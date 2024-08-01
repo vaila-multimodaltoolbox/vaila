@@ -443,7 +443,7 @@ class Vaila(tk.Tk):
 
     def open_link(self, event=None):
         import webbrowser
-        webbrowser.open("https://github.com/paulopreto/vaila-multimodaltoolbox")
+        webbrowser.open("https://github.com/vaila-multimodaltoolbox/vaila")
 
     def quit_app(self):
         self.destroy()
