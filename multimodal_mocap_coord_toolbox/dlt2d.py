@@ -1,3 +1,11 @@
+"""
+Nome do código: dlt2d.py
+Versão: v0.01
+Data e hora: 2024-08-01
+Criador: vailá
+Email: vailamultimodaltoolbox@gmail.com
+"""
+
 import os
 import numpy as np
 import pandas as pd
