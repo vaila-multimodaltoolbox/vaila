@@ -110,11 +110,11 @@ To set up the development environment, follow these steps:
 1. Clone the repository:
 
 ```bash
-  git clone https://github.com/paulopreto/vaila-multimodaltoolbox.git
+  git clone https://github.com/vaila-multimodaltoolbox/vaila
   cd vaila-multimodaltoolbox/yaml_for_conda_env
 ```
 
-2. Create a virtual environment and install the dependencies:
+2. Create [Anaconda](https://www.anaconda.com/download/success) virtual environment and install the dependencies:
 
 - For Linux:
 
@@ -219,7 +219,7 @@ IMU_csv --> |          vailá - multimodaltoolbox        | <-- Cluster_csv
 ========================= Available Multimodal =========================
 1. IMU Analysis
 2. Kinematic Cluster Analysis
-3. Kinematic Mocap Full Body Analysis
+3. Kinematic Motion Capture Full Body Analysis
 4. Markerless 2D with video
 5. Markerless 3D with multiple videos
 ============================= Available Tools ==========================
@@ -241,194 +241,81 @@ Choose an analysis option or file manager command:
 Here is an overview of the project structure:
 
 ```plaintext
-╰─$ tree vaila-multimodaltoolbox
-vaila-multimodaltoolbox
-├── LICENSE
-├── README.md
-├── data
-│   ├── csv_2_modify_labcoordsystem
-│   │   ├── newlabcoordsys_20240719_103146
-│   │   └── newlabcoordsys_20240719_103222
-│   ├── markerless_2D_video
-│   │   └── README.md
-│   └── mocap_fullbody
-│       └── README.md
-├── docs
-│   ├── README.md
-│   ├── css
-│   │   └── style.css
-│   ├── data
-│   │   └── sample_data.csv
-│   ├── help.html
-│   ├── help.txt
-│   ├── history.md
-│   ├── imagecluster.odg
-│   ├── images
-│   │   ├── gui.png
-│   │   ├── vaila.png
-│   │   └── vaila_transp.png
-│   ├── js
-│   │   └── script.js
-│   ├── run_docs.sh
-│   ├── style.css
-│   └── tutorials
-│       ├── tutorial1.html
-│       └── tutorial2.md
-├── export
-├── hooks
-│   └── pre-commit
-├── import
-│   ├── Sensor Pelvis_results.csv
-│   ├── Sensor Trunk_results.csv
-│   ├── clone_td01_analogs.csv
-│   └── td01_analogs.csv
-├── install-hooks.sh
-├── linux_launch_vaila.sh
-├── mac_launch_vaila.sh
-├── multimodal_mocap_coord_toolbox
-│   ├── __init__.py
-│   ├── __pycache__
-│   │   ├── __init__.cpython-311.pyc
-│   │   ├── __init__.cpython-312.pyc
-│   │   ├── batchcut.cpython-311.pyc
-│   │   ├── cluster_analysis.cpython-311.pyc
-│   │   ├── compress_videos_h264.cpython-311.pyc
-│   │   ├── compress_videos_h265.cpython-311.pyc
-│   │   ├── compressvideo.cpython-311.pyc
-│   │   ├── data_processing.cpython-311.pyc
-│   │   ├── data_processing.cpython-312.pyc
-│   │   ├── dialogs_user.cpython-311.pyc
-│   │   ├── dialogsuser.cpython-311.pyc
-│   │   ├── dialogsuser_cluster.cpython-311.pyc
-│   │   ├── dlt2d.cpython-311.pyc
-│   │   ├── drawboxe.cpython-311.pyc
-│   │   ├── emg_labiocom.cpython-311.pyc
-│   │   ├── extractpng.cpython-311.pyc
-│   │   ├── filemanager.cpython-311.pyc
-│   │   ├── filtering.cpython-311.pyc
-│   │   ├── getpixelvideo.cpython-311.pyc
-│   │   ├── imu_analysis.cpython-311.pyc
-│   │   ├── maintools.cpython-311.pyc
-│   │   ├── markerless_2D_analysis.cpython-311.pyc
-│   │   ├── markerless_3D_analysis.cpython-311.pyc
-│   │   ├── mocap_analysis.cpython-311.pyc
-│   │   ├── modifylabref.cpython-311.pyc
-│   │   ├── numberframes.cpython-311.pyc
-│   │   ├── plotting.cpython-311.pyc
-│   │   ├── plotting_matplotlib.cpython-311.pyc
-│   │   ├── readc3d_export.cpython-311.pyc
-│   │   ├── readc3d_export_normal.cpython-311.pyc
-│   │   ├── readcsv.cpython-311.pyc
-│   │   ├── readcsv_export.cpython-311.pyc
-│   │   ├── rearrange_data.cpython-311.pyc
-│   │   ├── rec2d.cpython-311.pyc
-│   │   ├── rec2d_one_dlt2d.cpython-311.pyc
-│   │   ├── rotation.cpython-311.pyc
-│   │   ├── run_vector_coding_GUI.cpython-311.pyc
-│   │   ├── showc3d.cpython-311.pyc
-│   │   ├── syncvid.cpython-311.pyc
-│   │   ├── utils.cpython-311.pyc
-│   │   ├── vaila.cpython-311.pyc
-│   │   ├── vaila_manifest.cpython-311.pyc
-│   │   ├── vector_coding.cpython-311.pyc
-│   │   └── videos_synchronization.cpython-311.pyc
-│   ├── batchcut.py
-│   ├── cluster_analysis.py
-│   ├── cluster_analysis_cli.py
-│   ├── common_utils.py
-│   ├── compress_videos_h264.py
-│   ├── compress_videos_h265.py
-│   ├── compressvideo.py
-│   ├── data_processing.py
-│   ├── dialogsuser.py
-│   ├── dialogsuser_cluster.py
-│   ├── dlt2d.py
-│   ├── drawboxe.py
-│   ├── emg_labiocom.py
-│   ├── extractpng.py
-│   ├── filemanager.py
-│   ├── filtering.py
-│   ├── fonts
-│   │   └── mrrobot.ttf
-│   ├── getpixelvideo.py
-│   ├── images
-│   │   ├── cluster_config.png
-│   │   ├── eeferp.png
-│   │   ├── gui.png
-│   │   ├── preto.png
-│   │   ├── unf.png
-│   │   ├── usp.png
-│   │   ├── vaila.ico
-│   │   ├── vaila_edge_w.png
-│   │   ├── vaila_ico_mac.png
-│   │   ├── vaila_ico_mac_original.png
-│   │   ├── vaila_ico_trans.ico
-│   │   ├── vaila_icon_win_original.ico
-│   │   ├── vaila_logo.png
-│   │   ├── vaila_trans_square.png
-│   │   ├── vaila_transp.ico
-│   │   └── vaila_white_square.png
-│   ├── imu_analysis.py
-│   ├── listjointsnames.py
-│   ├── maintools.py
-│   ├── markerless_2D_analysis.py
-│   ├── markerless_3D_analysis.py
-│   ├── mocap_analysis copy.py
-│   ├── mocap_analysis.py
-│   ├── modifylabref.py
-│   ├── modifylabref_cli.py
-│   ├── numberframes.py
-│   ├── plotting.py
-│   ├── readc3d_export.py
-│   ├── readcsv copy.py
-│   ├── readcsv.py
-│   ├── readcsv_export.py
-│   ├── rearrange_data.py
-│   ├── rearrange_data_dask.py
-│   ├── rec2d.py
-│   ├── rec2d_one_dlt2d.py
-│   ├── rotation.py
-│   ├── run_vector_coding copy.py
-│   ├── run_vector_coding.py
-│   ├── run_vector_coding_GUI.py
-│   ├── showc3d copy.py
-│   ├── showc3d.py
-│   ├── showc3d_nodash.py
-│   ├── syncvid.py
-│   ├── utils.py
-│   ├── vaila_manifest.py
-│   ├── vector_coding.py
-│   └── videos_synchronization.py
-├── notebooks
-│   ├── IMU_Trunk_Pelvis_Analysis.ipynb
-│   └── README.md
-├── requirements.txt
-├── results
-│   ├── README.md
-│   └── mocapfull
-│       ├── figure
-│       │   ├── MocapFull_20240720_110337
-│       │   │   └── td01_markers_figure.png
-│       │   └── MocapFull_20240721_162925
-│       │       └── td01_markers_unit_mm_m_20240721_161711_rot180_figure.png
-│       └── processed_data
-│           ├── MocapFull_20240720_110337
-│           │   └── td01_markers_results.csv
-│           └── MocapFull_20240721_162925
-│               └── td01_markers_unit_mm_m_20240721_161711_rot180_results.csv
-├── run_multimodal_gui copy.py
-├── run_vaila_cli.py
-├── scripts
-│   └── README.md
-├── setup.py
-├── setup_environment.sh
-├── vaila.py
-├── win_launch_vaila.bat
-└── yaml_for_conda_env
-    ├── README.md
-    ├── vaila_linux.yaml
-    ├── vaila_mac.yaml
-    └── vaila_win.yaml
+╰─$ tree multimodal_mocap_coord_toolbox
+multimodal_mocap_coord_toolbox
+├── __init__.py
+├── batchcut.py
+├── cluster_analysis.py
+├── cluster_analysis_cli.py
+├── common_utils.py
+├── compress_videos_h264.py
+├── compress_videos_h265.py
+├── compressvideo.py
+├── data_processing.py
+├── dialogsuser.py
+├── dialogsuser_cluster.py
+├── dlt2d.py
+├── drawboxe.py
+├── emg_labiocom.py
+├── extractpng.py
+├── filemanager.py
+├── filtering.py
+├── fonts
+│   └── mrrobot.ttf
+├── getpixelvideo.py
+├── images
+│   ├── cluster_config.png
+│   ├── eeferp.png
+│   ├── gui.png
+│   ├── preto.png
+│   ├── unf.png
+│   ├── usp.png
+│   ├── vaila.ico
+│   ├── vaila_edge_w.png
+│   ├── vaila_ico_mac.png
+│   ├── vaila_ico_mac_original.png
+│   ├── vaila_ico_trans.ico
+│   ├── vaila_icon_win_original.ico
+│   ├── vaila_logo.png
+│   ├── vaila_trans_square.png
+│   ├── vaila_transp.ico
+│   └── vaila_white_square.png
+├── imu_analysis copy.py
+├── imu_analysis.py
+├── listjointsnames.py
+├── maintools.py
+├── markerless_2D_analysis.py
+├── markerless_3D_analysis.py
+├── mergestack.py
+├── metadatavid.sh
+├── mocap_analysis copy.py
+├── mocap_analysis.py
+├── modifylabref.py
+├── modifylabref_cli.py
+├── numberframes.py
+├── plotting.py
+├── readc3d_export.py
+├── readcsv copy.py
+├── readcsv.py
+├── readcsv_export.py
+├── rearrange_data.py
+├── rearrange_data_dask.py
+├── rec2d.py
+├── rec2d_one_dlt2d.py
+├── rotation.py
+├── run_vector_coding copy.py
+├── run_vector_coding.py
+├── run_vector_coding_GUI.py
+├── showc3d copy.py
+├── showc3d.py
+├── showc3d_nodash.py
+├── syncvid.py
+├── utils.py
+├── vaila_manifest.py
+├── vailaplot2d.py
+├── vailaplot3d.py
+├── vector_coding.py
+└── videos_synchronization.py
 ```
 
 ## Contribution
