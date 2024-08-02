@@ -1,4 +1,5 @@
 # vailá - multimodaltoolbox
+
 <p align="center">
   <img src="docs/images/vaila.png" alt="vailá Logo" width="300"/>
 </p>
@@ -190,6 +191,10 @@ Use the batch script `win_launch_vaila.bat`:
 
 5. Follow the multimodal menu instructions in GUI or CLI:
 
+<p align="center">
+  <img src="docs/images/vaila_start_gui.png" alt="vailá GUI" width="800"/>
+</p>
+
 ```bash
 :::::::::'##::::'##::::'###::::'####:'##::::::::::'###::::'####::::::::::
 ::::::::: ##:::: ##:::'## ##:::. ##:: ##:::::::::'## ##::: ####::::::::::
@@ -208,13 +213,13 @@ IMU_csv --> |          vailá - multimodaltoolbox        | <-- Cluster_csv
                                   |
                                   v
                    +-----------------------------+
-                   |           Angles            |
+                   |           Results           |
                    +-----------------------------+
                                   |
                                   v
-                         +-----------------+
-                         |  Vector Coding  |
-                         +-----------------+
+                      +---------------------+
+                      | Visualization/Graphs|
+                      +---------------------+
 =========================== File Manager ===============================
  Import (im)  |  Export (ex)  |  Copy (cp)  |  Move (mv)  |  Remove (rm)
 ========================= Available Multimodal =========================
@@ -228,9 +233,10 @@ IMU_csv --> |          vailá - multimodaltoolbox        | <-- Cluster_csv
 2. Convert C3D data to CSV
 3. Metadata info
 4. Cut videos based on list
-5.  Draw a black box around videos
-6.  Compress videos to HEVC (H.265)
-7.  Compress videos to H.264
+5. Draw a black box around videos
+6. Compress videos to HEVC (H.265)
+7. Compress videos to H.264
+8. Plot 2D
 
 Type 'h' for help or 'exit' to quit.
 
