@@ -340,5 +340,5 @@ dependencies:
       - sounddevice==0.4.7
       - tenacity==8.5.0
       - werkzeug==3.0.3
-      - spm1d
+      - spm1d==0.4.32
 
