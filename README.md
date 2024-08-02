@@ -217,9 +217,9 @@ IMU_csv --> |          vailá - multimodaltoolbox        | <-- Cluster_csv
                    +-----------------------------+
                                   |
                                   v
-                      +---------------------+
-                      | Visualization/Graphs|
-                      +---------------------+
+                       +---------------------+
+                       | Visualization/Graph |
+                       +---------------------+
 =========================== File Manager ===============================
  Import (im)  |  Export (ex)  |  Copy (cp)  |  Move (mv)  |  Remove (rm)
 ========================= Available Multimodal =========================
