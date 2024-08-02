@@ -66,7 +66,7 @@ text = """
 :::::::::::. ###:::: ##:::: ##:'####: ########: ##:::: ##::::::::::::::::
 ::::::::::::...:::::..:::::..::....::........::..:::::..:::::::::::::::::
 Mocap fullbody_c3d        Markerless_3D_videos       Markerless_2D_video
-                  \\                |                /
+                  \                |                /
                    v               v               v
             +-------------------------------------------+
 IMU_csv --> |          vailá - multimodaltoolbox        | <-- Cluster_csv
@@ -74,13 +74,13 @@ IMU_csv --> |          vailá - multimodaltoolbox        | <-- Cluster_csv
                                   |
                                   v
                    +-----------------------------+
-                   |           Angles            |
+                   |           Results           |
                    +-----------------------------+
                                   |
                                   v
-                         +-----------------+
-                         |  Vector Coding  |
-                         +-----------------+
+                       +---------------------+
+                       | Visualization/Graph |
+                       +---------------------+
 =========================== File Manager ===============================
  Import (im)  |  Export (ex)  |  Copy (cp)  |  Move (mv)  |  Remove (rm)
 ========================= Available Multimodal =========================
@@ -97,6 +97,7 @@ IMU_csv --> |          vailá - multimodaltoolbox        | <-- Cluster_csv
 5. Draw a black box around videos
 6. Compress videos to HEVC (H.265)
 7. Compress videos to H.264
+8. Plot 2D
 
 Type 'h' for help or 'exit' to quit.
 
@@ -105,8 +106,12 @@ Choose an analysis option or file manager command:
 
 print(text)
 
+
 if platform.system() == 'Darwin':
-    import AppKit
+    try:
+        import AppKit
+    except ImportError:
+        AppKit = None
 
 class Vaila(tk.Tk):
     def __init__(self):
@@ -126,7 +131,7 @@ class Vaila(tk.Tk):
             self.iconphoto(True, img)
 
         # Set application name for macOS dock
-        if platform.system() == 'Darwin':
+        if platform.system() == 'Darwin' and AppKit is not None:
             AppKit.NSBundle.mainBundle().infoDictionary()['CFBundleName'] = 'Vaila'
 
         self.create_widgets()

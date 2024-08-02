@@ -2,11 +2,18 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from tkinter import Tk, Button, filedialog, Toplevel, Checkbutton, BooleanVar, Canvas, Scrollbar, Frame, messagebox
 from spm1d import stats
+import os
+import matplotlib.colors as mcolors
 
 # Variáveis globais para armazenar as seleções do usuário
 selected_files = []
 selected_headers = []
 plot_type = None
+
+# Definindo uma lista de cores que começa com R, G, B e segue com a paleta de cores do matplotlib
+base_colors = ['r', 'g', 'b']
+additional_colors = list(mcolors.TABLEAU_COLORS.keys())
+predefined_colors = base_colors + additional_colors
 
 def select_plot_type():
     global plot_type
@@ -65,73 +72,78 @@ def select_and_plot():
 
 def plot_time_scatter():
     plt.figure()
-    for file_path in selected_files:
+    for file_idx, file_path in enumerate(selected_files):
         data = pd.read_csv(file_path)
-        file_name = file_path.split('/')[-1]
-        for header in selected_headers:
-            plt.plot(data['Time'], data[header], label=f'{file_name}-{header}')
+        for header_idx, header in enumerate(selected_headers):
+            color = predefined_colors[(file_idx * len(selected_headers) + header_idx) % len(predefined_colors)]
+            plt.plot(data['Time'], data[header], label=f'{os.path.basename(file_path)}-{header}', color=color)
     plt.xlabel('Time')
     plt.ylabel('Values')
-    plt.legend()
+    plt.legend(loc='best', fontsize='small')
+    plt.tight_layout()
     plt.show()
 
 def plot_angle_angle():
     plt.figure()
-    for file_path in selected_files:
+    for file_idx, file_path in enumerate(selected_files):
         data = pd.read_csv(file_path)
-        file_name = file_path.split('/')[-1]
         headers = [header for header in selected_headers if header in data.columns]
         if len(headers) % 2 != 0:
             print("Please select pairs of headers for angle-angle plot.")
             return
         for i in range(0, len(headers), 2):
-            plt.plot(data[headers[i]], data[headers[i + 1]], label=f'{file_name}-{headers[i]} vs {headers[i + 1]}')
+            color = predefined_colors[(file_idx * len(headers) // 2 + i // 2) % len(predefined_colors)]
+            plt.plot(data[headers[i]], data[headers[i + 1]], label=f'{os.path.basename(file_path)}-{headers[i]} vs {headers[i + 1]}', color=color)
     plt.xlabel('Angle 1')
     plt.ylabel('Angle 2')
-    plt.legend()
+    plt.legend(loc='best', fontsize='small')
     plt.axis('equal')
+    plt.tight_layout()
     plt.show()
 
 def plot_confidence_interval():
     plt.figure()
-    for file_path in selected_files:
+    for file_idx, file_path in enumerate(selected_files):
         data = pd.read_csv(file_path)
-        file_name = file_path.split('/')[-1]
         headers = [header for header in selected_headers if header in data.columns]
         if len(headers) < 2:
             print("Please select at least two headers for confidence interval plot.")
             return
-        for header in headers:
+        for header_idx, header in enumerate(headers):
             values = data[header].dropna()
             ci = 1.96 * values.std() / (len(values) ** 0.5)
-            plt.errorbar(x=range(len(values)), y=values, yerr=ci, label=f'{file_name}-{header}')
+            color = predefined_colors[(file_idx * len(headers) + header_idx) % len(predefined_colors)]
+            plt.errorbar(x=range(len(values)), y=values, yerr=ci, label=f'{os.path.basename(file_path)}-{header}', color=color)
     plt.xlabel('Index')
     plt.ylabel('Values')
-    plt.legend()
+    plt.legend(loc='best', fontsize='small')
+    plt.tight_layout()
     plt.show()
 
 def plot_boxplot():
     plt.figure()
     data_dict = {}
-    for file_path in selected_files:
+    for file_idx, file_path in enumerate(selected_files):
         data = pd.read_csv(file_path)
-        file_name = file_path.split('/')[-1]
         headers = [header for header in selected_headers if header in data.columns]
         for header in headers:
             if header not in data_dict:
                 data_dict[header] = []
             data_dict[header].extend(data[header].dropna().values)
-    plt.boxplot(data_dict.values(), notch=True)
+    plt.boxplot(data_dict.values(), notch=True, patch_artist=True)
+    colors_list = [predefined_colors[i % len(predefined_colors)] for i in range(len(data_dict))]
+    for patch, color in zip(plt.gca().artists, colors_list):
+        patch.set_facecolor(color)
     plt.xticks(range(1, len(data_dict) + 1), data_dict.keys())
     plt.xlabel('Headers')
     plt.ylabel('Values')
+    plt.tight_layout()
     plt.show()
 
 def plot_spm():
     plt.figure()
     for file_path in selected_files:
         data = pd.read_csv(file_path)
-        file_name = file_path.split('/')[-1]
         headers = [header for header in selected_headers if header in data.columns]
         if len(headers) < 2:
             print("Please select at least two headers for SPM plot.")
@@ -141,6 +153,7 @@ def plot_spm():
         t = stats.ttest2(yA, yB)
         ti = t.inference(0.05, two_tailed=True)
         ti.plot()
+    plt.tight_layout()
     plt.show()
 
 def select_file():
@@ -191,7 +204,7 @@ def select_headers_gui(headers):
 
     header_vars = [BooleanVar() for _ in headers]
 
-    num_columns = 6  # Number of columns for the labels
+    num_columns = 6  # Number of columns para os labels
 
     for i, label in enumerate(headers):
         chk = Checkbutton(scrollable_frame, text=label, variable=header_vars[i])
