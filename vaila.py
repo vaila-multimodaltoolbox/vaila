@@ -22,6 +22,7 @@ import os
 import signal
 import sys
 import platform
+from rich import print
 import tkinter as tk
 from tkinter import messagebox, filedialog
 from tkinter import ttk
@@ -54,6 +55,55 @@ from multimodal_mocap_coord_toolbox import (
     emg_labiocom,
     plot_2d
 )
+
+text = """
+:::::::::'##::::'##::::'###::::'####:'##::::::::::'###::::'####::::::::::
+::::::::: ##:::: ##:::'## ##:::. ##:: ##:::::::::'## ##::: ####::::::::::
+::::::::: ##:::: ##::'##:. ##::: ##:: ##::::::::'##:. ##::. ##:::::::::::
+::::::::: ##:::: ##:'##:::. ##:: ##:: ##:::::::'##:::. ##:'##::::::::::::
+:::::::::. ##:: ##:: #########:: ##:: ##::::::: #########:..:::::::::::::
+::::::::::. ## ##::: ##.... ##:: ##:: ##::::::: ##.... ##::::::::::::::::
+:::::::::::. ###:::: ##:::: ##:'####: ########: ##:::: ##::::::::::::::::
+::::::::::::...:::::..:::::..::....::........::..:::::..:::::::::::::::::
+Mocap fullbody_c3d        Markerless_3D_videos       Markerless_2D_video
+                  \\                |                /
+                   v               v               v
+            +-------------------------------------------+
+IMU_csv --> |          vailá - multimodaltoolbox        | <-- Cluster_csv
+            +-------------------------------------------+
+                                  |
+                                  v
+                   +-----------------------------+
+                   |           Angles            |
+                   +-----------------------------+
+                                  |
+                                  v
+                         +-----------------+
+                         |  Vector Coding  |
+                         +-----------------+
+=========================== File Manager ===============================
+ Import (im)  |  Export (ex)  |  Copy (cp)  |  Move (mv)  |  Remove (rm)
+========================= Available Multimodal =========================
+1. IMU Analysis
+2. Kinematic Cluster Analysis
+3. Kinematic Motion Capture Full Body Analysis
+4. Markerless 2D with video
+5. Markerless 3D with multiple videos
+============================= Available Tools ==========================
+1. Edit CSV
+2. Convert C3D data to CSV
+3. Metadata info
+4. Cut videos based on list
+5. Draw a black box around videos
+6. Compress videos to HEVC (H.265)
+7. Compress videos to H.264
+
+Type 'h' for help or 'exit' to quit.
+
+Choose an analysis option or file manager command:
+"""
+
+print(text)
 
 if platform.system() == 'Darwin':
     import AppKit
