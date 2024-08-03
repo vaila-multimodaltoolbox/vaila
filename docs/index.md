@@ -5,7 +5,7 @@
 vailá is a toolbox designed to enhance biomechanics analysis by leveraging multiple motion capture systems. "vailá" is an expression that blends the sound of the French word "voilà" with the direct encouragement in Portuguese "vai lá," meaning "go there and do it!" This toolbox empowers you to explore, experiment, and create without the constraints of expensive commercial software. vailá and use your imagination!
 
 <center>
-  <img src="images/vaila.png" alt="vailá Logo" width="100"/>
+  <img src="images/vaila.png" alt="vailá Logo" width="300"/>
 </center>
 
 ## vailá manifest!
@@ -108,3 +108,13 @@ To use this toolbox, simply select the desired option by typing the correspondin
 ---
 
 © 2024 vailá - Multimodal Toolbox. All rights reserved.
+
+* `mkdocs build` - Build the documentation site.
+* `mkdocs -h` - Print help message and exit.
+
+## Project layout
+
+    mkdocs.yml    # The configuration file.
+    docs/
+        index.md  # The documentation homepage.
+        ...       # Other markdown pages, images and other files.

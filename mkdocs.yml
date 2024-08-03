@@ -1,0 +1,15 @@
+site_name: vailá
+repo_url: https://github.com/vaila-multimodaltoolbox/vaila
+repo_name: vaila
+edit_uri: tree/main/docs/
+
+theme:
+  name: material
+  logo: docs/images/vaila_logo.png
+  favicon: docs/images/vaila_logo.png
+  palette:
+    primary: "Black"
+    accent: "Black"
+
+markdown_extensions: 
+  - attr_list
