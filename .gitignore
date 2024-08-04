@@ -72,6 +72,7 @@ ENV/
 env.bak/
 venv.bak/
 .mocap_env/
+site/
 
 # Spyder project settings
 .spyderproject
