@@ -242,7 +242,7 @@ dependencies:
   - python-dateutil=2.9.0=pyhd8ed1ab_0
   - python-fastjsonschema=2.20.0=pyhd8ed1ab_0
   - python-json-logger=2.0.7=pyhd8ed1ab_0
-  - python-tzdata=2024.1=pyhd8ed1ab_0
+  - tzdata=2024a
   - python_abi=3.11=4_cp311
   - pytz=2024.1=pyhd8ed1ab_0
   - pywin32=306=py311h12c1d0e_2
@@ -251,7 +251,7 @@ dependencies:
   - pyzmq=26.0.3=py311h484c95c_0
   - qhull=2020.2=hc790b64_5
   - qt-main=5.15.8=h06adc49_23
-  - qtconsole-base=5.5.2=pyha770c72_0
+  - qtconsole=5.5.2=pyha770c72_0
   - qtpy=2.4.1=pyhd8ed1ab_0
   - re2=2023.09.01=hd3b24a8_2
   - referencing=0.35.1=pyhd8ed1ab_0
