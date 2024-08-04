@@ -10,6 +10,8 @@
 # 
 # Install this environment with: conda env create -f vaila_win.yaml
 # Update this environment with: conda env update -f vaila_win.yaml
+#
+# Remove this environment with: conda remove -n vaila --all
 
 name: vaila
 channels:
