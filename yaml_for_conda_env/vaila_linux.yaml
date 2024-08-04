@@ -21,6 +21,7 @@ channels:
 dependencies:
   - python=3.11.8
   - pip=24.2
+  - pipx=1.6.0
   - _libgcc_mutex=0.1
   - _openmp_mutex=4.5
   - alsa-lib=1.2.12
