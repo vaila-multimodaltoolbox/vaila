@@ -5,9 +5,8 @@
 vailá is a toolbox designed to enhance biomechanics analysis by leveraging multiple motion capture systems. "vailá" is an expression that blends the sound of the French word "voilà" with the direct encouragement in Portuguese "vai lá," meaning "go there and do it!" This toolbox empowers you to explore, experiment, and create without the constraints of expensive commercial software. vailá and use your imagination!
 
 <center>
-  <img src="images/vaila.png" alt="vailá Logo" width="100"/>
+  <img src="images/vaila.png" alt="vailá Logo" width="300"/>
 </center>
-
 
 ## vailá manifest!
 
