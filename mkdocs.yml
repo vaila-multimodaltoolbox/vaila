@@ -9,16 +9,15 @@ theme:
   favicon: docs/images/vaila_ico.png
   palette:
     - scheme: default
-      primary: purple
+      primary: black
       toggle:
         icon: material/weather-night
-        name: Modo noturno
+        name: Dark mode
     - scheme: slate
-      primary: deep purple
+      primary: darkslategray
       toggle:
         icon: material/weather-sunny
-        name: Modo claro
-
+        name: Light mode
 
 markdown_extensions:
   - attr_list
@@ -35,12 +34,3 @@ markdown_extensions:
       custom_fences:
         - name: mermaid
           class: mermaid
-          format: !!python/name:pymdownx.superfences.fence_div_format
-
-extra_css:
-  - https://unpkg.com/mermaid@8.5.1/dist/mermaid.css
-extra_javascript:
-  - https://unpkg.com/mermaid@8.5.1/dist/mermaid.min.js
-
-markdown_extensions: 
-
