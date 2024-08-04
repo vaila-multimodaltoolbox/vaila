@@ -1,3 +1,8 @@
+# General temporaly files
+.DS_Store
+.AppleDouble
+.LSOverride
+
 # Video files
 *.MOV
 *.mov
@@ -67,6 +72,7 @@ ENV/
 env.bak/
 venv.bak/
 .mocap_env/
+site/
 
 # Spyder project settings
 .spyderproject
@@ -90,10 +96,6 @@ dmypy.json
 # Temporary files created by editors
 *~
 *.swp
-
-# Temporary system files
-.DS_Store
-Thumbs.db
 
 # Logs
 *.log

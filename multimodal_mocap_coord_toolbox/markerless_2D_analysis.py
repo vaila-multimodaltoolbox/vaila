@@ -87,8 +87,9 @@ def process_videos_in_directory(input_dir, output_base, pose_config):
     os.makedirs(output_base, exist_ok=True)
 
     for root, dirs, files in os.walk(input_dir):
-        if root.startswith(output_base):
-            continue  # Skip directories created in the output base
+        # Check if we are in the top level of the directory
+        if root != input_dir:
+            continue  # Skip subdirectories
 
         for file in files:
             if file.lower().endswith(('.mp4', '.avi', '.mov')):
