@@ -108,13 +108,3 @@ To use this toolbox, simply select the desired option by typing the correspondin
 ---
 
 © 2024 vailá - Multimodal Toolbox. All rights reserved.
-
-* `mkdocs build` - Build the documentation site.
-* `mkdocs -h` - Print help message and exit.
-
-## Project layout
-
-    mkdocs.yml    # The configuration file.
-    docs/
-        index.md  # The documentation homepage.
-        ...       # Other markdown pages, images and other files.

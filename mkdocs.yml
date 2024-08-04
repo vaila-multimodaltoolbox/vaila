@@ -6,10 +6,25 @@ edit_uri: tree/main/docs/
 theme:
   name: material
   logo: docs/images/vaila_logo.png
-  favicon: docs/images/vaila_logo.png
+  favicon: docs/images/vaila_ico.png
   palette:
-    primary: "Black"
-    accent: "Black"
+     - scheme: default
+     - primary: "#3F51B5"
+       toggle:
+         icon: "material/weather-night"
+         name: "Dark"
+     - scheme: slate
+       primary: "#607D8B"
+       toggle:
+         icon: "material/weather-sunny"
+         name: "Light"
 
 markdown_extensions: 
   - attr_list
+  - pymdownx.superfences
+  - pymdownx.details
+  - pymdownx.emoji
+  - pymdownx.magiclink
+  - pymdownx.tasklist
+  - pymdownx.mark
+  - pymdownx.highlight
