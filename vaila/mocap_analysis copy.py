@@ -3,10 +3,10 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from datetime import datetime
-from multimodal_mocap_coord_toolbox.data_processing import read_cluster_csv
-from multimodal_mocap_coord_toolbox.filtering import apply_filter
-from multimodal_mocap_coord_toolbox.rotation import createortbase, calcmatrot, rotmat2euler
-from multimodal_mocap_coord_toolbox.plotting import plot_orthonormal_bases
+from vaila.data_processing import read_mocap_csv
+from vaila.filtering import apply_filter
+from vaila.rotation import createortbase_4points, calcmatrot, rotmat2euler
+from vaila.plotting import plot_orthonormal_bases
 
 def save_results_to_csv(base_dir, time, trunk_euler_angles, pelvis_euler_angles, file_name):
     results = {
@@ -33,46 +33,21 @@ def read_anatomical_csv(file_path):
         print(f"Error reading {file_path}: {e}")
         return None
 
-def analyze_cluster_data(directory_path, use_anatomical):
+def analyze_mocap_fullbody_data(directory_path, use_anatomical):
     sample_rate = float(input("Please enter the sample rate: "))
 
-    print("""
-         (A)               (B)
-
-        * P2            * P3
-        / |               | \\
-    P3 *  |               |  * P2
-        \\ |              | /
-        * P1              * P1
-
-
-         (C)               (D)
-
-    P3 *-----* P2          * P2
-        \\   /            /   \\
-        * P1          P3 *-----* P1
-
-    """)
-
-    trunk_config = input("Please enter the configuration for the trunk (A/B/C/D): ").strip().upper()
-    pelvis_config = input("Please enter the configuration for the pelvis (A/B/C/D): ").strip().upper()
-
-    if trunk_config not in ['A', 'B', 'C', 'D'] or pelvis_config not in ['A', 'B', 'C', 'D']:
-        print("Invalid input for configuration. Please enter 'A', 'B', 'C', or 'D'.")
-        return
-
     filter_method = 'butterworth'
-    file_names = sorted([f for f in os.listdir(directory_path) if f.endswith('.csv')])
 
+    file_names = sorted([f for f in os.listdir(directory_path) if f.endswith('.csv')])
     current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
-    base_dir_figures = f'results/cluster/figure/Cluster_{current_time}'
-    base_dir_processed_data = f'results/cluster/processed_data/Cluster_{current_time}'
+    base_dir_figures = f'results/mocapfull/figure/MocapFull_{current_time}'
+    base_dir_processed_data = f'results/mocapfull/processed_data/MocapFull_{current_time}'
     os.makedirs(base_dir_figures, exist_ok=True)
     os.makedirs(base_dir_processed_data, exist_ok=True)
 
     anatomical_data = {}
     if use_anatomical:
-        anatomical_dir = './data/cluster_csv/anatomical_position'
+        anatomical_dir = './data/mocap_fullbody/anatomical_position'
         anatomical_file_names = sorted([f for f in os.listdir(anatomical_dir) if f.endswith('.csv')])
         if len(anatomical_file_names) != len(file_names):
             print("Warning: Number of anatomical files does not match the number of data files.")
@@ -85,35 +60,52 @@ def analyze_cluster_data(directory_path, use_anatomical):
     matplotlib_figs = []  # List to store matplotlib figures
     for idx, file_name in enumerate(file_names):
         file_path = os.path.join(directory_path, file_name)
-        data = read_cluster_csv(file_path)
-        
-        # Create time vector
+        data = read_mocap_csv(file_path)
         time = np.linspace(0, len(data) / sample_rate, len(data))
-        # Insert time column in the data in the first column
-        data = np.insert(data, 0, time, axis=1)
-        # Remove time column if present in the data
-        data = data[:, 1:]
-        # Apply filter to the data
-        dataf = apply_filter(data, sample_rate, method=filter_method)
-        # Extract the points for the trunk and pelvis
-        trunk_p1 = dataf[:, [0, 1, 2]]
-        trunk_p2 = dataf[:, [3, 4, 5]]
-        trunk_p3 = dataf[:, [6, 7, 8]]
-        pelvis_p1 = dataf[:, [9, 10, 11]]
-        pelvis_p2 = dataf[:, [12, 13, 14]]
-        pelvis_p3 = dataf[:, [15, 16, 17]]
+
+        # Check for the presence of a time column and add it if not present
+        if not any(col.lower() == 'time' for col in data.columns):
+            data.insert(0, 'Time', time)
+
+        trunk_points_columns = ['STRN_X', 'STRN_Y', 'STRN_Z', 'CLAV_X', 'CLAV_Y', 'CLAV_Z', 'C7_X', 'C7_Y', 'C7_Z', 'T10_X', 'T10_Y', 'T10_Z']
+        pelvis_points_columns = ['RASI_X', 'RASI_Y', 'RASI_Z', 'LASI_X', 'LASI_Y', 'LASI_Z', 'RPSI_X', 'RPSI_Y', 'RPSI_Z', 'LPSI_X', 'LPSI_Y', 'LPSI_Z']
+
+        # Filter data based on required columns
+        if not set(trunk_points_columns).issubset(data.columns):
+            print(f"File {file_name} does not contain all required trunk columns.")
+            continue
+        if not set(pelvis_points_columns).issubset(data.columns):
+            print(f"File {file_name} does not contain all required pelvis columns.")
+            continue
+
+        trunk_points = data[trunk_points_columns].values
+        pelvis_points = data[pelvis_points_columns].values
+
+        trunk_pointsf = apply_filter(trunk_points, sample_rate, method=filter_method)
+        pelvis_pointsf = apply_filter(pelvis_points, sample_rate, method=filter_method)
+
+        trunk_p1 = trunk_pointsf[:, [0, 1, 2]]
+        trunk_p2 = trunk_pointsf[:, [3, 4, 5]]
+        trunk_p3 = trunk_pointsf[:, [6, 7, 8]]
+        trunk_p4 = trunk_pointsf[:, [9, 10, 11]]
+
+        pelvis_p1 = pelvis_pointsf[:, [0, 1, 2]]
+        pelvis_p2 = pelvis_pointsf[:, [3, 4, 5]]
+        pelvis_p3 = pelvis_pointsf[:, [6, 7, 8]]
+        pelvis_p4 = pelvis_pointsf[:, [9, 10, 11]]
 
         blab = np.array([[1., 0., 0.], [0., 1., 0.], [0., 0., 1.]])
 
-        trunk_base, orig_trunk = createortbase(trunk_p1, trunk_p2, trunk_p3, trunk_config)
-        pelvis_base, orig_pelvis = createortbase(pelvis_p1, pelvis_p2, pelvis_p3, pelvis_config)
+        trunk_base, orig_trunk = createortbase_4points(trunk_p1, trunk_p2, trunk_p3, trunk_p4, configuration='x')
+        pelvis_base, orig_pelvis = createortbase_4points(pelvis_p1, pelvis_p2, pelvis_p3, pelvis_p4, configuration='z')
 
         fig_matplotlib = plot_orthonormal_bases(
             [trunk_base, pelvis_base],
             [orig_trunk, orig_pelvis],
-            [[trunk_p1, trunk_p2, trunk_p3], [pelvis_p1, pelvis_p2, pelvis_p3]],
+            [[trunk_p1, trunk_p2, trunk_p3, trunk_p4], [pelvis_p1, pelvis_p2, pelvis_p3, pelvis_p4]],
             ['Trunk', 'Pelvis'],
-            title=f'Cluster Bases - {file_name}'
+            title=f'Mocap Bases - {file_name}',
+            four_points=True
         )
         matplotlib_figs.append(fig_matplotlib)
 
@@ -182,5 +174,5 @@ def analyze_cluster_data(directory_path, use_anatomical):
 
 if __name__ == "__main__":
     use_anatomical = input("Do you want to analyze with anatomical position data? (y/n): ").strip().lower() == 'y'
-    directory_path = './data/cluster_csv/'
-    analyze_cluster_data(directory_path, use_anatomical)
+    directory_path = './data/mocap_fullbody'
+    analyze_mocap_fullbody_data(directory_path, use_anatomical)

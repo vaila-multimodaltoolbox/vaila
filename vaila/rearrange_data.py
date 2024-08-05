@@ -9,8 +9,8 @@ import numpy as np
 import tkinter as tk
 from tkinter import filedialog, simpledialog, messagebox, Scrollbar
 from datetime import datetime
-from multimodal_mocap_coord_toolbox import modifylabref
-from multimodal_mocap_coord_toolbox.mergestack import select_file, merge_csv_files, stack_csv_files
+from vaila import modifylabref
+from vaila.mergestack import select_file, merge_csv_files, stack_csv_files
 
 # Dictionary for metric unit conversions with abbreviations
 CONVERSIONS = {

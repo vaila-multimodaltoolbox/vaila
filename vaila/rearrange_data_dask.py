@@ -9,7 +9,7 @@ import dask.dataframe as dd
 import tkinter as tk
 from tkinter import filedialog, simpledialog, messagebox, Scrollbar
 from datetime import datetime
-from multimodal_mocap_coord_toolbox import modifylabref
+from vaila import modifylabref
 
 # Dictionary for metric unit conversions with abbreviations
 CONVERSIONS = {

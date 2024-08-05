@@ -4,11 +4,11 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from datetime import datetime
 from tkinter import messagebox, filedialog, simpledialog, Tk
-from multimodal_mocap_coord_toolbox.data_processing import read_mocap_csv
-from multimodal_mocap_coord_toolbox.filtering import apply_filter
-from multimodal_mocap_coord_toolbox.rotation import createortbase_4points, calcmatrot, rotmat2euler
-from multimodal_mocap_coord_toolbox.plotting import plot_orthonormal_bases
-from multimodal_mocap_coord_toolbox.readcsv import get_csv_headers, select_headers_gui
+from vaila.data_processing import read_mocap_csv
+from vaila.filtering import apply_filter
+from vaila.rotation import createortbase_4points, calcmatrot, rotmat2euler
+from vaila.plotting import plot_orthonormal_bases
+from vaila.readcsv import get_csv_headers, select_headers_gui
 
 def save_results_to_csv(base_dir, time, trunk_euler_angles, pelvis_euler_angles, file_name):
     results = {

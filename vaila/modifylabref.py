@@ -1,7 +1,7 @@
 import os
 import numpy as np
 import pandas as pd
-from multimodal_mocap_coord_toolbox.rotation import rotdata
+from vaila.rotation import rotdata
 
 def modify_lab_coords(data, labcoord_angles):
     if labcoord_angles:
