@@ -27,7 +27,7 @@ import tkinter as tk
 from tkinter import messagebox, filedialog
 from tkinter import ttk
 from PIL import Image, ImageTk
-from multimodal_mocap_coord_toolbox import (
+from vaila import (
     cluster_analysis,
     imu_analysis,
     markerless_2D_analysis,
@@ -120,8 +120,8 @@ class Vaila(tk.Tk):
         self.geometry("1280x720")
 
         # Set window icon based on OS
-        icon_path_ico = os.path.join(os.path.dirname(__file__), "multimodal_mocap_coord_toolbox", "images", "vaila.ico")
-        icon_path_png = os.path.join(os.path.dirname(__file__), "multimodal_mocap_coord_toolbox", "images", "vaila_ico_mac.png")
+        icon_path_ico = os.path.join(os.path.dirname(__file__), "vaila", "images", "vaila.ico")
+        icon_path_png = os.path.join(os.path.dirname(__file__), "vaila", "images", "vaila_ico_mac.png")
 
         if platform.system() == 'Windows':
             self.iconbitmap(icon_path_ico)
@@ -144,7 +144,7 @@ class Vaila(tk.Tk):
         header_frame.pack(pady=10)
 
         # Load and place the image
-        image_path_preto = os.path.join(os.path.dirname(__file__), "multimodal_mocap_coord_toolbox", "images", "vaila_logo.png")
+        image_path_preto = os.path.join(os.path.dirname(__file__), "vaila", "images", "vaila_logo.png")
         preto_image = Image.open(image_path_preto)
         preto_image = preto_image.resize((87, 87), Image.LANCZOS)
         preto_photo = ImageTk.PhotoImage(preto_image)
