@@ -4,11 +4,11 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from datetime import datetime
 from tkinter import messagebox, filedialog, Tk
-from multimodal_mocap_coord_toolbox.filtering import apply_filter
-from multimodal_mocap_coord_toolbox.rotation import createortbase, calcmatrot, rotmat2euler
-from multimodal_mocap_coord_toolbox.plotting import plot_orthonormal_bases
-from multimodal_mocap_coord_toolbox.readcsv import get_csv_headers, select_headers_gui
-from multimodal_mocap_coord_toolbox.dialogsuser_cluster import get_user_inputs
+from vaila.filtering import apply_filter
+from vaila.rotation import createortbase, calcmatrot, rotmat2euler
+from vaila.plotting import plot_orthonormal_bases
+from vaila.readcsv import get_csv_headers, select_headers_gui
+from vaila.dialogsuser_cluster import get_user_inputs
 from PIL import Image
 from rich import print
 #import ipdb
