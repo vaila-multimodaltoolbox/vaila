@@ -111,7 +111,7 @@ To set up the development environment, follow these steps:
 1. Clone the repository:
 
 ```bash
-  git clone https://github.com/vaila-multimodaltoolbox/vaila
+  git clone https://github.com/vaila-multimodaltoolbox/vaila 
   cd vaila-multimodaltoolbox/yaml_for_conda_env
 ```
 

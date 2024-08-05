@@ -25,8 +25,8 @@ markdown_extensions:
   - pymdownx.details
   - pymdownx.magiclink
   - pymdownx.mark
-  - pymdownx.tasklist  # Lista de tarefas
-  - pymdownx.emoji  # Emojis
+  - pymdownx.tasklist
+  - pymdownx.emoji
   - pymdownx.mark
   - pymdownx.tilde
   - pymdownx.highlight

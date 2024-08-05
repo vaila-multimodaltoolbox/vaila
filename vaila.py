@@ -27,7 +27,7 @@ import tkinter as tk
 from tkinter import messagebox, filedialog
 from tkinter import ttk
 from PIL import Image, ImageTk
-from multimodal_mocap_coord_toolbox import (
+from vaila import (
     cluster_analysis,
     imu_analysis,
     markerless_2D_analysis,
