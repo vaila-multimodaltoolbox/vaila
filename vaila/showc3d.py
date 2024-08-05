@@ -88,7 +88,7 @@ def select_markers_gui(marker_labels):
 
     marker_vars = [BooleanVar() for _ in marker_labels]
 
-    num_columns = 10  # Number of columns for the labels
+    num_columns = 6  # Number of columns for the labels
 
     for i, label in enumerate(marker_labels):
         chk = Checkbutton(scrollable_frame, text=label, variable=marker_vars[i])
