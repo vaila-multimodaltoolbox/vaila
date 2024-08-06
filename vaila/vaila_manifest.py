@@ -13,7 +13,7 @@ def show_vaila_message():
     window.geometry("800x720")
 
     # Load the image
-    image_path = os.path.join("multimodal_mocap_coord_toolbox", "images", "vaila_logo.png")
+    image_path = os.path.join("vaila", "images", "vaila_logo.png")
     image = Image.open(image_path)
     image = image.resize((150, 150), Image.LANCZOS)
     photo = ImageTk.PhotoImage(image)
