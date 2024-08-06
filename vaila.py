@@ -9,7 +9,7 @@ Main application script for the vailá Multimodal Toolbox. This script provides
 a Tkinter-based GUI to access various tools and functionalities for multimodal
 analysis, including file management, data analysis, and visualization.
 
-Version: 0.2
+Version: 0.0.1
 
 Changelog:
 v0.2 - Added Plot 2D button for 2D plotting of CSV or C3D files using Matplotlib.
@@ -20,13 +20,13 @@ v0.1 - Initial version with basic GUI layout and functionality.
 
 import os
 import signal
-import sys
 import platform
 from rich import print
 import tkinter as tk
 from tkinter import messagebox, filedialog
 from tkinter import ttk
 from PIL import Image, ImageTk
+
 from vaila import (
     cluster_analysis,
     imu_analysis,
