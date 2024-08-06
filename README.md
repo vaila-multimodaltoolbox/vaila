@@ -98,6 +98,7 @@ e você pode chamar esta ferramenta de vailá.
 "vailá" significa "vai lá e faça!", encorajando todos a aproveitar o poder das ferramentas versáteis e integradas do "vailá: Versatile Anarcho Integrated Liberation Ánalysis in Multimodal Toolbox" para realizar análises com dados de múltiplos sistemas.
 
 ## Authors
+
 Guilherme Manna Cesar<sup>1</sup>, Ligia Yumi Mochida<sup>1</sup>, Bruno Luiz de Souza Bedo<sup>2</sup>, Paulo Roberto Pereira Santiago<sup>3</sup>
 
 1 - University of North Florida, Laboratory of Applied Biomechanics and Engineering  
@@ -141,7 +142,7 @@ If you need to update the environment (replace `vaila_linux.yaml` or `vaila_maco
   conda env update -f vaila_win.yaml
 ```
 
-3. Activate the conda environment:
+1. Activate the conda environment:
 
 ```bash
   conda activate vaila
@@ -217,15 +218,9 @@ IMU_csv --> |          vailá - multimodaltoolbox        | <-- Cluster_csv
                    +-----------------------------+
                                   |
                                   v
-<<<<<<< HEAD
                        +---------------------+
                        | Visualization/Graph |
                        +---------------------+
-=======
-                      +---------------------+
-                      | Visualization/Graphs|
-                      +---------------------+
->>>>>>> 0e2a2a4 (readme update image gui)
 =========================== File Manager ===============================
  Import (im)  |  Export (ex)  |  Copy (cp)  |  Move (mv)  |  Remove (rm)
 ========================= Available Multimodal =========================
@@ -254,8 +249,7 @@ Choose an analysis option or file manager command:
 Here is an overview of the project structure:
 
 ```plaintext
-╰─$ tree multimodal_mocap_coord_toolbox
-multimodal_mocap_coord_toolbox
+vaila
 ├── __init__.py
 ├── batchcut.py
 ├── cluster_analysis.py
