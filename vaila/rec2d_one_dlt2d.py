@@ -1,3 +1,5 @@
+# Corrigir rec2d for one dlt2d
+
 import numpy as np
 import pandas as pd
 from numpy.linalg import inv

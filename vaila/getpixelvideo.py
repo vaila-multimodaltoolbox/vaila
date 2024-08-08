@@ -1,7 +1,7 @@
 # --------------------------------------------------
 # Script Name: getpixelvideo.py
-# Version: 1.0
-# Last Updated: July 25, 2024
+# Version: 0.0.1
+# Last Updated: 8 Aug 2024
 # Description: A tool for marking and saving pixel
 # coordinates in a video.
 # --------------------------------------------------
@@ -83,19 +83,18 @@ def get_pixel_coordinates(video_path):
     paused = True
     frame = None
 
-    def draw_cross(frame, x, y, num):
+    def draw_point(frame, x, y, num):
         color = (0, 255, 0)
-        thickness = 2
-        length = 6
-        cv2.line(frame, (x - length, y), (x + length, y), color, thickness)
-        cv2.line(frame, (x, y - length), (x, y + length), color, thickness)
-        cv2.putText(frame, f'{num}', (x + 5, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, thickness)
+        radius = 5
+        thickness = -1  # Filled circle
+        cv2.circle(frame, (x, y), radius, color, thickness)
+        cv2.putText(frame, f'{num}', (x + 10, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
 
     def click_event(event, x, y, flags, param):
         nonlocal frame
         if event == cv2.EVENT_LBUTTONDOWN:
             coordinates[frame_count].append((x, y))
-            draw_cross(frame, x, y, len(coordinates[frame_count]))
+            draw_point(frame, x, y, len(coordinates[frame_count]))
             cv2.imshow('Frame', frame)
         elif event == cv2.EVENT_RBUTTONDOWN:
             if coordinates[frame_count]:
@@ -104,7 +103,7 @@ def get_pixel_coordinates(video_path):
                 ret, frame = cap.read()
                 if ret:
                     for i, point in enumerate(coordinates[frame_count]):
-                        draw_cross(frame, point[0], point[1], i + 1)
+                        draw_point(frame, point[0], point[1], i + 1)
                     cv2.imshow('Frame', frame)
 
     def update_frame(new_frame_count):
@@ -114,7 +113,7 @@ def get_pixel_coordinates(video_path):
         ret, frame = cap.read()
         if ret:
             for i, point in enumerate(coordinates[frame_count]):
-                draw_cross(frame, point[0], point[1], i + 1)
+                draw_point(frame, point[0], point[1], i + 1)
             cv2.imshow('Frame', frame)
             window.title(f'Frame {frame_count}')
         paused = True
@@ -147,7 +146,7 @@ def get_pixel_coordinates(video_path):
             ret, frame = cap.read()
             if ret:
                 for i, point in enumerate(coordinates[frame_count]):
-                    draw_cross(frame, point[0], point[1], i + 1)
+                    draw_point(frame, point[0], point[1], i + 1)
                 cv2.imshow('Frame', frame)
                 window.title(f'Frame {frame_count}')
                 slider.set(frame_count)
