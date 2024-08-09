@@ -1,13 +1,25 @@
-# Corrigir rec2d for one dlt2d
+# rec2d_one_dlt2d.py
+# Author: Paulo Santiago
+# Version: 0.0.3
+# Last Updated: August 9, 2024
+# Description: Reconstruct 2D coordinates using DLT parameters from a single set of DLT parameters.
+# --------------------------------------------------
+# Usage Instructions:
+# - Select the DLT parameters file (should contain only one set of DLT parameters).
+# - Select the CSV file containing pixel coordinates.
+# - The reconstructed 2D coordinates will be saved to a new file with the same name but with a .2d extension.
+# - The script applies the single set of DLT parameters to all frames in the pixel coordinates file.
+# --------------------------------------------------
 
 import numpy as np
 import pandas as pd
 from numpy.linalg import inv
 from tkinter import filedialog, Tk, messagebox
+from rich import print
 
-def read_coordinates(file_path, usecols=None):
+def read_coordinates(file_path, usecols):
     df = pd.read_csv(file_path, usecols=usecols)
-    coordinates = df.dropna().to_numpy()
+    coordinates = df.to_numpy()  # Não descartar NaN aqui
     return coordinates
 
 def rec2d(A, cc2d):
@@ -38,23 +50,26 @@ def main():
         print("Pixel file selection cancelled.")
         return
 
-    dlt_params = read_coordinates(dlt_file)
+    dlt_params_df = pd.read_csv(dlt_file)
     pixel_coords_df = pd.read_csv(pixel_file)
 
-    if dlt_params.shape[0] != 1:
-        print("DLT file should contain only one set of DLT parameters.")
+    if dlt_params_df.shape[0] < 1:
+        print("DLT file should contain at least one set of DLT parameters.")
         return
 
-    A = dlt_params[0]
+    # Pegue apenas o primeiro conjunto de parâmetros DLT
+    A = dlt_params_df.iloc[0, 1:].to_numpy()
+    #import ipdb; ipdb.set_trace()
 
     rec_coords = []
     for i, row in pixel_coords_df.iterrows():
+        frame_num = int(row['frame'])
         pixel_coords = row[1:].to_numpy().reshape(-1, 2)
         if not np.isnan(pixel_coords).all():
             rec2d_coords = rec2d(A, pixel_coords)
-            rec_coords.append((row[0], *rec2d_coords.flatten()))
+            rec_coords.append((frame_num, *rec2d_coords.flatten()))
         else:
-            rec_coords.append((row[0], *[np.nan] * (len(row) - 1)))
+            rec_coords.append((frame_num, *[np.nan] * (len(row) - 1)))
 
     rec_coords_df = pd.DataFrame(rec_coords, columns=pixel_coords_df.columns)
 

@@ -1,9 +1,9 @@
 # --------------------------------------------------
 # Script Name: getpixelvideo.py
-# Version: 0.0.1
-# Last Updated: 8 Aug 2024
+# Version: 0.0.5
+# Last Updated: August 8, 2024
 # Description: A tool for marking and saving pixel
-# coordinates in a video.
+# coordinates in a video with zoom functionality.
 # --------------------------------------------------
 # Usage Instructions:
 # - Press 'Space' to toggle play/pause of the video.
@@ -12,6 +12,9 @@
 # - Press 'D' or 'Right Arrow' to go to the next frame.
 # - Press 'W' or 'Up Arrow' to jump to the last frame.
 # - Press 'S' or 'Down Arrow' to jump to the first frame.
+# - Press 'Ctrl m' to zoom in on the video.
+# - Press 'Ctrl l' to zoom out on the video.
+# - Press 'Ctrl h' to reset the zoom.
 # - Left-click to mark a point on the video.
 # - Right-click to remove the last marked point.
 # --------------------------------------------------
@@ -35,6 +38,9 @@ def show_help_message():
         "- Press 'D' or 'Right Arrow' to go to the next frame.\n"
         "- Press 'W' or 'Up Arrow' to jump to the last frame.\n"
         "- Press 'S' or 'Down Arrow' to jump to the first frame.\n"
+        "- Press 'Ctrl m' to zoom in on the video.\n"
+        "- Press 'Ctrl l' to zoom out on the video.\n"
+        "- Press 'Ctrl h' to reset the zoom.\n"
         "- Left-click to mark a point on the video.\n"
         "- Right-click to remove the last marked point.\n\n"
         "For more detailed help, click the link below:\n"
@@ -82,13 +88,34 @@ def get_pixel_coordinates(video_path):
     coordinates = {i: [] for i in range(total_frames)}
     paused = True
     frame = None
+    zoom_level = 1.0
 
     def draw_point(frame, x, y, num):
-        color = (0, 255, 0)
-        radius = 5
+        outer_color = (0, 0, 0)  # Black for the border
+        inner_color = (0, 255, 0)  # Green for the inner point
+        outer_radius = 7  # Radius for the border circle
+        inner_radius = 5  # Radius for the inner circle
         thickness = -1  # Filled circle
-        cv2.circle(frame, (x, y), radius, color, thickness)
-        cv2.putText(frame, f'{num}', (x + 10, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
+
+        # Draw the outer circle (border)
+        cv2.circle(frame, (x, y), outer_radius, outer_color, thickness)
+        # Draw the inner circle (point)
+        cv2.circle(frame, (x, y), inner_radius, inner_color, thickness)
+        cv2.putText(frame, f'{num}', (x + 10, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, inner_color, 1)
+
+    def apply_zoom(frame, zoom_level):
+        height, width = frame.shape[:2]
+        new_width = int(width * zoom_level)
+        new_height = int(height * zoom_level)
+        frame = cv2.resize(frame, (new_width, new_height), interpolation=cv2.INTER_LINEAR)
+
+        # Center the frame
+        if zoom_level > 1.0:
+            x_offset = (new_width - width) // 2
+            y_offset = (new_height - height) // 2
+            frame = frame[y_offset:y_offset+height, x_offset:x_offset+width]
+
+        return frame
 
     def click_event(event, x, y, flags, param):
         nonlocal frame
@@ -102,6 +129,7 @@ def get_pixel_coordinates(video_path):
                 cap.set(cv2.CAP_PROP_POS_FRAMES, frame_count)
                 ret, frame = cap.read()
                 if ret:
+                    frame = apply_zoom(frame, zoom_level)
                     for i, point in enumerate(coordinates[frame_count]):
                         draw_point(frame, point[0], point[1], i + 1)
                     cv2.imshow('Frame', frame)
@@ -112,6 +140,7 @@ def get_pixel_coordinates(video_path):
         cap.set(cv2.CAP_PROP_POS_FRAMES, frame_count)
         ret, frame = cap.read()
         if ret:
+            frame = apply_zoom(frame, zoom_level)
             for i, point in enumerate(coordinates[frame_count]):
                 draw_point(frame, point[0], point[1], i + 1)
             cv2.imshow('Frame', frame)
@@ -119,8 +148,9 @@ def get_pixel_coordinates(video_path):
         paused = True
 
     def on_key(event):
-        nonlocal paused
+        nonlocal paused, zoom_level
         key = event.keysym.lower()
+        print(f"Key pressed: {key}, State: {event.state}")  # Debug print
         if key == 'space':
             toggle_play_pause()
         elif key == 'escape':
@@ -135,6 +165,19 @@ def get_pixel_coordinates(video_path):
             update_frame(total_frames - 1)
         elif key in ['s', 'down']:
             update_frame(0)
+        elif event.state == 4:  # Ctrl is pressed
+            if key == 'm':  # Ctrl m
+                zoom_level *= 1.2
+                print(f"Zooming in, new zoom level: {zoom_level}")  # Debug print
+                update_frame(frame_count)
+            elif key == 'l':  # Ctrl l
+                zoom_level /= 1.2
+                print(f"Zooming out, new zoom level: {zoom_level}")  # Debug print
+                update_frame(frame_count)
+            elif key == 'h':  # Ctrl h
+                zoom_level = 1.0
+                print("Resetting zoom")  # Debug print
+                update_frame(frame_count)
         slider.set(frame_count)
 
     def play_video():
@@ -145,6 +188,7 @@ def get_pixel_coordinates(video_path):
                 frame_count = 0
             ret, frame = cap.read()
             if ret:
+                frame = apply_zoom(frame, zoom_level)
                 for i, point in enumerate(coordinates[frame_count]):
                     draw_point(frame, point[0], point[1], i + 1)
                 cv2.imshow('Frame', frame)

@@ -1,3 +1,16 @@
+# rec2d.py
+# Author: Paulo Santiago
+# Version: 0.0.3
+# Last Updated: August 9, 2024
+# Description: Reconstruct 2D coordinates for each frame using corresponding DLT parameters.
+# --------------------------------------------------
+# Usage Instructions:
+# - Select the DLT parameters file (can contain multiple sets of DLT parameters).
+# - Select the CSV file containing pixel coordinates.
+# - The reconstructed 2D coordinates will be saved to a new file with the same name but with a .2d extension.
+# - The script matches each frame in the pixel coordinates file with the corresponding DLT parameters based on frame number.
+# --------------------------------------------------
+
 import numpy as np
 import pandas as pd
 from numpy.linalg import inv
