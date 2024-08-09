@@ -2,16 +2,19 @@
 vaila.py
 
 Name: Paulo Santiago
-Date: 29/07/2024
+Date: 9 Aug 2024
 
 Description:
 Main application script for the vailá Multimodal Toolbox. This script provides
 a Tkinter-based GUI to access various tools and functionalities for multimodal
 analysis, including file management, data analysis, and visualization.
 
-Version: 0.0.1
+Version: 0.5
 
 Changelog:
+v0.5 - Added getpixelvideo load csv data
+v0.4 - Changed location rec2d one dlt2d and dlt2d
+v0.3 - Changed markerless 2D analysis to use a directory selection dialog.
 v0.2 - Added Plot 2D button for 2D plotting of CSV or C3D files using Matplotlib.
        Improved exit functionality to ensure proper shutdown of the application.
        Refactored code for better readability and maintainability.
@@ -277,13 +280,13 @@ class Vaila(tk.Tk):
         tools_col2 = tk.LabelFrame(tools_frame, text="Video", padx=5, pady=5, font=("Arial", 14))
         tools_col3 = tk.LabelFrame(tools_frame, text="Visualization", padx=5, pady=5, font=("Arial", 14))
 
-        # Data Files sub-columns
+                # Data Files sub-columns
         reorder_csv_btn = tk.Button(tools_col1, text="Edit CSV", command=self.reorder_csv_data, width=button_width)
         convert_c3d_btn = tk.Button(tools_col1, text="C3D to CSV", command=self.convert_c3d_data, width=button_width) 
         create_c3d_btn = tk.Button(tools_col1, text="CSV to C3D", command=self.convert_csv_to_c3d, width=button_width)
-        dlt2d_btn = tk.Button(tools_col1, text="DLT 2D", command=self.dlt2d, width=button_width)
-        rec2d_multiple_btn = tk.Button(tools_col1, text="Rec2D Multi DLTs", command=self.rec2d, width=button_width)
-        rec2d_one_btn = tk.Button(tools_col1, text="Rec2D One DLT", command=self.rec2d_one_dlt2d, width=button_width)
+        dlt2d_btn = tk.Button(tools_col1, text="Make DLT2D", command=self.dlt2d, width=button_width)  # "Make DLT2D" vem primeiro
+        rec2d_one_btn = tk.Button(tools_col1, text="Rec2D 1DLT", command=self.rec2d_one_dlt2d, width=button_width)
+        rec2d_multiple_btn = tk.Button(tools_col1, text="Rec2D MultiDLT", command=self.rec2d, width=button_width)
         vaila_btn1 = tk.Button(tools_col1, text="vailá", command=self.show_vaila_message, width=button_width)
         vaila_btn2 = tk.Button(tools_col1, text="vailá", command=self.show_vaila_message, width=button_width)
         vaila_btn3 = tk.Button(tools_col1, text="vailá", command=self.show_vaila_message, width=button_width)
@@ -298,9 +301,9 @@ class Vaila(tk.Tk):
         reorder_csv_btn.grid(row=0, column=0, padx=2, pady=2)
         convert_c3d_btn.grid(row=0, column=1, padx=2, pady=2)
         create_c3d_btn.grid(row=0, column=2, padx=2, pady=2)
-        dlt2d_btn.grid(row=1, column=0, padx=2, pady=2)
-        rec2d_multiple_btn.grid(row=1, column=1, padx=2, pady=2)
-        rec2d_one_btn.grid(row=1, column=2, padx=2, pady=2)
+        dlt2d_btn.grid(row=1, column=0, padx=2, pady=2)  # "Make DLT2D" vem primeiro
+        rec2d_one_btn.grid(row=1, column=1, padx=2, pady=2)  # "Rec2D 1DLT" em seguida
+        rec2d_multiple_btn.grid(row=1, column=2, padx=2, pady=2)  # "Rec2D MultDLT" em terceiro
         vaila_btn1.grid(row=2, column=0, padx=2, pady=2)
         vaila_btn2.grid(row=2, column=1, padx=2, pady=2)
         vaila_btn3.grid(row=2, column=2, padx=2, pady=2)
@@ -415,12 +418,7 @@ class Vaila(tk.Tk):
         mocap_analysis.analyze_mocap_fullbody_data()
 
     def markerless_2d_analysis(self):
-        selected_path = filedialog.askdirectory()
-        if selected_path:
-            markerless_2D_analysis.process_videos_in_directory(selected_path, os.path.join(selected_path, 'working'), pose_config={
-                'min_detection_confidence': 0.1,
-                'min_tracking_confidence': 0.1
-            })
+        markerless_2D_analysis.process_videos_in_directory()
 
     def markerless_3d_analysis(self):
         selected_path = filedialog.askdirectory()
