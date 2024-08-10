@@ -1,7 +1,7 @@
 # markerless_2D_analysis.py
 # Author: Paulo Santiago
 # Version: 0.0.5
-# Last Updated: August 9, 2024
+# Last Updated: August 10, 2024
 # Description: This script performs batch processing of videos for 2D pose estimation using MediaPipe's Pose model.
 # --------------------------------------------------
 # Usage Instructions:
@@ -80,7 +80,7 @@ def process_video(video_path, output_dir, pose_config):
 
     output_video_name = os.path.splitext(os.path.basename(video_path))[0] + "_mp.mp4"
     output_video_path = os.path.join(output_dir, output_video_name)
-    output_landmarks_name = os.path.splitext(os.path.basename(video_path))[0] + "_mp_landmarks.csv"
+    output_landmarks_name = os.path.splitext(os.path.basename(video_path))[0] + "_mp_norm.csv"
     output_file_path = os.path.join(output_dir, output_landmarks_name)
     output_pixel_file_path = os.path.join(output_dir, os.path.splitext(os.path.basename(video_path))[0] + "_mp_pixel.csv")
 
@@ -152,10 +152,10 @@ def process_videos_in_directory():
 
     pose_config = get_pose_config()
     if not pose_config:
-        return
+        return 
 
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_base = os.path.join(output_base, f"working_{timestamp}")
+    output_base = os.path.join(output_base, f"mediapipe_{timestamp}")
     os.makedirs(output_base, exist_ok=True)
 
     for root, dirs, files in os.walk(input_dir):
