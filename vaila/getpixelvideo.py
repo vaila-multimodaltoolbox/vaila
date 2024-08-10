@@ -1,6 +1,6 @@
 # --------------------------------------------------
 # Script Name: getpixelvideo.py
-# Version: 0.0.7
+# Version: 0.0.9
 # Last Updated: August 9, 2024
 # Description: A tool for marking and saving pixel
 # coordinates in a video with zoom functionality. 
@@ -18,6 +18,7 @@
 # - Press 'Ctrl h' to reset the zoom.
 # - Left-click to mark a point on the video.
 # - Right-click to remove the last marked point.
+# - Use 'n' to go to the next point and 'p' to go to the previous point.
 # - Optionally, load a CSV with pre-marked points.
 # --------------------------------------------------
 
@@ -115,19 +116,21 @@ def get_pixel_coordinates(video_path, initial_coordinates=None):
     paused = True
     frame = None
     zoom_level = 1.0
+    current_point = 0  # Initialize current_point
 
-    def draw_point(frame, x, y, num):
-        outer_color = (0, 0, 0)  # Black for the border
-        inner_color = (0, 255, 0)  # Green for the inner point
-        outer_radius = 7  # Radius for the border circle
-        inner_radius = 5  # Radius for the inner circle
-        thickness = -1  # Filled circle
+    def draw_point(frame, x, y, num, is_current=False):
+        outer_color = (0, 0, 255) if is_current else (0, 0, 0)  # Red for current point, Black for others
+        inner_color = (0, 255, 255) if is_current else (0, 255, 0)  # Yellow for current point, Green for others
+        outer_radius = 7
+        inner_radius = 5
+        thickness = -1
 
-        # Draw the outer circle (border)
-        cv2.circle(frame, (x, y), outer_radius, outer_color, thickness)
-        # Draw the inner circle (point)
-        cv2.circle(frame, (x, y), inner_radius, inner_color, thickness)
-        cv2.putText(frame, f'{num}', (x + 10, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, inner_color, 1)
+        screen_x = int(x * zoom_level)
+        screen_y = int(y * zoom_level)
+
+        cv2.circle(frame, (screen_x, screen_y), outer_radius, outer_color, thickness)
+        cv2.circle(frame, (screen_x, screen_y), inner_radius, inner_color, thickness)
+        cv2.putText(frame, f'{num}', (screen_x + 10, screen_y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, inner_color, 1)
 
     def apply_zoom(frame, zoom_level):
         height, width = frame.shape[:2]
@@ -135,19 +138,20 @@ def get_pixel_coordinates(video_path, initial_coordinates=None):
         new_height = int(height * zoom_level)
         frame = cv2.resize(frame, (new_width, new_height), interpolation=cv2.INTER_LINEAR)
 
-        # Center the frame
         if zoom_level > 1.0:
             x_offset = (new_width - width) // 2
             y_offset = (new_height - height) // 2
-            frame = frame[y_offset:y_offset+height, x_offset:x_offset+width]
+            frame = frame[y_offset:y_offset + height, x_offset:x_offset + width]
 
         return frame
 
     def click_event(event, x, y, flags, param):
-        nonlocal frame
+        nonlocal frame, current_point
         if event == cv2.EVENT_LBUTTONDOWN:
-            coordinates[frame_count].append((x, y))
-            draw_point(frame, x, y, len(coordinates[frame_count]))
+            original_x = int(x / zoom_level)
+            original_y = int(y / zoom_level)
+            coordinates[frame_count].append((original_x, original_y))
+            draw_point(frame, original_x, original_y, len(coordinates[frame_count]), is_current=True)
             cv2.imshow('Frame', frame)
         elif event == cv2.EVENT_RBUTTONDOWN:
             if coordinates[frame_count]:
@@ -157,7 +161,7 @@ def get_pixel_coordinates(video_path, initial_coordinates=None):
                 if ret:
                     frame = apply_zoom(frame, zoom_level)
                     for i, point in enumerate(coordinates[frame_count]):
-                        draw_point(frame, point[0], point[1], i + 1)
+                        draw_point(frame, point[0], point[1], i + 1, is_current=(i == len(coordinates[frame_count])-1))
                     cv2.imshow('Frame', frame)
 
     def update_frame(new_frame_count):
@@ -168,13 +172,13 @@ def get_pixel_coordinates(video_path, initial_coordinates=None):
         if ret:
             frame = apply_zoom(frame, zoom_level)
             for i, point in enumerate(coordinates[frame_count]):
-                draw_point(frame, point[0], point[1], i + 1)
+                draw_point(frame, point[0], point[1], i + 1, is_current=(i == current_point))
             cv2.imshow('Frame', frame)
-            window.title(f'Frame {frame_count}')
+            window.title(f'Frame {frame_count} - Point {current_point + 1} of {len(coordinates[frame_count])}')
         paused = True
 
     def on_key(event):
-        nonlocal paused, zoom_level
+        nonlocal paused, zoom_level, current_point
         key = event.keysym.lower()
         if key == 'space':
             toggle_play_pause()
@@ -186,10 +190,14 @@ def get_pixel_coordinates(video_path, initial_coordinates=None):
             update_frame(max(frame_count - 1, 0))
         elif key in ['d', 'right']:
             update_frame(min(frame_count + 1, total_frames - 1))
-        elif key in ['w', 'up']:
-            update_frame(total_frames - 1)
-        elif key in ['s', 'down']:
-            update_frame(0)
+        elif key == 'n':
+            if coordinates[frame_count]:
+                current_point = (current_point + 1) % len(coordinates[frame_count])
+                update_frame(frame_count)
+        elif key == 'p':
+            if coordinates[frame_count]:
+                current_point = (current_point - 1) % len(coordinates[frame_count])
+                update_frame(frame_count)
         elif event.state == 4:  # Ctrl is pressed
             if key == 'm':  # Ctrl m
                 zoom_level *= 1.2
@@ -212,9 +220,9 @@ def get_pixel_coordinates(video_path, initial_coordinates=None):
             if ret:
                 frame = apply_zoom(frame, zoom_level)
                 for i, point in enumerate(coordinates[frame_count]):
-                    draw_point(frame, point[0], point[1], i + 1)
+                    draw_point(frame, point[0], point[1], i + 1, is_current=(i == current_point))
                 cv2.imshow('Frame', frame)
-                window.title(f'Frame {frame_count}')
+                window.title(f'Frame {frame_count} - Point {current_point + 1} of {len(coordinates[frame_count])}')
                 slider.set(frame_count)
             window.after(30, play_video)  # Adjust delay as needed
         else:
@@ -257,7 +265,7 @@ def get_pixel_coordinates(video_path, initial_coordinates=None):
     return coordinates, total_frames
 
 def main():
-    show_help_message()  # Show the help message and open the help file
+    show_help_message()
     video_path = get_video_path()
     if video_path:
         root = Tk()
@@ -272,3 +280,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+           
