@@ -1,6 +1,46 @@
 """
-rearrange_data.py
-Version: 2024-07-31 14:30:00
+Script Name: rearrange_data.py
+Version: 2024-08-10 14:30:00
+Author: Paulo Santiago
+
+Description:
+-------------
+This script provides tools for rearranging and processing CSV data files. 
+It includes functions for:
+- Reordering columns.
+- Merging and stacking CSV files.
+- Converting MediaPipe data to a format compatible with 'getpixelvideo.py'.
+- Detecting precision and scientific notation in the data.
+- Converting units between various metric systems.
+- Modifying lab reference systems.
+
+Features:
+---------
+- Batch processing of CSV files.
+- Support for GUI-based column reordering and data reshaping.
+- MediaPipe data conversion to a compatible format for pixel coordinate visualization.
+- Flexible unit conversion and custom lab reference adjustments.
+- User-friendly interface with options for saving intermediate and final processed data.
+
+Changelog:
+----------
+- 2024-08-10: Added functionality to batch convert MediaPipe CSV files and save them in a new directory.
+- 2024-08-10: Implemented automatic directory creation for saving converted MediaPipe data.
+- 2024-07-31: Initial version with core functionalities for CSV reordering and unit conversion.
+
+Usage:
+------
+- Run the script to launch a GUI for reordering CSV columns.
+- Use the "Convert MediaPipe" button to batch convert MediaPipe CSV files to a compatible format.
+- Save the processed files in a timestamped directory.
+
+Requirements:
+-------------
+- Python 3.x
+- pandas
+- numpy
+- tkinter
+
 """
 
 import os
@@ -103,6 +143,59 @@ def reshapedata(file_path, new_order, save_directory, suffix, max_decimal_places
     except Exception as e:
         print(f"Error processing {file_path}: {e}")
 
+# Function to convert MediaPipe data to the format compatible with getpixelvideo.py
+def convert_mediapipe_to_pixel_format(file_path, save_directory):
+    df = pd.read_csv(file_path)
+    
+    # Create the new DataFrame with the "frame" column and pX_x, pX_y coordinates
+    new_df = pd.DataFrame()
+    new_df['frame'] = df.iloc[:, 0]  # Use the first column as "frame"
+    
+    columns = df.columns[1:]  # Ignore the first column, which we already used for "frame"
+    for i in range(0, len(columns), 3):
+        if i + 1 < len(columns):
+            x_col = columns[i]
+            y_col = columns[i + 1]
+            new_df[f'p{i//3 + 1}_x'] = df[x_col]
+            new_df[f'p{i//3 + 1}_y'] = df[y_col]
+
+    # Save the new CSV file in the desired format
+    base_name = os.path.splitext(os.path.basename(file_path))[0]
+    new_file_name = f"{base_name}_converted.csv"
+    new_file_path = os.path.join(save_directory, new_file_name)
+
+    if not os.path.exists(save_directory):
+        os.makedirs(save_directory)
+
+    new_df.to_csv(new_file_path, index=False)
+    print(f"Converted MediaPipe data saved to {new_file_path}")
+    messagebox.showinfo("Success", f"Converted MediaPipe data saved to {new_file_path}")
+    
+# Function to batch convert all MediaPipe CSV files in a directory
+def batch_convert_mediapipe(directory_path):
+    if not directory_path:
+        print("No directory selected.")
+        return
+
+    csv_files = [f for f in os.listdir(directory_path) if f.endswith('.csv')]
+    if not csv_files:
+        print("No CSV files found in the directory.")
+        return
+
+    # Create a new directory with a timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    save_directory = os.path.join(directory_path, f"Convert_MediaPipe_{timestamp}")
+
+    if not os.path.exists(save_directory):
+        os.makedirs(save_directory)
+
+    for file_name in csv_files:
+        file_path = os.path.join(directory_path, file_name)
+        convert_mediapipe_to_pixel_format(file_path, save_directory)
+
+    print(f"All files have been converted and saved to {save_directory}")
+    messagebox.showinfo("Success", f"All files have been converted and saved to {save_directory}")
+
 class ColumnReorderGUI(tk.Tk):
     def __init__(self, original_headers, file_names, directory_path):
         super().__init__()
@@ -187,6 +280,10 @@ class ColumnReorderGUI(tk.Tk):
         
         stack_button = tk.Button(button_frame, text="Stack/Append CSV", command=self.stack_csv)
         stack_button.grid(row=3, column=0, padx=5, pady=5, sticky="n")
+        
+        # Button to convert MediaPipe CSVs
+        mediapipe_button = tk.Button(button_frame, text="Convert MediaPipe", command=lambda: batch_convert_mediapipe(self.directory_path))
+        mediapipe_button.grid(row=4, column=0, padx=5, pady=5, sticky="n")
 
         self.bind("<Return>", self.swap_columns)
         self.bind("d", self.delete_columns)
