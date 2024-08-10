@@ -1,7 +1,7 @@
 # --------------------------------------------------
 # Script Name: getpixelvideo.py
-# Version: 0.0.8
-# Last Updated: August 9, 2024
+# Version: 0.0.1
+# Last Updated: 8 Aug 2024
 # Description: A tool for marking and saving pixel
 # coordinates in a video.
 # --------------------------------------------------
@@ -84,17 +84,11 @@ def get_pixel_coordinates(video_path):
     frame = None
 
     def draw_point(frame, x, y, num):
-        outer_color = (0, 0, 0)  # Black for the border
-        inner_color = (0, 255, 0)  # Green for the inner point
-        outer_radius = 7  # Radius for the border circle
-        inner_radius = 5  # Radius for the inner circle
+        color = (0, 255, 0)
+        radius = 5
         thickness = -1  # Filled circle
-
-        # Draw the outer circle (border)
-        cv2.circle(frame, (x, y), outer_radius, outer_color, thickness)
-        # Draw the inner circle (point)
-        cv2.circle(frame, (x, y), inner_radius, inner_color, thickness)
-        cv2.putText(frame, f'{num}', (x + 10, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, inner_color, 1)
+        cv2.circle(frame, (x, y), radius, color, thickness)
+        cv2.putText(frame, f'{num}', (x + 10, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
 
     def click_event(event, x, y, flags, param):
         nonlocal frame
