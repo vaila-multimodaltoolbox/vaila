@@ -1,0 +1,36 @@
+site_name: vailá
+repo_url: https://github.com/vaila-multimodaltoolbox/vaila
+repo_name: vaila
+edit_uri: tree/main/docs/
+
+theme:
+  name: material
+  logo: docs/images/vaila_logo.png
+  favicon: docs/images/vaila_ico.png
+  palette:
+    - scheme: default
+      primary: black
+      toggle:
+        icon: material/weather-night
+        name: Dark mode
+    - scheme: slate
+      primary: darkslategray
+      toggle:
+        icon: material/weather-sunny
+        name: Light mode
+
+markdown_extensions:
+  - attr_list
+  - pymdownx.superfences
+  - pymdownx.details
+  - pymdownx.magiclink
+  - pymdownx.mark
+  - pymdownx.tasklist  # Lista de tarefas
+  - pymdownx.emoji  # Emojis
+  - pymdownx.mark
+  - pymdownx.tilde
+  - pymdownx.highlight
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
