@@ -280,39 +280,33 @@ class Vaila(tk.Tk):
         tools_col2 = tk.LabelFrame(tools_frame, text="Video", padx=5, pady=5, font=("Arial", 14))
         tools_col3 = tk.LabelFrame(tools_frame, text="Visualization", padx=5, pady=5, font=("Arial", 14))
 
-                # Data Files sub-columns
+        # Data Files sub-columns
         reorder_csv_btn = tk.Button(tools_col1, text="Edit CSV", command=self.reorder_csv_data, width=button_width)
         convert_c3d_btn = tk.Button(tools_col1, text="C3D to CSV", command=self.convert_c3d_data, width=button_width) 
         create_c3d_btn = tk.Button(tools_col1, text="CSV to C3D", command=self.convert_csv_to_c3d, width=button_width)
-        dlt2d_btn = tk.Button(tools_col1, text="Make DLT2D", command=self.dlt2d, width=button_width)  # "Make DLT2D" vem primeiro
+        dlt2d_btn = tk.Button(tools_col1, text="Make DLT2D", command=self.dlt2d, width=button_width)
         rec2d_one_btn = tk.Button(tools_col1, text="Rec2D 1DLT", command=self.rec2d_one_dlt2d, width=button_width)
         rec2d_multiple_btn = tk.Button(tools_col1, text="Rec2D MultiDLT", command=self.rec2d, width=button_width)
-        vaila_btn1 = tk.Button(tools_col1, text="vailá", command=self.show_vaila_message, width=button_width)
-        vaila_btn2 = tk.Button(tools_col1, text="vailá", command=self.show_vaila_message, width=button_width)
-        vaila_btn3 = tk.Button(tools_col1, text="vailá", command=self.show_vaila_message, width=button_width)
-        vaila_btn4 = tk.Button(tools_col1, text="vailá", command=self.show_vaila_message, width=button_width)
-        vaila_btn5 = tk.Button(tools_col1, text="vailá", command=self.show_vaila_message, width=button_width)
-        vaila_btn6 = tk.Button(tools_col1, text="vailá", command=self.show_vaila_message, width=button_width)
-        # For more buttons, add more vaila_btns in the Visualization sub-columns or edit the code to add more columns
-        # Example:
-        # vaila_btn7 = tk.Button(tools_col1, text="vailá", command=self.show_vaila_message, width=button_width)
+        dlt3d_btn = tk.Button(tools_col1, text="Make DLT3D", command=self.dlt3d, width=button_width)
+        rec3d_one_btn = tk.Button(tools_col1, text="Rec3D 1DLT", command=self.rec3d_one_dlt3d, width=button_width)
+        rec3d_multiple_btn = tk.Button(tools_col1, text="Rec3D MultiDLT", command=self.rec3d, width=button_width)
+        vaila_btn9 = tk.Button(tools_col1, text="vailá", command=self.show_vaila_message, width=button_width)
+        vaila_btn10 = tk.Button(tools_col1, text="vailá", command=self.show_vaila_message, width=button_width)
+        vaila_btn11 = tk.Button(tools_col1, text="vailá", command=self.show_vaila_message, width=button_width)
 
         # Packing Data Files buttons
         reorder_csv_btn.grid(row=0, column=0, padx=2, pady=2)
         convert_c3d_btn.grid(row=0, column=1, padx=2, pady=2)
         create_c3d_btn.grid(row=0, column=2, padx=2, pady=2)
-        dlt2d_btn.grid(row=1, column=0, padx=2, pady=2)  # "Make DLT2D" vem primeiro
-        rec2d_one_btn.grid(row=1, column=1, padx=2, pady=2)  # "Rec2D 1DLT" em seguida
-        rec2d_multiple_btn.grid(row=1, column=2, padx=2, pady=2)  # "Rec2D MultDLT" em terceiro
-        vaila_btn1.grid(row=2, column=0, padx=2, pady=2)
-        vaila_btn2.grid(row=2, column=1, padx=2, pady=2)
-        vaila_btn3.grid(row=2, column=2, padx=2, pady=2)
-        vaila_btn4.grid(row=3, column=0, padx=2, pady=2)
-        vaila_btn5.grid(row=3, column=1, padx=2, pady=2)
-        vaila_btn6.grid(row=3, column=2, padx=2, pady=2)
-        # For more buttons, add more vaila_btns in the Visualization sub-columns or edit the code to add more columns
-        # Example:
-        # vaila_btn7.grid(row=4, column=0, padx=2, pady=2)
+        dlt2d_btn.grid(row=1, column=0, padx=2, pady=2)
+        rec2d_one_btn.grid(row=1, column=1, padx=2, pady=2)
+        rec2d_multiple_btn.grid(row=1, column=2, padx=2, pady=2)
+        dlt3d_btn.grid(row=2, column=0, padx=2, pady=2)
+        rec3d_one_btn.grid(row=2, column=1, padx=2, pady=2)
+        rec3d_multiple_btn.grid(row=2, column=2, padx=2, pady=2)
+        vaila_btn9.grid(row=3, column=0, padx=2, pady=2)
+        vaila_btn10.grid(row=3, column=1, padx=2, pady=2)
+        vaila_btn11.grid(row=3, column=2, padx=2, pady=2)
 
         tools_col1.pack(side="left", fill="both", expand=True, padx=5, pady=5)
 
@@ -325,13 +319,10 @@ class Vaila(tk.Tk):
         sync_videos_btn = tk.Button(tools_col2, text="Make Sync file", command=self.sync_videos, width=button_width)
         getpixelvideo_btn = tk.Button(tools_col2, text="Get Pixel Coords", command=self.getpixelvideo, width=button_width)
         count_frames_btn = tk.Button(tools_col2, text="Metadata info", command=self.count_frames_in_videos, width=button_width)
-        vaila_btn7 = tk.Button(tools_col2, text="vailá", command=self.show_vaila_message, width=button_width)
-        vaila_btn8 = tk.Button(tools_col2, text="vailá", command=self.show_vaila_message, width=button_width)
-        vaila_btn9 = tk.Button(tools_col2, text="vailá", command=self.show_vaila_message, width=button_width)
-        vaila_btn10 = tk.Button(tools_col2, text="vailá", command=self.show_vaila_message, width=button_width)
-        # For more buttons, add more vaila_btns in the Visualization sub-columns or edit the code to add more columns
-        # Example:
-        # vaila_btn11 = tk.Button(tools_col2, text="vailá", command=self.show_vaila_message, width=button_width)
+        vaila_btn12 = tk.Button(tools_col2, text="vailá", command=self.show_vaila_message, width=button_width)
+        vaila_btn13 = tk.Button(tools_col2, text="vailá", command=self.show_vaila_message, width=button_width)
+        vaila_btn14 = tk.Button(tools_col2, text="vailá", command=self.show_vaila_message, width=button_width)
+        vaila_btn15 = tk.Button(tools_col2, text="vailá", command=self.show_vaila_message, width=button_width)
 
         # Packing Video buttons
         extract_png_btn.grid(row=0, column=0, padx=2, pady=2)
@@ -342,42 +333,33 @@ class Vaila(tk.Tk):
         sync_videos_btn.grid(row=1, column=2, padx=2, pady=2)
         getpixelvideo_btn.grid(row=2, column=0, padx=2, pady=2)
         count_frames_btn.grid(row=2, column=1, padx=2, pady=2)
-        vaila_btn7.grid(row=2, column=2, padx=2, pady=2)
-        vaila_btn8.grid(row=3, column=0, padx=2, pady=2)
-        vaila_btn9.grid(row=3, column=1, padx=2, pady=2)
-        vaila_btn10.grid(row=3, column=2, padx=2, pady=2)
-        # For more buttons, add more vaila_btns in the Visualization sub-columns ou edite o código para adicionar mais colunas
-        # Example:
-        # vaila_btn11.grid(row=4, column=0, padx=2, pady=2)
-        
+        vaila_btn12.grid(row=2, column=2, padx=2, pady=2)
+        vaila_btn13.grid(row=3, column=0, padx=2, pady=2)
+        vaila_btn14.grid(row=3, column=1, padx=2, pady=2)
+        vaila_btn15.grid(row=3, column=2, padx=2, pady=2)
+
         tools_col2.pack(side="left", fill="both", expand=True, padx=5, pady=5)
 
         # Visualization sub-columns
         show_c3d_btn = tk.Button(tools_col3, text="Show C3D", command=self.show_c3d_data, width=button_width)
         show_csv_btn = tk.Button(tools_col3, text="Show CSV", command=self.show_csv_file, width=button_width)
         plot_2d_btn = tk.Button(tools_col3, text="Plot 2D", command=self.plot_2d_data, width=button_width)
-        vaila_btn12 = tk.Button(tools_col3, text="vailá", command=self.show_vaila_message, width=button_width)
-        vaila_btn13 = tk.Button(tools_col3, text="vailá", command=self.show_vaila_message, width=button_width)
-        vaila_btn14 = tk.Button(tools_col3, text="vailá", command=self.show_vaila_message, width=button_width)
         vaila_btn15 = tk.Button(tools_col3, text="vailá", command=self.show_vaila_message, width=button_width)
         vaila_btn16 = tk.Button(tools_col3, text="vailá", command=self.show_vaila_message, width=button_width)
-        # For more buttons, add more vaila_btns in the Visualization sub-columns ou edite o código para adicionar mais colunas
-        # Example:
-        # vaila_btn17 = tk.Button(tools_col3, text="vailá", command=self.show_vaila_message, width=button_width)
-        
+        vaila_btn17 = tk.Button(tools_col3, text="vailá", command=self.show_vaila_message, width=button_width)
+        vaila_btn18 = tk.Button(tools_col3, text="vailá", command=self.show_vaila_message, width=button_width)
+        vaila_btn19 = tk.Button(tools_col3, text="vailá", command=self.show_vaila_message, width=button_width)
+
         # Packing Visualization buttons
         show_c3d_btn.grid(row=0, column=0, padx=2, pady=2)
         show_csv_btn.grid(row=0, column=1, padx=2, pady=2)
         plot_2d_btn.grid(row=1, column=0, padx=2, pady=2)
-        vaila_btn12.grid(row=1, column=1, padx=2, pady=2)
-        vaila_btn13.grid(row=2, column=0, padx=2, pady=2)
-        vaila_btn14.grid(row=2, column=1, padx=2, pady=2)
-        vaila_btn15.grid(row=3, column=0, padx=2, pady=2)
-        vaila_btn16.grid(row=3, column=1, padx=2, pady=2)
-        # For more buttons, add more vaila_btns in the Visualization sub-columns ou edite o código para adicionar mais colunas
-        # Example:
-        # vaila_btn17.grid(row=4, column=0, padx=2, pady=2)
-        
+        vaila_btn15.grid(row=1, column=1, padx=2, pady=2)
+        vaila_btn16.grid(row=2, column=0, padx=2, pady=2)
+        vaila_btn17.grid(row=2, column=1, padx=2, pady=2)
+        vaila_btn18.grid(row=3, column=0, padx=2, pady=2)
+        vaila_btn19.grid(row=3, column=1, padx=2, pady=2)
+
         tools_col3.pack(side="left", fill="both", expand=True, padx=5, pady=5)
 
         # Help and Exit Buttons Frame
@@ -477,6 +459,15 @@ class Vaila(tk.Tk):
 
     def rec2d_one_dlt2d(self):
         rec2d_one_dlt2d()
+
+    def dlt3d(self):
+        pass  # Aqui você deve adicionar a lógica para o DLT3D
+
+    def rec3d_one_dlt3d(self):
+        pass  # Aqui você deve adicionar a lógica para a reconstrução 3D com 1 DLT
+
+    def rec3d(self):
+        pass  # Aqui você deve adicionar a lógica para a reconstrução 3D com múltiplos DLTs
 
     def show_csv_file(self):
         show_csv()
