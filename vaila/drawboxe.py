@@ -1,6 +1,48 @@
 """
 drawboxe.py
-Version: 2024-07-15 20:00:00
+
+Description:
+-----------
+This script is designed to add bounding boxes to videos using coordinates obtained from clicks on an image. It also supports extracting frames and applying boxes to specific frame intervals or directly to videos. The script can be used for batch processing of videos in a directory.
+
+Version:
+--------
+2024-08-12 08:00:00 (New York Time)
+
+Author:
+-------
+Prof. PhD. Paulo Santiago
+
+License:
+--------
+This code is licensed under the MIT License. See the LICENSE file for more details.
+
+Version History:
+----------------
+- v1.0 (2024-08-12): Initial version with support for adding boxes to videos and extracting frames.
+
+Contact:
+--------
+For questions or contributions, please contact the author at: paulo.santiago@example.com.
+
+Contributions:
+--------------
+Contributions are welcome. Please follow the contribution guidelines provided in the CONTRIBUTING.md file of this repository.
+
+Dependencies:
+-------------
+- Python 3.11.8 (Anaconda environment)
+- os
+- ffmpeg-python
+- pandas
+- matplotlib
+- opencv-python
+- tkinter
+
+Additional Notes:
+-----------------
+- Ensure FFMPEG is installed on your system for this script to function correctly.
+- The script assumes that the input videos are in a format supported by OpenCV.
 """
 
 import os
