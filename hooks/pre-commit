@@ -1,19 +1,16 @@
+╰─$ cat hooks/pre-commit
 #!/bin/bash
 
-# Máximo tamanho permitido em bytes (24MB = 24 * 1024 * 1024)
+# Maximum allowed size in bytes (24MB = 24 * 1024 * 1024)
 max_size=25165824
 
-# Verifique se algum arquivo excede o tamanho máximo
+# Check if any file exceeds the maximum size
 for file in $(git diff --cached --name-only); do
   if [ -f "$file" ]; then
     file_size=$(wc -c <"$file")
     if [ $file_size -ge $max_size ]; then
-      echo "Erro: O arquivo '$file' tem tamanho de $(($file_size / 1024 / 1024))MB, que é maior que o limite de 24MB."
+      echo "Error: The file '$file' is $(($file_size / 1024 / 1024))MB, which exceeds the 24MB limit."
       exit 1
     fi
   fi
 done
-
-# Se todos os arquivos passarem no teste, permita o commit
-exit 0
-
