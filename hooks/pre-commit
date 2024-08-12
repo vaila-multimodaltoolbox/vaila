@@ -1,4 +1,3 @@
-╰─$ cat hooks/pre-commit
 #!/bin/bash
 
 # Maximum allowed size in bytes (24MB = 24 * 1024 * 1024)
