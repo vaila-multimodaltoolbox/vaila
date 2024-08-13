@@ -282,7 +282,7 @@ class ColumnReorderGUI(tk.Tk):
         stack_button.grid(row=3, column=0, padx=5, pady=5, sticky="n")
         
         # Button to convert MediaPipe CSVs
-        mediapipe_button = tk.Button(button_frame, text="Convert MediaPipe", command=lambda: batch_convert_mediapipe(self.directory_path))
+        mediapipe_button = tk.Button(button_frame, text="Convert MediaPipe to vailá", command=lambda: batch_convert_mediapipe(self.directory_path))
         mediapipe_button.grid(row=4, column=0, padx=5, pady=5, sticky="n")
 
         self.bind("<Return>", self.swap_columns)
