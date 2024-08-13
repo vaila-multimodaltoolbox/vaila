@@ -54,7 +54,7 @@ import matplotlib.patches as patches
 import cv2
 import tkinter as tk
 from tkinter import filedialog, messagebox
-from threading import Thread
+# from threading import Thread
 import time
 import shutil
 
@@ -212,40 +212,40 @@ def load_frame_intervals(file_path):
             intervals.append((start, end))
     return intervals
 
-def show_feedback_window():
-    # GUI to show "vailá" while processing is ongoing
-    feedback_window = tk.Toplevel()
-    feedback_window.title("Processing...")
+# def show_feedback_window():
+#     # GUI to show "vailá" while processing is ongoing
+#     feedback_window = tk.Toplevel()
+#     feedback_window.title("Processing...")
 
-    # Increase window size
-    feedback_window.geometry("400x200")
+#     # Increase window size
+#     feedback_window.geometry("400x200")
 
-    # Adjust font size and padding
-    feedback_label = tk.Label(feedback_window, text="", font=("Helvetica", 51), pady=20)
-    feedback_label.pack(expand=True)
+#     # Adjust font size and padding
+#     feedback_label = tk.Label(feedback_window, text="", font=("Helvetica", 51), pady=20)
+#     feedback_label.pack(expand=True)
 
-    def update_feedback():
-        text = "áliav"
-        for char in text:
-            feedback_label.config(text=feedback_label.cget("text") + char)
-            time.sleep(0.5)
-            feedback_window.update_idletasks()
+#     def update_feedback():
+#         text = "áliav"
+#         for char in text:
+#             feedback_label.config(text=feedback_label.cget("text") + char)
+#             time.sleep(0.5)
+#             feedback_window.update_idletasks()
 
-        time.sleep(1)
+#         time.sleep(1)
 
-        text_reverse = "vailá"
-        feedback_label.config(text="")
-        for char in text_reverse:
-            feedback_label.config(text=feedback_label.cget("text") + char)
-            time.sleep(0.5)
-            feedback_window.update_idletasks()
+#         text_reverse = "vailá"
+#         feedback_label.config(text="")
+#         for char in text_reverse:
+#             feedback_label.config(text=feedback_label.cget("text") + char)
+#             time.sleep(0.5)
+#             feedback_window.update_idletasks()
 
-        time.sleep(1)
-        feedback_window.destroy()
+#         time.sleep(1)
+#         feedback_window.destroy()
 
-    feedback_thread = Thread(target=update_feedback)
-    feedback_thread.start()
-    feedback_window.mainloop()
+#     feedback_thread = Thread(target=update_feedback)
+#     feedback_thread.start()
+#     feedback_window.mainloop()
 
 def run_drawboxe():
     root = tk.Tk()
@@ -307,7 +307,7 @@ def run_drawboxe():
             apply_boxes_directly_to_video(input_path, final_output_path, coordinates, selections)
 
     print("All videos processed and saved to the output directory.")
-    show_feedback_window()
+    # show_feedback_window()
 
 if __name__ == "__main__":
     run_drawboxe()
