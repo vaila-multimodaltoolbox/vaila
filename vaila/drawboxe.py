@@ -3,7 +3,10 @@ drawboxe.py
 
 Description:
 -----------
-This script is designed to add bounding boxes to videos using coordinates obtained from clicks on an image. It also supports extracting frames and applying boxes to specific frame intervals or directly to videos. The script can be used for batch processing of videos in a directory.
+This script is designed to add bounding boxes to videos using coordinates
+obtained from clicks on an image. It also supports extracting frames and
+applying boxes to specific frame intervals or directly to videos. The script
+can be used for batch processing of videos in a directory.
 
 Version:
 --------
@@ -34,7 +37,6 @@ Dependencies:
 - Python 3.11.8 (Anaconda environment)
 - os
 - ffmpeg-python
-- pandas
 - matplotlib
 - opencv-python
 - tkinter
@@ -47,107 +49,14 @@ Additional Notes:
 
 import os
 from ffmpeg import FFmpeg
-import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import cv2
 import tkinter as tk
 from tkinter import filedialog, messagebox
-
-# Funções do common_utils
-def determine_header_lines(file_path):
-    with open(file_path, 'r') as f:
-        for i, line in enumerate(f):
-            first_element = line.split(',')[0].strip()
-            if first_element.replace('.', '', 1).isdigit():
-                return i
-    return 0
-
-def headersidx(file_path):
-    try:
-        header_lines = determine_header_lines(file_path)
-        df = pd.read_csv(file_path, header=list(range(header_lines)))
-
-        print("Headers with indices:")
-        for i, col in enumerate(df.columns, 1):
-            print(f"{i}: {col}")
-
-        print("\nExample of new order:")
-        new_order = ['Time']
-        for i in range(1, len(df.columns), 3):
-            new_order.append(df.columns[i][0])
-        print(new_order)
-
-        return new_order
-
-    except Exception as e:
-        print(f"Error reading {file_path}: {e}")
-        return []
-
-def reshapedata(file_path, new_order, save_directory):
-    try:
-        header_lines = determine_header_lines(file_path)
-        df = pd.read_csv(file_path, skiprows=header_lines, header=None)
-        actual_header = pd.read_csv(file_path, nrows=header_lines, header=None).values
-        new_order_indices = [0]
-
-        for header in new_order[1:]:
-            base_idx = [i for i, col in enumerate(actual_header[0]) if col == header][0]
-            new_order_indices.extend([base_idx, base_idx + 1, base_idx + 2])
-
-        df_reordered = df.iloc[:, new_order_indices]
-        base_name = os.path.splitext(os.path.basename(file_path))[0]
-        new_file_path = os.path.join(save_directory, f"{base_name}_reord.csv")
-        
-        new_header = []
-        for header in new_order:
-            if header == 'Time':
-                new_header.append(header)
-            else:
-                new_header.extend([header + '_x', header + '_y', header + '_z'])
-
-        df_reordered.to_csv(new_file_path, index=False, header=new_header)
-        print(f"Reordered data saved to {new_file_path}")
-
-    except Exception as e:
-        print(f"Error processing {file_path}: {e}")
-
-# Funções específicas de drawboxe
-def get_box_coordinates(image_path):
-    img = plt.imread(image_path)
-    fig, ax = plt.subplots()
-    ax.imshow(img)
-    plt.title('Click on the top-left and bottom-right corners of the box. Press Enter to finish.')
-
-    points = []
-
-    def onclick(event):
-        if event.key == 'enter':
-            plt.close()
-            return
-        if len(points) % 2 == 0:
-            points.append((event.xdata, event.ydata))
-        else:
-            points.append((event.xdata, event.ydata))
-            rect = patches.Rectangle(
-                (points[-2][0], points[-2][1]),
-                points[-1][0] - points[-2][0],
-                points[-1][1] - points[-2][1],
-                linewidth=1,
-                edgecolor='r',
-                facecolor='none'
-            )
-            ax.add_patch(rect)
-            plt.draw()
-
-    fig.canvas.mpl_connect('button_press_event', onclick)
-    fig.canvas.mpl_connect('key_press_event', onclick)
-    plt.show()
-
-    if len(points) % 2 != 0:
-        raise ValueError("An incomplete box was defined.")
-
-    return [(int(points[i][0]), int(points[i][1]), int(points[i+1][0]), int(points[i+1][1])) for i in range(0, len(points), 2)]
+from threading import Thread
+import time
+import shutil
 
 def save_first_frame(video_path, frame_path):
     vidcap = cv2.VideoCapture(video_path)
@@ -165,35 +74,53 @@ def extract_frames(video_path, frames_dir):
     )
     ffmpeg.execute()
 
-def apply_boxes_directly_to_video(input_path, output_path, coordinates):
+def apply_boxes_directly_to_video(input_path, output_path, coordinates, selections):
     vidcap = cv2.VideoCapture(input_path)
     width = int(vidcap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(vidcap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = vidcap.get(cv2.CAP_PROP_FPS)
-    
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
-    
+
+    frame_count = 0
+    total_frames = int(vidcap.get(cv2.CAP_PROP_FRAME_COUNT))
+
     while True:
         ret, frame = vidcap.read()
         if not ret:
             break
-        for (x1, y1, x2, y2) in coordinates:
-            frame = cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 0), -1)
+        for (x1, y1, x2, y2), selection in zip(coordinates, selections):
+            if selection == 'outside':
+                frame[:y1, :] = (0, 0, 0)
+                frame[y2:, :] = (0, 0, 0)
+                frame[y1:y2, :x1] = (0, 0, 0)
+                frame[y1:y2, x2:] = (0, 0, 0)
+            else:
+                frame = cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 0), -1)
         out.write(frame)
-    
-    vidcap.release()
-    out.release()
+        frame_count += 1
+        print(f"Processed {frame_count}/{total_frames} frames", end="\r")
 
-def apply_boxes_to_frames(frames_dir, coordinates, frame_intervals):
+    print(f"\nCompleted processing: {os.path.basename(input_path)}")
+    out.release()
+    vidcap.release()
+
+def apply_boxes_to_frames(frames_dir, coordinates, selections, frame_intervals):
     for filename in sorted(os.listdir(frames_dir)):
         frame_number = int(filename.split('_')[1].split('.')[0])
         for start_frame, end_frame in frame_intervals:
             if start_frame <= frame_number <= end_frame:
                 frame_path = os.path.join(frames_dir, filename)
                 img = cv2.imread(frame_path)
-                for (x1, y1, x2, y2) in coordinates:
-                    img = cv2.rectangle(img, (x1, y1), (x2, y2), (0, 0, 0), -1)
+                for (x1, y1, x2, y2), selection in zip(coordinates, selections):
+                    if selection == 'outside':
+                        img[:y1, :] = (0, 0, 0)
+                        img[y2:, :] = (0, 0, 0)
+                        img[y1:y2, :x1] = (0, 0, 0)
+                        img[y1:y2, x2:] = (0, 0, 0)
+                    else:
+                        img = cv2.rectangle(img, (x1, y1), (x2, y2), (0, 0, 0), -1)
                 cv2.imwrite(frame_path, img)
 
 def reassemble_video(frames_dir, output_path, fps):
@@ -210,6 +137,73 @@ def clean_up(directory):
         os.remove(file_path)
     os.rmdir(directory)
 
+def get_box_coordinates(image_path):
+    img = plt.imread(image_path)
+    fig, ax = plt.subplots()
+    selection_mode = {'mode': 'inside'}  # Default mode is 'inside'
+
+    def update_title():
+        ax.set_title(f'Red box: inside, Blue box: outside\nCurrent mode: {selection_mode["mode"]}\n'
+                     'Click to select corners of the box. Press "e" to toggle mode, Enter to finish.')
+        fig.canvas.draw()
+
+    ax.imshow(img)
+    update_title()
+
+    points = []
+    rects = []
+    selections = []
+
+    def on_key(event):
+        if event.key == 'e':  # Toggle mode
+            selection_mode['mode'] = 'outside' if selection_mode['mode'] == 'inside' else 'inside'
+            update_title()
+        elif event.key == 'enter':  # Close the window
+            plt.close()
+
+    def on_click(event):
+        nonlocal points, rects, selections
+
+        if event.button == 3:  # Right mouse button to remove the last box
+            if len(points) > 0:
+                points = points[:-2]  # Remove the last pair of points
+                if rects:
+                    rects[-1].remove()  # Remove the last rectangle from the plot
+                    rects.pop()
+                    selections.pop()
+                plt.draw()
+            return
+
+        if event.button == 1:  # Left mouse button to add a point
+            if len(points) % 2 == 0:
+                points.append((event.xdata, event.ydata))
+            else:
+                points.append((event.xdata, event.ydata))
+                color = 'b' if selection_mode['mode'] == 'outside' else 'r'
+                rect = patches.Rectangle(
+                    (points[-2][0], points[-2][1]),
+                    points[-1][0] - points[-2][0],
+                    points[-1][1] - points[-2][1],
+                    linewidth=1,
+                    edgecolor=color,
+                    facecolor='none'
+                )
+                ax.add_patch(rect)
+                rects.append(rect)
+                selections.append(selection_mode['mode'])
+                plt.draw()
+
+    fig.canvas.mpl_connect('button_press_event', on_click)
+    fig.canvas.mpl_connect('key_press_event', on_key)
+    plt.show()
+
+    if len(points) % 2 != 0:
+        raise ValueError("An incomplete box was defined.")
+
+    boxes = [(int(points[i][0]), int(points[i][1]), int(points[i+1][0]), int(points[i+1][1])) for i in range(0, len(points), 2)]
+
+    return boxes, selections
+
 def load_frame_intervals(file_path):
     intervals = []
     with open(file_path, 'r') as file:
@@ -217,6 +211,41 @@ def load_frame_intervals(file_path):
             start, end = map(int, line.strip().split(','))
             intervals.append((start, end))
     return intervals
+
+def show_feedback_window():
+    # GUI to show "vailá" while processing is ongoing
+    feedback_window = tk.Toplevel()
+    feedback_window.title("Processing...")
+
+    # Increase window size
+    feedback_window.geometry("400x200")
+
+    # Adjust font size and padding
+    feedback_label = tk.Label(feedback_window, text="", font=("Helvetica", 51), pady=20)
+    feedback_label.pack(expand=True)
+
+    def update_feedback():
+        text = "áliav"
+        for char in text:
+            feedback_label.config(text=feedback_label.cget("text") + char)
+            time.sleep(0.5)
+            feedback_window.update_idletasks()
+
+        time.sleep(1)
+
+        text_reverse = "vailá"
+        feedback_label.config(text="")
+        for char in text_reverse:
+            feedback_label.config(text=feedback_label.cget("text") + char)
+            time.sleep(0.5)
+            feedback_window.update_idletasks()
+
+        time.sleep(1)
+        feedback_window.destroy()
+
+    feedback_thread = Thread(target=update_feedback)
+    feedback_thread.start()
+    feedback_window.mainloop()
 
 def run_drawboxe():
     root = tk.Tk()
@@ -237,7 +266,7 @@ def run_drawboxe():
     first_frame_path = os.path.join(video_directory, 'first_frame.jpg')
     save_first_frame(os.path.join(video_directory, first_video), first_frame_path)
 
-    coordinates = get_box_coordinates(first_frame_path)
+    coordinates, selections = get_box_coordinates(first_frame_path)
     os.remove(first_frame_path)
 
     use_intervals = messagebox.askyesno("Frame Intervals", "Do you want to use frame intervals from a .txt file?")
@@ -251,6 +280,13 @@ def run_drawboxe():
             return
 
     output_dir = os.path.join(video_directory, 'video_2_drawbox')
+    if os.path.exists(output_dir):
+        shutil.rmtree(output_dir)  # Delete the existing directory and its contents
+
+    final_output_path = os.path.join(output_dir, f"{os.path.splitext(video_files[0])[0]}_dbox.mp4")
+    if os.path.exists(final_output_path):
+        os.remove(final_output_path)  # Delete the existing video file
+
     os.makedirs(output_dir, exist_ok=True)
 
     for video_file in video_files:
@@ -258,19 +294,20 @@ def run_drawboxe():
         vidcap = cv2.VideoCapture(input_path)
         fps = vidcap.get(cv2.CAP_PROP_FPS)
         vidcap.release()
-        
+
         if frame_intervals:
             frames_dir = os.path.join(video_directory, 'frames_temp')
+            if os.path.exists(frames_dir):
+                shutil.rmtree(frames_dir)
             extract_frames(input_path, frames_dir)
-            apply_boxes_to_frames(frames_dir, coordinates, frame_intervals)
-            final_output_path = os.path.join(output_dir, f"{os.path.splitext(video_file)[0]}_dbox.mp4")
+            apply_boxes_to_frames(frames_dir, coordinates, selections, frame_intervals)
             reassemble_video(frames_dir, final_output_path, fps)
             clean_up(frames_dir)
         else:
-            final_output_path = os.path.join(output_dir, f"{os.path.splitext(video_file)[0]}_dbox.mp4")
-            apply_boxes_directly_to_video(input_path, final_output_path, coordinates)
+            apply_boxes_directly_to_video(input_path, final_output_path, coordinates, selections)
 
     print("All videos processed and saved to the output directory.")
+    show_feedback_window()
 
 if __name__ == "__main__":
     run_drawboxe()
