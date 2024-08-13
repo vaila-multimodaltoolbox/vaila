@@ -90,58 +90,48 @@ def export_file():
         messagebox.showerror("Error", "No file extension provided.")
         return
 
-    # Create a new window for pattern entry
-    pattern_window = tk.Tk()
-    pattern_window.title("Enter File Patterns")
-    
-    # Text box for entering multiple patterns, one per line
-    pattern_label = tk.Label(pattern_window, text="Enter file patterns (one per line):")
-    pattern_label.pack()
-    
-    pattern_text = tk.Text(pattern_window, height=10, width=50)
-    pattern_text.pack()
+    # Prompt the user to enter the file name pattern to search for
+    file_pattern = simpledialog.askstring(
+        "File Pattern", "Enter the file name pattern to group files (e.g., _01_):"
+    )
+    if not file_pattern:
+        messagebox.showerror("Error", "No file name pattern provided.")
+        return
 
-    def on_submit():
-        patterns = pattern_text.get("1.0", "end").strip().splitlines()
-        pattern_window.destroy()
-        process_export(src_directory, file_extension, patterns)
-
-    submit_button = tk.Button(pattern_window, text="Submit", command=on_submit)
-    submit_button.pack()
-
-    pattern_window.mainloop()
-
-
-def process_export(src_directory, file_extension, patterns):
-    # Prompt the user to select the destination directory where the new directories will be created
+    # Prompt the user to select the destination directory where the new directory will be created
     base_dest_directory = filedialog.askdirectory(title="Select Destination Directory")
     if not base_dest_directory:
         messagebox.showerror("Error", "No destination directory selected.")
         return
 
-    try:
-        for file_pattern in patterns:
-            # Generate a timestamp to create a unique directory name for each pattern
-            timestamp = time.strftime("%Y%m%d%H%M%S")
-            export_directory = os.path.join(
-                base_dest_directory, f"vaila_export_{file_pattern.strip('_')}_{timestamp}"
-            )
-            os.makedirs(export_directory, exist_ok=True)  # Create the export directory
+    # Generate a timestamp to create a unique directory name
+    timestamp = time.strftime("%Y%m%d%H%M%S")
+    export_directory = os.path.join(
+        base_dest_directory, f"vaila_export_{file_pattern}_{timestamp}"
+    )
+    os.makedirs(export_directory, exist_ok=True)  # Create the export directory
 
-            # Walk through the source directory and copy matching files to the new directory structure
-            for root, dirs, files in os.walk(src_directory):
-                for file in files:
-                    # Check if the file matches the specified extension and pattern
-                    if file.endswith(file_extension) and file_pattern in file:
-                        # Copy the file to the appropriate subdirectory
-                        src_path = os.path.join(root, file)
-                        dest_path = os.path.join(export_directory, file)
-                        shutil.copy2(src_path, dest_path)
+    # Walk through the source directory and copy matching files to the new directory structure
+    try:
+        for root, dirs, files in os.walk(src_directory):
+            for file in files:
+                # Check if the file matches the specified extension and pattern
+                if file.endswith(file_extension) and file_pattern in file:
+                    # Create a subdirectory for the pattern if it doesn't exist
+                    pattern_dir = os.path.join(
+                        export_directory, file_pattern.strip("_")
+                    )
+                    os.makedirs(pattern_dir, exist_ok=True)
+
+                    # Copy the file to the appropriate subdirectory
+                    src_path = os.path.join(root, file)
+                    dest_path = os.path.join(pattern_dir, file)
+                    shutil.copy2(src_path, dest_path)
 
         # Show a success message after the operation is complete
         messagebox.showinfo(
             "Success",
-            f"Files matching the specified patterns and extension {file_extension} have been exported successfully.",
+            f"Files matching the pattern {file_pattern} and extension {file_extension} have been exported to {export_directory}",
         )
     except Exception as e:
         # Show an error message if something goes wrong
@@ -237,4 +227,3 @@ def remove_file():
         messagebox.showinfo(
             "Success", f"Specified files in {selected_directory} have been removed."
         )
-
