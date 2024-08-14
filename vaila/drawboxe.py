@@ -54,7 +54,6 @@ import matplotlib.patches as patches
 import cv2
 import tkinter as tk
 from tkinter import filedialog, messagebox
-from threading import Thread
 import time
 import shutil
 
@@ -100,9 +99,10 @@ def apply_boxes_directly_to_video(input_path, output_path, coordinates, selectio
                 frame = cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 0), -1)
         out.write(frame)
         frame_count += 1
-        print(f"Processed {frame_count}/{total_frames} frames", end="\r")
+        print(f"Processed {frame_count}/{total_frames} frames for {os.path.basename(input_path)}", end="\r")
 
     print(f"\nCompleted processing: {os.path.basename(input_path)}")
+    print(f"Saved to: {output_path}")
     out.release()
     vidcap.release()
 
@@ -212,40 +212,9 @@ def load_frame_intervals(file_path):
             intervals.append((start, end))
     return intervals
 
-def show_feedback_window():
-    # GUI to show "vailá" while processing is ongoing
-    feedback_window = tk.Toplevel()
-    feedback_window.title("Processing...")
-
-    # Increase window size
-    feedback_window.geometry("400x200")
-
-    # Adjust font size and padding
-    feedback_label = tk.Label(feedback_window, text="", font=("Helvetica", 51), pady=20)
-    feedback_label.pack(expand=True)
-
-    def update_feedback():
-        text = "áliav"
-        for char in text:
-            feedback_label.config(text=feedback_label.cget("text") + char)
-            time.sleep(0.5)
-            feedback_window.update_idletasks()
-
-        time.sleep(1)
-
-        text_reverse = "vailá"
-        feedback_label.config(text="")
-        for char in text_reverse:
-            feedback_label.config(text=feedback_label.cget("text") + char)
-            time.sleep(0.5)
-            feedback_window.update_idletasks()
-
-        time.sleep(1)
-        feedback_window.destroy()
-
-    feedback_thread = Thread(target=update_feedback)
-    feedback_thread.start()
-    feedback_window.mainloop()
+def show_feedback_message():
+    print("vailá!")
+    time.sleep(2)  # Simulate processing time
 
 def run_drawboxe():
     root = tk.Tk()
@@ -283,14 +252,12 @@ def run_drawboxe():
     if os.path.exists(output_dir):
         shutil.rmtree(output_dir)  # Delete the existing directory and its contents
 
-    final_output_path = os.path.join(output_dir, f"{os.path.splitext(video_files[0])[0]}_dbox.mp4")
-    if os.path.exists(final_output_path):
-        os.remove(final_output_path)  # Delete the existing video file
-
     os.makedirs(output_dir, exist_ok=True)
 
     for video_file in video_files:
         input_path = os.path.join(video_directory, video_file)
+        final_output_path = os.path.join(output_dir, f"{os.path.splitext(video_file)[0]}_dbox.mp4")
+        
         vidcap = cv2.VideoCapture(input_path)
         fps = vidcap.get(cv2.CAP_PROP_FPS)
         vidcap.release()
@@ -305,9 +272,10 @@ def run_drawboxe():
             clean_up(frames_dir)
         else:
             apply_boxes_directly_to_video(input_path, final_output_path, coordinates, selections)
-
+    
+    show_feedback_message()
     print("All videos processed and saved to the output directory.")
-    show_feedback_window()
+    messagebox.showinfo("Completed", "All videos have been processed successfully!")
 
 if __name__ == "__main__":
     run_drawboxe()
