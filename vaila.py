@@ -156,24 +156,24 @@ class Vaila(tk.Tk):
         preto_label.image = preto_photo
         preto_label.pack(side="left", padx=10)
 
-        header_label = tk.Label(header_frame, text="vailá - Multimodal Toolbox", font=("Courier", 29, "bold"), anchor="center")
+        header_label = tk.Label(header_frame, text="vailá - Multimodal Toolbox", font=("default", 29, "bold"), anchor="center")
         header_label.pack(side="left")
         
         # Subheader with hyperlink for "vailá"
         subheader_frame = tk.Frame(self)
         subheader_frame.pack(pady=5)
 
-        subheader_label1 = tk.Label(subheader_frame, text="Versatile Anarcho Integrated Liberation Ánalysis in Multimodal Toolbox", font=("Arial", 15), anchor="center")
+        subheader_label1 = tk.Label(subheader_frame, text="Versatile Anarcho Integrated Liberation Ánalysis in Multimodal Toolbox", font=("default", 15), anchor="center")
         subheader_label1.pack()
 
         subheader_label2_frame = tk.Frame(subheader_frame)
         subheader_label2_frame.pack()
 
-        vaila_link = tk.Label(subheader_label2_frame, text="vailá", font=("Arial", 17, "italic"), fg="blue", cursor="hand2")
+        vaila_link = tk.Label(subheader_label2_frame, text="vailá", font=("default", 17, "italic"), fg="blue", cursor="hand2")
         vaila_link.pack(side="left")
         vaila_link.bind("<Button-1>", lambda e: self.open_link())
 
-        unleash_label = tk.Label(subheader_label2_frame, text=" and unleash your imagination!", font=("Arial", 17), anchor="center")
+        unleash_label = tk.Label(subheader_label2_frame, text=" and unleash your imagination!", font=("default", 17), anchor="center")
         unleash_label.pack(side="left")
 
 
@@ -199,7 +199,7 @@ class Vaila(tk.Tk):
         canvas.configure(yscrollcommand=scrollbar.set)
 
         # File Manager Frame
-        file_manager_frame = tk.LabelFrame(scrollable_frame, text="File Manager", padx=5, pady=5, font=("Arial", 17), labelanchor="n")
+        file_manager_frame = tk.LabelFrame(scrollable_frame, text="File Manager", padx=5, pady=5, font=("default", 17), labelanchor="n")
         file_manager_frame.pack(pady=10, fill="x")
 
         file_manager_btn_frame = tk.Frame(file_manager_frame)
@@ -218,7 +218,7 @@ class Vaila(tk.Tk):
         remove_btn.pack(side="left", padx=2, pady=2)
 
         # Analysis Frame
-        analysis_frame = tk.LabelFrame(scrollable_frame, text="Multimodal Analysis", padx=5, pady=5, font=("Arial", 17), labelanchor="n")
+        analysis_frame = tk.LabelFrame(scrollable_frame, text="Multimodal Analysis", padx=5, pady=5, font=("default", 17), labelanchor="n")
         analysis_frame.pack(pady=10, fill="x")
 
         #VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV
@@ -273,12 +273,12 @@ class Vaila(tk.Tk):
         #VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV
         # Tools Frame
         # Create a frame for the tools
-        tools_frame = tk.LabelFrame(scrollable_frame, text="Available Tools", padx=5, pady=5, font=("Arial", 17), labelanchor="n")
+        tools_frame = tk.LabelFrame(scrollable_frame, text="Available Tools", padx=5, pady=5, font=("default", 17), labelanchor="n")
         tools_frame.pack(pady=10, fill="x")
 
-        tools_col1 = tk.LabelFrame(tools_frame, text="Data Files", padx=5, pady=5, font=("Arial", 14))
-        tools_col2 = tk.LabelFrame(tools_frame, text="Video", padx=5, pady=5, font=("Arial", 14))
-        tools_col3 = tk.LabelFrame(tools_frame, text="Visualization", padx=5, pady=5, font=("Arial", 14))
+        tools_col1 = tk.LabelFrame(tools_frame, text="Data Files", padx=5, pady=5, font=("default", 14))
+        tools_col2 = tk.LabelFrame(tools_frame, text="Video", padx=5, pady=5, font=("default", 14))
+        tools_col3 = tk.LabelFrame(tools_frame, text="Visualization", padx=5, pady=5, font=("default", 14))
 
         # Data Files sub-columns
         reorder_csv_btn = tk.Button(tools_col1, text="Edit CSV", command=self.reorder_csv_data, width=button_width)
@@ -372,7 +372,7 @@ class Vaila(tk.Tk):
         help_btn.pack(side="left", padx=5)
         exit_btn.pack(side="left", padx=5)
 
-        license_label = tk.Label(scrollable_frame, text="© 2024 vailá - Multimodal Toolbox. Licensed under the GNU Lesser General Public License v3.0.", font=("Arial", 11), anchor="center")
+        license_label = tk.Label(scrollable_frame, text="© 2024 vailá - Multimodal Toolbox. Licensed under the GNU Lesser General Public License v3.0.", font=("default", 11), anchor="center")
         license_label.pack(pady=5)
 
     def import_file(self):
