@@ -93,7 +93,7 @@ def process_video(video_path, output_dir, pose_config):
 
     # Generate the headers for the files
     headers = ['frame_index'] + [f'{name}_x,{name}_y,{name}_z' for name in landmark_names]
-    pixel_headers = ['frame_index'] + [f'{name}_x_pixel,{name}_y_pixel,{name}_z' for name in landmark_names]
+    pixel_headers = ['frame_index'] + [f'{name}_x,{name}_y,{name}_z' for name in landmark_names]
 
     frame_count = 0
     with open(output_file_path, 'w') as f, open(output_pixel_file_path, 'w') as f_pixel:
