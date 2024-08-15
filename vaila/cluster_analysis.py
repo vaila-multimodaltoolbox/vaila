@@ -74,7 +74,7 @@ def analyze_cluster_data():
     """)
     
     
-    image_path = os.path.join('multimodal_mocap_coord_toolbox', 'images', 'cluster_config.png')
+    image_path = os.path.join('vaila', 'images', 'cluster_config.png')
     image = Image.open(image_path)
     plt.figure(figsize=(8, 6))
     plt.title("Memorize the cluster configuration (A/B/C/D) of the trunk (Cluster 1) and pelvis (Cluster 2)")
@@ -185,16 +185,16 @@ def analyze_cluster_data():
         print("Orthonormal bases created")
 
         # # Add more debug prints here
-        # print("cluster1:", cluster1_base)
-        # print("orig_cluster1:", orig_cluster1)
-        # print("cluster2_base:", cluster2_base)
-        # print("orig_cluster2:", orig_cluster2)
-        # print("cluster1_p1:", cluster1_p1)
-        # print("cluster1_p2:", cluster1_p2)
-        # print("cluster1_p3:", cluster1_p3)
-        # print("cluster2_p1:", cluster2_p1)
-        # print("cluster2_p2:", cluster2_p2)
-        # print("cluster2_p3:", cluster2_p3)
+        print("cluster1:", cluster1_base)
+        print("orig_cluster1:", orig_cluster1)
+        print("cluster2_base:", cluster2_base)
+        print("orig_cluster2:", orig_cluster2)
+        print("cluster1_p1:", cluster1_p1)
+        print("cluster1_p2:", cluster1_p2)
+        print("cluster1_p3:", cluster1_p3)
+        print("cluster2_p1:", cluster2_p1)
+        print("cluster2_p2:", cluster2_p2)
+        print("cluster2_p3:", cluster2_p3)
 
         fig_matplotlib = plot_orthonormal_bases(
             bases_list=[cluster1_base, cluster2_base],
