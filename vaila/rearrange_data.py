@@ -155,7 +155,7 @@ def convert_mediapipe_to_pixel_format(file_path, save_directory):
     df = pd.read_csv(file_path)
 
     # Adjust the "frame" column to start from 0
-    df.iloc[:, 0] = df.iloc[:, 0] - 1
+    df.iloc[:, 0] = df.iloc[:, 0]
 
     # Create the new DataFrame with the "frame" column and pX_x, pX_y coordinates
     new_df = pd.DataFrame()
@@ -197,7 +197,7 @@ def batch_convert_mediapipe(directory_path):
 
     # Create a new directory with a timestamp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    save_directory = os.path.join(directory_path, f"Convert_MediaPipe_{timestamp}")
+    save_directory = os.path.join(directory_path, f"Convert_MediaPipe_to_vaila_{timestamp}")
 
     if not os.path.exists(save_directory):
         os.makedirs(save_directory)
