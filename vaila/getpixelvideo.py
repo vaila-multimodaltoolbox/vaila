@@ -1,26 +1,31 @@
 # --------------------------------------------------
 # Script Name: getpixelvideo.py
 # Version: 0.0.9
-# Last Updated: August 9, 2024
+# Last Updated: August 15, 2024
 # Description: A tool for marking and saving pixel
 # coordinates in a video with zoom functionality. 
-# Now allows loading and displaying pre-marked points from a CSV file.
+# The tool allows loading and displaying pre-marked points from a CSV file.
 # --------------------------------------------------
 # Usage Instructions:
 # - Press 'Space' to toggle play/pause of the video.
 # - Press 'Escape' to close the video and exit the application.
 # - Press 'A' or 'Left Arrow' to go to the previous frame.
 # - Press 'D' or 'Right Arrow' to go to the next frame.
-# - Press 'W' or 'Up Arrow' to jump to the last frame.
-# - Press 'S' or 'Down Arrow' to jump to the first frame.
+# - Press 'W' or 'Up Arrow' to move to the next point.
+# - Press 'S' or 'Down Arrow' to move to the previous point.
+# - Press 'N' to go to the first frame.
+# - Press 'P' to go to the last frame.
 # - Press 'Ctrl m' to zoom in on the video.
 # - Press 'Ctrl l' to zoom out on the video.
 # - Press 'Ctrl h' to reset the zoom.
 # - Left-click to mark a point on the video.
 # - Right-click to remove the last marked point.
-# - Use 'n' to go to the next point and 'p' to go to the previous point.
-# - Optionally, load a CSV with pre-marked points.
+# 
+# Note: The current marker is not visually highlighted. Use the navigation 
+# counter to track your position. To control the video with zoom and player, 
+# you must select the control window.
 # --------------------------------------------------
+
 
 import cv2
 import os
@@ -39,14 +44,17 @@ def show_help_message():
         "- Press 'Escape' to close the video and exit the application.\n"
         "- Press 'A' or 'Left Arrow' to go to the previous frame.\n"
         "- Press 'D' or 'Right Arrow' to go to the next frame.\n"
-        "- Press 'W' or 'Up Arrow' to jump to the last frame.\n"
-        "- Press 'S' or 'Down Arrow' to jump to the first frame.\n"
+        "- Press 'W' or 'Up Arrow' to move to the next point.\n"
+        "- Press 'S' or 'Down Arrow' to move to the previous point.\n"
+        "- Press 'N' to go to the first frame.\n"
+        "- Press 'P' to go to the last frame.\n"
         "- Press 'Ctrl m' to zoom in on the video.\n"
         "- Press 'Ctrl l' to zoom out on the video.\n"
         "- Press 'Ctrl h' to reset the zoom.\n"
         "- Left-click to mark a point on the video.\n"
         "- Right-click to remove the last marked point.\n\n"
-        "Note: To control the video with zoom and player, you must select the control window.\n\n"
+        "Note: The current marker is not visually highlighted. Use the navigation counter to track your position.\n"
+        "To control the video with zoom and player, you must select the control window.\n\n"
         "For more detailed help, click the link below:\n"
         "docs/help.html",
         icon='info'
@@ -65,14 +73,13 @@ def load_existing_coordinates(video_path):
     if csv_path:
         df = pd.read_csv(csv_path)
 
-        # Identify the frame column dynamically
         frame_column = df.columns[0]
         coordinates = {}
 
         for _, row in df.iterrows():
             frame_num = int(row[frame_column])
             points = []
-            for i in range(1, len(row) // 2):
+            for i in range(1, (len(row) - 1) // 2 + 1):
                 x = row.get(f'p{i}_x')
                 y = row.get(f'p{i}_y')
                 if pd.notna(x) and pd.notna(y):
@@ -95,13 +102,11 @@ def save_coordinates(video_path, coordinates, total_frames):
             df.at[frame_num, f'p{i+1}_x'] = x
             df.at[frame_num, f'p{i+1}_y'] = y
 
-    # Determine the last marked point
     last_point = 0
     for frame_num, points in coordinates.items():
         if points:
             last_point = max(last_point, len(points))
 
-    # Remove columns beyond the last marked point
     if last_point < 100:
         df = df.iloc[:, :1 + 2 * last_point]
 
@@ -118,12 +123,12 @@ def get_pixel_coordinates(video_path, initial_coordinates=None):
     zoom_level = 1.0
     current_point = 0  # Initialize current_point
 
-    def draw_point(frame, x, y, num, is_current=False):
-        outer_color = (0, 0, 255) if is_current else (0, 0, 0)  # Red for current point, Black for others
-        inner_color = (0, 255, 255) if is_current else (0, 255, 0)  # Yellow for current point, Green for others
-        outer_radius = 7
-        inner_radius = 5
-        thickness = -1
+    def draw_point(frame, x, y, num, is_new=False):
+        outer_color = (0, 0, 0)  # Always black for the outer circle
+        inner_color = (0, 255, 0) if is_new else (0, 0, 255)  # Green for new points, Blue for loaded points
+        outer_radius = 6  # Size of the circle outer
+        inner_radius = 4  # Size of the circle inner
+        thickness = -1  # Fill the circle
 
         screen_x = int(x * zoom_level)
         screen_y = int(y * zoom_level)
@@ -151,17 +156,19 @@ def get_pixel_coordinates(video_path, initial_coordinates=None):
             original_x = int(x / zoom_level)
             original_y = int(y / zoom_level)
             coordinates[frame_count].append((original_x, original_y))
-            draw_point(frame, original_x, original_y, len(coordinates[frame_count]), is_current=True)
+            draw_point(frame, original_x, original_y, len(coordinates[frame_count]), is_new=True)
+            current_point = len(coordinates[frame_count]) - 1  # Set current point to the latest
             cv2.imshow('Frame', frame)
         elif event == cv2.EVENT_RBUTTONDOWN:
             if coordinates[frame_count]:
                 coordinates[frame_count].pop()
+                current_point = max(0, len(coordinates[frame_count]) - 1)
                 cap.set(cv2.CAP_PROP_POS_FRAMES, frame_count)
                 ret, frame = cap.read()
                 if ret:
                     frame = apply_zoom(frame, zoom_level)
                     for i, point in enumerate(coordinates[frame_count]):
-                        draw_point(frame, point[0], point[1], i + 1, is_current=(i == len(coordinates[frame_count])-1))
+                        draw_point(frame, point[0], point[1], i + 1, is_new=False)
                     cv2.imshow('Frame', frame)
 
     def update_frame(new_frame_count):
@@ -172,7 +179,7 @@ def get_pixel_coordinates(video_path, initial_coordinates=None):
         if ret:
             frame = apply_zoom(frame, zoom_level)
             for i, point in enumerate(coordinates[frame_count]):
-                draw_point(frame, point[0], point[1], i + 1, is_current=(i == current_point))
+                draw_point(frame, point[0], point[1], i + 1, is_new=False)
             cv2.imshow('Frame', frame)
             window.title(f'Frame {frame_count} - Point {current_point + 1} of {len(coordinates[frame_count])}')
         paused = True
@@ -190,14 +197,18 @@ def get_pixel_coordinates(video_path, initial_coordinates=None):
             update_frame(max(frame_count - 1, 0))
         elif key in ['d', 'right']:
             update_frame(min(frame_count + 1, total_frames - 1))
-        elif key == 'n':
+        elif key in ['w', 'up']:
             if coordinates[frame_count]:
                 current_point = (current_point + 1) % len(coordinates[frame_count])
                 update_frame(frame_count)
-        elif key == 'p':
+        elif key in ['s', 'down']:
             if coordinates[frame_count]:
                 current_point = (current_point - 1) % len(coordinates[frame_count])
                 update_frame(frame_count)
+        elif key == 'n':
+            update_frame(0)  # Go to the first frame
+        elif key == 'p':
+            update_frame(total_frames - 1)  # Go to the last frame
         elif event.state == 4:  # Ctrl is pressed
             if key == 'm':  # Ctrl m
                 zoom_level *= 1.2
@@ -220,7 +231,7 @@ def get_pixel_coordinates(video_path, initial_coordinates=None):
             if ret:
                 frame = apply_zoom(frame, zoom_level)
                 for i, point in enumerate(coordinates[frame_count]):
-                    draw_point(frame, point[0], point[1], i + 1, is_current=(i == current_point))
+                    draw_point(frame, point[0], point[1], i + 1, is_new=False)
                 cv2.imshow('Frame', frame)
                 window.title(f'Frame {frame_count} - Point {current_point + 1} of {len(coordinates[frame_count])}')
                 slider.set(frame_count)
@@ -280,5 +291,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-           
