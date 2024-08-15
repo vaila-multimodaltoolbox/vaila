@@ -45,7 +45,7 @@ Requirements:
 
 import os
 import pandas as pd
-import numpy as np
+#import numpy as np
 import tkinter as tk
 from tkinter import filedialog, simpledialog, messagebox, Scrollbar
 from datetime import datetime
