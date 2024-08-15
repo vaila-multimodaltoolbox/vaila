@@ -257,7 +257,7 @@ class ColumnReorderGUI(tk.Tk):
         self.instructions = tk.Label(
             scrollable_frame,
             text="Click to select a Column and press Enter to reorder. Select and press 'd' to delete.\nPress 'm' to manually select range. Press 'l' to edit rows. Press Ctrl+S to save. Press Ctrl+Z to undo.\nPress Esc to save and exit.",
-            font=("Arial", 14),
+            font=("default", 14),
         )
         self.instructions.grid(row=0, column=0, columnspan=2, pady=10, sticky="n")
 
@@ -268,17 +268,17 @@ class ColumnReorderGUI(tk.Tk):
         )
 
         self.number_label = tk.Label(
-            self.header_frame, text="Number", font=("Arial", 12, "bold")
+            self.header_frame, text="Number", font=("default", 12, "bold")
         )
         self.number_label.grid(row=0, column=0, padx=(10, 5), pady=(10, 0))
 
         self.name_label = tk.Label(
-            self.header_frame, text="Name", font=("Arial", 12, "bold")
+            self.header_frame, text="Name", font=("default", 12, "bold")
         )
         self.name_label.grid(row=0, column=1, padx=(5, 10), pady=(10, 0))
 
         self.shape_label = tk.Label(
-            self.header_frame, text=f"Shape: {self.df.shape}", font=("Arial", 12)
+            self.header_frame, text=f"Shape: {self.df.shape}", font=("default", 12)
         )
         self.shape_label.grid(row=0, column=2, padx=(5, 10), pady=(10, 0))
 
@@ -442,7 +442,7 @@ class ColumnReorderGUI(tk.Tk):
                 row_edit_window.geometry("600x400")
 
                 shape_label = tk.Label(
-                    row_edit_window, text=f"Shape: {row_shape}", font=("Arial", 12)
+                    row_edit_window, text=f"Shape: {row_shape}", font=("default", 12)
                 )
                 shape_label.pack(pady=10)
 
