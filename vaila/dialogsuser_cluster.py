@@ -8,6 +8,7 @@ Descrição: Este módulo solicita ao usuário detalhes de configuração, inclu
 import tkinter as tk
 from tkinter import ttk
 
+
 def get_user_inputs():
     def confirm(event=None):
         try:
@@ -21,11 +22,11 @@ def get_user_inputs():
                 error_label.config(text="Cluster names cannot be empty.")
                 return
 
-            user_inputs['sample_rate'] = sample_rate
-            user_inputs['cluster1_config'] = cluster1_config
-            user_inputs['cluster2_config'] = cluster2_config
-            user_inputs['cluster1_name'] = cluster1_name
-            user_inputs['cluster2_name'] = cluster2_name
+            user_inputs["sample_rate"] = sample_rate
+            user_inputs["cluster1_config"] = cluster1_config
+            user_inputs["cluster2_config"] = cluster2_config
+            user_inputs["cluster1_name"] = cluster1_name
+            user_inputs["cluster2_name"] = cluster2_name
 
             app.quit()  # Quit the main loop
         except ValueError:
@@ -53,7 +54,9 @@ def get_user_inputs():
     sample_rate_entry.pack(padx=10, pady=5)
 
     # Create a LabelFrame for entering Cluster 1 configuration
-    cluster1_config_frame = ttk.LabelFrame(input_frame, text="Cluster 1 Configuration (A/B/C/D):")
+    cluster1_config_frame = ttk.LabelFrame(
+        input_frame, text="Cluster 1 Configuration (A/B/C/D):"
+    )
     cluster1_config_frame.pack(padx=10, pady=10)
 
     # Create an Entry widget for Cluster 1 configuration
@@ -69,7 +72,9 @@ def get_user_inputs():
     cluster1_name_entry.pack(padx=10, pady=5)
 
     # Create a LabelFrame for entering Cluster 2 configuration
-    cluster2_config_frame = ttk.LabelFrame(input_frame, text="Cluster 2 Configuration (A/B/C/D):")
+    cluster2_config_frame = ttk.LabelFrame(
+        input_frame, text="Cluster 2 Configuration (A/B/C/D):"
+    )
     cluster2_config_frame.pack(padx=10, pady=10)
 
     # Create an Entry widget for Cluster 2 configuration
@@ -93,7 +98,7 @@ def get_user_inputs():
     error_label.pack()
 
     # Bind the Return key (Enter) to the confirm function
-    app.bind('<Return>', confirm)
+    app.bind("<Return>", confirm)
 
     app.mainloop()
     app.destroy()  # Close the GUI window after the main loop ends
