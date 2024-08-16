@@ -7,6 +7,7 @@ import tkinter as tk
 from PIL import Image, ImageTk
 import os
 
+
 def show_vaila_message():
     window = tk.Toplevel()
     window.title("vailá")
@@ -73,6 +74,7 @@ def show_vaila_message():
     window.transient()
     window.grab_set()
     window.mainloop()
+
 
 if __name__ == "__main__":
     show_vaila_message()

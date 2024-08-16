@@ -2,13 +2,22 @@ import os
 import tkinter as tk
 from tkinter import filedialog, messagebox
 
+
 def get_video_files(directory_path):
-    return sorted([f for f in os.listdir(directory_path) if f.lower().endswith(('.mp4', '.avi', '.mov', '.mkv'))])
+    return sorted(
+        [
+            f
+            for f in os.listdir(directory_path)
+            if f.lower().endswith((".mp4", ".avi", ".mov", ".mkv"))
+        ]
+    )
+
 
 def write_sync_file(sync_data, output_file):
-    with open(output_file, 'a') as f:
+    with open(output_file, "a") as f:
         for data in sync_data:
-            f.write(' '.join(map(str, data)) + '\n')
+            f.write(" ".join(map(str, data)) + "\n")
+
 
 def get_sync_info(video_files):
     sync_data = []
@@ -25,10 +34,12 @@ def get_sync_info(video_files):
             self.geometry("800x600")
 
             self.create_widgets()
-        
+
         def create_widgets(self):
-            tk.Label(self, text="Enter Keyframes for Synchronization", font=("Arial", 14)).pack(pady=10)
-            
+            tk.Label(
+                self, text="Enter Keyframes for Synchronization", font=("Arial", 14)
+            ).pack(pady=10)
+
             frame = tk.Frame(self)
             frame.pack(fill=tk.BOTH, expand=True)
 
@@ -38,9 +49,7 @@ def get_sync_info(video_files):
 
             scrollable_frame.bind(
                 "<Configure>",
-                lambda e: canvas.configure(
-                    scrollregion=canvas.bbox("all")
-                )
+                lambda e: canvas.configure(scrollregion=canvas.bbox("all")),
             )
 
             canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
@@ -50,14 +59,18 @@ def get_sync_info(video_files):
             # Header labels
             header_frame = tk.Frame(scrollable_frame)
             header_frame.pack(fill=tk.X, pady=5)
-            tk.Label(header_frame, text="Video File", width=40, anchor='w').pack(side=tk.LEFT, padx=5)
-            tk.Label(header_frame, text="Keyframe", width=10, anchor='w').pack(side=tk.LEFT, padx=5)
+            tk.Label(header_frame, text="Video File", width=40, anchor="w").pack(
+                side=tk.LEFT, padx=5
+            )
+            tk.Label(header_frame, text="Keyframe", width=10, anchor="w").pack(
+                side=tk.LEFT, padx=5
+            )
 
             for video_file in self.video_files:
                 row = tk.Frame(scrollable_frame)
                 row.pack(fill=tk.X, pady=5)
 
-                tk.Label(row, text=video_file, width=40, anchor='w').pack(side=tk.LEFT)
+                tk.Label(row, text=video_file, width=40, anchor="w").pack(side=tk.LEFT)
                 keyframe_entry = tk.Entry(row, width=10)
                 keyframe_entry.pack(side=tk.LEFT, padx=5)
 
@@ -74,9 +87,12 @@ def get_sync_info(video_files):
                     keyframe = int(keyframe_entry.get())
                     self.sync_data.append([video_file, keyframe])
                 except ValueError:
-                    messagebox.showerror("Error", f"Invalid input for video {video_file}. Please enter a valid keyframe.")
+                    messagebox.showerror(
+                        "Error",
+                        f"Invalid input for video {video_file}. Please enter a valid keyframe.",
+                    )
                     return
-            
+
             self.select_main_camera()
 
         def select_main_camera(self):
@@ -103,7 +119,11 @@ def get_sync_info(video_files):
             self.title("Select Main Camera")
             self.geometry("600x400")
 
-            tk.Label(self, text="Select the Main Camera for Synchronization", font=("Arial", 14)).pack(pady=10)
+            tk.Label(
+                self,
+                text="Select the Main Camera for Synchronization",
+                font=("Arial", 14),
+            ).pack(pady=10)
 
             frame = tk.Frame(self)
             frame.pack(pady=10)
@@ -128,14 +148,18 @@ def get_sync_info(video_files):
         def on_ok(self):
             selected_index = self.main_video_combobox.curselection()
             if not selected_index:
-                messagebox.showerror("Error", "Please select the main video for synchronization.")
+                messagebox.showerror(
+                    "Error", "Please select the main video for synchronization."
+                )
                 return
 
             try:
                 frame_initial = int(self.frame_initial_entry.get())
                 frame_final = int(self.frame_final_entry.get())
             except ValueError:
-                messagebox.showerror("Error", "Please enter valid start and end frames.")
+                messagebox.showerror(
+                    "Error", "Please enter valid start and end frames."
+                )
                 return
 
             main_video = self.video_files[selected_index[0]]
@@ -145,22 +169,29 @@ def get_sync_info(video_files):
 
     root = tk.Tk()
     root.withdraw()
-    
+
     dialog = SyncDialog(root, video_files)
     sync_data, main_video, frame_initial, frame_final = dialog.get_sync_data()
 
     return sync_data, main_video, frame_initial, frame_final
 
+
 def sync_videos():
     root = tk.Tk()
     root.withdraw()
-    
-    video_directory = filedialog.askdirectory(title="Select the directory containing videos")
+
+    video_directory = filedialog.askdirectory(
+        title="Select the directory containing videos"
+    )
     if not video_directory:
         print("No video directory selected.")
         return
 
-    output_file = filedialog.asksaveasfilename(title="Save sync file as", defaultextension=".txt", filetypes=[("Text files", "*.txt"), ("All files", "*.*")])
+    output_file = filedialog.asksaveasfilename(
+        title="Save sync file as",
+        defaultextension=".txt",
+        filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
+    )
     if not output_file:
         print("No output file selected.")
         return
@@ -185,7 +216,14 @@ def sync_videos():
     adjusted_sync_data = []
     for video_file, keyframe in sync_data:
         if main_video in video_file:
-            adjusted_sync_data.append([video_file, f"{os.path.splitext(video_file)[0]}_{keyframe}_{frame_initial}_{frame_final}.mp4", frame_initial, frame_final])
+            adjusted_sync_data.append(
+                [
+                    video_file,
+                    f"{os.path.splitext(video_file)[0]}_{keyframe}_{frame_initial}_{frame_final}.mp4",
+                    frame_initial,
+                    frame_final,
+                ]
+            )
             continue
 
         initial_frame = frame_initial - (main_keyframe - keyframe)
@@ -197,7 +235,10 @@ def sync_videos():
     print("Sync file created successfully.")
 
     # Display success message
-    messagebox.showinfo("Success", f"Sync file '{output_file}' was created successfully.")
+    messagebox.showinfo(
+        "Success", f"Sync file '{output_file}' was created successfully."
+    )
+
 
 if __name__ == "__main__":
     sync_videos()

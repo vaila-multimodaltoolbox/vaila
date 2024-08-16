@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
 
+
 def get_user_inputs():
     def confirm():
         try:
@@ -9,12 +10,12 @@ def get_user_inputs():
             if file_type not in ["csv", "c3d"]:
                 error_label.config(text="Please enter 'csv' or 'c3d' for file type.")
                 return
-            user_inputs['sample_rate'] = sample_rate
-            user_inputs['file_type'] = file_type
+            user_inputs["sample_rate"] = sample_rate
+            user_inputs["file_type"] = file_type
             app.quit()  # Quit the main loop
         except ValueError:
             error_label.config(text="Please enter a valid float for sample rate.")
-    
+
     app = tk.Tk()
     app.title("Select File Format and Sample Rate")
 
