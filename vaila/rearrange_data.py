@@ -45,7 +45,8 @@ Requirements:
 
 import os
 import pandas as pd
-#import numpy as np
+
+# import numpy as np
 import tkinter as tk
 from tkinter import filedialog, simpledialog, messagebox, Scrollbar
 from datetime import datetime
@@ -197,7 +198,9 @@ def batch_convert_mediapipe(directory_path):
 
     # Create a new directory with a timestamp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    save_directory = os.path.join(directory_path, f"Convert_MediaPipe_to_vaila_{timestamp}")
+    save_directory = os.path.join(
+        directory_path, f"Convert_MediaPipe_to_vaila_{timestamp}"
+    )
 
     if not os.path.exists(save_directory):
         os.makedirs(save_directory)

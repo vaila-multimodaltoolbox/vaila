@@ -6,13 +6,15 @@ Version: 2024-07-15 20:00:00
 import os
 import pandas as pd
 
+
 def determine_header_lines(file_path):
-    with open(file_path, 'r') as f:
+    with open(file_path, "r") as f:
         for i, line in enumerate(f):
-            first_element = line.split(',')[0].strip()
-            if first_element.replace('.', '', 1).isdigit():
+            first_element = line.split(",")[0].strip()
+            if first_element.replace(".", "", 1).isdigit():
                 return i
     return 0
+
 
 def headersidx(file_path):
     try:
@@ -24,7 +26,7 @@ def headersidx(file_path):
             print(f"{i}: {col}")
 
         print("\nExample of new order:")
-        new_order = ['Time']
+        new_order = ["Time"]
         for i in range(1, len(df.columns), 3):
             new_order.append(df.columns[i][0])
         print(new_order)
@@ -34,6 +36,7 @@ def headersidx(file_path):
     except Exception as e:
         print(f"Error reading {file_path}: {e}")
         return []
+
 
 def reshapedata(file_path, new_order, save_directory):
     try:

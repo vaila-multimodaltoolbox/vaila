@@ -1,2 +1,2 @@
 def videos_synchronization():
-    print('OK')
+    print("OK")
