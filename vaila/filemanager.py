@@ -1,3 +1,35 @@
+"""
+File: filemanager.py
+
+Description:
+This script, named `filemanager.py`, is designed to manage files and directories efficiently. It supports various operations, including importing, exporting, copying, moving, and removing files. The script leverages the Tkinter graphical interface to facilitate user interaction, enabling the selection of files and directories through an easy-to-use GUI.
+
+Version: 1.0
+Last Updated: August 16, 2024
+Author: Prof. Paulo Santiago
+
+Main Features:
+- Import specific files from a selected directory into a predefined structure.
+- Export files matching specific patterns and extensions into a newly created directory.
+- Copy files from one location to another within the allowed directories.
+- Move files between predefined directories.
+- Remove files with specific extensions from selected directories.
+
+Usage Notes:
+- A directory named 'vaila_export' will be automatically created within the chosen destination directory for exporting files.
+- The script ensures that essential directories ('data', 'import', 'export', 'results') exist before performing operations.
+
+Dependencies:
+- Python 3.x
+- Tkinter (for the graphical user interface)
+- shutil, os, time (standard Python libraries)
+
+How to Run:
+- Execute the script in a Python environment that supports Tkinter.
+- Follow on-screen prompts to perform the desired file operations.
+
+"""
+
 import shutil
 import os
 import tkinter as tk
@@ -93,11 +125,11 @@ def export_file():
     # Create a new window for pattern entry
     pattern_window = tk.Tk()
     pattern_window.title("Enter File Patterns")
-    
+
     # Text box for entering multiple patterns, one per line
     pattern_label = tk.Label(pattern_window, text="Enter file patterns (one per line):")
     pattern_label.pack()
-    
+
     pattern_text = tk.Text(pattern_window, height=10, width=50)
     pattern_text.pack()
 
@@ -119,12 +151,17 @@ def process_export(src_directory, file_extension, patterns):
         messagebox.showerror("Error", "No destination directory selected.")
         return
 
+    # Ensure the 'vaila_export' directory exists within the selected destination directory
+    base_dest_directory = os.path.join(base_dest_directory, "vaila_export")
+    os.makedirs(base_dest_directory, exist_ok=True)
+
     try:
         for file_pattern in patterns:
             # Generate a timestamp to create a unique directory name for each pattern
             timestamp = time.strftime("%Y%m%d%H%M%S")
             export_directory = os.path.join(
-                base_dest_directory, f"vaila_export_{file_pattern.strip('_')}_{timestamp}"
+                base_dest_directory,
+                f"vaila_export_{file_pattern.strip('_')}_{timestamp}",
             )
             os.makedirs(export_directory, exist_ok=True)  # Create the export directory
 
@@ -237,4 +274,3 @@ def remove_file():
         messagebox.showinfo(
             "Success", f"Specified files in {selected_directory} have been removed."
         )
-
