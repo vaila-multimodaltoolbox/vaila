@@ -17,7 +17,6 @@ Dependencies:
 import os
 import time
 from moviepy.editor import VideoFileClip, concatenate_videoclips, vfx
-import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog
 
 
