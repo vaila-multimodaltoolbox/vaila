@@ -42,7 +42,7 @@ from .vector_coding import vector_coding
 from .syncvid import sync_videos
 from .compress_videos_h264 import compress_videos_h264_gui
 from .compress_videos_h265 import compress_videos_h265_gui
-from .extractpng import extract_png_from_videos
+from .extractpng import VideoProcessor  # Importando a classe VideoProcessor
 from .readcsv_export import create_c3d_from_csv, convert_csv_to_c3d
 from .getpixelvideo import main as getpixelvideo
 from .dlt2d import main as dlt2d
@@ -91,7 +91,7 @@ __all__ = [
     "show_c3d",
     "vector_coding",
     "sync_videos",
-    "extract_png_from_videos",
+    "VideoProcessor",  # Agora exportando a classe VideoProcessor
     "select_file",
     "show_csv",
     "get_csv_headers",
