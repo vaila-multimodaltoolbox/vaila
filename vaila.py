@@ -49,7 +49,7 @@ from vaila import (
     show_c3d,
     # vector_coding,
     sync_videos,
-    extract_png_from_videos,
+    VideoProcessor,  # Importando a classe VideoProcessor do extractpng.py
     compress_videos_h264_gui,
     compress_videos_h265_gui,
     cut_videos,
@@ -61,7 +61,7 @@ from vaila import (
     show_vaila_message,
     emg_labiocom,
     plot_2d,
-    process_videos_gui,
+    process_videos_gui,  # Importando a função de processar vídeos
 )
 
 text = """
@@ -514,8 +514,8 @@ class Vaila(tk.Tk):
         # Video sub-columns
         extract_png_btn = tk.Button(
             tools_col2,
-            text="Extract PNG",
-            command=self.extract_png_from_videos,
+            text="Video <--> PNG",
+            command=self.extract_png_from_videos,  # Atualizado para refletir a nova lógica de escolha
             width=button_width,
         )
         cut_videos_btn = tk.Button(
@@ -737,7 +737,8 @@ class Vaila(tk.Tk):
         sync_videos()
 
     def extract_png_from_videos(self):
-        extract_png_from_videos()
+        processor = VideoProcessor()
+        processor.run()
 
     def getpixelvideo(self):
         getpixelvideo()
