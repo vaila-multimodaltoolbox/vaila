@@ -21,7 +21,12 @@ from tkinter import filedialog, messagebox, simpledialog
 
 
 def process_videos(
-    source_dir, target_dir, percentage=50, reverse=False, use_text_file=False, text_file_path=None
+    source_dir,
+    target_dir,
+    percentage=50,
+    reverse=False,
+    use_text_file=False,
+    text_file_path=None,
 ):
     # Create a new directory with timestamp
     timestamp = time.strftime("%Y%m%d%H%M%S")
@@ -34,18 +39,30 @@ def process_videos(
         with open(text_file_path, "r") as file:
             for line in file.readlines():
                 line = line.strip()
-                if ',' in line:
-                    source_video, percent, target_video = line.split(',')
+                if "," in line:
+                    source_video, percent, target_video = line.split(",")
                 else:
                     source_video, percent, target_video = line.split()
-                
+
                 percent = float(percent)
-                video_files.append((os.path.join(source_dir, source_video), percent, os.path.join(output_dir, target_video)))
+                video_files.append(
+                    (
+                        os.path.join(source_dir, source_video),
+                        percent,
+                        os.path.join(output_dir, target_video),
+                    )
+                )
     else:
         video_files = []
         for file in os.listdir(source_dir):
             if file.lower().endswith((".mp4", ".avi", ".mov", ".mkv")):
-                video_files.append((os.path.join(source_dir, file), percentage, os.path.join(output_dir, file)))
+                video_files.append(
+                    (
+                        os.path.join(source_dir, file),
+                        percentage,
+                        os.path.join(output_dir, file),
+                    )
+                )
 
     for source_video, percent, target_video in video_files:
         try:
@@ -54,17 +71,23 @@ def process_videos(
             video_A = video_original.subclip(0, video_A_duration)
             if reverse:
                 video_A = video_A.fx(vfx.time_mirror)  # Reverse the video segment
-            video_B = VideoFileClip(target_video) if os.path.exists(target_video) else video_original
+            video_B = (
+                VideoFileClip(target_video)
+                if os.path.exists(target_video)
+                else video_original
+            )
 
             video_final = concatenate_videoclips([video_A, video_B])
 
             # Save the concatenated video
             base_name = os.path.splitext(os.path.basename(target_video))[0]
-            inserted_frames = int(video_A.fps * video_A.duration)  # Number of frames inserted
-            output_suffix = f"rframes_{inserted_frames}" if reverse else f"frames_{inserted_frames}"
-            output_file = os.path.join(
-                output_dir, f"{base_name}_{output_suffix}.mp4"
+            inserted_frames = int(
+                video_A.fps * video_A.duration
+            )  # Number of frames inserted
+            output_suffix = (
+                f"rframes_{inserted_frames}" if reverse else f"frames_{inserted_frames}"
             )
+            output_file = os.path.join(output_dir, f"{base_name}_{output_suffix}.mp4")
             video_final.write_videofile(
                 output_file, fps=video_final.fps, codec="libx264", bitrate="8000k"
             )
@@ -116,7 +139,9 @@ def process_videos_gui():
         reverse = "R" in user_input[1].upper() if len(user_input) > 1 else False
 
     # Call the process_videos function with the collected inputs
-    process_videos(source_dir, target_dir, percentage, reverse, use_text_file, text_file_path)
+    process_videos(
+        source_dir, target_dir, percentage, reverse, use_text_file, text_file_path
+    )
 
 
 if __name__ == "__main__":
