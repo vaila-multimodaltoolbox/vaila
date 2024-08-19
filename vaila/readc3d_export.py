@@ -1,3 +1,46 @@
+"""
+File: readc3d_export.py
+
+Description:
+This script processes .c3d files, extracting marker data, analog data, and points residuals,
+and saves them into CSV files. It also allows the option to save the data in Excel format.
+The script leverages Dask for efficient data handling and processing, particularly useful
+when working with large datasets.
+
+Features:
+- Extracts and saves marker data with time columns.
+- Extracts and saves analog data with time columns.
+- Extracts and saves points residuals with time columns.
+- Supports saving the data in CSV format.
+- Optionally saves the data in Excel format (can be slow for large files).
+- Generates an info file containing metadata about markers and analogs.
+
+Dependencies:
+- Python 3.x
+- ezc3d
+- Dask
+- Pandas
+- Tkinter
+- Tqdm
+- Openpyxl (optional, for saving Excel files)
+
+Version: 1.0
+Date: August 2024
+Author: Prof. Paulo Santiago
+
+Usage:
+- Run the script, select the input directory containing .c3d files, and specify an output directory.
+- Choose whether to save the files in Excel format.
+- The script will process each .c3d file in the input directory and save the results in the specified output directory.
+
+Example:
+$ python readc3d_export.py
+
+Notes:
+- Ensure that all necessary libraries are installed.
+- This script is designed to handle large datasets efficiently, but saving to Excel format may take significant time depending on the dataset size.
+"""
+
 import os
 import dask.dataframe as dd
 import pandas as pd
