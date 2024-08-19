@@ -48,7 +48,17 @@ def get_video_info(video_path):
         return None
 
 
-def count_frames_in_videos(directory_path):
+def count_frames_in_videos():
+    root = tk.Tk()
+    root.withdraw()
+
+    directory_path = filedialog.askdirectory(
+        title="Select the directory containing videos"
+    )
+    if not directory_path:
+        messagebox.showerror("Error", "No directory selected.")
+        return
+
     video_files = sorted(
         [
             f
@@ -210,12 +220,4 @@ def show_save_success_message(output_file):
 
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    root.withdraw()
-    directory_path = filedialog.askdirectory(
-        title="Select the directory containing videos"
-    )
-    if directory_path:
-        count_frames_in_videos(directory_path)
-    else:
-        messagebox.showerror("Error", "No directory selected.")
+    count_frames_in_videos()
