@@ -47,9 +47,8 @@ from vaila import (
     remove_file,
     import_file,
     show_c3d,
-    # vector_coding,
     sync_videos,
-    VideoProcessor,  # Importando a classe VideoProcessor do extractpng.py
+    VideoProcessor,
     compress_videos_h264_gui,
     compress_videos_h265_gui,
     cut_videos,
@@ -61,7 +60,7 @@ from vaila import (
     show_vaila_message,
     emg_labiocom,
     plot_2d,
-    process_videos_gui,  # Importando a função de processar vídeos
+    process_videos_gui,
 )
 
 text = """
@@ -440,16 +439,16 @@ class Vaila(tk.Tk):
             command=self.reorder_csv_data,
             width=button_width,
         )
-        convert_c3d_btn = tk.Button(
+        convert_btn = tk.Button(
             tools_col1,
-            text="C3D to CSV",
-            command=self.convert_c3d_data,
+            text="CSV <--> C3D",
+            command=self.convert_c3d_csv,
             width=button_width,
         )
-        create_c3d_btn = tk.Button(
+        vaila_btn8to9 = tk.Button(
             tools_col1,
-            text="CSV to C3D",
-            command=self.convert_csv_to_c3d,
+            text="vailá",
+            command=self.show_vaila_message,
             width=button_width,
         )
         dlt2d_btn = tk.Button(
@@ -497,8 +496,8 @@ class Vaila(tk.Tk):
 
         # Packing Data Files buttons
         reorder_csv_btn.grid(row=0, column=0, padx=2, pady=2)
-        convert_c3d_btn.grid(row=0, column=1, padx=2, pady=2)
-        create_c3d_btn.grid(row=0, column=2, padx=2, pady=2)
+        convert_btn.grid(row=0, column=1, padx=2, pady=2)
+        vaila_btn8to9.grid(row=0, column=2, padx=2, pady=2)
         dlt2d_btn.grid(row=1, column=0, padx=2, pady=2)
         rec2d_one_btn.grid(row=1, column=1, padx=2, pady=2)
         rec2d_multiple_btn.grid(row=1, column=2, padx=2, pady=2)
@@ -707,16 +706,19 @@ class Vaila(tk.Tk):
     def reorder_csv_data(self):
         rearrange_data_in_directory()
 
-    def convert_c3d_data(self):
-        convert_c3d_to_csv()
-
-    def convert_csv_to_c3d(self):
-        convert_csv_to_c3d()
+    def convert_c3d_csv(self):
+        action = messagebox.askquestion(
+            "Choose Action",
+            "Select:\n(No) CSV -> C3D\n(Yes) C3D -> CSV",
+            icon="question",
+        )
+        if action == "yes":
+            convert_c3d_to_csv()
+        else:
+            convert_csv_to_c3d()
 
     def count_frames_in_videos(self):
-        selected_path = filedialog.askdirectory()
-        if selected_path:
-            count_frames_in_videos(selected_path)
+        count_frames_in_videos()
 
     def cut_videos(self):
         cut_videos()

@@ -4,7 +4,6 @@ from tkinter import (
     filedialog,
     messagebox,
     Tk,
-    simpledialog,
     Toplevel,
     Label,
     Radiobutton,
