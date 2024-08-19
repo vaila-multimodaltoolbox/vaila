@@ -2,32 +2,30 @@
 File: filemanager.py
 
 Description:
-This script, named `filemanager.py`, is designed to manage files and directories efficiently. It supports various operations, including importing, exporting, copying, moving, and removing files. The script leverages the Tkinter graphical interface to facilitate user interaction, enabling the selection of files and directories through an easy-to-use GUI.
+This script, named `filemanager.py`, is designed to manage files and directories efficiently. It supports various operations, including importing, converting, exporting, copying, moving, and removing files. The script leverages the Tkinter graphical interface to facilitate user interaction, enabling the selection of files and directories through an easy-to-use GUI.
 
-Version: 1.0
-Last Updated: August 16, 2024
+Version: 1.1
+Last Updated: [Data Atual]
 Author: Prof. Paulo Santiago
 
 Main Features:
 - Import specific files from a selected directory into a predefined structure.
-- Export files matching specific patterns and extensions into a newly created directory.
+- Convert various file types (e.g., c3d, yaml, xml, html, h5, etc.) to CSV format.
 - Copy files from one location to another within the allowed directories.
 - Move files between predefined directories.
-- Remove files with specific extensions from selected directories.
+- Remove files with specific extensions or directory names from selected directories.
 
 Usage Notes:
-- A directory named 'vaila_export' will be automatically created within the chosen destination directory for exporting files.
+- A directory named 'vaila_export', 'vaila_copy', 'vaila_move', or 'vaila_import' will be automatically created within the chosen destination directory for the respective operations.
 - The script ensures that essential directories ('data', 'import', 'export', 'results') exist before performing operations.
 
 Dependencies:
 - Python 3.x
-- Tkinter (for the graphical user interface)
-- shutil, os, time (standard Python libraries)
+- Conda environment with the following packages: pandas, ezc3d, yaml, toml, lxml, BeautifulSoup4, pickle5, hdf5plugin
 
 How to Run:
-- Execute the script in a Python environment that supports Tkinter.
+- Execute the script in a Python environment managed by Conda that includes the necessary packages.
 - Follow on-screen prompts to perform the desired file operations.
-
 """
 
 import shutil
@@ -35,6 +33,18 @@ import os
 import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog
 import time
+import pandas as pd
+import ezc3d
+import pickle  # Usando o pickle nativo do Python 3.11
+import yaml
+import toml
+from lxml import etree
+from bs4 import BeautifulSoup
+from datetime import datetime
+import h5py  # Import necessário para manipular arquivos .h5
+import hdf5plugin  # Import necessário para manipular arquivos .h5 com compressão específica
+import json
+
 
 # Ensure the 'data', 'import', 'export', and 'results' directories exist
 for directory in ["data", "import", "export", "results"]:
@@ -47,62 +57,6 @@ directories = ["import", "export", "results"] + [
     for d in os.listdir("data")
     if os.path.isdir(os.path.join("data", d))
 ]
-
-
-def import_file():
-    allowed_extensions = {
-        ".avi",
-        ".AVI",
-        ".mp4",
-        ".MP4",
-        ".mov",
-        ".MOV",
-        ".mkv",
-        ".MKV",
-        ".c3d",
-        ".csv",
-        ".txt",
-        ".ref2d",
-        ".dlt2d",
-        ".2d",
-        ".ref3d",
-        ".3d",
-        ".dlt3d",
-    }
-
-    def select_directory(title):
-        directory_path = filedialog.askdirectory(title=title)
-        return directory_path
-
-    # Select source directory
-    src = select_directory("Select the source directory")
-    if not src:
-        messagebox.showerror("Error", "No source directory selected.")
-        return
-
-    # Destination directory is always the 'import' directory in the current working directory
-    dest = os.path.join(os.getcwd(), "import")
-
-    # Ensure the destination directory exists
-    os.makedirs(dest, exist_ok=True)
-
-    # Copy all allowed files from source to destination
-    for item in os.listdir(src):
-        src_path = os.path.join(src, item)
-        dest_path = os.path.join(dest, item)
-        if os.path.isdir(src_path):
-            for root_dir, dirs, files in os.walk(src_path):
-                for file in files:
-                    if os.path.splitext(file)[1].lower() in allowed_extensions:
-                        shutil.copy2(
-                            os.path.join(root_dir, file), os.path.join(dest, file)
-                        )
-        elif os.path.splitext(item)[1].lower() in allowed_extensions:
-            shutil.copy2(src_path, dest_path)
-
-    messagebox.showinfo(
-        "Success", f"All allowed files from {src} have been imported to {dest}."
-    )
 
 
 def copy_file():
@@ -182,7 +136,7 @@ def process_copy(src_directory, file_extension, patterns):
         )
     except Exception as e:
         # Show an error message if something goes wrong
-        messagebox.showerror("Error", f"Error copy files: {e}")
+        messagebox.showerror("Error", f"Error copying files: {e}")
 
 
 def export_file():
@@ -332,3 +286,231 @@ def remove_file():
         messagebox.showinfo("Success", f"Items matching '{pattern}' have been removed.")
     except Exception as e:
         messagebox.showerror("Error", f"Error removing items: {e}")
+
+
+def import_file():
+    root = tk.Tk()
+    root.withdraw()
+
+    # Seleção do diretório fonte
+    src_directory = filedialog.askdirectory(title="Select Source Directory")
+    if not src_directory:
+        messagebox.showerror("Error", "No source directory selected.")
+        return
+
+    # Seleção do diretório de destino
+    dest_directory = filedialog.askdirectory(title="Select Destination Directory")
+    if not dest_directory:
+        messagebox.showerror("Error", "No destination directory selected.")
+        return
+
+    dest_directory = os.path.join(dest_directory, "vaila_import")
+    os.makedirs(dest_directory, exist_ok=True)
+
+    # Solicitar a extensão do arquivo ao usuário
+    file_extension = simpledialog.askstring(
+        "File Extension",
+        "Enter the file extension to process (e.g., .csv, .json, .xml):",
+    )
+    if not file_extension:
+        messagebox.showerror("Error", "No file extension provided.")
+        return
+
+    # Filtrar arquivos pela extensão fornecida
+    files = sorted(
+        [
+            f
+            for f in os.listdir(src_directory)
+            if f.endswith(file_extension)
+            and os.path.isfile(os.path.join(src_directory, f))
+        ]
+    )
+    if not files:
+        messagebox.showerror(
+            "Error",
+            f"No files with extension {file_extension} found in the source directory.",
+        )
+        return
+
+    for file in files:
+        src_file_path = os.path.join(src_directory, file)
+        file_name, file_extension = os.path.splitext(file)
+
+        print(f"Processing file: {src_file_path}")
+
+        def save_csv(dataframe, base_name, suffix):
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            dest_file = os.path.join(
+                dest_directory, f"{base_name}_{suffix}_{timestamp}.csv"
+            )
+            dataframe.to_csv(dest_file, index=False)
+            print(f"Saved: {dest_file}")
+
+        try:
+            # Processamento de arquivos CSV, TSV, TXT
+            if file_extension in [".csv", ".tsv", ".txt"]:
+                df = pd.read_csv(src_file_path, sep=None, engine="python")
+                save_csv(df, file_name, "data")
+
+            # Processamento de arquivos Excel
+            elif file_extension in [".xlsx", ".xls", ".ods"]:
+                df = pd.read_excel(src_file_path)
+                save_csv(df, file_name, "data")
+
+            # Processamento de arquivos HDF5
+            elif file_extension == ".h5":
+                with h5py.File(src_file_path, "r") as hdf:
+                    for key in hdf.keys():
+                        data = hdf[key][:]
+                        df = pd.DataFrame(data)
+                        save_csv(df, file_name, key)
+
+            # Processamento de arquivos Pickle
+            elif file_extension == ".pickle":
+                with open(src_file_path, "rb") as f:
+                    data = pickle.load(f)
+                df = pd.DataFrame(data)
+                save_csv(df, file_name, "data")
+
+            # Processamento de arquivos YAML
+            elif file_extension in [".yml", ".yaml"]:
+                with open(src_file_path, "r") as f:
+                    data = yaml.safe_load(f)
+                df = pd.DataFrame(data)
+                save_csv(df, file_name, "data")
+
+            # Processamento de arquivos TOML
+            elif file_extension == ".toml":
+                data = toml.load(src_file_path)
+                df = pd.DataFrame(data)
+                save_csv(df, file_name, "data")
+
+            # Processamento de arquivos HTML
+            elif file_extension == ".html":
+                try:
+                    with open(src_file_path, "r") as f:
+                        soup = BeautifulSoup(f, "html.parser")
+                    tables = pd.read_html(str(soup))
+                    for i, table in enumerate(tables):
+                        table_name = (
+                            table.columns[0] if len(table.columns) > 0 else f"table_{i}"
+                        )
+                        save_csv(table, file_name, table_name)
+                except Exception as e:
+                    print(f"Error processing HTML file {src_file_path}: {e}")
+                    messagebox.showerror("Error", f"Failed to process HTML file: {e}")
+
+            # Processamento de arquivos XML
+            elif file_extension == ".xml":
+                try:
+                    with open(src_file_path, "r") as f:
+                        tree = etree.parse(f)
+                    root = tree.getroot()
+                    data = []
+                    columns = []
+                    for element in root.iter():
+                        if element.tag not in columns:
+                            columns.append(element.tag)
+                        data.append({element.tag: element.text})
+                    df = pd.DataFrame(data)
+                    save_csv(df, file_name, "data")
+                except Exception as e:
+                    print(f"Error processing XML file {src_file_path}: {e}")
+                    messagebox.showerror("Error", f"Failed to process XML file: {e}")
+
+            # Processamento de arquivos C3D
+            elif file_extension == ".c3d":
+                try:
+                    c3d_data = ezc3d.c3d(src_file_path)
+                    point_data = c3d_data["data"]["points"]
+                    marker_labels = c3d_data["parameters"]["POINT"]["LABELS"]["value"]
+                    markers = point_data[0:3, :, :].T.reshape(
+                        -1, len(marker_labels) * 3
+                    )
+                    marker_freq = c3d_data["header"]["points"]["frame_rate"]
+
+                    marker_columns = [
+                        f"{label}_{axis}"
+                        for label in marker_labels
+                        for axis in ["X", "Y", "Z"]
+                    ]
+                    markers_df = pd.DataFrame(markers, columns=marker_columns)
+
+                    num_marker_frames = markers_df.shape[0]
+                    marker_time_column = pd.Series(
+                        [f"{i / marker_freq:.3f}" for i in range(num_marker_frames)],
+                        name="Time",
+                    )
+                    markers_df.insert(0, "Time", marker_time_column)
+                    save_csv(markers_df, file_name, "markers")
+
+                    analogs = c3d_data["data"]["analogs"].squeeze(axis=0).T
+                    analog_labels = c3d_data["parameters"]["ANALOG"]["LABELS"]["value"]
+                    analogs_df = pd.DataFrame(analogs, columns=analog_labels)
+
+                    analog_freq = c3d_data["header"]["analogs"]["frame_rate"]
+                    num_analog_frames = analogs_df.shape[0]
+                    analog_time_column = pd.Series(
+                        [f"{i / analog_freq:.3f}" for i in range(num_analog_frames)],
+                        name="Time",
+                    )
+                    analogs_df.insert(0, "Time", analog_time_column)
+                    save_csv(analogs_df, file_name, "analogs")
+                except Exception as e:
+                    print(f"Error processing C3D file {src_file_path}: {e}")
+                    messagebox.showerror("Error", f"Failed to process C3D file: {e}")
+
+            # Processamento de arquivos JSON
+            elif file_extension == ".json":
+                try:
+                    with open(src_file_path, "r") as f:
+                        data = json.load(f)
+
+                    print("JSON data loaded successfully.")
+
+                    timeseries = data.get("data", {}).get("timeseries", [])
+                    print(f"Found {len(timeseries)} timeseries.")
+
+                    for series in timeseries:
+                        time = series.get("time", [])
+                        positions = series.get("data", {}).get("0", [])
+
+                        if not time or not positions:
+                            print(
+                                f"No valid time or position data found in series: {series.get('name', 'Unnamed Series')}"
+                            )
+                            continue
+
+                        rows = []
+                        for t, pos in zip(time, positions):
+                            row = {"Time": t}
+                            if isinstance(pos, list) and len(pos) == 2:
+                                row["p1_x"] = pos[0]
+                                row["p1_y"] = pos[1]
+                            else:
+                                print(f"Invalid position data: {pos} for time {t}")
+                            rows.append(row)
+
+                        if rows:
+                            df = pd.DataFrame(rows)
+                            series_name = series.get("name", "data").replace(" ", "_")
+                            save_csv(df, file_name, series_name)
+                        else:
+                            print(
+                                f"No data to save for series: {series.get('name', 'Unnamed Series')}"
+                            )
+
+                except Exception as e:
+                    print(f"Error processing JSON file {src_file_path}: {e}")
+                    messagebox.showerror("Error", f"Failed to process JSON file: {e}")
+
+            else:
+                raise ValueError(f"Unsupported file format: {file_extension}")
+
+        except Exception as e:
+            print(f"Error processing {src_file_path}: {e}")
+            messagebox.showerror("Error", f"Failed to process {src_file_path}: {e}")
+
+    messagebox.showinfo(
+        "Success", f"Files have been processed and saved to {dest_directory}."
+    )
