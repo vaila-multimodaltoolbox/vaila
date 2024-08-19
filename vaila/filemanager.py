@@ -105,7 +105,7 @@ def import_file():
     )
 
 
-def export_file():
+def copy_file():
     # Prompt the user to select the main path directory for recursive search
     src_directory = filedialog.askdirectory(title="Select Source Directory")
 
@@ -136,7 +136,7 @@ def export_file():
     def on_submit():
         patterns = pattern_text.get("1.0", "end").strip().splitlines()
         pattern_window.destroy()
-        process_export(src_directory, file_extension, patterns)
+        process_copy(src_directory, file_extension, patterns)
 
     submit_button = tk.Button(pattern_window, text="Submit", command=on_submit)
     submit_button.pack()
@@ -144,26 +144,26 @@ def export_file():
     pattern_window.mainloop()
 
 
-def process_export(src_directory, file_extension, patterns):
+def process_copy(src_directory, file_extension, patterns):
     # Prompt the user to select the destination directory where the new directories will be created
     base_dest_directory = filedialog.askdirectory(title="Select Destination Directory")
     if not base_dest_directory:
         messagebox.showerror("Error", "No destination directory selected.")
         return
 
-    # Ensure the 'vaila_export' directory exists within the selected destination directory
-    base_dest_directory = os.path.join(base_dest_directory, "vaila_export")
+    # Ensure the 'vaila_copy' directory exists within the selected destination directory
+    base_dest_directory = os.path.join(base_dest_directory, "vaila_copy")
     os.makedirs(base_dest_directory, exist_ok=True)
 
     try:
         for file_pattern in patterns:
             # Generate a timestamp to create a unique directory name for each pattern
             timestamp = time.strftime("%Y%m%d%H%M%S")
-            export_directory = os.path.join(
+            copy_directory = os.path.join(
                 base_dest_directory,
-                f"vaila_export_{file_pattern.strip('_')}_{timestamp}",
+                f"vaila_copy_{file_pattern.strip('_')}_{timestamp}",
             )
-            os.makedirs(export_directory, exist_ok=True)  # Create the export directory
+            os.makedirs(copy_directory, exist_ok=True)  # Create the export directory
 
             # Walk through the source directory and copy matching files to the new directory structure
             for root, dirs, files in os.walk(src_directory):
@@ -172,7 +172,7 @@ def process_export(src_directory, file_extension, patterns):
                     if file.endswith(file_extension) and file_pattern in file:
                         # Copy the file to the appropriate subdirectory
                         src_path = os.path.join(root, file)
-                        dest_path = os.path.join(export_directory, file)
+                        dest_path = os.path.join(copy_directory, file)
                         shutil.copy2(src_path, dest_path)
 
         # Show a success message after the operation is complete
@@ -182,10 +182,10 @@ def process_export(src_directory, file_extension, patterns):
         )
     except Exception as e:
         # Show an error message if something goes wrong
-        messagebox.showerror("Error", f"Error exporting files: {e}")
+        messagebox.showerror("Error", f"Error copy files: {e}")
 
 
-def copy_file():
+def export_file():
     src = filedialog.askopenfilename(title="Select the source file")
     if not src:
         messagebox.showerror("Error", "No source file selected.")
@@ -236,41 +236,99 @@ def move_file():
 
 
 def remove_file():
-    allowed_extensions = {
-        ".avi",
-        ".AVI",
-        ".mp4",
-        ".MP4",
-        ".mov",
-        ".MOV",
-        ".mkv",
-        ".MKV",
-    }
-    allowed_directories = ["data", "results", "import", "export"]
+    # Lista de padrões perigosos e arquivos de sistema a serem protegidos
+    forbidden_patterns = ["*", ".", "/", "\\"]
+    system_files = [
+        "boot.ini",
+        "ntldr",
+        "ntdetect.com",
+        "autoexec.bat",
+        "config.sys",
+        "System",
+        "System32",  # Windows
+        ".bashrc",
+        ".profile",
+        ".bash_profile",
+        ".bash_logout",
+        "/etc/passwd",
+        "/etc/shadow",  # Linux
+        ".DS_Store",
+        "/System",
+        "/Applications",
+        "/Users",
+        "/Library",  # macOS
+    ]
 
-    def select_directory(title):
-        directory_path = filedialog.askdirectory(title=title)
-        return directory_path
-
-    selected_directory = select_directory("Select the directory to remove files from")
-    if not selected_directory or not any(
-        selected_directory.startswith(os.path.join(os.getcwd(), d))
-        for d in allowed_directories
-    ):
-        messagebox.showerror("Error", "No valid directory selected.")
+    # Prompt the user to select the root directory for the removal process
+    root_directory = filedialog.askdirectory(title="Select Root Directory for Removal")
+    if not root_directory:
+        messagebox.showerror("Error", "No root directory selected.")
         return
 
-    confirmation = messagebox.askyesno(
-        "Confirm", f"Are you sure you want to remove files from {selected_directory}?"
+    # Prompt the user to choose between removing by file extension or by directory/folder name
+    removal_type = simpledialog.askstring(
+        "Removal Type",
+        "Enter 'ext' to remove by file extension or 'dir' to remove by directory/folder name:",
     )
-    if confirmation:
-        for item in os.listdir(selected_directory):
-            item_path = os.path.join(selected_directory, item)
-            if (
-                os.path.isfile(item_path)
-                and os.path.splitext(item_path)[1].lower() in allowed_extensions
-            ):
-                os.remove(item_path)
-        messagebox.showinfo(
-            "Success", f"Specified files in {selected_directory} have been removed."
+    if not removal_type or removal_type not in ["ext", "dir"]:
+        messagebox.showerror("Error", "Invalid removal type provided.")
+        return
+
+    # Prompt the user to enter the file extension or directory name pattern
+    pattern = simpledialog.askstring(
+        "Pattern",
+        "Enter the file extension (e.g., .csv) or directory/folder name pattern to remove:",
+    )
+    if not pattern:
+        messagebox.showerror("Error", "No pattern provided.")
+        return
+
+    # Verificar se o padrão está na lista de padrões proibidos
+    if pattern in forbidden_patterns or pattern in system_files:
+        messagebox.showerror("Error", "This pattern is forbidden for removal.")
+        return
+
+    # Verificar se o padrão pode causar remoção de arquivos de sistema operacional
+    if removal_type == "dir" and any(sys_file in pattern for sys_file in system_files):
+        messagebox.showerror(
+            "Error", "Attempting to remove a system directory is not allowed."
         )
+        return
+
+    # Confirmation step - user must re-enter the pattern to confirm
+    confirm_pattern = simpledialog.askstring(
+        "Confirm Removal",
+        f"To confirm, please re-enter the {('extension' if removal_type == 'ext' else 'directory/folder name')} you want to remove:",
+    )
+    if confirm_pattern != pattern:
+        messagebox.showerror(
+            "Error", "The confirmation pattern does not match. Operation canceled."
+        )
+        return
+
+    # Final confirmation dialog
+    confirmation = messagebox.askyesno(
+        "Final Confirmation",
+        f"Are you absolutely sure you want to remove all items matching '{pattern}' in '{root_directory}'?",
+    )
+    if not confirmation:
+        return
+
+    try:
+        if removal_type == "ext":
+            # Walk through the directories and remove files matching the extension
+            for root, dirs, files in os.walk(root_directory):
+                for file in files:
+                    if file.endswith(pattern):
+                        os.remove(os.path.join(root, file))
+
+        elif removal_type == "dir":
+            # Walk through the directories and remove folders matching the name pattern
+            for root, dirs, files in os.walk(root_directory):
+                for dir_name in dirs:
+                    if pattern in dir_name:
+                        shutil.rmtree(os.path.join(root, dir_name))
+
+        messagebox.showinfo("Success", f"Items matching '{pattern}' have been removed.")
+    except Exception as e:
+        messagebox.showerror("Error", f"Error removing items: {e}")
