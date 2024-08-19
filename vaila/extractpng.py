@@ -2,38 +2,27 @@
 File: extractpng.py
 
 Description:
-This script allows users to either extract PNG frames from video files or create a video from a sequence of PNG images. When extracting frames, the script saves them in a specified directory and records the frame rate (FPS) and other relevant information in an `info.txt` file. This information is then used to correctly reassemble the PNG images back into a video, ensuring the final video has the correct frame rate and format. The script provides a graphical user interface (GUI) for selecting source directories, destination directories, and output files.
+This script allows users to either extract PNG frames from video files or create a video from a sequence of PNG images. The script ensures consistency and quality in extracted frames and generated videos, making them suitable for machine learning, computer vision, and biomechanics applications.
 
-Version: 1.2
+Version: 1.3
 Last Updated: August 17, 2024
 Author: Prof. Paulo Santiago
 
 Features:
-- Extract PNG frames from videos and save them with correct frame rate information.
-- Create videos from PNG images using the saved frame rate.
+- Extract PNG frames in RGB format to ensure compatibility with machine learning models.
+- Create videos in YUV420p format, which is a widely used standard in computer vision.
 - User-friendly GUI for directory and file selection.
-- Supports multiple video formats including .avi, .mp4, .mov, and .mkv.
-- Progress bar displayed in the terminal during the extraction or creation process.
-- Confirmation message after process completion to ensure the main GUI remains responsive.
-
-Usage:
-- Run the script and choose the desired action (extract PNGs or create a video).
-- Follow the prompts to select the source and destination directories.
-- The user can type 'e' to extract PNGs or 'c' to create a video.
+- Ensures consistent resolution, frame rate, and color space across all operations.
 
 Dependencies:
 - Python 3.x
-- OpenCV
 - ffmpeg-python
 - Tkinter
-- tqdm
 """
 
 import os
-import cv2
 from ffmpeg import FFmpeg
 from tkinter import filedialog, messagebox, simpledialog, Tk, Toplevel, Label, Button
-
 
 class VideoProcessor:
 
@@ -57,8 +46,7 @@ class VideoProcessor:
 
         try:
             video_files = [
-                f
-                for f in os.listdir(src)
+                f for f in os.listdir(src)
                 if f.endswith((".avi", ".mp4", ".mov", ".mkv"))
             ]
 
@@ -69,9 +57,10 @@ class VideoProcessor:
                 os.makedirs(output_dir, exist_ok=True)
                 output_pattern = os.path.join(output_dir, "%09d.png")
 
-                cap = cv2.VideoCapture(video_path)
-                fps = cap.get(cv2.CAP_PROP_FPS)
+                # Extract FPS using ffmpeg
+                fps = self.get_fps(video_path)
 
+                # Extract frames with RGB color space
                 ffmpeg = (
                     FFmpeg()
                     .input(video_path)
@@ -87,8 +76,6 @@ class VideoProcessor:
 
                 with open(os.path.join(output_dir, "info.txt"), "w") as f:
                     f.write(f"FPS: {fps}\n")
-
-                cap.release()
 
                 print(f"Extraction completed for {item}")
 
@@ -129,6 +116,7 @@ class VideoProcessor:
 
             input_pattern = os.path.join(src, "%09d.png")
 
+            # Create video in YUV420p color space for compatibility
             ffmpeg = (
                 FFmpeg()
                 .input(input_pattern, framerate=fps)
@@ -142,6 +130,13 @@ class VideoProcessor:
             self.show_completion_message("Video creation completed successfully.")
         except Exception as e:
             messagebox.showerror("Error", f"Error creating video: {e}")
+
+    def get_fps(self, video_path):
+        import cv2
+        cap = cv2.VideoCapture(video_path)
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        cap.release()
+        return fps
 
     def show_completion_message(self, message):
         root = Tk()
