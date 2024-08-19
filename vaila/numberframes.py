@@ -26,7 +26,6 @@ Usage:
 - Use the provided FFprobe commands for further detailed analysis if needed.
 """
 
-
 import os
 import cv2
 import tkinter as tk
