@@ -1,3 +1,32 @@
+"""
+File: numberframes.py
+
+Description:
+This script allows users to analyze video files within a selected directory and extract metadata such as frame count, frame rate (FPS), resolution, codec, and more. The script generates a summary of this information, displays it in a user-friendly graphical interface, and saves the metadata to a text file. It is designed to work seamlessly with machine learning, computer vision, and biomechanics applications.
+
+Features:
+- Automatically scans all video files in a selected directory.
+- Extracts key video properties including frame count, FPS, resolution, codec, duration, and color properties.
+- Saves the metadata to a timestamped text file within the selected directory.
+- Displays the extracted metadata in a scrollable, easy-to-read GUI.
+- Provides FFprobe commands for advanced metadata extraction.
+
+Version: 1.1
+Last Updated: August 18, 2024
+Author: Prof. Paulo Santiago
+
+Dependencies:
+- Python 3.x
+- OpenCV
+- Tkinter
+
+Usage:
+- Run the script, select a directory containing video files, and let the tool analyze the videos.
+- View the metadata in the GUI and check the saved text file in the selected directory for details.
+- Use the provided FFprobe commands for further detailed analysis if needed.
+"""
+
+
 import os
 import cv2
 import tkinter as tk
