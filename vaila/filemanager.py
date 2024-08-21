@@ -42,21 +42,22 @@ from lxml import etree
 from bs4 import BeautifulSoup
 from datetime import datetime
 import h5py  # Import necessário para manipular arquivos .h5
-import hdf5plugin  # Import necessário para manipular arquivos .h5 com compressão específica
+
+# import hdf5plugin  # Import necessário para manipular arquivos .h5 com compressão específica
 import json
 
 
-# Ensure the 'data', 'import', 'export', and 'results' directories exist
-for directory in ["data", "import", "export", "results"]:
-    if not os.path.exists(directory):
-        os.makedirs(directory)
+# # Ensure the 'data', 'import', 'export', and 'results' directories exist
+# for directory in ["data", "import", "export", "results"]:
+#     if not os.path.exists(directory):
+#         os.makedirs(directory)
 
-# Create the directories list
-directories = ["import", "export", "results"] + [
-    os.path.join("data", d)
-    for d in os.listdir("data")
-    if os.path.isdir(os.path.join("data", d))
-]
+# # Create the directories list
+# directories = ["import", "export", "results"] + [
+#     os.path.join("data", d)
+#     for d in os.listdir("data")
+#     if os.path.isdir(os.path.join("data", d))
+# ]
 
 
 def copy_file():
@@ -514,3 +515,54 @@ def import_file():
     messagebox.showinfo(
         "Success", f"Files have been processed and saved to {dest_directory}."
     )
+
+
+def rename_files():
+    # Prompt the user to select the directory containing the files to rename
+    directory = filedialog.askdirectory(title="Select Directory with Files to Rename")
+
+    if not directory:
+        messagebox.showerror("Error", "No directory selected.")
+        return
+
+    # Prompt the user to enter the text to be replaced and the text to replace it with
+    text_to_replace = simpledialog.askstring(
+        "Text to Replace", "Enter the text to replace:"
+    )
+    replacement_text = simpledialog.askstring(
+        "Replacement Text",
+        "Enter the replacement text (leave empty to remove the text):",
+    )
+
+    if text_to_replace is None or replacement_text is None:
+        messagebox.showerror("Error", "No text provided.")
+        return
+
+    # Prompt the user to enter the file extension
+    file_extension = simpledialog.askstring(
+        "File Extension", "Enter the file extension (e.g., .png, .txt):"
+    )
+
+    if not file_extension:
+        messagebox.showerror("Error", "No file extension provided.")
+        return
+
+    try:
+        # Walk through the directory and its subdirectories
+        for root, dirs, files in os.walk(directory):
+            for filename in files:
+                # Check if the file has the specified extension and contains the text to replace
+                if filename.endswith(file_extension) and text_to_replace in filename:
+                    # Create the new filename by replacing the text
+                    new_filename = filename.replace(text_to_replace, replacement_text)
+                    # Rename the file
+                    os.rename(
+                        os.path.join(root, filename), os.path.join(root, new_filename)
+                    )
+
+        # Show a success message after renaming is complete
+        messagebox.showinfo("Success", "Files have been renamed successfully.")
+
+    except Exception as e:
+        # Show an error message if something goes wrong
+        messagebox.showerror("Error", f"Error renaming files: {e}")

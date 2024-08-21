@@ -477,8 +477,11 @@ class ColumnReorderGUI(tk.Tk):
                 )
 
     def save_row_range(self, window, start, end):
-        print(f"Saving row range from {start} to {end}")
-        row_df = self.df.iloc[start : end + 1]
+        # Adjusting the indices to be correctly inclusive
+        print(f"Saving row range from {start + 1} to {end + 1}")
+        row_df = self.df.iloc[
+            start : end + 1
+        ]  # The end + 1 ensures that 'end' is included
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         base_name = os.path.splitext(os.path.basename(self.file_names[0]))[0]
         new_file_name = f"{base_name}_{timestamp}_selrows_{start + 1}_{end + 1}.csv"
@@ -492,8 +495,11 @@ class ColumnReorderGUI(tk.Tk):
         window.destroy()
 
     def delete_row_range(self, window, start, end):
-        print(f"Deleting row range from {start} to {end}")
-        deleted_df = self.df.drop(self.df.index[start : end + 1])
+        # Adjusting the message to show the correct range
+        print(f"Deleting row range from {start + 1} to {end + 1}")
+        deleted_df = self.df.drop(
+            self.df.index[start : end + 1]
+        )  # The end + 1 ensures 'end' is included in deletion
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         base_name = os.path.splitext(os.path.basename(self.file_names[0]))[0]
         new_file_name = f"{base_name}_{timestamp}_delrows_{start + 1}_{end + 1}.csv"

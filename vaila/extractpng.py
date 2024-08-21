@@ -90,6 +90,7 @@ class VideoProcessor:
             messagebox.showerror("Error", f"Error extracting PNG frames: {e}")
 
     def create_video_from_png(self):
+        print("create_video_from_png was called")
         root = Tk()
         root.withdraw()
 
@@ -106,6 +107,34 @@ class VideoProcessor:
         os.makedirs(output_dir, exist_ok=True)
 
         try:
+            # Verifica se há arquivos PNG diretamente no diretório selecionado
+            png_files = [f for f in os.listdir(src) if f.endswith(".png")]
+
+            if png_files:
+                # Se encontrar arquivos PNG no diretório raiz, processa-os diretamente
+                input_pattern = os.path.join(src, "%09d.png")
+                # Usando o nome do diretório em vez de "output.mp4"
+                output_video_name = os.path.basename(src)
+                output_video_path = os.path.join(output_dir, f"{output_video_name}.mp4")
+
+                try:
+                    # Create video in YUV420p color space for compatibility
+                    ffmpeg = (
+                        FFmpeg()
+                        .input(
+                            input_pattern, framerate=30
+                        )  # Ajuste o framerate se necessário
+                        .output(output_video_path, vcodec="libx264", pix_fmt="yuv420p")
+                    )
+                    ffmpeg.execute()
+
+                    print(f"Video creation completed and saved to {output_video_path}")
+                except Exception as e:
+                    print(f"Error creating video from PNG files: {e}")
+                    messagebox.showerror(
+                        "Error", f"Error creating video from PNG files: {e}"
+                    )
+
             # Loop through the immediate subdirectories of the selected source directory
             for dir_name in os.listdir(src):
                 dir_path = os.path.join(src, dir_name)
@@ -136,7 +165,6 @@ class VideoProcessor:
                                 output_video_path, vcodec="libx264", pix_fmt="yuv420p"
                             )
                         )
-
                         ffmpeg.execute()
 
                         print(
