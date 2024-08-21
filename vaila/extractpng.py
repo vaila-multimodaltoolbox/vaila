@@ -117,13 +117,20 @@ class VideoProcessor:
                 output_video_name = os.path.basename(src)
                 output_video_path = os.path.join(output_dir, f"{output_video_name}.mp4")
 
+                # Check for the info.txt file for FPS, default to 30 if not found
+                info_file = os.path.join(src, "info.txt")
+                if os.path.exists(info_file):
+                    with open(info_file, "r") as f:
+                        lines = f.readlines()
+                        fps = float(lines[0].split(":")[1].strip())
+                else:
+                    fps = 30.0  # Default FPS
+
                 try:
                     # Create video in YUV420p color space for compatibility
                     ffmpeg = (
                         FFmpeg()
-                        .input(
-                            input_pattern, framerate=30
-                        )  # Ajuste o framerate se necessário
+                        .input(input_pattern, framerate=fps)
                         .output(output_video_path, vcodec="libx264", pix_fmt="yuv420p")
                     )
                     ffmpeg.execute()
