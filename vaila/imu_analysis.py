@@ -1,7 +1,44 @@
 """
-Nome: imu_analysis.py
-Data: 2024-07-28
-Versão: 1.0
+Name: imu_analysis.py
+Date: 2024-07-28
+Version: 1.1
+
+Description:
+This script performs IMU sensor data analysis from CSV and C3D files. 
+The script processes accelerometer and gyroscope data, calculates tilt angles and Euler angles,
+and generates graphs and CSV files with the processed results. The script allows the user to 
+select specific headers for processing or, if no selection is made, automatically uses the first 
+18 columns (excluding the time column in the case of CSV, or the first 18 analog channels in the case of C3D).
+
+Features:
+- Support for CSV and C3D files.
+- Processing of accelerometer and gyroscope data.
+- Calculation of tilt angles and Euler angles.
+- Saving graphs in PNG format.
+- Exporting processed data to CSV files.
+- Graphical interface for selecting directories and headers.
+- Automatic processing of default headers if the user opts not to select them manually.
+
+Requirements:
+- Python 3.x
+- Libraries: numpy, pandas, imufusion, matplotlib, tkinter, ezc3d, rich
+- Custom modules: filtering, readcsv, dialogsuser
+
+How to Use:
+1. Run the script. You will be prompted to select the file type (CSV or C3D).
+2. Select the directory containing the files for analysis.
+3. Choose the directory where you want to save the results.
+4. Choose whether to manually select headers for all files.
+   - If "Yes," choose a file to define the headers.
+   - If "No," the script will automatically use the first 18 columns (or channels).
+5. The script will process all files in the directory and save the results in the specified directory.
+
+Author:
+Prof. Ph.D. Paulo Santiago (paulosantiago@usp.br)
+
+Version History:
+- 1.0: Initial version.
+- 1.1: Implementation of automatic processing of the first 18 columns/channels and general code improvements.
 """
 
 import os
@@ -13,7 +50,7 @@ from datetime import datetime
 from tkinter import messagebox, filedialog, Tk
 import ezc3d
 from .filtering import apply_filter
-from .readcsv import show_csv, select_headers_gui, get_csv_headers
+from .readcsv import select_headers_gui, get_csv_headers
 from .dialogsuser import get_user_inputs
 from rich import print
 
@@ -253,6 +290,12 @@ def analyze_imu_data():
                 analogs_2d.T, columns=analog_labels
             )  # Convert to DataFrame for easier selection
             selected_headers = select_headers_gui(df_analogs.columns)
+    else:
+        # Caso o usuário selecione "No", usar as 18 primeiras colunas ou canais
+        def process_default_headers(data):
+            return data.iloc[
+                :, 1:19
+            ].values  # Pular a primeira coluna (tempo) e selecionar as próximas 18 colunas
 
     # Apply the chosen filter to accelerometer and gyroscope data ('butterworth' or 'fir')
     filter_method = "fir"
@@ -267,13 +310,28 @@ def analyze_imu_data():
 
         if file_type == "csv" and file_name.endswith(".csv"):
             try:
+                # Obter o nome do arquivo sem a extensão
+                file_name_without_extension, file_extension = os.path.splitext(
+                    file_name
+                )
+
+                # Substituir a extensão com _csv ou _c3d conforme o tipo do arquivo
+                if file_extension == ".csv":
+                    file_name_sanitized = f"{file_name_without_extension}_csv"
+                elif file_extension == ".c3d":
+                    file_name_sanitized = f"{file_name_without_extension}_c3d"
+                else:
+                    file_name_sanitized = file_name_without_extension  # fallback
+
                 # Read the CSV file with selected headers if applicable
                 if selected_headers:
                     data = pd.read_csv(file_path, usecols=selected_headers).values
                 else:
-                    data = show_csv(
-                        file_path
-                    )  # Assuming show_csv returns the selected data
+                    data = pd.read_csv(file_path)  # Read full CSV file
+                    data = process_default_headers(
+                        data
+                    )  # Use as primeiras 18 colunas após a de tempo
+
                 if data is not None:
                     dataf = apply_filter(data, sample_rate, method=filter_method)
                     accelerometer_1 = (
@@ -301,19 +359,17 @@ def analyze_imu_data():
                     )
 
                     print(f"Processed {file_name}:")
-                    # print(f"Sensor 1 - Tilt shape: {tilt_1.shape}, Euler angles shape: {euler_1.shape}, Quaternions shape: {quaternions_1.shape}")
-                    # print(f"Sensor 2 - Tilt shape: {tilt_2.shape}, Euler angles shape: {euler_2.shape}, Quaternions shape: {quaternions_2.shape}")
 
                     current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
                     base_dir_figures = os.path.join(
                         output_directory,
                         "IMU_multimodal_results",
-                        f"figure/IMU_{file_name}_{current_time}",
+                        f"figure/IMU_{file_name_sanitized}_{current_time}",
                     )
                     base_dir_processed_data = os.path.join(
                         output_directory,
                         "IMU_multimodal_results",
-                        f"processed_data/IMU_{file_name}_{current_time}",
+                        f"processed_data/IMU_{file_name_sanitized}_{current_time}",
                     )
                     os.makedirs(base_dir_figures, exist_ok=True)
                     os.makedirs(base_dir_processed_data, exist_ok=True)
@@ -369,13 +425,36 @@ def analyze_imu_data():
 
         elif file_type == "c3d" and file_name.endswith(".c3d"):
             try:
-                # _, _, _, analogs, _, analog_labels, analog_freq = importc3d(file_path)
-                # Convert analogs to 2D array
-                # analogs_2d = analogs.reshape(analogs.shape[0] * analogs.shape[1], analogs.shape[2])
-                # df_analogs = pd.DataFrame(analogs_2d.T, columns=analog_labels)  # Convert to DataFrame for easier selection
-                analogs_selected = df_analogs[
-                    selected_headers
-                ].values  # Select columns from DataFrame
+                # Obter o nome do arquivo sem a extensão
+                file_name_without_extension, file_extension = os.path.splitext(
+                    file_name
+                )
+
+                # Substituir a extensão com _csv ou _c3d conforme o tipo do arquivo
+                if file_extension == ".csv":
+                    file_name_sanitized = f"{file_name_without_extension}_csv"
+                elif file_extension == ".c3d":
+                    file_name_sanitized = f"{file_name_without_extension}_c3d"
+                else:
+                    file_name_sanitized = file_name_without_extension  # fallback
+
+                # Importar dados do C3D
+                _, _, _, analogs, _, analog_labels, analog_freq = importc3d(file_path)
+
+                if selected_headers:
+                    # Se o usuário selecionou "Yes", usa os headers selecionados
+                    df_analogs = pd.DataFrame(
+                        analogs.reshape(
+                            analogs.shape[0] * analogs.shape[1], analogs.shape[2]
+                        ).T,
+                        columns=analog_labels,
+                    )
+                    analogs_selected = df_analogs[selected_headers].values
+                else:
+                    # Se o usuário selecionou "No", seleciona automaticamente os primeiros 18 canais de `analogs`
+                    analogs_selected = analogs[:, :18, :].reshape(-1, 18)
+
+                # Aplicar o filtro e realizar as análises
                 dataf = apply_filter(
                     analogs_selected, sample_rate, method=filter_method
                 )
@@ -402,19 +481,17 @@ def analyze_imu_data():
                 )
 
                 print(f"Processed {file_name}:")
-                # print(f"Sensor 1 - Tilt shape: {tilt_1.shape}, Euler angles shape: {euler_1.shape}, Quaternions shape: {quaternions_1.shape}")
-                # print(f"Sensor 2 - Tilt shape: {tilt_2.shape}, Euler angles shape: {euler_2.shape}, Quaternions shape: {quaternions_2.shape}")
 
                 current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
                 base_dir_figures = os.path.join(
                     output_directory,
                     "IMU_multimodal_results",
-                    f"figure/IMU_{file_name}_{current_time}",
+                    f"figure/IMU_{file_name_sanitized}_{current_time}",
                 )
                 base_dir_processed_data = os.path.join(
                     output_directory,
                     "IMU_multimodal_results",
-                    f"processed_data/IMU_{file_name}_{current_time}",
+                    f"processed_data/IMU_{file_name_sanitized}_{current_time}",
                 )
                 os.makedirs(base_dir_figures, exist_ok=True)
                 os.makedirs(base_dir_processed_data, exist_ok=True)
