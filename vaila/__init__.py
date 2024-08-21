@@ -36,7 +36,14 @@ from . import imu_analysis
 from . import markerless_2D_analysis
 from . import markerless_3D_analysis
 from . import mocap_analysis
-from .filemanager import import_file, export_file, copy_file, move_file, remove_file
+from .filemanager import (
+    import_file,
+    export_file,
+    copy_file,
+    move_file,
+    remove_file,
+    rename_files,
+)
 from .showc3d import show_c3d
 from .vector_coding import vector_coding
 from .syncvid import sync_videos
@@ -88,10 +95,11 @@ __all__ = [
     "copy_file",
     "move_file",
     "remove_file",
+    "rename_files",
     "show_c3d",
     "vector_coding",
     "sync_videos",
-    "VideoProcessor",  # Agora exportando a classe VideoProcessor
+    "VideoProcessor",
     "select_file",
     "show_csv",
     "get_csv_headers",
@@ -105,5 +113,5 @@ __all__ = [
     "plot_2d",
     "merge_csv_files",
     "stack_csv_files",
-    "process_videos_gui",  # Export the GUI function for video processing
+    "process_videos_gui",
 ]
