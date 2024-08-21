@@ -45,8 +45,6 @@ Requirements:
 
 import os
 import pandas as pd
-
-# import numpy as np
 import tkinter as tk
 from tkinter import filedialog, simpledialog, messagebox, Scrollbar
 from datetime import datetime
@@ -80,6 +78,8 @@ CONVERSIONS = {
     "angular_rotation_per_second": (1, "rps"),
     "rpm": (1 / 60, "rpm"),
     "radians_per_second": (2 * 3.141592653589793 / 60, "rad/s"),
+    "meters_per_second_squared": (1, "m/s²"),
+    "gravitational_force": (1 / 9.80665, "g"),
 }
 
 
@@ -477,42 +477,96 @@ class ColumnReorderGUI(tk.Tk):
                 )
 
     def save_row_range(self, window, start, end):
-        # Adjusting the indices to be correctly inclusive
-        print(f"Saving row range from {start + 1} to {end + 1}")
-        row_df = self.df.iloc[
-            start : end + 1
-        ]  # The end + 1 ensures that 'end' is included
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        base_name = os.path.splitext(os.path.basename(self.file_names[0]))[0]
-        new_file_name = f"{base_name}_{timestamp}_selrows_{start + 1}_{end + 1}.csv"
-        new_file_path = os.path.join(self.rearranged_path, new_file_name)
-
+        # Ensure the directory for rearranged data exists
         if not os.path.exists(self.rearranged_path):
             os.makedirs(self.rearranged_path)
 
-        save_dataframe(row_df, new_file_path, row_df.columns, self.max_decimal_places)
-        messagebox.showinfo("Success", f"Selected row range saved to {new_file_path}")
+        print(f"Saving row range from {start + 1} to {end + 1}")
+
+        # Walk through the original directory, ignoring files with timestamps
+        for root, _, files in os.walk(self.directory_path):
+            for file_name in files:
+                if file_name.endswith(".csv") and not self.is_file_already_processed(
+                    file_name
+                ):
+                    file_path = os.path.join(root, file_name)
+                    df = pd.read_csv(file_path)
+                    row_df = df.iloc[
+                        start : end + 1
+                    ]  # The end + 1 ensures 'end' is included
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    base_name = os.path.splitext(os.path.basename(file_name))[0]
+                    new_file_name = (
+                        f"{base_name}_{timestamp}_selrows_{start + 1}_{end + 1}.csv"
+                    )
+                    new_file_path = os.path.join(self.rearranged_path, new_file_name)
+
+                    # Save only the file with the timestamp
+                    save_dataframe(
+                        row_df, new_file_path, row_df.columns, self.max_decimal_places
+                    )
+                    print(f"Selected row range saved to {new_file_path}")
+
+        messagebox.showinfo(
+            "Success",
+            f"Selected row range ({start + 1} - {end + 1}) saved for all files.",
+        )
+
+        # Force GUI to update and ensure all operations are processed
+        self.update_idletasks()
         window.destroy()
 
     def delete_row_range(self, window, start, end):
-        # Adjusting the message to show the correct range
-        print(f"Deleting row range from {start + 1} to {end + 1}")
-        deleted_df = self.df.drop(
-            self.df.index[start : end + 1]
-        )  # The end + 1 ensures 'end' is included in deletion
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        base_name = os.path.splitext(os.path.basename(self.file_names[0]))[0]
-        new_file_name = f"{base_name}_{timestamp}_delrows_{start + 1}_{end + 1}.csv"
-        new_file_path = os.path.join(self.rearranged_path, new_file_name)
-
+        # Ensure the directory for rearranged data exists
         if not os.path.exists(self.rearranged_path):
             os.makedirs(self.rearranged_path)
 
-        save_dataframe(
-            deleted_df, new_file_path, deleted_df.columns, self.max_decimal_places
+        print(f"Deleting row range from {start + 1} to {end + 1}")
+
+        # Walk through the original directory, ignoring files with timestamps
+        for root, _, files in os.walk(self.directory_path):
+            for file_name in files:
+                if file_name.endswith(".csv") and not self.is_file_already_processed(
+                    file_name
+                ):
+                    file_path = os.path.join(root, file_name)
+                    df = pd.read_csv(file_path)
+                    deleted_df = df.drop(
+                        df.index[start : end + 1]
+                    )  # The end + 1 ensures 'end' is included in deletion
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    base_name = os.path.splitext(os.path.basename(file_name))[0]
+                    new_file_name = (
+                        f"{base_name}_{timestamp}_delrows_{start + 1}_{end + 1}.csv"
+                    )
+                    new_file_path = os.path.join(self.rearranged_path, new_file_name)
+
+                    # Save only the file with the timestamp
+                    save_dataframe(
+                        deleted_df,
+                        new_file_path,
+                        deleted_df.columns,
+                        self.max_decimal_places,
+                    )
+                    print(f"Deleted row range saved to {new_file_path}")
+
+        messagebox.showinfo(
+            "Success",
+            f"Deleted row range ({start + 1} - {end + 1}) saved for all files.",
         )
-        messagebox.showinfo("Success", f"Deleted row range saved to {new_file_path}")
+
+        # Force GUI to update and ensure all operations are processed
+        self.update_idletasks()
         window.destroy()
+
+    def is_file_already_processed(self, file_name):
+        """
+        Helper function to check if a file already contains a timestamp,
+        meaning it has already been processed.
+        """
+        # A regular expression or simple check can be used to see if the file name contains a timestamp
+        # For example, checking if the file contains '_selrows_' or '_delrows_' which indicates it's a processed file
+        return "_selrows_" in file_name or "_delrows_" in file_name
 
     def save_intermediate(self, event=None):
         try:
@@ -652,7 +706,29 @@ class ColumnReorderGUI(tk.Tk):
             )
             return
 
-        conversion_factor = CONVERSIONS[target_unit][0] / CONVERSIONS[current_unit][0]
+        # Special case for m/s2 and g conversion
+        if current_unit in [
+            "meters_per_second_squared",
+            "gravitational_force",
+        ] and target_unit in ["meters_per_second_squared", "gravitational_force"]:
+            if (
+                current_unit == "meters_per_second_squared"
+                and target_unit == "gravitational_force"
+            ):
+                conversion_factor = 1 / 9.80665
+            elif (
+                current_unit == "gravitational_force"
+                and target_unit == "meters_per_second_squared"
+            ):
+                conversion_factor = 9.80665
+            else:
+                conversion_factor = (
+                    CONVERSIONS[target_unit][0] / CONVERSIONS[current_unit][0]
+                )
+        else:
+            conversion_factor = (
+                CONVERSIONS[target_unit][0] / CONVERSIONS[current_unit][0]
+            )
 
         # Iterate over all CSV files in the directory
         if not os.path.exists(self.rearranged_path):
@@ -669,8 +745,19 @@ class ColumnReorderGUI(tk.Tk):
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             base_name = os.path.splitext(file_name)[0]
-            new_file_name = f"{base_name}_unit_{CONVERSIONS[current_unit][1]}_{CONVERSIONS[target_unit][1]}_{timestamp}.csv"
+            # Adjust the unit names to avoid special characters and upper case
+            current_unit_name = (
+                CONVERSIONS[current_unit][1].replace("/", "").replace("²", "2").lower()
+            )
+            target_unit_name = (
+                CONVERSIONS[target_unit][1].replace("/", "").replace("²", "2").lower()
+            )
+            new_file_name = f"{base_name}_unit_{current_unit_name}_{target_unit_name}_{timestamp}.csv"
             new_file_path = os.path.join(self.rearranged_path, new_file_name)
+
+            # Ensure the directory exists before saving
+            if not os.path.exists(os.path.dirname(new_file_path)):
+                os.makedirs(os.path.dirname(new_file_path))
 
             max_decimal_places, _ = detect_precision_and_notation(file_path)
             save_dataframe(df, new_file_path, df.columns, max_decimal_places)
