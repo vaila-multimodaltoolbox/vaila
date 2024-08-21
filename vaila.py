@@ -45,6 +45,7 @@ from vaila import (
     copy_file,
     move_file,
     remove_file,
+    rename_files,
     import_file,
     show_c3d,
     sync_videos,
@@ -240,6 +241,12 @@ class Vaila(tk.Tk):
         file_manager_btn_frame = tk.Frame(file_manager_frame)
         file_manager_btn_frame.pack(pady=5)
 
+        rename_btn = tk.Button(
+            file_manager_btn_frame,
+            text="Rename",
+            command=self.rename_files,
+            width=button_width,
+        )
         import_btn = tk.Button(
             file_manager_btn_frame,
             text="Import",
@@ -271,6 +278,7 @@ class Vaila(tk.Tk):
             width=button_width,
         )
 
+        rename_btn.pack(side="left", padx=2, pady=2)
         import_btn.pack(side="left", padx=2, pady=2)
         export_btn.pack(side="left", padx=2, pady=2)
         copy_btn.pack(side="left", padx=2, pady=2)
@@ -514,7 +522,7 @@ class Vaila(tk.Tk):
         extract_png_btn = tk.Button(
             tools_col2,
             text="Video <--> PNG",
-            command=self.extract_png_from_videos,  # Atualizado para refletir a nova lógica de escolha
+            command=self.extract_png_from_videos,
             width=button_width,
         )
         cut_videos_btn = tk.Button(
@@ -664,6 +672,9 @@ class Vaila(tk.Tk):
             anchor="center",
         )
         license_label.pack(pady=5)
+
+    def rename_files(self):
+        rename_files()
 
     def import_file(self):
         import_file()
