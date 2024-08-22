@@ -36,6 +36,8 @@ from . import imu_analysis
 from . import markerless_2D_analysis
 from . import markerless_3D_analysis
 from . import mocap_analysis
+from . import forceplate_analysis
+from . import gnss_analysis
 from .filemanager import (
     import_file,
     export_file,
@@ -43,6 +45,9 @@ from .filemanager import (
     move_file,
     remove_file,
     rename_files,
+    tree_file,
+    find_file,
+    transfer_file,
 )
 from .showc3d import show_c3d
 from .vector_coding import vector_coding
@@ -58,6 +63,7 @@ from .rec2d_one_dlt2d import main as rec2d_one_dlt2d
 from .vaila_manifest import show_vaila_message
 from .emg_labiocom import run_emg_gui
 from .vailaplot2d import plot_2d
+from .vailaplot3d import plot_3d
 from .mergestack import merge_csv_files, stack_csv_files
 from .videoprocessor import process_videos_gui
 
@@ -90,12 +96,17 @@ __all__ = [
     "markerless_2D_analysis",
     "markerless_3D_analysis",
     "mocap_analysis",
+    "forceplate_analysis",
+    "gnss_analysis",
     "import_file",
     "export_file",
     "copy_file",
     "move_file",
     "remove_file",
     "rename_files",
+    "tree_file",
+    "find_file",
+    "transfer_file",
     "show_c3d",
     "vector_coding",
     "sync_videos",
@@ -111,6 +122,7 @@ __all__ = [
     "show_vaila_message",
     "run_emg_gui",
     "plot_2d",
+    "plot_3d",
     "merge_csv_files",
     "stack_csv_files",
     "process_videos_gui",
