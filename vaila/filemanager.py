@@ -31,33 +31,21 @@ How to Run:
 import shutil
 import os
 import tkinter as tk
-from tkinter import filedialog, messagebox, simpledialog
+from tkinter import filedialog, messagebox, simpledialog, Tk
 import time
 import pandas as pd
 import ezc3d
-import pickle  # Usando o pickle nativo do Python 3.11
+import pickle  # pickle native in Python 3.11
 import yaml
 import toml
 from lxml import etree
 from bs4 import BeautifulSoup
 from datetime import datetime
-import h5py  # Import necessário para manipular arquivos .h5
-
-# import hdf5plugin  # Import necessário para manipular arquivos .h5 com compressão específica
+import h5py
 import json
-
-
-# # Ensure the 'data', 'import', 'export', and 'results' directories exist
-# for directory in ["data", "import", "export", "results"]:
-#     if not os.path.exists(directory):
-#         os.makedirs(directory)
-
-# # Create the directories list
-# directories = ["import", "export", "results"] + [
-#     os.path.join("data", d)
-#     for d in os.listdir("data")
-#     if os.path.isdir(os.path.join("data", d))
-# ]
+import fnmatch
+import paramiko
+from scp import SCPClient
 
 
 def copy_file():
@@ -159,35 +147,83 @@ def export_file():
 
 
 def move_file():
-    allowed_directories = ["data", "results", "import", "export"]
+    # Prompt the user to select the main path directory for recursive search
+    src_directory = filedialog.askdirectory(title="Select Source Directory")
 
-    def select_directory(title):
-        directory_path = filedialog.askdirectory(title=title)
-        return directory_path
-
-    src = select_directory("Select the source directory")
-    if not src or not any(
-        src.startswith(os.path.join(os.getcwd(), d)) for d in allowed_directories
-    ):
-        messagebox.showerror("Error", "No valid source directory selected.")
+    # Check if a source directory was selected; if not, show an error message
+    if not src_directory:
+        messagebox.showerror("Error", "No source directory selected.")
         return
 
-    dest = select_directory("Select the destination directory")
-    if not dest or not any(
-        dest.startswith(os.path.join(os.getcwd(), d)) for d in allowed_directories
-    ):
-        messagebox.showerror("Error", "No valid destination directory selected.")
+    # Prompt the user to enter the file extension to search for
+    file_extension = simpledialog.askstring(
+        "File Extension", "Enter the file extension to export (e.g., .csv, .mp4):"
+    )
+    if not file_extension:
+        messagebox.showerror("Error", "No file extension provided.")
         return
+
+    # Create a new window for pattern entry
+    pattern_window = tk.Tk()
+    pattern_window.title("Enter File Patterns")
+
+    # Text box for entering multiple patterns, one per line
+    pattern_label = tk.Label(pattern_window, text="Enter file patterns (one per line):")
+    pattern_label.pack()
+
+    pattern_text = tk.Text(pattern_window, height=10, width=50)
+    pattern_text.pack()
+
+    def on_submit():
+        patterns = pattern_text.get("1.0", "end").strip().splitlines()
+        pattern_window.destroy()
+        process_move(src_directory, file_extension, patterns)
+
+    submit_button = tk.Button(pattern_window, text="Submit", command=on_submit)
+    submit_button.pack()
+
+    pattern_window.mainloop()
+
+
+def process_move(src_directory, file_extension, patterns):
+    # Prompt the user to select the destination directory where the new directories will be created
+    base_dest_directory = filedialog.askdirectory(title="Select Destination Directory")
+    if not base_dest_directory:
+        messagebox.showerror("Error", "No destination directory selected.")
+        return
+
+    # Ensure the 'vaila_move' directory exists within the selected destination directory
+    base_dest_directory = os.path.join(base_dest_directory, "vaila_move")
+    os.makedirs(base_dest_directory, exist_ok=True)
 
     try:
-        for item in os.listdir(src):
-            src_path = os.path.join(src, item)
-            dest_path = os.path.join(dest, item)
-            if os.path.isfile(src_path):
-                shutil.move(src_path, dest_path)
-        messagebox.showinfo("Success", f"Files moved from {src} to {dest}")
+        for file_pattern in patterns:
+            # Generate a timestamp to create a unique directory name for each pattern
+            timestamp = time.strftime("%Y%m%d%H%M%S")
+            move_directory = os.path.join(
+                base_dest_directory,
+                f"vaila_move_{file_pattern.strip('_')}_{timestamp}",
+            )
+            os.makedirs(move_directory, exist_ok=True)  # Create the move directory
+
+            # Walk through the source directory and move matching files to the new directory structure
+            for root, dirs, files in os.walk(src_directory):
+                for file in files:
+                    # Check if the file matches the specified extension and pattern
+                    if file.endswith(file_extension) and file_pattern in file:
+                        # Move the file to the appropriate subdirectory
+                        src_path = os.path.join(root, file)
+                        dest_path = os.path.join(move_directory, file)
+                        shutil.move(src_path, dest_path)
+
+        # Show a success message after the operation is complete
+        messagebox.showinfo(
+            "Success",
+            f"Files matching the specified patterns and extension {file_extension} have been moved successfully.",
+        )
     except Exception as e:
-        messagebox.showerror("Error", f"Error moving files from {src} to {dest}: {e}")
+        # Show an error message if something goes wrong
+        messagebox.showerror("Error", f"Error moving files: {e}")
 
 
 def remove_file():
@@ -566,3 +602,205 @@ def rename_files():
     except Exception as e:
         # Show an error message if something goes wrong
         messagebox.showerror("Error", f"Error renaming files: {e}")
+
+
+def tree_file():
+    # Prompt the user to select the main path directory for recursive search
+    src_directory = filedialog.askdirectory(title="Select Source Directory")
+
+    # Check if a source directory was selected; if not, show an error message
+    if not src_directory:
+        messagebox.showerror("Error", "No source directory selected.")
+        return
+
+    # Prompt the user to enter the file extension to search for
+    file_extension = simpledialog.askstring(
+        "File Extension", "Enter the file extension to search for (e.g., .csv, .mp4):"
+    )
+    if not file_extension:
+        messagebox.showerror("Error", "No file extension provided.")
+        return
+
+    # Prompt the user to select the destination directory where the .txt file will be saved
+    dest_directory = filedialog.askdirectory(title="Select Destination Directory")
+    if not dest_directory:
+        messagebox.showerror("Error", "No destination directory selected.")
+        return
+
+    # Generate the output file path with the timestamp
+    timestamp = time.strftime("%Y%m%d%H%M%S")
+    output_file_path = os.path.join(dest_directory, f"vaila_tree_{timestamp}.txt")
+
+    try:
+        with open(output_file_path, "w") as output_file:
+            # Walk through the source directory and list matching files
+            for root, dirs, files in os.walk(src_directory):
+                for file in files:
+                    if file.endswith(file_extension):
+                        # Write the relative file path to the output file
+                        relative_path = os.path.relpath(
+                            os.path.join(root, file), src_directory
+                        )
+                        output_file.write(f"{relative_path}\n")
+
+        # Show a success message after the operation is complete
+        messagebox.showinfo(
+            "Success",
+            f"File tree saved successfully to {output_file_path}.",
+        )
+    except Exception as e:
+        # Show an error message if something goes wrong
+        messagebox.showerror("Error", f"Error saving file tree: {e}")
+
+
+def find_file():
+    # Prompt the user to select the main path directory for recursive search
+    src_directory = filedialog.askdirectory(title="Select Source Directory")
+
+    # Check if a source directory was selected; if not, show an error message
+    if not src_directory:
+        messagebox.showerror("Error", "No source directory selected.")
+        return
+
+    # Prompt the user to enter the pattern to search for
+    search_pattern = simpledialog.askstring(
+        "Search Pattern",
+        "Enter the pattern to search for (e.g., *.csv, *report*, data*.txt):",
+    )
+    if not search_pattern:
+        messagebox.showerror("Error", "No search pattern provided.")
+        return
+
+    # Prompt the user to select the destination directory where the .txt file will be saved
+    dest_directory = filedialog.askdirectory(title="Select Destination Directory")
+    if not dest_directory:
+        messagebox.showerror("Error", "No destination directory selected.")
+        return
+
+    # Generate the output file path with the timestamp
+    timestamp = time.strftime("%Y%m%d%H%M%S")
+    output_file_path = os.path.join(dest_directory, f"vaila_find_{timestamp}.txt")
+
+    try:
+        with open(output_file_path, "w") as output_file:
+            # Walk through the source directory and find matching files or directories
+            for root, dirs, files in os.walk(src_directory):
+                # Match files and directories based on the search pattern
+                for name in dirs + files:
+                    if fnmatch.fnmatch(name, search_pattern):
+                        # Write the relative file path to the output file
+                        relative_path = os.path.relpath(
+                            os.path.join(root, name), src_directory
+                        )
+                        output_file.write(f"{relative_path}\n")
+
+        # Show a success message after the operation is complete
+        messagebox.showinfo(
+            "Success",
+            f"Find results saved successfully to {output_file_path}.",
+        )
+    except Exception as e:
+        # Show an error message if something goes wrong
+        messagebox.showerror("Error", f"Error finding files: {e}")
+
+
+def transfer_file():
+    # Initialize Tkinter root
+    root = Tk()
+    root.withdraw()  # Hide the root window
+
+    # Prompt the user to select Upload or Download
+    transfer_type = simpledialog.askstring(
+        "Transfer Type", "Enter 'upload' to send files or 'download' to receive files:"
+    )
+
+    if transfer_type not in ["upload", "download"]:
+        messagebox.showerror("Error", "Invalid transfer type provided.")
+        return
+
+    # Select file or directory for upload or specify destination directory for download
+    if transfer_type == "upload":
+        src_path = filedialog.askopenfilename(
+            title="Select the file or directory to transfer"
+        )
+        if not src_path:
+            messagebox.showerror("Error", "No file or directory selected.")
+            return
+    else:  # download
+        remote_file = simpledialog.askstring(
+            "Remote File", "Enter the remote file or directory path:"
+        )
+        if not remote_file:
+            messagebox.showerror("Error", "No remote file or directory path provided.")
+            return
+        dest_path = filedialog.askdirectory(title="Select the destination directory")
+        if not dest_path:
+            messagebox.showerror("Error", "No destination directory selected.")
+            return
+
+    # Remote server details
+    remote_host = simpledialog.askstring(
+        "Remote Host", "Enter the remote host (e.g., example.com):"
+    )
+    if not remote_host:
+        messagebox.showerror("Error", "No remote host provided.")
+        return
+
+    remote_port = simpledialog.askinteger(
+        "Remote Port", "Enter the SSH port (default is 22):", initialvalue=22
+    )
+    if not remote_port:
+        remote_port = 22
+
+    remote_user = simpledialog.askstring("Remote User", "Enter the SSH username:")
+    if not remote_user:
+        messagebox.showerror("Error", "No SSH username provided.")
+        return
+
+    remote_password = simpledialog.askstring(
+        "Remote Password", "Enter the SSH password:", show="*"
+    )
+    if remote_password is None:
+        messagebox.showerror("Error", "No SSH password provided.")
+        return
+
+    try:
+        # Create an SSH client
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh.connect(
+            remote_host,
+            port=remote_port,
+            username=remote_user,
+            password=remote_password,
+        )
+
+        # Create an SCP client
+        with SCPClient(
+            ssh.get_transport(), compress=True
+        ) as scp:  # Compression enabled
+
+            if transfer_type == "upload":
+                # Upload the file or directory
+                scp.put(
+                    src_path, remote_path=remote_file, recursive=os.path.isdir(src_path)
+                )
+                messagebox.showinfo(
+                    "Success",
+                    f"File or directory successfully uploaded to {remote_host}:{remote_file}",
+                )
+            else:
+                # Download the file or directory
+                scp.get(remote_file, local_path=dest_path, recursive=True)
+                messagebox.showinfo(
+                    "Success",
+                    f"File or directory successfully downloaded from {remote_host}:{remote_file} to {dest_path}",
+                )
+
+    except Exception as e:
+        # Show an error message if something goes wrong
+        messagebox.showerror("Error", f"Error during file transfer: {e}")
+
+    finally:
+        # Close the SSH connection
+        ssh.close()
