@@ -36,17 +36,22 @@ from vaila import (
     markerless_2D_analysis,
     markerless_3D_analysis,
     mocap_analysis,
+    forceplate_analysis,
+    gnss_analysis,
     convert_c3d_to_csv,
     convert_csv_to_c3d,
     rearrange_data_in_directory,
     run_drawboxe,
     count_frames_in_videos,
+    import_file,
     export_file,
     copy_file,
     move_file,
     remove_file,
     rename_files,
-    import_file,
+    tree_file,
+    find_file,
+    transfer_file,
     show_c3d,
     sync_videos,
     VideoProcessor,
@@ -61,6 +66,7 @@ from vaila import (
     show_vaila_message,
     emg_labiocom,
     plot_2d,
+    plot_3d,
     process_videos_gui,
 )
 
@@ -89,15 +95,15 @@ IMU_csv --> |          vailá - multimodaltoolbox        | <-- Cluster_csv
                        +---------------------+
                        | Visualization/Graph |
                        +---------------------+
-=========================== File Manager ===============================
- Import (im)  |  Export (ex)  |  Copy (cp)  |  Move (mv)  |  Remove (rm)
-========================= Available Multimodal =========================
+============================ File Manager ================================
+ Rename | Import | Export | Copy | Move | Remove | Tree | Find | Transfer
+========================== Available Multimodal ==========================
 1. IMU Analysis
 2. Kinematic Cluster Analysis
 3. Kinematic Motion Capture Full Body Analysis
 4. Markerless 2D with video
 5. Markerless 3D with multiple videos
-============================= Available Tools ==========================
+============================== Available Tools ===========================
 1. Edit CSV
 2. Convert C3D data to CSV
 3. Metadata info
@@ -277,6 +283,24 @@ class Vaila(tk.Tk):
             command=self.remove_file,
             width=button_width,
         )
+        tree_btn = tk.Button(
+            file_manager_btn_frame,
+            text="Tree",
+            command=self.tree_file,
+            width=button_width,
+        )
+        find_btn = tk.Button(
+            file_manager_btn_frame,
+            text="Find",
+            command=self.find_file,
+            width=button_width,
+        )
+        transfer_btn = tk.Button(
+            file_manager_btn_frame,
+            text="Transfer",
+            command=self.transfer_file,
+            width=button_width,
+        )
 
         rename_btn.pack(side="left", padx=2, pady=2)
         import_btn.pack(side="left", padx=2, pady=2)
@@ -284,6 +308,9 @@ class Vaila(tk.Tk):
         copy_btn.pack(side="left", padx=2, pady=2)
         move_btn.pack(side="left", padx=2, pady=2)
         remove_btn.pack(side="left", padx=2, pady=2)
+        tree_btn.pack(side="left", padx=2, pady=2)
+        find_btn.pack(side="left", padx=2, pady=2)
+        transfer_btn.pack(side="left", padx=2, pady=2)
 
         # Analysis Frame
         analysis_frame = tk.LabelFrame(
@@ -352,17 +379,17 @@ class Vaila(tk.Tk):
         emg_analysis_btn = tk.Button(
             row2_frame, text="EMG", width=button_width, command=self.emg_analysis
         )
-        vaila_btn1 = tk.Button(
+        forceplate_btn = tk.Button(
             row2_frame,
-            text="vailá",
+            text="Force Plate",
             width=button_width,
-            command=self.show_vaila_message,
+            command=self.force_analysis,  # Altere para force_analysis
         )
-        vaila_btn2 = tk.Button(
+        gnss_btn = tk.Button(
             row2_frame,
-            text="vailá",
+            text="GNSS/GPS",
             width=button_width,
-            command=self.show_vaila_message,
+            command=self.gnss_analysis,  # Altere para gnss_analysis
         )
         vaila_btn3 = tk.Button(
             row2_frame,
@@ -373,8 +400,8 @@ class Vaila(tk.Tk):
 
         vector_coding_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         emg_analysis_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
-        vaila_btn1.pack(side="left", expand=True, fill="x", padx=2, pady=2)
-        vaila_btn2.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        forceplate_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        gnss_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         vaila_btn3.pack(side="left", expand=True, fill="x", padx=2, pady=2)
 
         # Third row of buttons (if needed)
@@ -434,7 +461,7 @@ class Vaila(tk.Tk):
             tools_frame, text="Data Files", padx=5, pady=5, font=("default", 14)
         )
         tools_col2 = tk.LabelFrame(
-            tools_frame, text="Video", padx=5, pady=5, font=("default", 14)
+            tools_frame, text="Video and Image", padx=5, pady=5, font=("default", 14)
         )
         tools_col3 = tk.LabelFrame(
             tools_frame, text="Visualization", padx=5, pady=5, font=("default", 14)
@@ -612,10 +639,10 @@ class Vaila(tk.Tk):
         plot_2d_btn = tk.Button(
             tools_col3, text="Plot 2D", command=self.plot_2d_data, width=button_width
         )
-        vaila_btn15 = tk.Button(
+        plot_3d_btn = tk.Button(
             tools_col3,
-            text="vailá",
-            command=self.show_vaila_message,
+            text="Plot 3D",
+            command=self.plot_3d_data,
             width=button_width,
         )
         vaila_btn16 = tk.Button(
@@ -647,7 +674,7 @@ class Vaila(tk.Tk):
         show_c3d_btn.grid(row=0, column=0, padx=2, pady=2)
         show_csv_btn.grid(row=0, column=1, padx=2, pady=2)
         plot_2d_btn.grid(row=1, column=0, padx=2, pady=2)
-        vaila_btn15.grid(row=1, column=1, padx=2, pady=2)
+        plot_3d_btn.grid(row=1, column=1, padx=2, pady=2)
         vaila_btn16.grid(row=2, column=0, padx=2, pady=2)
         vaila_btn17.grid(row=2, column=1, padx=2, pady=2)
         vaila_btn18.grid(row=3, column=0, padx=2, pady=2)
@@ -691,6 +718,15 @@ class Vaila(tk.Tk):
     def remove_file(self):
         remove_file()
 
+    def tree_file(self):
+        tree_file()
+
+    def find_file(self):
+        find_file()
+
+    def transfer_file(self):
+        transfer_file()
+
     def imu_analysis(self):
         imu_analysis.analyze_imu_data()
 
@@ -713,6 +749,12 @@ class Vaila(tk.Tk):
 
     def emg_analysis(self):
         emg_labiocom.run_emg_gui()
+
+    def force_analysis(self):
+        forceplate_analysis.run_force_analysis()
+
+    def gnss_analysis(self):
+        gnss_analysis.run_gnss_analysis()
 
     def reorder_csv_data(self):
         rearrange_data_in_directory()
@@ -779,6 +821,9 @@ class Vaila(tk.Tk):
 
     def plot_2d_data(self):
         plot_2d()
+
+    def plot_3d_data(self):
+        plot_3d()
 
     def process_videos_gui(self):
         process_videos_gui()  # Correctly calls the function from __init__.py
