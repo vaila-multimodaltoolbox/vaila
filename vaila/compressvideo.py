@@ -1,5 +1,41 @@
+"""
+# vailá - Multimodal Toolbox
+# © Paulo Santiago, Guilherme Cesar, Ligia Mochida, Bruno Bedo
+# https://github.com/paulopreto/vaila-multimodaltoolbox
+# Please see AUTHORS for contributors.
+#
+# Licensed under GNU Lesser General Public License v3.0
+#
+# compress_videos.py
+# This script compresses videos in a specified directory to either H.264 or H.265/HEVC format
+# using the FFmpeg tool. It provides a GUI for selecting the directory containing the videos,
+# allows the user to choose the desired codec, and then processes each video, saving the
+# compressed versions in a subdirectory named 'compressed_[codec]'.
+#
+# Usage:
+# Run the script to open the GUI, select the directory containing videos, choose the codec,
+# and the compression process will start automatically.
+#
+# Requirements:
+# - FFmpeg must be installed and accessible in the system PATH.
+# - This script is designed to work in a Conda environment where FFmpeg is
+#   installed via conda-forge.
+#
+# Dependencies:
+# - Python 3.11.8
+# - Tkinter (included with Python)
+# - FFmpeg (installed via Conda or available in PATH)
+#
+# Installation of FFmpeg in Conda:
+#   conda install -c conda-forge ffmpeg
+#
+# Note:
+# This process may take several hours depending on the size of the videos
+# and the performance of your computer.
+"""
+
 import os
-from ffmpeg import FFmpeg
+import subprocess
 from tkinter import (
     filedialog,
     messagebox,
@@ -15,16 +51,20 @@ from tkinter import (
 
 def check_ffmpeg_encoder(encoder):
     try:
-        ffmpeg = (
-            FFmpeg()
-            .input("dummy")
-            .output("dummy.mp4", vcodec=encoder)
-            .global_args("-hide_banner", "-nostats")
-        )
-        ffmpeg.execute()
+        command = [
+            "ffmpeg",
+            "-f", "lavfi",  # use lavfi format for dummy input
+            "-i", "nullsrc=s=64x64:d=1",  # generate dummy input
+            "-vcodec", encoder,
+            "-f", "null",
+            "-hide_banner",
+            "-nostats",
+            "-",
+        ]
+        subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         return True
-    except Exception as e:
-        if "Unknown encoder" in str(e):
+    except subprocess.CalledProcessError as e:
+        if "Unknown encoder" in e.stderr.decode():
             return False
         else:
             raise
@@ -57,17 +97,22 @@ def run_compress_videos(video_directory, codec, preset="medium", crf=23):
 
         print(f"Compressing {video_file}...")
 
-        ffmpeg = (
-            FFmpeg()
-            .input(input_path)
-            .output(output_path, vcodec=codec, preset=preset, crf=crf)
-            .global_args("-hide_banner", "-nostats")
-        )
+        command = [
+            "ffmpeg",
+            "-y",  # overwrite output files
+            "-i", input_path,  # input file
+            "-vcodec", codec,  # video codec
+            "-preset", preset,  # preset for encoding speed
+            "-crf", str(crf),  # constant rate factor for quality
+            "-hide_banner",
+            "-nostats",
+            output_path
+        ]
 
         try:
-            ffmpeg.execute()
+            subprocess.run(command, check=True)
             print(f"Done compressing {video_file} to {codec}.")
-        except Exception as e:
+        except subprocess.CalledProcessError as e:
             print(f"Error compressing {video_file}: {e}")
 
 
