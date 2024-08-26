@@ -100,7 +100,6 @@ dependencies:
   - executing=2.0.1=pyhd8ed1ab_0
   - expat=2.6.2=h59595ed_0
   - ezc3d=1.5.10=py311_python3_hf39590b_3
-  - ffmpeg=4.4.0=hca11adc_0
   - font-ttf-dejavu-sans-mono=2.37=hab24e00_0
   - font-ttf-inconsolata=3.000=h77eed37_0
   - font-ttf-source-code-pro=2.038=h77eed37_0
@@ -141,7 +140,6 @@ dependencies:
   - idna=3.7=pyhd8ed1ab_0
   - imagehash=4.3.1=pyhd8ed1ab_0
   - imageio=2.35.1=pyh12aca89_0
-  - imageio-ffmpeg=0.5.1=pyhd8ed1ab_0
   - importlib-metadata=8.0.0=pyha770c72_0
   - importlib_metadata=8.0.0=hd8ed1ab_0
   - importlib_resources=6.4.0=pyhd8ed1ab_0
@@ -511,7 +509,6 @@ dependencies:
       - pyqt5-qt5==5.15.14
       - pyqt5-sip==12.15.0
       - pyside2==5.13.2
-      - python-ffmpeg==2.0.12
       - retrying==1.3.4
       - scp==0.15.0
       - shiboken2==5.13.2
