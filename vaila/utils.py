@@ -1,12 +1,40 @@
 """
-utils.py
-Version: 2024-07-15 20:00:00
+# vailá - Multimodal Toolbox
+# © Paulo Santiago, Guilherme Cesar, Ligia Mochida, Bruno Bedo
+# https://github.com/paulopreto/vaila-multimodaltoolbox
+# Please see AUTHORS for contributors.
+#
+# Licensed under GNU Lesser General Public License v3.0
+#
+# utils.py
+# This script provides various utility functions, including drawing boxes on videos.
+# The script uses FFmpeg to process videos, applying a rectangular mask based on user-defined coordinates.
+#
+# Usage:
+# Run the script with the argument 'draw_box' to open a GUI for selecting the coordinates
+# and apply them to all videos in the specified directory.
+#
+# Requirements:
+# - FFmpeg must be installed and accessible in the system PATH.
+# - This script is designed to work in a Conda environment where FFmpeg is
+#   installed via conda-forge.
+#
+# Dependencies:
+# - Python 3.11.8
+# - Tkinter (included with Python)
+# - FFmpeg (installed via Conda or available in PATH)
+#
+# Installation of FFmpeg in Conda:
+#   conda install -c conda-forge ffmpeg
+#
+# Note:
+# Ensure that the video files are in a format supported by FFmpeg.
 """
 
 import os
 import sys
+import subprocess
 import pandas as pd
-from ffmpeg import FFmpeg
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 import cv2
@@ -56,25 +84,25 @@ def draw_box_on_videos(video_directory, coordinates):
 
         print(f"Processing {video_file}...")
 
-        ffmpeg = (
-            FFmpeg()
-            .input(input_path)
-            .output(
-                output_path,
-                vf=f"drawbox=0:0:in_w:{YT}:color=black:t=fill,"
-                f"drawbox=0:{YT}:{XT}:in_h:color=black:t=fill,"
-                f"drawbox={XT}:{YD}:in_w:in_h:color=black:t=fill,"
-                f"drawbox={XD}:{YT}:in_w:{YD}:color=black:t=fill",
-                c="libx265",
-                crf=22,
-            )
-            .global_args("-hide_banner", "-nostats", "-loglevel", "quiet")
-        )
+        command = [
+            "ffmpeg",
+            "-i", input_path,
+            "-vf", f"drawbox=0:0:in_w:{YT}:color=black:t=fill,"
+                   f"drawbox=0:{YT}:{XT}:in_h:color=black:t=fill,"
+                   f"drawbox={XT}:{YD}:in_w:in_h:color=black:t=fill,"
+                   f"drawbox={XD}:{YT}:in_w:{YD}:color=black:t=fill",
+            "-c:v", "libx265",
+            "-crf", "22",
+            "-hide_banner",
+            "-nostats",
+            "-loglevel", "quiet",
+            output_path
+        ]
 
         try:
-            ffmpeg.execute()
+            subprocess.run(command, check=True)
             print(f"Done DRAW BOX EDGES -------> {video_file}")
-        except Exception as e:
+        except subprocess.CalledProcessError as e:
             print(f"Error processing {video_file}: {e}")
 
 
