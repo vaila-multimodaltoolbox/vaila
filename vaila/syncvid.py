@@ -1,7 +1,35 @@
+"""
+syncvid.py
+
+This script is used for manually synchronizing videos, allowing the user to input 
+keyframes for multiple video files and select a main camera for synchronization.
+
+Features:
+- Manual synchronization: Allows the user to manually input keyframes for 
+  synchronization.
+- Automatic synchronization (using flash): Automatically extracts the median of 
+  the R, G, and B values from a specific region of each video to automatically 
+  synchronize the videos based on a flash or brightness change.
+
+Dependencies:
+- tkinter: For the graphical user interface (GUI).
+- cv2 (OpenCV): For video processing, used in automatic synchronization.
+- numpy: For numerical array manipulation, used in automatic synchronization.
+
+Usage:
+- Run the script and follow the instructions in the GUI to select the videos 
+  and choose the synchronization method.
+- Save the resulting synchronization file in the desired format.
+
+Author: [Your Name]
+Date: [Current Date]
+
+"""
+
 import os
 import tkinter as tk
 from tkinter import filedialog, messagebox
-
+from vaila.sync_flash import get_median_brightness  # Imports the automatic synchronization feature
 
 def get_video_files(directory_path):
     return sorted(
@@ -190,13 +218,26 @@ def sync_videos():
     output_file = filedialog.asksaveasfilename(
         title="Save sync file as",
         defaultextension=".txt",
-        filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
+        filetypes=[("Text files", "*.txt"), ("All files", "*.*")]
     )
     if not output_file:
         print("No output file selected.")
         return
 
     video_files = get_video_files(video_directory)
+
+    # Ask the user if they want to use the flash for automatic synchronization
+    use_flash = messagebox.askyesno(
+        "Use Flash Synchronization",
+        "Do you want to use flash detection for automatic synchronization?"
+    )
+
+    if use_flash:
+        for video_file in video_files:
+            region = (50, 50, 100, 100)  # Example region, customize as needed
+            median_brightness = get_median_brightness(video_file, region)
+            print(f"Median brightness for {video_file}: {median_brightness}")
+
     sync_data, main_video, frame_initial, frame_final = get_sync_info(video_files)
     if not main_video:
         messagebox.showerror("Error", "Main video was not selected.")
