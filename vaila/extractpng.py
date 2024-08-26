@@ -2,34 +2,34 @@
 File: extractpng.py
 
 Description:
-This script allows users to either extract PNG frames from video files or create a video from a sequence of PNG images. The script ensures consistency and quality in extracted frames and generated videos, making them suitable for machine learning, computer vision, and biomechanics applications.
+This script allows users to either extract PNG frames from video files or create a video from a sequence of PNG images. The script ensures consistency and quality in extracted frames and generated videos, making them suitable for machine learning, computer vision, e biomechanics applications.
 
-Version: 1.5
-Last Updated: August 18, 2024
+Version: 2.0
+Last Updated: August 25, 2024
 Author: Prof. Paulo Santiago
 
 Features:
 - Extract PNG frames in RGB format to ensure compatibility with machine learning models.
-- Create videos in YUV420p format, which is a widely used standard in computer vision.
-- Automatically creates a directory for saving the output videos, named `vaila_png2mp4_` followed by a timestamp.
-- Processes all immediate subdirectories of the selected source directory, creating a video from PNG files found within each subdirectory.
-- Uses the `info.txt` file within each subdirectory to determine the FPS for video creation, with a default of 30 FPS if the file is not found.
-- User-friendly GUI for directory and file selection.
+- Create videos in YUV420p format, with the option to choose between libx264 or libx265 codecs.
+- Automatically creates a directory for saving the output PNGs, named `vaila_extractpng_<timestamp>`.
+- Processes all video files in the selected source directory, creating a directory for PNG files extracted from each video.
 - Ensures consistent resolution, frame rate, and color space across all operations.
 
 Dependencies:
 - Python 3.x
-- ffmpeg-python
+- ffmpeg (installed via Conda or available in PATH)
 - Tkinter
 """
 
 import os
+import subprocess
 import time
-from ffmpeg import FFmpeg
 from tkinter import filedialog, messagebox, simpledialog, Tk, Toplevel, Label, Button
 
 
 class VideoProcessor:
+    def __init__(self):
+        self.pattern = "%09d.png"  # Default pattern
 
     def extract_png_from_videos(self):
         root = Tk()
@@ -42,12 +42,18 @@ class VideoProcessor:
             messagebox.showerror("Error", "No source directory selected.")
             return
 
-        dest = filedialog.askdirectory(
-            title="Select the destination directory for PNG files"
+        # Ask the user for the PNG filename pattern
+        pattern = simpledialog.askstring(
+            "PNG Filename Pattern",
+            "Enter the filename pattern for PNG files (e.g., frame%07d.png):\nLeave empty for default (%09d.png):"
         )
-        if not dest:
-            messagebox.showerror("Error", "No destination directory selected.")
-            return
+        if pattern:
+            self.pattern = pattern
+
+        # Create a new main directory inside the selected destination directory for saving the output PNGs
+        timestamp = time.strftime("%Y%m%d%H%M%S")
+        dest_main_dir = os.path.join(src, f"vaila_extractpng_{timestamp}")
+        os.makedirs(dest_main_dir, exist_ok=True)
 
         try:
             video_files = [
@@ -59,26 +65,22 @@ class VideoProcessor:
             for item in video_files:
                 video_path = os.path.join(src, item)
                 video_name = os.path.splitext(item)[0]
-                output_dir = os.path.join(dest, f"{video_name}_png")
+                output_dir = os.path.join(dest_main_dir, f"{video_name}_png")
                 os.makedirs(output_dir, exist_ok=True)
-                output_pattern = os.path.join(output_dir, "%09d.png")
+                output_pattern = os.path.join(output_dir, self.pattern)
 
                 # Extract FPS using OpenCV
                 fps = self.get_fps(video_path)
 
                 # Extract frames with RGB color space
-                ffmpeg = (
-                    FFmpeg()
-                    .input(video_path)
-                    .output(
-                        output_pattern,
-                        vf="scale=in_range=pc:out_range=pc,format=rgb24",
-                        vcodec="png",
-                        q=1,
-                    )
-                )
-
-                ffmpeg.execute()
+                command = [
+                    "ffmpeg",
+                    "-i", video_path,
+                    "-vf", "scale=in_range=pc:out_range=pc,format=rgb24",
+                    "-q:v", "1",
+                    output_pattern
+                ]
+                subprocess.run(command, check=True)
 
                 with open(os.path.join(output_dir, "info.txt"), "w") as f:
                     f.write(f"FPS: {fps}\n")
@@ -90,7 +92,6 @@ class VideoProcessor:
             messagebox.showerror("Error", f"Error extracting PNG frames: {e}")
 
     def create_video_from_png(self):
-        print("create_video_from_png was called")
         root = Tk()
         root.withdraw()
 
@@ -100,6 +101,31 @@ class VideoProcessor:
         if not src:
             messagebox.showerror("Error", "No source directory selected.")
             return
+
+        # Ask the user for the PNG filename pattern
+        pattern = simpledialog.askstring(
+            "PNG Filename Pattern",
+            "Enter the filename pattern for PNG files (e.g., 'frame%07d.png'):\nLeave empty for default ('%09d.png'):"
+        )
+        if pattern:
+            self.pattern = pattern
+
+        # Ask the user to choose the codec
+        codec_choice = simpledialog.askstring(
+            "Codec Choice",
+            "Enter 'h264' for libx264 or 'h265' for libx265 (default is 'h264'):"
+        )
+        if not codec_choice:
+            codec_choice = 'h264'
+        elif codec_choice not in ['h264', 'h265']:
+            messagebox.showerror("Error", "Invalid codec choice. Defaulting to 'h264'.")
+            codec_choice = 'h264'
+
+        codec_map = {
+            'h264': 'libx264',
+            'h265': 'libx265'
+        }
+        codec = codec_map[codec_choice]
 
         # Create a new directory inside the selected source directory for saving the output videos
         timestamp = time.strftime("%Y%m%d%H%M%S")
@@ -112,7 +138,7 @@ class VideoProcessor:
 
             if png_files:
                 # Se encontrar arquivos PNG no diretório raiz, processa-os diretamente
-                input_pattern = os.path.join(src, "%09d.png")
+                input_pattern = os.path.join(src, self.pattern)
                 # Usando o nome do diretório em vez de "output.mp4"
                 output_video_name = os.path.basename(src)
                 output_video_path = os.path.join(output_dir, f"{output_video_name}.mp4")
@@ -128,12 +154,15 @@ class VideoProcessor:
 
                 try:
                     # Create video in YUV420p color space for compatibility
-                    ffmpeg = (
-                        FFmpeg()
-                        .input(input_pattern, framerate=fps)
-                        .output(output_video_path, vcodec="libx264", pix_fmt="yuv420p")
-                    )
-                    ffmpeg.execute()
+                    command = [
+                        "ffmpeg",
+                        "-framerate", str(fps),
+                        "-i", input_pattern,
+                        "-c:v", codec,
+                        "-pix_fmt", "yuv420p",
+                        output_video_path
+                    ]
+                    subprocess.run(command, check=True)
 
                     print(f"Video creation completed and saved to {output_video_path}")
                 except Exception as e:
@@ -160,19 +189,20 @@ class VideoProcessor:
                     else:
                         fps = 30.0  # Default FPS
 
-                    input_pattern = os.path.join(dir_path, "%09d.png")
+                    input_pattern = os.path.join(dir_path, self.pattern)
                     output_video_path = os.path.join(output_dir, f"{dir_name}.mp4")
 
                     try:
                         # Create video in YUV420p color space for compatibility
-                        ffmpeg = (
-                            FFmpeg()
-                            .input(input_pattern, framerate=fps)
-                            .output(
-                                output_video_path, vcodec="libx264", pix_fmt="yuv420p"
-                            )
-                        )
-                        ffmpeg.execute()
+                        command = [
+                            "ffmpeg",
+                            "-framerate", str(fps),
+                            "-i", input_pattern,
+                            "-c:v", codec,
+                            "-pix_fmt", "yuv420p",
+                            output_video_path
+                        ]
+                        subprocess.run(command, check=True)
 
                         print(
                             f"Video creation completed and saved to {output_video_path}"

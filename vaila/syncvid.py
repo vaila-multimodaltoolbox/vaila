@@ -273,11 +273,11 @@ def sync_videos():
         adjusted_sync_data.append([video_file, new_name, initial_frame, final_frame])
 
     write_sync_file(adjusted_sync_data, output_file)
-    print("Sync file created successfully.")
+    print("Sync file created successfully! Now use Cut Videos to synchronize the videos.")
 
     # Display success message
     messagebox.showinfo(
-        "Success", f"Sync file '{output_file}' was created successfully."
+        "Success", f"Sync file '{output_file}' was created successfully. Now use Cut Videos to synchronize the videos."
     )
 
 
