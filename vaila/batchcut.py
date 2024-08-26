@@ -19,7 +19,7 @@ The script creates a "cut_videos" subdirectory in the specified output directory
 will be saved. If the new name already contains the .mp4 extension, it will be removed to avoid duplication.
 
 Dependencies:
-- ffmpeg-python
+- FFmpeg (installed via Conda or available in PATH)
 - tkinter
 
 Usage:
@@ -30,7 +30,7 @@ directory.
 
 import os
 import sys
-from ffmpeg import FFmpeg
+import subprocess
 import tkinter as tk
 from tkinter import filedialog
 
@@ -72,19 +72,18 @@ def batch_cut_videos(video_directory, list_file_path, output_directory):
         try:
             print(f"Processing {original_name} from frame {start_frame} to {end_frame}")
 
-            ffmpeg = (
-                FFmpeg()
-                .option("y")
-                .input(original_path)
-                .output(
-                    new_path,
-                    vf=f"select=between(n\,{start_frame}\,{end_frame})",
-                    vsync="vfr",
-                )
-            )
-            ffmpeg.execute()
+            command = [
+                "ffmpeg",
+                "-y",  # overwrite output files
+                "-i", original_path,  # input file
+                "-vf", f"select=between(n\\,{start_frame}\\,{end_frame})",  # video filter
+                "-vsync", "vfr",  # variable frame rate
+                new_path,  # output file
+            ]
+
+            subprocess.run(command, check=True)
             print(f"{new_name} completed!")
-        except Exception as e:
+        except subprocess.CalledProcessError as e:
             print(f"Error processing {original_name}: {str(e)}", file=sys.stderr)
 
 

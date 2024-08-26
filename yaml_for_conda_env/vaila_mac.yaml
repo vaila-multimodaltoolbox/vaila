@@ -554,7 +554,6 @@ dependencies:
       - pyobjc-framework-vision==10.3.1
       - pyobjc-framework-webkit==10.3.1
       - moviepy==1.0.3
-      - python-ffmpeg==2.0.12
       - pyyaml-env-tag==0.1
       - regex==2024.7.24
       - retrying==1.3.4

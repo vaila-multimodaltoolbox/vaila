@@ -36,7 +36,7 @@ Dependencies:
 -------------
 - Python 3.11.8 (Anaconda environment)
 - os
-- ffmpeg-python
+- ffmpeg (installed via Conda or available in PATH)
 - matplotlib
 - opencv-python
 - tkinter
@@ -48,7 +48,7 @@ Additional Notes:
 """
 
 import os
-from ffmpeg import FFmpeg
+import subprocess
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import cv2
@@ -68,10 +68,12 @@ def save_first_frame(video_path, frame_path):
 
 def extract_frames(video_path, frames_dir):
     os.makedirs(frames_dir, exist_ok=True)
-    ffmpeg = (
-        FFmpeg().input(video_path).output(os.path.join(frames_dir, "frame_%09d.png"))
-    )
-    ffmpeg.execute()
+    command = [
+        "ffmpeg",
+        "-i", video_path,
+        os.path.join(frames_dir, "frame_%09d.png")
+    ]
+    subprocess.run(command, check=True)
 
 
 def apply_boxes_directly_to_video(input_path, output_path, coordinates, selections):
@@ -130,12 +132,14 @@ def apply_boxes_to_frames(frames_dir, coordinates, selections, frame_intervals):
 
 
 def reassemble_video(frames_dir, output_path, fps):
-    ffmpeg = (
-        FFmpeg()
-        .input(os.path.join(frames_dir, "frame_%09d.png"), framerate=fps)
-        .output(output_path)
-    )
-    ffmpeg.execute()
+    command = [
+        "ffmpeg",
+        "-framerate", str(fps),
+        "-i", os.path.join(frames_dir, "frame_%09d.png"),
+        "-c:v", "libx264",
+        output_path
+    ]
+    subprocess.run(command, check=True)
 
 
 def clean_up(directory):

@@ -1,7 +1,39 @@
-import os
-from ffmpeg import FFmpeg
-from tkinter import filedialog, messagebox, Tk
+"""
+# vailá - Multimodal Toolbox
+# © Paulo Santiago, Guilherme Cesar, Ligia Mochida, Bruno Bedo
+# https://github.com/paulopreto/vaila-multimodaltoolbox
+# Please see AUTHORS for contributors.
+#
+# Licensed under GNU Lesser General Public License v3.0
+#
+# compress_videos_h265.py
+# This script compresses videos in a specified directory to H.265/HEVC format.
+# It identifies the operating system and calls the appropriate shell script
+# for compression: compress_videos_h265.sh for Linux/macOS and 
+# compress_videos_h265.bat for Windows.
+#
+# Usage:
+# Run the script to open the GUI, select the directory containing videos,
+# and the appropriate shell script for your OS will handle the compression.
+#
+# Requirements:
+# - A valid shell script for your OS (compress_videos_h265.sh or compress_videos_h265.bat)
+#   must be available in the same directory as this Python script.
+#
+# Dependencies:
+# - Python 3.11.8
+# - Tkinter (included with Python)
+# - subprocess (included with Python)
+#
+# Note:
+# This process may take several hours depending on the size of the videos
+# and the performance of your computer.
+"""
 
+import os
+import subprocess
+import platform
+import sys
 
 def run_compress_videos_h265(video_directory, preset="medium", crf=23):
     output_directory = os.path.join(video_directory, "compressed_h265")
@@ -26,23 +58,27 @@ def run_compress_videos_h265(video_directory, preset="medium", crf=23):
 
         print(f"Compressing {video_file}...")
 
-        ffmpeg = (
-            FFmpeg()
-            .option("y")
-            .input(input_path)
-            .output(output_path, {"codec:v": "libx265"}, preset=preset, crf=crf)
-        )
+        # Determina o SO e chama o script apropriado
+        if platform.system() == "Windows":
+            script_path = "compress_videos_h265.bat"
+            command = [script_path, input_path, output_path]
+        else:
+            script_path = os.path.join(os.path.dirname(__file__), "compress_videos_h265.sh")
+            command = [script_path, input_path, output_path]
 
         try:
-            ffmpeg.execute()
-            print(f"Done compressing {video_file} to H.265/HEVC.")
-        except Exception as e:
+            subprocess.check_call(command)
+            print(f"Done compressing {video_file} to H.265.")
+        except subprocess.CalledProcessError as e:
             print(f"Error compressing {video_file}: {e}")
+            sys.exit(1)
 
     print("All videos have been compressed successfully!")
 
 
 def compress_videos_h265_gui():
+    from tkinter import filedialog, messagebox, Tk
+
     root = Tk()
     root.withdraw()
 
@@ -65,3 +101,4 @@ def compress_videos_h265_gui():
 
 if __name__ == "__main__":
     compress_videos_h265_gui()
+
