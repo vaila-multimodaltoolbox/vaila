@@ -66,6 +66,7 @@ from .vailaplot2d import plot_2d
 from .vailaplot3d import plot_3d
 from .mergestack import merge_csv_files, stack_csv_files
 from .videoprocessor import process_videos_gui
+from .sync_flash import get_median_brightness
 
 
 __all__ = [
@@ -126,4 +127,5 @@ __all__ = [
     "merge_csv_files",
     "stack_csv_files",
     "process_videos_gui",
+    "get_median_brightness"
 ]
