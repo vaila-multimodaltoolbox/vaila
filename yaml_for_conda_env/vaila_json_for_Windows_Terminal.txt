@@ -3,7 +3,7 @@
                 "commandline": "pwsh.exe -ExecutionPolicy ByPass -NoExit -Command \"& 'C:\\ProgramData\\anaconda3\\shell\\condabin\\conda-hook.ps1' ; conda activate 'vaila' ; python 'vaila.py' \"",
                 "guid": "{17ce5bfe-17ed-5f3a-ab15-5cd5baafed5b}",
                 "hidden": false,
-                "icon": "C:\\vaila_programs\\vaila_logo.png",
+                "icon": "C:\\vaila_programs\\vaila\\vaila\\images\\vaila_ico.png",
                 "name": "vail\u00e1",
                 "startingDirectory": "C:\\vaila_programs\\vaila"
             }
