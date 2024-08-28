@@ -1,7 +1,7 @@
 """
 Script Name: dlt3d.py
 Version: v0.01
-Date and Time: 2024-08-13
+Date and Time: 2024-08-26
 Author: Prof. PhD. Paulo Santiago
 Email: vailamultimodaltoolbox@gmail.com
 Description: This script performs 3D calibration using the Direct Linear 
