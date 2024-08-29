@@ -39,5 +39,5 @@ copy %WT_CONFIG_PATH% %WT_CONFIG_PATH%.bak
 REM Append the vailá profile to the profiles section in the settings.json
 powershell -Command "(Get-Content -Raw %WT_CONFIG_PATH%).Replace('\"profiles\": {', '\"profiles\": {\n    \"list\": [\n        %VAILA_PROFILE%,') | Set-Content %WT_CONFIG_PATH%"
 
-echo "Installation and configuration completed successfully! Enjoy"
+echo "Installation and configuration completed successfully!"
 pause
