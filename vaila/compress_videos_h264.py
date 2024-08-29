@@ -34,7 +34,6 @@
 # and the performance of your computer.
 """
 
-
 import os
 import subprocess
 from tkinter import filedialog, messagebox, Tk
@@ -66,11 +65,15 @@ def run_compress_videos_h264(video_directory, preset="medium", crf=23):
         command = [
             "ffmpeg",
             "-y",  # overwrite output files
-            "-i", input_path,  # input file
-            "-c:v", "libx264",  # video codec
-            "-preset", preset,  # preset for encoding speed
-            "-crf", str(crf),  # constant rate factor for quality
-            output_path  # output file
+            "-i",
+            input_path,  # input file
+            "-c:v",
+            "libx264",  # video codec
+            "-preset",
+            preset,  # preset for encoding speed
+            "-crf",
+            str(crf),  # constant rate factor for quality
+            output_path,  # output file
         ]
 
         try:

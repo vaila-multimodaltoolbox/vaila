@@ -75,9 +75,12 @@ def batch_cut_videos(video_directory, list_file_path, output_directory):
             command = [
                 "ffmpeg",
                 "-y",  # overwrite output files
-                "-i", original_path,  # input file
-                "-vf", f"select=between(n\\,{start_frame}\\,{end_frame})",  # video filter
-                "-vsync", "vfr",  # variable frame rate
+                "-i",
+                original_path,  # input file
+                "-vf",
+                f"select=between(n\\,{start_frame}\\,{end_frame})",  # video filter
+                "-vsync",
+                "vfr",  # variable frame rate
                 new_path,  # output file
             ]
 

@@ -29,7 +29,10 @@ Date: [Current Date]
 import os
 import tkinter as tk
 from tkinter import filedialog, messagebox
-from vaila.sync_flash import get_median_brightness  # Imports the automatic synchronization feature
+from vaila.sync_flash import (
+    get_median_brightness,
+)  # Imports the automatic synchronization feature
+
 
 def get_video_files(directory_path):
     return sorted(
@@ -218,7 +221,7 @@ def sync_videos():
     output_file = filedialog.asksaveasfilename(
         title="Save sync file as",
         defaultextension=".txt",
-        filetypes=[("Text files", "*.txt"), ("All files", "*.*")]
+        filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
     )
     if not output_file:
         print("No output file selected.")
@@ -229,7 +232,7 @@ def sync_videos():
     # Ask the user if they want to use the flash for automatic synchronization
     use_flash = messagebox.askyesno(
         "Use Flash Synchronization",
-        "Do you want to use flash detection for automatic synchronization?"
+        "Do you want to use flash detection for automatic synchronization?",
     )
 
     if use_flash:
@@ -273,11 +276,14 @@ def sync_videos():
         adjusted_sync_data.append([video_file, new_name, initial_frame, final_frame])
 
     write_sync_file(adjusted_sync_data, output_file)
-    print("Sync file created successfully! Now use Cut Videos to synchronize the videos.")
+    print(
+        "Sync file created successfully! Now use Cut Videos to synchronize the videos."
+    )
 
     # Display success message
     messagebox.showinfo(
-        "Success", f"Sync file '{output_file}' was created successfully. Now use Cut Videos to synchronize the videos."
+        "Success",
+        f"Sync file '{output_file}' was created successfully. Now use Cut Videos to synchronize the videos.",
     )
 
 
