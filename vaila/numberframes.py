@@ -185,8 +185,10 @@ def save_full_metadata_to_file(directory_path, video_files):
         json_file = os.path.join(output_dir, f"{os.path.splitext(video_file)[0]}.json")
         command = [
             "ffprobe",
-            "-v", "quiet",
-            "-print_format", "json",
+            "-v",
+            "quiet",
+            "-print_format",
+            "json",
             "-show_format",
             "-show_streams",
             video_path,

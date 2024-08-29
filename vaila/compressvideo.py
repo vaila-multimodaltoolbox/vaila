@@ -53,15 +53,21 @@ def check_ffmpeg_encoder(encoder):
     try:
         command = [
             "ffmpeg",
-            "-f", "lavfi",  # use lavfi format for dummy input
-            "-i", "nullsrc=s=64x64:d=1",  # generate dummy input
-            "-vcodec", encoder,
-            "-f", "null",
+            "-f",
+            "lavfi",  # use lavfi format for dummy input
+            "-i",
+            "nullsrc=s=64x64:d=1",  # generate dummy input
+            "-vcodec",
+            encoder,
+            "-f",
+            "null",
             "-hide_banner",
             "-nostats",
             "-",
         ]
-        subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        subprocess.run(
+            command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
         return True
     except subprocess.CalledProcessError as e:
         if "Unknown encoder" in e.stderr.decode():
@@ -100,13 +106,17 @@ def run_compress_videos(video_directory, codec, preset="medium", crf=23):
         command = [
             "ffmpeg",
             "-y",  # overwrite output files
-            "-i", input_path,  # input file
-            "-vcodec", codec,  # video codec
-            "-preset", preset,  # preset for encoding speed
-            "-crf", str(crf),  # constant rate factor for quality
+            "-i",
+            input_path,  # input file
+            "-vcodec",
+            codec,  # video codec
+            "-preset",
+            preset,  # preset for encoding speed
+            "-crf",
+            str(crf),  # constant rate factor for quality
             "-hide_banner",
             "-nostats",
-            output_path
+            output_path,
         ]
 
         try:
