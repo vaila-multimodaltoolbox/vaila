@@ -34,19 +34,19 @@ Date: [Current Date]
 
 """
 
-
 import cv2
 import numpy as np
+
 
 def get_median_brightness(video_file, region=None):
     """
     Extracts the median of the R, G, B values from a specified region of the video.
-    
+
     Parameters:
     - video_file: path to the video file.
     - region: a tuple (x, y, width, height) defining the rectangular region.
               If None, the entire frame is considered.
-    
+
     Returns:
     - median_rgb: a tuple containing the median R, G, B values.
     """
@@ -63,7 +63,7 @@ def get_median_brightness(video_file, region=None):
 
         if region:
             x, y, w, h = region
-            frame = frame[y:y+h, x:x+w]
+            frame = frame[y : y + h, x : x + w]
 
         # Convert frame to RGB and reshape it to a 2D array of pixels
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -77,6 +77,7 @@ def get_median_brightness(video_file, region=None):
     median_rgb = np.median(all_pixels, axis=0)
 
     return tuple(median_rgb)
+
 
 if __name__ == "__main__":
     video_path = "path/to/your/video.mp4"  # Replace with your video path
