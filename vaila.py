@@ -157,7 +157,7 @@ class Vaila(tk.Tk):
             AppKit.NSBundle.mainBundle().infoDictionary()["CFBundleName"] = "Vaila"
 
         self.create_widgets()
-        
+
     def set_dimensions_based_on_os(self):
         if platform.system() == "Darwin":
             # Specific adjustments for macOS
