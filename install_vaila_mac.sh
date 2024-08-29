@@ -1,7 +1,6 @@
 #!/bin/bash
 
 # Install vailá - Multimodal Toolbox on macOS
-
 echo "Starting installation of vailá - Multimodal Toolbox on macOS..."
 
 # Check if Conda is installed

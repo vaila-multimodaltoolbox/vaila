@@ -134,6 +134,9 @@ class Vaila(tk.Tk):
         self.title("vailá - 0.1.0")
         self.geometry("1280x720")
 
+        # Set button dimensions and font size based on OS
+        self.set_dimensions_based_on_os()  # Chamada para ajustar dimensões e fonte
+
         # Set window icon based on OS
         icon_path_ico = os.path.join(
             os.path.dirname(__file__), "vaila", "images", "vaila.ico"
@@ -154,9 +157,28 @@ class Vaila(tk.Tk):
             AppKit.NSBundle.mainBundle().infoDictionary()["CFBundleName"] = "Vaila"
 
         self.create_widgets()
+        
+    def set_dimensions_based_on_os(self):
+        if platform.system() == "Darwin":
+            # Specific adjustments for macOS
+            self.button_width = 10
+            self.font_size = 11
+        elif platform.system() == "Windows":
+            # Specific adjustments for Windows
+            self.button_width = 12
+            self.font_size = 11
+        elif platform.system() == "Linux":
+            # Specific adjustments for Linux
+            self.button_width = 13
+            self.font_size = 11
+        else:
+            # Default values
+            self.button_width = 12
+            self.font_size = 11
 
     def create_widgets(self):
-        button_width = 12  # Define a largura dos botões
+        button_width = self.button_width  # Use o valor dinâmico ajustado
+        font = ("default", self.font_size)  # Use o tamanho de fonte ajustado
 
         # Header with program name and description
         header_frame = tk.Frame(self)
@@ -177,7 +199,7 @@ class Vaila(tk.Tk):
         header_label = tk.Label(
             header_frame,
             text="vailá - Multimodal Toolbox",
-            font=("default", 29, "bold"),
+            font=font,  # Corrigido para usar a variável de fonte ajustada
             anchor="center",
         )
         header_label.pack(side="left")
@@ -189,7 +211,7 @@ class Vaila(tk.Tk):
         subheader_label1 = tk.Label(
             subheader_frame,
             text="Versatile Anarcho Integrated Liberation Ánalysis in Multimodal Toolbox",
-            font=("default", 15),
+            font=font,  # Usando a fonte ajustada
             anchor="center",
         )
         subheader_label1.pack()
@@ -200,7 +222,7 @@ class Vaila(tk.Tk):
         vaila_link = tk.Label(
             subheader_label2_frame,
             text="vailá",
-            font=("default", 17, "italic"),
+            font=("default", self.font_size, "italic"),  # Fonte específica com itálico
             fg="blue",
             cursor="hand2",
         )
@@ -210,7 +232,7 @@ class Vaila(tk.Tk):
         unleash_label = tk.Label(
             subheader_label2_frame,
             text=" and unleash your imagination!",
-            font=("default", 17),
+            font=font,  # Usando a fonte ajustada
             anchor="center",
         )
         unleash_label.pack(side="left")
