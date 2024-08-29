@@ -1,7 +1,6 @@
 #!/bin/bash
 
 # Install vailá - Multimodal Toolbox on Linux
-
 echo "Starting installation of vailá - Multimodal Toolbox on Linux..."
 
 # Check if Conda is installed
