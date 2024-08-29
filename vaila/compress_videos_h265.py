@@ -35,6 +35,7 @@ import subprocess
 import platform
 import sys
 
+
 def run_compress_videos_h265(video_directory, preset="medium", crf=23):
     output_directory = os.path.join(video_directory, "compressed_h265")
     os.makedirs(output_directory, exist_ok=True)
@@ -63,7 +64,9 @@ def run_compress_videos_h265(video_directory, preset="medium", crf=23):
             script_path = "compress_videos_h265.bat"
             command = [script_path, input_path, output_path]
         else:
-            script_path = os.path.join(os.path.dirname(__file__), "compress_videos_h265.sh")
+            script_path = os.path.join(
+                os.path.dirname(__file__), "compress_videos_h265.sh"
+            )
             command = [script_path, input_path, output_path]
 
         try:
@@ -101,4 +104,3 @@ def compress_videos_h265_gui():
 
 if __name__ == "__main__":
     compress_videos_h265_gui()
-

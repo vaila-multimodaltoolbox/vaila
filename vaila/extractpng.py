@@ -45,7 +45,7 @@ class VideoProcessor:
         # Ask the user for the PNG filename pattern
         pattern = simpledialog.askstring(
             "PNG Filename Pattern",
-            "Enter the filename pattern for PNG files (e.g., frame%07d.png):\nLeave empty for default (%09d.png):"
+            "Enter the filename pattern for PNG files (e.g., frame%07d.png):\nLeave empty for default (%09d.png):",
         )
         if pattern:
             self.pattern = pattern
@@ -75,10 +75,13 @@ class VideoProcessor:
                 # Extract frames with RGB color space
                 command = [
                     "ffmpeg",
-                    "-i", video_path,
-                    "-vf", "scale=in_range=pc:out_range=pc,format=rgb24",
-                    "-q:v", "1",
-                    output_pattern
+                    "-i",
+                    video_path,
+                    "-vf",
+                    "scale=in_range=pc:out_range=pc,format=rgb24",
+                    "-q:v",
+                    "1",
+                    output_pattern,
                 ]
                 subprocess.run(command, check=True)
 
@@ -105,7 +108,7 @@ class VideoProcessor:
         # Ask the user for the PNG filename pattern
         pattern = simpledialog.askstring(
             "PNG Filename Pattern",
-            "Enter the filename pattern for PNG files (e.g., 'frame%07d.png'):\nLeave empty for default ('%09d.png'):"
+            "Enter the filename pattern for PNG files (e.g., 'frame%07d.png'):\nLeave empty for default ('%09d.png'):",
         )
         if pattern:
             self.pattern = pattern
@@ -113,18 +116,15 @@ class VideoProcessor:
         # Ask the user to choose the codec
         codec_choice = simpledialog.askstring(
             "Codec Choice",
-            "Enter 'h264' for libx264 or 'h265' for libx265 (default is 'h264'):"
+            "Enter 'h264' for libx264 or 'h265' for libx265 (default is 'h264'):",
         )
         if not codec_choice:
-            codec_choice = 'h264'
-        elif codec_choice not in ['h264', 'h265']:
+            codec_choice = "h264"
+        elif codec_choice not in ["h264", "h265"]:
             messagebox.showerror("Error", "Invalid codec choice. Defaulting to 'h264'.")
-            codec_choice = 'h264'
+            codec_choice = "h264"
 
-        codec_map = {
-            'h264': 'libx264',
-            'h265': 'libx265'
-        }
+        codec_map = {"h264": "libx264", "h265": "libx265"}
         codec = codec_map[codec_choice]
 
         # Create a new directory inside the selected source directory for saving the output videos
@@ -156,11 +156,15 @@ class VideoProcessor:
                     # Create video in YUV420p color space for compatibility
                     command = [
                         "ffmpeg",
-                        "-framerate", str(fps),
-                        "-i", input_pattern,
-                        "-c:v", codec,
-                        "-pix_fmt", "yuv420p",
-                        output_video_path
+                        "-framerate",
+                        str(fps),
+                        "-i",
+                        input_pattern,
+                        "-c:v",
+                        codec,
+                        "-pix_fmt",
+                        "yuv420p",
+                        output_video_path,
                     ]
                     subprocess.run(command, check=True)
 
@@ -196,11 +200,15 @@ class VideoProcessor:
                         # Create video in YUV420p color space for compatibility
                         command = [
                             "ffmpeg",
-                            "-framerate", str(fps),
-                            "-i", input_pattern,
-                            "-c:v", codec,
-                            "-pix_fmt", "yuv420p",
-                            output_video_path
+                            "-framerate",
+                            str(fps),
+                            "-i",
+                            input_pattern,
+                            "-c:v",
+                            codec,
+                            "-pix_fmt",
+                            "yuv420p",
+                            output_video_path,
                         ]
                         subprocess.run(command, check=True)
 
