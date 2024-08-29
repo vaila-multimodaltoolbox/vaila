@@ -86,17 +86,22 @@ def draw_box_on_videos(video_directory, coordinates):
 
         command = [
             "ffmpeg",
-            "-i", input_path,
-            "-vf", f"drawbox=0:0:in_w:{YT}:color=black:t=fill,"
-                   f"drawbox=0:{YT}:{XT}:in_h:color=black:t=fill,"
-                   f"drawbox={XT}:{YD}:in_w:in_h:color=black:t=fill,"
-                   f"drawbox={XD}:{YT}:in_w:{YD}:color=black:t=fill",
-            "-c:v", "libx265",
-            "-crf", "22",
+            "-i",
+            input_path,
+            "-vf",
+            f"drawbox=0:0:in_w:{YT}:color=black:t=fill,"
+            f"drawbox=0:{YT}:{XT}:in_h:color=black:t=fill,"
+            f"drawbox={XT}:{YD}:in_w:in_h:color=black:t=fill,"
+            f"drawbox={XD}:{YT}:in_w:{YD}:color=black:t=fill",
+            "-c:v",
+            "libx265",
+            "-crf",
+            "22",
             "-hide_banner",
             "-nostats",
-            "-loglevel", "quiet",
-            output_path
+            "-loglevel",
+            "quiet",
+            output_path,
         ]
 
         try:

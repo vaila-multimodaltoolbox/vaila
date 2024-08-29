@@ -2,10 +2,10 @@
 File: filemanager.py
 
 Description:
-This script, named `filemanager.py`, is designed to manage files and directories efficiently. It supports various operations, including importing, converting, exporting, copying, moving, and removing files. The script leverages the Tkinter graphical interface to facilitate user interaction, enabling the selection of files and directories through an easy-to-use GUI.
+This script, named `filemanager.py`, is designed to manage files and directories efficiently. It supports various operations, including importing, converting, exporting, copying, moving, removing, and finding files with specific patterns. The script leverages the Tkinter graphical interface to facilitate user interaction, enabling the selection of files and directories through an easy-to-use GUI.
 
-Version: 1.1
-Last Updated: [Data Atual]
+Version: 1.2
+Last Updated: 2024-08-29
 Author: Prof. Paulo Santiago
 
 Main Features:
@@ -14,6 +14,7 @@ Main Features:
 - Copy files from one location to another within the allowed directories.
 - Move files between predefined directories.
 - Remove files with specific extensions or directory names from selected directories.
+- Find files or directories based on user-defined patterns and count the number of files with a specified extension.
 
 Usage Notes:
 - A directory named 'vaila_export', 'vaila_copy', 'vaila_move', or 'vaila_import' will be automatically created within the chosen destination directory for the respective operations.
@@ -662,14 +663,35 @@ def find_file():
         messagebox.showerror("Error", "No source directory selected.")
         return
 
-    # Prompt the user to enter the pattern to search for
+    # Prompt the user to enter the file name pattern and extension separately
     search_pattern = simpledialog.askstring(
         "Search Pattern",
-        "Enter the pattern to search for (e.g., *.csv, *report*, data*.txt):",
+        "Enter the name pattern (optional) and file extension (e.g., vailá .mp4 or just .mp4):",
     )
     if not search_pattern:
-        messagebox.showerror("Error", "No search pattern provided.")
+        messagebox.showerror("Error", "No search pattern or extension provided.")
         return
+
+    # Split the input to get the name pattern and extension
+    search_parts = search_pattern.split()
+    if len(search_parts) == 1:
+        # If only the extension is provided
+        pattern = ""
+        file_extension = search_parts[0]
+    else:
+        # If both pattern and extension are provided
+        pattern = search_parts[0]
+        file_extension = search_parts[1]
+
+    # Ensure the extension starts with an asterisk for the search
+    if not file_extension.startswith("*"):
+        file_extension = f"*{file_extension}"
+
+    # Combine pattern and extension into a complete search pattern
+    if pattern:
+        full_pattern = f"*{pattern}*{file_extension}"
+    else:
+        full_pattern = file_extension  # Use extension only if no pattern is provided
 
     # Prompt the user to select the destination directory where the .txt file will be saved
     dest_directory = filedialog.askdirectory(title="Select Destination Directory")
@@ -681,23 +703,55 @@ def find_file():
     timestamp = time.strftime("%Y%m%d%H%M%S")
     output_file_path = os.path.join(dest_directory, f"vaila_find_{timestamp}.txt")
 
+    # Variables to count files and total size
+    extension_count = 0
+    total_size_bytes = 0
+    found_files = []
+
     try:
+        # Walk through the source directory and find matching files or directories
+        for root, dirs, files in os.walk(src_directory):
+            # Match files and directories based on the search pattern
+            for name in dirs + files:
+                if fnmatch.fnmatch(name, full_pattern):
+                    # Write the relative file path to the list
+                    relative_path = os.path.relpath(
+                        os.path.join(root, name), src_directory
+                    )
+                    found_files.append(relative_path)
+
+            # Count files with the specified extension and calculate their sizes
+            for file in files:
+                if fnmatch.fnmatch(file, full_pattern):
+                    extension_count += 1
+                    total_size_bytes += os.path.getsize(os.path.join(root, file))
+
+        # Convert total size to megabytes
+        total_size_mb = total_size_bytes / (1024 * 1024)
+
+        # Write the header with summary information to the file
         with open(output_file_path, "w") as output_file:
-            # Walk through the source directory and find matching files or directories
-            for root, dirs, files in os.walk(src_directory):
-                # Match files and directories based on the search pattern
-                for name in dirs + files:
-                    if fnmatch.fnmatch(name, search_pattern):
-                        # Write the relative file path to the output file
-                        relative_path = os.path.relpath(
-                            os.path.join(root, name), src_directory
-                        )
-                        output_file.write(f"{relative_path}\n")
+            output_file.write(f"Summary of Search Results\n")
+            output_file.write(f"Pattern Searched: {full_pattern}\n")
+            output_file.write(f"Number of Files Found: {extension_count}\n")
+            output_file.write(f"Total Size: {total_size_mb:.2f} MB\n\n")
+            output_file.write("File Tree:\n")
+            output_file.write("\n".join(found_files))
+
+        # Print the results in the terminal
+        print(f"Summary of Search Results")
+        print(f"Pattern Searched: {full_pattern}")
+        print(f"Number of Files Found: {extension_count}")
+        print(f"Total Size: {total_size_mb:.2f} MB\n")
+        print("File Tree:")
+        for file in found_files:
+            print(file)
 
         # Show a success message after the operation is complete
         messagebox.showinfo(
             "Success",
-            f"Find results saved successfully to {output_file_path}.",
+            f"Find results saved successfully to {output_file_path}.\n"
+            f"Number of files with pattern '{pattern}' and extension {file_extension}: {extension_count}.",
         )
     except Exception as e:
         # Show an error message if something goes wrong

@@ -127,5 +127,5 @@ __all__ = [
     "merge_csv_files",
     "stack_csv_files",
     "process_videos_gui",
-    "get_median_brightness"
+    "get_median_brightness",
 ]
