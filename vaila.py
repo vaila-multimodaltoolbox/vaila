@@ -157,6 +157,42 @@ class Vaila(tk.Tk):
             AppKit.NSBundle.mainBundle().infoDictionary()["CFBundleName"] = "Vaila"
 
         self.create_widgets()
+        
+    def set_dimensions_based_on_os(self):
+        if platform.system() == "Darwin":
+            # Specific adjustments for macOS
+            self.button_width = 10
+            self.font_size = 11
+        elif platform.system() == "Windows":
+            # Specific adjustments for Windows
+            self.button_width = 12
+            self.font_size = 11
+        elif platform.system() == "Linux":
+            # Specific adjustments for Linux
+            self.button_width = 13
+            self.font_size = 11
+        else:
+            # Default values
+            self.button_width = 12
+            self.font_size = 11
+
+    def set_dimensions_based_on_os(self):
+        if platform.system() == "Darwin":
+            # Specific adjustments for macOS
+            self.button_width = 10
+            self.font_size = 11
+        elif platform.system() == "Windows":
+            # Specific adjustments for Windows
+            self.button_width = 12
+            self.font_size = 11
+        elif platform.system() == "Linux":
+            # Specific adjustments for Linux
+            self.button_width = 13
+            self.font_size = 11
+        else:
+            # Default values
+            self.button_width = 12
+            self.font_size = 11
 
     def set_dimensions_based_on_os(self):
         if platform.system() == "Darwin":
