@@ -329,6 +329,14 @@ class ColumnReorderGUI(tk.Tk):
         )
         mediapipe_button.grid(row=4, column=0, padx=5, pady=5, sticky="n")
 
+        # Button to convert Dvideo .dat files to vailá CSVs
+        dvideo_button = tk.Button(
+            button_frame,
+            text="Convert Dvideo to vailá",
+            command=lambda: batch_convert_dvideo(self.directory_path),
+        )
+        dvideo_button.grid(row=5, column=0, padx=5, pady=5, sticky="n")
+
         self.bind("<Return>", self.swap_columns)
         self.bind("d", self.delete_columns)
         self.bind("m", self.manual_selection)
@@ -875,6 +883,69 @@ class ColumnReorderGUI(tk.Tk):
                 stack_csv_files(base_file, stack_file, save_path, stack_position)
 
 
+def convert_dvideo_to_vaila(file_path, save_directory):
+    try:
+        # Read the .dat file with space-separated values
+        df = pd.read_csv(file_path, delim_whitespace=True, header=None)
+
+        # Calculate the number of points (assuming the first column is 'frame')
+        num_points = (df.shape[1] - 1) // 2
+
+        # Create headers in the format: frame, p1_x, p1_y, p2_x, p2_y, ..., pN_x, pN_y
+        headers = ["frame"] + [
+            f"p{i + 1}_x" if j % 2 == 0 else f"p{i + 1}_y"
+            for i in range(num_points)
+            for j in range(2)
+        ]
+        df.columns = headers
+
+        # Ensure the output formatting with a fixed number of decimal places
+        float_format = "%.6f"
+
+        # Create the output file path
+        base_name = os.path.splitext(os.path.basename(file_path))[0]
+        new_file_name = f"{base_name}_vaila.csv"
+        new_file_path = os.path.join(save_directory, new_file_name)
+
+        # Ensure save directory exists
+        if not os.path.exists(save_directory):
+            os.makedirs(save_directory)
+
+        # Save the dataframe as CSV with specified float format and headers
+        df.to_csv(new_file_path, index=False, float_format=float_format)
+        print(f"Converted Dvideo data saved to {new_file_path}")
+
+    except Exception as e:
+        print(f"Error converting {file_path}: {e}")
+
+
+def batch_convert_dvideo(directory_path):
+    if not directory_path:
+        print("No directory selected.")
+        return
+
+    dat_files = [f for f in os.listdir(directory_path) if f.endswith(".dat")]
+    if not dat_files:
+        print("No .dat files found in the directory.")
+        return
+
+    # Create a new directory with a timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    save_directory = os.path.join(
+        directory_path, f"Convert_Dvideo_to_vaila_{timestamp}"
+    )
+
+    if not os.path.exists(save_directory):
+        os.makedirs(save_directory)
+
+    # Convert each .dat file and save in the new directory
+    for file_name in dat_files:
+        file_path = os.path.join(directory_path, file_name)
+        convert_dvideo_to_vaila(file_path, save_directory)
+
+    print(f"All files have been converted and saved to {save_directory}")
+
+
 def rearrange_data_in_directory():
     root = tk.Tk()
     root.withdraw()
@@ -886,23 +957,29 @@ def rearrange_data_in_directory():
         print("No directory selected.")
         return
 
+    # Busca arquivos CSV no diretório
     file_names = sorted(
         [f for f in os.listdir(selected_directory) if f.endswith(".csv")]
     )
 
+    # Caso não existam arquivos CSV, continuar e abrir a GUI
     if not file_names:
         print("No CSV files found in the directory.")
-        return
+        file_names = []  # Lista vazia de arquivos para evitar erros
+        original_headers = []  # Lista vazia de headers
 
-    example_file = os.path.join(selected_directory, file_names[0])
-    original_headers = get_headers(example_file)
+    else:
+        # Pega headers do primeiro arquivo CSV se existir
+        example_file = os.path.join(selected_directory, file_names[0])
+        original_headers = get_headers(example_file)
 
-    print("-" * 80)
-    print("Original Headers:")
-    print(original_headers)
-    print("-" * 80)
-    print("")
+        print("-" * 80)
+        print("Original Headers:")
+        print(original_headers)
+        print("-" * 80)
+        print("")
 
+    # Abre a GUI sem arquivos CSV carregados
     app = ColumnReorderGUI(original_headers, file_names, selected_directory)
     app.mainloop()
 
