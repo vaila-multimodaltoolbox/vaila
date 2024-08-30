@@ -2,7 +2,7 @@
 File: filemanager.py
 
 Description:
-This script, named `filemanager.py`, is designed to manage files and directories efficiently. It supports various operations, including importing, converting, exporting, copying, moving, removing, and finding files with specific patterns. The script leverages the Tkinter graphical interface to facilitate user interaction, enabling the selection of files and directories through an easy-to-use GUI.
+This script, named filemanager.py, is designed to manage files and directories efficiently. It supports various operations, including importing, converting, exporting, copying, moving, removing, and finding files with specific patterns. The script leverages the Tkinter graphical interface to facilitate user interaction, enabling the selection of files and directories through an easy-to-use GUI.
 
 Version: 1.2
 Last Updated: 2024-08-29
@@ -731,7 +731,7 @@ def find_file():
 
         # Write the header with summary information to the file
         with open(output_file_path, "w") as output_file:
-            output_file.write(f"Summary of Search Results\n")
+            output_file.write("Summary of Search Results\n")
             output_file.write(f"Pattern Searched: {full_pattern}\n")
             output_file.write(f"Number of Files Found: {extension_count}\n")
             output_file.write(f"Total Size: {total_size_mb:.2f} MB\n\n")
@@ -739,7 +739,7 @@ def find_file():
             output_file.write("\n".join(found_files))
 
         # Print the results in the terminal
-        print(f"Summary of Search Results")
+        print("Summary of Search Results")
         print(f"Pattern Searched: {full_pattern}")
         print(f"Number of Files Found: {extension_count}")
         print(f"Total Size: {total_size_mb:.2f} MB\n")
