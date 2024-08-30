@@ -26,12 +26,14 @@
 # you must select the control window.
 # --------------------------------------------------
 
-
 import cv2
 import os
 import pandas as pd
 from tkinter import filedialog, Tk, Toplevel, Scale, HORIZONTAL, Button, messagebox
 import numpy as np
+
+# Variável global para rastrear se o salvamento foi solicitado
+should_save = False
 
 
 def show_help_message():
@@ -125,6 +127,7 @@ def save_coordinates(video_path, coordinates, total_frames):
 
 
 def get_pixel_coordinates(video_path, initial_coordinates=None):
+    global should_save
     cap = cv2.VideoCapture(video_path)
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     frame_count = 0
@@ -282,7 +285,16 @@ def get_pixel_coordinates(video_path, initial_coordinates=None):
         nonlocal paused
         paused = not paused
 
-    def close_video():
+    def close_video_without_saving():
+        global should_save
+        should_save = False  # Indica que não deve salvar
+        cap.release()
+        cv2.destroyAllWindows()
+        window.quit()
+
+    def save_and_close_video():
+        global should_save
+        should_save = True  # Indica que deve salvar
         cap.release()
         cv2.destroyAllWindows()
         window.quit()
@@ -307,8 +319,15 @@ def get_pixel_coordinates(video_path, initial_coordinates=None):
     play_pause_button = Button(window, text="Next Frame", command=toggle_play_pause)
     play_pause_button.pack(side="left")
 
-    close_button = Button(window, text="Close Video", command=close_video)
+    close_button = Button(
+        window, text="Close video", command=close_video_without_saving
+    )
     close_button.pack(side="right")
+
+    save_close_button = Button(
+        window, text="Save and close video", command=save_and_close_video
+    )
+    save_close_button.pack(side="right")
 
     cv2.namedWindow("Frame")
     cv2.setMouseCallback("Frame", click_event)
@@ -338,7 +357,10 @@ def main():
             )
         else:
             coordinates, total_frames = get_pixel_coordinates(video_path)
-        save_coordinates(video_path, coordinates, total_frames)
+
+        # Verifica se deve salvar
+        if should_save:
+            save_coordinates(video_path, coordinates, total_frames)
 
 
 if __name__ == "__main__":
