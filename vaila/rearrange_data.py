@@ -225,20 +225,34 @@ class ColumnReorderGUI(tk.Tk):
         self.rearranged_path = os.path.join(directory_path, "data_rearranged")
         self.history = []
 
-        base_file_name = file_names[0]
+        # Verifique se não há arquivos CSV e simule um CSV vazio
+        if self.file_names == ["Empty"]:
+            print("No CSV files found. Simulating an empty CSV file.")
+            # Crie um DataFrame vazio com cabeçalhos simulados
+            self.df = pd.DataFrame(columns=["Column1", "Column2", "Column3"])
+            self.file_names = ["Simulated_Empty_File.csv"]
+            self.max_decimal_places = 2
+            self.scientific_notation = False
+        else:
+            base_file_name = file_names[0]
+            
+            # Detectar precisão e notação científica no primeiro arquivo
+            self.max_decimal_places, self.scientific_notation = (
+                detect_precision_and_notation(os.path.join(directory_path, base_file_name))
+            )
 
-        # Detect precision and scientific notation in the first file
-        self.max_decimal_places, self.scientific_notation = (
-            detect_precision_and_notation(os.path.join(directory_path, base_file_name))
-        )
+            # Ler CSV com Pandas
+            self.df = pd.read_csv(os.path.join(directory_path, base_file_name))
 
-        # Read CSV with Pandas
-        self.df = pd.read_csv(os.path.join(directory_path, base_file_name))
-
-        self.title(f"Reorder CSV Columns - {base_file_name}")
+        # Continue carregando a GUI original
+        self.title(f"Reorder CSV Columns - {self.file_names[0]}")
         self.geometry("1024x960")
 
-        # Scrollbar
+        # Continuação da inicialização da interface gráfica
+        self.setup_gui()
+
+    def setup_gui(self):
+        # Função para configurar os elementos da GUI
         main_frame = tk.Frame(self)
         main_frame.pack(fill=tk.BOTH, expand=True)
 
@@ -256,7 +270,6 @@ class ColumnReorderGUI(tk.Tk):
         scrollbar.pack(side="right", fill="y")
         canvas.pack(side="left", fill="both", expand=True)
 
-        # Instructions and buttons at the top
         self.instructions = tk.Label(
             scrollable_frame,
             text="Click to select a Column and press Enter to reorder. Select and press 'd' to delete.\nPress 'm' to manually select range. Press 'l' to edit rows. Press Ctrl+S to save. Press Ctrl+Z to undo.\nPress Esc to save and exit.",
@@ -264,7 +277,6 @@ class ColumnReorderGUI(tk.Tk):
         )
         self.instructions.grid(row=0, column=0, columnspan=2, pady=10, sticky="n")
 
-        # Frame for headers and listboxes with adjusted height
         self.header_frame = tk.Frame(scrollable_frame)
         self.header_frame.grid(
             row=1, column=0, columnspan=3, pady=10, padx=10, sticky="nsew"
@@ -298,7 +310,6 @@ class ColumnReorderGUI(tk.Tk):
         self.update_listbox()
         self.update_shape_label()
 
-        # Buttons for unit conversion and reference system modification
         button_frame = tk.Frame(scrollable_frame)
         button_frame.grid(row=1, column=3, pady=10, padx=10, sticky="ns")
 
@@ -312,7 +323,6 @@ class ColumnReorderGUI(tk.Tk):
         )
         self.modify_labref_button.grid(row=1, column=0, padx=5, pady=5, sticky="n")
 
-        # Adding buttons for merge and stack
         merge_button = tk.Button(button_frame, text="Merge CSV", command=self.merge_csv)
         merge_button.grid(row=2, column=0, padx=5, pady=5, sticky="n")
 
@@ -321,7 +331,6 @@ class ColumnReorderGUI(tk.Tk):
         )
         stack_button.grid(row=3, column=0, padx=5, pady=5, sticky="n")
 
-        # Button to convert MediaPipe CSVs
         mediapipe_button = tk.Button(
             button_frame,
             text="Convert MediaPipe to vailá",
@@ -329,7 +338,6 @@ class ColumnReorderGUI(tk.Tk):
         )
         mediapipe_button.grid(row=4, column=0, padx=5, pady=5, sticky="n")
 
-        # Button to convert Dvideo .dat files to vailá CSVs
         dvideo_button = tk.Button(
             button_frame,
             text="Convert Dvideo to vailá",
@@ -348,9 +356,14 @@ class ColumnReorderGUI(tk.Tk):
     def update_listbox(self):
         self.header_listbox.delete(0, tk.END)
         self.order_listbox.delete(0, tk.END)
-        for i, header in enumerate(self.current_order):
-            self.order_listbox.insert(tk.END, i + 1)
-            self.header_listbox.insert(tk.END, f"{i + 1}: {header}")
+
+        # Se não houver arquivos, exibir "Empty"
+        if self.file_names == ["Empty"]:
+            self.header_listbox.insert(tk.END, "No CSV files found.")
+        else:
+            for i, header in enumerate(self.current_order):
+                self.order_listbox.insert(tk.END, i + 1)
+                self.header_listbox.insert(tk.END, f"{i + 1}: {header}")
 
     def update_shape_label(self):
         shape = (self.df.shape[0], len(self.current_order))
@@ -965,9 +978,8 @@ def rearrange_data_in_directory():
     # Caso não existam arquivos CSV, continuar e abrir a GUI
     if not file_names:
         print("No CSV files found in the directory.")
-        file_names = []  # Lista vazia de arquivos para evitar erros
+        file_names = ["Empty"]  # Marcar como 'Empty' quando não há arquivos
         original_headers = []  # Lista vazia de headers
-
     else:
         # Pega headers do primeiro arquivo CSV se existir
         example_file = os.path.join(selected_directory, file_names[0])
