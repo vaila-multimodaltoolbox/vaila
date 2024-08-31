@@ -501,7 +501,7 @@ dependencies:
       - libclang==18.1.1
       - lxml==5.3.0
       - markdown==3.6
-      - mediapipe==0.10.14
+      - mediapipe==0.10.15
       - ml-dtypes==0.3.2
       - namex==0.0.8
       - opencv-contrib-python==4.10.0.84
