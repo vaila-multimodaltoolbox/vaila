@@ -235,10 +235,12 @@ class ColumnReorderGUI(tk.Tk):
             self.scientific_notation = False
         else:
             base_file_name = file_names[0]
-            
+
             # Detectar precisão e notação científica no primeiro arquivo
             self.max_decimal_places, self.scientific_notation = (
-                detect_precision_and_notation(os.path.join(directory_path, base_file_name))
+                detect_precision_and_notation(
+                    os.path.join(directory_path, base_file_name)
+                )
             )
 
             # Ler CSV com Pandas
@@ -252,7 +254,7 @@ class ColumnReorderGUI(tk.Tk):
         self.setup_gui()
 
     def setup_gui(self):
-        # Função para configurar os elementos da GUI
+        # Function to set up the GUI elements
         main_frame = tk.Frame(self)
         main_frame.pack(fill=tk.BOTH, expand=True)
 
@@ -275,11 +277,11 @@ class ColumnReorderGUI(tk.Tk):
             text="Click to select a Column and press Enter to reorder. Select and press 'd' to delete.\nPress 'm' to manually select range. Press 'l' to edit rows. Press Ctrl+S to save. Press Ctrl+Z to undo.\nPress Esc to save and exit.",
             font=("default", 14),
         )
-        self.instructions.grid(row=0, column=0, columnspan=2, pady=10, sticky="n")
+        self.instructions.grid(row=0, column=0, columnspan=3, pady=10, sticky="n")
 
         self.header_frame = tk.Frame(scrollable_frame)
         self.header_frame.grid(
-            row=1, column=0, columnspan=3, pady=10, padx=10, sticky="nsew"
+            row=1, column=0, columnspan=2, pady=10, padx=10, sticky="nsew"
         )
 
         self.number_label = tk.Label(
@@ -310,8 +312,9 @@ class ColumnReorderGUI(tk.Tk):
         self.update_listbox()
         self.update_shape_label()
 
-        button_frame = tk.Frame(scrollable_frame)
-        button_frame.grid(row=1, column=3, pady=10, padx=10, sticky="ns")
+        # Adjust the button frame to be placed next to the column names listbox
+        button_frame = tk.Frame(self.header_frame)
+        button_frame.grid(row=1, column=2, padx=10, pady=10, sticky="ns")
 
         self.convert_button = tk.Button(
             button_frame, text="Convert Units", command=self.convert_units
@@ -345,6 +348,7 @@ class ColumnReorderGUI(tk.Tk):
         )
         dvideo_button.grid(row=5, column=0, padx=5, pady=5, sticky="n")
 
+        # Bind events to functions
         self.bind("<Return>", self.swap_columns)
         self.bind("d", self.delete_columns)
         self.bind("m", self.manual_selection)
