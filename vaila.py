@@ -26,8 +26,7 @@ import signal
 import platform
 from rich import print
 import tkinter as tk
-from tkinter import messagebox, filedialog
-from tkinter import ttk
+from tkinter import messagebox, filedialog, ttk, Toplevel, Label, Button
 from PIL import Image, ImageTk
 
 from vaila import (
@@ -158,7 +157,6 @@ class Vaila(tk.Tk):
 
         self.create_widgets()
 
-
     def set_dimensions_based_on_os(self):
         if platform.system() == "Darwin":
             # Specific adjustments for macOS
@@ -176,7 +174,6 @@ class Vaila(tk.Tk):
             # Default values
             self.button_width = 12
             self.font_size = 11
-
 
     def create_widgets(self):
         button_width = self.button_width  # Use o valor dinâmico ajustado
@@ -784,15 +781,29 @@ class Vaila(tk.Tk):
         rearrange_data_in_directory()
 
     def convert_c3d_csv(self):
-        action = messagebox.askquestion(
-            "Choose Action",
-            "Select:\n(No) CSV -> C3D\n(Yes) C3D -> CSV",
-            icon="question",
+        # Cria uma nova janela para a escolha da ação
+        window = Toplevel()
+        window.title("Choose Action")
+
+        # Mensagem para o usuário
+        label = Label(window, text="Which conversion would you like to perform?")
+        label.pack(pady=10)
+
+        # Botão para C3D -> CSV
+        button_c3d_to_csv = Button(
+            window,
+            text="C3D -> CSV",
+            command=lambda: [convert_c3d_to_csv(), window.destroy()],
         )
-        if action == "yes":
-            convert_c3d_to_csv()
-        else:
-            convert_csv_to_c3d()
+        button_c3d_to_csv.pack(side="left", padx=20, pady=20)
+
+        # Botão para CSV -> C3D
+        button_csv_to_c3d = Button(
+            window,
+            text="CSV -> C3D",
+            command=lambda: [convert_csv_to_c3d(), window.destroy()],
+        )
+        button_csv_to_c3d.pack(side="right", padx=20, pady=20)
 
     def count_frames_in_videos(self):
         count_frames_in_videos()
