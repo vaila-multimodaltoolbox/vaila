@@ -11,7 +11,7 @@ import os
 def show_vaila_message():
     window = tk.Toplevel()
     window.title("vailá")
-    window.geometry("800x720")
+    window.geometry("900x820")
 
     # Load the image
     image_path = os.path.join("vaila", "images", "vaila_logo.png")
@@ -78,4 +78,3 @@ def show_vaila_message():
 
 if __name__ == "__main__":
     show_vaila_message()
-
