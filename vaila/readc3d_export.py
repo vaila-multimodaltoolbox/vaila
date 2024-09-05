@@ -42,24 +42,31 @@ Notes:
 """
 
 import os
-import dask.dataframe as dd
 import pandas as pd
 from ezc3d import c3d
 from datetime import datetime
 from tkinter import Tk, filedialog, messagebox
 from tqdm import tqdm
+import numpy as np
 
 
 def importc3d(dat):
     datac3d = c3d(dat)
     print(f"\nProcessing file: {dat}")
     print(f'Number of markers = {datac3d["parameters"]["POINT"]["USED"]["value"][0]}')
+
     point_data = datac3d["data"]["points"]
     points_residuals = datac3d["data"]["meta_points"]["residuals"]
     analogs = datac3d["data"]["analogs"]
     marker_labels = datac3d["parameters"]["POINT"]["LABELS"]["value"]
     analog_labels = datac3d["parameters"]["ANALOG"]["LABELS"]["value"]
-    markers = point_data[0:3, :, :].T.reshape(-1, len(marker_labels) * 3)
+
+    # Verifica se há dados de pontos
+    if datac3d["parameters"]["POINT"]["USED"]["value"][0] > 0:
+        markers = point_data[0:3, :, :].T.reshape(-1, len(marker_labels) * 3)
+    else:
+        markers = np.array([])  # Usa um array vazio do NumPy
+
     marker_freq = datac3d["header"]["points"]["frame_rate"]
     analog_freq = datac3d["header"]["analogs"]["frame_rate"]
 
@@ -97,6 +104,13 @@ def save_info_file(
             f.write(f"{label}\n")
 
 
+def save_empty_file(file_path):
+    # Save an empty CSV file
+    print(f"Saving empty file: {file_path}")
+    with open(file_path, "w") as f:
+        f.write("")
+
+
 def save_to_files(
     markers,
     marker_labels,
@@ -115,86 +129,86 @@ def save_to_files(
         output_dir, "multimodal_c3d_to_csv", f"{file_name}_{timestamp}"
     )
     os.makedirs(dir_name, exist_ok=True)
+    print(f"Directory created: {dir_name}")
 
     # Prepare marker columns
     marker_columns = [
         f"{label}_{axis}" for label in marker_labels for axis in ["X", "Y", "Z"]
     ]
-    markers_df = pd.DataFrame(markers, columns=marker_columns)
 
-    # Add time column to markers_df
-    num_marker_frames = markers_df.shape[0]
-    marker_time_column = pd.Series(
-        [f"{i / marker_freq:.3f}" for i in range(num_marker_frames)], name="Time"
-    )
-    markers_df.insert(0, "Time", marker_time_column)
+    # Save markers data
+    if markers.size > 0:
+        markers_df = pd.DataFrame(markers, columns=marker_columns)
+        markers_df.insert(
+            0,
+            "Time",
+            pd.Series(
+                [f"{i / marker_freq:.3f}" for i in range(markers_df.shape[0])],
+                name="Time",
+            ),
+        )
+        print(f"Saving markers CSV for {file_name}")
+        markers_df.to_csv(
+            os.path.join(dir_name, f"{file_name}_markers.csv"), index=False
+        )
+    else:
+        print(f"No markers found for {file_name}, saving empty file.")
+        save_empty_file(os.path.join(dir_name, f"{file_name}_markers.csv"))
 
-    # Convert to Dask DataFrame
-    markers_ddf = dd.from_pandas(markers_df, npartitions=10)
+    # Save analog data
+    if analogs.size > 0:
+        analogs_df = pd.DataFrame(analogs.squeeze(axis=0).T, columns=analog_labels)
+        analogs_df.insert(
+            0,
+            "Time",
+            pd.Series(
+                [f"{i / analog_freq:.3f}" for i in range(analogs_df.shape[0])],
+                name="Time",
+            ),
+        )
+        print(f"Saving analogs CSV for {file_name}")
+        analogs_df.to_csv(
+            os.path.join(dir_name, f"{file_name}_analogs.csv"), index=False
+        )
+    else:
+        print(f"No analogs found for {file_name}, saving empty file.")
+        save_empty_file(os.path.join(dir_name, f"{file_name}_analogs.csv"))
 
-    # Prepare analog data
-    analogs = analogs.squeeze(
-        axis=0
-    ).T  # Remove the extra dimension and transpose to have time in rows
-    analogs_df = pd.DataFrame(analogs, columns=analog_labels)
+    # Save points residuals data
+    if points_residuals.size > 0:
+        points_residuals_df = pd.DataFrame(points_residuals.squeeze(axis=0).T)
+        points_residuals_df.insert(
+            0,
+            "Time",
+            pd.Series(
+                [f"{i / marker_freq:.3f}" for i in range(points_residuals_df.shape[0])],
+                name="Time",
+            ),
+        )
+        print(f"Saving points residuals CSV for {file_name}")
+        points_residuals_df.to_csv(
+            os.path.join(dir_name, f"{file_name}_points_residuals.csv"), index=False
+        )
+    else:
+        print(f"No points residuals found for {file_name}, saving empty file.")
+        save_empty_file(os.path.join(dir_name, f"{file_name}_points_residuals.csv"))
 
-    # Add time column to analogs_df
-    num_analog_frames = analogs_df.shape[0]
-    analog_time_column = pd.Series(
-        [f"{i / analog_freq:.3f}" for i in range(num_analog_frames)], name="Time"
-    )
-    analogs_df.insert(0, "Time", analog_time_column)
-
-    # Convert to Dask DataFrame
-    analogs_ddf = dd.from_pandas(analogs_df, npartitions=10)
-
-    # Prepare points residuals
-    points_residuals_df = pd.DataFrame(points_residuals.squeeze(axis=0).T)
-
-    # Add time column to points_residuals_df
-    num_points_frames = points_residuals_df.shape[0]
-    points_time_column = pd.Series(
-        [f"{i / marker_freq:.3f}" for i in range(num_points_frames)], name="Time"
-    )
-    points_residuals_df.insert(0, "Time", points_time_column)
-
-    # Convert to Dask DataFrame
-    points_residuals_ddf = dd.from_pandas(points_residuals_df, npartitions=10)
-
-    # Save to CSV
-    markers_ddf.to_csv(
-        os.path.join(dir_name, f"{file_name}_markers.csv"),
-        index=False,
-        single_file=True,
-    )
-    analogs_ddf.to_csv(
-        os.path.join(dir_name, f"{file_name}_analogs.csv"),
-        index=False,
-        single_file=True,
-    )
-    points_residuals_ddf.to_csv(
-        os.path.join(dir_name, f"{file_name}_points_residuals.csv"),
-        index=False,
-        single_file=True,
-    )
-
+    # Optionally save to Excel
     if save_excel:
-        # Save to Excel (using pandas)
         print("Saving to Excel. This process can take a long time...")
         with pd.ExcelWriter(
             os.path.join(dir_name, f"{file_name}.xlsx"), engine="openpyxl"
         ) as writer:
-            markers_ddf.compute().to_excel(
-                writer, sheet_name="Markers", index=False, float_format="%.7f"
-            )
-            analogs_ddf.compute().to_excel(
-                writer, sheet_name="Analogs", index=False, float_format="%.7f"
-            )
-            points_residuals_ddf.compute().to_excel(
-                writer, sheet_name="Points Residuals", index=False, float_format="%.7f"
-            )
+            if markers.size > 0:
+                markers_df.to_excel(writer, sheet_name="Markers", index=False)
+            if analogs.size > 0:
+                analogs_df.to_excel(writer, sheet_name="Analogs", index=False)
+            if points_residuals.size > 0:
+                points_residuals_df.to_excel(
+                    writer, sheet_name="Points Residuals", index=False
+                )
 
-    # Save info file
+    # Save the info file
     save_info_file(
         marker_labels, marker_freq, analog_labels, analog_freq, dir_name, file_name
     )
@@ -204,16 +218,14 @@ def save_to_files(
 
 def convert_c3d_to_csv():
     root = Tk()
-    root.withdraw()  # Hide the root window
+    root.withdraw()
 
-    # Perguntar ao usuário se deseja salvar como Excel
     save_excel = messagebox.askyesno(
         "Save as Excel",
         "Do you want to save the data as Excel files? This process can be very slow.",
     )
     print(f"Debug: save_excel = {save_excel}")
 
-    # Pedir diretórios de entrada e saída
     input_directory = filedialog.askdirectory(title="Select Input Directory")
     print(f"Debug: input_directory = {input_directory}")
 
@@ -221,13 +233,18 @@ def convert_c3d_to_csv():
     print(f"Debug: output_directory = {output_directory}")
 
     if input_directory and output_directory:
-        # Find all .c3d files in the input directory and sort them
         c3d_files = sorted(
             [f for f in os.listdir(input_directory) if f.endswith(".c3d")]
         )
+        print(f"Found {len(c3d_files)} .c3d files in the input directory.")
 
-        # Process each .c3d file
-        for c3d_file in tqdm(c3d_files, desc="Processing C3D files"):
+        # Barra de progresso simplificada
+        progress_bar = tqdm(
+            total=len(c3d_files), desc="Processing C3D files", unit="file"
+        )
+
+        for c3d_file in c3d_files:
+            print(f"Processing file: {c3d_file}")
             try:
                 file_path = os.path.join(input_directory, c3d_file)
                 (
@@ -255,6 +272,10 @@ def convert_c3d_to_csv():
             except Exception as e:
                 print(f"Error processing {c3d_file}: {e}")
 
+            # Atualiza a barra de progresso após cada arquivo
+            progress_bar.update(1)
+
+        progress_bar.close()
         print("All files have been processed and saved successfully!")
         messagebox.showinfo(
             "Information", "C3D files conversion completed successfully!"

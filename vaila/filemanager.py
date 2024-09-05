@@ -74,7 +74,7 @@ def copy_file():
     pattern_label = tk.Label(pattern_window, text="Enter file patterns (one per line):")
     pattern_label.pack()
 
-    pattern_text = tk.Text(pattern_window, height=10, width=50)
+    pattern_text = tk.Text(pattern_window, height=44, width=60)
     pattern_text.pack()
 
     def on_submit():
