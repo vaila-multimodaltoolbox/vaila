@@ -24,6 +24,7 @@ v0.1 - Initial version with basic GUI layout and functionality.
 import os
 import signal
 import platform
+import subprocess
 from rich import print
 import tkinter as tk
 from tkinter import messagebox, filedialog, ttk, Toplevel, Label, Button
@@ -131,7 +132,7 @@ class Vaila(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("vailá - 0.1.0")
-        self.geometry("1280x720")
+        self.geometry("1280x820")
 
         # Set button dimensions and font size based on OS
         self.set_dimensions_based_on_os()  # Chamada para ajustar dimensões e fonte
@@ -228,13 +229,22 @@ class Vaila(tk.Tk):
         vaila_link.pack(side="left")
         vaila_link.bind("<Button-1>", lambda e: self.open_link())
 
-        unleash_label = tk.Label(
+        # Manter texto normal e transformar "imagination!" em um botão
+        unleash_label1 = tk.Label(
             subheader_label2_frame,
-            text=" and unleash your imagination!",
+            text=" and unleash your ",
             font=font,  # Usando a fonte ajustada
             anchor="center",
         )
-        unleash_label.pack(side="left")
+        unleash_label1.pack(side="left")
+
+        unleash_button = tk.Button(
+            subheader_label2_frame,
+            text="imagination!",
+            font=font,  # Usando a fonte ajustada
+            command=self.open_terminal_shell,
+        )
+        unleash_button.pack(side="left")
 
         # Create a canvas to add scrollbar
         canvas = tk.Canvas(self)
@@ -721,6 +731,7 @@ class Vaila(tk.Tk):
         )
         license_label.pack(pady=5)
 
+    # Class definition
     def rename_files(self):
         rename_files()
 
@@ -881,6 +892,38 @@ class Vaila(tk.Tk):
         import webbrowser
 
         webbrowser.open("https://github.com/vaila-multimodaltoolbox/vaila")
+
+    def open_terminal_shell(self):
+        # Open a new terminal with the Conda environment activated using xonsh
+        if platform.system() == "Darwin":  # For macOS
+            # Use osascript to open Terminal and activate the Conda environment, then start xonsh
+            subprocess.Popen(
+                [
+                    "osascript",
+                    "-e",
+                    'tell application "Terminal" to do script "source ~/anaconda3/etc/profile.d/conda.sh && conda activate vaila && xonsh"',
+                ]
+            )
+
+        elif platform.system() == "Windows":  # For Windows
+            # Open Command Prompt and activate the Conda environment using xonsh
+            subprocess.Popen(
+                "start cmd /K \"xonsh -c 'source C:\\ProgramData\\Miniconda3\\etc\\profile.d\\conda.sh && conda activate vaila'\"",
+                shell=True,
+            )
+
+        elif platform.system() == "Linux":  # For Linux
+            # Open a terminal and activate the Conda environment using xonsh
+            subprocess.Popen(
+                [
+                    "x-terminal-emulator",
+                    "-e",
+                    "bash",
+                    "-c",
+                    "source ~/anaconda3/etc/profile.d/conda.sh && conda activate vaila && xonsh",
+                ],
+                start_new_session=True,
+            )
 
     def quit_app(self):
         self.destroy()
