@@ -530,3 +530,7 @@ dependencies:
       - termcolor==2.4.0
       - werkzeug==3.0.3
       - wrapt==1.16.0
+      - pygments==2.18.0
+      - prompt-toolkit==3.0.47
+      - setproctitle==1.3.3
+      - 'xonsh[full]==0.18.3'
