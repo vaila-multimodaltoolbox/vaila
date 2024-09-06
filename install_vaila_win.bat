@@ -17,6 +17,20 @@ if %errorlevel% neq 0 (
     exit /b
 )
 
+REM Remove existing vailá Conda environment if it exists
+echo Checking if vailá Conda environment exists...
+conda env list | findstr /i "vaila" >nul 2>&1
+if %errorlevel% equ 0 (
+    echo Conda environment 'vaila' already exists. Removing it...
+    conda remove -n vaila --all -y
+    if %errorlevel% neq 0 (
+        echo Failed to remove existing 'vaila' environment.
+        exit /b
+    ) else (
+        echo Existing 'vaila' environment removed successfully.
+    )
+)
+
 REM Install FFmpeg using winget
 echo Installing FFmpeg...
 winget install ffmpeg -e --id Gyan.FFmpeg
