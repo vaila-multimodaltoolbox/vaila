@@ -106,92 +106,103 @@ Guilherme Manna Cesar<sup>1</sup>, Ligia Yumi Mochida<sup>1</sup>, Bruno Luiz de
 2 - School of Physical Education and Sport, University of São Paulo, Laboratory of Technology and Sports Performance Analysis  
 3 - School of Physical Education and Sport of Ribeirão Preto, University of São Paulo, Biomechanics and Motor Control Laboratory
 
-## Environment Setup
+## Environment Setup/Install
 
+* Install the complete [Anaconda](https://www.anaconda.com/download/success) virtual environment for your operating system. Remember to add the path and possible dependencies
 To set up the development environment, follow these steps:
 
 1. Clone the repository:
 
-```bash
-  git clone https://github.com/vaila-multimodaltoolbox/vaila
-  cd vaila-multimodaltoolbox/yaml_for_conda_env
-```
+    ```bash
+      git clone https://github.com/vaila-multimodaltoolbox/vaila
+      cd vaila
+    ```
 
-2. Create [Anaconda](https://www.anaconda.com/download/success) virtual environment and install the dependencies:
+2. Install the required environment and dependencies using the provided installation scripts:
 
-- For Linux:
+- For **Linux**:
 
-```bash
-  conda env create -f vaila_linux.yaml
-```
+    ```bash
+      ./install_vaila_linux.sh
+    ```
 
-- For macOS:
+- For **macOS**:
 
-```bash
-  conda env create -f vaila_macos.yaml
-```
+    ```bash
+      ./install_vaila_mac.sh
+    ```
 
-- For Windows:
+- For **Windows**:
 
-```bash
-  conda env create -f vaila_win.yaml
-```
+    Run the batch script:
 
-If you need to update the environment (replace `vaila_linux.yaml` or `vaila_macos.yaml`):
-
-```bash
-  conda env update -f vaila_win.yaml
-```
-
-1. Activate the conda environment:
-
-```bash
-  conda activate vaila
-```
-
-4. Run the toolbox to analyze data:
-
-- Windows 11
-  
-  ```bash
-   python vaila.py
-   ```
-
-- Linux and MacOS
-
-```bash
-  python3 vaila.py
-```
+    ```bat
+      install_vaila_win.bat
+    ```
 
 ### Running the Application
 
-To make it easier to launch the application, you can use the provided scripts for different operating systems.
+To run the vailá toolbox, activate the environment and start the application using the provided scripts.
 
 #### For macOS
 
 Use the script `mac_launch_vaila.sh`:
 
-```bash
-  ./mac_launch_vaila.sh
-```
+    ```bash
+      ./mac_launch_vaila.sh
+    ```
 
 #### For Linux
 
 Use the script `linux_launch_vaila.sh`:
 
-```bash
-  ./linux_launch_vaila.sh
-```
+    ```bash
+      ./linux_launch_vaila.sh
+    ```
 
 #### For Windows
 
-Use the batch script `win_launch_vaila.bat`:
+On Windows, after running `install_vaila_win.bat`, a button is added to the Windows Terminal. If the automatic insertion fails, manually add the following profile to your Windows Terminal `settings.json` file:
 
-```bat
-  win_launch_vaila.bat
-```
+    ```json
+    {
+        "colorScheme": "Vintage",
+        "commandline": "pwsh.exe -ExecutionPolicy ByPass -NoExit -Command \"& 'C:\\ProgramData\\anaconda3\\shell\\condabin\\conda-hook.ps1' ; conda activate 'vaila' ; python 'vaila.py' \"",
+        "guid": "{17ce5bfe-17ed-5f3a-ab15-5cd5baafed5b}",
+        "hidden": false,
+        "icon": "C:\\vaila_programs\\vaila\\vaila\\images\\vaila_ico.png",
+        "name": "vailá",
+        "startingDirectory": "C:\\vaila_programs\\vaila"
+    }
+    ```
 
-5. Follow the multimodal menu instructions in GUI or CLI:
+You can find the settings.json file at:
+    ```
+      %LocalAppData%\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json
+    ```
+
+Once configured, use the Windows Terminal profile named "vailá" to launch the multimodal-toolbox.
+If you prefer to do everything manually, simply activate the environment with
+
+    ```bash
+      conda activate vaila
+    ```
+
+4. Run the toolbox to analyze data:
+
+- Windows 11
+  
+    ```bash
+      python vaila.py
+    ```
+
+- Linux and MacOS
+
+    ```bash
+      python3 vaila.py
+    ```
+
+5. Follow the multimodal menu instructions in GUI or CLI click in `imagination!` button:
 
 <p align="center">
   <img src="docs/images/vaila_start_gui.png" alt="vailá GUI" width="800"/>
@@ -250,19 +261,22 @@ Choose an analysis option or file manager command:
 Here is an overview of the project structure:
 
 ```plaintext
-vaila
+vaila/vaila/
 ├── __init__.py
 ├── batchcut.py
 ├── cluster_analysis.py
 ├── cluster_analysis_cli.py
 ├── common_utils.py
 ├── compress_videos_h264.py
+├── compress_videos_h265.bat
 ├── compress_videos_h265.py
+├── compress_videos_h265.sh
 ├── compressvideo.py
 ├── data_processing.py
 ├── dialogsuser.py
 ├── dialogsuser_cluster.py
 ├── dlt2d.py
+├── dlt3d.py
 ├── drawboxe.py
 ├── emg_labiocom.py
 ├── extractpng.py
@@ -270,7 +284,10 @@ vaila
 ├── filtering.py
 ├── fonts
 │   └── mrrobot.ttf
+├── force_cube_fig.py
+├── forceplate_analysis.py
 ├── getpixelvideo.py
+├── gnss_analysis.py
 ├── images
 │   ├── cluster_config.png
 │   ├── eeferp.png
@@ -280,6 +297,7 @@ vaila
 │   ├── usp.png
 │   ├── vaila.ico
 │   ├── vaila_edge_w.png
+│   ├── vaila_ico.png
 │   ├── vaila_ico_mac.png
 │   ├── vaila_ico_mac_original.png
 │   ├── vaila_ico_trans.ico
@@ -288,22 +306,18 @@ vaila
 │   ├── vaila_trans_square.png
 │   ├── vaila_transp.ico
 │   └── vaila_white_square.png
-├── imu_analysis copy.py
 ├── imu_analysis.py
 ├── listjointsnames.py
 ├── maintools.py
 ├── markerless_2D_analysis.py
 ├── markerless_3D_analysis.py
 ├── mergestack.py
-├── metadatavid.sh
-├── mocap_analysis copy.py
 ├── mocap_analysis.py
 ├── modifylabref.py
 ├── modifylabref_cli.py
 ├── numberframes.py
 ├── plotting.py
 ├── readc3d_export.py
-├── readcsv copy.py
 ├── readcsv.py
 ├── readcsv_export.py
 ├── rearrange_data.py
@@ -311,25 +325,28 @@ vaila
 ├── rec2d.py
 ├── rec2d_one_dlt2d.py
 ├── rotation.py
-├── run_vector_coding copy.py
 ├── run_vector_coding.py
 ├── run_vector_coding_GUI.py
-├── showc3d copy.py
 ├── showc3d.py
 ├── showc3d_nodash.py
+├── sync_flash.py
 ├── syncvid.py
 ├── utils.py
 ├── vaila_manifest.py
+├── vaila_upscaler.py
 ├── vailaplot2d.py
 ├── vailaplot3d.py
 ├── vector_coding.py
-└── videos_synchronization.py
+└── videoprocessor.py
 ```
 
 ## Contribution
 
-We welcome contributions to improve and expand the functionality of this toolbox. To contribute, please fork the repository, create a branch for your changes, and submit a pull request.
+We encourage creativity and innovation to enhance and expand the functionality of this toolbox. You can make a difference by contributing to the project! To get involved, feel free to fork the repository, experiment with new ideas, and create a branch for your changes. When you're ready, submit a pull request so we can review and potentially integrate your contributions.
+
+Don't hesitate to learn, explore, and experiment. Be bold, and don't be afraid to make mistakes—every attempt is a step towards improvement!
 
 ## License
 
-This project is primarily licensed under the GNU Lesser General Public License v3.0. Note that the software is provided "as is", without warranty of any kind, express or implied. If you use the code or data, please cite us!
+This project is primarily licensed under the GNU Lesser General Public License v3.0. Please note that the software is provided "as is," without any warranty of any kind, either express or implied. If you use the code or data, we kindly ask that you cite our work. Let's collaborate and push the boundaries together!
+
