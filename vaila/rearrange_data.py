@@ -275,7 +275,7 @@ class ColumnReorderGUI(tk.Tk):
         self.instructions = tk.Label(
             scrollable_frame,
             text="Click to select a Column and press Enter to reorder. Select and press 'd' to delete.\nPress 'm' to manually select range. Press 'l' to edit rows. Press Ctrl+S to save. Press Ctrl+Z to undo.\nPress Esc to save and exit.",
-            font=("default", 14),
+            font=("default", 10),
         )
         self.instructions.grid(row=0, column=0, columnspan=3, pady=10, sticky="n")
 
