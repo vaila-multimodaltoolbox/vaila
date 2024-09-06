@@ -10,6 +10,18 @@ then
     exit 1
 fi
 
+# Check if the "vaila" environment already exists and remove it if it does
+if conda info --envs | grep -q "^vaila"; then
+    echo "Conda environment 'vaila' already exists. Removing it..."
+    conda remove -n vaila --all -y
+    if [ $? -eq 0 ]; then
+        echo "Existing 'vaila' environment removed successfully."
+    else
+        echo "Failed to remove existing 'vaila' environment."
+        exit 1
+    fi
+fi
+
 # Navigate to the directory containing the YAML file
 cd "$(dirname "$0")"
 
@@ -26,3 +38,4 @@ else
 fi
 
 echo "Installation completed."
+
