@@ -1,14 +1,15 @@
 """
 readcsv_export.py
+Author: Paulo R. P. Santiago
 Version: 2024-07-25 18:00:00
 """
 
 import numpy as np
 import pandas as pd
+import re
 import ezc3d
 import tkinter as tk
 from tkinter import filedialog, simpledialog, messagebox
-import os
 
 # Dictionary for metric unit conversions with abbreviations
 CONVERSIONS = {
@@ -40,57 +41,79 @@ CONVERSIONS = {
 }
 
 
-def create_c3d_from_csv(
-    points_df, analog_df=None, point_rate=100, analog_rate=1000, conversion_factor=1
-):
-    c3d = ezc3d.c3d()
+def sanitize_header(header):
+    """
+    Sanitize the CSV header to ensure it is in the correct format.
+    - Remove any existing suffixes (_X, _Y, _Z or .X, .Y, .Z) from column names.
+    - Replace any characters that are not letters, numbers, or underscores.
+    - Ensure each coordinate column has the correct suffix (_X, _Y, _Z).
+    - Fix any empty or incorrectly named columns.
+    """
+    new_header = [
+        header[0]
+    ]  # Keep the first column unchanged (typically 'Time' or 'Frame')
+    empty_column_counter = 0  # Counter for empty columns
 
-    # Extract marker labels
-    marker_labels = [col.rsplit("_", 1)[0] for col in points_df.columns[1::3]]
-    c3d["parameters"]["POINT"]["LABELS"]["value"] = marker_labels
+    for i, col in enumerate(header[1:]):  # Start from the second column
+        col = col.strip().upper()  # Remove extra spaces and convert to uppercase
 
-    # Convert points data to the required shape (4xNxT)
-    num_markers = len(marker_labels)
-    num_frames = len(points_df)
-    points_data = np.zeros((4, num_markers, num_frames))
+        if not col:  # Handle empty columns
+            base_name = f"VAILA{empty_column_counter // 3 + 1}"
+            suffix = ["_X", "_Y", "_Z"][empty_column_counter % 3]
+            new_col = base_name + suffix
+            empty_column_counter += 1
+        else:
+            # Remove any unwanted characters (anything not a letter, number, or underscore)
+            col = re.sub(r"[^A-Z0-9_]", "_", col)
 
-    for i, label in enumerate(marker_labels):
-        points_data[0, i, :] = points_df[f"{label}_X"].values * conversion_factor
-        points_data[1, i, :] = points_df[f"{label}_Y"].values * conversion_factor
-        points_data[2, i, :] = points_df[f"{label}_Z"].values * conversion_factor
-        points_data[3, i, :] = 1  # Homogeneous coordinate
+            # Remove existing suffixes "_X", "_Y", "_Z", ".X", ".Y", ".Z" if present
+            if col.endswith(("_X", "_Y", "_Z")):
+                col = col.rsplit("_", 1)[0]
 
-    c3d["data"]["points"] = points_data
-    c3d["parameters"]["POINT"]["RATE"]["value"] = [point_rate]
+            # Add the correct suffix based on the (i) position to ensure starting at "_X"
+            correct_suffix = ["_X", "_Y", "_Z"][(i) % 3]
+            new_col = col + correct_suffix
 
-    # Handle analog data if provided
-    if analog_df is not None:
-        analog_labels = list(analog_df.columns)[1:]
-        num_analog = len(analog_labels)
-        c3d["parameters"]["ANALOG"]["LABELS"]["value"] = analog_labels
-        analog_data = np.zeros((1, num_analog, num_frames))
+        new_header.append(new_col)
 
-        for i, label in enumerate(analog_labels):
-            analog_data[0, i, :] = analog_df[label].values
+    # Ensure all markers have their _X, _Y, and _Z coordinates
+    sanitized_header = []
+    i = 0
+    while i < len(new_header):
+        sanitized_header.append(new_header[i])
+        if i > 0 and (i + 2) < len(
+            new_header
+        ):  # Ensure we have space for a set of _X, _Y, _Z
+            base_name = new_header[i].rsplit("_", 1)[
+                0
+            ]  # Get the base name without the suffix
+            sanitized_header.append(base_name + "_Y")
+            sanitized_header.append(base_name + "_Z")
+            i += 2
+        i += 1
 
-        c3d["data"]["analogs"] = analog_data
-        c3d["parameters"]["ANALOG"]["RATE"]["value"] = [analog_rate]
+    return sanitized_header
 
-    # Write the C3D file
-    output_path = filedialog.asksaveasfilename(
-        defaultextension=".c3d", filetypes=[("C3D files", "*.c3d")]
-    )
-    if output_path:
-        c3d.write(output_path)
-        messagebox.showinfo("Success", f"C3D file saved to {output_path}")
-    else:
-        messagebox.showwarning("Warning", "Save operation cancelled.")
+
+def validate_and_filter_columns(df):
+    """
+    Filter only the columns that are in the correct format, ignoring the first column.
+    """
+    valid_columns = [df.columns[0]] + [
+        col
+        for col in df.columns[1:]
+        if "_" in col and col.split("_")[-1] in ["X", "Y", "Z"]
+    ]
+    return df[valid_columns]
 
 
 def get_conversion_factor():
+    """
+    Display a window to select the conversion factor for units.
+    """
     convert_window = tk.Toplevel()
     convert_window.title("Conversion Factor")
-    convert_window.geometry("400x300")
+    convert_window.geometry("400x600")
 
     unit_options = list(CONVERSIONS.keys())
 
@@ -134,6 +157,9 @@ def get_conversion_factor():
 
 
 def convert_csv_to_c3d():
+    """
+    Handle the CSV to C3D conversion process, including file selection and user inputs.
+    """
     root = tk.Tk()
     root.withdraw()
 
@@ -146,6 +172,12 @@ def convert_csv_to_c3d():
 
     point_df = pd.read_csv(point_file_path)
 
+    print(f"Loaded point data from {point_file_path}")
+    print(f"Point data header: {point_df.columns.tolist()}")
+    print(f"Point data shape: {point_df.shape}")
+
+    point_df.columns = sanitize_header(point_df.columns)
+
     use_analog = messagebox.askyesno(
         "Analog Data", "Do you have an analog data CSV file to add?"
     )
@@ -157,6 +189,11 @@ def convert_csv_to_c3d():
         )
         if analog_file_path:
             analog_df = pd.read_csv(analog_file_path)
+            analog_df.columns = sanitize_header(analog_df.columns)
+
+            print(f"Loaded analog data from {analog_file_path}")
+            print(f"Analog data header: {analog_df.columns.tolist()}")
+            print(f"Analog data shape: {analog_df.shape}")
 
     point_rate = simpledialog.askinteger(
         "Point Rate", "Enter the point data rate (Hz):", minvalue=1, initialvalue=100
@@ -172,12 +209,112 @@ def convert_csv_to_c3d():
 
     conversion_factor = get_conversion_factor()
 
+    sort_markers = messagebox.askyesno(
+        "Sort Markers", "Do you want to sort markers alphabetically?"
+    )
+
     try:
         create_c3d_from_csv(
-            point_df, analog_df, point_rate, analog_rate, conversion_factor
+            point_df,
+            analog_df,
+            point_rate,
+            analog_rate,
+            conversion_factor,
+            sort_markers,
         )
     except Exception as e:
         messagebox.showerror("Error", f"An error occurred while creating C3D file: {e}")
+
+
+def create_c3d_from_csv(
+    points_df,
+    analog_df=None,
+    point_rate=100,
+    analog_rate=1000,
+    conversion_factor=1,
+    sort_markers=False,
+):
+    """
+    Create a C3D file from the given point and analog data.
+    """
+    print("Creating C3D from CSV...")
+
+    c3d = ezc3d.c3d()
+    print("Initialized empty C3D object.")
+
+    points_df = validate_and_filter_columns(points_df)
+    print("Filtered and sanitized columns for points:", points_df.columns.tolist())
+
+    marker_labels = [col.rsplit("_", 1)[0] for col in points_df.columns[1::3]]
+    if sort_markers:
+        marker_labels.sort()
+    print("Extracted marker labels:", marker_labels)
+
+    c3d["parameters"]["POINT"]["UNITS"]["value"] = ["m"]
+    c3d["parameters"]["POINT"]["LABELS"]["value"] = marker_labels
+    c3d["parameters"]["POINT"]["RATE"]["value"] = [point_rate]
+
+    num_markers = len(marker_labels)
+    num_frames = len(points_df)
+    print(f"Number of markers: {num_markers}, Number of frames: {num_frames}")
+
+    points_data = np.zeros((4, num_markers, num_frames))
+    print("Initialized points data array with shape:", points_data.shape)
+
+    for i, label in enumerate(marker_labels):
+        try:
+            points_data[0, i, :] = points_df[f"{label}_X"].values * conversion_factor
+            points_data[1, i, :] = points_df[f"{label}_Y"].values * conversion_factor
+            points_data[2, i, :] = points_df[f"{label}_Z"].values * conversion_factor
+            points_data[3, i, :] = 1  # Coordenada homogênea
+        except KeyError as e:
+            print(f"Error accessing data for label '{label}': {e}")
+            raise
+
+    print("Points data populated successfully.")
+    c3d["data"]["points"] = points_data
+    print("Assigned points data to C3D.")
+
+    if analog_df is not None:
+        analog_labels = list(analog_df.columns[1:])
+        num_analog = len(analog_labels)
+        print("Analog labels:", analog_labels)
+        c3d["parameters"]["ANALOG"]["LABELS"]["value"] = analog_labels
+        c3d["parameters"]["ANALOG"]["RATE"]["value"] = [analog_rate]
+
+        num_analog_frames = analog_df.shape[0]
+        analog_data = np.zeros((1, num_analog, num_analog_frames))
+
+        for i, label in enumerate(analog_labels):
+            try:
+                analog_data[0, i, :] = analog_df[label].values
+            except KeyError as e:
+                print(f"Error accessing analog data for label '{label}': {e}")
+                raise
+
+        print(f"Analog data shape: {analog_data.shape}")
+        c3d["data"]["analogs"] = analog_data
+        print("Analog data assigned to C3D.")
+
+    print(f"Final POINT RATE: {c3d['parameters']['POINT']['RATE']['value']}")
+    print(f"Final ANALOG RATE: {c3d['parameters']['ANALOG']['RATE']['value']}")
+    print(f"Final POINT SHAPE: {c3d['data']['points'].shape}")
+    print(f"Final ANALOG SHAPE: {c3d['data']['analogs'].shape}")
+
+    output_path = filedialog.asksaveasfilename(
+        defaultextension=".c3d", filetypes=[("C3D files", "*.c3d")]
+    )
+    if output_path:
+        try:
+            c3d.write(output_path)
+            print(f"C3D file saved to {output_path}.")
+            messagebox.showinfo("Success", f"C3D file saved to {output_path}")
+        except Exception as e:
+            print(f"Error writing C3D file: {e}")
+            messagebox.showerror("Error", f"Failed to save C3D file: {e}")
+    else:
+        print("Save operation cancelled.")
+        messagebox.showwarning("Warning", "Save operation cancelled.")
 
 
 if __name__ == "__main__":
