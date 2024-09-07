@@ -228,7 +228,7 @@ def process_move(src_directory, file_extension, patterns):
 
 
 def remove_file():
-    # Lista de padrões perigosos e arquivos de sistema a serem protegidos
+    # List of dangerous patterns and system files to protect
     forbidden_patterns = ["*", ".", "/", "\\"]
     system_files = [
         "boot.ini",
@@ -257,30 +257,30 @@ def remove_file():
         messagebox.showerror("Error", "No root directory selected.")
         return
 
-    # Prompt the user to choose between removing by file extension or by directory/folder name
+    # Prompt the user to choose the removal type: by file extension, directory name, or file name pattern
     removal_type = simpledialog.askstring(
         "Removal Type",
-        "Enter 'ext' to remove by file extension or 'dir' to remove by directory/folder name:",
+        "Enter 'ext' to remove by file extension, 'dir' to remove by directory name, or 'name' to remove by file name pattern:",
     )
-    if not removal_type or removal_type not in ["ext", "dir"]:
+    if not removal_type or removal_type not in ["ext", "dir", "name"]:
         messagebox.showerror("Error", "Invalid removal type provided.")
         return
 
-    # Prompt the user to enter the file extension or directory name pattern
+    # Prompt the user to enter the file extension, directory name pattern, or file name pattern
     pattern = simpledialog.askstring(
         "Pattern",
-        "Enter the file extension (e.g., .csv) or directory/folder name pattern to remove:",
+        "Enter the file extension (e.g., .csv), directory name pattern, or file name pattern (e.g., *backup*):",
     )
     if not pattern:
         messagebox.showerror("Error", "No pattern provided.")
         return
 
-    # Verificar se o padrão está na lista de padrões proibidos
+    # Check if the pattern is in the list of forbidden patterns or system files
     if pattern in forbidden_patterns or pattern in system_files:
         messagebox.showerror("Error", "This pattern is forbidden for removal.")
         return
 
-    # Verificar se o padrão pode causar remoção de arquivos de sistema operacional
+    # Check if the pattern might cause removal of critical system files or directories
     if removal_type == "dir" and any(sys_file in pattern for sys_file in system_files):
         messagebox.showerror(
             "Error", "Attempting to remove a system directory is not allowed."
@@ -290,7 +290,7 @@ def remove_file():
     # Confirmation step - user must re-enter the pattern to confirm
     confirm_pattern = simpledialog.askstring(
         "Confirm Removal",
-        f"To confirm, please re-enter the {('extension' if removal_type == 'ext' else 'directory/folder name')} you want to remove:",
+        f"To confirm, please re-enter the {('extension' if removal_type == 'ext' else 'directory/folder name' if removal_type == 'dir' else 'file name pattern')} you want to remove:",
     )
     if confirm_pattern != pattern:
         messagebox.showerror(
@@ -308,18 +308,25 @@ def remove_file():
 
     try:
         if removal_type == "ext":
-            # Walk through the directories and remove files matching the extension
+            # Walk through directories and remove files matching the extension
             for root, dirs, files in os.walk(root_directory):
                 for file in files:
                     if file.endswith(pattern):
                         os.remove(os.path.join(root, file))
 
         elif removal_type == "dir":
-            # Walk through the directories and remove folders matching the name pattern
+            # Walk through directories and remove folders matching the name pattern
             for root, dirs, files in os.walk(root_directory):
                 for dir_name in dirs:
                     if pattern in dir_name:
                         shutil.rmtree(os.path.join(root, dir_name))
+
+        elif removal_type == "name":
+            # Walk through directories and remove files matching the file name pattern
+            for root, dirs, files in os.walk(root_directory):
+                for file in files:
+                    if fnmatch.fnmatch(file, pattern):
+                        os.remove(os.path.join(root, file))
 
         messagebox.showinfo("Success", f"Items matching '{pattern}' have been removed.")
     except Exception as e:
