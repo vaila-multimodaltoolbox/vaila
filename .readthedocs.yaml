@@ -11,4 +11,3 @@ python:
 
 mkdocs:
   configuration: docs/mkdocs.yml  # Point to your MkDocs configuration file inside the docs directory
-
