@@ -11,4 +11,3 @@ python:
 
 mkdocs:
   configuration: mkdocs.yml  # Path is now in the root directory
-
