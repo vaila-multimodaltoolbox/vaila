@@ -100,14 +100,6 @@ e você pode chamar esta ferramenta de vailá.
 É uma chamada à ação, um convite à iniciativa e à liberdade de explorar, experimentar e criar sem as limitações impostas por softwares comerciais caros.
 "vailá" significa "vai lá e faça!", encorajando todos a aproveitar o poder das ferramentas versáteis e integradas do "vailá: Versatile Anarcho Integrated Liberation Ánalysis in Multimodal Toolbox" para realizar análises com dados de múltiplos sistemas.
 
-## Authors
-
-Guilherme Manna Cesar<sup>1</sup>, Ligia Yumi Mochida<sup>1</sup>, Bruno Luiz de Souza Bedo<sup>2</sup>, Paulo Roberto Pereira Santiago<sup>3</sup>
-
-1 - University of North Florida, Laboratory of Applied Biomechanics and Engineering  
-2 - School of Physical Education and Sport, University of São Paulo, Laboratory of Technology and Sports Performance Analysis  
-3 - School of Physical Education and Sport of Ribeirão Preto, University of São Paulo, Biomechanics and Motor Control Laboratory
-
 ## Environment Setup/Install
 
 * Install the complete [Anaconda](https://www.anaconda.com/download/success) virtual environment for your operating system. Remember to add the path and possible dependencies
@@ -342,6 +334,15 @@ vaila/vaila/
 └── videoprocessor.py
 ```
 
+## Authors
+
+Paulo Roberto Pereira Santiago<sup>1,2</sup>, Abel Gonçalves Chinaglia<sup>2</sup>, Bruno Luiz de Souza Bedo<sup>3</sup>, Ligia Yumi Mochida<sup>4</sup>, Juan Aceros<sup>4,5</sup> Guilherme Manna Cesar<sup>4</sup>
+
+1 - Biomechanics and Motor Control Lab, School of Physical Education and Sport of Ribeirão Preto, University of São Paulo, Brazil
+2 - Graduate Program in Rehabilitation and Functional Performance, Ribeirão Preto Medical School, University of São Paulo, Brazil
+3 - Laboratory of Technology and Sports Performance Analysis, School of Physical Education and Sport, University of São Paulo, Brazil
+4 - Laboratory of Applied Biomechanics and Engineering, Brooks College of Health, University of North Florida, USA
+5 - College of Computing, Engineering and Construction, Mechanical Engineering, University of North Florida, USA
 ## Contribution
 
 We encourage creativity and innovation to enhance and expand the functionality of this toolbox. You can make a difference by contributing to the project! To get involved, feel free to fork the repository, experiment with new ideas, and create a branch for your changes. When you're ready, submit a pull request so we can review and potentially integrate your contributions.
