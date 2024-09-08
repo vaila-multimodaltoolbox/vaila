@@ -2,7 +2,39 @@
 readcsv_export.py
 Author: Paulo R. P. Santiago
 Version: 2024-07-25 18:00:00
+
+Description:
+This script provides functionality to convert CSV files containing point and analog data 
+into the C3D format, commonly used for motion capture data analysis. The script uses the 
+ezc3d library to create C3D files from CSV inputs while sanitizing and formatting the data
+to ensure compatibility with the C3D standard.
+
+Main Features:
+- Reads point and analog data from user-selected CSV files.
+- Sanitizes headers to remove unwanted characters and ensure proper naming conventions.
+- Handles user input for data rates, unit conversions, and sorting preferences.
+- Converts the CSV data into a C3D file with appropriately formatted point and analog data.
+- Provides a user interface for selecting files and entering required information using Tkinter.
+
+Functions:
+- sanitize_header: Cleans and formats CSV headers to conform to expected data formats.
+- convert_csv_to_c3d: Handles user input and coordinates the conversion process from CSV to C3D.
+- create_c3d_from_csv: Constructs the C3D file from the sanitized data.
+- validate_and_filter_columns: Validates and filters CSV columns to ensure correct formatting.
+- get_conversion_factor: Provides a user interface for unit conversion selection.
+
+Dependencies:
+- numpy: For numerical data handling.
+- pandas: For data manipulation and reading CSV files.
+- ezc3d: To create and write C3D files.
+- tkinter: For GUI elements, including file dialogs and message boxes.
+
+Usage:
+Run the script, select the necessary CSV files for point and analog data, provide the required 
+parameters, and save the resulting C3D file to the desired location.
+
 """
+
 
 import numpy as np
 import pandas as pd
@@ -38,6 +70,16 @@ CONVERSIONS = {
     "angular_rotation_per_second": (1, "rps"),
     "rpm": (1 / 60, "rpm"),
     "radians_per_second": (2 * 3.141592653589793 / 60, "rad/s"),
+    "radians_per_minute": (2 * 3.141592653589793 / 3600, "rad/min"),
+    "radians_per_hour": (2 * 3.141592653589793 / 86400, "rad/hr"),
+    "watts": (1, "W"),
+    "pounds": (0.453592, "lb"),
+    "joules": (1, "J"),
+    "kilojoules": (1000, "kJ"),
+    "watt_hours": (3600, "Wh"),
+    "kilojoules_per_hour": (3600, "kWh"),
+    "calories": (4.184, "cal"),
+    "kilocalories": (4.184, "kcal")
 }
 
 
