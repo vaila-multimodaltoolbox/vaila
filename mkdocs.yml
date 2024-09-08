@@ -5,8 +5,8 @@ edit_uri: tree/main/docs/
 
 theme:
   name: material
-  logo: docs/images/vaila_logo.png
-  favicon: docs/images/vaila_ico.png
+  logo: images/vaila_logo.png
+  favicon: images/vaila_ico.png
   palette:
     - scheme: default
       primary: black
