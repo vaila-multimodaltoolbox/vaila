@@ -10,4 +10,4 @@ python:
     - requirements: requirements-docs.txt  # Use the requirements file specific to documentation
 
 mkdocs:
-  configuration: docs/mkdocs.yml  # Point to your MkDocs configuration file inside the docs directory
+  configuration: configuration: mkdocs.yml  # Path is now in the root directory
