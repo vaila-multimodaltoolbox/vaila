@@ -34,3 +34,26 @@ markdown_extensions:
       custom_fences:
         - name: mermaid
           class: mermaid
+
+extra:
+  nav:
+    - Home: index.md
+    - Overview: overview.md
+    - "vailá Manifest": vaila-manifest.md
+    - "Available Multimodal Analysis":
+        - IMU Analysis: imu-analysis.md
+        - Kinematic Cluster Analysis: kinematic-cluster-analysis.md
+        - Kinematic Mocap Full Body Analysis: mocap-full-body-analysis.md
+        - Markerless 2D with video: markerless-2d-video.md
+        - Markerless 3D with multiple videos: markerless-3d-multiple-videos.md
+    - "Available Tools":
+        - Edit CSV: edit-csv.md
+        - Convert C3D data to CSV: convert-c3d-csv.md
+        - Metadata info: metadata-info.md
+        - "Cut videos based on list": cut-videos.md
+        - "Draw a black box around videos": draw-black-box.md
+        - "Compress videos to HEVC (H.265)": compress-hevc.md
+        - "Compress videos to H.264": compress-h264.md
+        - "Plot 2D": plot-2d.md
+    - Additional Commands: additional-commands.md
+    - "Environment Setup/Install": environment-setup.md
