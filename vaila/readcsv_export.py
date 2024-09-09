@@ -1,7 +1,7 @@
 """
 readcsv_export.py
 Author: Paulo R. P. Santiago
-Version: 2024-07-25 18:00:00
+Version: 2024-09-25 11:07:00
 
 Description:
 This script provides functionality to convert CSV files containing point and analog data 
