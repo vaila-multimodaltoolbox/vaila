@@ -35,7 +35,6 @@ parameters, and save the resulting C3D file to the desired location.
 
 """
 
-
 import numpy as np
 import pandas as pd
 import re
@@ -79,7 +78,7 @@ CONVERSIONS = {
     "watt_hours": (3600, "Wh"),
     "kilojoules_per_hour": (3600, "kWh"),
     "calories": (4.184, "cal"),
-    "kilocalories": (4.184, "kcal")
+    "kilocalories": (4.184, "kcal"),
 }
 
 
