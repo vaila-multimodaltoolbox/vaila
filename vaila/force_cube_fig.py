@@ -11,136 +11,280 @@ from scipy.signal import find_peaks
 from scipy.optimize import curve_fit
 from rich import print
 from ydata_profiling import ProfileReport
-
-print(
-    r"""
- _          ____  _        ____       __  __   | Biomechanics and Motor Control Laboratory
-| |        |  _ \(_)      /  __|     |  \/  |  | Developed by: Paulo R. P. Santiago
-| |    __ _| |_) |_  ___ |  /    ___ | \  / |  | paulosantiago@usp.br
-| |   / _' |  _ <| |/ _ \| |    / _ \| |\/| |  | University of Sao Paulo
-| |__' (_| | |_) | | (_) |  \__' (_) | |  | |  | https://orcid.org/0000-0002-9460-8847
-|____|\__'_|____/|_|\___/ \____|\___/|_|  |_|  | Date: 05 Jun 2024
-"""
+from tkinter import (
+    Tk,
+    Button,
+    filedialog,
+    Toplevel,
+    Checkbutton,
+    BooleanVar,
+    Canvas,
+    Scrollbar,
+    Frame,
+    messagebox,
+    simpledialog,
 )
 
 
-def read_csv_skip_header(filename, usecols):
-    try:
-        col_indices = list(map(int, usecols.split(",")))
-        loaddata = np.loadtxt(filename, delimiter=",", skiprows=1, usecols=col_indices)
-
-        # Read the CSV file using pandas, parsing the timestamp column
-        df = pd.read_csv(filename, usecols=[0], nrows=1)
-        timestamp = df.iat[0, 0]
-
-        return loaddata, timestamp
-
-    except Exception as e:
-        print(f"Error reading the CSV file: {str(e)}")
-        return None  # It might be better to let this exception propagate rather than returning None.
+def select_source_directory():
+    """
+    Opens a directory dialog to select the source directory containing CSV files.
+    """
+    root = Tk()
+    root.withdraw()  # Hides the main Tkinter window
+    source_dir = filedialog.askdirectory(title="Select Source Directory")
+    root.destroy()
+    return source_dir
 
 
-def create_main_output_directory(filename):
-    today_date = datetime.now().strftime("%Y%m%d")  # Formato AAAAMMDD
+def select_output_directory():
+    """
+    Opens a dialog to select the output directory for saving results.
+    """
+    root = Tk()
+    root.withdraw()  # Hide the main Tkinter window
+    output_dir = filedialog.askdirectory(title="Select Output Directory for Results")
+    root.destroy()
+    return output_dir
+
+
+def process_file(
+    file_path,
+    selected_column,
+    sidefoot,
+    dominance,
+    quality,
+    threshold,
+    output_dir,
+    Fs=1000,
+    generate_profile="No",
+):
+    """
+    Processes a single file for the selected column using the provided parameters.
+    """
+    # Load the file and extract the selected column
+    df = pd.read_csv(file_path)
+    data = df[selected_column].values
+
+    # Determine body weight from the data if not provided
+    body_weight_newton = np.median(data[10:110])
+    body_weight_kg = body_weight_newton / 9.81
+    databw_norm = data / (body_weight_kg * 9.81)
+
+    # Create output directory for the file
+    main_output_dir = create_main_output_directory(output_dir, file_path)
+
+    # Prompt user to select indices for the analysis
+    indices = makefig1(databw_norm, main_output_dir, file_path)
+
+    # Calculate active ranges
+    active_ranges = makefig2(databw_norm, indices, threshold)
+
+    # Apply the Butterworth filter to the normalized data
+    databw = butterworthfilt(databw_norm, cutoff=59, Fs=Fs)
+
+    # Perform the main analysis and generate figures
+    results = makefig3(
+        databw,
+        active_ranges,
+        body_weight_kg,
+        main_output_dir,
+        file_path,
+        sidefoot,
+        dominance,
+        quality,
+        os.path.basename(file_path),
+        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        indices,
+        Fs,
+    )
+
+    # Run statistics on the results
+    result_stats, result_profile = run_statistics(
+        results,
+        file_path,
+        main_output_dir,
+        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        generate_profile,
+    )
+
+    print(f"Processing completed for file: {file_path}")
+    return results, result_stats, result_profile
+
+
+def batch_process_directory(
+    source_dir,
+    selected_column,
+    output_dir,
+    sidefoot,
+    dominance,
+    quality,
+    threshold,
+    fs,
+    generate_profile,
+):
+    # Correct function definition with all required parameters
+    files = sorted([f for f in os.listdir(source_dir) if f.endswith(".csv")])
+    for file_name in files:
+        file_path = os.path.join(source_dir, file_name)
+        process_file(
+            file_path,
+            selected_column,
+            sidefoot,
+            dominance,
+            quality,
+            threshold,
+            output_dir,
+            Fs=fs,
+            generate_profile=generate_profile,
+        )
+
+
+def select_headers_and_load_data(file_path):
+    """
+    Displays a GUI to select the desired headers with Select All and Unselect All options
+    and loads the corresponding data for the selected headers.
+    """
+
+    def get_csv_headers(file_path):
+        """
+        Reads the headers from a CSV file.
+        """
+        df = pd.read_csv(file_path)
+        return list(df.columns), df
+
+    headers, df = get_csv_headers(file_path)
+    selected_headers = []
+
+    def on_select():
+        nonlocal selected_headers
+        selected_headers = [
+            header for header, var in zip(headers, header_vars) if var.get()
+        ]
+        selection_window.quit()  # Ends the main Tkinter loop
+        selection_window.destroy()  # Closes the selection window
+
+    def select_all():
+        for var in header_vars:
+            var.set(True)
+
+    def unselect_all():
+        for var in header_vars:
+            var.set(False)
+
+    selection_window = Toplevel()
+    selection_window.title("Select Headers")
+    selection_window.geometry(
+        f"{selection_window.winfo_screenwidth()}x{int(selection_window.winfo_screenheight()*0.9)}"
+    )
+
+    canvas = Canvas(selection_window)
+    scrollbar = Scrollbar(selection_window, orient="vertical", command=canvas.yview)
+    scrollable_frame = Frame(canvas)
+
+    scrollable_frame.bind(
+        "<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+    )
+
+    canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+    canvas.configure(yscrollcommand=scrollbar.set)
+
+    header_vars = [BooleanVar() for _ in headers]
+
+    num_columns = 7  # Number of columns for header labels
+
+    for i, label in enumerate(headers):
+        chk = Checkbutton(scrollable_frame, text=label, variable=header_vars[i])
+        chk.grid(row=i // num_columns, column=i % num_columns, sticky="w")
+
+    canvas.pack(side="left", fill="both", expand=True)
+    scrollbar.pack(side="right", fill="y")
+
+    btn_frame = Frame(selection_window)
+    btn_frame.pack(side="right", padx=10, pady=10, fill="y", anchor="center")
+
+    btn_select_all = Button(btn_frame, text="Select All", command=select_all)
+    btn_select_all.pack(side="top", pady=5)
+
+    btn_unselect_all = Button(btn_frame, text="Unselect All", command=unselect_all)
+    btn_unselect_all.pack(side="top", pady=5)
+
+    btn_select = Button(btn_frame, text="Confirm", command=on_select)
+    btn_select.pack(side="top", pady=5)
+
+    selection_window.mainloop()
+
+    if not selected_headers:
+        messagebox.showinfo("Info", "No headers were selected.")
+        return None, None
+
+    # Load the data for the selected headers
+    selected_data = df[selected_headers]
+
+    return selected_headers, selected_data
+
+
+def create_main_output_directory(output_dir, filename):
+    """
+    Creates a main output directory for results based on the output directory chosen by the user,
+    the current date, and the input filename.
+    """
+    today_date = datetime.now().strftime("%Y%m%d")  # Format YYYYMMDD
     base_filename = os.path.splitext(os.path.basename(filename))[0]
     main_output_dir = os.path.join(
-        os.getcwd(),
+        output_dir,  # Use the output directory chosen by the user
         f"Results_force_cube_analysis_{today_date}",
         f"Results_{base_filename}",
     )
+
+    # Verifica se o diretório de saída já existe, e se não, o cria
     if not os.path.exists(main_output_dir):
         os.makedirs(main_output_dir)
+
+    # Print para verificar o diretório de saída
+    print(f"Directory for saving results: {main_output_dir}")
+
     return main_output_dir
 
 
+def prompt_user_input():
+    # Correct function definition without parameters
+    root = Tk()
+    root.withdraw()  # Hide the main Tkinter window
+
+    sidefoot = simpledialog.askstring(
+        "Input", "Enter Sidefoot (R or L):", initialvalue="R"
+    )
+    dominance = simpledialog.askstring(
+        "Input", "Enter Dominance (R or L):", initialvalue="R"
+    )
+    quality = simpledialog.askinteger(
+        "Input", "Enter Quality (integer):", initialvalue=5
+    )
+    threshold = simpledialog.askfloat(
+        "Input", "Enter Threshold (float):", initialvalue=0.025
+    )
+    fs = simpledialog.askfloat(
+        "Input", "Enter Sampling Frequency (Fs):", initialvalue=1000.0
+    )
+    generate_profile = simpledialog.askstring(
+        "Input", "Generate Profiling Report? (Yes or No):", initialvalue="No"
+    )
+
+    root.destroy()
+    return sidefoot, dominance, quality, threshold, fs, generate_profile
+
+
 def butterworthfilt(data, cutoff=59, Fs=1000):
-    # Padding
+    """
+    Applies a Butterworth filter to the data.
+    """
     pad_length = 100
     padded_data = np.pad(data, (pad_length, pad_length), "edge")
-
     b, a = butter(4, cutoff / (Fs / 2), "low")
-
-    # Aplicação do filtro
     filtered_padded = filtfilt(b, a, padded_data)
-
-    # Remoção do padding
     filtered_data = filtered_padded[pad_length:-pad_length]
-    datafiltered = filtered_data
-    return datafiltered
-
-
-def makefig1(data, output_dir, filename):
-    """
-    Creates an interactive plot for selecting data points.
-    Space + Left Click to select, Right Click to remove last point, press 'Enter' to finish.
-
-    Parameters:
-        data (array-like): The dataset to plot for interaction.
-        output_dir (str): Directory to save the figure.
-        filename (str): Base name for the output file.
-
-    Returns:
-        list of int: The indices of selected points.
-    """
-    fig1, ax1 = plt.subplots()
-    ax1.plot(data)
-    ax1.set_title(
-        "Space + Left Click to select, Right Click to remove, press 'Enter' to finish"
-    )
-    ax1.set_xlabel("Sample Index")
-    ax1.set_ylabel("Force Value")
-    ax1.grid(True)
-
-    points = []
-    space_held = False  # Variable to track if Space is held down
-
-    def on_key_press(event):
-        nonlocal space_held
-        if event.key == " ":
-            space_held = True
-        elif event.key == "enter":
-            plt.close(fig1)  # Closes the figure on pressing 'Enter'
-
-    def on_key_release(event):
-        nonlocal space_held
-        if event.key == " ":
-            space_held = False
-
-    def onclick(event):
-        if (
-            space_held and event.button == 1
-        ):  # Check if Space is held and left mouse is clicked
-            x_value = event.xdata
-            if x_value is not None:
-                points.append((x_value, event.ydata))
-                ax1.axvline(x=x_value, color="red", linestyle="--")
-                fig1.canvas.draw()
-        elif event.button == 3:  # Right Click to remove the last point
-            if points:
-                points.pop()
-                ax1.cla()
-                ax1.plot(data)
-                ax1.grid(True)
-                for point in points:
-                    ax1.axvline(x=point[0], color="red", linestyle="--")
-                fig1.canvas.draw()
-
-    fig1.canvas.mpl_connect("button_press_event", onclick)
-    fig1.canvas.mpl_connect("key_press_event", on_key_press)
-    fig1.canvas.mpl_connect("key_release_event", on_key_release)
-
-    # Save the figure as a PNG file with _raw suffix inside the correct directory
-    base_filename = os.path.splitext(os.path.basename(filename))[0]
-    figure1_filename = os.path.join(output_dir, base_filename + "_raw.png")
-    plt.savefig(figure1_filename)
-    plt.show(block=True)  # Block is True to keep the figure open
-
-    if len(points) < 2:
-        print("At least two points required.")
-        sys.exit(1)
-
-    indices = [int(point[0]) for point in points]
-    return indices
+    return filtered_data
 
 
 def calculate_median(data, start, end, window=5):
@@ -181,58 +325,6 @@ def find_active_indices(section_data, start_median, end_median, threshold):
         end_active = len(section_data) - 1
 
     return start_active, end_active
-
-
-## FIGURE 2
-def makefig2(data, indices, threshold):
-    active_ranges = []
-    # Create a Figure 2 for all subplots
-    num_segments = len(indices) - 1
-    fig2, ax2 = plt.subplots(3, 3)  # 3x3 subplot matrix
-    ax2 = ax2.flatten()  # Flatten the array to simplify indexing
-
-    for i in range(min(num_segments, 9)):  # Limit to 9 segments for the 3x3 matrix
-        start = int(indices[i])  # Ensure index is integer
-        end = int(indices[i + 1])  # Ensure index is integer
-
-        # Validate indices within data boundaries
-        if end > len(data):
-            end = len(data)
-        if start >= len(data):
-            break  # Exit the loop if start is not within data length
-
-        section_data = data[start:end]
-        start_median, end_median = calculate_median(data, start, end)
-        start_active, end_active = find_active_indices(
-            section_data, start_median, end_median, threshold
-        )
-
-        adjusted_start = start + start_active
-        adjusted_end = start + end_active
-
-        # Plot data and markers
-        ax2[i].plot(np.arange(start, end), section_data)
-        ax2[i].axvline(x=adjusted_start, color="green", label="Start")
-        ax2[i].axvline(x=adjusted_end, color="red", label="End")
-        ax2[i].set_title(f"{i+1}: index {start} to {end}")
-        ax2[i].set_ylabel("Force (N)")
-        ax2[i].set_xlabel("Time (s)")
-        ax2[i].grid(True)
-        ax2[i].legend(
-            fontsize="xx-small",
-            loc="upper right",
-            handlelength=1,
-            handletextpad=0.2,
-            borderaxespad=0.2,
-            framealpha=0.6,
-        )
-        plt.tight_layout()
-
-        active_ranges.append([adjusted_start, adjusted_end])
-
-    plt.show()
-
-    return active_ranges
 
 
 def build_headers():
@@ -508,6 +600,135 @@ def calculate_cube_values(signal, Fs):
     )
 
 
+def makefig1(data, output_dir, filename):
+    """
+    Creates an interactive plot for selecting data points.
+    Space + Left Click to select, Right Click to remove last point, press 'Enter' to finish.
+
+    Parameters:
+        data (array-like): The dataset to plot for interaction.
+        output_dir (str): Directory to save the figure.
+        filename (str): Base name for the output file.
+
+    Returns:
+        list of int: The indices of selected points.
+    """
+    fig1, ax1 = plt.subplots()
+    ax1.plot(data)
+    ax1.set_title(
+        "Space + Left Click to select, Right Click to remove, press 'Enter' to finish"
+    )
+    ax1.set_xlabel("Sample Index")
+    ax1.set_ylabel("Force Value")
+    ax1.grid(True)
+
+    points = []
+    space_held = False  # Variable to track if Space is held down
+
+    def on_key_press(event):
+        nonlocal space_held
+        if event.key == " ":
+            space_held = True
+        elif event.key == "enter":
+            plt.close(fig1)  # Closes the figure on pressing 'Enter'
+
+    def on_key_release(event):
+        nonlocal space_held
+        if event.key == " ":
+            space_held = False
+
+    def onclick(event):
+        if (
+            space_held and event.button == 1
+        ):  # Check if Space is held and left mouse is clicked
+            x_value = event.xdata
+            if x_value is not None:
+                points.append((x_value, event.ydata))
+                ax1.axvline(x=x_value, color="red", linestyle="--")
+                fig1.canvas.draw()
+        elif event.button == 3:  # Right Click to remove the last point
+            if points:
+                points.pop()
+                ax1.cla()
+                ax1.plot(data)
+                ax1.grid(True)
+                for point in points:
+                    ax1.axvline(x=point[0], color="red", linestyle="--")
+                fig1.canvas.draw()
+
+    fig1.canvas.mpl_connect("button_press_event", onclick)
+    fig1.canvas.mpl_connect("key_press_event", on_key_press)
+    fig1.canvas.mpl_connect("key_release_event", on_key_release)
+
+    # Save the figure as a PNG file with _raw suffix inside the correct directory
+    base_filename = os.path.splitext(os.path.basename(filename))[0]
+    figure1_filename = os.path.join(output_dir, base_filename + "_raw.png")
+    plt.savefig(figure1_filename)
+    plt.show(block=True)  # Block is True to keep the figure open
+
+    if len(points) < 2:
+        print("At least two points required.")
+        sys.exit(1)
+
+    indices = [int(point[0]) for point in points]
+    return indices
+
+
+## FIGURE 2
+def makefig2(data, indices, threshold):
+    active_ranges = []
+    # Create a Figure 2 for all subplots
+    num_segments = len(indices) - 1
+    fig2, ax2 = plt.subplots(3, 3)  # 3x3 subplot matrix
+    ax2 = ax2.flatten()  # Flatten the array to simplify indexing
+
+    for i in range(min(num_segments, 9)):  # Limit to 9 segments for the 3x3 matrix
+        start = int(indices[i])  # Ensure index is integer
+        end = int(indices[i + 1])  # Ensure index is integer
+
+        # Validate indices within data boundaries
+        if end > len(data):
+            end = len(data)
+        if start >= len(data):
+            break  # Exit the loop if start is not within data length
+
+        section_data = data[start:end]
+        start_median, end_median = calculate_median(data, start, end)
+        start_active, end_active = find_active_indices(
+            section_data, start_median, end_median, threshold
+        )
+
+        adjusted_start = start + start_active
+        adjusted_end = start + end_active
+
+        # Plot data and markers
+        ax2[i].plot(np.arange(start, end), section_data)
+        ax2[i].axvline(x=adjusted_start, color="green", label="Start")
+        ax2[i].axvline(x=adjusted_end, color="red", label="End")
+        ax2[i].set_title(f"{i+1}: index {start} to {end}")
+        ax2[i].set_ylabel("Force (N)")
+        ax2[i].set_xlabel("Time (s)")
+        ax2[i].grid(True)
+        ax2[i].legend(
+            fontsize="xx-small",
+            loc="upper right",
+            handlelength=1,
+            handletextpad=0.2,
+            borderaxespad=0.2,
+            framealpha=0.6,
+        )
+        plt.tight_layout()
+
+        active_ranges.append([adjusted_start, adjusted_end])
+
+    # Exibir e fechar a figura fora do loop
+    plt.show(block=False)  # Mostra a figura sem bloquear o restante do código
+    plt.pause(1)  # Espera por 1 segundo
+    plt.close(fig2)  # Fecha a figura
+
+    return active_ranges
+
+
 ## FIGURE 3
 def makefig3(
     databw,
@@ -534,9 +755,9 @@ def makefig3(
         output_dir, filename_without_extension + "_result.csv"
     )
 
-    # Define the plot PNG file name using the new directory path
+    # Define the plot PNG and SVG file names using the new directory path
     result_plot_filename = os.path.join(
-        output_dir, filename_without_extension + "_result.png"
+        output_dir, filename_without_extension + "_result"
     )
 
     # Now also define the index file name using the new directory path
@@ -910,13 +1131,434 @@ def makefig3(
             )  # Note que mudamos para 'dtype=object' para acomodar strings e floats.
             result_array.append(matresults)
 
-        plt.savefig(result_plot_filename)
-        plt.show()
+        # Salva a figura em PNG e SVG
+        plt.savefig(result_plot_filename + ".png", format="png", dpi=300)
+        plt.savefig(result_plot_filename + ".svg", format="svg")
+
+    # Exibir e fechar a figura fora do loop
+    plt.show(block=False)  # Mostra a figura sem bloquear o restante do código
+    plt.pause(1)  # Espera por 1 segundo
+    plt.close(fig3)  # Fecha a figura
 
     return result_array
 
 
-def run_statistics(data2stats, filename, output_dir, timestamp):
+## FIGURE 4
+def makefig4(
+    databw,
+    active_ranges,
+    body_weight_kg,
+    output_dir,
+    filename,
+    sidefoot,
+    dominance,
+    quality,
+    simple_filename,
+    timestamp,
+    indices,
+    Fs,
+):
+    fig4, ax3 = plt.subplots(3, 3, figsize=(30, 30))
+    ax4 = ax3.flatten()  # Flatten the array to simplify indexing
+
+    # Get the filename without extension
+    filename_without_extension = os.path.splitext(os.path.basename(filename))[0]
+
+    # Define the CSV result file name using the new directory path
+    result_csv_filename = os.path.join(
+        output_dir, filename_without_extension + "_result.csv"
+    )
+
+    # Define the plot PNG and SVG file names using the new directory path
+    result_plot_filename_png = os.path.join(
+        output_dir, filename_without_extension + "_result.png"
+    )
+    result_plot_filename_svg = os.path.join(
+        output_dir, filename_without_extension + "_result.svg"
+    )
+
+    # Now also define the index file name using the new directory path
+    indices_filename = os.path.join(
+        output_dir, filename_without_extension + "_index.txt"
+    )
+
+    active_ranges_np = np.array(active_ranges)
+    # Extrair o primeiro elemento
+    first_element = active_ranges_np[0, 0]
+
+    # Extrair os últimos elementos de cada sublista
+    last_elements = active_ranges_np[:, 1]
+
+    # Subtrair o primeiro elemento de cada último elemento
+    differences = last_elements - first_element
+
+    # Calcular a soma acumulada das diferenças
+    test_duration = differences * (1 / Fs)
+
+    # Save indices to a file
+    with open(indices_filename, "w") as f:
+        for index in indices:
+            f.write(f"{index}\n")
+
+    # Initialize all_time to sum up all total_time values
+    cumulative_time = 0
+
+    # Open the CSV file for writing
+    result_array = []
+
+    with open(result_csv_filename, "w", newline="") as csvfile:
+        writer = csv.writer(csvfile)
+        headers = build_headers()
+        writer.writerow(headers)  # Write headers to the CSV file
+
+        for i, (start, end) in enumerate(active_ranges[:9]):
+            active_segment_data = databw[start : end + 1]
+            # Unpack results from the calculate_cube_values function
+            (
+                num_samples,
+                index_40ms,
+                index_100ms,
+                index_impact_transient,
+                index_peakmax,
+                total_time,
+                time_interval,
+                t40ms,
+                t100ms,
+                time_impact_transient,
+                time_peakmax,
+                vpeak_40ms,
+                vpeak_100ms,
+                vpeak_impact_transient,
+                vpeakmax,
+                total_area,
+                area_until_40ms,
+                area_until_100ms,
+                area_impact_transient,
+                area_peakmax,
+                area_propulsion,
+                rfd_40ms,
+                rfd_100ms,
+                rfd_impact_transient,
+                rfd_peakmax,
+                rfd_propulsion,
+                index_poi,
+                vpeak_poi,
+                time_poi,
+            ) = calculate_cube_values(active_segment_data, Fs)
+
+            # Accumulate total_time
+            cumulative_time += total_time
+
+            time_data = time_interval
+            vgrf = active_segment_data
+
+            kc, kh, kl, tT, m = fit_stiffness_models(vgrf, time_data)
+            (
+                valr,
+                vip_value,
+                vip_index,
+                vgrf_poi20_80,
+                time_poi20_80,
+                start_index_poi20_80,
+                end_index_poi20_80,
+            ) = calculate_loading_rates(
+                active_segment_data, np.arange(len(active_segment_data)) / Fs
+            )
+            index_impact_transient = end_index_poi20_80
+            time_impact_transient = time_poi20_80[-1]
+            vpeak_impact_transient = active_segment_data[end_index_poi20_80]
+
+            # Plotting the segment data
+            ax4[i].plot(time_interval, active_segment_data, linewidth=3)
+            # Convertendo start e end de índices para segundos
+            start_seconds = start / Fs
+            end_seconds = end / Fs
+            # Formatação do título com tempo em segundos
+            ax4[i].set_title(f"{i+1}: time {start_seconds:.3f} to {end_seconds:.3f} s")
+            ax4[i].set_xlabel("Time (s)")
+            ax4[i].set_ylabel("Force (BW)")
+            # Ajustando o limite x do gráfico em x
+            max_time_interval = np.max(time_interval)
+            if max_time_interval > 0.65:
+                ax4[i].set_xlim(0, max_time_interval)
+            else:
+                ax4[i].set_xlim(0, 0.65)
+
+            # Ajustando o limite y do gráfico em y
+            max_active_segment_data = np.max(active_segment_data)
+            if max_active_segment_data > 3.7:
+                ax4[i].set_ylim(0, max_active_segment_data + 0.1)
+            else:
+                ax4[i].set_ylim(0, 3.7)
+
+            # Get current ticks and add custom tick for 40ms
+            current_ticks = np.append(
+                ax4[i].get_xticks(), 0.04
+            )  # Include 0.04s in the existing ticks
+            current_ticks = np.unique(
+                np.sort(current_ticks)
+            )  # Sort and remove any duplicates
+            ax4[i].set_xticks(current_ticks)  # Set the ticks to include 0.04s
+
+            # Optional: you can format ticks to show more clearly or with specific precision
+            ax4[i].get_xaxis().set_major_formatter(
+                plt.FuncFormatter(lambda x, _: f"{x:.2f}")
+            )
+
+            # Preenchendo a área sob a curva
+            ax4[i].fill_between(
+                time_interval, active_segment_data, color="gray", alpha=0.2
+            )
+
+            # Create an array of x values from 0 to impact transient for filling - IMPACT TRANSIENT
+            x_fill_impact_transient = np.linspace(0, time_impact_transient, 100)
+            # Create corresponding y values for the line
+            y_fill_impact_transient = (
+                vpeak_impact_transient / time_impact_transient
+            ) * x_fill_impact_transient
+            # Fill the area below the line in red with transparency
+            ax4[i].fill_between(
+                x_fill_impact_transient,
+                0,
+                y_fill_impact_transient,
+                color="red",
+                alpha=0.3,
+            )
+
+            # Create an array of x values from 0 to peakmax for filling - BRAKE
+            x_fill_peakmax = np.linspace(0, time_peakmax, 100)
+            # Create corresponding y values for the line
+            y_fill_peakmax = (vpeakmax / time_peakmax) * x_fill_peakmax
+            # Fill the area below the line in magenta with transparency
+            ax4[i].fill_between(
+                x_fill_peakmax, 0, y_fill_peakmax, color="orange", alpha=0.3
+            )
+
+            # Preenchimento para o peakmax to end - PROPULSION
+            x_fill_end = np.linspace(time_peakmax, total_time, 100)
+            y_start = vpeakmax  # Valor de Y no ponto peakmax to end - PROPULSION
+            y_fill_end = np.linspace(
+                y_start, 0, 100
+            )  # Decresce linearmente de vpeakmax até 0
+
+            # Fill the area below the line in another color (e.g., green) with transparency
+            ax4[i].fill_between(x_fill_end, 0, y_fill_end, color="green", alpha=0.3)
+
+            # Highlight the peaks on the plot
+            ax4[i].plot(
+                time_impact_transient,
+                vpeak_impact_transient,
+                "r*",
+                markersize=12,
+                label=f"Transient: {time_impact_transient:.3f}s:{vpeak_impact_transient:.3f}BW",
+            )
+            ax4[i].plot(
+                time_peakmax,
+                vpeakmax,
+                "kv",
+                markersize=8,
+                label=f"Peak Max: {time_peakmax:.3f}s:{vpeakmax:.3f}BW",
+            )
+            ax4[i].axvline(
+                x=t40ms,
+                color="red",
+                label=f"Peak in 40ms: {vpeak_40ms:.3f}BW",
+                linestyle=":",
+                linewidth=1,
+            )
+            ax4[i].axvline(
+                x=t100ms,
+                color="olive",
+                label=f"Peak in 100ms: {vpeak_100ms:.3f}BW",
+                linestyle=":",
+                linewidth=1,
+            )
+            ax4[i].plot(
+                time_poi,
+                vpeak_poi,
+                "rv",
+                markersize=8,
+                label=f"VIP_Transient: {time_peakmax:.3f}s:{vpeakmax:.3f}BW",
+            )
+
+            # Linhas para RFD
+            # Plotando linhas inclinadas para RFD Impact Transient
+            ax4[i].plot(
+                [0, time_impact_transient],
+                [active_segment_data[0], vpeak_impact_transient],
+                "r--",
+                linewidth=2.5,
+                label=f"RFD Impact Transient: {rfd_impact_transient:.3f}BW\u00B7s\u207B\u00B9",
+            )
+            # Se rfd_peakmax tem o mesmo intervalo de tempo que rfd_impact_transient
+            ax4[i].plot(
+                [0, time_peakmax],
+                [active_segment_data[0], vpeakmax],
+                color="orange",
+                linestyle="--",
+                linewidth=2.5,
+                label=f"RFD Brake: {rfd_peakmax:.3f}BW\u00B7s\u207B\u00B9",
+            )
+            # Para RFD Propulsion, que começa n o pico máximo e vai até o fim do tempo total
+            ax4[i].plot(
+                [time_peakmax, total_time],
+                [vpeakmax, active_segment_data[-1]],
+                "g--",
+                linewidth=2.5,
+                label=f"RFD Propulsion: {rfd_propulsion:.3f}BW\u00B7s\u207B\u00B9",
+            )
+            ax4[i].plot(
+                [],
+                [],
+                "s",
+                color="red",
+                alpha=0.3,
+                label=f"Impulse Impact Transient: {area_impact_transient:.3f}BW\u00B7s",
+            )
+            ax4[i].plot(
+                [],
+                [],
+                "s",
+                color="orange",
+                alpha=0.3,
+                label=f"Impulse Brake: {area_peakmax:.3f}BW\u00B7s",
+            )
+            ax4[i].plot(
+                [],
+                [],
+                "s",
+                color="green",
+                alpha=0.3,
+                label=f"Impulse Propulsion: {area_propulsion:.3f}BW\u00B7s",
+            )
+            ax4[i].plot(
+                [],
+                [],
+                "s",
+                color="gray",
+                alpha=0.2,
+                label=f"Total Impulse: {total_area:.3f}BW\u00B7s",
+            )
+            ax4[i].plot(
+                [], [], " ", label=f"Contact Time: {total_time:.3f}s"
+            )  # Invisible line for Contact Time
+            # Add legend with small font size
+            ax4[i].legend(
+                fontsize="small",
+                loc="upper right",
+                handlelength=1,
+                handletextpad=0.2,
+                borderaxespad=0.2,
+                framealpha=0.6,
+            )
+            plt.tight_layout()
+
+            result = [
+                f"{simple_filename}",
+                f"{timestamp}",
+                f"{i+1}",
+                f"{body_weight_kg:.3f}",
+                f"{sidefoot}",
+                f"{dominance}",
+                f"{quality}",
+                f"{num_samples}",
+                f"{index_40ms}",
+                f"{index_100ms}",
+                f"{index_impact_transient}",
+                f"{index_poi}",
+                f"{index_peakmax}",
+                f"{test_duration[i]:.3f}",
+                f"{cumulative_time:.3f}",
+                f"{total_time:.3f}",
+                f"{t40ms:.3f}",
+                f"{t100ms:.3f}",
+                f"{time_impact_transient:.3f}",
+                f"{time_poi:.3f}",
+                f"{time_peakmax:.3f}",
+                f"{vpeak_40ms:.3f}",
+                f"{vpeak_100ms:.3f}",
+                f"{vpeak_impact_transient:.3f}",
+                f"{vpeak_poi:.3f}",
+                f"{vpeakmax:.3f}",
+                f"{total_area:.3f}",
+                f"{area_until_40ms:.3f}",
+                f"{area_until_100ms:.3f}",
+                f"{area_impact_transient:.3f}",
+                f"{area_peakmax:.3f}",
+                f"{area_propulsion:.3f}",
+                f"{rfd_40ms:.3f}",
+                f"{rfd_100ms:.3f}",
+                f"{rfd_impact_transient:.3f}",
+                f"{rfd_peakmax:.3f}",
+                f"{rfd_propulsion:.3f}",
+                f"{kc:.3f}",
+                f"{kh:.3f}",
+                f"{kl:.3f}",
+                f"{tT:.3f}",
+                f"{valr:.3f}",
+            ]
+            writer.writerow(result)
+
+            matresults = np.asarray(
+                [
+                    simple_filename,
+                    timestamp,
+                    i + 1,
+                    body_weight_kg,
+                    sidefoot,
+                    dominance,
+                    quality,
+                    num_samples,
+                    index_40ms,
+                    index_100ms,
+                    index_impact_transient,
+                    index_poi,
+                    index_peakmax,
+                    test_duration[i],
+                    cumulative_time,
+                    total_time,
+                    t40ms,
+                    t100ms,
+                    time_impact_transient,
+                    time_poi,
+                    time_peakmax,
+                    vpeak_40ms,
+                    vpeak_100ms,
+                    vpeak_impact_transient,
+                    vpeak_poi,
+                    vpeakmax,
+                    total_area,
+                    area_until_40ms,
+                    area_until_100ms,
+                    area_impact_transient,
+                    area_peakmax,
+                    area_propulsion,
+                    rfd_40ms,
+                    rfd_100ms,
+                    rfd_impact_transient,
+                    rfd_peakmax,
+                    rfd_propulsion,
+                    kc,
+                    kh,
+                    kl,
+                    tT,
+                    valr,
+                ],
+                dtype=object,
+            )  # Note que mudamos para 'dtype=object' para acomodar strings e floats.
+            result_array.append(matresults)
+
+            # Salva a figura em PNG e SVG
+        plt.savefig(result_plot_filename_png, format="png", dpi=300)
+        plt.savefig(result_plot_filename_svg, format="svg")
+        plt.show(block=False)  # Mostra a figura sem bloquear o restante do código
+        plt.pause(1)  # Espera por 1 segundo
+        plt.close(fig4)  # Fecha a figura
+
+        return result_array
+
+
+def run_statistics(data2stats, filename, output_dir, timestamp, generate_profile):
     result_stat_filename = os.path.join(
         output_dir, os.path.splitext(os.path.basename(filename))[0] + "_stats.csv"
     )
@@ -927,104 +1569,90 @@ def run_statistics(data2stats, filename, output_dir, timestamp):
     df = pd.DataFrame(data2stats, columns=build_headers())
     df.drop(columns=["FileName", "TimeStamp"], inplace=True)
 
-    # Temporariamente mapeia 'R' e 'L' para 0 e 1 para descrição estatística
+    # Temporarily map 'R' and 'L' to 0 and 1 for statistical description
     temp_df = df.copy()
     temp_df["SideFoot_RL"] = temp_df["SideFoot_RL"].map({"R": 0, "L": 1}).astype(float)
     temp_df["Dominance_RL"] = (
         temp_df["Dominance_RL"].map({"R": 0, "L": 1}).astype(float)
     )
 
-    # Calculando estatísticas básicas apenas com dados numéricos temporários
+    # Calculating basic statistics with temporary numerical data
     results_stats = temp_df.describe().round(3)
     results_stats.loc["cv"] = (temp_df.std() / temp_df.mean() * 100).round(2)
 
-    # Renomear o índice para "Stats"
+    # Rename the index to "Stats"
     results_stats.index.name = "Stats"
 
-    # Adicionando filename e timestamp como novas colunas no início do dataframe de estatísticas
+    # Add filename and timestamp as new columns at the beginning of the statistics dataframe
     results_stats.insert(0, "Timestamp", timestamp)
     results_stats.insert(0, "Filename", os.path.basename(filename))
 
-    # Salvando o dataframe estendido com as novas colunas
+    # Save the extended dataframe with the new columns
     results_stats.to_csv(result_stat_filename, index=True)
 
-    # Revertendo as colunas para categórico para uso no ProfileReport
+    # Revert the columns to categorical for use in ProfileReport
     df["SideFoot_RL"] = df["SideFoot_RL"].astype("category")
     df["Dominance_RL"] = df["Dominance_RL"].astype("category")
 
-    # Gerando perfil de dados usando as categorias
-    profile = ProfileReport(df, title="Profiling Report")
-    profile.to_file(result_profile_filename)
+    # Generate profiling report if the user opted for it
+    if generate_profile.lower() == "yes":
+        profile = ProfileReport(df, title="Profiling Report")
+        profile.to_file(result_profile_filename)
 
-    return results_stats, profile
+    return results_stats, None if generate_profile.lower() != "yes" else profile
 
 
-if __name__ == "__main__":
-    Fs = 1000  # Sampling Frequency
+def main():
+    """
+    Main function to handle batch processing of CSV files.
+    """
+    source_dir = select_source_directory()
+    if not source_dir:
+        messagebox.showerror("Error", "No source directory selected.")
+        return
 
-    if len(sys.argv) < 2:  # Check if filename is provided
-        print(
-            "Usage: python script.py <filename> [sidefoot] [dominance] [quality] [threshold] [columns] [index_file] [bw_kg]"
-        )
-        sys.exit(1)  # Exit if filename is not provided
+    # Get the first file for header selection
+    first_file_path = sorted([f for f in os.listdir(source_dir) if f.endswith(".csv")])[
+        0
+    ]
+    first_file_full_path = os.path.join(source_dir, first_file_path)
 
-    filename = sys.argv[1]  # Filename is required
-    simple_filename = basename(filename)  # Use basename to get just the file name
-    sidefoot = sys.argv[2] if len(sys.argv) > 2 else "R"
-    dominance = sys.argv[3] if len(sys.argv) > 3 else "R"
-    quality = int(sys.argv[4]) if len(sys.argv) > 4 else 5
-    threshold = float(sys.argv[5]) if len(sys.argv) > 5 else 0.025
-    columns = sys.argv[6] if len(sys.argv) > 6 else "12,13,14"
-    index_file = sys.argv[7] if len(sys.argv) > 7 else None
-    body_weight_kg = float(sys.argv[8]) if len(sys.argv) > 8 else None
+    selected_headers, selected_data = select_headers_and_load_data(first_file_full_path)
+    if not selected_headers or selected_data is None:
+        print("No headers or data selected.")
+        return
 
-    print(f"Filename: {filename}")
-    print(f"Sidefoot: {sidefoot}")
-    print(f"Dominance: {dominance}")
-    print(f"Quality: {quality}")
-    print(f"Threshold: {threshold}")
-    print(f"Columns: {columns}")
+    # Ask the user to select the column to analyze
+    selected_column = selected_headers[
+        0
+    ]  # Example: Assume first column is selected for analysis
 
-    # Directly try to load and process the data to see detailed errors
-    data, timestamp = read_csv_skip_header(filename, columns)
-    if data is None:
-        print("No data returned from file reading function.")
-        sys.exit(1)
+    # Prompt for output directory
+    output_dir = select_output_directory()
+    if not output_dir:
+        messagebox.showerror("Error", "No output directory selected.")
+        return
 
-    selected_data = data[:, -1] * -1 if data.ndim > 1 else data * -1
-    if not body_weight_kg:
-        body_weight_newton = np.median(selected_data[10:110])
-        body_weight_kg = body_weight_newton / 9.81
+    # Verifica se o diretório de saída existe, e se não, cria
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
 
-    databw_norm = selected_data / (body_weight_kg * 9.81)
+    # Ask for user input once, including Fs
+    sidefoot, dominance, quality, threshold, fs, generate_profile = prompt_user_input()
 
-    main_output_dir = create_main_output_directory(filename)
-
-    if index_file:
-        indices = np.loadtxt(index_file).astype(
-            int
-        )  # Load and convert indices from file if provided
-    else:
-        indices = makefig1(
-            databw_norm, main_output_dir, filename
-        )  # Pass output_dir and filename to makefig1
-
-    active_ranges = makefig2(databw_norm, indices, threshold)
-    databw = butterworthfilt(databw_norm, 59, Fs)
-    results = makefig3(
-        databw,
-        active_ranges,
-        body_weight_kg,
-        main_output_dir,
-        filename,
+    # Batch process all files in the source directory
+    batch_process_directory(
+        source_dir,
+        selected_column,
+        output_dir,
         sidefoot,
         dominance,
         quality,
-        simple_filename,
-        timestamp,
-        indices,
-        Fs,
+        threshold,
+        fs,
+        generate_profile,
     )
-    result_stats, result_profile = run_statistics(
-        results, filename, main_output_dir, timestamp
-    )
+
+
+if __name__ == "__main__":
+    main()
