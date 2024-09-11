@@ -1,3 +1,55 @@
+"""
+================================================================================
+force_cube_fig.py
+================================================================================
+Author: Paulo Santiago
+Date: 9 September 2024
+Version: 0.5
+
+Description:
+------------
+This script provides functions to process biomechanical data from force platforms,
+analyzing the vertical ground reaction force (VGRF) to compute several metrics such
+as peak forces, time intervals, impulse, rate of force development (RFD), and stiffness
+parameters. The results are visualized through plots and saved to CSV files for further analysis.
+
+The script includes the following main functionalities:
+1. **Data Selection**: Allows the user to select source and output directories, as well as columns from the input CSV files.
+2. **Data Processing**: Normalizes data, applies Butterworth filters, and computes key biomechanical metrics.
+3. **Visualization**: Generates multiple figures showing force-time curves with markers and highlighted regions.
+4. **Statistical Analysis**: Calculates descriptive statistics and optionally generates profiling reports using pandas and ydata_profiling.
+5. **Batch Processing**: Processes multiple files in a batch mode.
+
+Modules and Packages Required:
+-------------------------------
+- Python Standard Libraries: os, sys, datetime, csv, tkinter
+- External Libraries: numpy, pandas, matplotlib, scipy, rich, ydata_profiling
+
+How to Use:
+-----------
+1. **Select Source and Output Directories**: The script uses a Tkinter GUI to allow the user to select the input directory containing CSV files and the output directory for saving results.
+2. **Select Data Columns**: Prompts the user to select which columns from the CSV files to analyze.
+3. **User Input Parameters**: The user is prompted to enter parameters such as sidefoot, dominance, quality, threshold, and sampling frequency (Fs).
+4. **Batch Processing**: Automatically processes all files in the source directory according to the selected parameters and outputs results to the specified directory.
+5. **Visualization**: Generates interactive plots for data selection and saves analysis figures.
+
+How to Run:
+-----------
+To execute this script, ensure that all dependencies are installed and then run the script from the terminal using the following command:
+
+```bash
+python force_cube_fig.py
+Make sure to have the necessary permissions and access to both input and output directories. The script will prompt the user for inputs via a GUI.
+License:
+
+This script is licensed under the MIT License. See LICENSE file in the project root for more details.
+Disclaimer:
+
+This script is provided "as is" without warranty of any kind. Use at your own risk. For academic and research purposes only.
+
+================================================================================
+"""
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
