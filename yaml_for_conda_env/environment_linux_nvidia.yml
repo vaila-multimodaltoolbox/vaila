@@ -509,3 +509,5 @@ dependencies:
       - termcolor==2.4.0
       - werkzeug==3.0.3
       - wrapt==1.16.0
+      - 'xonsh[full]==0.18.3'
+      - scikit-learn==1.5.1
