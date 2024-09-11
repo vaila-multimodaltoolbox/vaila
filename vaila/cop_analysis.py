@@ -4,7 +4,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import butter, filtfilt
 from sklearn.decomposition import PCA
-from datetime import datetime
 from tkinter import (
     Tk,
     Toplevel,
@@ -25,7 +24,7 @@ def read_csv_full(filename):
     try:
         data = pd.read_csv(filename, delimiter=",")
         # multiply -1 all values in the first column
-        data.iloc[:, 0] = -data.iloc[:, 0]
+        data.iloc[:, 0] = data.iloc[:, 0]
 
         return data
     except Exception as e:
@@ -82,6 +81,7 @@ def select_two_columns(file_path):
     scrollable_frame.bind(
         "<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
     )
+
     canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
     canvas.configure(yscrollcommand=scrollbar.set)
 
@@ -114,48 +114,46 @@ def select_two_columns(file_path):
     return selected_headers, selected_data
 
 
-def analyze_data_2d(data, output_dir, file_name, fs, plate_width, plate_height, timestamp):
-    """Analisa os dados 2D selecionados e salva os resultados."""
-    # Filtra os dados
+def analyze_data_2d(
+    data, output_dir, file_name, fs, plate_width, plate_height, timestamp
+):
+    """Analyzes selected 2D data and saves results."""
+    # Filter data
     data = butterworth_filter(data, cutoff=10, fs=fs)
 
     cop_x = data[:, 0]
     cop_y = data[:, 1]
 
-    # Calcula o eixo do tempo com base na frequência de amostragem e no comprimento dos dados
+    # Create vector time
     time = np.arange(0, len(cop_x) / fs, 1 / fs)
 
-    # Plota a trajetória do CoP ao longo do tempo
+    # Create figure
     plt.figure()
 
-    # Plota o deslocamento X ao longo do tempo
+    # Plot displacement X
     plt.subplot(2, 1, 1)
     plt.plot(time, cop_x, "-", color="black")
     plt.xlabel("Time [s]")
-    plt.ylabel("Displacement [cm] - X [ML]")
-    plt.title("Medio-Lateral Displacement Over Time")
+    plt.ylabel("X-axis ML [cm]")
+    plt.title("Medio-Lateral (ML) Displacement")
     plt.grid(True)
 
-    # Plota o deslocamento Y ao longo do tempo
+    # Plot displacement Y
     plt.subplot(2, 1, 2)
     plt.plot(time, cop_y, "-", color="black")
     plt.xlabel("Time [s]")
-    plt.ylabel("Displacement [cm] - Y [AP]")
-    plt.title("Antero-Posterior Displacement Over Time")
+    plt.ylabel("Y-axis AP [cm]")
+    plt.title("Antero-Posterior (AP) Displacement")
     plt.grid(True)
 
     plt.tight_layout()
-    plt.savefig(
-        os.path.join(output_dir, f"{file_name}_time_displacement_{timestamp}.png")
-    )
-    plt.savefig(
-        os.path.join(output_dir, f"{file_name}_time_displacement_{timestamp}.svg")
-    )
+    plt.savefig(os.path.join(output_dir, f"{file_name}_timedisp_{timestamp}.png"))
+    plt.savefig(os.path.join(output_dir, f"{file_name}_timedisp_{timestamp}.svg"))
 
-    # Define o nível de confiança
-    confidence = 0.95  # Exemplo de nível de confiança
+    # Sets the confidence level
+    confidence = 0.95  # Exemple for 95%
 
-    # Plota a trajetória do CoP e a elipse
+    # Plot pathway of CoP and ellipse 95% confidence
     plt.figure()
     plt.plot(cop_x, cop_y, "-", color="black", label="CoP Pathway")
     plt.plot(cop_x[0], cop_y[0], "g.", markersize=17)  # Primeiro ponto em verde
@@ -168,19 +166,19 @@ def analyze_data_2d(data, output_dir, file_name, fs, plate_width, plate_height, 
     plt.grid(True)
     plt.gca().set_aspect("equal", adjustable="box")
 
-    # Elipse e PCA
+    # Ellipse e PCA
     area, angle = plot_ellipse_pca(data, confidence)
     plt.title(
-        f"CoP {confidence*100:.1f}% Confidence Ellipse (Area: {area:.2f}, Angle: {angle:.2f} degrees)"
+        f"CoP {confidence*100:.1f}% Confidence Ellipse (Area: {area:.2f} cm^2, Angle: {angle:.2f}$^\\circ$)"
     )
 
-    # Salva os gráficos
-    plt.savefig(os.path.join(output_dir, f"{file_name}_cop_analysis_{timestamp}.png"))
+    # Save figures of CoP pathway and ellipse
+    plt.savefig(os.path.join(output_dir, f"{file_name}analysis_{timestamp}.png"))
     plt.savefig(os.path.join(output_dir, f"{file_name}_cop_analysis_{timestamp}.svg"))
 
 
 def plot_ellipse_pca(data, confidence=0.95):
-    """Calcula e plota a elipse usando PCA com um nível de confiança especificado."""
+    """Calculates and plots the ellipse using PCA with a specified confidence level."""
     pca = PCA(n_components=2)
     pca.fit(data)
 
@@ -188,25 +186,25 @@ def plot_ellipse_pca(data, confidence=0.95):
     eigvals = np.sqrt(pca.explained_variance_)
     eigvecs = pca.components_
 
-    # Fator de escala para o nível de confiança
+    # Scale factor for confidence level
     chi2_val = np.sqrt(2) * np.sqrt(np.log(1 / (1 - confidence)))
     scaled_eigvals = eigvals * chi2_val
 
-    # Parâmetros da elipse
+    # Ellipse parameters
     theta = np.linspace(0, 2 * np.pi, 100)
     ellipse = np.array(
         [scaled_eigvals[0] * np.cos(theta), scaled_eigvals[1] * np.sin(theta)]
     )
-    ellipse_rot = np.dot(eigvecs.T, ellipse)  # Ajuste para rotação correta da elipse
+    ellipse_rot = np.dot(eigvecs.T, ellipse)  # Adjustement for rotated ellipse
 
-    # Área e ângulo da elipse
+    # Area and angle of the ellipse
     area = np.pi * scaled_eigvals[0] * scaled_eigvals[1]
     angle = (
         np.arctan2(eigvecs[1, 0], eigvecs[0, 0]) * 180 / np.pi
-    )  # Ajuste para o ângulo correto
+    )  # Adjustement for rotated ellipse
 
     plt.figure()
-    # Plot dos dados e da elipse
+    # Plot of data and ellipse
     plt.plot(data[:, 0], data[:, 1], "-", color="black", label="CoP Pathway")
     plt.plot(
         ellipse_rot[0, :] + pca.mean_[0],
@@ -215,7 +213,7 @@ def plot_ellipse_pca(data, confidence=0.95):
         linewidth=2,
     )
 
-    # Plot dos eixos principais da elipse
+    # Plot of major and minor axis
     major_axis_start = pca.mean_
     major_axis_end = pca.mean_ + eigvecs[0] * scaled_eigvals[0]
     plt.plot(
@@ -236,12 +234,13 @@ def plot_ellipse_pca(data, confidence=0.95):
 
     return area, angle
 
-def main():
-    """Função principal para executar a análise de balanço de CoP."""
-    root = Tk()
-    root.withdraw()  # Oculta a janela principal do Tkinter
 
-    # Solicita os diretórios
+def main():
+    """Function to run the CoP analysis"""
+    root = Tk()
+    root.withdraw()  # Hides the main Tkinter window
+
+    # Request input and output directories
     input_dir = filedialog.askdirectory(title="Select Input Directory")
     if not input_dir:
         print("No input directory selected.")
@@ -252,7 +251,7 @@ def main():
         print("No output directory selected.")
         return
 
-    # Solicita a frequência de amostragem e dimensões da plataforma de força
+    # Request sampling frequency and plate dimensions
     fs = simpledialog.askfloat(
         "Signal Frequency",
         "Enter the sampling frequency (Fs) in Hz:",
@@ -277,7 +276,7 @@ def main():
         print("Invalid force plate dimensions provided.")
         return
 
-    # Seleciona o arquivo CSV para obter os cabeçalhos
+    # Select sample file
     sample_file_path = filedialog.askopenfilename(
         title="Select a Sample CSV File", filetypes=[("CSV files", "*.csv")]
     )
@@ -285,35 +284,42 @@ def main():
         print("No sample file selected.")
         return
 
-    # Obtém os cabeçalhos
+    # Select two headers for 2D analysis
     selected_headers, _ = select_two_columns(sample_file_path)
     if not selected_headers:
         print("No valid headers selected.")
         return
 
-    # Gera o timestamp uma vez
+    # Create timestamp for output directory
     timestamp = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
 
-    # Cria o diretório principal com o timestamp
+    # Create main output directory using timestamp
     main_output_dir = os.path.join(output_dir, f"vaila_cop_balance_{timestamp}")
     os.makedirs(main_output_dir, exist_ok=True)
 
-    # Processa cada arquivo no diretório de entrada
+    # Process each CSV file in the input directory
     for file_name in os.listdir(input_dir):
         if file_name.endswith(".csv"):
             file_path = os.path.join(input_dir, file_name)
             data = read_csv_full(file_path)[selected_headers].to_numpy()
 
-            # Cria subdiretório específico para o arquivo usando o mesmo timestamp
+            # Create output directory for current file
             file_output_dir = os.path.join(main_output_dir, file_name)
             os.makedirs(file_output_dir, exist_ok=True)
 
-            # Analisa os dados do arquivo atual
+            # Analyze and save results
             analyze_data_2d(
-                data, file_output_dir, file_name, fs, plate_width, plate_height, timestamp
+                data,
+                file_output_dir,
+                file_name,
+                fs,
+                plate_width,
+                plate_height,
+                timestamp,
             )
-
+    plt.show()
     print("Analysis complete.")
+
 
 if __name__ == "__main__":
     main()
