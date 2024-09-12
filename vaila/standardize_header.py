@@ -1,10 +1,49 @@
+"""
+Script Name: standardize_header.py
+Version: 1.1
+Author: [Your Name]
+
+Description:
+-------------
+This script provides a tool to standardize headers across multiple CSV files in a selected directory.
+It allows the user to select a specific line to use as the header and remove unwanted rows from each file.
+
+Features:
+---------
+- Batch processing of CSV files in a selected directory.
+- User-friendly GUI to select header lines and rows to delete.
+- Handles parsing errors and ensures consistent formatting across files.
+- Saves the processed files in a new directory with a timestamp.
+
+Changelog:
+----------
+- Version 1.1: Enhanced error handling and user prompts for selecting header lines and rows to delete.
+- Version 1.0: Initial release with basic functionality for header standardization.
+
+Usage:
+------
+- Run the script to launch a GUI for selecting the header line and rows to delete.
+- Select the directory containing CSV files and follow the prompts to process the files.
+
+Requirements:
+-------------
+- Python 3.x
+- pandas
+- tkinter
+"""
+
 import os
 import pandas as pd
 import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog
 from datetime import datetime
 
+
 def standardize_header():
+    """
+    Standardize headers and clean rows in all CSV files within a selected directory.
+    Allows the user to select the header line and specify rows to delete.
+    """
     # Open a window to select the directory containing CSV files
     directory_path = filedialog.askdirectory(title="Select Directory Containing CSV Files")
     if not directory_path:
@@ -55,6 +94,9 @@ def standardize_header():
         delete_rows_entry.pack()
 
         def confirm_selection():
+            """
+            Confirm the user's selection of the header line and rows to delete, and process all CSV files accordingly.
+            """
             # Get the line selected by the user for the header
             try:
                 selected_line = int(header_line_entry.get())
@@ -113,6 +155,9 @@ def standardize_header():
                     if rows_to_delete_after_header:
                         df.drop(rows_to_delete_after_header, inplace=True)
 
+                    # Remove any trailing empty rows
+                    df = df.dropna(how='all')
+
                     # Save the standardized file in the new directory
                     base_name = os.path.splitext(file_name)[0]
                     new_file_name = f"{base_name}_vaila_stand_{timestamp}.csv"
@@ -134,4 +179,3 @@ if __name__ == "__main__":
     root = tk.Tk()
     root.withdraw()  # Hide the main Tkinter window
     standardize_header()
-

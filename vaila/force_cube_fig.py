@@ -549,7 +549,8 @@ def calculate_cube_values(signal, Fs):
     if num_samples < int(0.1 * Fs):
         raise ValueError("Signal is too short for analysis.")
 
-    time_interval = np.arange(num_samples) / Fs
+    time_interval = np.linspace(0, (num_samples - 1) / Fs, num_samples)
+
     total_time = time_interval[-1]
 
     t40ms = 0.04  # 40 ms
