@@ -84,7 +84,7 @@ def full_wave_rectification(emg_signal):
 
 def linear_envelope(emg_abs, cutoff, fs):
     emg_envelope = butter_lowpass_filter(emg_abs, cutoff, fs)
-    time = np.arange(len(emg_abs)) / fs
+    time = np.linspace(0, (len(emg_abs) - 1) / fs, len(emg_abs))
     signal_integ = np.trapz(emg_envelope, time)
     return emg_envelope, signal_integ
 
@@ -141,7 +141,7 @@ def emg_analysis(emg_file, fs, start_index, end_index, no_plot, selected_path):
         emg_file, delimiter=",", skip_header=1, filling_values=0.0
     )
     emg_signal[:, 1] = emg_signal[:, 1] * 1000000
-    time_full = np.arange(len(emg_signal))
+    time_full = np.linspace(0, (len(emg_signal) - 1), len(emg_signal))
     emg_signal = emg_signal[:, 1]
 
     print(f"Initial selection - Start index: {start_index}, End index: {end_index}")
@@ -188,8 +188,9 @@ def emg_analysis(emg_file, fs, start_index, end_index, no_plot, selected_path):
         emg_filtered, fs, window_length, overlap
     )
 
-    time = np.arange(start_index, end_index)
-    time_rms = np.arange(start_index, start_index + len(rms_values) * overlap, overlap)
+    time = np.linspace(start_index, end_index - 1, end_index - start_index)
+    time_rms = np.linspace(start_index, start_index + (len(rms_values) - 1) * overlap, len(rms_values))
+
 
     poly2_rms = polynomial_fit(time_rms, rms_values, 2)
     poly2_mdf = polynomial_fit(time_rms, median_freq_values, 2)

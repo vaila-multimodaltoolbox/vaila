@@ -1,9 +1,13 @@
+# https://github.com/Jythen/code_descriptors_postural_control/blob/main/main.py
+# https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8623280/
+
 import os
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import butter, filtfilt
 from sklearn.decomposition import PCA
+from matplotlib.colors import LinearSegmentedColormap
 from tkinter import (
     Tk,
     Toplevel,
@@ -18,14 +22,28 @@ from tkinter import (
     simpledialog,
 )
 
+def convert_to_cm(data, unit):
+    """Converts the data to centimeters based on the provided unit."""
+    conversion_factors = {
+        "m": 100,  # meters to cm
+        "mm": 0.1,  # millimeters to cm
+        "ft": 30.48,  # feet to cm
+        "in": 2.54,  # inches to cm
+        "yd": 91.44,  # yards to cm
+        "cm": 1  # cm to cm (no conversion needed)
+    }
+
+    if unit not in conversion_factors:
+        raise ValueError(f"Unsupported unit '{unit}'. Please use m, mm, ft, in, yd, or cm.")
+
+    return data * conversion_factors[unit]
 
 def read_csv_full(filename):
     """Reads the full CSV file."""
     try:
         data = pd.read_csv(filename, delimiter=",")
-        # multiply -1 all values in the first column
-        data.iloc[:, 0] = data.iloc[:, 0]
-
+        # Multiply -1 all values in the first column
+        # data.iloc[:, 0] = data.iloc[:, 0]
         return data
     except Exception as e:
         raise Exception(f"Error reading the CSV file: {str(e)}")
@@ -37,7 +55,6 @@ def butterworth_filter(data, cutoff, fs, order=4):
     normal_cutoff = cutoff / nyquist
     b, a = butter(order, normal_cutoff, btype="low", analog=False)
     y = filtfilt(b, a, data, axis=0)
-
     return y
 
 
@@ -114,9 +131,7 @@ def select_two_columns(file_path):
     return selected_headers, selected_data
 
 
-def analyze_data_2d(
-    data, output_dir, file_name, fs, plate_width, plate_height, timestamp
-):
+def analyze_data_2d(data, output_dir, file_name, fs, plate_width, plate_height, timestamp):
     """Analyzes selected 2D data and saves results."""
     # Filter data
     data = butterworth_filter(data, cutoff=10, fs=fs)
@@ -125,56 +140,54 @@ def analyze_data_2d(
     cop_y = data[:, 1]
 
     # Create vector time
-    time = np.arange(0, len(cop_x) / fs, 1 / fs)
-
-    # Create figure
-    plt.figure()
-
-    # Plot displacement X
-    plt.subplot(2, 1, 1)
-    plt.plot(time, cop_x, "-", color="black")
-    plt.xlabel("Time [s]")
-    plt.ylabel("X-axis ML [cm]")
-    plt.title("Medio-Lateral (ML) Displacement")
-    plt.grid(True)
-
-    # Plot displacement Y
-    plt.subplot(2, 1, 2)
-    plt.plot(time, cop_y, "-", color="black")
-    plt.xlabel("Time [s]")
-    plt.ylabel("Y-axis AP [cm]")
-    plt.title("Antero-Posterior (AP) Displacement")
-    plt.grid(True)
-
-    plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, f"{file_name}_timedisp_{timestamp}.png"))
-    plt.savefig(os.path.join(output_dir, f"{file_name}_timedisp_{timestamp}.svg"))
+    time = np.linspace(0, (len(cop_x) - 1) / fs, len(cop_x))
 
     # Sets the confidence level
-    confidence = 0.95  # Exemple for 95%
+    confidence = 0.95  # Example for 95%
 
-    # Plot pathway of CoP and ellipse 95% confidence
-    plt.figure()
-    plt.plot(cop_x, cop_y, "-", color="black", label="CoP Pathway")
-    plt.plot(cop_x[0], cop_y[0], "g.", markersize=17)  # Primeiro ponto em verde
-    plt.plot(cop_x[-1], cop_y[-1], "r.", markersize=17)  # Último ponto em vermelho
+    # Plot pathway of CoP and ellipse 95% confidence with color segments
+    plt.figure(figsize=(10, 8))
 
-    plt.xlabel("Medio-Lateral Displacement (cm)")
-    plt.ylabel("Antero-Posterior Displacement (cm)")
-    plt.xlim(-plate_width / 2, plate_width / 2)
-    plt.ylim(-plate_height / 2, plate_height / 2)
-    plt.grid(True)
+    # Create colormap
+    cmap = LinearSegmentedColormap.from_list("CoP_path", ["blue", "green", "yellow", "red"])
+
+    # Plot CoP pathway with heatmap colors
+    for i in range(len(cop_x) - 1):
+        plt.plot(cop_x[i:i + 2], cop_y[i:i + 2], color=cmap(i / len(cop_x)), linewidth=2)
+
+    # Plot start and end points
+    plt.plot(cop_x[0], cop_y[0], "b^", markersize=10, label="Start")  # Start point
+    plt.plot(cop_x[-1], cop_y[-1], "ro", markersize=10, label="End")  # End point
+
+    # Ellipse and PCA
+    area, angle, ellipse_bounds = plot_ellipse_pca(data, confidence)
+
+    # Calculating the margins to expand the xlim and ylim
+    x_margin = 0.02 * (ellipse_bounds[1] - ellipse_bounds[0])  # 2% of the x range
+    y_margin = 0.02 * (ellipse_bounds[3] - ellipse_bounds[2])  # 2% of the y range
+
+    # Adjust xlim and ylim based on ellipse bounds and add margin
+    plt.xlim(ellipse_bounds[0] - x_margin, ellipse_bounds[1] + x_margin)
+    plt.ylim(ellipse_bounds[2] - y_margin, ellipse_bounds[3] + y_margin)
+
+    plt.xlabel("Medio-Lateral (cm)")
+    plt.ylabel("Antero-Posterior (cm)")
+    plt.grid(True, linestyle=':', color='lightgray')
     plt.gca().set_aspect("equal", adjustable="box")
 
-    # Ellipse e PCA
-    area, angle = plot_ellipse_pca(data, confidence)
-    plt.title(
-        f"CoP {confidence*100:.1f}% Confidence Ellipse (Area: {area:.2f} cm^2, Angle: {angle:.2f}$^\\circ$)"
-    )
+    # Add colorbar for time progression
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=0, vmax=100))
+    sm.set_array([])
+    cbar = plt.colorbar(sm, ax=plt.gca(), orientation='vertical', fraction=0.046, pad=0.04)
+    cbar.set_label('Time Progression [%]', rotation=270, labelpad=15)
 
+    # Set the title of the plot correctly
+    plt.title(f'{file_name}\n95% Ellipse (Area: {area:.2f} cm², Angle: {angle:.2f}°)', fontsize=12)
+    
     # Save figures of CoP pathway and ellipse
-    plt.savefig(os.path.join(output_dir, f"{file_name}analysis_{timestamp}.png"))
+    plt.savefig(os.path.join(output_dir, f"{file_name}_cop_analysis_{timestamp}.png"))
     plt.savefig(os.path.join(output_dir, f"{file_name}_cop_analysis_{timestamp}.svg"))
+    plt.close()  # Close the plot to free memory and prevent overlapping in subsequent plots
 
 
 def plot_ellipse_pca(data, confidence=0.95):
@@ -203,36 +216,39 @@ def plot_ellipse_pca(data, confidence=0.95):
         np.arctan2(eigvecs[1, 0], eigvecs[0, 0]) * 180 / np.pi
     )  # Adjustement for rotated ellipse
 
-    plt.figure()
-    # Plot of data and ellipse
-    plt.plot(data[:, 0], data[:, 1], "-", color="black", label="CoP Pathway")
+    # Calculate ellipse bounds
+    ellipse_x = ellipse_rot[0, :] + pca.mean_[0]
+    ellipse_y = ellipse_rot[1, :] + pca.mean_[1]
+    x_bounds = [min(ellipse_x), max(ellipse_x)]
+    y_bounds = [min(ellipse_y), max(ellipse_y)]
+
     plt.plot(
-        ellipse_rot[0, :] + pca.mean_[0],
-        ellipse_rot[1, :] + pca.mean_[1],
-        "r--",
+        ellipse_x,
+        ellipse_y,
+         color='gray', linestyle='--',
         linewidth=2,
     )
 
-    # Plot of major and minor axis
-    major_axis_start = pca.mean_
+    # Plot major and minor axes from edge to edge
+    major_axis_start = pca.mean_ - eigvecs[0] * scaled_eigvals[0]
     major_axis_end = pca.mean_ + eigvecs[0] * scaled_eigvals[0]
     plt.plot(
         [major_axis_start[0], major_axis_end[0]],
         [major_axis_start[1], major_axis_end[1]],
-        "b-",
+        color='gray', linestyle='--',
         linewidth=1,
     )
 
-    minor_axis_start = pca.mean_
+    minor_axis_start = pca.mean_ - eigvecs[1] * scaled_eigvals[1]
     minor_axis_end = pca.mean_ + eigvecs[1] * scaled_eigvals[1]
     plt.plot(
         [minor_axis_start[0], minor_axis_end[0]],
         [minor_axis_start[1], minor_axis_end[1]],
-        "b-",
+        color='gray', linestyle='--',
         linewidth=1,
     )
 
-    return area, angle
+    return area, angle, x_bounds + y_bounds
 
 
 def main():
@@ -276,6 +292,16 @@ def main():
         print("Invalid force plate dimensions provided.")
         return
 
+    # Ask user for the unit of measurement
+    unit = simpledialog.askstring(
+        "Unit of Measurement",
+        "Enter the unit of measurement for the CoP data (e.g., cm, m, mm, ft, in, yd):",
+        initialvalue="cm"
+    )
+    if not unit:
+        print("No unit provided.")
+        return
+
     # Select sample file
     sample_file_path = filedialog.askopenfilename(
         title="Select a Sample CSV File", filetypes=[("CSV files", "*.csv")]
@@ -302,6 +328,13 @@ def main():
         if file_name.endswith(".csv"):
             file_path = os.path.join(input_dir, file_name)
             data = read_csv_full(file_path)[selected_headers].to_numpy()
+
+            # Convert data to cm if necessary
+            try:
+                data = convert_to_cm(data, unit)
+            except ValueError as e:
+                print(e)
+                return
 
             # Create output directory for current file
             file_output_dir = os.path.join(main_output_dir, file_name)
