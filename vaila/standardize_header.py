@@ -179,4 +179,3 @@ if __name__ == "__main__":
     root = tk.Tk()
     root.withdraw()  # Hide the main Tkinter window
     standardize_header()
-
