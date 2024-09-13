@@ -1,7 +1,7 @@
 """
 EMG Analysis Toolkit - emg_labiocom
 Version: 1.0
-Author: [Your Name]
+Author: Paulo R. P. Santiago
 Date: 2024-07-26
 
 Description:
