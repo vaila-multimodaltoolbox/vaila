@@ -13,8 +13,9 @@ Changelog:
 Author: Prof. Paulo Santiago
 """
 
+from .ellipse import plot_ellipse_pca, plot_cop_pathway_with_ellipse
 from .data_processing import read_cluster_csv, read_mocap_csv
-from .filtering import apply_filter
+from .filter_utils import butter_filter  # Import the updated filter function
 from .plotting import plot_orthonormal_bases
 from .rotation import rotdata, createortbase, calcmatrot, rotmat2euler
 from .readcsv import (
@@ -68,11 +69,12 @@ from .mergestack import merge_csv_files, stack_csv_files
 from .videoprocessor import process_videos_gui
 from .sync_flash import get_median_brightness
 
-
 __all__ = [
+    "plot_ellipse_pca",
+    "plot_cop_pathway_with_ellipse",
     "read_cluster_csv",
     "read_mocap_csv",
-    "apply_filter",
+    "butter_filter",  # Updated filter function name
     "plot_orthonormal_bases",
     "rotdata",
     "createortbase",
@@ -129,3 +131,4 @@ __all__ = [
     "process_videos_gui",
     "get_median_brightness",
 ]
+

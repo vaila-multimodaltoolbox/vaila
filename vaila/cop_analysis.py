@@ -1,65 +1,85 @@
-# https://github.com/Jythen/code_descriptors_postural_control/blob/main/main.py
-# https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8623280/
+"""
+Module: cop_analysis.py
+Description: This module provides tools for analyzing Center of Pressure (CoP) data from force plate measurements. 
+It includes functions for data filtering, selecting relevant data headers, calculating confidence ellipses, 
+and plotting CoP pathways with confidence intervals.
+
+Author: Prof. Dr. Paulo R. P. Santiago
+Version: 1.0
+Date: 2024-09-12
+
+References:
+- Jirsa, V. K., & Kelso, J. A. S. (2004). Coordination dynamics: Issues and trends. In Coordination: Neural, Behavioral and Social Dynamics (pp. 39-56). Springer.
+- Liu, S., Zhai, P., Wang, L., Qiu, J., Liu, L., & Wang, H. (2021). Application of entropy-based measures in postural control system research. Frontiers in Bioengineering and Biotechnology, 9, 776326. https://doi.org/10.3389/fbioe.2021.776326
+- GitHub Repository: Code Descriptors Postural Control. https://github.com/Jythen/code_descriptors_postural_control/blob/main/main.py
+- Liu, S., Zhai, P., Wang, L., Qiu, J., Liu, L., & Wang, H. (2021). A Review of Entropy-Based Methods in Postural Control Evaluation. Frontiers in Neuroscience, 15, 776326. https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8623280/
+
+Changelog:
+- Version 1.0 (2024-09-12):
+  - Initial implementation of CoP data analysis functions.
+  - Included flexible Butterworth filtering for data processing.
+  - Added functions for selecting data headers and plotting CoP pathways.
+  - Integrated GUI components for user input and file handling.
+  - Added conversion utilities for different measurement units.
+
+Usage:
+- To run the CoP analysis, use the `main` function:
+
+  if __name__ == "__main__":
+      main()
+
+- The module provides functions to:
+  - Read CSV files:
+    read_csv_full(filename)
+    Reads the full CSV file and returns its content as a DataFrame.
+  
+  - Filter CoP data:
+    butter_filter(data, fs, filter_type='low', cutoff=10, order=4)
+    Applies a flexible Butterworth filter to the data.
+  
+  - Select Data Headers:
+    select_nine_headers(file_path)
+    Displays a GUI to select nine headers for force plate data analysis.
+  
+  - Compute Confidence Ellipses:
+    plot_ellipse_pca(data, confidence=0.95)
+    Calculates the ellipse using PCA with a specified confidence level.
+  
+  - Plot CoP Pathways:
+    plot_cop_pathway_with_ellipse(cop_x, cop_y, area, angle, ellipse_data, title, output_path)
+    Plots the CoP pathway along with the 95% confidence ellipse and saves the figure.
+"""
 
 import os
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.signal import butter, filtfilt
-from sklearn.decomposition import PCA
-from matplotlib.colors import LinearSegmentedColormap
 from tkinter import (
-    Tk,
-    Toplevel,
-    Canvas,
-    Scrollbar,
-    Frame,
-    Button,
-    Checkbutton,
-    BooleanVar,
-    messagebox,
-    filedialog,
-    simpledialog,
+    Tk, Toplevel, Canvas, Scrollbar, Frame, Button, Checkbutton,
+    BooleanVar, messagebox, filedialog, simpledialog
 )
+from .ellipse import plot_ellipse_pca, plot_cop_pathway_with_ellipse
+from .filter_utils import butter_filter  # Import the updated filter function
 
 def convert_to_cm(data, unit):
     """Converts the data to centimeters based on the provided unit."""
     conversion_factors = {
-        "m": 100,  # meters to cm
-        "mm": 0.1,  # millimeters to cm
-        "ft": 30.48,  # feet to cm
-        "in": 2.54,  # inches to cm
-        "yd": 91.44,  # yards to cm
-        "cm": 1  # cm to cm (no conversion needed)
+        "m": 100, "mm": 0.1, "ft": 30.48, "in": 2.54, "yd": 91.44, "cm": 1
     }
-
     if unit not in conversion_factors:
         raise ValueError(f"Unsupported unit '{unit}'. Please use m, mm, ft, in, yd, or cm.")
-
     return data * conversion_factors[unit]
 
 def read_csv_full(filename):
     """Reads the full CSV file."""
     try:
         data = pd.read_csv(filename, delimiter=",")
-        # Multiply -1 all values in the first column
-        # data.iloc[:, 0] = data.iloc[:, 0]
         return data
     except Exception as e:
         raise Exception(f"Error reading the CSV file: {str(e)}")
 
-
-def butterworth_filter(data, cutoff, fs, order=4):
-    """Applies a Butterworth filter to the data."""
-    nyquist = 0.5 * fs
-    normal_cutoff = cutoff / nyquist
-    b, a = butter(order, normal_cutoff, btype="low", analog=False)
-    y = filtfilt(b, a, data, axis=0)
-    return y
-
-
-def select_two_columns(file_path):
-    """Displays a GUI to select two columns for 2D analysis."""
+def select_nine_headers(file_path):
+    """Displays a GUI to select nine headers for force plate data analysis."""
 
     def get_csv_headers(file_path):
         """Reads the headers from a CSV file."""
@@ -86,9 +106,9 @@ def select_two_columns(file_path):
             var.set(False)
 
     selection_window = Toplevel()
-    selection_window.title("Select Two Headers")
+    selection_window.title("Select Nine Headers for Force Plate Data")
     selection_window.geometry(
-        f"{selection_window.winfo_screenwidth()}x{int(selection_window.winfo_screenheight()*0.9)}"
+        f"{selection_window.winfo_screenwidth()}x{int(selection_window.winfo_screenheight()*0.8)}"
     )
 
     canvas = Canvas(selection_window)
@@ -103,7 +123,7 @@ def select_two_columns(file_path):
     canvas.configure(yscrollcommand=scrollbar.set)
 
     header_vars = [BooleanVar() for _ in headers]
-    num_columns = 7  # Number of columns for header labels
+    num_columns = 8  # Number of columns for header labels
 
     for i, label in enumerate(headers):
         chk = Checkbutton(scrollable_frame, text=label, variable=header_vars[i])
@@ -123,133 +143,39 @@ def select_two_columns(file_path):
 
     selection_window.mainloop()
 
-    if len(selected_headers) != 2:
-        messagebox.showinfo("Info", "Please select exactly two headers for analysis.")
+    if len(selected_headers) != 9:
+        messagebox.showinfo("Info", "Please select exactly nine headers for analysis.")
         return None, None
 
     selected_data = df[selected_headers]
     return selected_headers, selected_data
 
-
 def analyze_data_2d(data, output_dir, file_name, fs, plate_width, plate_height, timestamp):
-    """Analyzes selected 2D data and saves results."""
-    # Filter data
-    data = butterworth_filter(data, cutoff=10, fs=fs)
+    """Analyzes selected 2D data and saves the results."""
 
-    cop_x = data[:, 0]
-    cop_y = data[:, 1]
+    # Apply the updated Butterworth filter to the data
+    try:
+        data = butter_filter(data, fs, filter_type='low', cutoff=10, order=4, padding=True)
+    except ValueError as e:
+        print(f"Filtering error: {e}")
+        messagebox.showerror("Filtering Error", f"An error occurred during filtering:\n{e}")
+        return
 
-    # Create vector time
+    # Defining variables for the analysis
+    cop_x = data[:, 6]     # Center of Pressure in the X direction (Cx)
+    cop_y = data[:, 7]     # Center of Pressure in the Y direction (Cy)
+
+    # Create time vector based on the sampling frequency
     time = np.linspace(0, (len(cop_x) - 1) / fs, len(cop_x))
 
-    # Sets the confidence level
-    confidence = 0.95  # Example for 95%
+    # Calculate the confidence ellipse for Cx and Cy
+    area, angle, bounds, ellipse_data = plot_ellipse_pca(data[:, [6, 7]], confidence=0.95)
 
-    # Plot pathway of CoP and ellipse 95% confidence with color segments
-    plt.figure(figsize=(10, 8))
+    # Define the output path for the plots
+    output_path = os.path.join(output_dir, f"{file_name}_cop_analysis_{timestamp}")
 
-    # Create colormap
-    cmap = LinearSegmentedColormap.from_list("CoP_path", ["blue", "green", "yellow", "red"])
-
-    # Plot CoP pathway with heatmap colors
-    for i in range(len(cop_x) - 1):
-        plt.plot(cop_x[i:i + 2], cop_y[i:i + 2], color=cmap(i / len(cop_x)), linewidth=2)
-
-    # Plot start and end points
-    plt.plot(cop_x[0], cop_y[0], "b^", markersize=10, label="Start")  # Start point
-    plt.plot(cop_x[-1], cop_y[-1], "ro", markersize=10, label="End")  # End point
-
-    # Ellipse and PCA
-    area, angle, ellipse_bounds = plot_ellipse_pca(data, confidence)
-
-    # Calculating the margins to expand the xlim and ylim
-    x_margin = 0.02 * (ellipse_bounds[1] - ellipse_bounds[0])  # 2% of the x range
-    y_margin = 0.02 * (ellipse_bounds[3] - ellipse_bounds[2])  # 2% of the y range
-
-    # Adjust xlim and ylim based on ellipse bounds and add margin
-    plt.xlim(ellipse_bounds[0] - x_margin, ellipse_bounds[1] + x_margin)
-    plt.ylim(ellipse_bounds[2] - y_margin, ellipse_bounds[3] + y_margin)
-
-    plt.xlabel("Medio-Lateral (cm)")
-    plt.ylabel("Antero-Posterior (cm)")
-    plt.grid(True, linestyle=':', color='lightgray')
-    plt.gca().set_aspect("equal", adjustable="box")
-
-    # Add colorbar for time progression
-    sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=0, vmax=100))
-    sm.set_array([])
-    cbar = plt.colorbar(sm, ax=plt.gca(), orientation='vertical', fraction=0.046, pad=0.04)
-    cbar.set_label('Time Progression [%]', rotation=270, labelpad=15)
-
-    # Set the title of the plot correctly
-    plt.title(f'{file_name}\n95% Ellipse (Area: {area:.2f} cm², Angle: {angle:.2f}°)', fontsize=12)
-    
-    # Save figures of CoP pathway and ellipse
-    plt.savefig(os.path.join(output_dir, f"{file_name}_cop_analysis_{timestamp}.png"))
-    plt.savefig(os.path.join(output_dir, f"{file_name}_cop_analysis_{timestamp}.svg"))
-    plt.close()  # Close the plot to free memory and prevent overlapping in subsequent plots
-
-
-def plot_ellipse_pca(data, confidence=0.95):
-    """Calculates and plots the ellipse using PCA with a specified confidence level."""
-    pca = PCA(n_components=2)
-    pca.fit(data)
-
-    # Eigenvalues e eigenvectors
-    eigvals = np.sqrt(pca.explained_variance_)
-    eigvecs = pca.components_
-
-    # Scale factor for confidence level
-    chi2_val = np.sqrt(2) * np.sqrt(np.log(1 / (1 - confidence)))
-    scaled_eigvals = eigvals * chi2_val
-
-    # Ellipse parameters
-    theta = np.linspace(0, 2 * np.pi, 100)
-    ellipse = np.array(
-        [scaled_eigvals[0] * np.cos(theta), scaled_eigvals[1] * np.sin(theta)]
-    )
-    ellipse_rot = np.dot(eigvecs.T, ellipse)  # Adjustement for rotated ellipse
-
-    # Area and angle of the ellipse
-    area = np.pi * scaled_eigvals[0] * scaled_eigvals[1]
-    angle = (
-        np.arctan2(eigvecs[1, 0], eigvecs[0, 0]) * 180 / np.pi
-    )  # Adjustement for rotated ellipse
-
-    # Calculate ellipse bounds
-    ellipse_x = ellipse_rot[0, :] + pca.mean_[0]
-    ellipse_y = ellipse_rot[1, :] + pca.mean_[1]
-    x_bounds = [min(ellipse_x), max(ellipse_x)]
-    y_bounds = [min(ellipse_y), max(ellipse_y)]
-
-    plt.plot(
-        ellipse_x,
-        ellipse_y,
-         color='gray', linestyle='--',
-        linewidth=2,
-    )
-
-    # Plot major and minor axes from edge to edge
-    major_axis_start = pca.mean_ - eigvecs[0] * scaled_eigvals[0]
-    major_axis_end = pca.mean_ + eigvecs[0] * scaled_eigvals[0]
-    plt.plot(
-        [major_axis_start[0], major_axis_end[0]],
-        [major_axis_start[1], major_axis_end[1]],
-        color='gray', linestyle='--',
-        linewidth=1,
-    )
-
-    minor_axis_start = pca.mean_ - eigvecs[1] * scaled_eigvals[1]
-    minor_axis_end = pca.mean_ + eigvecs[1] * scaled_eigvals[1]
-    plt.plot(
-        [minor_axis_start[0], minor_axis_end[0]],
-        [minor_axis_start[1], minor_axis_end[1]],
-        color='gray', linestyle='--',
-        linewidth=1,
-    )
-
-    return area, angle, x_bounds + y_bounds
-
+    # Delegate the plotting to the ellipse module
+    plot_cop_pathway_with_ellipse(cop_x, cop_y, area, angle, ellipse_data, file_name, output_path)
 
 def main():
     """Function to run the CoP analysis"""
@@ -271,7 +197,7 @@ def main():
     fs = simpledialog.askfloat(
         "Signal Frequency",
         "Enter the sampling frequency (Fs) in Hz:",
-        initialvalue=100.0,
+        initialvalue=1000.0,
     )
     if not fs:
         print("No valid frequency provided.")
@@ -296,7 +222,7 @@ def main():
     unit = simpledialog.askstring(
         "Unit of Measurement",
         "Enter the unit of measurement for the CoP data (e.g., cm, m, mm, ft, in, yd):",
-        initialvalue="cm"
+        initialvalue="mm"
     )
     if not unit:
         print("No unit provided.")
@@ -310,8 +236,8 @@ def main():
         print("No sample file selected.")
         return
 
-    # Select two headers for 2D analysis
-    selected_headers, _ = select_two_columns(sample_file_path)
+    # Select nine headers for force plate data analysis
+    selected_headers, _ = select_nine_headers(sample_file_path)
     if not selected_headers:
         print("No valid headers selected.")
         return
@@ -334,25 +260,31 @@ def main():
                 data = convert_to_cm(data, unit)
             except ValueError as e:
                 print(e)
+                messagebox.showerror("Unit Conversion Error", f"An error occurred during unit conversion:\n{e}")
                 return
 
-            # Create output directory for current file
-            file_output_dir = os.path.join(main_output_dir, file_name)
+            # Create output directory for the current file without the '.csv' extension
+            file_name_without_extension = os.path.splitext(file_name)[0]
+            file_output_dir = os.path.join(main_output_dir, file_name_without_extension)
             os.makedirs(file_output_dir, exist_ok=True)
 
             # Analyze and save results
             analyze_data_2d(
                 data,
                 file_output_dir,
-                file_name,
+                file_name_without_extension,  # Use file name without extension
                 fs,
                 plate_width,
                 plate_height,
                 timestamp,
             )
-    plt.show()
-    print("Analysis complete.")
 
+    # Inform the user that the analysis is complete
+    print("Analysis complete.")
+    messagebox.showinfo("Information", "Analysis complete! The window will close in 10 seconds.")
+    root.after(10000, root.destroy)  # Wait for 10 seconds and then destroy the window
+    root.mainloop()
 
 if __name__ == "__main__":
     main()
+
