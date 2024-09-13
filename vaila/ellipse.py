@@ -1,4 +1,20 @@
-# ellipse.py
+"""
+Módulo: ellipse.py
+Descrição: Fornece funções para calcular e plotar elipses de confiança para dados do Centro de Pressão (CoP).
+             Utiliza Análise de Componentes Principais (PCA) para determinar a orientação e o tamanho da elipse.
+             O módulo também inclui funcionalidades de plotagem para visualizar o caminho do CoP com a elipse de confiança.
+             
+Autor: Prof. Dr. Paulo R. P. Santiago
+Versão: 1.0
+Data: 2024-09-12
+
+Histórico de Alterações:
+- Versão 1.0 (2024-09-12):
+  - Implementação inicial do cálculo da elipse usando PCA.
+  - Adicionadas funções de plotagem para visualizar os caminhos do CoP com elipses de confiança.
+  - Integrado mapeamento de cores para representar a progressão do tempo no gráfico do caminho do CoP.
+"""
+
 
 import numpy as np
 from sklearn.decomposition import PCA
