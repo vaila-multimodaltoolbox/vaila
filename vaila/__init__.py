@@ -68,6 +68,18 @@ from .vailaplot3d import plot_3d
 from .mergestack import merge_csv_files, stack_csv_files
 from .videoprocessor import process_videos_gui
 from .sync_flash import get_median_brightness
+from .spectral_features import (
+    total_power,
+    power_frequency_50,
+    power_frequency_95,
+    power_mode,
+    centroid_frequency,
+    frequency_dispersion,
+    energy_content_below_0_5,
+    energy_content_0_5_2,
+    energy_content_above_2,
+    frequency_quotient,
+)
 
 __all__ = [
     "plot_ellipse_pca",
@@ -130,5 +142,15 @@ __all__ = [
     "stack_csv_files",
     "process_videos_gui",
     "get_median_brightness",
+    "total_power",
+    "power_frequency_50",
+    "power_frequency_95",
+    "power_mode",
+    "centroid_frequency",
+    "frequency_dispersion",
+    "energy_content_below_0_5",
+    "energy_content_0_5_2",
+    "energy_content_above_2",
+    "frequency_quotient",
 ]
 
