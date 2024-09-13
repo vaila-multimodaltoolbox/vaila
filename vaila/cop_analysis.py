@@ -59,7 +59,6 @@ from .spectral_features import (
     frequency_quotient
 )
 
-
 def convert_to_cm(data, unit):
     """Converts the data to centimeters based on the provided unit."""
     conversion_factors = {
@@ -151,7 +150,6 @@ def select_nine_headers(file_path):
 
     selected_data = df[selected_headers]
     return selected_headers, selected_data
-
 
 def analyze_data_2d(data, output_dir, file_name, fs, plate_width, plate_height, timestamp):
     """Analyzes selected 2D data and saves the results."""
@@ -325,7 +323,6 @@ def analyze_data_2d(data, output_dir, file_name, fs, plate_width, plate_height, 
 
     print(f"Analysis complete for file: {file_name}\n")
 
-
 def main():
     """Function to run the CoP analysis"""
     root = Tk()
@@ -457,7 +454,6 @@ def main():
     messagebox.showinfo("Information", "Analysis complete! The window will close in 10 seconds.")
     root.after(10000, root.destroy)  # Wait for 10 seconds and then destroy the window
     root.mainloop()
-
 
 if __name__ == "__main__":
     main()
