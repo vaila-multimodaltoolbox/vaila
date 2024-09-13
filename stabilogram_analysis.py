@@ -29,6 +29,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import butter, filtfilt, welch, savgol_filter
 
+
 def filter_signal(cop_x, cop_y, fs, cutoff=10, order=4):
     """
     Aplica um filtro passa-baixa de Butterworth aos sinais de CoP.
@@ -53,10 +54,11 @@ def filter_signal(cop_x, cop_y, fs, cutoff=10, order=4):
     """
     nyq = 0.5 * fs
     normal_cutoff = cutoff / nyq
-    b, a = butter(order, normal_cutoff, btype='low', analog=False)
+    b, a = butter(order, normal_cutoff, btype="low", analog=False)
     filtered_cop_x = filtfilt(b, a, cop_x)
     filtered_cop_y = filtfilt(b, a, cop_y)
     return filtered_cop_x, filtered_cop_y
+
 
 def compute_rms(cop_x, cop_y):
     """
@@ -74,9 +76,10 @@ def compute_rms(cop_x, cop_y):
     - rms_ap: float
         Deslocamento RMS na direção AP.
     """
-    rms_ml = np.sqrt(np.mean(cop_x ** 2))
-    rms_ap = np.sqrt(np.mean(cop_y ** 2))
+    rms_ml = np.sqrt(np.mean(cop_x**2))
+    rms_ap = np.sqrt(np.mean(cop_y**2))
     return rms_ml, rms_ap
+
 
 def compute_speed(cop_x, cop_y, fs, window_length=5, polyorder=3):
     """
@@ -105,6 +108,7 @@ def compute_speed(cop_x, cop_y, fs, window_length=5, polyorder=3):
     speed_ap = savgol_filter(cop_y, window_length, polyorder, deriv=1, delta=delta)
     return speed_ml, speed_ap
 
+
 def compute_power_spectrum(cop_x, cop_y, fs):
     """
     Calcula a Densidade Espectral de Potência (PSD) dos sinais de CoP.
@@ -130,6 +134,7 @@ def compute_power_spectrum(cop_x, cop_y, fs):
     freqs_ml, psd_ml = welch(cop_x, fs=fs, nperseg=256)
     freqs_ap, psd_ap = welch(cop_y, fs=fs, nperseg=256)
     return freqs_ml, psd_ml, freqs_ap, psd_ap
+
 
 def compute_sway_density(cop_x, cop_y, fs, radius=0.3):
     """
@@ -157,6 +162,7 @@ def compute_sway_density(cop_x, cop_y, fs, radius=0.3):
         sway_density[t] = np.sum(distances <= radius) / n_samples
     return sway_density
 
+
 def plot_stabilogram(cop_x, cop_y, output_path):
     """
     Plota e salva o estabilograma.
@@ -170,14 +176,15 @@ def plot_stabilogram(cop_x, cop_y, output_path):
         Caminho para salvar o plot do estabilograma.
     """
     plt.figure(figsize=(10, 8))
-    plt.plot(cop_x, cop_y, color='blue', linewidth=1)
-    plt.title('Estabilograma')
-    plt.xlabel('Deslocamento ML (cm)')
-    plt.ylabel('Deslocamento AP (cm)')
+    plt.plot(cop_x, cop_y, color="blue", linewidth=1)
+    plt.title("Estabilograma")
+    plt.xlabel("Deslocamento ML (cm)")
+    plt.ylabel("Deslocamento AP (cm)")
     plt.grid(True)
-    plt.axis('equal')
+    plt.axis("equal")
     plt.savefig(f"{output_path}_stabilogram.png", dpi=300)
     plt.close()
+
 
 def plot_power_spectrum(freqs_ml, psd_ml, freqs_ap, psd_ap, output_path):
     """
@@ -196,15 +203,16 @@ def plot_power_spectrum(freqs_ml, psd_ml, freqs_ap, psd_ap, output_path):
         Caminho para salvar o plot do espectro de potência.
     """
     plt.figure(figsize=(10, 8))
-    plt.semilogy(freqs_ml, psd_ml, label='ML')
-    plt.semilogy(freqs_ap, psd_ap, label='AP')
-    plt.xlabel('Frequência (Hz)')
-    plt.ylabel('PSD (cm²/Hz)')
-    plt.title('Densidade Espectral de Potência')
+    plt.semilogy(freqs_ml, psd_ml, label="ML")
+    plt.semilogy(freqs_ap, psd_ap, label="AP")
+    plt.xlabel("Frequência (Hz)")
+    plt.ylabel("PSD (cm²/Hz)")
+    plt.title("Densidade Espectral de Potência")
     plt.legend()
     plt.grid(True)
     plt.savefig(f"{output_path}_psd.png", dpi=300)
     plt.close()
+
 
 def save_metrics_to_csv(metrics_dict, output_path):
     """
@@ -217,6 +225,6 @@ def save_metrics_to_csv(metrics_dict, output_path):
         Caminho para salvar o arquivo CSV de métricas.
     """
     import pandas as pd
+
     df = pd.DataFrame([metrics_dict])
     df.to_csv(f"{output_path}_metrics.csv", index=False)
-

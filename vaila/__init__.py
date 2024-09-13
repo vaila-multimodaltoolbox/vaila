@@ -153,4 +153,3 @@ __all__ = [
     "energy_content_above_2",
     "frequency_quotient",
 ]
-

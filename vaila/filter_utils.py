@@ -23,7 +23,17 @@ Usage Example:
 from scipy.signal import butter, sosfiltfilt
 import numpy as np
 
-def butter_filter(data, fs, filter_type='low', cutoff=None, lowcut=None, highcut=None, order=4, padding=True):
+
+def butter_filter(
+    data,
+    fs,
+    filter_type="low",
+    cutoff=None,
+    lowcut=None,
+    highcut=None,
+    order=4,
+    padding=True,
+):
     """
     Applies a Butterworth filter (low-pass or band-pass) to the input data.
 
@@ -51,19 +61,23 @@ def butter_filter(data, fs, filter_type='low', cutoff=None, lowcut=None, highcut
     """
     # Check filter type and set parameters
     nyq = 0.5 * fs  # Nyquist frequency
-    if filter_type == 'low':
+    if filter_type == "low":
         if cutoff is None:
             raise ValueError("Cutoff frequency must be provided for low-pass filter.")
         normal_cutoff = cutoff / nyq
-        sos = butter(order, normal_cutoff, btype='low', analog=False, output='sos')
-    elif filter_type == 'band':
+        sos = butter(order, normal_cutoff, btype="low", analog=False, output="sos")
+    elif filter_type == "band":
         if lowcut is None or highcut is None:
-            raise ValueError("Lowcut and highcut frequencies must be provided for band-pass filter.")
+            raise ValueError(
+                "Lowcut and highcut frequencies must be provided for band-pass filter."
+            )
         low = lowcut / nyq
         high = highcut / nyq
-        sos = butter(order, [low, high], btype='band', analog=False, output='sos')
+        sos = butter(order, [low, high], btype="band", analog=False, output="sos")
     else:
-        raise ValueError("Unsupported filter type. Use 'low' for low-pass or 'band' for band-pass.")
+        raise ValueError(
+            "Unsupported filter type. Use 'low' for low-pass or 'band' for band-pass."
+        )
 
     data = np.asarray(data)
     axis = 0  # Filtering along the first axis (rows)
@@ -76,12 +90,14 @@ def butter_filter(data, fs, filter_type='low', cutoff=None, lowcut=None, highcut
         padlen = min(int(fs), max_padlen, 15)
 
         if data_len <= padlen:
-            raise ValueError(f"The length of the input data ({data_len}) must be greater than the padding length ({padlen}).")
+            raise ValueError(
+                f"The length of the input data ({data_len}) must be greater than the padding length ({padlen})."
+            )
 
         # Pad the data along the specified axis
         pad_width = [(0, 0)] * data.ndim
         pad_width[axis] = (padlen, padlen)
-        padded_data = np.pad(data, pad_width=pad_width, mode='reflect')
+        padded_data = np.pad(data, pad_width=pad_width, mode="reflect")
         filtered_padded_data = sosfiltfilt(sos, padded_data, axis=axis, padlen=0)
         # Remove padding
         idx = [slice(None)] * data.ndim
@@ -91,4 +107,3 @@ def butter_filter(data, fs, filter_type='low', cutoff=None, lowcut=None, highcut
         filtered_data = sosfiltfilt(sos, data, axis=axis, padlen=0)
 
     return filtered_data
-

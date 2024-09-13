@@ -1,26 +1,71 @@
 """
 Module: cop_analysis.py
-Description: This module provides tools for analyzing Center of Pressure (CoP) data from force plate measurements.
-It includes functions for data filtering, selecting relevant data headers, calculating confidence ellipses,
-and plotting CoP pathways with confidence intervals.
+Description: This module provides a comprehensive set of tools for analyzing Center of Pressure (CoP) data from force plate measurements. 
+             CoP data is critical in understanding balance and postural control in various fields such as biomechanics, rehabilitation, and sports science.
 
-Author: Prof. Dr. Paulo R. P. Santiago
-Version: 1.4
-Date: 2024-09-12
+             The module includes:
+             - Functions for data filtering, specifically using a Butterworth filter, to remove noise and smooth the CoP data.
+             - GUI components to allow users to select relevant data headers interactively for analysis.
+             - Methods to calculate various postural stability metrics such as Mean Square Displacement (MSD), Power Spectral Density (PSD), and sway density.
+             - Spectral feature analysis to quantify different frequency components of the CoP signals, which is essential for evaluating balance strategies and postural control.
+             - Plotting functions to visualize CoP pathways and their associated confidence ellipses, stabilograms, and power spectrums.
 
-Changelog:
-- Version 1.4 (2024-09-12):
-  - Integrated spectral features calculations.
-  - Adjusted metrics dictionary to include new spectral features.
-  - Standardized headers in the metrics dictionary for CSV output.
-  - Updated plotting functions to include maximum PSD values and median frequencies.
-  - Added print statements to provide user feedback during processing.
+             The module is designed to handle large datasets efficiently, allowing batch processing of multiple files and providing detailed feedback throughout the analysis.
+
+Inputs:
+- `convert_to_cm(data, unit)`:
+  - `data` (numpy array): Numerical data to be converted.
+  - `unit` (str): The current unit of the data (e.g., 'm', 'mm', 'ft', 'in', 'yd', 'cm').
+
+- `read_csv_full(filename)`:
+  - `filename` (str): The path to the CSV file containing CoP data.
+
+- `select_nine_headers(file_path)`:
+  - `file_path` (str): Path to a sample CSV file to determine the headers available for analysis.
+
+- `analyze_data_2d(data, output_dir, file_name, fs, plate_width, plate_height, timestamp)`:
+  - `data` (numpy array): Filtered CoP data for analysis.
+  - `output_dir` (str): Directory path to save analysis outputs.
+  - `file_name` (str): Base name for output files.
+  - `fs` (float): Sampling frequency in Hz.
+  - `plate_width` (float): Width of the force plate in centimeters.
+  - `plate_height` (float): Height of the force plate in centimeters.
+  - `timestamp` (str): Timestamp for output file naming.
+
+Outputs:
+- Saves processed data and metrics in CSV format to the specified output directory.
+- Generates and saves visualizations of CoP pathways, stabilograms, power spectrums, and confidence ellipses in PNG and SVG formats.
 
 Usage:
-- To run the CoP analysis, use the `main` function:
+- To use this module for CoP data analysis, execute the `main` function. The script will prompt the user to select input and output directories, sampling frequency, force plate dimensions, and unit of measurement for the CoP data.
 
-  if __name__ == "__main__":
-      main()
+Example:
+```python
+if __name__ == "__main__":
+    main()
+```
+    Example flow of using the functions in this module:
+        Data Import and Preparation: Use read_csv_full to load CoP data from a CSV file and convert_to_cm to ensure the data is in the desired unit.
+        Header Selection: Use select_nine_headers to allow the user to select which headers from the CSV file should be analyzed.
+        Data Analysis: Use analyze_data_2d to filter the CoP data, compute various metrics, perform spectral feature analysis, and generate visualizations.
+        Batch Processing: The main function orchestrates the entire process, handling multiple CSV files in a selected directory.
+
+Author: Prof. Dr. Paulo R. P. Santiago Version: 1.4 Date: 2024-09-12
+
+Changelog:
+
+    Version 1.4 (2024-09-12):
+        Integrated spectral features calculations for enhanced analysis of CoP data.
+        Adjusted metrics dictionary to include new spectral features such as total power, frequency dispersion, and energy content at various frequency bands.
+        Standardized headers in the metrics dictionary for consistent CSV output.
+        Updated plotting functions to display maximum PSD values and median frequencies for improved visual analysis.
+        Enhanced user feedback with print statements during various processing stages.
+
+References:
+
+    GitHub Repository: Code Descriptors Postural Control. https://github.com/Jythen/code_descriptors_postural_control/blob/main/stabilogram/stato.py
+    Further reading on entropy-based methods in postural control: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8623280
+
 """
 
 import os
@@ -28,8 +73,17 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from tkinter import (
-    Tk, Toplevel, Canvas, Scrollbar, Frame, Button, Checkbutton,
-    BooleanVar, messagebox, filedialog, simpledialog
+    Tk,
+    Toplevel,
+    Canvas,
+    Scrollbar,
+    Frame,
+    Button,
+    Checkbutton,
+    BooleanVar,
+    messagebox,
+    filedialog,
+    simpledialog,
 )
 from .ellipse import plot_ellipse_pca, plot_cop_pathway_with_ellipse
 from .filter_utils import butter_filter
@@ -44,7 +98,7 @@ from .stabilogram_analysis import (
     compute_total_path_length,
     plot_stabilogram,
     plot_power_spectrum,
-    save_metrics_to_csv
+    save_metrics_to_csv,
 )
 from .spectral_features import (
     total_power,
@@ -56,16 +110,24 @@ from .spectral_features import (
     energy_content_below_0_5,
     energy_content_0_5_2,
     energy_content_above_2,
-    frequency_quotient
+    frequency_quotient,
 )
+
 
 def convert_to_cm(data, unit):
     """Converts the data to centimeters based on the provided unit."""
     conversion_factors = {
-        "m": 100, "mm": 0.1, "ft": 30.48, "in": 2.54, "yd": 91.44, "cm": 1
+        "m": 100,
+        "mm": 0.1,
+        "ft": 30.48,
+        "in": 2.54,
+        "yd": 91.44,
+        "cm": 1,
     }
     if unit not in conversion_factors:
-        raise ValueError(f"Unsupported unit '{unit}'. Please use m, mm, ft, in, yd, or cm.")
+        raise ValueError(
+            f"Unsupported unit '{unit}'. Please use m, mm, ft, in, yd, or cm."
+        )
     return data * conversion_factors[unit]
 
 
@@ -95,7 +157,9 @@ def select_nine_headers(file_path):
             header for header, var in zip(headers, header_vars) if var.get()
         ]
         if len(selected_headers) != 9:
-            messagebox.showinfo("Info", "Please select exactly nine headers for analysis.")
+            messagebox.showinfo(
+                "Info", "Please select exactly nine headers for analysis."
+            )
             return
         selection_window.quit()
         selection_window.destroy()
@@ -139,7 +203,9 @@ def select_nine_headers(file_path):
     btn_frame.pack(side="right", padx=10, pady=10, anchor="center")
 
     Button(btn_frame, text="Select All", command=select_all).pack(side="top", pady=5)
-    Button(btn_frame, text="Unselect All", command=unselect_all).pack(side="top", pady=5)
+    Button(btn_frame, text="Unselect All", command=unselect_all).pack(
+        side="top", pady=5
+    )
     Button(btn_frame, text="Confirm", command=on_select).pack(side="top", pady=5)
 
     selection_window.mainloop()
@@ -151,7 +217,10 @@ def select_nine_headers(file_path):
     selected_data = df[selected_headers]
     return selected_headers, selected_data
 
-def analyze_data_2d(data, output_dir, file_name, fs, plate_width, plate_height, timestamp):
+
+def analyze_data_2d(
+    data, output_dir, file_name, fs, plate_width, plate_height, timestamp
+):
     """Analyzes selected 2D data and saves the results."""
 
     print(f"Starting analysis for file: {file_name}")
@@ -160,13 +229,23 @@ def analyze_data_2d(data, output_dir, file_name, fs, plate_width, plate_height, 
     # Apply the Butterworth filter to the data, creating 'dataf'
     try:
         print("Applying Butterworth filter...")
-        dataf = butter_filter(data, fs, filter_type='low', cutoff=10, order=4, padding=True)
+        dataf = butter_filter(
+            data, fs, filter_type="low", cutoff=10, order=4, padding=True
+        )
     except ValueError as e:
         print(f"Filtering error: {e}")
-        messagebox.showerror("Filtering Error", f"An error occurred during filtering:\n{e}")
+        messagebox.showerror(
+            "Filtering Error", f"An error occurred during filtering:\n{e}"
+        )
         return
 
     # Extract variables from filtered data 'dataf'
+    force_x_f = dataf[:, 0]  # Force in the X direction (ML)
+    force_y_f = dataf[:, 1]  # Force in the Y direction (AP)
+    force_z_f = dataf[:, 2]  # Force in the Z direction (Vertical)
+    moment_x_f = dataf[:, 3]  # Moment in the X direction
+    moment_y_f = dataf[:, 4]  # Moment in the Y direction
+    moment_z_f = dataf[:, 5]  # Moment in the Z direction
     cop_x_f = dataf[:, 6]  # Filtered CoP in the X direction (ML)
     cop_y_f = dataf[:, 7]  # Filtered CoP in the Y direction (AP)
 
@@ -184,7 +263,7 @@ def analyze_data_2d(data, output_dir, file_name, fs, plate_width, plate_height, 
     Y_n = cop_y_f - mean_AP
 
     # Radius
-    R_n = np.sqrt(X_n ** 2 + Y_n ** 2)
+    R_n = np.sqrt(X_n**2 + Y_n**2)
 
     # Covariance
     COV = np.mean(X_n * Y_n)
@@ -192,7 +271,7 @@ def analyze_data_2d(data, output_dir, file_name, fs, plate_width, plate_height, 
     # Velocity components
     V_xn = np.gradient(X_n, time)
     V_yn = np.gradient(Y_n, time)
-    V_n = np.sqrt(V_xn ** 2 + V_yn ** 2)
+    V_n = np.sqrt(V_xn**2 + V_yn**2)
 
     # Mean speed
     mean_speed_ml = np.mean(np.abs(V_xn))
@@ -257,48 +336,48 @@ def analyze_data_2d(data, output_dir, file_name, fs, plate_width, plate_height, 
 
     # Update metrics dictionary
     metrics = {
-        'Total Duration (s)': T,
-        'Number of Points': N,
-        'Sampling Frequency (Hz)': fs,
-        'Mean ML (cm)': mean_ML,
-        'Mean AP (cm)': mean_AP,
-        'Min ML (cm)': np.min(X_n),
-        'Max ML (cm)': np.max(X_n),
-        'Min AP (cm)': np.min(Y_n),
-        'Max AP (cm)': np.max(Y_n),
-        'RMS ML (cm)': rms_ml,
-        'RMS AP (cm)': rms_ap,
-        'Covariance (cm²)': COV,
-        'Total Path Length (cm)': total_path_length,
-        'Mean Speed ML (cm/s)': mean_speed_ml,
-        'Mean Speed AP (cm/s)': mean_speed_ap,
-        'Mean Velocity Norm (cm/s)': mean_velocity_norm,
-        'MSD ML (cm²)': msd_ml,
-        'MSD AP (cm²)': msd_ap,
-        'Zero Crossings ML': zero_crossings_ml,
-        'Zero Crossings AP': zero_crossings_ap,
-        'Number of Peaks ML': num_peaks_ml,
-        'Number of Peaks AP': num_peaks_ap,
-        'Total Power ML': total_power_ml,
-        'Total Power AP': total_power_ap,
-        'Power Frequency 50 ML': power_freq_50_ml,
-        'Power Frequency 50 AP': power_freq_50_ap,
-        'Power Frequency 95 ML': power_freq_95_ml,
-        'Power Frequency 95 AP': power_freq_95_ap,
-        'Power Mode ML': power_mode_ml,
-        'Power Mode AP': power_mode_ap,
-        'Centroid Frequency ML': centroid_freq_ml,
-        'Centroid Frequency AP': centroid_freq_ap,
-        'Frequency Dispersion ML': freq_dispersion_ml,
-        'Frequency Dispersion AP': freq_dispersion_ap,
-        'Energy Content Below 0.5 ML': energy_below_0_5_ml,
-        'Energy Content Below 0.5 AP': energy_below_0_5_ap,
-        'Energy Content 0.5-2 ML': energy_0_5_2_ml,
-        'Energy Content 0.5-2 AP': energy_0_5_2_ap,
-        'Energy Content Above 2 ML': energy_above_2_ml,
-        'Energy Content Above 2 AP': energy_above_2_ap,
-        'Frequency Quotient ML': freq_quotient_ml,
-        'Frequency Quotient AP': freq_quotient_ap,
+        "Total Duration (s)": T,
+        "Number of Points": N,
+        "Sampling Frequency (Hz)": fs,
+        "Mean ML (cm)": mean_ML,
+        "Mean AP (cm)": mean_AP,
+        "Min ML (cm)": np.min(X_n),
+        "Max ML (cm)": np.max(X_n),
+        "Min AP (cm)": np.min(Y_n),
+        "Max AP (cm)": np.max(Y_n),
+        "RMS ML (cm)": rms_ml,
+        "RMS AP (cm)": rms_ap,
+        "Covariance (cm²)": COV,
+        "Total Path Length (cm)": total_path_length,
+        "Mean Speed ML (cm/s)": mean_speed_ml,
+        "Mean Speed AP (cm/s)": mean_speed_ap,
+        "Mean Velocity Norm (cm/s)": mean_velocity_norm,
+        "MSD ML (cm²)": msd_ml,
+        "MSD AP (cm²)": msd_ap,
+        "Zero Crossings ML": zero_crossings_ml,
+        "Zero Crossings AP": zero_crossings_ap,
+        "Number of Peaks ML": num_peaks_ml,
+        "Number of Peaks AP": num_peaks_ap,
+        "Total Power ML": total_power_ml,
+        "Total Power AP": total_power_ap,
+        "Power Frequency 50 ML": power_freq_50_ml,
+        "Power Frequency 50 AP": power_freq_50_ap,
+        "Power Frequency 95 ML": power_freq_95_ml,
+        "Power Frequency 95 AP": power_freq_95_ap,
+        "Power Mode ML": power_mode_ml,
+        "Power Mode AP": power_mode_ap,
+        "Centroid Frequency ML": centroid_freq_ml,
+        "Centroid Frequency AP": centroid_freq_ap,
+        "Frequency Dispersion ML": freq_dispersion_ml,
+        "Frequency Dispersion AP": freq_dispersion_ap,
+        "Energy Content Below 0.5 ML": energy_below_0_5_ml,
+        "Energy Content Below 0.5 AP": energy_below_0_5_ap,
+        "Energy Content 0.5-2 ML": energy_0_5_2_ml,
+        "Energy Content 0.5-2 AP": energy_0_5_2_ap,
+        "Energy Content Above 2 ML": energy_above_2_ml,
+        "Energy Content Above 2 AP": energy_above_2_ap,
+        "Frequency Quotient ML": freq_quotient_ml,
+        "Frequency Quotient AP": freq_quotient_ap,
     }
 
     # Define output path to save files
@@ -318,10 +397,15 @@ def analyze_data_2d(data, output_dir, file_name, fs, plate_width, plate_height, 
 
     # Calculate and plot confidence ellipse
     print("Calculating and plotting confidence ellipse...")
-    area, angle, bounds, ellipse_data = plot_ellipse_pca(np.column_stack((X_n, Y_n)), confidence=0.95)
-    plot_cop_pathway_with_ellipse(X_n, Y_n, area, angle, ellipse_data, file_name, output_path)
+    area, angle, bounds, ellipse_data = plot_ellipse_pca(
+        np.column_stack((X_n, Y_n)), confidence=0.95
+    )
+    plot_cop_pathway_with_ellipse(
+        X_n, Y_n, area, angle, ellipse_data, file_name, output_path
+    )
 
     print(f"Analysis complete for file: {file_name}\n")
+
 
 def main():
     """Function to run the CoP analysis"""
@@ -373,7 +457,7 @@ def main():
     unit = simpledialog.askstring(
         "Unit of Measurement",
         "Enter the unit of measurement for the CoP data (e.g., cm, m, mm, ft, in, yd):",
-        initialvalue="mm"
+        initialvalue="mm",
     )
     if not unit:
         print("No unit provided.")
@@ -417,8 +501,12 @@ def main():
             file_path = os.path.join(input_dir, file_name)
             df_full = read_csv_full(file_path)
             if not all(header in df_full.columns for header in selected_headers):
-                messagebox.showerror("Header Error", f"Selected headers not found in file {file_name}.")
-                print(f"Error: Selected headers not found in file {file_name}. Skipping file.")
+                messagebox.showerror(
+                    "Header Error", f"Selected headers not found in file {file_name}."
+                )
+                print(
+                    f"Error: Selected headers not found in file {file_name}. Skipping file."
+                )
                 continue
             data = df_full[selected_headers].to_numpy()
 
@@ -427,7 +515,10 @@ def main():
                 data = convert_to_cm(data, unit)
             except ValueError as e:
                 print(e)
-                messagebox.showerror("Unit Conversion Error", f"An error occurred during unit conversion:\n{e}")
+                messagebox.showerror(
+                    "Unit Conversion Error",
+                    f"An error occurred during unit conversion:\n{e}",
+                )
                 print(f"Error converting units for file {file_name}. Skipping file.")
                 continue
 
@@ -451,10 +542,12 @@ def main():
 
     # Inform the user that the analysis is complete
     print("All files processed.")
-    messagebox.showinfo("Information", "Analysis complete! The window will close in 10 seconds.")
+    messagebox.showinfo(
+        "Information", "Analysis complete! The window will close in 10 seconds."
+    )
     root.after(10000, root.destroy)  # Wait for 10 seconds and then destroy the window
     root.mainloop()
 
+
 if __name__ == "__main__":
     main()
-

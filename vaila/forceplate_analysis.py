@@ -8,56 +8,75 @@ Version: 0.5
 
 Description:
 ------------
-This script provides a graphical user interface (GUI) for selecting and running various 
-biomechanical analysis scripts as part of the VAILA toolbox. The available analyses include:
-- Force Cube Analysis
-- Center of Pressure (CoP) Balance Analysis
-- Force CMJ Analysis
-- Noise Signal Fixing
+This script serves as the central control interface for the VAILA (Virtual Analysis 
+for Interactive Learning in Biomechanics) toolbox, providing a user-friendly graphical 
+user interface (GUI) for selecting and executing various biomechanical analysis scripts. 
+The analyses offered in this toolbox support the study and evaluation of postural control, 
+dynamic balance, and force measurements, which are critical in both clinical and research 
+settings.
 
-The user is prompted to choose the desired analysis via a GUI, and the corresponding analysis 
-script is executed based on the selection.
+Key Analyses Supported:
+-----------------------
+1. Force Cube Analysis: Examines force data captured in a cubic arrangement, allowing for 
+   multidirectional force vector analysis.
+2. Center of Pressure (CoP) Balance Analysis: Evaluates postural stability by analyzing 
+   the center of pressure data, providing insights into balance control and sway 
+   characteristics.
+3. Force CMJ (Countermovement Jump) Analysis: Analyzes the forces involved in a 
+   countermovement jump to assess athletic performance, muscle power, and explosiveness.
+4. Noise Signal Fixing: Identifies and corrects noise artifacts in force signals, ensuring 
+   data accuracy for subsequent analyses.
 
 Functionalities:
 ----------------
-1. **GUI for Analysis Selection**: Presents the user with a choice of analyses to run.
-2. **Dynamic Module Importing**: Only imports the necessary module when a specific analysis is selected, 
-   optimizing performance and memory usage.
-3. **Analysis Execution**: Executes the main function of the selected analysis script.
+1. GUI for Analysis Selection: Utilizes Python's Tkinter library to present a straightforward 
+   interface where users can choose their desired analysis with ease.
+2. Dynamic Module Importing: Efficiently loads only the necessary module for the selected 
+   analysis, conserving system resources and improving performance.
+3. Execution of Analysis: Automatically runs the main function of the selected analysis module, 
+   guiding users through any necessary data input or parameter settings.
 
 Modules and Packages Required:
--------------------------------
-- Python Standard Libraries: `tkinter`
-- External Libraries: None
+------------------------------
+- Python Standard Libraries: tkinter for GUI creation and management.
+- External Libraries: None required; all functionalities are built using standard Python libraries.
 - VAILA Toolbox Modules: 
-  - `force_cube_fig`
-  - `cop_analysis`
-  - `force_cmj`
-  - `fixnoise`
+  * force_cube_fig: For analyzing force cube data.
+  * cop_analysis: For conducting CoP balance analysis.
+  * force_cmj: For analyzing countermovement jump dynamics.
+  * fixnoise: For correcting noise in force data.
 
 How to Use:
 -----------
-1. Run the script from the terminal using:
-```python
-    python -m vaila.forceplate_analysis
-```
-or by double-clicking the script if running in an environment where this is possible.
+1. Run the Script: 
+   Execute the script from the terminal using:
+   python -m vaila.forceplate_analysis
+   Alternatively, double-click the script file if your environment supports it.
 
-    A GUI window will appear, allowing you to select the desired analysis type. Choose the appropriate button for the analysis you wish to perform.
+2. Select Analysis:
+   A GUI window will appear, prompting you to select the type of analysis to perform. Click on 
+   the corresponding button for the desired analysis.
 
-    The selected analysis will run, and the user will be guided through any required steps, such as selecting data files or inputting parameters.
+3. Follow Instructions:
+   The selected analysis will start, and you will be guided through the necessary steps, such as 
+   choosing data files or entering parameters. Follow the on-screen instructions to complete the 
+   analysis.
 
 License:
+--------
+This script is licensed under the MIT License. For more details, please refer to the LICENSE file 
+located in the project root.
 
-This script is licensed under the MIT License. See LICENSE file in the project root for more details.
 Disclaimer:
+-----------
+This script is provided "as is," without any warranty, express or implied. The authors are not 
+liable for any damage or data loss resulting from the use of this script. It is intended solely for 
+academic and research purposes.
 
-This script is provided "as is," without warranty of any kind. Use at your own risk. It is intended for academic and research purposes only.
 Changelog:
-
-    2024-09-09: Initial creation of the script with functionality for dynamic analysis selection.
-    2024-09-10: Added support for CoP Balance Analysis (cop_analysis.py).
-
+----------
+- 2024-09-09: Initial creation of the script with dynamic analysis selection functionality.
+- 2024-09-10: Added support for CoP Balance Analysis (cop_analysis.py).
 ================================================================================
 """
 

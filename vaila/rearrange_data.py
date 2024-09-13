@@ -248,7 +248,7 @@ class ColumnReorderGUI(tk.Tk):
                 self.deiconify()  # Show the Tkinter window again after standardization
                 return
 
-        # Detectar precisão e notação científica no primeiro arquivo
+            # Detectar precisão e notação científica no primeiro arquivo
             self.max_decimal_places, self.scientific_notation = (
                 detect_precision_and_notation(
                     os.path.join(directory_path, base_file_name)
@@ -365,7 +365,7 @@ class ColumnReorderGUI(tk.Tk):
         )
         standardize_button.grid(row=6, column=0, padx=5, pady=5, sticky="n")
 
-       # Bind events to functions
+        # Bind events to functions
         self.bind("<Return>", self.swap_columns)
         self.bind("d", self.delete_columns)
         self.bind("m", self.manual_selection)
@@ -978,6 +978,7 @@ def batch_convert_dvideo(directory_path):
         convert_dvideo_to_vaila(file_path, save_directory)
 
     print(f"All files have been converted and saved to {save_directory}")
+
 
 def rearrange_data_in_directory():
     root = tk.Tk()
