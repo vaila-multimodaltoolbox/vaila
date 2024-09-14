@@ -382,7 +382,7 @@ dependencies:
   - xyzservices=2024.6.0=pyhd8ed1ab_0
   - xz=5.4.6=h80987f9_1
   - yaml=0.2.5=h3422bc3_2
-  - ydata-profiling=4.9.0=pyhd8ed1ab_0
+  - ydata-profiling=4.10.0
   - zeromq=4.3.5=hcc0f68c_4
   - zict=3.0.0=pyhd8ed1ab_0
   - zipp=3.19.2=pyhd8ed1ab_0
