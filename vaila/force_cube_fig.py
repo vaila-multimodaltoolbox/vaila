@@ -77,6 +77,9 @@ from tkinter import (
     simpledialog,
 )
 
+# Print the directory and name of the script being executed
+print(f"Running script: {os.path.basename(__file__)}")
+print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
 
 def select_source_directory():
     """
@@ -225,7 +228,7 @@ def select_headers_and_load_data(file_path):
             var.set(False)
 
     selection_window = Toplevel()
-    selection_window.title("Select Headers")
+    selection_window.title(f"Select Headers for {os.path.basename(file_path)}")
     selection_window.geometry(
         f"{selection_window.winfo_screenwidth()}x{int(selection_window.winfo_screenheight()*0.9)}"
     )
@@ -299,33 +302,35 @@ def create_main_output_directory(output_dir, filename):
     return main_output_dir
 
 
-def prompt_user_input():
-    # Correct function definition without parameters
+def prompt_user_input(file_name):
+    """
+    Prompts the user for input parameters and displays the file name being processed.
+    """
     root = Tk()
     root.withdraw()  # Hide the main Tkinter window
 
+    # Display the current file being processed in the input dialogs
     sidefoot = simpledialog.askstring(
-        "Input", "Enter Sidefoot (R or L):", initialvalue="R"
+        "Input", f"Enter Sidefoot (R or L) for {file_name}:", initialvalue="R"
     )
     dominance = simpledialog.askstring(
-        "Input", "Enter Dominance (R or L):", initialvalue="R"
+        "Input", f"Enter Dominance (R or L) for {file_name}:", initialvalue="R"
     )
     quality = simpledialog.askinteger(
-        "Input", "Enter Quality (integer):", initialvalue=5
+        "Input", f"Enter Quality (integer) for {file_name}:", initialvalue=5
     )
     threshold = simpledialog.askfloat(
-        "Input", "Enter Threshold (float):", initialvalue=0.025
+        "Input", f"Enter Threshold (float) for {file_name}:", initialvalue=0.025
     )
     fs = simpledialog.askfloat(
-        "Input", "Enter Sampling Frequency (Fs):", initialvalue=1000.0
+        "Input", f"Enter Sampling Frequency (Fs) for {file_name}:", initialvalue=1000.0
     )
     generate_profile = simpledialog.askstring(
-        "Input", "Generate Profiling Report? (Yes or No):", initialvalue="No"
+        "Input", f"Generate Profiling Report? (Yes or No) for {file_name}:", initialvalue="No"
     )
 
     root.destroy()
     return sidefoot, dominance, quality, threshold, fs, generate_profile
-
 
 def butterworthfilt(data, cutoff=59, Fs=1000):
     """
@@ -1691,7 +1696,11 @@ def main():
         os.makedirs(output_dir)
 
     # Ask for user input once, including Fs
-    sidefoot, dominance, quality, threshold, fs, generate_profile = prompt_user_input()
+    # Get the first file's name for input prompts
+    first_file_name = os.path.basename(first_file_full_path)
+
+    # Ask for user input once, including Fs, and pass the file name
+    sidefoot, dominance, quality, threshold, fs, generate_profile = prompt_user_input(first_file_name)
 
     # Batch process all files in the source directory
     batch_process_directory(
@@ -1709,3 +1718,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

@@ -9,23 +9,25 @@ when working with large datasets.
 
 Features:
 - Extracts and saves marker data with time columns.
-- Extracts and saves analog data with time columns.
+- Extracts and saves analog data with time columns, including their units.
 - Extracts and saves points residuals with time columns.
 - Supports saving the data in CSV format.
 - Optionally saves the data in Excel format (can be slow for large files).
-- Generates an info file containing metadata about markers and analogs.
+- Generates an info file containing metadata about markers, analogs, and their units.
+- Generates a simplified short info file with key parameters and headers.
+- Handles encoding errors to avoid crashes due to unexpected characters.
 
 Dependencies:
 - Python 3.x
 - ezc3d
-- Dask
 - Pandas
 - Tkinter
 - Tqdm
+- Numpy
 - Openpyxl (optional, for saving Excel files)
 
-Version: 1.0
-Date: August 2024
+Version: 1.7
+Date: September 2024
 Author: Prof. Paulo Santiago
 
 Usage:
@@ -50,7 +52,61 @@ from tqdm import tqdm
 import numpy as np
 
 
+def save_info_file(datac3d, file_name, output_dir):
+    """
+    Save all parameters and data from the C3D file into a detailed .info text file.
+    """
+    print(f"Saving all data to .info file for {file_name}")
+
+    info_file_path = os.path.join(output_dir, f"{file_name}.info")
+    # Use encoding='utf-8' and ignore errors
+    with open(info_file_path, 'w', encoding='utf-8', errors='ignore') as info_file:
+        # Write header information
+        info_file.write(f"File: {file_name}\n")
+        info_file.write("--- Parameters in C3D File ---\n\n")
+
+        # Iterate over all groups in parameters and write them to the .info file
+        for group_name, group_content in datac3d['parameters'].items():
+            info_file.write(f"Group: {group_name}\n")
+            for param_name, param_content in group_content.items():
+                info_file.write(f"  Parameter: {param_name}\n")
+                info_file.write(f"    Description: {param_content.get('description', 'No description')}\n")
+                info_file.write(f"    Value: {param_content.get('value', 'No value')}\n")
+                info_file.write(f"    Type: {param_content.get('type', 'No type')}\n")
+                info_file.write(f"    Dimension: {param_content.get('dimension', 'No dimension')}\n")
+                info_file.write("\n")
+
+    print(f".info file saved at: {info_file_path}")
+
+
+def save_short_info_file(marker_labels, marker_freq, analog_labels, analog_units, analog_freq, dir_name, file_name):
+    """
+    Save a simplified version of the info file with only the main parameters and headers.
+    """
+    print(f"Saving short info file for {file_name}")
+    short_info_file_path = os.path.join(dir_name, f"{file_name}_short.info")
+    # Use encoding='utf-8' and ignore errors
+    with open(short_info_file_path, 'w', encoding='utf-8', errors='ignore') as f:
+        f.write(f"Marker frequency: {marker_freq} Hz\n")
+        f.write(f"Analog frequency: {analog_freq} Hz\n\n")
+        f.write("Marker labels:\n")
+        for label in marker_labels:
+            f.write(f"{label}\n")
+        f.write("\nAnalog labels and units:\n")
+        for label, unit in zip(analog_labels, analog_units):
+            f.write(f"{label} ({unit})\n")
+
+    print(f"Short info file saved at: {short_info_file_path}")
+
+
 def importc3d(dat):
+    """
+    Import C3D file data and parameters.
+    """
+    # Print the directory and name of the script being executed
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+
     datac3d = c3d(dat)
     print(f"\nProcessing file: {dat}")
     print(f'Number of markers = {datac3d["parameters"]["POINT"]["USED"]["value"][0]}')
@@ -60,12 +116,13 @@ def importc3d(dat):
     analogs = datac3d["data"]["analogs"]
     marker_labels = datac3d["parameters"]["POINT"]["LABELS"]["value"]
     analog_labels = datac3d["parameters"]["ANALOG"]["LABELS"]["value"]
+    analog_units = datac3d["parameters"]["ANALOG"].get("UNITS", {}).get("value", ["Unknown"] * len(analog_labels))
 
-    # Verifica se há dados de pontos
+    # Check if there are point data
     if datac3d["parameters"]["POINT"]["USED"]["value"][0] > 0:
         markers = point_data[0:3, :, :].T.reshape(-1, len(marker_labels) * 3)
     else:
-        markers = np.array([])  # Usa um array vazio do NumPy
+        markers = np.array([])  # Use an empty NumPy array if no markers
 
     marker_freq = datac3d["header"]["points"]["frame_rate"]
     analog_freq = datac3d["header"]["analogs"]["frame_rate"]
@@ -84,28 +141,16 @@ def importc3d(dat):
         analogs,
         points_residuals,
         analog_labels,
+        analog_units,
         analog_freq,
+        datac3d
     )
 
 
-def save_info_file(
-    marker_labels, marker_freq, analog_labels, analog_freq, dir_name, file_name
-):
-    print(f"Saving info file for {file_name}")
-    info_file_path = os.path.join(dir_name, f"{file_name}.info")
-    with open(info_file_path, "w") as f:
-        f.write(f"Marker frequency: {marker_freq} Hz\n")
-        f.write(f"Analog frequency: {analog_freq} Hz\n\n")
-        f.write("Marker labels:\n")
-        for label in marker_labels:
-            f.write(f"{label}\n")
-        f.write("\nAnalog labels:\n")
-        for label in analog_labels:
-            f.write(f"{label}\n")
-
-
 def save_empty_file(file_path):
-    # Save an empty CSV file
+    """
+    Save an empty CSV file.
+    """
     print(f"Saving empty file: {file_path}")
     with open(file_path, "w") as f:
         f.write("")
@@ -118,18 +163,28 @@ def save_to_files(
     analogs,
     points_residuals,
     analog_labels,
+    analog_units,
     analog_freq,
     file_name,
     output_dir,
     save_excel,
+    datac3d
 ):
+    """
+    Save extracted data to CSV files and all parameters to .info files.
+    """
     print(f"Saving data to files for {file_name}")
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     dir_name = os.path.join(
-        output_dir, "multimodal_c3d_to_csv", f"{file_name}_{timestamp}"
+        output_dir, "vaila_c3d_to_csv", f"{file_name}_{timestamp}"
     )
     os.makedirs(dir_name, exist_ok=True)
     print(f"Directory created: {dir_name}")
+
+    # Save all data to detailed .info file
+    save_info_file(datac3d, file_name, dir_name)
+    # Save simplified short .info file
+    save_short_info_file(marker_labels, marker_freq, analog_labels, analog_units, analog_freq, dir_name, file_name)
 
     # Prepare marker columns
     marker_columns = [
@@ -208,15 +263,13 @@ def save_to_files(
                     writer, sheet_name="Points Residuals", index=False
                 )
 
-    # Save the info file
-    save_info_file(
-        marker_labels, marker_freq, analog_labels, analog_freq, dir_name, file_name
-    )
-
     print(f"Files for {file_name} saved successfully!")
 
 
 def convert_c3d_to_csv():
+    """
+    Main function to convert C3D files to CSV and .info files.
+    """
     root = Tk()
     root.withdraw()
 
@@ -232,13 +285,15 @@ def convert_c3d_to_csv():
     output_directory = filedialog.askdirectory(title="Select Output Directory")
     print(f"Debug: output_directory = {output_directory}")
 
+    root.quit()  # Ensure Tkinter resources are released properly
+
     if input_directory and output_directory:
         c3d_files = sorted(
             [f for f in os.listdir(input_directory) if f.endswith(".c3d")]
         )
         print(f"Found {len(c3d_files)} .c3d files in the input directory.")
 
-        # Barra de progresso simplificada
+        # Simplified progress bar
         progress_bar = tqdm(
             total=len(c3d_files), desc="Processing C3D files", unit="file"
         )
@@ -254,7 +309,9 @@ def convert_c3d_to_csv():
                     analogs,
                     points_residuals,
                     analog_labels,
+                    analog_units,
                     analog_freq,
+                    datac3d
                 ) = importc3d(file_path)
                 file_name = os.path.splitext(c3d_file)[0]
                 save_to_files(
@@ -264,15 +321,18 @@ def convert_c3d_to_csv():
                     analogs,
                     points_residuals,
                     analog_labels,
+                    analog_units,
                     analog_freq,
                     file_name,
                     output_directory,
                     save_excel,
+                    datac3d
                 )
             except Exception as e:
                 print(f"Error processing {c3d_file}: {e}")
+                messagebox.showerror("Error", f"Failed to process {c3d_file}: {e}")
 
-            # Atualiza a barra de progresso após cada arquivo
+            # Update progress bar after each file
             progress_bar.update(1)
 
         progress_bar.close()
@@ -287,3 +347,4 @@ def convert_c3d_to_csv():
 
 if __name__ == "__main__":
     convert_c3d_to_csv()
+
