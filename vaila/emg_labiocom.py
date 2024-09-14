@@ -189,8 +189,9 @@ def emg_analysis(emg_file, fs, start_index, end_index, no_plot, selected_path):
     )
 
     time = np.linspace(start_index, end_index - 1, end_index - start_index)
-    time_rms = np.linspace(start_index, start_index + (len(rms_values) - 1) * overlap, len(rms_values))
-
+    time_rms = np.linspace(
+        start_index, start_index + (len(rms_values) - 1) * overlap, len(rms_values)
+    )
 
     poly2_rms = polynomial_fit(time_rms, rms_values, 2)
     poly2_mdf = polynomial_fit(time_rms, median_freq_values, 2)

@@ -1,19 +1,87 @@
 """
-Módulo: ellipse.py
-Descrição: Fornece funções para calcular e plotar elipses de confiança para dados do Centro de Pressão (CoP).
-             Utiliza Análise de Componentes Principais (PCA) para determinar a orientação e o tamanho da elipse.
-             O módulo também inclui funcionalidades de plotagem para visualizar o caminho do CoP com a elipse de confiança.
-             
-Autor: Prof. Dr. Paulo R. P. Santiago
-Versão: 1.0
-Data: 2024-09-12
+Module: ellipse.py
+Description: This module provides functions to compute and visualize confidence ellipses for Center of Pressure (CoP) data, 
+             which is often used in postural control studies to assess balance and stability. The confidence ellipse represents 
+             the region where the majority of data points are expected to fall, based on a specified confidence level.
 
-Histórico de Alterações:
-- Versão 1.0 (2024-09-12):
-  - Implementação inicial do cálculo da elipse usando PCA.
-  - Adicionadas funções de plotagem para visualizar os caminhos do CoP com elipses de confiança.
-  - Integrado mapeamento de cores para representar a progressão do tempo no gráfico do caminho do CoP.
+             The module includes:
+             - `plot_ellipse_pca`: Calculates the parameters of a confidence ellipse using Principal Component Analysis (PCA). 
+               PCA is employed to identify the principal axes of the data distribution, allowing for the computation of the ellipse 
+               that best fits the CoP data within a given confidence level. The function returns the ellipse's area, orientation, 
+               and boundary coordinates.
+             
+             - `plot_cop_pathway_with_ellipse`: Visualizes the CoP pathway along with the calculated confidence ellipse. 
+               This function plots the CoP movement over time, adds a color gradient to indicate time progression, and overlays 
+               the computed confidence ellipse to provide insight into the range and directionality of CoP variations. It also 
+               marks the starting and ending points of the CoP pathway and illustrates the major and minor axes of the ellipse.
+
+Inputs:
+- `plot_ellipse_pca(data, confidence=0.95)`:
+  - `data` (numpy array): A 2D array where each row represents a time point, and columns represent CoP coordinates (typically medio-lateral and antero-posterior).
+  - `confidence` (float): The confidence level for the ellipse, default is 95%.
+
+- `plot_cop_pathway_with_ellipse(cop_x, cop_y, area, angle, ellipse_data, title, output_path)`:
+  - `cop_x` (numpy array): X-coordinates of the CoP data.
+  - `cop_y` (numpy array): Y-coordinates of the CoP data.
+  - `area` (float): The calculated area of the confidence ellipse.
+  - `angle` (float): The orientation angle of the ellipse in degrees.
+  - `ellipse_data` (tuple): Contains the ellipse boundary coordinates, eigenvectors, scaled eigenvalues, and the mean center.
+  - `title` (str): The title for the plot.
+  - `output_path` (str): The file path where the plot should be saved.
+
+Usage:
+- Import the functions from `ellipse.py` in your main program or script:
+
+Example usage within your program:
+
+```python
+from ellipse import plot_ellipse_pca, plot_cop_pathway_with_ellipse
+# Assuming `cop_x` and `cop_y` are arrays containing the CoP data
+cop_data = np.column_stack((cop_x, cop_y))  # Combine x and y into a single array
+
+# Calculate the confidence ellipse using PCA
+area, angle, bounds, ellipse_data = plot_ellipse_pca(cop_data, confidence=0.95)
+
+# Plot the CoP pathway with the calculated confidence ellipse
+plot_cop_pathway_with_ellipse(
+    cop_x=cop_x,
+    cop_y=cop_y,
+    area=area,
+    angle=angle,
+    ellipse_data=ellipse_data,
+    title="CoP Pathway with 95% Confidence Ellipse",
+    output_path="output/cop_analysis"
+)
+```
+
+    The above example demonstrates how to compute the confidence ellipse for a given CoP dataset and plot the CoP pathway with the ellipse, providing visual insights into the subject's postural control behavior.
+
+Author: Prof. Dr. Paulo R. P. Santiago Version: 1.0 Date: 2024-09-12
+
+Changelog:
+
+    Version 1.0 (2024-09-12):
+        Initial implementation of confidence ellipse calculation using PCA.
+        Added plotting functions for CoP pathways with confidence ellipses.
+        Integrated color mapping to visually represent time progression along the CoP path.
+        Included visual indicators for the start and end of the CoP trajectory and the major and minor axes of the ellipse.
+
+References:
+
+    GitHub Repository: Code Descriptors Postural Control. https://github.com/Jythen/code_descriptors_postural_control
+    Further reading on the use of PCA for analyzing CoP data in postural control studies: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8623280
+
+## Key Additions:
+
+1. **Inputs**: Detailed the required inputs for each function, specifying the expected data types and default values.
+2. **Usage Example**: Provided a practical example demonstrating how to use the functions within the context of your program. This shows how to calculate and visualize a confidence ellipse for CoP data.
+
 """
+
+import numpy as np
+from sklearn.decomposition import PCA
+import matplotlib.pyplot as plt
+from matplotlib.colors import LinearSegmentedColormap
 
 
 import numpy as np
@@ -56,27 +124,39 @@ def plot_ellipse_pca(data, confidence=0.95):
 
     return area, angle, x_bounds + y_bounds, ellipse_data
 
-def plot_cop_pathway_with_ellipse(cop_x, cop_y, area, angle, ellipse_data, title, output_path):
+def plot_cop_pathway_with_ellipse(
+    cop_x, cop_y, area, angle, ellipse_data, title, output_path
+):
     """Plots the CoP pathway along with the 95% confidence ellipse and saves the figure."""
 
     # Unpack ellipse data
     ellipse_x, ellipse_y = ellipse_data[0], ellipse_data[1]
-    eigvecs, scaled_eigvals, pca_mean = ellipse_data[2], ellipse_data[3], ellipse_data[4]
+    eigvecs, scaled_eigvals, pca_mean = (
+        ellipse_data[2],
+        ellipse_data[3],
+        ellipse_data[4],
+    )
 
     # Create colormap for CoP path
-    cmap = LinearSegmentedColormap.from_list("CoP_path", ["blue", "green", "yellow", "red"])
+    cmap = LinearSegmentedColormap.from_list(
+        "CoP_path", ["blue", "green", "yellow", "red"]
+    )
 
     # Plot CoP pathway with color segments
     plt.figure(figsize=(10, 8))
     for i in range(len(cop_x) - 1):
-        plt.plot(cop_x[i:i + 2], cop_y[i:i + 2], color=cmap(i / len(cop_x)), linewidth=2)
+        plt.plot(
+            cop_x[i : i + 2], cop_y[i : i + 2], color=cmap(i / len(cop_x)), linewidth=2
+        )
 
     # Plot start and end points
     plt.plot(cop_x[0], cop_y[0], color="gray", marker=".", markersize=17, label="Start")
-    plt.plot(cop_x[-1], cop_y[-1], color="black", marker=".", markersize=17, label="End")
+    plt.plot(
+        cop_x[-1], cop_y[-1], color="black", marker=".", markersize=17, label="End"
+    )
 
     # Plot the ellipse
-    plt.plot(ellipse_x, ellipse_y, color='gray', linestyle='--', linewidth=2)
+    plt.plot(ellipse_x, ellipse_y, color="gray", linestyle="--", linewidth=2)
 
     # Plot major and minor axes of the ellipse
     major_axis_start = pca_mean - eigvecs[0] * scaled_eigvals[0]
@@ -84,7 +164,9 @@ def plot_cop_pathway_with_ellipse(cop_x, cop_y, area, angle, ellipse_data, title
     plt.plot(
         [major_axis_start[0], major_axis_end[0]],
         [major_axis_start[1], major_axis_end[1]],
-        color='gray', linestyle='--', linewidth=1,
+        color="gray",
+        linestyle="--",
+        linewidth=1,
     )
 
     minor_axis_start = pca_mean - eigvecs[1] * scaled_eigvals[1]
@@ -92,33 +174,39 @@ def plot_cop_pathway_with_ellipse(cop_x, cop_y, area, angle, ellipse_data, title
     plt.plot(
         [minor_axis_start[0], minor_axis_end[0]],
         [minor_axis_start[1], minor_axis_end[1]],
-        color='gray', linestyle='--', linewidth=1,
+        color="gray",
+        linestyle="--",
+        linewidth=1,
     )
 
     # Add legend for Start and End points
     plt.legend()
 
     # Calculate margins to expand the xlim and ylim
-    x_margin = 0.02 * (np.max(ellipse_x) - np.min(ellipse_x))
-    y_margin = 0.02 * (np.max(ellipse_y) - np.min(ellipse_y))
+    x_margin = 0.02 * (np.max([np.max(ellipse_x), np.max(cop_x)]) - np.min([np.min(ellipse_x), np.min(cop_x)]))
+    y_margin = 0.02 * (np.max([np.max(ellipse_y), np.max(cop_y)]) - np.min([np.min(ellipse_y), np.min(cop_y)]))
 
     # Adjust xlim and ylim based on ellipse bounds and add margin
-    plt.xlim(np.min(ellipse_x) - x_margin, np.max(ellipse_x) + x_margin)
-    plt.ylim(np.min(ellipse_y) - y_margin, np.max(ellipse_y) + y_margin)
+    plt.xlim(min(np.min(ellipse_x), np.min(cop_x)) - x_margin, max(np.max(ellipse_x), np.max(cop_x)) + x_margin)
+    plt.ylim(min(np.min(ellipse_y), np.min(cop_y)) - y_margin, max(np.max(ellipse_y), np.max(cop_y)) + y_margin)
 
     plt.xlabel("Medio-Lateral (cm)")
     plt.ylabel("Antero-Posterior (cm)")
-    plt.grid(True, linestyle=':', color='lightgray')
+    plt.grid(True, linestyle=":", color="lightgray")
     plt.gca().set_aspect("equal", adjustable="box")
 
     # Add colorbar for time progression
     sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=0, vmax=len(cop_x)))
     sm.set_array([])
-    cbar = plt.colorbar(sm, ax=plt.gca(), orientation='vertical', fraction=0.046, pad=0.04)
-    cbar.set_label('Time Progression [%]', rotation=270, labelpad=15)
+    cbar = plt.colorbar(
+        sm, ax=plt.gca(), orientation="vertical", fraction=0.046, pad=0.04
+    )
+    cbar.set_label("Time Progression [%]", rotation=270, labelpad=15)
 
     # Set the title of the plot
-    plt.title(f'{title}\n95% Ellipse (Area: {area:.2f} cm², Angle: {angle:.2f}°)', fontsize=12)
+    plt.title(
+        f"{title}\n95% Ellipse (Area: {area:.2f} cm², Angle: {angle:.2f}°)", fontsize=12
+    )
 
     # Save the figure
     plt.savefig(f"{output_path}.png")
