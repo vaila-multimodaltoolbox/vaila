@@ -50,6 +50,10 @@ from scp import SCPClient
 
 
 def copy_file():
+    # Print the directory and name of the script being executed
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    
     # Prompt the user to select the main path directory for recursive search
     src_directory = filedialog.askdirectory(title="Select Source Directory")
 
@@ -130,6 +134,10 @@ def process_copy(src_directory, file_extension, patterns):
 
 
 def export_file():
+    # Print the directory and name of the script being executed
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    
     src = filedialog.askopenfilename(title="Select the source file")
     if not src:
         messagebox.showerror("Error", "No source file selected.")
@@ -148,6 +156,10 @@ def export_file():
 
 
 def move_file():
+    # Print the directory and name of the script being executed
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    
     # Prompt the user to select the main path directory for recursive search
     src_directory = filedialog.askdirectory(title="Select Source Directory")
 
@@ -228,6 +240,10 @@ def process_move(src_directory, file_extension, patterns):
 
 
 def remove_file():
+    # Print the directory and name of the script being executed
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    
     # List of dangerous patterns and system files to protect
     forbidden_patterns = ["*", ".", "/", "\\"]
     system_files = [
@@ -334,6 +350,10 @@ def remove_file():
 
 
 def import_file():
+    # Print the directory and name of the script being executed
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    
     root = tk.Tk()
     root.withdraw()
 
@@ -562,6 +582,10 @@ def import_file():
 
 
 def rename_files():
+    # Print the directory and name of the script being executed
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    
     # Prompt the user to select the directory containing the files to rename
     directory = filedialog.askdirectory(title="Select Directory with Files to Rename")
 
@@ -613,6 +637,10 @@ def rename_files():
 
 
 def tree_file():
+    # Print the directory and name of the script being executed
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    
     # Prompt the user to select the main path directory for recursive search
     src_directory = filedialog.askdirectory(title="Select Source Directory")
 
@@ -662,6 +690,10 @@ def tree_file():
 
 
 def find_file():
+    # Print the directory and name of the script being executed
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    
     # Prompt the user to select the main path directory for recursive search
     src_directory = filedialog.askdirectory(title="Select Source Directory")
 
@@ -766,6 +798,10 @@ def find_file():
 
 
 def transfer_file():
+    # Print the directory and name of the script being executed
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    
     # Initialize Tkinter root
     root = Tk()
     root.withdraw()  # Hide the root window
@@ -829,8 +865,12 @@ def transfer_file():
         # Create an SSH client
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        
+        # Debugging output
+        print(f"Connecting to {remote_host}:{remote_port} as {remote_user}")
+
         ssh.connect(
-            remote_host,
+            hostname=remote_host,
             port=remote_port,
             username=remote_user,
             password=remote_password,
@@ -843,6 +883,7 @@ def transfer_file():
 
             if transfer_type == "upload":
                 # Upload the file or directory
+                print(f"Uploading {src_path} to {remote_host}:{remote_file}")
                 scp.put(
                     src_path, remote_path=remote_file, recursive=os.path.isdir(src_path)
                 )
@@ -852,16 +893,27 @@ def transfer_file():
                 )
             else:
                 # Download the file or directory
+                print(f"Downloading {remote_file} from {remote_host} to {dest_path}")
                 scp.get(remote_file, local_path=dest_path, recursive=True)
                 messagebox.showinfo(
                     "Success",
                     f"File or directory successfully downloaded from {remote_host}:{remote_file} to {dest_path}",
                 )
 
+    except paramiko.AuthenticationException as auth_error:
+        messagebox.showerror("Authentication Error", f"Authentication failed: {auth_error}")
+        print(f"Authentication failed: {auth_error}")
+
+    except paramiko.SSHException as ssh_error:
+        messagebox.showerror("SSH Error", f"SSH connection error: {ssh_error}")
+        print(f"SSH connection error: {ssh_error}")
+
     except Exception as e:
         # Show an error message if something goes wrong
         messagebox.showerror("Error", f"Error during file transfer: {e}")
+        print(f"Error during file transfer: {e}")
 
     finally:
         # Close the SSH connection
         ssh.close()
+

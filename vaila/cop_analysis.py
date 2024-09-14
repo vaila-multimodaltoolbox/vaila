@@ -20,7 +20,7 @@ Inputs:
 - `read_csv_full(filename)`:
   - `filename` (str): The path to the CSV file containing CoP data.
 
-- `select_nine_headers(file_path)`:
+- `select2headers(file_path)`:
   - `file_path` (str): Path to a sample CSV file to determine the headers available for analysis.
 
 - `analyze_data_2d(data, output_dir, file_name, fs, plate_width, plate_height, timestamp)`:
@@ -46,7 +46,7 @@ if __name__ == "__main__":
 ```
     Example flow of using the functions in this module:
         Data Import and Preparation: Use read_csv_full to load CoP data from a CSV file and convert_to_cm to ensure the data is in the desired unit.
-        Header Selection: Use select_nine_headers to allow the user to select which headers from the CSV file should be analyzed.
+        Header Selection: Use select2headers to allow the user to select which headers from the CSV file should be analyzed.
         Data Analysis: Use analyze_data_2d to filter the CoP data, compute various metrics, perform spectral feature analysis, and generate visualizations.
         Batch Processing: The main function orchestrates the entire process, handling multiple CSV files in a selected directory.
 
@@ -63,7 +63,7 @@ Changelog:
 
 References:
 
-    GitHub Repository: Code Descriptors Postural Control. https://github.com/Jythen/code_descriptors_postural_control/blob/main/stabilogram/stato.py
+    GitHub Repository: Code Descriptors Postural Control. https://github.com/Jythen/code_descriptors_postural_control
     Further reading on entropy-based methods in postural control: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8623280
 
 """
@@ -140,8 +140,8 @@ def read_csv_full(filename):
         raise Exception(f"Error reading the CSV file: {str(e)}")
 
 
-def select_nine_headers(file_path):
-    """Displays a GUI to select nine headers for force plate data analysis."""
+def select2headers(file_path):
+    """Displays a GUI to select two (2) headers for force plate data analysis."""
 
     def get_csv_headers(file_path):
         """Reads the headers from a CSV file."""
@@ -156,9 +156,9 @@ def select_nine_headers(file_path):
         selected_headers = [
             header for header, var in zip(headers, header_vars) if var.get()
         ]
-        if len(selected_headers) != 9:
+        if len(selected_headers) != 2:
             messagebox.showinfo(
-                "Info", "Please select exactly nine headers for analysis."
+                "Info", "Please select exactly two (2) headers for analysis."
             )
             return
         selection_window.quit()
@@ -173,7 +173,7 @@ def select_nine_headers(file_path):
             var.set(False)
 
     selection_window = Toplevel()
-    selection_window.title("Select Nine Headers for Force Plate Data")
+    selection_window.title("Select two (2) Cx and Cy components from Headers for Force Plate Data")
     selection_window.geometry(
         f"{selection_window.winfo_screenwidth()}x{int(selection_window.winfo_screenheight()*0.8)}"
     )
@@ -210,12 +210,100 @@ def select_nine_headers(file_path):
 
     selection_window.mainloop()
 
-    if len(selected_headers) != 9:
-        messagebox.showinfo("Info", "Please select exactly nine headers for analysis.")
+    if len(selected_headers) != 2:
+        messagebox.showinfo("Info", "Please select exactly 2 headers for analysis.")
         return None, None
 
     selected_data = df[selected_headers]
     return selected_headers, selected_data
+
+
+def plot_final_figure(time, X_n, Y_n, freqs_ml, psd_ml, freqs_ap, psd_ap, metrics, output_path, area, angle, bounds, ellipse_data):
+    """
+    Creates the final figure with the stabilogram, CoP pathway, and a text with all the presented result variables.
+    """
+    fig = plt.figure(figsize=(12, 8))
+    
+    # Subplot for the stabilogram (row 1, column 1)
+    ax1 = fig.add_subplot(2, 2, 1)
+    ax1.plot(time, X_n, label='CoP ML')
+    ax1.plot(time, Y_n, label='CoP AP')
+    # insert grid with : gray light 
+    ax1.grid(color='gray', linestyle=':', linewidth=0.5)
+    ax1.set_title('Stabilogram')
+    ax1.set_xlabel('Time (s)')
+    ax1.set_ylabel('Displacement (cm)')
+    ax1.legend()
+    
+    # Subplot for the CoP pathway with confidence ellipse (row 2, column 1)
+    ax2 = fig.add_subplot(2, 2, 3)
+    
+    # Plot the CoP pathway
+    ax2.plot(X_n, Y_n, label='CoP Pathway', color='blue')
+    
+    # Unpack the ellipse data to plot it correctly
+    ellipse_x, ellipse_y = ellipse_data[0], ellipse_data[1]
+    eigvecs, scaled_eigvals, pca_mean = ellipse_data[2], ellipse_data[3], ellipse_data[4]
+    
+    # Plot the confidence ellipse
+    ax2.plot(ellipse_x, ellipse_y, color='red', linestyle='--', linewidth=2, label='Confidence Ellipse')
+    
+    # Plot major and minor axes of the ellipse
+    major_axis_start = pca_mean - eigvecs[0] * scaled_eigvals[0]
+    major_axis_end = pca_mean + eigvecs[0] * scaled_eigvals[0]
+    ax2.plot(
+        [major_axis_start[0], major_axis_end[0]],
+        [major_axis_start[1], major_axis_end[1]],
+        color='grey',
+        linestyle=':',
+        linewidth=1.7,
+        label='Major Axis'
+    )
+
+    minor_axis_start = pca_mean - eigvecs[1] * scaled_eigvals[1]
+    minor_axis_end = pca_mean + eigvecs[1] * scaled_eigvals[1]
+    ax2.plot(
+        [minor_axis_start[0], minor_axis_end[0]],
+        [minor_axis_start[1], minor_axis_end[1]],
+        color='grey',
+        linestyle=':',
+        linewidth=1.5,
+        label='Minor Axis'
+    )
+    
+    # Set the title and labels
+    ax2.set_title('CoP Pathway with Confidence Ellipse')
+    ax2.set_xlabel('CoP ML (cm)')
+    ax2.set_ylabel('CoP AP (cm)')
+   
+    # Set the aspect ratio to equal to ensure equal proportions
+    ax2.set_aspect('equal', adjustable='box')
+    #ax2.legend()
+    
+    # Adjust the limits of the plot to ensure both the CoP pathway and ellipse are visible
+    x_margin = 0.02 * (np.max([np.max(ellipse_x), np.max(X_n)]) - np.min([np.min(ellipse_x), np.min(X_n)]))
+    y_margin = 0.02 * (np.max([np.max(ellipse_y), np.max(Y_n)]) - np.min([np.min(ellipse_y), np.min(Y_n)]))
+    
+    ax2.set_xlim(min(np.min(ellipse_x), np.min(X_n)) - x_margin, max(np.max(ellipse_x), np.max(X_n)) + x_margin)
+    ax2.set_ylim(min(np.min(ellipse_y), np.min(Y_n)) - y_margin, max(np.max(ellipse_y), np.max(Y_n)) + y_margin)
+    
+    # Subplot for result variables (combined column 2)
+    ax3 = fig.add_subplot(1, 2, 2)  # Use a single subplot that spans both rows in the second column
+    ax3.axis('off')  # Hide axes to focus on the text
+    text_str = '\n'.join([f"{key}: {value}" for key, value in metrics.items()])  # Prepare text from metrics dictionary
+    ax3.text(0.05, 0.5, text_str, fontsize=10, verticalalignment='center', transform=ax3.transAxes, wrap=True)  # Display text
+   
+    # Subplot for result variables (combined column 2)
+    ax3 = fig.add_subplot(1, 2, 2)  # Use a single subplot that spans both rows in the second column
+    ax3.axis('off')  # Hide axes to focus on the text
+    text_str = '\n'.join([f"{key}: {value}" for key, value in metrics.items()])  # Prepare text from metrics dictionary
+    ax3.text(0.05, 0.5, text_str, fontsize=10, verticalalignment='center', transform=ax3.transAxes, wrap=True)  # Display text
+    
+    # Save the figure in PNG and SVG formats
+    plt.tight_layout()
+    plt.savefig(f"{output_path}_final_figure.png", dpi=300, format='png')
+    plt.savefig(f"{output_path}_final_figure.svg", format='svg')
+    #plt.show()
 
 
 def analyze_data_2d(
@@ -240,20 +328,15 @@ def analyze_data_2d(
         return
 
     # Extract variables from filtered data 'dataf'
-    force_x_f = dataf[:, 0]  # Force in the X direction (ML)
-    force_y_f = dataf[:, 1]  # Force in the Y direction (AP)
-    force_z_f = dataf[:, 2]  # Force in the Z direction (Vertical)
-    moment_x_f = dataf[:, 3]  # Moment in the X direction
-    moment_y_f = dataf[:, 4]  # Moment in the Y direction
-    moment_z_f = dataf[:, 5]  # Moment in the Z direction
-    cop_x_f = dataf[:, 6]  # Filtered CoP in the X direction (ML)
-    cop_y_f = dataf[:, 7]  # Filtered CoP in the Y direction (AP)
+    cop_x_f = dataf[:, 0]  # Filtered CoP in the X direction (ML)
+    cop_y_f = dataf[:, 1]  # Filtered CoP in the Y direction (AP)
 
     # Create time vector based on the sampling frequency
     N = len(cop_x_f)
     T = N / fs  # Total duration
-    time = np.linspace(0, T, N)
-
+    # time = np.linspace(0, T, N)
+    time = np.linspace(0, (len(cop_x_f) - 1) / fs, len(cop_x_f))
+    
     # Calculate mean values of ML and AP coordinates
     mean_ML = np.mean(cop_x_f)
     mean_AP = np.mean(cop_y_f)
@@ -404,13 +487,18 @@ def analyze_data_2d(
         X_n, Y_n, area, angle, ellipse_data, file_name, output_path
     )
 
-    print(f"Analysis complete for file: {file_name}\n")
+    # Call plot_final_figure with the precomputed ellipse data
+    plot_final_figure(time, X_n, Y_n, freqs_ml, psd_ml, freqs_ap, psd_ap, metrics, output_path, area, angle, bounds, ellipse_data)
 
 
 def main():
     """Function to run the CoP analysis"""
     root = Tk()
     root.withdraw()  # Hides the main Tkinter window
+
+    # Print the directory and name of the script being executed
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
 
     print("Starting CoP analysis...")
 
@@ -477,8 +565,8 @@ def main():
 
     print(f"Sample file selected: {sample_file_path}")
 
-    # Select nine headers for force plate data analysis
-    selected_headers, _ = select_nine_headers(sample_file_path)
+    # Select two (2) headers for force plate data analysis
+    selected_headers, _ = select2headers(sample_file_path)
     if not selected_headers:
         print("No valid headers selected.")
         return
@@ -543,11 +631,12 @@ def main():
     # Inform the user that the analysis is complete
     print("All files processed.")
     messagebox.showinfo(
-        "Information", "Analysis complete! The window will close in 10 seconds."
+        "Information", "Analysis complete! The window will close in 5 seconds."
     )
-    root.after(10000, root.destroy)  # Wait for 10 seconds and then destroy the window
+    root.after(5000, lambda: root.quit())  # Wait for 5 seconds and then quit safely
     root.mainloop()
 
 
 if __name__ == "__main__":
     main()
+

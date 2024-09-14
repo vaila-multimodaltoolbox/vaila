@@ -68,7 +68,7 @@ Changelog:
 
 References:
 
-    GitHub Repository: Code Descriptors Postural Control. https://github.com/Jythen/code_descriptors_postural_control/blob/main/stabilogram/stato.py
+    GitHub Repository: Code Descriptors Postural Control. https://github.com/Jythen/code_descriptors_postural_control
     Further reading on the use of PCA for analyzing CoP data in postural control studies: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8623280
 
 ## Key Additions:
@@ -83,6 +83,11 @@ from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 
+
+import numpy as np
+from sklearn.decomposition import PCA
+import matplotlib.pyplot as plt
+from matplotlib.colors import LinearSegmentedColormap
 
 def plot_ellipse_pca(data, confidence=0.95):
     """Calculates the ellipse using PCA with a specified confidence level."""
@@ -118,7 +123,6 @@ def plot_ellipse_pca(data, confidence=0.95):
     ellipse_data = (ellipse_x, ellipse_y, eigvecs, scaled_eigvals, pca.mean_)
 
     return area, angle, x_bounds + y_bounds, ellipse_data
-
 
 def plot_cop_pathway_with_ellipse(
     cop_x, cop_y, area, angle, ellipse_data, title, output_path
@@ -179,12 +183,12 @@ def plot_cop_pathway_with_ellipse(
     plt.legend()
 
     # Calculate margins to expand the xlim and ylim
-    x_margin = 0.02 * (np.max(ellipse_x) - np.min(ellipse_x))
-    y_margin = 0.02 * (np.max(ellipse_y) - np.min(ellipse_y))
+    x_margin = 0.02 * (np.max([np.max(ellipse_x), np.max(cop_x)]) - np.min([np.min(ellipse_x), np.min(cop_x)]))
+    y_margin = 0.02 * (np.max([np.max(ellipse_y), np.max(cop_y)]) - np.min([np.min(ellipse_y), np.min(cop_y)]))
 
     # Adjust xlim and ylim based on ellipse bounds and add margin
-    plt.xlim(np.min(ellipse_x) - x_margin, np.max(ellipse_x) + x_margin)
-    plt.ylim(np.min(ellipse_y) - y_margin, np.max(ellipse_y) + y_margin)
+    plt.xlim(min(np.min(ellipse_x), np.min(cop_x)) - x_margin, max(np.max(ellipse_x), np.max(cop_x)) + x_margin)
+    plt.ylim(min(np.min(ellipse_y), np.min(cop_y)) - y_margin, max(np.max(ellipse_y), np.max(cop_y)) + y_margin)
 
     plt.xlabel("Medio-Lateral (cm)")
     plt.ylabel("Antero-Posterior (cm)")
@@ -208,3 +212,4 @@ def plot_cop_pathway_with_ellipse(
     plt.savefig(f"{output_path}.png")
     plt.savefig(f"{output_path}.svg")
     plt.close()  # Close the plot to free memory and prevent overlapping in subsequent plots
+

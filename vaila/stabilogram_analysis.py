@@ -20,7 +20,7 @@ Version: 1.3
 Date: 2024-09-12
 
 References:
-- GitHub Repository: Code Descriptors Postural Control. https://github.com/Jythen/code_descriptors_postural_control/blob/main/stabilogram/stato.py
+- GitHub Repository: Code Descriptors Postural Control. https://github.com/Jythen/code_descriptors_postural_control
 - "Physiological Reports" - A detailed article on the usage of stabilogram analysis in postural control research. https://doi.org/10.14814/phy2.15067
 
 Changelog:
@@ -251,7 +251,7 @@ def plot_stabilogram(time, cop_x, cop_y, output_path):
 
     # Subplot for ML displacement
     plt.subplot(2, 1, 1)
-    plt.plot(time, cop_x, color="blue", linewidth=1)
+    plt.plot(time, cop_x, color="black", linewidth=2)
     plt.title("Stabilogram - ML Displacement")
     plt.xlabel("Time (s)")
     plt.ylabel("ML Displacement (cm)")
@@ -261,14 +261,14 @@ def plot_stabilogram(time, cop_x, cop_y, output_path):
     min_ml = np.min(cop_x)
     max_ml = np.max(cop_x)
     rms_ml = np.sqrt(np.mean(cop_x**2))
-    plt.axhline(min_ml, color="red", linestyle="--", label=f"Min: {min_ml:.2f} cm")
-    plt.axhline(max_ml, color="green", linestyle="--", label=f"Max: {max_ml:.2f} cm")
-    plt.axhline(rms_ml, color="purple", linestyle="--", label=f"RMS: {rms_ml:.2f} cm")
+    plt.axhline(min_ml, color="grey", linestyle="--", label=f"Min: {min_ml:.2f} cm")
+    plt.axhline(max_ml, color="grey", linestyle="-.", label=f"Max: {max_ml:.2f} cm")
+    plt.axhline(rms_ml, color="grey", linestyle=":", label=f"RMS: {rms_ml:.2f} cm")
     plt.legend()
 
     # Subplot for AP displacement
     plt.subplot(2, 1, 2)
-    plt.plot(time, cop_y, color="orange", linewidth=1)
+    plt.plot(time, cop_y, color="black", linewidth=2)
     plt.title("Stabilogram - AP Displacement")
     plt.xlabel("Time (s)")
     plt.ylabel("AP Displacement (cm)")
@@ -278,9 +278,9 @@ def plot_stabilogram(time, cop_x, cop_y, output_path):
     min_ap = np.min(cop_y)
     max_ap = np.max(cop_y)
     rms_ap = np.sqrt(np.mean(cop_y**2))
-    plt.axhline(min_ap, color="red", linestyle="--", label=f"Min: {min_ap:.2f} cm")
-    plt.axhline(max_ap, color="green", linestyle="--", label=f"Max: {max_ap:.2f} cm")
-    plt.axhline(rms_ap, color="purple", linestyle="--", label=f"RMS: {rms_ap:.2f} cm")
+    plt.axhline(min_ap, color="grey", linestyle="--", label=f"Min: {min_ap:.2f} cm")
+    plt.axhline(max_ap, color="grey", linestyle="-.", label=f"Max: {max_ap:.2f} cm")
+    plt.axhline(rms_ap, color="grey", linestyle=":", label=f"RMS: {rms_ap:.2f} cm")
     plt.legend()
 
     plt.tight_layout()
@@ -324,14 +324,14 @@ def plot_power_spectrum(freqs_ml, psd_ml, freqs_ap, psd_ap, output_path):
         max_freq_ml,
         max_psd_ml,
         color="blue",
-        marker="o",
+        marker="v",
         label=f"Max ML PSD: {max_psd_ml:.2e} at {max_freq_ml:.2f} Hz",
     )
     plt.scatter(
         max_freq_ap,
         max_psd_ap,
         color="orange",
-        marker="o",
+        marker="v",
         label=f"Max AP PSD: {max_psd_ap:.2e} at {max_freq_ap:.2f} Hz",
     )
 

@@ -26,6 +26,7 @@ Key Analyses Supported:
    countermovement jump to assess athletic performance, muscle power, and explosiveness.
 4. Noise Signal Fixing: Identifies and corrects noise artifacts in force signals, ensuring 
    data accuracy for subsequent analyses.
+5. Calculate CoP: Executes a new process to calculate the CoP data.
 
 Functionalities:
 ----------------
@@ -45,6 +46,7 @@ Modules and Packages Required:
   * cop_analysis: For conducting CoP balance analysis.
   * force_cmj: For analyzing countermovement jump dynamics.
   * fixnoise: For correcting noise in force data.
+  * cop_calculate: For calculating CoP data.
 
 How to Use:
 -----------
@@ -77,9 +79,11 @@ Changelog:
 ----------
 - 2024-09-09: Initial creation of the script with dynamic analysis selection functionality.
 - 2024-09-10: Added support for CoP Balance Analysis (cop_analysis.py).
+- 2024-09-14: Added "Calculate CoP" button and functionality (cop_calculate.py).
 ================================================================================
 """
 
+import os
 import tkinter as tk
 
 
@@ -87,6 +91,10 @@ def choose_analysis_type():
     """
     Opens a GUI to choose which analysis code to run.
     """
+    # Print the directory and name of the script being executed
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    
     choice = []
 
     def select_force_cube_fig():
@@ -106,6 +114,11 @@ def choose_analysis_type():
 
     def select_fix_noise():
         choice.append("fix_noise")
+        choice_window.quit()
+        choice_window.destroy()
+
+    def select_calculate_cop():
+        choice.append("calculate_cop")
         choice_window.quit()
         choice_window.destroy()
 
@@ -133,6 +146,12 @@ def choose_analysis_type():
         choice_window, text="Fix Noise Signal", command=select_fix_noise
     )
     btn_fix_noise.pack(pady=5)
+
+    # New button for "Calculate CoP"
+    btn_calculate_cop = tk.Button(
+        choice_window, text="Calculate CoP", command=select_calculate_cop
+    )
+    btn_calculate_cop.pack(pady=5)
 
     choice_window.mainloop()
 
@@ -187,6 +206,18 @@ def run_fix_noise():
         print(f"Error importing fixnoise: {e}")
 
 
+def run_calculate_cop():
+    """
+    Runs the Calculate CoP process.
+    """
+    try:
+        from . import cop_calculate  # Import the new script
+
+        cop_calculate.main()  # Call the main function in cop_calculate.py
+    except ImportError as e:
+        print(f"Error importing cop_calculate: {e}")
+
+
 def run_force_analysis():
     """
     Main function to execute the chosen force analysis.
@@ -204,9 +235,12 @@ def run_force_analysis():
         run_force_cmj_analysis()
     elif analysis_type == "fix_noise":
         run_fix_noise()
+    elif analysis_type == "calculate_cop":
+        run_calculate_cop()  # Call the new function when "Calculate CoP" is selected
     else:
         print("No analysis type selected.")
 
 
 if __name__ == "__main__":
     run_force_analysis()
+
