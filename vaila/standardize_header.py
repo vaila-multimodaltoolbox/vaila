@@ -45,7 +45,9 @@ def standardize_header():
     Allows the user to select the header line and specify rows to delete.
     """
     # Open a window to select the directory containing CSV files
-    directory_path = filedialog.askdirectory(title="Select Directory Containing CSV Files")
+    directory_path = filedialog.askdirectory(
+        title="Select Directory Containing CSV Files"
+    )
     if not directory_path:
         return
 
@@ -82,13 +84,18 @@ def standardize_header():
             header_text.insert(tk.END, f"{i}: {line}")
 
         # Entry to select the header line number
-        header_line_label = tk.Label(header_window, text="Enter the line number to use as the header (e.g., 3):")
+        header_line_label = tk.Label(
+            header_window, text="Enter the line number to use as the header (e.g., 3):"
+        )
         header_line_label.pack()
         header_line_entry = tk.Entry(header_window)
         header_line_entry.pack()
 
         # Entry to select the range or single row to delete
-        delete_rows_label = tk.Label(header_window, text="Enter a range (start:end) of rows to delete (e.g., 4:5) or a single row number (e.g., 4):")
+        delete_rows_label = tk.Label(
+            header_window,
+            text="Enter a range (start:end) of rows to delete (e.g., 4:5) or a single row number (e.g., 4):",
+        )
         delete_rows_label.pack()
         delete_rows_entry = tk.Entry(header_window)
         delete_rows_entry.pack()
@@ -104,7 +111,9 @@ def standardize_header():
                     messagebox.showerror("Error", "Invalid line number.")
                     return
             except ValueError:
-                messagebox.showerror("Error", "Please enter a valid line number for the header.")
+                messagebox.showerror(
+                    "Error", "Please enter a valid line number for the header."
+                )
                 return
 
             # Get the range or single row to delete
@@ -126,7 +135,10 @@ def standardize_header():
                             raise ValueError
                         rows_to_delete.append(single_row)
                 except ValueError:
-                    messagebox.showerror("Error", "Invalid input for rows to delete. Use 'start:end' or a single row number.")
+                    messagebox.showerror(
+                        "Error",
+                        "Invalid input for rows to delete. Use 'start:end' or a single row number.",
+                    )
                     return
 
             # Process all CSV files in the directory
@@ -139,24 +151,35 @@ def standardize_header():
 
                     # Try reading the file with the selected header line and cleaning rows
                     try:
-                        df = pd.read_csv(file_path, header=selected_line, skip_blank_lines=False)
+                        df = pd.read_csv(
+                            file_path, header=selected_line, skip_blank_lines=False
+                        )
                     except pd.errors.ParserError as pe:
                         # Handle tokenizing errors by cleaning lines manually
                         cleaned_lines = []
                         for line in all_lines:
-                            if len(line.split(",")) == len(all_lines[selected_line].split(",")):
+                            if len(line.split(",")) == len(
+                                all_lines[selected_line].split(",")
+                            ):
                                 cleaned_lines.append(line)
-                        df = pd.read_csv(pd.compat.StringIO("".join(cleaned_lines)), header=selected_line)
+                        df = pd.read_csv(
+                            pd.compat.StringIO("".join(cleaned_lines)),
+                            header=selected_line,
+                        )
 
                     # Calculate the actual row indices to delete in the DataFrame
-                    rows_to_delete_after_header = [row - (selected_line + 1) for row in rows_to_delete if row > selected_line]
+                    rows_to_delete_after_header = [
+                        row - (selected_line + 1)
+                        for row in rows_to_delete
+                        if row > selected_line
+                    ]
 
                     # Delete the specified rows if they exist
                     if rows_to_delete_after_header:
                         df.drop(rows_to_delete_after_header, inplace=True)
 
                     # Remove any trailing empty rows
-                    df = df.dropna(how='all')
+                    df = df.dropna(how="all")
 
                     # Save the standardized file in the new directory
                     base_name = os.path.splitext(file_name)[0]
@@ -167,13 +190,18 @@ def standardize_header():
                 except Exception as e:
                     messagebox.showerror("Error", f"Error processing {file_name}: {e}")
 
-            messagebox.showinfo("Success", f"Files have been standardized and saved in {save_directory}")
+            messagebox.showinfo(
+                "Success", f"Files have been standardized and saved in {save_directory}"
+            )
             header_window.destroy()
 
-        confirm_button = tk.Button(header_window, text="Confirm", command=confirm_selection)
+        confirm_button = tk.Button(
+            header_window, text="Confirm", command=confirm_selection
+        )
         confirm_button.pack()
 
     choose_header_line()
+
 
 if __name__ == "__main__":
     root = tk.Tk()
