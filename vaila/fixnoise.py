@@ -1,8 +1,32 @@
-# fixnoise.py
+"""
+fixnoise_batch.py
+version 0.02
+
+This script is designed to batch process CSV files, applying a noise filter (fixnoise) interactively.
+The user selects a directory containing CSV files and, from the first file, chooses the headers of interest.
+The script applies the same header selection for all subsequent files and allows the user to mark start and end points 
+for specific segment replacements. If no points are selected, the file is saved without changes.
+
+Author: Prof. Dr. Paulo R. P. Santiago
+Date: September 13, 2024
+
+Modifications:
+- Added batch processing for multiple CSV files.
+- Unified header selection based on the first file.
+- Saved processed files in a new directory with a timestamp.
+
+This script was created to facilitate the processing of large volumes of experimental data, allowing fine adjustments
+through a user-friendly graphical interface.
+
+Instructions:
+1. Run the script.
+2. Select the directory containing the CSV files to be processed.
+3. Follow the instructions in the graphical interface to choose headers and adjustment points.
+
+"""
 
 import pandas as pd
 import matplotlib.pyplot as plt
-import sys
 from tkinter import (
     Tk,
     Toplevel,
@@ -15,7 +39,13 @@ from tkinter import (
     messagebox,
     filedialog,
 )
+import os
+import glob
+from datetime import datetime
 
+# Print the directory and name of the script being executed
+print(f"Running script: {os.path.basename(__file__)}")
+print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
 
 def read_csv_full(filename):
     try:
@@ -23,13 +53,7 @@ def read_csv_full(filename):
     except Exception as e:
         raise Exception(f"Error reading the CSV file: {str(e)}")
 
-
 def select_headers_and_load_data(file_path):
-    """
-    Displays a GUI to select the desired headers with Select All and Unselect All options
-    and loads the corresponding data for the selected headers.
-    """
-
     def get_csv_headers(file_path):
         df = pd.read_csv(file_path)
         return list(df.columns), df
@@ -102,7 +126,6 @@ def select_headers_and_load_data(file_path):
     selected_data = df[selected_headers]
     return selected_headers, selected_data
 
-
 def makefig1(data):
     fig1, ax1 = plt.subplots()
     ax1.plot(data * -1)
@@ -152,12 +175,11 @@ def makefig1(data):
     plt.show(block=True)
 
     if len(points) < 2:
-        print("At least two points required.")
-        sys.exit(1)
+        print("No points selected. Saving without changes.")
+        return []
 
     indices = sorted([int(point[0]) for point in points])
     return indices
-
 
 def replace_segments(data, indices, column_index):
     for i in range(0, len(indices), 2):  # Step of 2 to process pairs
@@ -165,36 +187,63 @@ def replace_segments(data, indices, column_index):
         data.iloc[start:end, column_index] = 0  # Only modify the specific column
     return data
 
+def process_files_in_directory(directory):
+    csv_files = sorted(glob.glob(os.path.join(directory, "*.csv")))
+
+    if not csv_files:
+        print("No CSV files found in the directory.")
+        return
+
+    # Create a new directory to save the processed files
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_directory = os.path.join(directory, f"vaila_fixnoise_{timestamp}")
+    os.makedirs(output_directory, exist_ok=True)
+
+    selected_headers = None
+    for idx, file_path in enumerate(csv_files):
+        print(f"Processing {file_path}")
+        
+        if idx == 0:
+            # For the first file, open the dialog to select headers
+            selected_headers, _ = select_headers_and_load_data(file_path)
+            if not selected_headers:
+                print("No headers selected.")
+                return  # If no headers are selected, exit the script
+        else:
+            print(f"Using previously selected headers: {selected_headers}")
+
+        selected_column = selected_headers[0]  # Assume the first column is selected
+
+        data = read_csv_full(file_path)
+        target_column_index = data.columns.get_loc(
+            selected_column
+        )  # Get the index of the selected column
+
+        indices = makefig1(data.iloc[:, target_column_index])
+        if indices:  # Only if points were selected
+            modified_data = replace_segments(data, indices, target_column_index)
+            new_filename = os.path.join(output_directory, os.path.basename(file_path).replace(".csv", "_fixnoise.csv"))
+            modified_data.to_csv(new_filename, index=False)
+            print(f"File saved as {new_filename}")
+        else:
+            # Save the file without changes
+            new_filename = os.path.join(output_directory, os.path.basename(file_path).replace(".csv", "_nochange.csv"))
+            data.to_csv(new_filename, index=False)
+            print(f"No changes made. File saved as {new_filename}")
 
 def main():
     root = Tk()
     root.withdraw()  # Hide the main Tkinter window
-    file_path = filedialog.askopenfilename(
-        title="Select CSV File", filetypes=[("CSV files", "*.csv")]
+    directory_path = filedialog.askdirectory(
+        title="Select Directory Containing CSV Files"
     )
 
-    if not file_path:
-        messagebox.showerror("Error", "No file selected.")
+    if not directory_path:
+        messagebox.showerror("Error", "No directory selected.")
         return
 
-    selected_headers, _ = select_headers_and_load_data(file_path)
-    if not selected_headers:
-        print("No headers selected.")
-        return
-
-    selected_column = selected_headers[0]  # Assume first column is selected
-
-    data = read_csv_full(file_path)
-    target_column_index = data.columns.get_loc(
-        selected_column
-    )  # Get the index of the selected column
-
-    indices = makefig1(data.iloc[:, target_column_index])
-    modified_data = replace_segments(data, indices, target_column_index)
-    new_filename = file_path.replace(".csv", "_fixnoise.csv")
-    modified_data.to_csv(new_filename, index=False)
-    print(f"File saved as {new_filename}")
-
+    process_files_in_directory(directory_path)
 
 if __name__ == "__main__":
     main()
+

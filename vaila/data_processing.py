@@ -78,5 +78,3 @@ def read_mocap_csv(file_path):
     except Exception as e:
         print(f"Error reading {file_path}: {e}")
         return None
-
-

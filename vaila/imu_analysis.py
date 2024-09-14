@@ -347,7 +347,11 @@ def analyze_imu_data():
                         180 / np.pi
                     )
 
-                    time = np.linspace(0, (len(accelerometer_1) - 1) / sample_rate, len(accelerometer_1))
+                    time = np.linspace(
+                        0,
+                        (len(accelerometer_1) - 1) / sample_rate,
+                        len(accelerometer_1),
+                    )
 
                     tilt_1, euler_1, quaternions_1 = imu_orientations(
                         accelerometer_1, gyroscope_1, time, sample_rate, "Sensor Trunk"
@@ -467,7 +471,9 @@ def analyze_imu_data():
                     180 / np.pi
                 )
 
-                time = np.linspace(0, (len(accelerometer_1) - 1) / sample_rate, len(accelerometer_1))
+                time = np.linspace(
+                    0, (len(accelerometer_1) - 1) / sample_rate, len(accelerometer_1)
+                )
 
                 tilt_1, euler_1, quaternions_1 = imu_orientations(
                     accelerometer_1, gyroscope_1, time, sample_rate, "Sensor Trunk"
