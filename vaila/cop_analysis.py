@@ -173,7 +173,9 @@ def select2headers(file_path):
             var.set(False)
 
     selection_window = Toplevel()
-    selection_window.title("Select two (2) Cx and Cy components from Headers for Force Plate Data")
+    selection_window.title(
+        "Select two (2) Cx and Cy components from Headers for Force Plate Data"
+    )
     selection_window.geometry(
         f"{selection_window.winfo_screenwidth()}x{int(selection_window.winfo_screenheight()*0.8)}"
     )
@@ -218,46 +220,71 @@ def select2headers(file_path):
     return selected_headers, selected_data
 
 
-def plot_final_figure(time, X_n, Y_n, freqs_ml, psd_ml, freqs_ap, psd_ap, metrics, output_path, area, angle, bounds, ellipse_data):
+def plot_final_figure(
+    time,
+    X_n,
+    Y_n,
+    freqs_ml,
+    psd_ml,
+    freqs_ap,
+    psd_ap,
+    metrics,
+    output_path,
+    area,
+    angle,
+    bounds,
+    ellipse_data,
+):
     """
     Creates the final figure with the stabilogram, CoP pathway, and a text with all the presented result variables.
     """
     fig = plt.figure(figsize=(12, 8))
-    
+
     # Subplot for the stabilogram (row 1, column 1)
     ax1 = fig.add_subplot(2, 2, 1)
-    ax1.plot(time, X_n, label='CoP ML')
-    ax1.plot(time, Y_n, label='CoP AP')
-    # insert grid with : gray light 
-    ax1.grid(color='gray', linestyle=':', linewidth=0.5)
-    ax1.set_title('Stabilogram')
-    ax1.set_xlabel('Time (s)')
-    ax1.set_ylabel('Displacement (cm)')
+    ax1.plot(time, X_n, label="CoP ML")
+    ax1.plot(time, Y_n, label="CoP AP")
+    # insert grid with : gray light
+    ax1.grid(color="gray", linestyle=":", linewidth=0.5)
+    ax1.set_title("Stabilogram")
+    ax1.set_xlabel("Time (s)")
+    ax1.set_ylabel("Displacement (cm)")
     ax1.legend()
-    
+
     # Subplot for the CoP pathway with confidence ellipse (row 2, column 1)
     ax2 = fig.add_subplot(2, 2, 3)
-    
+
     # Plot the CoP pathway
-    ax2.plot(X_n, Y_n, label='CoP Pathway', color='blue')
-    
+    ax2.plot(X_n, Y_n, label="CoP Pathway", color="blue")
+
     # Unpack the ellipse data to plot it correctly
     ellipse_x, ellipse_y = ellipse_data[0], ellipse_data[1]
-    eigvecs, scaled_eigvals, pca_mean = ellipse_data[2], ellipse_data[3], ellipse_data[4]
-    
+    eigvecs, scaled_eigvals, pca_mean = (
+        ellipse_data[2],
+        ellipse_data[3],
+        ellipse_data[4],
+    )
+
     # Plot the confidence ellipse
-    ax2.plot(ellipse_x, ellipse_y, color='red', linestyle='--', linewidth=2, label='Confidence Ellipse')
-    
+    ax2.plot(
+        ellipse_x,
+        ellipse_y,
+        color="red",
+        linestyle="--",
+        linewidth=2,
+        label="Confidence Ellipse",
+    )
+
     # Plot major and minor axes of the ellipse
     major_axis_start = pca_mean - eigvecs[0] * scaled_eigvals[0]
     major_axis_end = pca_mean + eigvecs[0] * scaled_eigvals[0]
     ax2.plot(
         [major_axis_start[0], major_axis_end[0]],
         [major_axis_start[1], major_axis_end[1]],
-        color='grey',
-        linestyle=':',
+        color="grey",
+        linestyle=":",
         linewidth=1.7,
-        label='Major Axis'
+        label="Major Axis",
     )
 
     minor_axis_start = pca_mean - eigvecs[1] * scaled_eigvals[1]
@@ -265,45 +292,81 @@ def plot_final_figure(time, X_n, Y_n, freqs_ml, psd_ml, freqs_ap, psd_ap, metric
     ax2.plot(
         [minor_axis_start[0], minor_axis_end[0]],
         [minor_axis_start[1], minor_axis_end[1]],
-        color='grey',
-        linestyle=':',
+        color="grey",
+        linestyle=":",
         linewidth=1.5,
-        label='Minor Axis'
+        label="Minor Axis",
     )
-    
+
     # Set the title and labels
-    ax2.set_title('CoP Pathway with Confidence Ellipse')
-    ax2.set_xlabel('CoP ML (cm)')
-    ax2.set_ylabel('CoP AP (cm)')
-   
+    ax2.set_title("CoP Pathway with Confidence Ellipse")
+    ax2.set_xlabel("CoP ML (cm)")
+    ax2.set_ylabel("CoP AP (cm)")
+
     # Set the aspect ratio to equal to ensure equal proportions
-    ax2.set_aspect('equal', adjustable='box')
-    #ax2.legend()
-    
+    ax2.set_aspect("equal", adjustable="box")
+    # ax2.legend()
+
     # Adjust the limits of the plot to ensure both the CoP pathway and ellipse are visible
-    x_margin = 0.02 * (np.max([np.max(ellipse_x), np.max(X_n)]) - np.min([np.min(ellipse_x), np.min(X_n)]))
-    y_margin = 0.02 * (np.max([np.max(ellipse_y), np.max(Y_n)]) - np.min([np.min(ellipse_y), np.min(Y_n)]))
-    
-    ax2.set_xlim(min(np.min(ellipse_x), np.min(X_n)) - x_margin, max(np.max(ellipse_x), np.max(X_n)) + x_margin)
-    ax2.set_ylim(min(np.min(ellipse_y), np.min(Y_n)) - y_margin, max(np.max(ellipse_y), np.max(Y_n)) + y_margin)
-    
+    x_margin = 0.02 * (
+        np.max([np.max(ellipse_x), np.max(X_n)])
+        - np.min([np.min(ellipse_x), np.min(X_n)])
+    )
+    y_margin = 0.02 * (
+        np.max([np.max(ellipse_y), np.max(Y_n)])
+        - np.min([np.min(ellipse_y), np.min(Y_n)])
+    )
+
+    ax2.set_xlim(
+        min(np.min(ellipse_x), np.min(X_n)) - x_margin,
+        max(np.max(ellipse_x), np.max(X_n)) + x_margin,
+    )
+    ax2.set_ylim(
+        min(np.min(ellipse_y), np.min(Y_n)) - y_margin,
+        max(np.max(ellipse_y), np.max(Y_n)) + y_margin,
+    )
+
     # Subplot for result variables (combined column 2)
-    ax3 = fig.add_subplot(1, 2, 2)  # Use a single subplot that spans both rows in the second column
-    ax3.axis('off')  # Hide axes to focus on the text
-    text_str = '\n'.join([f"{key}: {value}" for key, value in metrics.items()])  # Prepare text from metrics dictionary
-    ax3.text(0.05, 0.5, text_str, fontsize=10, verticalalignment='center', transform=ax3.transAxes, wrap=True)  # Display text
-   
+    ax3 = fig.add_subplot(
+        1, 2, 2
+    )  # Use a single subplot that spans both rows in the second column
+    ax3.axis("off")  # Hide axes to focus on the text
+    text_str = "\n".join(
+        [f"{key}: {value}" for key, value in metrics.items()]
+    )  # Prepare text from metrics dictionary
+    ax3.text(
+        0.05,
+        0.5,
+        text_str,
+        fontsize=10,
+        verticalalignment="center",
+        transform=ax3.transAxes,
+        wrap=True,
+    )  # Display text
+
     # Subplot for result variables (combined column 2)
-    ax3 = fig.add_subplot(1, 2, 2)  # Use a single subplot that spans both rows in the second column
-    ax3.axis('off')  # Hide axes to focus on the text
-    text_str = '\n'.join([f"{key}: {value}" for key, value in metrics.items()])  # Prepare text from metrics dictionary
-    ax3.text(0.05, 0.5, text_str, fontsize=10, verticalalignment='center', transform=ax3.transAxes, wrap=True)  # Display text
-    
+    ax3 = fig.add_subplot(
+        1, 2, 2
+    )  # Use a single subplot that spans both rows in the second column
+    ax3.axis("off")  # Hide axes to focus on the text
+    text_str = "\n".join(
+        [f"{key}: {value}" for key, value in metrics.items()]
+    )  # Prepare text from metrics dictionary
+    ax3.text(
+        0.05,
+        0.5,
+        text_str,
+        fontsize=10,
+        verticalalignment="center",
+        transform=ax3.transAxes,
+        wrap=True,
+    )  # Display text
+
     # Save the figure in PNG and SVG formats
     plt.tight_layout()
-    plt.savefig(f"{output_path}_final_figure.png", dpi=300, format='png')
-    plt.savefig(f"{output_path}_final_figure.svg", format='svg')
-    #plt.show()
+    plt.savefig(f"{output_path}_final_figure.png", dpi=300, format="png")
+    plt.savefig(f"{output_path}_final_figure.svg", format="svg")
+    # plt.show()
 
 
 def analyze_data_2d(
@@ -336,7 +399,7 @@ def analyze_data_2d(
     T = N / fs  # Total duration
     # time = np.linspace(0, T, N)
     time = np.linspace(0, (len(cop_x_f) - 1) / fs, len(cop_x_f))
-    
+
     # Calculate mean values of ML and AP coordinates
     mean_ML = np.mean(cop_x_f)
     mean_AP = np.mean(cop_y_f)
@@ -488,7 +551,21 @@ def analyze_data_2d(
     )
 
     # Call plot_final_figure with the precomputed ellipse data
-    plot_final_figure(time, X_n, Y_n, freqs_ml, psd_ml, freqs_ap, psd_ap, metrics, output_path, area, angle, bounds, ellipse_data)
+    plot_final_figure(
+        time,
+        X_n,
+        Y_n,
+        freqs_ml,
+        psd_ml,
+        freqs_ap,
+        psd_ap,
+        metrics,
+        output_path,
+        area,
+        angle,
+        bounds,
+        ellipse_data,
+    )
 
 
 def main():
@@ -639,4 +716,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

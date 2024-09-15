@@ -81,6 +81,7 @@ from tkinter import (
 print(f"Running script: {os.path.basename(__file__)}")
 print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
 
+
 def select_source_directory():
     """
     Opens a directory dialog to select the source directory containing CSV files.
@@ -326,11 +327,14 @@ def prompt_user_input(file_name):
         "Input", f"Enter Sampling Frequency (Fs) for {file_name}:", initialvalue=1000.0
     )
     generate_profile = simpledialog.askstring(
-        "Input", f"Generate Profiling Report? (Yes or No) for {file_name}:", initialvalue="No"
+        "Input",
+        f"Generate Profiling Report? (Yes or No) for {file_name}:",
+        initialvalue="No",
     )
 
     root.destroy()
     return sidefoot, dominance, quality, threshold, fs, generate_profile
+
 
 def butterworthfilt(data, cutoff=59, Fs=1000):
     """
@@ -1700,7 +1704,9 @@ def main():
     first_file_name = os.path.basename(first_file_full_path)
 
     # Ask for user input once, including Fs, and pass the file name
-    sidefoot, dominance, quality, threshold, fs, generate_profile = prompt_user_input(first_file_name)
+    sidefoot, dominance, quality, threshold, fs, generate_profile = prompt_user_input(
+        first_file_name
+    )
 
     # Batch process all files in the source directory
     batch_process_directory(
@@ -1718,4 +1724,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

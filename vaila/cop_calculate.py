@@ -15,6 +15,7 @@ from tkinter import (
     BooleanVar,
 )
 
+
 def convert_to_mm(data, unit):
     """Converts the data to millimeters based on the provided unit."""
     conversion_factors = {
@@ -31,6 +32,7 @@ def convert_to_mm(data, unit):
         )
     return data * conversion_factors[unit]
 
+
 def read_csv_full(filename):
     """Reads the full CSV file."""
     try:
@@ -39,8 +41,10 @@ def read_csv_full(filename):
     except Exception as e:
         raise Exception(f"Error reading the CSV file: {str(e)}")
 
+
 def select_headers(file_path):
     """Displays a GUI to select six (6) headers for force plate data analysis."""
+
     def get_csv_headers(file_path):
         """Reads the headers from a CSV file."""
         df = pd.read_csv(file_path)
@@ -102,7 +106,9 @@ def select_headers(file_path):
     btn_frame.pack(side="right", padx=10, pady=10, fill="y", anchor="center")
 
     Button(btn_frame, text="Select All", command=select_all).pack(side="top", pady=5)
-    Button(btn_frame, text="Unselect All", command=unselect_all).pack(side="top", pady=5)
+    Button(btn_frame, text="Unselect All", command=unselect_all).pack(
+        side="top", pady=5
+    )
     Button(btn_frame, text="Confirm", command=on_select).pack(side="top", pady=5)
 
     selection_window.mainloop()
@@ -113,24 +119,76 @@ def select_headers(file_path):
 
     return selected_headers
 
-def N_Nm2COP_OR67(N_Nm_Data):
+
+def calc_cop(data, fp_dimensions_xy=None, h=None):
     """
-    Converts force (N) and moment (Nmm) data to CoP (mm) coordinates.
+    Converts force (N) and moment (N.mm) data to CoP (mm) coordinates.
     Inputs:
-        N_Nm_Data: numpy array with columns [Fx, Fy, Fz, Mx, My, Mz]
+        data: numpy array with columns [Fx, Fy, Fz, Mx, My, Mz]
+        fp_dimensions_xy: array or None, the dimensions of the force plate in mm [width, length]
+        h: float or None, the height of the board over the force plate (in mm)
     Outputs:
-        COPxy_mm: numpy array with columns [COPx, COPy] in mm
+        cop_xyz_mm: numpy array with columns [cop_x, cop_y, cop_z] in mm
+
+    Calculations based on:
+
+    Case 1 - No board over the force plate (h is None):
+        cop_x = My / Fz
+        cop_y = Mx / Fz
+        cop_z = 0 (height at force plate level)
+
+    Case 2 - Board exists over the force plate (h is provided):
+        cop_x = (-h * Fx - My) / Fz
+        cop_y = (-h * Fy + Mx) / Fz
+        cop_z = h (height of the board over the force plate)
+
+    Where:
+        - Mx, My: Components of the moment (N.mm)
+        - Fx, Fy, Fz: Force components (N)
+        - h: Height of the board over the force plate (mm)
     """
-    # Default location (in meters) of the center of the force plate
-    C0 = [0.0000e-3, -0.0001e-3, -50.000e-3]
 
-    # CoP calculations based on provided formulas
-    COPx = ((-N_Nm_Data[:, 4] + N_Nm_Data[:, 0] * C0[2]) / N_Nm_Data[:, 2]) + C0[0]
-    COPy = ((N_Nm_Data[:, 3] + N_Nm_Data[:, 1] * C0[2]) / N_Nm_Data[:, 2]) + C0[1]
+    # Convert data to numpy array if it's not already
+    data = np.asarray(data)
 
-    # Convert from meters to millimeters
-    COPxy_mm = np.column_stack((COPx, COPy)) * 1000
-    return COPxy_mm
+    # Use default force plate dimensions if none are provided
+    if fp_dimensions_xy is None:
+        fp_dimensions_xy = np.array([500, 500])
+
+    # Calculate the center of the force plate
+    fp_center = fp_dimensions_xy / 2
+
+    # Initialize CoP arrays with the default values as the center of the force plate
+    cop_x = np.full(data.shape[0], fp_center[0])
+    cop_y = np.full(data.shape[0], fp_center[1])
+
+    # Identify rows where Fz is not zero
+    fz_nonzero = data[:, 2] != 0
+
+    # Case 1 - No board over the force plate (h is None)
+    if h is None:
+        cop_x[fz_nonzero] = data[fz_nonzero, 4] / data[fz_nonzero, 2]
+        cop_y[fz_nonzero] = data[fz_nonzero, 3] / data[fz_nonzero, 2]
+        cop_z = np.zeros(data.shape[0])  # CoP Z is zero when no board is present
+    # Case 2 - Board exists over the force plate (h is provided)
+    else:
+        # Ensure h is a valid float
+        if not isinstance(h, (int, float)):
+            raise ValueError("The height 'h' must be a number.")
+
+        cop_x[fz_nonzero] = (-h * data[fz_nonzero, 0] - data[fz_nonzero, 4]) / data[
+            fz_nonzero, 2
+        ]
+        cop_y[fz_nonzero] = (-h * data[fz_nonzero, 1] + data[fz_nonzero, 3]) / data[
+            fz_nonzero, 2
+        ]
+        cop_z = np.full(data.shape[0], h)  # CoP Z is the height of the board
+
+    # Combine cop_x, cop_y, and cop_z into a single array
+    cop_xyz = np.column_stack((cop_x, cop_y, cop_z))
+
+    return cop_xyz
+
 
 def main():
     """Function to run the CoP calculation."""
@@ -157,6 +215,38 @@ def main():
     # Set default units for forces (N) and moments (Nmm)
     unit = "mm"
     print(f"Default unit of measurement: {unit}")
+
+    # Request force plate dimensions from user
+    dimensions_input = simpledialog.askstring(
+        "Force Plate Dimensions",
+        "Enter the force plate dimensions (width, length) in mm, separated by a comma:",
+        parent=root,
+    )
+    if dimensions_input:
+        try:
+            fp_dimensions_xy = [float(dim) for dim in dimensions_input.split(",")]
+            if len(fp_dimensions_xy) != 2:
+                raise ValueError("Please provide exactly two values: width and length.")
+        except ValueError as e:
+            print(f"Invalid input for force plate dimensions: {e}")
+            return
+    else:
+        print("No force plate dimensions provided. Using default [500, 500].")
+        fp_dimensions_xy = [500, 500]
+
+    # Request the height 'h' from user
+    h = simpledialog.askfloat(
+        "Board Height (h)",
+        "Enter the height of the board over the force plate (in mm):",
+        parent=root,
+    )
+    if h is not None:
+        print(f"Using provided board height: {h} mm")
+    else:
+        print(
+            "No height provided. Calculations will assume no board over the force plate (h=None)."
+        )
+        h = None
 
     # Sort files to select the first CSV for header selection
     csv_files = sorted([f for f in os.listdir(input_dir) if f.endswith(".csv")])
@@ -195,7 +285,9 @@ def main():
             messagebox.showerror(
                 "Header Error", f"Selected headers not found in file {file_name}."
             )
-            print(f"Error: Selected headers not found in file {file_name}. Skipping file.")
+            print(
+                f"Error: Selected headers not found in file {file_name}. Skipping file."
+            )
             continue
 
         data = df_full[selected_headers].to_numpy()
@@ -212,16 +304,14 @@ def main():
             continue
 
         # Calculate CoP from force and moment data
-        COPxy_mm = N_Nm2COP_OR67(data)
-
-        # Add Cz (0.0) to CoP data
-        Cz = np.zeros((COPxy_mm.shape[0], 1))
-        COP_xyz = np.hstack((COPxy_mm, Cz))
+        cop_xyz = calc_cop(data, fp_dimensions_xy, h)
 
         # Save the CoP data to a new CSV file
         file_name_without_extension = os.path.splitext(file_name)[0]
-        output_file_path = os.path.join(main_output_dir, f"{file_name_without_extension}_{timestamp}.csv")
-        output_df = pd.DataFrame(COP_xyz, columns=['CoP_x (mm)', 'CoP_y (mm)', 'CoP_z (mm)'])
+        output_file_path = os.path.join(
+            main_output_dir, f"{file_name_without_extension}_{timestamp}.csv"
+        )
+        output_df = pd.DataFrame(cop_xyz, columns=["cop_x_mm", "cop_y_mm", "cop_z_mm"])
         output_df.to_csv(output_file_path, index=False)
 
         print(f"Saved CoP data to: {output_file_path}")
@@ -231,9 +321,9 @@ def main():
     messagebox.showinfo(
         "Information", "CoP calculation complete! The window will close in 5 seconds."
     )
-    root.after(5000, lambda: root.quit())  # Wait for 5 seconds and then quit safely
-    root.mainloop()
+    # root.after(5000, lambda: root.quit())  # Wait for 5 seconds and then quit safely
+    # root.mainloop()
+
 
 if __name__ == "__main__":
     main()
-
