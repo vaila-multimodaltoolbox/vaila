@@ -94,7 +94,7 @@ def choose_analysis_type():
     # Print the directory and name of the script being executed
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
-    
+
     choice = []
 
     def select_force_cube_fig():
@@ -243,4 +243,3 @@ def run_force_analysis():
 
 if __name__ == "__main__":
     run_force_analysis()
-

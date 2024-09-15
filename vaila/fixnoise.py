@@ -47,11 +47,13 @@ from datetime import datetime
 print(f"Running script: {os.path.basename(__file__)}")
 print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
 
+
 def read_csv_full(filename):
     try:
         return pd.read_csv(filename, delimiter=",")
     except Exception as e:
         raise Exception(f"Error reading the CSV file: {str(e)}")
+
 
 def select_headers_and_load_data(file_path):
     def get_csv_headers(file_path):
@@ -126,6 +128,7 @@ def select_headers_and_load_data(file_path):
     selected_data = df[selected_headers]
     return selected_headers, selected_data
 
+
 def makefig1(data):
     fig1, ax1 = plt.subplots()
     ax1.plot(data * -1)
@@ -181,11 +184,13 @@ def makefig1(data):
     indices = sorted([int(point[0]) for point in points])
     return indices
 
+
 def replace_segments(data, indices, column_index):
     for i in range(0, len(indices), 2):  # Step of 2 to process pairs
         start, end = indices[i], indices[i + 1]
         data.iloc[start:end, column_index] = 0  # Only modify the specific column
     return data
+
 
 def process_files_in_directory(directory):
     csv_files = sorted(glob.glob(os.path.join(directory, "*.csv")))
@@ -202,7 +207,7 @@ def process_files_in_directory(directory):
     selected_headers = None
     for idx, file_path in enumerate(csv_files):
         print(f"Processing {file_path}")
-        
+
         if idx == 0:
             # For the first file, open the dialog to select headers
             selected_headers, _ = select_headers_and_load_data(file_path)
@@ -222,14 +227,21 @@ def process_files_in_directory(directory):
         indices = makefig1(data.iloc[:, target_column_index])
         if indices:  # Only if points were selected
             modified_data = replace_segments(data, indices, target_column_index)
-            new_filename = os.path.join(output_directory, os.path.basename(file_path).replace(".csv", "_fixnoise.csv"))
+            new_filename = os.path.join(
+                output_directory,
+                os.path.basename(file_path).replace(".csv", "_fixnoise.csv"),
+            )
             modified_data.to_csv(new_filename, index=False)
             print(f"File saved as {new_filename}")
         else:
             # Save the file without changes
-            new_filename = os.path.join(output_directory, os.path.basename(file_path).replace(".csv", "_nochange.csv"))
+            new_filename = os.path.join(
+                output_directory,
+                os.path.basename(file_path).replace(".csv", "_nochange.csv"),
+            )
             data.to_csv(new_filename, index=False)
             print(f"No changes made. File saved as {new_filename}")
+
 
 def main():
     root = Tk()
@@ -244,6 +256,6 @@ def main():
 
     process_files_in_directory(directory_path)
 
+
 if __name__ == "__main__":
     main()
-
