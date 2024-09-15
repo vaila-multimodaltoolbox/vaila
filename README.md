@@ -1,6 +1,5 @@
 # vailá - multimodaltoolbox
 
-
 <p align="center">
   <img src="docs/images/vaila.png" alt="vailá Logo" width="300"/>
 </p>
@@ -26,113 +25,83 @@
 
 ## Introduction
 
-The analysis of human movement is fundamental in both health and sports biomechanics, providing valuable insights into various aspects of physical performance, rehabilitation, and injury prevention. Understanding joint coordination, such as that between the trunk and pelvis, is essential for assessing movement patterns in both healthy individuals and those with disabilities. Traditional motion capture systems, despite their high accuracy, often involve complex setups and are restricted in their ability to capture natural, unrestricted movements across diverse environments. Recent advancements in motion capture technologies, including inertial measurement units (IMUs) and markerless video-based systems, offer new opportunities for more comprehensive and flexible movement analysis, allowing for more accurate assessments in real-world settings.
+The analysis of human movement is fundamental in both health and sports biomechanics, providing valuable insights into various aspects of physical performance, rehabilitation, and injury prevention. However, existing software often restricts user control and customization, acting as a "black box." With __vailá__, users have the freedom to explore, customize, and create their own tools in a truly open-source and collaborative environment.
 
-However, many people struggle to fully understand the complexity behind pre-built software that often functions as a "black box," limiting the user's control and comprehension. Additionally, these software solutions are proprietary, meaning users do not own them and cannot make necessary modifications or adaptations to suit their specific needs. With **vailá**, this is not the case. You have the freedom to use your imagination, customize your analysis, and create your own tools with the help of new "friends" in the community. Here, the software is in your hands—you are encouraged to build new buttons, write new code, and shape the software to meet your unique requirements, fostering a truly open and collaborative environment.
+__vailá__ (Versatile Anarcho Integrated Liberation Ánalysis) is an open-source multimodal toolbox that leverages data from multiple biomechanical systems to enhance human movement analysis. It integrates data from:
 
-This study presents the development of the vailá - Versatile Anarcho Integrated Liberation Ánalysis in Multimodal Toolbox. This toolbox/toolkit designed to enhance the analysis of human movement by leveraging data from multiple biomechanical systems. The toolbox incorporates data from:
+- **Retroreflective Motion Capture Systems** (e.g., Vicon, OptiTrack)
+- **Inertial Measurement Unit (IMU) Systems** (e.g., Delsys, Noraxon)
+- **Markerless Video Capture Technology** (e.g., OpenPose, MediaPipe)
+- **Electromyography (EMG) Systems** (e.g., Delsys, Noraxon)
+- **Force Plate Systems** (e.g., AMTI, Bertec)
+- **GPS/GNSS Systems** (e.g., Garmin, Trimble)
+- **MEG/EEG Systems** (for brain activity monitoring)
+- **HR/ECG Systems** (for heart rate and electrical activity)
 
-- **Retroreflective Motion Capture Systems**, such as Vicon, which provide high-precision tracking of reflective markers placed on the body.
-- **Inertial Measurement Unit (IMU) Systems**, such as those from Delsys, which offer portable and unobtrusive tracking of body segment accelerations and orientations.
-- **Markerless Video Capture Technology**, such as OpenPose, which enables the estimation of human poses from video footage without the need for markers, facilitating more natural movement analysis.
-- **Electromyography (EMG) Systems**, which measure muscle activation signals, providing insights into the neuromuscular aspects of movement.
-- **Force Plate Systems**, which measure ground reaction forces, offering data on balance, gait, and other aspects of biomechanics.
-- **GPS/GNSS Systems**, which provide precise location data, useful for outdoor movement analysis.
+By integrating these diverse data sources, __vailá__ allows for comprehensive and accurate analysis of movement patterns, which is particularly beneficial for research and clinical applications.
 
-By integrating these diverse data sources, the vailá allows for a more comprehensive and accurate analysis of movement patterns. This toolbox is particularly beneficial for research and clinical applications where detailed biomechanical assessments are required to develop and evaluate interventions aimed at improving motor function in individuals with disabilities.
+## Key Features
 
-The development and validation of this toolbox involved collaborative efforts across multiple institutions, ensuring robust and reliable performance. The primary objective of this paper is to describe the technical implementation of the vailá in Multimodal Toolbox and demonstrate its application in the analysis of sit-to-stand movements in children with cerebral palsy. The results highlight the potential of this integrated approach to provide deeper insights into the biomechanics of movement, ultimately contributing to the advancement of rehabilitation strategies and the improvement of quality of life for individuals with movement disorders.
+- **Multimodal Data Analysis**: Analyze data from various sources such as IMU sensors, motion capture, markerless tracking, EMG, force plates, and GPS/GNSS systems.
+- **File Management**: Tools for file operations, including rename, import, export, copy, move, remove, tree, find, and transfer.
+- **Data Conversion**: Convert between C3D and CSV formats, and perform Direct Linear Transformation (DLT) methods for 2D and 3D reconstructions.
+- **Video Processing**: Tools for converting videos to images, cutting videos, compressing (H.264 and HEVC H.265), synchronizing videos, and extracting pixel coordinates.
+- **Data Visualization**: Display and plot 2D and 3D graphs; visualize CSV and C3D data.
 
 ## Description
 
-This multimodal toolbox integrates data from various motion capture systems, including:
+This multimodal toolbox integrates data from various motion capture systems to facilitate advanced biomechanical analysis by combining multiple data sources. The primary objective is to improve understanding and evaluation of movement patterns across different contexts.
 
-- **Retroreflective Motion Capture Systems** (e.g., OptiTrack, Vicon, Qualisys)
-- **Inertial Measurement Unit (IMU) Systems** (e.g., Delsys, Noraxon)
-- **Markerless Video Capture Technology** (e.g., MediaPipe or OpenPose for human pose estimation)
-- **Electromyography (EMG) Systems** (e.g., Delsys, Noraxon)
-- **Force Plate Systems** (e.g., AMTI, Bertec, Kistler)
-- **GPS/GNSS Systems** (e.g., Garmin, Trimble)
-
-This project aims to facilitate advanced biomechanical analysis by combining multiple data sources to improve the understanding and evaluation of movement patterns.
-
-## vailá manifest
+## vailá Manifest
 
 ### English Version
 
-If you have new ideas or suggestions, please send them to us.
-Join us in the liberation from paid software with the "vailá - Versatile Anarcho Integrated Liberation Ánalysis in Multimodal Toolbox".
+Join us in the liberation from paid software with the "vailá - Versatile Anarcho Integrated Liberation Ánalysis in Multimodal Toolbox."
 
-In front of you stands a versatile and anarcho-integrated tool, designed to challenge the boundaries of commercial systems.
-This software, not a mere substitute, is a symbol of innovation and freedom, now available and accessible.
-However, this brave visitation of an old problem is alive and determined to eliminate these venal and
-virulent barriers that protect the monopoly of expensive software, ensuring the dissemination of knowledge and accessibility.
-We have left the box open with vailá to insert your ideas and processing in a liberated manner.
-The only verdict is versatility; a vendetta against exorbitant costs, held as a vow, not in vain, for the value and veracity of which shall one day
-vindicate the vigilant and the virtuous in the field of motion analysis.
-Surely, this torrent of technology tends to be very innovative, so let me simply add that it is a great honor to have you with us
-and you may call this tool vailá.
+In front of you stands a versatile tool designed to challenge the boundaries of commercial systems. This software is a symbol of innovation and freedom, determined to eliminate barriers that protect the monopoly of expensive software, ensuring the dissemination of knowledge and accessibility.
 
-― The vailá idea!
-
-"vailá" is an expression that blends the sound of the French word "voilà" with the direct encouragement in Portuguese BR "vai lá."
-It is a call to action, an invitation to initiative and freedom to explore, experiment, and create without the constraints imposed by expensive commercial software.
-"vailá" means "go there and do it!", encouraging everyone to harness the power of the "vailá - Versatile Anarcho Integrated Liberation Ánalysis in Multimodal Toolbox" to perform analysis with data from multiple systems.
+With __vailá__, you are invited to explore, experiment, and create without constraints. "vailá" means "go there and do it!" — encouraging you to harness its power to perform analysis with data from multiple systems.
 
 ### Versão em Português
 
-Se você tiver novas ideias ou sugestões, envie-as para nós.
 Junte-se a nós na libertação do software pago com o "vailá: Análise versátil da libertação anarquista integrada na caixa de ferramentas multimodal".
 
-Diante de você está uma ferramenta versátil e integrada anarquicamente, projetada para desafiar as fronteiras dos sistemas comerciais.
-Este software, não é um mero substituto, é um símbolo de inovação e liberdade, agora disponível e acessível.
-No entanto, esta ousada visitação de um velho problema está viva e determinada a eliminar essas barreiras venais e
-virulentas que protegem o monopólio do software caro, garantindo a disseminação do conhecimento e a acessibilidade.
-Deixamos a caixa aberta com vailá para inserir suas ideias e processamento de maneira liberada.
-O único veredito é versatilidade; uma vingança contra custos exorbitantes, mantida como um voto, não em vão, pelo valor e veracidade que um dia
-vindicarão os vigilantes e virtuosos no campo da análise de movimento.
-Certamente, este torrente de tecnologia tende a ser muito inovador, então me permita simplesmente acrescentar que é uma grande honra tê-lo conosco
-e você pode chamar esta ferramenta de vailá.
+Diante de você está uma ferramenta versátil, projetada para desafiar as fronteiras dos sistemas comerciais. Este software é um símbolo de inovação e liberdade, determinado a eliminar as barreiras que protegem o monopólio do software caro, garantindo a disseminação do conhecimento e a acessibilidade.
 
-― A ideia vailá!
-
-"vailá" é uma expressão que mistura a sonoridade da palavra francesa "voilà" com o incentivo direto em português "vai lá".
-É uma chamada à ação, um convite à iniciativa e à liberdade de explorar, experimentar e criar sem as limitações impostas por softwares comerciais caros.
-"vailá" significa "vai lá e faça!", encorajando todos a aproveitar o poder das ferramentas versáteis e integradas do "vailá: Versatile Anarcho Integrated Liberation Ánalysis in Multimodal Toolbox" para realizar análises com dados de múltiplos sistemas.
+Com __vailá__, você é convidado a explorar, experimentar e criar sem restrições. "vailá" significa "vai lá e faça!" — encorajando você a aproveitar seu poder para realizar análises com dados de múltiplos sistemas.
 
 ## Environment Setup/Install
 
-* Install the complete [Anaconda](https://www.anaconda.com/download/success) virtual environment for your operating system. Remember to add the path and possible dependencies
 To set up the development environment, follow these steps:
 
 1. Clone the repository:
 
     ```bash
-      git clone https://github.com/vaila-multimodaltoolbox/vaila
-      cd vaila
+    git clone https://github.com/vaila-multimodaltoolbox/vaila
+    cd vaila
     ```
 
 2. Install the required environment and dependencies using the provided installation scripts:
 
 - For **Linux**:
 
-    ```bash
-      ./install_vaila_linux.sh
-    ```
+  ```bash
+  ./install_vaila_linux.sh
+  ```
 
 - For **macOS**:
 
-    ```bash
-      ./install_vaila_mac.sh
-    ```
+  ```bash
+  ./install_vaila_mac.sh
+  ```
 
 - For **Windows**:
 
     Run the batch script:
 
-    ```bat
-      install_vaila_win.bat
-    ```
+  ```bat
+  install_vaila_win.bat
+  ```
 
 ### Running the Application
 
@@ -142,23 +111,23 @@ To run the vailá toolbox, activate the environment and start the application us
 
 Use the script `mac_launch_vaila.sh`:
 
-    ```bash
-      ./mac_launch_vaila.sh
-    ```
+  ```bash
+  ./mac_launch_vaila.sh
+  ```
 
 #### For Linux
 
 Use the script `linux_launch_vaila.sh`:
 
-    ```bash
-      ./linux_launch_vaila.sh
-    ```
+  ```bash
+  ./linux_launch_vaila.sh
+  ```
 
 #### For Windows
 
 On Windows, after running `install_vaila_win.bat`, a button is added to the Windows Terminal. If the automatic insertion fails, manually add the following profile to your Windows Terminal `settings.json` file:
 
-    ```json
+  ```json
     {
         "colorScheme": "Vintage",
         "commandline": "pwsh.exe -ExecutionPolicy ByPass -NoExit -Command \"& 'C:\\ProgramData\\anaconda3\\shell\\condabin\\conda-hook.ps1' ; conda activate 'vaila' ; python 'vaila.py' \"",
@@ -168,116 +137,60 @@ On Windows, after running `install_vaila_win.bat`, a button is added to the Wind
         "name": "vailá",
         "startingDirectory": "C:\\vaila_programs\\vaila"
     }
-    ```
+  ```
 
-You can find the settings.json file at:
-    ```
-      %LocalAppData%\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json
-    ```
+### Analyzing Data
 
-Once configured, use the Windows Terminal profile named "vailá" to launch the multimodal-toolbox.
-If you prefer to do everything manually, simply activate the environment with
+To run the toolbox and analyze data:
+
+- **Windows 11**:
 
     ```bash
-      conda activate vaila
+    python vaila.py
     ```
 
-4. Run the toolbox to analyze data:
-
-- Windows 11
-  
-    ```bash
-      python vaila.py
-    ```
-
-- Linux and MacOS
+- **Linux and macOS**:
 
     ```bash
-      python3 vaila.py
+    python3 vaila.py
     ```
 
-5. Follow the multimodal menu instructions in GUI or CLI click in `imagination!` button:
-
-<p align="center">
-  <img src="docs/images/vaila_start_gui.png" alt="vailá GUI" width="800"/>
-</p>
-
-```bash
-:::::::::'##::::'##::::'###::::'####:'##::::::::::'###::::'####::::::::::
-::::::::: ##:::: ##:::'## ##:::. ##:: ##:::::::::'## ##::: ####::::::::::
-::::::::: ##:::: ##::'##:. ##::: ##:: ##::::::::'##:. ##::. ##:::::::::::
-::::::::: ##:::: ##:'##:::. ##:: ##:: ##:::::::'##:::. ##:'##::::::::::::
-:::::::::. ##:: ##:: #########:: ##:: ##::::::: #########:..:::::::::::::
-::::::::::. ## ##::: ##.... ##:: ##:: ##::::::: ##.... ##::::::::::::::::
-:::::::::::. ###:::: ##:::: ##:'####: ########: ##:::: ##::::::::::::::::
-::::::::::::...:::::..:::::..::....::........::..:::::..:::::::::::::::::
-Mocap fullbody_c3d        Markerless_3D_videos       Markerless_2D_video
-                  \                |                /
-                   v               v               v
-            +-------------------------------------------+
-IMU_csv --> |          vailá - multimodaltoolbox        | <-- Cluster_csv
-            +-------------------------------------------+
-                                  |
-                                  v
-                   +-----------------------------+
-                   |           Results           |
-                   +-----------------------------+
-                                  |
-                                  v
-                       +---------------------+
-                       | Visualization/Graph |
-                       +---------------------+
-=========================== File Manager ===============================
- Import (im)  |  Export (ex)  |  Copy (cp)  |  Move (mv)  |  Remove (rm)
-========================= Available Multimodal =========================
-1. IMU Analysis
-2. Kinematic Cluster Analysis
-3. Kinematic Motion Capture Full Body Analysis
-4. Markerless 2D with video
-5. Markerless 3D with multiple videos
-============================= Available Tools ==========================
-1. Edit CSV
-2. Convert C3D data to CSV
-3. Metadata info
-4. Cut videos based on list
-5. Draw a black box around videos
-6. Compress videos to HEVC (H.265)
-7. Compress videos to H.264
-8. Plot 2D
-
-Type 'h' for help or 'exit' to quit.
-
-Choose an analysis option or file manager command:
-```
+Follow the multimodal menu instructions in GUI or click on the `imagination!` button to access CLI commands.
 
 ## Project Structure
 
-Here is an overview of the project structure:
+An overview of the project structure:
 
-```plaintext
-vaila/vaila/
+```bash
+tree vaila
+
+vaila
 ├── __init__.py
 ├── batchcut.py
 ├── cluster_analysis.py
 ├── cluster_analysis_cli.py
 ├── common_utils.py
 ├── compress_videos_h264.py
-├── compress_videos_h265.bat
 ├── compress_videos_h265.py
-├── compress_videos_h265.sh
 ├── compressvideo.py
+├── cop_analysis.py
+├── cop_calculate.py
 ├── data_processing.py
 ├── dialogsuser.py
 ├── dialogsuser_cluster.py
 ├── dlt2d.py
 ├── dlt3d.py
 ├── drawboxe.py
+├── ellipse.py
 ├── emg_labiocom.py
 ├── extractpng.py
 ├── filemanager.py
+├── filter_utils.py
 ├── filtering.py
+├── fixnoise.py
 ├── fonts
 │   └── mrrobot.ttf
+├── force_cmj.py
 ├── force_cube_fig.py
 ├── forceplate_analysis.py
 ├── getpixelvideo.py
@@ -323,6 +236,9 @@ vaila/vaila/
 ├── run_vector_coding_GUI.py
 ├── showc3d.py
 ├── showc3d_nodash.py
+├── spectral_features.py
+├── stabilogram_analysis.py
+├── standardize_header.py
 ├── sync_flash.py
 ├── syncvid.py
 ├── utils.py
@@ -331,18 +247,37 @@ vaila/vaila/
 ├── vailaplot2d.py
 ├── vailaplot3d.py
 ├── vector_coding.py
-└── videoprocessor.py
+├── videoprocessor.py
+└── videoprocessor2.py
 ```
 
 ## Authors
 
-Paulo Roberto Pereira Santiago<sup>1,2</sup>, Abel Gonçalves Chinaglia<sup>2</sup>, Bruno Luiz de Souza Bedo<sup>3</sup>, Ligia Yumi Mochida<sup>4</sup>, Juan Aceros<sup>4,5</sup> Guilherme Manna Cesar<sup>4</sup>
+- **Paulo Roberto Pereira Santiago** [ORCID: 0000-0002-9460-8847](https://orcid.org/0000-0002-9460-8847)  
+  Biomechanics and Motor Control Lab, School of Physical Education and Sport of Ribeirão Preto, University of São Paulo, Brazil  
+  Graduate Program in Rehabilitation and Functional Performance, Ribeirão Preto Medical School, University of São Paulo, Brazil  
 
-1 - Biomechanics and Motor Control Lab, School of Physical Education and Sport of Ribeirão Preto, University of São Paulo, Brazil
-2 - Graduate Program in Rehabilitation and Functional Performance, Ribeirão Preto Medical School, University of São Paulo, Brazil
-3 - Laboratory of Technology and Sports Performance Analysis, School of Physical Education and Sport, University of São Paulo, Brazil
-4 - Laboratory of Applied Biomechanics and Engineering, Brooks College of Health, University of North Florida, USA
-5 - College of Computing, Engineering and Construction, Mechanical Engineering, University of North Florida, USA
+- **Abel Gonçalves Chinaglia** [ORCID: 0000-0002-6955-7187](https://orcid.org/0000-0002-6955-7187)  
+  Graduate Program in Rehabilitation and Functional Performance, Ribeirão Preto Medical School, University of São Paulo, Brazil  
+
+- **Kira Flanagan** [ORCID: 0000-0003-0317-6346](https://orcid.org/0000-0003-0317-6346)  
+  College of Computing, Engineering and Construction, University of North Florida, USA  
+
+- **Bruno Luiz de Souza Bedo** [ORCID: 0000-0003-3821-2327](https://orcid.org/0000-0003-3821-2327)  
+  Laboratory of Technology and Sports Performance Analysis, School of Physical Education and Sport, University of São Paulo, Brazil  
+
+- **Ligia Yumi Mochida** [ORCID: 0009-0005-7266-3799](https://orcid.org/0009-0005-7266-3799)  
+  Laboratory of Applied Biomechanics and Engineering, Brooks College of Health, University of North Florida, USA  
+  Department of Physical Therapy, Brooks College of Health, University of North Florida, USA  
+
+- **Juan Aceros** [ORCID: 0000-0001-6381-7032](https://orcid.org/0000-0001-6381-7032)  
+  Laboratory of Applied Biomechanics and Engineering, Brooks College of Health, University of North Florida, USA  
+  College of Computing, Engineering and Construction, University of North Florida, USA  
+
+- **Guilherme Manna Cesar** [ORCID: 0000-0002-5596-9439](https://orcid.org/0000-0002-5596-9439)  
+  Laboratory of Applied Biomechanics and Engineering, Brooks College of Health, University of North Florida, USA  
+  Department of Physical Therapy, Brooks College of Health, University of North Florida, USA  
+
 ## Contribution
 
 We encourage creativity and innovation to enhance and expand the functionality of this toolbox. You can make a difference by contributing to the project! To get involved, feel free to fork the repository, experiment with new ideas, and create a branch for your changes. When you're ready, submit a pull request so we can review and potentially integrate your contributions.
@@ -351,5 +286,4 @@ Don't hesitate to learn, explore, and experiment. Be bold, and don't be afraid t
 
 ## License
 
-This project is primarily licensed under the GNU Lesser General Public License v3.0. Please note that the software is provided "as is," without any warranty of any kind, either express or implied. If you use the code or data, we kindly ask that you cite our work. Let's collaborate and push the boundaries together!
-
+This project is primarily licensed under the GNU Lesser General Public License v3.0. Please cite our work if you use the code or data. Let's collaborate and push the boundaries together!

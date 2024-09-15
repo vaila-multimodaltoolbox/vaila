@@ -1,24 +1,43 @@
 """
 vaila.py
 
-Name: Paulo Santiago
-Date: 9 Aug 2024
+Author: Paulo Santiago
+Date: 7 September 2024
 
 Description:
-Main application script for the vailá Multimodal Toolbox. This script provides
-a Tkinter-based GUI to access various tools and functionalities for multimodal
-analysis, including file management, data analysis, and visualization.
+'vailá' is an open-source multimodal toolbox designed for comprehensive biomechanical analysis. It integrates various types of data and provides advanced tools for researchers and practitioners in the field of biomechanics. This script serves as the main application file, offering a graphical user interface (GUI) built with Tkinter to manage, analyze, and visualize multimodal data effectively.
 
-Version: 0.5
+Key Features:
+- **Multimodal Data Analysis**: 
+  - Supports analyses across multiple modalities including IMU sensors, motion capture (MoCap), markerless tracking (2D and 3D), force plates, GNSS/GPS, MEG/EEG, and HR/ECG.
+- **File Management**: 
+  - Comprehensive set of tools for file operations: Rename, Import, Export, Copy, Move, Remove, Tree, Find, and Transfer.
+- **Data Conversion**: 
+  - Converts between C3D and CSV data formats, and supports DLT (Direct Linear Transformation) methods for 2D and 3D reconstructions.
+- **Video Processing**: 
+  - Tools for video manipulation including conversion between video and images, cutting, compression (H.264 and HEVC H.265), synchronization, and extraction of pixel coordinates.
+- **Data Visualization**: 
+  - Provides tools for displaying and plotting 2D and 3D graphs, as well as viewing CSV and C3D data.
+
+Version: 7.9.1822 (First Release)
 
 Changelog:
-v0.5 - Added getpixelvideo load csv data
-v0.4 - Changed location rec2d one dlt2d and dlt2d
-v0.3 - Changed markerless 2D analysis to use a directory selection dialog.
-v0.2 - Added Plot 2D button for 2D plotting of CSV or C3D files using Matplotlib.
-       Improved exit functionality to ensure proper shutdown of the application.
-       Refactored code for better readability and maintainability.
-v0.1 - Initial version with basic GUI layout and functionality.
+- **v7.9.1822**:
+  - Initial release with fully integrated GUI for multimodal data analysis.
+  - Added support for IMU analysis, cluster analysis, full-body motion capture, and markerless 2D/3D video tracking.
+  - Included comprehensive file management capabilities and advanced data conversion tools.
+  - Developed robust video processing functionalities including compression, synchronization, and pixel data extraction.
+  - Implemented advanced visualization tools for 2D and 3D plotting.
+
+Usage:
+- Launch the 'vailá' GUI by running this script.
+- Utilize the File Manager (Frame A) to handle files.
+- Perform various multimodal analyses (Frame B) such as IMU, MoCap, and markerless tracking.
+- Use the Available Tools (Frame C) for data conversion, video processing, and visualization.
+- Click the [imagination!] button for command-line tools access.
+
+License:
+© 2024 'vailá' - Multimodal Toolbox. Licensed under the GNU Lesser General Public License v3.0.
 """
 
 import os
@@ -80,11 +99,12 @@ text = """
 ::::::::::. ## ##::: ##.... ##:: ##:: ##::::::: ##.... ##::::::::::::::::
 :::::::::::. ###:::: ##:::: ##:'####: ########: ##:::: ##::::::::::::::::
 ::::::::::::...:::::..:::::..::....::........::..:::::..:::::::::::::::::
+
 Mocap fullbody_c3d        Markerless_3D_videos       Markerless_2D_video
-                  \                |                /
+                  \\                |                /
                    v               v               v
             +-------------------------------------------+
-IMU_csv --> |          vailá - multimodaltoolbox        | <-- Cluster_csv
+IMU_csv --> |          vailá - multimodal toolbox        | <-- Cluster_csv
             +-------------------------------------------+
                                   |
                                   v
@@ -96,27 +116,43 @@ IMU_csv --> |          vailá - multimodaltoolbox        | <-- Cluster_csv
                        +---------------------+
                        | Visualization/Graph |
                        +---------------------+
-============================ File Manager ================================
- Rename | Import | Export | Copy | Move | Remove | Tree | Find | Transfer
-========================== Available Multimodal ==========================
-1. IMU Analysis
-2. Kinematic Cluster Analysis
-3. Kinematic Motion Capture Full Body Analysis
-4. Markerless 2D with video
-5. Markerless 3D with multiple videos
-============================== Available Tools ===========================
-1. Edit CSV
-2. Convert C3D data to CSV
-3. Metadata info
-4. Cut videos based on list
-5. Draw a black box around videos
-6. Compress videos to HEVC (H.265)
-7. Compress videos to H.264
-8. Plot 2D
+
+============================ File Manager (Frame A) ========================
+A_r1_c1 - Rename          A_r1_c2 - Import           A_r1_c3 - Export
+A_r1_c4 - Copy            A_r1_c5 - Move             A_r1_c6 - Remove
+A_r1_c7 - Tree            A_r1_c8 - Find             A_r1_c9 - Transfer
+
+========================== Multimodal Analysis (Frame B) ===================
+B1_r1_c1 - IMU            B1_r1_c2 - MoCapCluster    B1_r1_c3 - MoCapFullBody
+B1_r1_c4 - Markerless2D   B1_r1_c5 - Markerless3D
+
+B2_r2_c1 - Vector Coding  B2_r2_c2 - EMG             B2_r2_c3 - Force Plate
+B2_r2_c4 - GNSS/GPS       B2_r2_c5 - MEG/EEG
+
+B3_r3_c1 - HR/ECG         B3_r3_c2 - vailá           B3_r3_c3 - vailá
+B3_r3_c4 - vailá          B3_r3_c5 - vailá
+
+============================== Tools Available (Frame C) ===================
+C_A: Data Files
+C_A_r1_c1 - Edit CSV      C_A_r1_c2 - C3D <--> CSV   C_A_r1_c3 - vailá
+C_A_r2_c1 - Make DLT2D    C_A_r2_c2 - Rec2D 1DLT     C_A_r2_c3 - Rec2D MultiDLT
+C_A_r3_c1 - Make DLT3D    C_A_r3_c2 - Rec3D 1DLT     C_A_r3_c3 - Rec3D MultiDLT
+C_A_r4_c1 - vailá         C_A_r4_c2 - vailá          C_A_r4_c3 - vailá
+
+C_B: Video and Image
+C_B_r1_c1 - Video<-->PNG  C_B_r1_c2 - Cut Videos    C_B_r1_c3 - Draw Box
+C_B_r2_c1 - CompressH264  C_B_r2_c2 - Compress H265 C_B_r2_c3 - Make Sync file
+C_B_r3_c1 - GetPixelCoord C_B_r3_c2 - Metadata info C_B_r3_c3 - Merge Videos
+C_B_r4_c1 - vailá         C_B_r4_c2 - vailá         C_B_r4_c3 - vailá
+
+C_C: Visualization
+C_C_r1_c1 - Show C3D      C_C_r1_c2 - Show CSV       C_C_r2_c1 - Plot 2D
+C_C_r2_c2 - Plot 3D       C_C_r3_c1 - vailá          C_C_r3_c2 - vailá
+C_C_r4_c1 - vailá         C_C_r4_c2 - vailá          C_C_r4_c3 - vailá
 
 Type 'h' for help or 'exit' to quit.
 
-Choose an analysis option or file manager command:
+Use the button 'imagination!' to access command-line (xonsh) tools for advanced multimodal analysis!
 """
 
 print(text)
@@ -798,20 +834,13 @@ class Vaila(tk.Tk):
             width=button_width,
         )
         # C_C_r4_c1 - Visualization: vailá
-        vaila_btn17 = tk.Button(
-            tools_col3,
-            text="vailá",
-            command=self.show_vaila_message,
-            width=button_width,
-        )
-        # C_C_r4_c2 - Visualization: vailá
         vaila_btn18 = tk.Button(
             tools_col3,
             text="vailá",
             command=self.show_vaila_message,
             width=button_width,
         )
-        # C_C_r4_c3 - Visualization: vailá
+        # C_C_r4_c2 - Visualization: vailá
         vaila_btn19 = tk.Button(
             tools_col3,
             text="vailá",
@@ -926,7 +955,8 @@ class Vaila(tk.Tk):
 
     # B_r2_c4
     def gnss_analysis(self):
-        gnss_analysis.run_gnss_analysis()
+        show_vaila_message()
+        # gnss_analysis.run_gnss_analysis()
 
     # B_r2_c5
     def eeg_analysis(self):
