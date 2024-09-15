@@ -246,7 +246,6 @@ def plot_final_figure(
     ax1 = fig.add_subplot(2, 2, 1)
     ax1.plot(time, X_n, label="CoP ML")
     ax1.plot(time, Y_n, label="CoP AP")
-    # insert grid with : gray light
     ax1.grid(color="gray", linestyle=":", linewidth=0.5)
     ax1.set_title("Stabilogram")
     ax1.set_xlabel("Time (s)")
@@ -258,6 +257,7 @@ def plot_final_figure(
 
     # Plot the CoP pathway with points only (no connecting lines)
     ax2.plot(X_n, Y_n, label='CoP Pathway', color='blue', marker='.', markersize=3, linestyle='None')
+
     # Unpack the ellipse data to plot it correctly
     ellipse_x, ellipse_y = ellipse_data[0], ellipse_data[1]
     eigvecs, scaled_eigvals, pca_mean = (
@@ -306,7 +306,6 @@ def plot_final_figure(
 
     # Set the aspect ratio to equal to ensure equal proportions
     ax2.set_aspect("equal", adjustable="box")
-    # ax2.legend()
 
     # Adjust the limits of the plot to ensure both the CoP pathway and ellipse are visible
     x_margin = 0.02 * (
@@ -343,31 +342,11 @@ def plot_final_figure(
         wrap=True,
     )  # Display text
 
-    # Subplot for result variables (combined column 2)
-    ax3 = fig.add_subplot(
-        1, 2, 2
-    )  # Use a single subplot that spans both rows in the second column
-    ax3.axis("off")  # Hide axes to focus on the text
-    text_str = "\n".join(
-        [f"{key}: {value}" for key, value in metrics.items()]
-    )  # Prepare text from metrics dictionary
-    ax3.text(
-        0.05,
-        0.5,
-        text_str,
-        fontsize=10,
-        verticalalignment="center",
-        transform=ax3.transAxes,
-        wrap=True,
-    )  # Display text
-
     # Save the figure in PNG and SVG formats
     plt.tight_layout()
     plt.savefig(f"{output_path}_final_figure.png", dpi=300, format="png")
     plt.savefig(f"{output_path}_final_figure.svg", format="svg")
     plt.close()
-    # plt.show()
-
 
 def analyze_data_2d(
     data, output_dir, file_name, fs, plate_width, plate_height, timestamp
@@ -714,3 +693,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
