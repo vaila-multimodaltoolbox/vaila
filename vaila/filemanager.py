@@ -53,7 +53,7 @@ def copy_file():
     # Print the directory and name of the script being executed
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
-    
+
     # Prompt the user to select the main path directory for recursive search
     src_directory = filedialog.askdirectory(title="Select Source Directory")
 
@@ -137,7 +137,7 @@ def export_file():
     # Print the directory and name of the script being executed
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
-    
+
     src = filedialog.askopenfilename(title="Select the source file")
     if not src:
         messagebox.showerror("Error", "No source file selected.")
@@ -159,7 +159,7 @@ def move_file():
     # Print the directory and name of the script being executed
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
-    
+
     # Prompt the user to select the main path directory for recursive search
     src_directory = filedialog.askdirectory(title="Select Source Directory")
 
@@ -243,7 +243,7 @@ def remove_file():
     # Print the directory and name of the script being executed
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
-    
+
     # List of dangerous patterns and system files to protect
     forbidden_patterns = ["*", ".", "/", "\\"]
     system_files = [
@@ -353,7 +353,7 @@ def import_file():
     # Print the directory and name of the script being executed
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
-    
+
     root = tk.Tk()
     root.withdraw()
 
@@ -585,7 +585,7 @@ def rename_files():
     # Print the directory and name of the script being executed
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
-    
+
     # Prompt the user to select the directory containing the files to rename
     directory = filedialog.askdirectory(title="Select Directory with Files to Rename")
 
@@ -640,7 +640,7 @@ def tree_file():
     # Print the directory and name of the script being executed
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
-    
+
     # Prompt the user to select the main path directory for recursive search
     src_directory = filedialog.askdirectory(title="Select Source Directory")
 
@@ -693,7 +693,7 @@ def find_file():
     # Print the directory and name of the script being executed
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
-    
+
     # Prompt the user to select the main path directory for recursive search
     src_directory = filedialog.askdirectory(title="Select Source Directory")
 
@@ -801,7 +801,7 @@ def transfer_file():
     # Print the directory and name of the script being executed
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
-    
+
     # Initialize Tkinter root
     root = Tk()
     root.withdraw()  # Hide the root window
@@ -865,7 +865,7 @@ def transfer_file():
         # Create an SSH client
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        
+
         # Debugging output
         print(f"Connecting to {remote_host}:{remote_port} as {remote_user}")
 
@@ -901,7 +901,9 @@ def transfer_file():
                 )
 
     except paramiko.AuthenticationException as auth_error:
-        messagebox.showerror("Authentication Error", f"Authentication failed: {auth_error}")
+        messagebox.showerror(
+            "Authentication Error", f"Authentication failed: {auth_error}"
+        )
         print(f"Authentication failed: {auth_error}")
 
     except paramiko.SSHException as ssh_error:
@@ -916,4 +918,3 @@ def transfer_file():
     finally:
         # Close the SSH connection
         ssh.close()
-
