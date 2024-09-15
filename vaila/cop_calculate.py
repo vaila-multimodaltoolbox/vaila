@@ -16,21 +16,22 @@ from tkinter import (
 )
 
 
-def convert_to_mm(data, unit):
-    """Converts the data to millimeters based on the provided unit."""
+def convert_moment_to_nm(data, unit):
+    """Converts the moment data to N.m based on the provided unit (N.mm to N.m)."""
     conversion_factors = {
-        "m": 1000,
-        "cm": 10,
-        "mm": 1,
-        "ft": 304.8,
-        "in": 25.4,
-        "yd": 914.4,
+        "N.m": 1,
+        "N.mm": 0.001,
     }
     if unit not in conversion_factors:
-        raise ValueError(
-            f"Unsupported unit '{unit}'. Please use m, cm, mm, ft, in, or yd."
-        )
-    return data * conversion_factors[unit]
+        raise ValueError(f"Unsupported moment unit '{unit}'. Please use N.m or N.mm.")
+    # Convert only the moments (Mx, My, Mz) from columns 3, 4, 5
+    data[:, 3:6] *= conversion_factors[unit]
+    return data
+
+
+def convert_cop_to_mm(cop_data):
+    """Converts CoP data from meters to millimeters."""
+    return cop_data * 1000
 
 
 def read_csv_full(filename):
@@ -120,32 +121,15 @@ def select_headers(file_path):
     return selected_headers
 
 
-def calc_cop(data, fp_dimensions_xy=None, h=None):
+def calc_cop(data, fp_dimensions_xy=None, h: float = 0.0):
     """
-    Converts force (N) and moment (N.mm) data to CoP (mm) coordinates.
+    Converts force (N) and moment (N.m) data to CoP (m) coordinates.
     Inputs:
-        data: numpy array with columns [Fx, Fy, Fz, Mx, My, Mz]
-        fp_dimensions_xy: array or None, the dimensions of the force plate in mm [width, length]
-        h: float or None, the height of the board over the force plate (in mm)
+        data: numpy array with columns [Fx, Fy, Fz, Mx, My, Mz] (Fx, Fy, Fz in N, Mx, My, Mz in N.m)
+        fp_dimensions_xy: array or None, the dimensions of the force plate in meters [width, length]
+        h: float, the height of the board over the force plate (in meters)
     Outputs:
-        cop_xyz_mm: numpy array with columns [cop_x, cop_y, cop_z] in mm
-
-    Calculations based on:
-
-    Case 1 - No board over the force plate (h is None):
-        cop_x = My / Fz
-        cop_y = Mx / Fz
-        cop_z = 0 (height at force plate level)
-
-    Case 2 - Board exists over the force plate (h is provided):
-        cop_x = (-h * Fx - My) / Fz
-        cop_y = (-h * Fy + Mx) / Fz
-        cop_z = h (height of the board over the force plate)
-
-    Where:
-        - Mx, My: Components of the moment (N.mm)
-        - Fx, Fy, Fz: Force components (N)
-        - h: Height of the board over the force plate (mm)
+        cop_xyz_m: numpy array with columns [cop_x, cop_y, cop_z] in meters
     """
 
     # Convert data to numpy array if it's not already
@@ -153,7 +137,10 @@ def calc_cop(data, fp_dimensions_xy=None, h=None):
 
     # Use default force plate dimensions if none are provided
     if fp_dimensions_xy is None:
-        fp_dimensions_xy = np.array([500, 500])
+        fp_dimensions_xy = np.array([0.464, 0.508])  # default in meters
+    else:
+        # Convert to numpy array if it's a list
+        fp_dimensions_xy = np.array(fp_dimensions_xy)
 
     # Calculate the center of the force plate
     fp_center = fp_dimensions_xy / 2
@@ -165,17 +152,13 @@ def calc_cop(data, fp_dimensions_xy=None, h=None):
     # Identify rows where Fz is not zero
     fz_nonzero = data[:, 2] != 0
 
-    # Case 1 - No board over the force plate (h is None)
-    if h is None:
+    # Case 1 - No board over the force plate (h is zero)
+    if h == 0.0:
         cop_x[fz_nonzero] = data[fz_nonzero, 4] / data[fz_nonzero, 2]
         cop_y[fz_nonzero] = data[fz_nonzero, 3] / data[fz_nonzero, 2]
         cop_z = np.zeros(data.shape[0])  # CoP Z is zero when no board is present
     # Case 2 - Board exists over the force plate (h is provided)
     else:
-        # Ensure h is a valid float
-        if not isinstance(h, (int, float)):
-            raise ValueError("The height 'h' must be a number.")
-
         cop_x[fz_nonzero] = (-h * data[fz_nonzero, 0] - data[fz_nonzero, 4]) / data[
             fz_nonzero, 2
         ]
@@ -212,41 +195,51 @@ def main():
     print(f"Input Directory: {input_dir}")
     print(f"Output Directory: {output_dir}")
 
-    # Set default units for forces (N) and moments (Nmm)
-    unit = "mm"
-    print(f"Default unit of measurement: {unit}")
+    # Ask for the unit of moment data
+    moment_unit = simpledialog.askstring(
+        "Moment Unit of Measurement",
+        "Enter the unit of measurement for the moments in the loaded force data (e.g., N.m, N.mm):",
+        initialvalue="N.mm",
+        parent=root,
+    )
+    print(f"Moment unit of measurement: {moment_unit}")
 
     # Request force plate dimensions from user
     dimensions_input = simpledialog.askstring(
         "Force Plate Dimensions",
         "Enter the force plate dimensions (width, length) in mm, separated by a comma:",
+        initialvalue="464,508",
         parent=root,
     )
     if dimensions_input:
         try:
-            fp_dimensions_xy = [float(dim) for dim in dimensions_input.split(",")]
+            fp_dimensions_xy = [
+                float(dim) / 1000 for dim in dimensions_input.split(",")
+            ]  # Convert to meters
             if len(fp_dimensions_xy) != 2:
                 raise ValueError("Please provide exactly two values: width and length.")
         except ValueError as e:
             print(f"Invalid input for force plate dimensions: {e}")
             return
     else:
-        print("No force plate dimensions provided. Using default [500, 500].")
-        fp_dimensions_xy = [500, 500]
+        print("No force plate dimensions provided. Using default [464, 508].")
+        fp_dimensions_xy = [0.464, 0.508]  # default in meters
 
     # Request the height 'h' from user
     h = simpledialog.askfloat(
         "Board Height (h)",
         "Enter the height of the board over the force plate (in mm):",
+        initialvalue=0.0,
         parent=root,
     )
     if h is not None:
-        print(f"Using provided board height: {h} mm")
+        h = h / 1000  # Convert to meters
+        print(f"Using provided board height: {h} m")
     else:
         print(
-            "No height provided. Calculations will assume no board over the force plate (h=None)."
+            "No height provided. Calculations will assume no board over the force plate (h=0)."
         )
-        h = None
+        h = 0.0
 
     # Sort files to select the first CSV for header selection
     csv_files = sorted([f for f in os.listdir(input_dir) if f.endswith(".csv")])
@@ -292,9 +285,10 @@ def main():
 
         data = df_full[selected_headers].to_numpy()
 
-        # Convert data to mm if necessary
+        # Convert moments to N.m if necessary
         try:
-            data = convert_to_mm(data, unit)
+            data = convert_moment_to_nm(data, moment_unit)
+            print(f"Moment data converted to N.m for file: {file_name}")
         except ValueError as e:
             print(f"Error converting units for file {file_name}: {e}")
             messagebox.showerror(
@@ -304,14 +298,18 @@ def main():
             continue
 
         # Calculate CoP from force and moment data
-        cop_xyz = calc_cop(data, fp_dimensions_xy, h)
+        cop_xyz_m = calc_cop(data, fp_dimensions_xy, h)
+
+        cop_xyz_mm = convert_cop_to_mm(cop_xyz_m)
 
         # Save the CoP data to a new CSV file
         file_name_without_extension = os.path.splitext(file_name)[0]
         output_file_path = os.path.join(
             main_output_dir, f"{file_name_without_extension}_{timestamp}.csv"
         )
-        output_df = pd.DataFrame(cop_xyz, columns=["cop_x_mm", "cop_y_mm", "cop_z_mm"])
+        output_df = pd.DataFrame(
+            cop_xyz_mm, columns=["cop_x_mm", "cop_y_mm", "cop_z_mm"]
+        )
         output_df.to_csv(output_file_path, index=False)
 
         print(f"Saved CoP data to: {output_file_path}")
@@ -321,8 +319,6 @@ def main():
     messagebox.showinfo(
         "Information", "CoP calculation complete! The window will close in 5 seconds."
     )
-    # root.after(5000, lambda: root.quit())  # Wait for 5 seconds and then quit safely
-    # root.mainloop()
 
 
 if __name__ == "__main__":
