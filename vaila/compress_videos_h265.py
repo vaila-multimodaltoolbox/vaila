@@ -36,7 +36,48 @@ import platform
 import sys
 
 
+def compress_video_h265(input_file, output_file, preset="medium", crf=23):
+    """
+    Compress a video file to H.265/HEVC format using FFmpeg.
+    
+    Parameters:
+        input_file (str): Path to the input video file.
+        output_file (str): Path to the output compressed video file.
+        preset (str): Compression preset for FFmpeg (default is "medium").
+        crf (int): Constant Rate Factor (default is 23).
+    """
+    command = [
+        "ffmpeg",
+        "-y",
+        "-i",
+        input_file,
+        "-c:v",
+        "libx265",
+        "-preset",
+        preset,
+        "-crf",
+        str(crf),
+        output_file,
+    ]
+
+    try:
+        print(f"Compressing {input_file}...")
+        subprocess.check_call(command)
+        print(f"Compression completed successfully: {output_file}")
+    except subprocess.CalledProcessError as e:
+        print(f"Error compressing video: {e}")
+        sys.exit(1)
+
+
 def run_compress_videos_h265(video_directory, preset="medium", crf=23):
+    """
+    Compress all video files in a specified directory to H.265/HEVC format.
+    
+    Parameters:
+        video_directory (str): Directory containing videos to compress.
+        preset (str): Compression preset for FFmpeg (default is "medium").
+        crf (int): Constant Rate Factor (default is 23).
+    """
     output_directory = os.path.join(video_directory, "compressed_h265")
     os.makedirs(output_directory, exist_ok=True)
 
@@ -57,24 +98,7 @@ def run_compress_videos_h265(video_directory, preset="medium", crf=23):
             output_directory, f"{os.path.splitext(video_file)[0]}_h265.mp4"
         )
 
-        print(f"Compressing {video_file}...")
-
-        # Determina o SO e chama o script apropriado
-        if platform.system() == "Windows":
-            script_path = "compress_videos_h265.bat"
-            command = [script_path, input_path, output_path]
-        else:
-            script_path = os.path.join(
-                os.path.dirname(__file__), "compress_videos_h265.sh"
-            )
-            command = [script_path, input_path, output_path]
-
-        try:
-            subprocess.check_call(command)
-            print(f"Done compressing {video_file} to H.265.")
-        except subprocess.CalledProcessError as e:
-            print(f"Error compressing {video_file}: {e}")
-            sys.exit(1)
+        compress_video_h265(input_path, output_path, preset, crf)
 
     print("All videos have been compressed successfully!")
 
@@ -104,3 +128,4 @@ def compress_videos_h265_gui():
 
 if __name__ == "__main__":
     compress_videos_h265_gui()
+
