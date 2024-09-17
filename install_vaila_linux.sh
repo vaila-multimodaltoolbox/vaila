@@ -91,6 +91,19 @@ echo "Ensuring correct ownership and permissions for the application..."
 chown -R "$USER:$USER" "$VAILA_HOME"
 chmod -R +x "$VAILA_HOME"
 
+# Remove ffmpeg from the Conda environment if installed
+echo "Removing ffmpeg installed via Conda..."
+conda remove -n vaila ffmpeg -y
+
+# Install the system version of ffmpeg
+echo "Installing ffmpeg from system repositories..."
+sudo apt update
+sudo apt install ffmpeg -y
+
+# Install moviepy using pip
+echo "Installing moviepy..."
+pip install moviepy
+
 echo "vailá Launcher created and available in the Applications menu!"
 echo "Installation and setup completed."
 echo " "
