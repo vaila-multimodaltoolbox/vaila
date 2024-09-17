@@ -145,12 +145,12 @@ def plot_cop_pathway_with_ellipse(
     )
 
     # Plot CoP pathway with color segments
+    # Plot CoP pathway with cross points using a loop
     plt.figure(figsize=(10, 8))
-    for i in range(len(cop_x) - 1):
+    for i in range(len(cop_x)):
         plt.plot(
-            cop_x[i : i + 2], cop_y[i : i + 2], color=cmap(i / len(cop_x)), linewidth=2
-        )
-
+            cop_x[i], cop_y[i], color=cmap(i / len(cop_x)), marker=".", markersize=4, linestyle='None'
+    )
     # Plot start and end points
     plt.plot(cop_x[0], cop_y[0], color="gray", marker=".", markersize=17, label="Start")
     plt.plot(

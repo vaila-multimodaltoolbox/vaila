@@ -1,4 +1,6 @@
 """
+# Plot the CoP pathway with points only (no connecting lines)
+ax2.plot(X_n, Y_n, label='CoP Pathway', color='blue', marker='.', markersize=3, linestyle='None')
 Module: cop_analysis.py
 Description: This module provides a comprehensive set of tools for analyzing Center of Pressure (CoP) data from force plate measurements. 
              CoP data is critical in understanding balance and postural control in various fields such as biomechanics, rehabilitation, and sports science.
@@ -244,7 +246,6 @@ def plot_final_figure(
     ax1 = fig.add_subplot(2, 2, 1)
     ax1.plot(time, X_n, label="CoP ML")
     ax1.plot(time, Y_n, label="CoP AP")
-    # insert grid with : gray light
     ax1.grid(color="gray", linestyle=":", linewidth=0.5)
     ax1.set_title("Stabilogram")
     ax1.set_xlabel("Time (s)")
@@ -254,8 +255,8 @@ def plot_final_figure(
     # Subplot for the CoP pathway with confidence ellipse (row 2, column 1)
     ax2 = fig.add_subplot(2, 2, 3)
 
-    # Plot the CoP pathway
-    ax2.plot(X_n, Y_n, label="CoP Pathway", color="blue")
+    # Plot the CoP pathway with points only (no connecting lines)
+    ax2.plot(X_n, Y_n, label='CoP Pathway', color='blue', marker='.', markersize=3, linestyle='None')
 
     # Unpack the ellipse data to plot it correctly
     ellipse_x, ellipse_y = ellipse_data[0], ellipse_data[1]
@@ -305,7 +306,6 @@ def plot_final_figure(
 
     # Set the aspect ratio to equal to ensure equal proportions
     ax2.set_aspect("equal", adjustable="box")
-    # ax2.legend()
 
     # Adjust the limits of the plot to ensure both the CoP pathway and ellipse are visible
     x_margin = 0.02 * (
@@ -327,27 +327,7 @@ def plot_final_figure(
     )
 
     # Subplot for result variables (combined column 2)
-    ax3 = fig.add_subplot(
-        1, 2, 2
-    )  # Use a single subplot that spans both rows in the second column
-    ax3.axis("off")  # Hide axes to focus on the text
-    text_str = "\n".join(
-        [f"{key}: {value}" for key, value in metrics.items()]
-    )  # Prepare text from metrics dictionary
-    ax3.text(
-        0.05,
-        0.5,
-        text_str,
-        fontsize=10,
-        verticalalignment="center",
-        transform=ax3.transAxes,
-        wrap=True,
-    )  # Display text
-
-    # Subplot for result variables (combined column 2)
-    ax3 = fig.add_subplot(
-        1, 2, 2
-    )  # Use a single subplot that spans both rows in the second column
+    ax3 = fig.add_subplot(1, 2, 2)  # Use a single subplot that spans both rows in the second column
     ax3.axis("off")  # Hide axes to focus on the text
     text_str = "\n".join(
         [f"{key}: {value}" for key, value in metrics.items()]
@@ -366,8 +346,7 @@ def plot_final_figure(
     plt.tight_layout()
     plt.savefig(f"{output_path}_final_figure.png", dpi=300, format="png")
     plt.savefig(f"{output_path}_final_figure.svg", format="svg")
-    # plt.show()
-
+    plt.close()
 
 def analyze_data_2d(
     data, output_dir, file_name, fs, plate_width, plate_height, timestamp
@@ -397,7 +376,6 @@ def analyze_data_2d(
     # Create time vector based on the sampling frequency
     N = len(cop_x_f)
     T = N / fs  # Total duration
-    # time = np.linspace(0, T, N)
     time = np.linspace(0, (len(cop_x_f) - 1) / fs, len(cop_x_f))
 
     # Calculate mean values of ML and AP coordinates
@@ -708,11 +686,11 @@ def main():
     # Inform the user that the analysis is complete
     print("All files processed.")
     messagebox.showinfo(
-        "Information", "Analysis complete! The window will close in 5 seconds."
+        "Information", "Analysis complete! Close this window."
     )
-    root.after(5000, lambda: root.quit())  # Wait for 5 seconds and then quit safely
     root.mainloop()
 
 
 if __name__ == "__main__":
     main()
+

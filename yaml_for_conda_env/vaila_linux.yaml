@@ -534,4 +534,4 @@ dependencies:
       - prompt-toolkit==3.0.47
       - setproctitle==1.3.3
       - 'xonsh[full]==0.18.3'
-      - scikit-learn==1.5.1
+      - scikit-learn==1.5.2
