@@ -1,7 +1,20 @@
 @echo off
-REM This script installs the vailá environment on Windows
+REM This script installs or updates the vailá environment on Windows
 
 echo Starting vailá installation on Windows...
+
+REM Ensure the script is running as administrator
+net session >nul 2>&1
+if %errorlevel% neq 0 (
+    echo This script requires administrative privileges. Please run as administrator.
+    exit /b
+)
+
+REM Ensure the script is running in Anaconda PowerShell
+if not defined CONDA_PREFIX (
+    echo This script must be run in Anaconda PowerShell. Please open Anaconda PowerShell and run this script.
+    exit /b
+)
 
 REM Check if winget is available in the system path
 where winget >nul 2>&1
@@ -17,27 +30,34 @@ if %errorlevel% neq 0 (
     exit /b
 )
 
-REM Remove existing vailá Conda environment if it exists
+REM Check if the "vaila" environment already exists
 echo Checking if vailá Conda environment exists...
 conda env list | findstr /i "vaila" >nul 2>&1
 if %errorlevel% equ 0 (
-    echo Conda environment 'vaila' already exists. Removing it...
-    conda remove -n vaila --all -y
+    echo Conda environment 'vaila' already exists. Updating it...
+    REM Update the existing environment
+    conda env update -f yaml_for_conda_env\vaila_win.yaml --prune
     if %errorlevel% neq 0 (
-        echo Failed to remove existing 'vaila' environment.
+        echo Failed to update 'vaila' environment.
         exit /b
     ) else (
-        echo Existing 'vaila' environment removed successfully.
+        echo 'vaila' environment updated successfully.
+    )
+) else (
+    REM Create the environment if it does not exist
+    echo Creating Conda environment from vaila_win.yaml...
+    conda env create -f yaml_for_conda_env\vaila_win.yaml
+    if %errorlevel% neq 0 (
+        echo Failed to create 'vaila' environment.
+        exit /b
+    ) else (
+        echo 'vaila' environment created successfully.
     )
 )
 
 REM Install FFmpeg using winget
 echo Installing FFmpeg...
 winget install ffmpeg -e --id Gyan.FFmpeg
-
-REM Create the Conda environment using the YAML file
-echo Creating Conda environment...
-conda env create -f yaml_for_conda_env\vaila_win.yaml
 
 REM Configure vailá in the Windows Terminal JSON
 echo Configuring Windows Terminal...
@@ -81,3 +101,4 @@ if %errorlevel% neq 0 (
 )
 
 pause
+
