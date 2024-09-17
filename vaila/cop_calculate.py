@@ -16,27 +16,6 @@ from tkinter import (
 )
 
 
-<<<<<<< HEAD
-=======
-def convert_moment_to_nm(data, unit):
-    """Converts the moment data to N.m based on the provided unit (N.mm to N.m)."""
-    conversion_factors = {
-        "N.m": 1,
-        "N.mm": 0.001,
-    }
-    if unit not in conversion_factors:
-        raise ValueError(f"Unsupported moment unit '{unit}'. Please use N.m or N.mm.")
-    # Convert only the moments (Mx, My, Mz) from columns 3, 4, 5
-    data[:, 3:6] *= conversion_factors[unit]
-    return data
-
-
-def convert_cop_to_mm(cop_data):
-    """Converts CoP data from meters to millimeters."""
-    return cop_data * 1000
-
-
->>>>>>> 55bb60b (fix cop calc need)
 def read_csv_full(filename):
     """Reads the full CSV file."""
     try:
@@ -124,21 +103,13 @@ def select_headers(file_path):
     return selected_headers
 
 
-<<<<<<< HEAD
 def calc_cop(data, fp_dimensions_xy=None, board_height_m: float = 0.0):
-=======
-def calc_cop(data, fp_dimensions_xy=None, h: float = 0.0):
->>>>>>> 55bb60b (fix cop calc need)
     """
     Converts force (N) and moment (N.m) data to CoP (m) coordinates.
     Inputs:
         data: numpy array with columns [Fx, Fy, Fz, Mx, My, Mz] (Fx, Fy, Fz in N, Mx, My, Mz in N.m)
         fp_dimensions_xy: array or None, the dimensions of the force plate in meters [width, length]
-<<<<<<< HEAD
         board_height_m: float, the height of the board over the force plate (in meters)
-=======
-        h: float, the height of the board over the force plate (in meters)
->>>>>>> 55bb60b (fix cop calc need)
     Outputs:
         cop_xyz_m: numpy array with columns [cop_x, cop_y, cop_z] in meters
     """
@@ -158,11 +129,7 @@ def calc_cop(data, fp_dimensions_xy=None, h: float = 0.0):
 
     # Use default force plate dimensions if none are provided
     if fp_dimensions_xy is None:
-<<<<<<< HEAD
         fp_dimensions_xy = np.array([0.508, 0.464])  # default in meters
-=======
-        fp_dimensions_xy = np.array([0.464, 0.508])  # default in meters
->>>>>>> 55bb60b (fix cop calc need)
     else:
         # Convert to numpy array if it's a list
         fp_dimensions_xy = np.array(fp_dimensions_xy)
@@ -177,7 +144,6 @@ def calc_cop(data, fp_dimensions_xy=None, h: float = 0.0):
     # Identify rows where Fz is not zero
     fz_nonzero = fz != 0
 
-<<<<<<< HEAD
     x0 = 0.0
     y0 = 0.0
 
@@ -185,29 +151,13 @@ def calc_cop(data, fp_dimensions_xy=None, h: float = 0.0):
     if board_height_m == 0.0:
         cop_x[fz_nonzero] = -my[fz_nonzero] / fz[fz_nonzero]
         cop_y[fz_nonzero] = mx[fz_nonzero] / fz[fz_nonzero]
-=======
-    # Case 1 - No board over the force plate (h is zero)
-    if h == 0.0:
-        cop_x[fz_nonzero] = data[fz_nonzero, 4] / data[fz_nonzero, 2]
-        cop_y[fz_nonzero] = data[fz_nonzero, 3] / data[fz_nonzero, 2]
->>>>>>> 55bb60b (fix cop calc need)
         cop_z = np.zeros(data.shape[0])  # CoP Z is zero when no board is present
     # Case 2 - Board exists over the force plate (board_height_m is provided)
     else:
-<<<<<<< HEAD
         # Calculate CoP using Fx, Fy, Fz and board_height_m
         cop_x = ((-my[fz_nonzero] + fx[fz_nonzero] * board_height_m) / fz[fz_nonzero]) + x0
         cop_y = ((mx[fz_nonzero] - fy[fz_nonzero] * board_height_m) / fz[fz_nonzero]) + y0
         cop_z = np.full(data.shape[0], board_height_m)  # CoP Z is the height of the board
-=======
-        cop_x[fz_nonzero] = (-h * data[fz_nonzero, 0] - data[fz_nonzero, 4]) / data[
-            fz_nonzero, 2
-        ]
-        cop_y[fz_nonzero] = (-h * data[fz_nonzero, 1] + data[fz_nonzero, 3]) / data[
-            fz_nonzero, 2
-        ]
-        cop_z = np.full(data.shape[0], h)  # CoP Z is the height of the board
->>>>>>> 55bb60b (fix cop calc need)
 
     # Combine cop_x, cop_y, and cop_z into a single array
     cop_xyz = np.column_stack((cop_x, cop_y, cop_z))
@@ -240,11 +190,7 @@ def main():
     # Ask for the unit of moment data
     moment_unit = simpledialog.askstring(
         "Moment Unit of Measurement",
-<<<<<<< HEAD
         "Enter the unit of measurement for your moment data (e.g. N.m, N.mm)",
-=======
-        "Enter the unit of measurement for the moments in the loaded force data (e.g., N.m, N.mm):",
->>>>>>> 55bb60b (fix cop calc need)
         initialvalue="N.mm",
         parent=root,
     )
@@ -253,13 +199,8 @@ def main():
     # Request force plate dimensions from user
     dimensions_input = simpledialog.askstring(
         "Force Plate Dimensions",
-<<<<<<< HEAD
         "Enter the force plate dimensions (length [X-axis], width [Y-axis]) in mm, separated by a comma:",
         initialvalue="508,464",
-=======
-        "Enter the force plate dimensions (width, length) in mm, separated by a comma:",
-        initialvalue="464,508",
->>>>>>> 55bb60b (fix cop calc need)
         parent=root,
     )
     if dimensions_input:
@@ -273,13 +214,8 @@ def main():
             print(f"Invalid input for force plate dimensions: {e}")
             return
     else:
-<<<<<<< HEAD
         print("No force plate dimensions provided. Using default [0.508, 0.464].")
         fp_dimensions_xy = [0.508, 0.464]  # default in meters
-=======
-        print("No force plate dimensions provided. Using default [464, 508].")
-        fp_dimensions_xy = [0.464, 0.508]  # default in meters
->>>>>>> 55bb60b (fix cop calc need)
 
     # Request the board height from user
     board_height_mm = simpledialog.askfloat(
@@ -288,7 +224,6 @@ def main():
         initialvalue=0.0,
         parent=root,
     )
-<<<<<<< HEAD
     if board_height_mm is not None:
         board_height_m = board_height_mm / 1000  # Convert to meters
         print(f"Using provided board height: {board_height_m} m")
@@ -297,16 +232,6 @@ def main():
             "No height provided. Calculations will assume no board over the force plate (board_height_m=0)."
         )
         board_height_m = 0.0
-=======
-    if h is not None:
-        h = h / 1000  # Convert to meters
-        print(f"Using provided board height: {h} m")
-    else:
-        print(
-            "No height provided. Calculations will assume no board over the force plate (h=0)."
-        )
-        h = 0.0
->>>>>>> 55bb60b (fix cop calc need)
 
     # Sort files to select the first CSV for header selection
     csv_files = sorted([f for f in os.listdir(input_dir) if f.endswith(".csv")])
@@ -352,16 +277,9 @@ def main():
 
         data = df_full[selected_headers].to_numpy()
 
-<<<<<<< HEAD
         # No need to convert moments to N.m or forces to N; assume they are correctly provided in the input file
         try:
             print(f"Processing moment data for file: {file_name}")
-=======
-        # Convert moments to N.m if necessary
-        try:
-            data = convert_moment_to_nm(data, moment_unit)
-            print(f"Moment data converted to N.m for file: {file_name}")
->>>>>>> 55bb60b (fix cop calc need)
         except ValueError as e:
             print(f"Error processing data for file {file_name}: {e}")
             messagebox.showerror(
@@ -371,16 +289,10 @@ def main():
             continue
 
         # Calculate CoP from force and moment data
-<<<<<<< HEAD
         cop_xyz_m = calc_cop(data, fp_dimensions_xy, board_height_m)
 
         # Convert CoP from meters to millimeters for output
         cop_xyz_mm = cop_xyz_m * 1000
-=======
-        cop_xyz_m = calc_cop(data, fp_dimensions_xy, h)
-
-        cop_xyz_mm = convert_cop_to_mm(cop_xyz_m)
->>>>>>> 55bb60b (fix cop calc need)
 
         # Save the CoP data to a new CSV file
         file_name_without_extension = os.path.splitext(file_name)[0]
@@ -403,4 +315,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
