@@ -847,6 +847,13 @@ class Vaila(tk.Tk):
             command=self.show_vaila_message,
             width=button_width,
         )
+        # C_C_r4_c3 - Visualization: vailá
+        vaila_btn19 = tk.Button(
+            tools_col3,
+            text="vailá",
+            command=self.show_vaila_message,
+            width=button_width,
+        )
 
         # Packing Visualization buttons
         show_c3d_btn.grid(row=0, column=0, padx=2, pady=2)
