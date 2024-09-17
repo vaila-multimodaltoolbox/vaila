@@ -5,25 +5,24 @@
 # Script: install_vaila.mac.sh                                                          #
 # Description: Installs the vaila - Multimodal Toolbox on macOS, including the Conda    #
 #              environment setup, copying program files to the user's home directory,   #
-#              configuring the macOS app icon, and creating a symlink in ~/Applications.#
+#              configuring the macOS app icon, and creating a symlink in /Applications. #
 #                                                                                       #
 # Usage:                                                                                #
-#   1. Make the script executable:                                                      #
+#   1. Download the repository from GitHub manually and extract it.                     #
+#   2. Make the script executable:                                                      #
 #      chmod +x install_vaila.mac.sh                                                    #
-#   2. Run the script:                                                                  #
+#   3. Run the script from the root directory of the extracted repository:              #
 #      ./install_vaila.mac.sh                                                           #
 #                                                                                       #
 # Notes:                                                                                #
-#   - This script does not require sudo access.                                         #
 #   - Ensure Conda is installed and accessible from the command line before running.    #
 #                                                                                       #
 # Author: Prof. Dr. Paulo R. P. Santiago                                                #
 # Date: September 17, 2024                                                              #
-# Version: 1.3                                                                          #
+# Version: 1.9                                                                          #
 # OS: macOS                                                                             #
 #########################################################################################
 
-# Start of the installation process
 echo "Starting installation of vaila - Multimodal Toolbox on macOS..."
 
 # Display ASCII Art
@@ -46,7 +45,6 @@ fi
 # Check if the "vaila" environment already exists
 if conda info --envs | grep -q "^vaila"; then
     echo "Conda environment 'vaila' already exists. Updating it..."
-    # Update the existing environment
     conda env update -f yaml_for_conda_env/vaila_mac.yaml --prune
     if [ $? -eq 0 ]; then
         echo "'vaila' environment updated successfully."
@@ -55,7 +53,6 @@ if conda info --envs | grep -q "^vaila"; then
         exit 1
     fi
 else
-    # Create the environment if it does not exist
     echo "Creating Conda environment from vaila_mac.yaml..."
     conda env create -f yaml_for_conda_env/vaila_mac.yaml
     if [ $? -eq 0 ]; then
@@ -69,18 +66,16 @@ fi
 # Define paths
 USER_HOME="$HOME"
 VAILA_HOME="$USER_HOME/vaila"
-APP_PATH="$USER_HOME/Applications/vaila.app"
-ICON_PATH="$(dirname "$0")/docs/images/vaila.icns"
+APP_PATH="$VAILA_HOME/vaila.app"
+ICON_PATH="$(pwd)/docs/images/vaila.icns"
 
 # Copy the entire vaila program to the user's home directory
 echo "Copying vaila program to the user's home directory..."
 mkdir -p "$VAILA_HOME"
-cp -R "$(dirname "$0")/"* "$VAILA_HOME/"
+cp -R "$(pwd)/"* "$VAILA_HOME/"
 
-# Configure macOS app icon and executable
+# Ensure the application directory exists in the user's home directory
 echo "Configuring macOS app icon for vaila..."
-
-# Ensure the application directory exists
 if [ ! -d "$APP_PATH" ]; then
     echo "Application not found at $APP_PATH, creating a new app directory..."
     mkdir -p "$APP_PATH/Contents/MacOS"
@@ -134,10 +129,25 @@ python3 "$VAILA_HOME/vaila.py"
 EOF
 
 # Make the executable script runnable
-chmod +x "$APP_PATH/Contents/MacOS/run_vaila"
-chmod -R +x "$VAILA_HOME"
+chmod -R +x "$APP_PATH"
 
-echo "vaila Launcher created and configured in ~/Applications! Check the Applications folder."
+# Create a symbolic link in /Applications
+echo "Creating a symbolic link in /Applications to the app in the user's home directory..."
+if [ -e "/Applications/vaila.app" ]; then
+    sudo rm -rf "/Applications/vaila.app"
+fi
+sudo ln -s "$APP_PATH" "/Applications/vaila.app"
+
+# Ensure the symbolic link has the correct permissions
+echo "Ensuring correct permissions for the application link..."
+sudo chown -h "$USER:admin" "/Applications/vaila.app"
+
+# Ensure the application directory is owned by the user and has the correct permissions
+echo "Ensuring correct ownership and permissions for the application..."
+sudo chown -R "$USER:admin" "$APP_PATH"
+chmod -R +x "$APP_PATH"
+
+echo "vaila Launcher created and configured in /Applications as a symbolic link! Check the Applications folder."
 echo "Installation and setup completed."
 echo " "
 echo "                   _         o   "
