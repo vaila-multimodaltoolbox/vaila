@@ -100,6 +100,9 @@ echo "Installing ffmpeg from system repositories..."
 sudo apt update
 sudo apt install ffmpeg -y
 
+source ~/anaconda3/etc/profile.d/conda.sh
+conda activate vaila
+
 # Install moviepy using pip
 echo "Installing moviepy..."
 pip install moviepy
