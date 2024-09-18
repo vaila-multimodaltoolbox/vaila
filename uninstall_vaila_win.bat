@@ -1,77 +1,98 @@
 @echo off
-REM Script: uninstall_vaila_win.bat
-REM Description: Uninstalls the vaila - Multimodal Toolbox from Windows,
-REM              including removing the Conda environment and program files.
-REM              Cannot remove the Windows Terminal profile automatically.
+REM This script uninstalls the vailá environment on Windows
 
-echo Starting vaila uninstallation on Windows...
+echo Starting vailá uninstallation on Windows...
 
 REM Ensure the script is running as administrator
-NET SESSION >nul 2>&1
-IF %ERRORLEVEL% NEQ 0 (
+net session >nul 2>&1
+if %errorlevel% neq 0 (
     echo This script requires administrative privileges. Please run as administrator.
     pause
     exit /b
 )
 
+REM Initialize Conda
+call "%ProgramData%\Anaconda3\Scripts\activate.bat" base
+
 REM Check if conda is available
 where conda >nul 2>&1
-IF %ERRORLEVEL% NEQ 0 (
-    echo Conda is not installed or not in PATH. Cannot proceed with uninstallation.
+if %errorlevel% neq 0 (
+    echo Conda not found. Please make sure Anaconda or Miniconda is installed.
     pause
     exit /b
 )
 
-REM Activate Conda base environment
-CALL conda activate base
+REM Deactivate any active environment
+call conda deactivate
 
 REM Remove the 'vaila' Conda environment if it exists
 echo Checking for 'vaila' Conda environment...
 conda env list | findstr /i "^vaila" >nul 2>&1
-IF %ERRORLEVEL% EQU 0 (
+if %errorlevel% equ 0 (
     echo Removing 'vaila' Conda environment...
     conda remove --name vaila --all -y
-    IF %ERRORLEVEL% EQU 0 (
-        echo 'vaila' environment removed successfully.
-    ) ELSE (
+    if %errorlevel% neq 0 (
         echo Failed to remove 'vaila' environment.
+    ) else (
+        echo 'vaila' environment removed successfully.
     )
-) ELSE (
+) else (
     echo 'vaila' environment does not exist. Skipping environment removal.
 )
 
-REM Define user paths
-SET USER_HOME=%USERPROFILE%
-SET VAILA_HOME=%USER_HOME%\vaila
+REM Define installation path
+set "VAILA_PROGRAM_PATH=C:\vaila_programs\vaila"
 
-REM Remove the vaila directory from the user's home directory
-IF EXIST "%VAILA_HOME%" (
-    echo Removing vaila directory from user's home directory...
-    rmdir /S /Q "%VAILA_HOME%"
-    IF %ERRORLEVEL% EQU 0 (
-        echo vaila directory removed successfully.
-    ) ELSE (
-        echo Failed to remove vaila directory.
+REM Remove the vailá directory
+if exist "%VAILA_PROGRAM_PATH%" (
+    echo Removing vailá directory at %VAILA_PROGRAM_PATH%...
+    rmdir /S /Q "%VAILA_PROGRAM_PATH%"
+    if %errorlevel% neq 0 (
+        echo Failed to remove vailá directory.
+    ) else (
+        echo vailá directory removed successfully.
     )
-) ELSE (
-    echo vaila directory not found in user's home directory. Skipping removal.
+) else (
+    echo vailá directory not found at %VAILA_PROGRAM_PATH%. Skipping removal.
+)
+
+REM Remove the Windows Terminal profile if Windows Terminal is installed
+if exist "%LocalAppData%\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe" (
+    echo Removing vailá profile from Windows Terminal...
+    set "WT_CONFIG_PATH=%LocalAppData%\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
+    set "WT_BACKUP_PATH=%LocalAppData%\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings_backup_uninstall.json"
+    
+    REM Backup the current settings.json
+    copy "%WT_CONFIG_PATH%" "%WT_BACKUP_PATH%" >nul
+    
+    REM Use PowerShell to remove the profile from the JSON
+    powershell -Command ^
+    $settings = Get-Content -Path '%WT_CONFIG_PATH%' -Raw | ConvertFrom-Json; ^
+    $profileIndex = $settings.profiles.list.FindIndex({ $_.name -eq 'vailá' -or $_.name -eq 'vaila' }); ^
+    if ($profileIndex -ge 0) { ^
+        $settings.profiles.list.RemoveAt($profileIndex); ^
+        $settings | ConvertTo-Json -Depth 100 | Set-Content -Path '%WT_CONFIG_PATH%'; ^
+        Write-Host 'vailá profile removed from Windows Terminal.'
+    } else { ^
+        Write-Host 'vailá profile not found in Windows Terminal settings.'
+    }
+) else (
+    echo Windows Terminal is not installed. Skipping profile removal.
 )
 
 REM Remove desktop shortcut if it exists
-SET SHORTCUT_PATH=%USER_HOME%\Desktop\vaila.lnk
-IF EXIST "%SHORTCUT_PATH%" (
+set "SHORTCUT_PATH=%USERPROFILE%\Desktop\vailá.lnk"
+if exist "%SHORTCUT_PATH%" (
     echo Removing desktop shortcut...
-    del "%SHORTCUT_PATH%" /Q
-    IF %ERRORLEVEL% EQU 0 (
-        echo Desktop shortcut removed successfully.
-    ) ELSE (
+    del "%SHORTCUT_PATH%" /F /Q
+    if %errorlevel% neq 0 (
         echo Failed to remove desktop shortcut.
+    ) else (
+        echo Desktop shortcut removed successfully.
     )
-) ELSE (
+) else (
     echo Desktop shortcut not found. Skipping removal.
 )
 
-echo Uninstallation completed. vaila has been removed from your system.
-echo Please remove the vaila profile from Windows Terminal settings manually if it was added.
+echo Uninstallation completed. vailá has been removed from your system.
 pause
-

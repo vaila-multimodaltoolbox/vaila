@@ -1,9 +1,10 @@
-<#
+<<#
     Script: install_vaila_win.ps1
-    Description: Installs or updates the vaila - Multimodal Toolbox on Windows 11,
-                 setting up the Conda environment, copying program files to the user's
-                 home directory, installing FFmpeg, adding a profile to Windows Terminal,
-                 and creating a desktop shortcut if Windows Terminal is not installed.
+    Description: Installs or updates the vailá - Multimodal Toolbox on Windows 11,
+                 setting up the Conda environment, copying program files to
+                 C:\vaila_programs\vaila, installing FFmpeg, adding a profile to
+                 Windows Terminal, and creating a desktop shortcut if Windows Terminal
+                 is not installed.
 
     Usage:
       1. Download the repository from GitHub manually and extract it.
@@ -16,7 +17,7 @@
 
     Author: Prof. Dr. Paulo R. P. Santiago
     Date: September 17, 2024
-    Version: 1.1
+    Version: 1.2
     OS: Windows 11
 #>
 
@@ -38,9 +39,14 @@ $condaPath = (conda info --base).Trim()
 # Initialize Conda in the script
 & "$condaPath\Scripts\activate.bat" base
 
-# Define user paths
-$userHome = $env:USERPROFILE
-$vailaHome = "$userHome\vaila"
+# Define installation path
+$vailaProgramPath = "C:\vaila_programs\vaila"
+
+# Ensure the directory exists
+If (-Not (Test-Path $vailaProgramPath)) {
+    Write-Output "Creating directory $vailaProgramPath..."
+    New-Item -ItemType Directory -Force -Path $vailaProgramPath
+}
 
 # Check if the "vaila" environment already exists
 Write-Output "Checking if the 'vaila' Conda environment exists..."
@@ -101,10 +107,9 @@ If (-Not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
     Write-Output "FFmpeg is already installed."
 }
 
-# Copy the vaila program to the user's home directory
-Write-Output "Copying vaila program to the user's home directory..."
-New-Item -ItemType Directory -Force -Path "$vailaHome"
-Copy-Item -Path (Get-Location) -Destination "$vailaHome" -Recurse -Force
+# Copy the vaila program to C:\vaila_programs\vaila
+Write-Output "Copying vaila program to $vailaProgramPath..."
+Copy-Item -Path (Get-Location) -Destination "$vailaProgramPath" -Recurse -Force
 
 # Check if Windows Terminal is installed
 $wtPath = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe"
@@ -134,12 +139,19 @@ If ($wtInstalled) {
     # Load settings.json
     $settingsJson = Get-Content -Path $settingsPath -Raw | ConvertFrom-Json
 
+    # Remove existing vaila profile if it exists
+    $existingProfileIndex = $settingsJson.profiles.list.FindIndex({ $_.name -eq "vailá" -or $_.name -eq "vaila" })
+    If ($existingProfileIndex -ge 0) {
+        Write-Output "Removing existing vaila profile..."
+        $settingsJson.profiles.list.RemoveAt($existingProfileIndex)
+    }
+
     # Define the new profile
     $vailaProfile = @{
-        name = "vaila"
-        commandline = "pwsh.exe -ExecutionPolicy Bypass -NoExit -Command `"& '$condaPath\shell\condabin\conda-hook.ps1' ; conda activate 'vaila' ; python '$vailaHome\vaila.py'`""
-        startingDirectory = "$vailaHome"
-        icon = "$vailaHome\docs\images\vaila_ico.png"
+        name = "vailá"
+        commandline = "pwsh.exe -ExecutionPolicy Bypass -NoExit -Command `"& '$condaPath\shell\condabin\conda-hook.ps1' ; conda activate 'vaila' ; cd '$vailaProgramPath' ; python 'vaila.py'`""
+        startingDirectory = "$vailaProgramPath"
+        icon = "$vailaProgramPath\docs\images\vaila_ico.png"
         colorScheme = "Vintage"
         guid = "{17ce5bfe-17ed-5f3a-ab15-5cd5baafed5b}"
         hidden = $false
@@ -154,21 +166,21 @@ If ($wtInstalled) {
     # Save the updated settings.json
     $settingsJson | ConvertTo-Json -Depth 100 | Set-Content -Path $settingsPath -Encoding UTF8
 
-    Write-Output "vaila profile added to Windows Terminal successfully."
+    Write-Output "vailá profile added to Windows Terminal successfully."
 
     # Open settings.json in Notepad for verification
     Write-Output "Opening settings.json in Notepad for verification..."
     notepad "$settingsPath"
 } Else {
     # Create a desktop shortcut
-    Write-Output "Creating a desktop shortcut for vaila..."
-    $shortcutPath = "$env:USERPROFILE\Desktop\vaila.lnk"
+    Write-Output "Creating a desktop shortcut for vailá..."
+    $shortcutPath = "$env:USERPROFILE\Desktop\vailá.lnk"
     $wshell = New-Object -ComObject WScript.Shell
     $shortcut = $wshell.CreateShortcut($shortcutPath)
     $shortcut.TargetPath = "pwsh.exe"
-    $shortcut.Arguments = "-ExecutionPolicy Bypass -NoExit -Command `"& '$condaPath\shell\condabin\conda-hook.ps1' ; conda activate 'vaila' ; python '$vailaHome\vaila.py'`""
-    $shortcut.IconLocation = "$vailaHome\docs\images\vaila_ico.ico"
-    $shortcut.WorkingDirectory = "$vailaHome"
+    $shortcut.Arguments = "-ExecutionPolicy Bypass -NoExit -Command `"& '$condaPath\shell\condabin\conda-hook.ps1' ; conda activate 'vaila' ; cd '$vailaProgramPath' ; python 'vaila.py'`""
+    $shortcut.IconLocation = "$vailaProgramPath\docs\images\vaila_ico.ico"
+    $shortcut.WorkingDirectory = "$vailaProgramPath"
     $shortcut.Save()
 
     Write-Output "Desktop shortcut created at $shortcutPath"
