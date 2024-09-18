@@ -2,39 +2,34 @@
 
 #########################################################################################
 #                                                                                       #
-# Script: uninstall_vaila.mac.sh                                                        #
-# Description: Uninstalls the vaila - Multimodal Toolbox from macOS, including the      #
-#              Conda environment removal, deletion of program files from the user's     #
-#              home directory, and removal of the application from /Applications.       #
-#              Also refreshes the Launchpad to remove the icon.                         #
+# Script: uninstall_vaila_linux.sh                                                      #
+# Description: Uninstalls the vaila - Multimodal Toolbox from Ubuntu Linux, including   #
+#              removing the Conda environment, deleting program files from the user's   #
+#              home directory, and removing the desktop entry.                          #
 #                                                                                       #
 # Usage:                                                                                #
 #   1. Make the script executable:                                                      #
-#      chmod +x uninstall_vaila.mac.sh                                                  #
+#      chmod +x uninstall_vaila_linux.sh                                                #
 #   2. Run the script:                                                                  #
-#      ./uninstall_vaila.mac.sh                                                         #
-#      (You will be prompted for your password when sudo is required)                   #
+#      ./uninstall_vaila_linux.sh                                                       #
 #                                                                                       #
 # Author: Prof. Dr. Paulo R. P. Santiago                                                #
 # Date: September 17, 2024                                                              #
-# Version: 1.6                                                                          #
-# OS: macOS                                                                             #
+# Version: 1.0                                                                          #
+# OS: Ubuntu Linux                                                                      #
 #########################################################################################
 
-echo "Starting uninstallation of vaila - Multimodal Toolbox on macOS..."
+echo "Starting uninstallation of vaila - Multimodal Toolbox on Linux..."
 
-# Define paths
-USER_HOME="$HOME"
-VAILA_HOME="$USER_HOME/vaila"
-APP_PATH="/Applications/vaila.app"
-LOG_FILE="$USER_HOME/vaila_app.log"
+# Get Conda base path
+CONDA_BASE=$(conda info --base 2>/dev/null)
 
 # Check if Conda is installed
 if ! command -v conda &> /dev/null; then
     echo "Conda is not installed. Cannot proceed with environment removal."
 else
     # Remove the 'vaila' Conda environment if it exists
-    if conda info --envs | grep -qw "^vaila"; then
+    if conda env list | grep -q "^vaila"; then
         echo "Removing 'vaila' Conda environment..."
         conda remove --name vaila --all -y
         if [ $? -eq 0 ]; then
@@ -46,6 +41,12 @@ else
         echo "'vaila' environment does not exist. Skipping environment removal."
     fi
 fi
+
+# Define paths
+USER_HOME="$HOME"
+VAILA_HOME="$USER_HOME/vaila"
+DESKTOP_ENTRY_PATH="$HOME/.local/share/applications/vaila.desktop"
+RUN_SCRIPT="$VAILA_HOME/run_vaila.sh"
 
 # Remove the vaila directory from the user's home
 if [ -d "$VAILA_HOME" ]; then
@@ -60,36 +61,29 @@ else
     echo "vaila directory not found in the user's home. Skipping removal."
 fi
 
-# Remove the vaila.app from /Applications
-if [ -e "$APP_PATH" ] || [ -L "$APP_PATH" ]; then
-    echo "Removing vaila app from /Applications..."
-    sudo rm -rf "$APP_PATH"
+# Remove the desktop entry
+if [ -f "$DESKTOP_ENTRY_PATH" ]; then
+    echo "Removing desktop entry..."
+    rm -f "$DESKTOP_ENTRY_PATH"
     if [ $? -eq 0 ]; then
-        echo "vaila app removed successfully."
+        echo "Desktop entry removed successfully."
     else
-        echo "Failed to remove vaila app."
+        echo "Failed to remove desktop entry."
     fi
 else
-    echo "vaila app not found in /Applications. Skipping removal."
+    echo "Desktop entry not found. Skipping removal."
 fi
 
-# Remove the log file if it exists
-if [ -f "$LOG_FILE" ]; then
-    echo "Removing vaila log file..."
-    rm -f "$LOG_FILE"
+# Remove the run_vaila.sh script if it exists
+if [ -f "$RUN_SCRIPT" ]; then
+    echo "Removing run_vaila.sh script..."
+    rm -f "$RUN_SCRIPT"
     if [ $? -eq 0 ]; then
-        echo "vaila log file removed successfully."
+        echo "run_vaila.sh script removed successfully."
     else
-        echo "Failed to remove vaila log file."
+        echo "Failed to remove run_vaila.sh script."
     fi
-else
-    echo "vaila log file not found. Skipping removal."
 fi
-
-# Refresh Launchpad to remove any cached icons
-echo "Refreshing Launchpad..."
-killall Dock
-echo "Launchpad refreshed."
 
 echo "Uninstallation completed. vaila has been removed from your system."
 
