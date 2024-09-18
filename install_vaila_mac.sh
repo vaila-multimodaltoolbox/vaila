@@ -139,3 +139,4 @@ chmod -R +x "${APP_PATH}"
 
 echo "vaila Launcher created and configured in /Applications as a symbolic link! Check the Applications folder."
 echo "Installation and setup completed."
+
