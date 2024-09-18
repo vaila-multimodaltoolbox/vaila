@@ -1,8 +1,8 @@
 <#
     Script: uninstall_vaila_win.ps1
-    Description: Uninstalls the vaila - Multimodal Toolbox from Windows 11,
+    Description: Uninstalls the vailá - Multimodal Toolbox from Windows 11,
                  including removing the Conda environment, deleting program files
-                 from the user's home directory, removing the Windows Terminal profile,
+                 from C:\vaila_programs\vaila, removing the Windows Terminal profile,
                  and deleting the desktop shortcut if it was created.
 
     Usage:
@@ -14,7 +14,7 @@
 
     Author: Prof. Dr. Paulo R. P. Santiago
     Date: September 17, 2024
-    Version: 1.0
+    Version: 1.1
     OS: Windows 11
 #>
 
@@ -52,27 +52,26 @@ If ($envExists) {
     Write-Output "'vaila' environment does not exist. Skipping environment removal."
 }
 
-# Define user paths
-$userHome = $env:USERPROFILE
-$vailaHome = "$userHome\vaila"
+# Define installation path
+$vailaProgramPath = "C:\vaila_programs\vaila"
 
-# Remove the vaila directory from the user's home directory
-If (Test-Path $vailaHome) {
-    Write-Output "Removing vaila directory from user's home directory..."
+# Remove the vaila directory
+If (Test-Path $vailaProgramPath) {
+    Write-Output "Removing vaila directory at $vailaProgramPath..."
     Try {
-        Remove-Item -Path $vailaHome -Recurse -Force
+        Remove-Item -Path $vailaProgramPath -Recurse -Force
         Write-Output "vaila directory removed successfully."
     } Catch {
         Write-Error "Failed to remove vaila directory. Error: $_"
     }
 } Else {
-    Write-Output "vaila directory not found in user's home directory. Skipping removal."
+    Write-Output "vaila directory not found at $vailaProgramPath. Skipping removal."
 }
 
 # Remove the Windows Terminal profile if Windows Terminal is installed
 $wtPath = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe"
 If (Test-Path $wtPath) {
-    Write-Output "Removing vaila profile from Windows Terminal..."
+    Write-Output "Removing vailá profile from Windows Terminal..."
     $settingsPath = "$wtPath\LocalState\settings.json"
     $settingsBackupPath = "$wtPath\LocalState\settings_backup_uninstall.json"
 
@@ -83,28 +82,21 @@ If (Test-Path $wtPath) {
     $settingsJson = Get-Content -Path $settingsPath -Raw | ConvertFrom-Json
 
     # Remove the vaila profile
-    $profileIndex = $null
-    For ($i = 0; $i -lt $settingsJson.profiles.list.Count; $i++) {
-        If ($settingsJson.profiles.list[$i].name -eq "vaila" -or $settingsJson.profiles.list[$i].name -eq "vailá") {
-            $profileIndex = $i
-            Break
-        }
-    }
-
-    If ($null -ne $profileIndex) {
+    $profileIndex = $settingsJson.profiles.list.FindIndex({ $_.name -eq "vailá" -or $_.name -eq "vaila" })
+    If ($profileIndex -ge 0) {
         $settingsJson.profiles.list.RemoveAt($profileIndex)
         # Save the updated settings.json
         $settingsJson | ConvertTo-Json -Depth 100 | Set-Content -Path $settingsPath -Encoding UTF8
-        Write-Output "vaila profile removed from Windows Terminal."
+        Write-Output "vailá profile removed from Windows Terminal."
     } Else {
-        Write-Output "vaila profile not found in Windows Terminal settings."
+        Write-Output "vailá profile not found in Windows Terminal settings."
     }
 } Else {
     Write-Output "Windows Terminal is not installed. Skipping profile removal."
 }
 
 # Remove desktop shortcut if it exists
-$shortcutPath = "$env:USERPROFILE\Desktop\vaila.lnk"
+$shortcutPath = "$env:USERPROFILE\Desktop\vailá.lnk"
 If (Test-Path $shortcutPath) {
     Write-Output "Removing desktop shortcut..."
     Try {
@@ -117,6 +109,5 @@ If (Test-Path $shortcutPath) {
     Write-Output "Desktop shortcut not found. Skipping removal."
 }
 
-Write-Output "Uninstallation completed. vaila has been removed from your system."
+Write-Output "Uninstallation completed. vailá has been removed from your system."
 Pause
-
