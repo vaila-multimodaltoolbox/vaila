@@ -120,4 +120,3 @@ pip install moviepy
 echo "vaila Launcher created and available in the Applications menu!"
 echo "Installation and setup completed."
 echo " "
-
