@@ -1,20 +1,23 @@
 <#
-    Script: uninstall_vaila_win.ps1
-    Description: Uninstalls the vailá - Multimodal Toolbox from Windows 11,
-                 including removing the Conda environment, deleting program files
-                 from C:\vaila_programs\vaila, removing the Windows Terminal profile,
-                 and deleting the desktop shortcut if it was created.
+    Script: install_vaila_win.ps1
+    Description: Installs or updates the vailá - Multimodal Toolbox on Windows 11,
+                 setting up the Conda environment, copying program files to
+                 C:\vaila_programs\vaila, installing FFmpeg, adding a profile to
+                 Windows Terminal, and creating a desktop shortcut if Windows Terminal
+                 is not installed.
 
     Usage:
-      1. Right-click the script and select "Run with PowerShell" as Administrator.
+      1. Download the repository from GitHub manually and extract it.
+      2. Right-click the script and select "Run with PowerShell" as Administrator.
 
     Notes:
       - Ensure Conda is installed and accessible from the command line before running.
-      - The script will remove the 'vaila' Conda environment and program files.
+      - The script checks for and installs Windows Terminal if necessary.
+      - If Windows Terminal is not available, a desktop shortcut will be created.
 
     Author: Prof. Dr. Paulo R. P. Santiago
     Date: September 17, 2024
-    Version: 1.1
+    Version: 1.2
     OS: Windows 11
 #>
 
