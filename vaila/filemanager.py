@@ -207,7 +207,7 @@ def move_file():
 
     # Prompt the user to enter the file extension to search for
     file_extension = simpledialog.askstring(
-        "File Extension", "Enter the file extension to export (e.g., .csv, .mp4):"
+        "File Extension", "Enter the file extension to move (e.g., .csv, .mp4):"
     )
     if not file_extension:
         messagebox.showerror("Error", "No file extension provided.")
