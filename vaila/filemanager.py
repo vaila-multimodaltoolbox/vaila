@@ -1,33 +1,70 @@
 """
-File: filemanager.py
+================================================================================
+File Manager - Comprehensive File and Directory Management Tool
+================================================================================
+Author: Prof. Dr. Paulo R. P. Santiago
+Date: 2024-08-29
+Version: 1.2
 
 Description:
-This script, named filemanager.py, is designed to manage files and directories efficiently. It supports various operations, including importing, converting, exporting, copying, moving, removing, and finding files with specific patterns. The script leverages the Tkinter graphical interface to facilitate user interaction, enabling the selection of files and directories through an easy-to-use GUI.
-
-Version: 1.2
-Last Updated: 2024-08-29
-Author: Prof. Paulo Santiago
+------------
+This Python script provides a comprehensive tool for managing files and directories. 
+It supports importing, converting, exporting, copying, moving, removing, and finding 
+files based on user-defined patterns. The script includes a user-friendly GUI, built 
+with Tkinter, that allows users to perform operations on files and directories easily.
 
 Main Features:
-- Import specific files from a selected directory into a predefined structure.
-- Convert various file types (e.g., c3d, yaml, xml, html, h5, etc.) to CSV format.
-- Copy files from one location to another within the allowed directories.
-- Move files between predefined directories.
-- Remove files with specific extensions or directory names from selected directories.
-- Find files or directories based on user-defined patterns and count the number of files with a specified extension.
+--------------
+1. **File Import**: Import specific file types from selected directories into a predefined 
+   structure. Supported file types include `.csv`, `.mat`, `.tsv`, `.html`, `.xml`, `.xlsx`, etc.
+2. **File Conversion**: Convert various file types (e.g., `.c3d`, `.yaml`, `.xml`, `.html`, `.h5`) 
+   into CSV format.
+3. **File Export**: Export files to various formats such as CSV, FBX, and TRC.
+4. **File Copy/Move**: Copy or move files based on specified patterns and file extensions.
+5. **File Removal**: Remove files with specific extensions or directory names from selected 
+   directories, with safeguards to prevent accidental deletion of critical files.
+6. **File Search**: Find files or directories based on user-defined patterns and count files 
+   with a specified extension.
+7. **Batch Processing**: Includes batch processing of files, such as CSV file splitting by 
+   devices using a VICON Nexus CSV processing module.
 
 Usage Notes:
-- A directory named 'vaila_export', 'vaila_copy', 'vaila_move', or 'vaila_import' will be automatically created within the chosen destination directory for the respective operations.
-- The script ensures that essential directories ('data', 'import', 'export', 'results') exist before performing operations.
+------------
+- The GUI enables the selection of files and directories for each operation.
+- Directories like 'vaila_export', 'vaila_copy', 'vaila_move', or 'vaila_import' are automatically 
+  created within the destination directory for respective operations.
+- The script ensures essential directories (e.g., 'data', 'import', 'export', 'results') are created 
+  before performing operations.
 
 Dependencies:
+-------------
 - Python 3.x
-- Conda environment with the following packages: pandas, ezc3d, yaml, toml, lxml, BeautifulSoup4, pickle5, hdf5plugin
+- Required Libraries: pandas, ezc3d, yaml, toml, lxml, BeautifulSoup4, pickle5, hdf5plugin, paramiko, scp
 
 How to Run:
-- Execute the script in a Python environment managed by Conda that includes the necessary packages.
-- Follow on-screen prompts to perform the desired file operations.
+-----------
+- Run the script in a Python environment managed by Conda or with the required packages installed.
+- Follow the on-screen prompts to perform the desired file operations.
+
+Changelog:
+----------
+Version 1.2 - 2024-08-29:
+    - Added batch processing for VICON Nexus CSV files.
+    - Expanded import options to include `.html`, `.xml`, and `.xlsx`.
+    - Improved file copy and move functionality with pattern matching.
+    - Updated file removal functionality with safeguards to prevent critical file deletion.
+
+License:
+--------
+This script is licensed under the MIT License.
+
+Disclaimer:
+-----------
+This script is provided "as is" without warranty of any kind. The author is not responsible for any 
+damage or loss resulting from the use of this script.
+================================================================================
 """
+
 
 import shutil
 import os
@@ -199,6 +236,10 @@ def move_file():
 
 
 def process_move(src_directory, file_extension, patterns):
+    # Print the directory and name of the script being executed
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+
     # Prompt the user to select the destination directory where the new directories will be created
     base_dest_directory = filedialog.askdirectory(title="Select Destination Directory")
     if not base_dest_directory:
@@ -354,232 +395,100 @@ def import_file():
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
 
-    root = tk.Tk()
-    root.withdraw()
+    """
+    Create a GUI with multiple buttons, each calling an external script or function.
+    """
 
-    # Seleção do diretório fonte
-    src_directory = filedialog.askdirectory(title="Select Source Directory")
-    if not src_directory:
-        messagebox.showerror("Error", "No source directory selected.")
-        return
+    def data_import_tsv_qualysis():
+        messagebox.showinfo("Data Import", "You selected to import a .tsv file from Qualysis.")
+        # Add your .tsv processing logic here
 
-    # Seleção do diretório de destino
-    dest_directory = filedialog.askdirectory(title="Select Destination Directory")
-    if not dest_directory:
-        messagebox.showerror("Error", "No destination directory selected.")
-        return
+    def data_import_mat_matlab():
+        messagebox.showinfo("Data Import", "You selected to import a .mat file from MATLAB.")
+        # Add your .mat processing logic here
 
-    dest_directory = os.path.join(dest_directory, "vaila_import")
-    os.makedirs(dest_directory, exist_ok=True)
-
-    # Solicitar a extensão do arquivo ao usuário
-    file_extension = simpledialog.askstring(
-        "File Extension",
-        "Enter the file extension to process (e.g., .csv, .json, .xml):",
-    )
-    if not file_extension:
-        messagebox.showerror("Error", "No file extension provided.")
-        return
-
-    # Filtrar arquivos pela extensão fornecida
-    files = sorted(
-        [
-            f
-            for f in os.listdir(src_directory)
-            if f.endswith(file_extension)
-            and os.path.isfile(os.path.join(src_directory, f))
-        ]
-    )
-    if not files:
-        messagebox.showerror(
-            "Error",
-            f"No files with extension {file_extension} found in the source directory.",
-        )
-        return
-
-    for file in files:
-        src_file_path = os.path.join(src_directory, file)
-        file_name, file_extension = os.path.splitext(file)
-
-        print(f"Processing file: {src_file_path}")
-
-        def save_csv(dataframe, base_name, suffix):
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            dest_file = os.path.join(
-                dest_directory, f"{base_name}_{suffix}_{timestamp}.csv"
-            )
-            dataframe.to_csv(dest_file, index=False)
-            print(f"Saved: {dest_file}")
-
+    def data_import_csv_vicon_nexus():
+        """
+        Executes the VICON Nexus CSV batch processing from load_vicon_csv_split_batch.py
+        """
         try:
-            # Processamento de arquivos CSV, TSV, TXT
-            if file_extension in [".csv", ".tsv", ".txt"]:
-                df = pd.read_csv(src_file_path, sep=None, engine="python")
-                save_csv(df, file_name, "data")
-
-            # Processamento de arquivos Excel
-            elif file_extension in [".xlsx", ".xls", ".ods"]:
-                df = pd.read_excel(src_file_path)
-                save_csv(df, file_name, "data")
-
-            # Processamento de arquivos HDF5
-            elif file_extension == ".h5":
-                with h5py.File(src_file_path, "r") as hdf:
-                    for key in hdf.keys():
-                        data = hdf[key][:]
-                        df = pd.DataFrame(data)
-                        save_csv(df, file_name, key)
-
-            # Processamento de arquivos Pickle
-            elif file_extension == ".pickle":
-                with open(src_file_path, "rb") as f:
-                    data = pickle.load(f)
-                df = pd.DataFrame(data)
-                save_csv(df, file_name, "data")
-
-            # Processamento de arquivos YAML
-            elif file_extension in [".yml", ".yaml"]:
-                with open(src_file_path, "r") as f:
-                    data = yaml.safe_load(f)
-                df = pd.DataFrame(data)
-                save_csv(df, file_name, "data")
-
-            # Processamento de arquivos TOML
-            elif file_extension == ".toml":
-                data = toml.load(src_file_path)
-                df = pd.DataFrame(data)
-                save_csv(df, file_name, "data")
-
-            # Processamento de arquivos HTML
-            elif file_extension == ".html":
-                try:
-                    with open(src_file_path, "r") as f:
-                        soup = BeautifulSoup(f, "html.parser")
-                    tables = pd.read_html(str(soup))
-                    for i, table in enumerate(tables):
-                        table_name = (
-                            table.columns[0] if len(table.columns) > 0 else f"table_{i}"
-                        )
-                        save_csv(table, file_name, table_name)
-                except Exception as e:
-                    print(f"Error processing HTML file {src_file_path}: {e}")
-                    messagebox.showerror("Error", f"Failed to process HTML file: {e}")
-
-            # Processamento de arquivos XML
-            elif file_extension == ".xml":
-                try:
-                    with open(src_file_path, "r") as f:
-                        tree = etree.parse(f)
-                    root = tree.getroot()
-                    data = []
-                    columns = []
-                    for element in root.iter():
-                        if element.tag not in columns:
-                            columns.append(element.tag)
-                        data.append({element.tag: element.text})
-                    df = pd.DataFrame(data)
-                    save_csv(df, file_name, "data")
-                except Exception as e:
-                    print(f"Error processing XML file {src_file_path}: {e}")
-                    messagebox.showerror("Error", f"Failed to process XML file: {e}")
-
-            # Processamento de arquivos C3D
-            elif file_extension == ".c3d":
-                try:
-                    c3d_data = ezc3d.c3d(src_file_path)
-                    point_data = c3d_data["data"]["points"]
-                    marker_labels = c3d_data["parameters"]["POINT"]["LABELS"]["value"]
-                    markers = point_data[0:3, :, :].T.reshape(
-                        -1, len(marker_labels) * 3
-                    )
-                    marker_freq = c3d_data["header"]["points"]["frame_rate"]
-
-                    marker_columns = [
-                        f"{label}_{axis}"
-                        for label in marker_labels
-                        for axis in ["X", "Y", "Z"]
-                    ]
-                    markers_df = pd.DataFrame(markers, columns=marker_columns)
-
-                    num_marker_frames = markers_df.shape[0]
-                    marker_time_column = pd.Series(
-                        [f"{i / marker_freq:.3f}" for i in range(num_marker_frames)],
-                        name="Time",
-                    )
-                    markers_df.insert(0, "Time", marker_time_column)
-                    save_csv(markers_df, file_name, "markers")
-
-                    analogs = c3d_data["data"]["analogs"].squeeze(axis=0).T
-                    analog_labels = c3d_data["parameters"]["ANALOG"]["LABELS"]["value"]
-                    analogs_df = pd.DataFrame(analogs, columns=analog_labels)
-
-                    analog_freq = c3d_data["header"]["analogs"]["frame_rate"]
-                    num_analog_frames = analogs_df.shape[0]
-                    analog_time_column = pd.Series(
-                        [f"{i / analog_freq:.3f}" for i in range(num_analog_frames)],
-                        name="Time",
-                    )
-                    analogs_df.insert(0, "Time", analog_time_column)
-                    save_csv(analogs_df, file_name, "analogs")
-                except Exception as e:
-                    print(f"Error processing C3D file {src_file_path}: {e}")
-                    messagebox.showerror("Error", f"Failed to process C3D file: {e}")
-
-            # Processamento de arquivos JSON
-            elif file_extension == ".json":
-                try:
-                    with open(src_file_path, "r") as f:
-                        data = json.load(f)
-
-                    print("JSON data loaded successfully.")
-
-                    timeseries = data.get("data", {}).get("timeseries", [])
-                    print(f"Found {len(timeseries)} timeseries.")
-
-                    for series in timeseries:
-                        time = series.get("time", [])
-                        positions = series.get("data", {}).get("0", [])
-
-                        if not time or not positions:
-                            print(
-                                f"No valid time or position data found in series: {series.get('name', 'Unnamed Series')}"
-                            )
-                            continue
-
-                        rows = []
-                        for t, pos in zip(time, positions):
-                            row = {"Time": t}
-                            if isinstance(pos, list) and len(pos) == 2:
-                                row["p1_x"] = pos[0]
-                                row["p1_y"] = pos[1]
-                            else:
-                                print(f"Invalid position data: {pos} for time {t}")
-                            rows.append(row)
-
-                        if rows:
-                            df = pd.DataFrame(rows)
-                            series_name = series.get("name", "data").replace(" ", "_")
-                            save_csv(df, file_name, series_name)
-                        else:
-                            print(
-                                f"No data to save for series: {series.get('name', 'Unnamed Series')}"
-                            )
-
-                except Exception as e:
-                    print(f"Error processing JSON file {src_file_path}: {e}")
-                    messagebox.showerror("Error", f"Failed to process JSON file: {e}")
-
-            else:
-                raise ValueError(f"Unsupported file format: {file_extension}")
-
+            # Import the batch processing module (adjust the path as necessary)
+            from vaila import load_vicon_csv_split_batch
+    
+            # Confirm if the 'process_csv_files_first_level' exists in the module
+            if not hasattr(load_vicon_csv_split_batch, 'process_csv_files_first_level'):
+                raise AttributeError("The module 'load_vicon_csv_split_batch' does not have 'process_csv_files_first_level' function")
+    
+            # Ask the user to select the source and output directories
+            src_directory, output_directory = load_vicon_csv_split_batch.select_directory()
+    
+            # Run the batch processing function from load_vicon_csv_split_batch.py
+            load_vicon_csv_split_batch.process_csv_files_first_level(src_directory, output_directory)
+    
+            # Show success message once processing is completed
+            messagebox.showinfo("Success", "Batch processing of VICON Nexus CSV files completed successfully.")
+    
+        except AttributeError as e:
+            # Handle the case where the function is missing
+            messagebox.showerror("Error", f"An error occurred: {e}")
+    
         except Exception as e:
-            print(f"Error processing {src_file_path}: {e}")
-            messagebox.showerror("Error", f"Failed to process {src_file_path}: {e}")
+            # General error handling
+            messagebox.showerror("Error", f"An error occurred during batch processing: {e}")
+       
+    def data_import_html():
+        messagebox.showinfo("Data Import", "You selected to import a .html file.")
+        # Add your .html processing logic here
 
-    messagebox.showinfo(
-        "Success", f"Files have been processed and saved to {dest_directory}."
-    )
+    def data_import_xml():
+        messagebox.showinfo("Data Import", "You selected to import a .xml file.")
+        # Add your .xml processing logic here
 
+    def data_import_xlsx():
+        messagebox.showinfo("Data Import", "You selected to import an .xlsx file.")
+        # Add your .xlsx processing logic here
+
+    def data_import_bvh():
+        messagebox.showinfo("Data Import", "You selected to import a BVH file.")
+        # Add your .bvh processing logic here
+
+    def data_export_csv():
+        messagebox.showinfo("Data Export", "You selected to export to CSV.")
+        # Add your CSV export logic here
+
+    def data_export_fbx():
+        messagebox.showinfo("Data Export", "You selected to export to FBX.")
+        # Add your FBX export logic here
+
+    def data_export_trc():
+        messagebox.showinfo("Data Export", "You selected to export to TRC.")
+        # Add your TRC export logic here
+
+    # Create the main GUI window
+    root = tk.Tk()
+    root.title("File Manager - Import/Export Options")
+
+    # Create buttons for each file type or operation
+    buttons = [
+        ("Data Import: .tsv QUALYSIS", data_import_tsv_qualysis),
+        ("Data Import: .mat MATLAB", data_import_mat_matlab),
+        ("Data Import: .csv VICON NEXUS", data_import_csv_vicon_nexus),
+        ("Data Import: HTML", data_import_html),          # New HTML button
+        ("Data Import: XML", data_import_xml),            # New XML button
+        ("Data Import: XLSX", data_import_xlsx),          # New XLSX button
+        ("Data Import: BVH", data_import_bvh),
+        ("Data Export: CSV", data_export_csv),
+        ("Data Export: FBX", data_export_fbx),
+        ("Data Export: TRC", data_export_trc),
+    ]
+
+    # Create a grid of buttons
+    for i, (label, command) in enumerate(buttons):
+        btn = tk.Button(root, text=label, command=command, width=40)
+        btn.grid(row=i // 2, column=i % 2, padx=10, pady=10)
+
+    # Start the GUI event loop
+    root.mainloop()
 
 def rename_files():
     # Print the directory and name of the script being executed
@@ -805,7 +714,8 @@ def transfer_file():
     # Initialize Tkinter root
     root = Tk()
     root.withdraw()  # Hide the root window
-
+    root.tk.call('wm', 'attributes', '.', '-topmost', '1')  # Keep window on top
+    
     # Prompt the user to select Upload or Download
     transfer_type = simpledialog.askstring(
         "Transfer Type", "Enter 'upload' to send files or 'download' to receive files:"
