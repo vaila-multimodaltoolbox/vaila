@@ -256,7 +256,15 @@ def plot_final_figure(
     ax2 = fig.add_subplot(2, 2, 3)
 
     # Plot the CoP pathway with points only (no connecting lines)
-    ax2.plot(X_n, Y_n, label='CoP Pathway', color='blue', marker='.', markersize=3, linestyle='None')
+    ax2.plot(
+        X_n,
+        Y_n,
+        label="CoP Pathway",
+        color="blue",
+        marker=".",
+        markersize=3,
+        linestyle="None",
+    )
 
     # Unpack the ellipse data to plot it correctly
     ellipse_x, ellipse_y = ellipse_data[0], ellipse_data[1]
@@ -327,7 +335,9 @@ def plot_final_figure(
     )
 
     # Subplot for result variables (combined column 2)
-    ax3 = fig.add_subplot(1, 2, 2)  # Use a single subplot that spans both rows in the second column
+    ax3 = fig.add_subplot(
+        1, 2, 2
+    )  # Use a single subplot that spans both rows in the second column
     ax3.axis("off")  # Hide axes to focus on the text
     text_str = "\n".join(
         [f"{key}: {value}" for key, value in metrics.items()]
@@ -347,6 +357,7 @@ def plot_final_figure(
     plt.savefig(f"{output_path}_final_figure.png", dpi=300, format="png")
     plt.savefig(f"{output_path}_final_figure.svg", format="svg")
     plt.close()
+
 
 def analyze_data_2d(
     data, output_dir, file_name, fs, plate_width, plate_height, timestamp
@@ -685,12 +696,9 @@ def main():
 
     # Inform the user that the analysis is complete
     print("All files processed.")
-    messagebox.showinfo(
-        "Information", "Analysis complete! Close this window."
-    )
+    messagebox.showinfo("Information", "Analysis complete! Close this window.")
     root.mainloop()
 
 
 if __name__ == "__main__":
     main()
-
