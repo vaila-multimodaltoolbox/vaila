@@ -310,7 +310,7 @@ dependencies:
   - pyparsing=3.0.9=pyhd8ed1ab_0
   - pyperclip=1.9.0=pyh534df25_0
   - pysocks=1.7.1=pyha2e5f31_6
-  - python=3.11.8=hdf0ec26_0_cpython
+  - python=3.11
   - python-dateutil=2.9.0post0=py311hca03da5_2
   - python-fastjsonschema=2.20.0=pyhd8ed1ab_0
   - python-json-logger=2.0.7=pyhd8ed1ab_0
