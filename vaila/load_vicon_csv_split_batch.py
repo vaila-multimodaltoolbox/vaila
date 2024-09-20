@@ -52,13 +52,15 @@ from io import StringIO
 from datetime import datetime
 from tkinter import Tk, filedialog
 
+
 def clean_header(header):
     """Sanitize the header to handle specific units and replace problematic characters."""
-    header = header.replace('mm/s²', 'mm_s2')
-    header = header.replace('deg/s', 'deg_s')
-    header = re.sub(r'[\s]+', '_', header)
-    header = re.sub(r'[^\w]', '', header)
+    header = header.replace("mm/s²", "mm_s2")
+    header = header.replace("deg/s", "deg_s")
+    header = re.sub(r"[\s]+", "_", header)
+    header = re.sub(r"[^\w]", "", header)
     return header
+
 
 def merge_headers(header1, header2):
     """Merge two header rows into a single header, ensuring unique header names."""
@@ -67,18 +69,19 @@ def merge_headers(header1, header2):
     for h1, h2 in zip(header1, header2):
         h1 = clean_header(str(h1))
         h2 = clean_header(str(h2))
-        
+
         combined_name = f"{h1}_{h2}" if h1 and h2 else h1 or h2
         count = 1
         original_name = combined_name
         while combined_name in used_names:
             combined_name = f"{original_name}_{count}"
             count += 1
-        
+
         used_names.add(combined_name)
         header.append(combined_name)
-    
+
     return header
+
 
 def get_file_creation_datetime(filepath):
     """Retrieve the file creation date and time, and format it as a string."""
@@ -87,16 +90,19 @@ def get_file_creation_datetime(filepath):
         creation_time = stat.st_birthtime
     except AttributeError:
         creation_time = stat.st_ctime
-    return datetime.fromtimestamp(creation_time).strftime('%Y-%m-%d %H:%M:%S')
+    return datetime.fromtimestamp(creation_time).strftime("%Y-%m-%d %H:%M:%S")
+
 
 def read_csv_devs(filepath, output_dir):
     """Process a CSV file and save the results split by devices."""
     file_datetime = get_file_creation_datetime(filepath)
 
-    with open(filepath, 'r', encoding='utf-8-sig') as file:
+    with open(filepath, "r", encoding="utf-8-sig") as file:
         lines = file.readlines()
 
-    blank_line_indices = [index for index, line in enumerate(lines) if line.strip() == '']
+    blank_line_indices = [
+        index for index, line in enumerate(lines) if line.strip() == ""
+    ]
     blank_line_indices = [0] + blank_line_indices + [len(lines)]
 
     devs = {}
@@ -112,40 +118,53 @@ def read_csv_devs(filepath, output_dir):
 
         if start_index < end_index - data_offset:
             dev_lines = lines[start_index:end_index]
-            header_lines = StringIO(''.join(dev_lines[header_offset:header_offset + 2]))
-            data_str = StringIO(''.join(dev_lines[data_offset:]))
+            header_lines = StringIO(
+                "".join(dev_lines[header_offset : header_offset + 2])
+            )
+            data_str = StringIO("".join(dev_lines[data_offset:]))
 
             try:
                 headers_df = pd.read_csv(header_lines, header=None)
                 merged_header = merge_headers(headers_df.iloc[0], headers_df.iloc[1])
                 df = pd.read_csv(data_str, names=merged_header)
-                df.insert(0, 'Timestamp', file_datetime)  # Insert the timestamp column at position 0
-                devs[f'dev_{dev_count}'] = df
-                output_filename = os.path.join(output_dir, f"{os.path.splitext(os.path.basename(filepath))[0]}_dev{dev_count + 1}.csv")
+                df.insert(
+                    0, "Timestamp", file_datetime
+                )  # Insert the timestamp column at position 0
+                devs[f"dev_{dev_count}"] = df
+                output_filename = os.path.join(
+                    output_dir,
+                    f"{os.path.splitext(os.path.basename(filepath))[0]}_dev{dev_count + 1}.csv",
+                )
                 df.to_csv(output_filename, index=False)
                 print(f"Saved: {output_filename}")
             except pd.errors.ParserError as e:
                 print(f"Error parsing dev {dev_count}: {e}")
-                devs[f'dev_{dev_count}_error'] = ''.join(dev_lines[:100])
+                devs[f"dev_{dev_count}_error"] = "".join(dev_lines[:100])
 
             first_dev = False
             dev_count += 1
 
     return devs
 
+
 def select_directory():
     """Prompt the user to select a source and output directory."""
     root = Tk()
     root.withdraw()  # Hide the root window
-    root.tk.call('wm', 'attributes', '.', '-topmost', '1')  # Keep window on top
+    root.tk.call("wm", "attributes", ".", "-topmost", "1")  # Keep window on top
 
     # Prompt the user to select the source directory
-    src_directory = filedialog.askdirectory(title="Select the Source Directory with CSV Files")
+    src_directory = filedialog.askdirectory(
+        title="Select the Source Directory with CSV Files"
+    )
 
     # Prompt the user to select the output directory
-    output_directory = filedialog.askdirectory(title="Select the Output Directory to Save Processed Files")
+    output_directory = filedialog.askdirectory(
+        title="Select the Output Directory to Save Processed Files"
+    )
 
     return src_directory, output_directory
+
 
 def process_csv_files_first_level(src_directory, output_directory):
     """Process all CSV files in the first level of the selected directory."""
@@ -154,7 +173,11 @@ def process_csv_files_first_level(src_directory, output_directory):
         return
 
     # Find all CSV files in the first level of the source directory
-    csv_files = [os.path.join(src_directory, file) for file in os.listdir(src_directory) if file.endswith(".csv")]
+    csv_files = [
+        os.path.join(src_directory, file)
+        for file in os.listdir(src_directory)
+        if file.endswith(".csv")
+    ]
 
     if not csv_files:
         print("No CSV files found in the selected directory.")
@@ -162,7 +185,9 @@ def process_csv_files_first_level(src_directory, output_directory):
 
     # Create the main output directory with a timestamp
     datetime_suffix = datetime.now().strftime("%Y%m%d_%H%M%S")
-    main_output_dir = os.path.join(output_directory, f"vicon_csv_split_{datetime_suffix}")
+    main_output_dir = os.path.join(
+        output_directory, f"vicon_csv_split_{datetime_suffix}"
+    )
     os.makedirs(main_output_dir, exist_ok=True)
 
     for csv_file in csv_files:
@@ -180,7 +205,8 @@ def process_csv_files_first_level(src_directory, output_directory):
             else:
                 print(f"{key} contains an error or non-data text: {df}")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     # Print the directory and name of the script being executed
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
@@ -190,4 +216,3 @@ if __name__ == '__main__':
 
     # Process CSV files only in the first level of the source directory
     process_csv_files_first_level(src_directory, output_directory)
-
