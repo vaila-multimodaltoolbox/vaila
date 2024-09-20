@@ -222,7 +222,7 @@ python vaila.py
 
 #### From the Terminal If you prefer to run _vailá_ from the terminal or if you encounter issues with the applications menu, you can use the provided launch scripts.
 
-##### Linux
+##### Linux and macOS
 
 - **Make the script executable** (if you haven't already):
 
@@ -236,26 +236,12 @@ sudo chmod +x ~/vaila/linux_launch_vaila.sh
 ~/vaila/linux_launch_vaila.sh 
 ```
 
-##### macOS 
-
-- **Make the script executable** (if you haven't already):
-
-```zsh
-sudo chmod +x ~/vaila/mac_launch_vaila.sh 
-```
-
-- **Run the script**:
-
-```zsh
-~/vaila/mac_launch_vaila.sh 
-```
-
 #### Notes for Linux and macOS 
 
 - **Ensure Conda is in the Correct Location**: 
   - The launch scripts assume that Conda is installed in `~/anaconda3`. 
   - If Conda is installed elsewhere, update the `source` command in the scripts to point to the correct location.
- 
+
 - **Verify Paths**: 
   - Make sure that the path to `vaila.py` in the launch scripts matches where you have installed the program. 
   - By default, the scripts assume that `vaila.py` is located in `~/vaila`. 
@@ -269,14 +255,14 @@ sudo chmod +x ~/vaila/mac_launch_vaila.sh
 
 - **Using the_vailá _Profile**: 
   - Open **Windows Terminal**. - Select the `vailá` profile that was added during installation. 
-  - This profile automatically activates the Conda environment and launches _vailá_. 
+  - This profile automatically activates the Conda environment and launches *vailá*. 
 
 #### From Desktop Shortcut 
 
 - If a desktop shortcut was created during installation: 
 - **Double-click** the `vailá` icon on your desktop to launch the application.
 
-#### Manually Running from Command Prompt or PowerShell If you prefer to run _vailá_ manually or if the profile/shortcut is not available: 
+#### Manually Running from Command Prompt or PowerShell If you prefer to run *vailá* manually or if the profile/shortcut is not available: 
 
 - **Activate the Conda Environment**: ```powershell conda activate vaila ```
 - **Navigate to the Program Directory**: ```powershell cd C:\vaila_programs\vaila ```
@@ -556,11 +542,11 @@ vaila
   College of Computing, Engineering and Construction, University of North Florida, USA
 
 - **Aline Bononi** [ORCID: 0000-0001-8169-0864](https://orcid.org/0000-0001-8169-0864)
-  Pharmacist at the Municipality of Ribeirão Preto - Brazil
+  Pharmacist at the Municipality of Ribeirão ~/vaila/linux_launch_vaila.sh Preto - Brazil
 
 - **Guilherme Manna Cesar** [ORCID: 0000-0002-5596-9439](https://orcid.org/0000-0002-5596-9439)  
   Laboratory of Applied Biomechanics and Engineering, Brooks College of Health, University of North Florida, USA  
-  Department of Physical Therapy, Brooks College of Health, University of North Florida, USA  
+  Department of Physical Therapy, Broo~/vaila/linux_launch_vaila.sh ks College of Health, University of North Florida, USA  
 
 ## Contribution
 
