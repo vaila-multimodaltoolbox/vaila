@@ -155,9 +155,15 @@ def calc_cop(data, fp_dimensions_xy=None, board_height_m: float = 0.0):
     # Case 2 - Board exists over the force plate (board_height_m is provided)
     else:
         # Calculate CoP using Fx, Fy, Fz and board_height_m
-        cop_x = ((-my[fz_nonzero] + fx[fz_nonzero] * board_height_m) / fz[fz_nonzero]) + x0
-        cop_y = ((mx[fz_nonzero] - fy[fz_nonzero] * board_height_m) / fz[fz_nonzero]) + y0
-        cop_z = np.full(data.shape[0], board_height_m)  # CoP Z is the height of the board
+        cop_x = (
+            (-my[fz_nonzero] + fx[fz_nonzero] * board_height_m) / fz[fz_nonzero]
+        ) + x0
+        cop_y = (
+            (mx[fz_nonzero] - fy[fz_nonzero] * board_height_m) / fz[fz_nonzero]
+        ) + y0
+        cop_z = np.full(
+            data.shape[0], board_height_m
+        )  # CoP Z is the height of the board
 
     # Combine cop_x, cop_y, and cop_z into a single array
     cop_xyz = np.column_stack((cop_x, cop_y, cop_z))
