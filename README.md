@@ -294,16 +294,16 @@ sudo chmod +x ~/vaila/linux_launch_vaila.sh
 
 #### Making the Scripts Executable (Linux/macOS) If you haven't already made the launch scripts executable, you can do so using the following commands:
 
-For Linux
+## For Linux
 
 ```bash
 sudo chmod +x ~/vaila/linux_launch_vaila.sh
 ```
 
-# For macOS 
+## For macOS 
 
 ```bash
-chmod +x ~/vaila/mac_launch_vaila.sh 
+sudo chmod +x ~/vaila/mac_launch_vaila.sh 
 ```
 
 #### Running the Scripts 
@@ -316,7 +316,8 @@ chmod +x ~/vaila/mac_launch_vaila.sh
 
 - **macOS**:
 
-```zsh ~/vaila/mac_launch_vaila.sh 
+```zsh
+~/vaila/mac_launch_vaila.sh 
 ``` 
 
 - **Windows**: - Double-click the `win_launch_vaila.bat` file or run it from the Command Prompt: 
@@ -338,7 +339,7 @@ C:\vaila_programs\vaila\win_launch_vaila.ps1
 
 - Be cautious when changing execution policies. 
 
-### Troubleshooting - **Conda Not Found**: 
+#### Troubleshooting - **Conda Not Found**: 
 
 - If you receive an error indicating that `conda` is not found, ensure that Conda is installed and added to your system's `PATH`. 
 - On Linux/macOS, you may need to initialize Conda in your shell. 
@@ -542,7 +543,7 @@ vaila
   College of Computing, Engineering and Construction, University of North Florida, USA
 
 - **Aline Bononi** [ORCID: 0000-0001-8169-0864](https://orcid.org/0000-0001-8169-0864)
-  Pharmacist at the Municipality of Ribeirão ~/vaila/linux_launch_vaila.sh Preto - Brazil
+  Municipal Pharmacy of Ribeirão Preto - Brazil
 
 - **Guilherme Manna Cesar** [ORCID: 0000-0002-5596-9439](https://orcid.org/0000-0002-5596-9439)  
   Laboratory of Applied Biomechanics and Engineering, Brooks College of Health, University of North Florida, USA  
