@@ -1,4 +1,4 @@
-# vailá - Multimodal Toolbox
+# _vailá_ - Multimodal Toolbox
 
 <p align="center">
   <img src="docs/images/vaila.png" alt="vailá Logo" width="300"/>
@@ -21,7 +21,7 @@
   </table>
 </div>
 
-## Development of vailá: Versatile Anarcho Integrated Liberation Ánalysis in Multimodal Toolbox
+## Development of _vailá_: Versatile Anarcho Integrated Liberation Ánalysis in Multimodal Toolbox
 
 ## Introduction
 
@@ -52,7 +52,7 @@ By integrating these diverse data sources, _vailá_ allows for comprehensive and
 
 This multimodal toolbox integrates data from various motion capture systems to facilitate advanced biomechanical analysis by combining multiple data sources. The primary objective is to improve understanding and evaluation of movement patterns across different contexts.
 
-## vailá Manifest
+## *vailá* Manifest
 
 ### English Version
 
@@ -154,7 +154,7 @@ sudo chmod +x install_vaila_mac.sh
 
 2. **Allow Script Execution**:
 
-   - If script execution is blocked, change the execution policy:
+- If script execution is blocked, change the execution policy:
 
 ```powershell
 Set-ExecutionPolicy RemoteSigned
@@ -162,20 +162,21 @@ Set-ExecutionPolicy RemoteSigned
 
 - Run this command in PowerShell as Administrator before running the installation script.
 
-1. **Follow the Instructions Displayed by the Script**:
+3. **Follow the Instructions Displayed by the Script**:
 
-    - The script will:
-      - Set up the Conda environment using vaila_win.yaml.
-      - Install ffmpeg using winget or chocolatey if necessary.
-      - Copy program files to your home directory (C:\Users\YourUsername\vaila).
-      - Configure the vaila profile in Windows Terminal.
-      - Create a desktop shortcut if Windows Terminal is not installed.
+- The script will:
+  - Set up the Conda environment using vaila_win.yaml.
+  - Install ffmpeg using winget or chocolatey if necessary.
+  - Copy program files to your home directory (C:\Users\YourUsername\vaila).
+  - Configure the vaila profile in Windows Terminal.
+  - Create a desktop shortcut if Windows Terminal is not installed.
 
-2. **Notes**:
-      - Ensure that Conda is added to your PATH and accessible from the command line.
-      - The script must be run with administrative privileges.
+4. **Notes**:
 
-3. **On Windows, after running install, a button is added to the Windows Terminal. If the automatic insertion fails, manually add the following profile to your Windows Terminal `settings.json` file**:
+- Ensure that Conda is added to your PATH and accessible from the command line.
+- The script must be run with administrative privileges.
+
+5. **On Windows, after running install, a button is added to the Windows Terminal. If the automatic insertion fails, manually add the following profile to your Windows Terminal `settings.json` file**:
 
 ```json
         {
@@ -191,9 +192,10 @@ Set-ExecutionPolicy RemoteSigned
 
 ## Running the Application
 
-## Running the Application After installation, you can launch _vailá_ from your applications menu or directly from the terminal, depending on your operating system.
+### Running the Application After installation, you can launch _vailá_ from your applications menu or directly from the terminal, depending on your operating system.
 
-- Linux and macOS: **From the Terminal**
+- Linux and macOS: **From the Terminal bash or zsh**
+
 1. Navigate to the `vaila` directory: ```cd ~/vaila ``` and run command:
 
 ```bash
@@ -201,7 +203,8 @@ conda activate vaila
 python3 vaila.py
 ```
 
-- Windows: **From the Windows Terminal**
+- Windows: **From the Windows Terminal (Anaconda in path) or use Anaconda PowerShell**
+
 2. Open Anaconda Prompt or Anaconda Powershell Prompt (Anaconda Powershell is recommended) and run command:
 
 ```cmd
@@ -209,66 +212,92 @@ conda activate vaila
 python vaila.py
 ```
 
-## If preferred, you can also run _vailá_ from the launch scripts.
+### If preferred, you can also run _vailá_ from the launch scripts.
 
 ### For Linux and macOS 
 
-#### From the Applications Menu 
-
-- **Linux and macOS**:
+- From the Applications Menu:
+  
   - Look for `vaila` in your applications menu and launch it by clicking on the icon. 
 
 #### From the Terminal If you prefer to run _vailá_ from the terminal or if you encounter issues with the applications menu, you can use the provided launch scripts.
 
 ##### Linux
 
-- **Make the script executable** (if you haven't already): ```bash chmod +x ~/vaila/linux_launch_vaila.sh ```
-- **Run the script**: ```bash ~/vaila/linux_launch_vaila.sh ``` 
+- **Make the script executable** (if you haven't already):
+
+```bash
+sudo chmod +x ~/vaila/linux_launch_vaila.sh
+```
+
+- **Run the script**:
+  
+```bash
+~/vaila/linux_launch_vaila.sh 
+```
 
 ##### macOS 
-- **Make the script executable** (if you haven't already): ```zsh chmod +x ~/vaila/mac_launch_vaila.sh ``` 
-- **Run the script**: ```zsh ~/vaila/mac_launch_vaila.sh ``` 
+
+- **Make the script executable** (if you haven't already):
+
+```zsh
+sudo chmod +x ~/vaila/mac_launch_vaila.sh 
+```
+
+- **Run the script**:
+
+```zsh
+~/vaila/mac_launch_vaila.sh 
+```
 
 #### Notes for Linux and macOS 
+
 - **Ensure Conda is in the Correct Location**: 
   - The launch scripts assume that Conda is installed in `~/anaconda3`. 
-  - If Conda is installed elsewhere, update the `source` command in the scripts to point to the correct location. 
+  - If Conda is installed elsewhere, update the `source` command in the scripts to point to the correct location.
+ 
 - **Verify Paths**: 
   - Make sure that the path to `vaila.py` in the launch scripts matches where you have installed the program. 
   - By default, the scripts assume that `vaila.py` is located in `~/vaila`. 
+
 - **Permissions**: 
   - Ensure you have execute permissions for the launch scripts and read permissions for the program files. 
 
 ### For Windows 
 
 #### From Windows Terminal 
-- **Using the vailá Profile**: 
+
+- **Using the_vailá _Profile**: 
   - Open **Windows Terminal**. - Select the `vailá` profile that was added during installation. 
   - This profile automatically activates the Conda environment and launches _vailá_. 
 
 #### From Desktop Shortcut 
+
 - If a desktop shortcut was created during installation: 
 - **Double-click** the `vailá` icon on your desktop to launch the application.
 
 #### Manually Running from Command Prompt or PowerShell If you prefer to run _vailá_ manually or if the profile/shortcut is not available: 
+
 - **Activate the Conda Environment**: ```powershell conda activate vaila ```
 - **Navigate to the Program Directory**: ```powershell cd C:\vaila_programs\vaila ```
 - **Run the Application**: ```powershell python vaila.py ```
 
-
 #### Notes for Windows 
+
 - **Ensure Conda is in the Correct Location**:
   - The instructions assume that Conda is installed and added to your system's `PATH`.
   - If Conda is installed in a non-standard location, you may need to provide the full path to `conda.exe`.
+
 - **Verify Paths**: 
   - Ensure that `vaila.py` is located in `C:\vaila_programs\vaila`.
   - If installed elsewhere, adjust the commands accordingly.
+
 - **Permissions**: 
   - Make sure you have the necessary permissions to execute scripts and access the program files. 
   - Running the application does not require administrative privileges. ### Additional Notes
 
-
 #### For All Platforms - **Conda Environment Activation**: 
+
 - It's important to activate the `vaila` Conda environment before running the application to ensure all dependencies are available. 
 
 - **Script Execution Permissions**: 
@@ -292,21 +321,54 @@ chmod +x ~/vaila/mac_launch_vaila.sh
 ```
 
 #### Running the Scripts 
-- **Linux**: ```bash ~/vaila/linux_launch_vaila.sh ``` 
-- **macOS**: ```zsh ~/vaila/mac_launch_vaila.sh ``` - **Windows**: - Double-click the `win_launch_vaila.bat` file or run it from the Command Prompt: ```cmd C:\vaila_programs\vaila\win_launch_vaila.bat ``` 
-  - Alternatively, if you have a PowerShell launch script (`win_launch_vaila.ps1`), you can run it from PowerShell: ```powershell C:\vaila_programs\vaila\win_launch_vaila.ps1 ``` 
-- **Note**: You may need to adjust the execution policy to allow the script to run: ```powershell Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser ``` 
-  - Be cautious when changing execution policies. 
+
+- **Linux**:
+
+```bash
+~/vaila/linux_launch_vaila.sh 
+``` 
+
+- **macOS**:
+
+```zsh ~/vaila/mac_launch_vaila.sh 
+``` 
+
+- **Windows**: - Double-click the `win_launch_vaila.bat` file or run it from the Command Prompt: 
+
+```cmd
+C:\vaila_programs\vaila\win_launch_vaila.bat 
+``` 
+
+- Alternatively, if you have a PowerShell launch script (`win_launch_vaila.ps1`), you can run it from PowerShell:
+  
+```powershell
+C:\vaila_programs\vaila\win_launch_vaila.ps1 
+``` 
+
+- **Note**: You may need to adjust the execution policy to allow the script to run: 
+ 
+```powershell Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser 
+``` 
+
+- Be cautious when changing execution policies. 
 
 ### Troubleshooting - **Conda Not Found**: 
+
 - If you receive an error indicating that `conda` is not found, ensure that Conda is installed and added to your system's `PATH`. 
 - On Linux/macOS, you may need to initialize Conda in your shell. 
+
 - **Permission Denied**: 
   - If you encounter permission errors when running the scripts, check that you have the necessary execute permissions. 
   - Use `chmod +x script_name.sh` on Linux/macOS to make a script executable. 
+
 - **Module Not Found Errors**: 
   - If the application reports missing modules, ensure that the `vaila` Conda environment is activated and that all dependencies are installed. 
-  - You can try updating the environment: ```bash conda activate vaila conda env update -f path_to_vaila_environment_yaml_file.yaml --prune ``` 
+  - You can try updating the environment: 
+
+```bash
+conda activate vaila conda env update -f path_to_vaila_environment_yaml_file.yaml --prune 
+``` 
+
 - **Application Does Not Start**: 
   - Verify that the paths in the launch scripts are correct. 
   - Check for error messages in the terminal that may indicate what the issue is.
@@ -392,7 +454,6 @@ sudo chmod +x uninstall_vaila_mac.sh
         "startingDirectory": "C:\\vaila_programs\\vaila"
     }
 ```
-
 
 ## Project Structure
 
@@ -492,7 +553,10 @@ vaila
 
 - **Juan Aceros** [ORCID: 0000-0001-6381-7032](https://orcid.org/0000-0001-6381-7032)  
   Laboratory of Applied Biomechanics and Engineering, Brooks College of Health, University of North Florida, USA  
-  College of Computing, Engineering and Construction, University of North Florida, USA  
+  College of Computing, Engineering and Construction, University of North Florida, USA
+
+- **Aline Bononi** [ORCID: 0000-0001-8169-0864](https://orcid.org/0000-0001-8169-0864)
+  Pharmacist at the Municipality of Ribeirão Preto - Brazil
 
 - **Guilherme Manna Cesar** [ORCID: 0000-0002-5596-9439](https://orcid.org/0000-0002-5596-9439)  
   Laboratory of Applied Biomechanics and Engineering, Brooks College of Health, University of North Florida, USA  
@@ -507,6 +571,3 @@ Don't hesitate to learn, explore, and experiment. Be bold, and don't be afraid t
 ## License
 
 This project is primarily licensed under the GNU Lesser General Public License v3.0. Please cite our work if you use the code or data. Let's collaborate and push the boundaries together!
-
-
-
