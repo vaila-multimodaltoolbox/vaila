@@ -128,7 +128,7 @@ def copy_file():
 
     # Prompt the user to enter the file extension to search for
     file_extension = simpledialog.askstring(
-        "File Extension", "Enter the file extension to export (e.g., .csv, .mp4):"
+        "File Extension", "Enter the file extension to copy (e.g., .csv, .mp4):"
     )
     if not file_extension:
         messagebox.showerror("Error", "No file extension provided.")
@@ -190,7 +190,7 @@ def process_copy(src_directory, file_extension, patterns):
         # Show a success message after the operation is complete
         messagebox.showinfo(
             "Success",
-            f"Files matching the specified patterns and extension {file_extension} have been exported successfully.",
+            f"Files matching the specified patterns and extension {file_extension} have been copy successfully.",
         )
     except Exception as e:
         # Show an error message if something goes wrong
