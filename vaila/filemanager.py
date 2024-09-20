@@ -4,67 +4,94 @@ File Manager - Comprehensive File and Directory Management Tool
 ================================================================================
 Author: Prof. Dr. Paulo R. P. Santiago
 Date: 2024-08-29
-Version: 1.2
+Version: 1.3
 
-Description:
-------------
-This Python script provides a comprehensive tool for managing files and directories. 
-It supports importing, converting, exporting, copying, moving, removing, and finding 
-files based on user-defined patterns. The script includes a user-friendly GUI, built 
-with Tkinter, that allows users to perform operations on files and directories easily.
+verview:
 
+This Python script is designed to manage files and directories through a graphical user interface (GUI) using Tkinter. It supports various operations such as copying, moving, removing, and converting files, along with advanced features like pattern matching and batch processing. The tool is particularly useful for organizing large datasets and automating repetitive file operations.
 Main Features:
---------------
-1. **File Import**: Import specific file types from selected directories into a predefined 
-   structure. Supported file types include `.csv`, `.mat`, `.tsv`, `.html`, `.xml`, `.xlsx`, etc.
-2. **File Conversion**: Convert various file types (e.g., `.c3d`, `.yaml`, `.xml`, `.html`, `.h5`) 
-   into CSV format.
-3. **File Export**: Export files to various formats such as CSV, FBX, and TRC.
-4. **File Copy/Move**: Copy or move files based on specified patterns and file extensions.
-5. **File Removal**: Remove files with specific extensions or directory names from selected 
-   directories, with safeguards to prevent accidental deletion of critical files.
-6. **File Search**: Find files or directories based on user-defined patterns and count files 
-   with a specified extension.
-7. **Batch Processing**: Includes batch processing of files, such as CSV file splitting by 
-   devices using a VICON Nexus CSV processing module.
+
+    File Import:
+        Imports specific file types from selected directories into a predefined structure.
+        Supports multiple file types like .csv, .mat, .tsv, .html, .xml, .xlsx, etc.
+        Helps standardize file organization by importing various data formats.
+
+    File Conversion:
+        Converts files from diverse formats (e.g., .c3d, .yaml, .xml, .html, .h5) into the CSV format.
+        Useful for preprocessing data from different sources for uniform analysis.
+
+    File Export:
+        Exports files to formats such as CSV, FBX, and TRC.
+        Enables the user to prepare data for specific tools or further analysis.
+
+    File Copy/Move:
+        Allows copying or moving files based on file extensions and pattern matching.
+        Streamlines file management across directories, minimizing manual effort.
+
+    File Removal:
+        Removes files matching specific extensions or directories.
+        Safeguards critical system files from accidental deletion by recognizing forbidden patterns.
+
+    File Search:
+        Searches for files or directories based on user-defined patterns.
+        Tracks and counts files matching specific extensions, ensuring efficient file retrieval.
+
+    Batch Processing:
+        Automates batch processing of files, such as splitting CSV files by device using a VICON Nexus module.
+        Significantly reduces manual intervention when processing multiple files.
+
+Functionality of Key Methods:
+
+    copy_file():
+    Prompts the user to select a source directory and file extension, then copies files that match the extension and user-defined patterns into a new directory (vaila_copy). It creates unique subdirectories based on patterns and timestamps to organize the copied files.
+
+    process_copy():
+    Handles the actual file copying process, walking through the source directory to find files matching both the extension and the patterns. Files are copied into subdirectories created in the destination directory.
+
+    export_file():
+    Facilitates the manual selection of a source file and destination directory. The selected file is copied to the destination, ensuring a simple export process for single files.
+
+    move_file():
+    Similar to copy_file(), but it moves files matching specific patterns from a source to a destination directory. The files are organized into subdirectories within vaila_move to keep track of moved files.
+
+    process_move():
+    Manages the movement of files based on patterns, ensuring files are moved to an organized structure in the destination directory. The function is useful for relocating large batches of files according to predefined criteria.
+
+    remove_file():
+    Deletes files or directories based on extension, directory name, or filename pattern. The function incorporates safeguards to avoid the accidental removal of critical system files by confirming patterns and offering multiple user confirmations.
+
+    import_file():
+    Provides a GUI for users to select the type of data import (e.g., .tsv, .mat, .csv). This method integrates various data import functions, allowing for seamless batch processing and data import from different biomechanical data formats.
+
+    rename_files():
+    Allows users to rename files in bulk by replacing specific text patterns in filenames. This method is especially useful when standardizing filenames across large datasets.
+
+    tree_file():
+    Generates a tree structure of files in the source directory, matching a specific file extension. This is helpful for generating reports or summaries of directory contents.
+
+    find_file():
+    Searches the source directory for files matching a pattern and extension. Results are saved to a text file, which includes the count and total size of matched files. This method is useful for quickly locating specific files in large datasets.
+
+    transfer_file():
+    Handles file transfer between a local machine and a remote server using SSH. Users can either upload or download files, making this method useful for syncing files across remote environments.
 
 Usage Notes:
-------------
-- The GUI enables the selection of files and directories for each operation.
-- Directories like 'vaila_export', 'vaila_copy', 'vaila_move', or 'vaila_import' are automatically 
-  created within the destination directory for respective operations.
-- The script ensures essential directories (e.g., 'data', 'import', 'export', 'results') are created 
-  before performing operations.
 
-Dependencies:
--------------
-- Python 3.x
-- Required Libraries: pandas, ezc3d, yaml, toml, lxml, BeautifulSoup4, pickle5, hdf5plugin, paramiko, scp
+    The GUI simplifies file selection and management. Files can be easily imported, converted, and exported, reducing the need for command-line operations.
+    Several directories (e.g., vaila_export, vaila_copy, vaila_move, vaila_import) are created automatically to ensure organized file management.
 
-How to Run:
------------
-- Run the script in a Python environment managed by Conda or with the required packages installed.
-- Follow the on-screen prompts to perform the desired file operations.
+Changelog for Version 1.2:
 
-Changelog:
-----------
-Version 1.2 - 2024-08-29:
-    - Added batch processing for VICON Nexus CSV files.
-    - Expanded import options to include `.html`, `.xml`, and `.xlsx`.
-    - Improved file copy and move functionality with pattern matching.
-    - Updated file removal functionality with safeguards to prevent critical file deletion.
+    Batch processing for VICON Nexus CSV files added.
+    Import options expanded to include .html, .xml, and .xlsx formats.
+    Improved file copy/move functionality using pattern matching.
+    File removal functionality updated with safeguards against critical file deletion.
 
 License:
---------
-This script is licensed under the MIT License.
 
-Disclaimer:
------------
-This script is provided "as is" without warranty of any kind. The author is not responsible for any 
-damage or loss resulting from the use of this script.
+This script is distributed under the MIT License
 ================================================================================
 """
-
 
 import shutil
 import os
@@ -400,11 +427,15 @@ def import_file():
     """
 
     def data_import_tsv_qualysis():
-        messagebox.showinfo("Data Import", "You selected to import a .tsv file from Qualysis.")
+        messagebox.showinfo(
+            "Data Import", "You selected to import a .tsv file from Qualysis."
+        )
         # Add your .tsv processing logic here
 
     def data_import_mat_matlab():
-        messagebox.showinfo("Data Import", "You selected to import a .mat file from MATLAB.")
+        messagebox.showinfo(
+            "Data Import", "You selected to import a .mat file from MATLAB."
+        )
         # Add your .mat processing logic here
 
     def data_import_csv_vicon_nexus():
@@ -414,28 +445,39 @@ def import_file():
         try:
             # Import the batch processing module (adjust the path as necessary)
             from vaila import load_vicon_csv_split_batch
-    
+
             # Confirm if the 'process_csv_files_first_level' exists in the module
-            if not hasattr(load_vicon_csv_split_batch, 'process_csv_files_first_level'):
-                raise AttributeError("The module 'load_vicon_csv_split_batch' does not have 'process_csv_files_first_level' function")
-    
+            if not hasattr(load_vicon_csv_split_batch, "process_csv_files_first_level"):
+                raise AttributeError(
+                    "The module 'load_vicon_csv_split_batch' does not have 'process_csv_files_first_level' function"
+                )
+
             # Ask the user to select the source and output directories
-            src_directory, output_directory = load_vicon_csv_split_batch.select_directory()
-    
+            src_directory, output_directory = (
+                load_vicon_csv_split_batch.select_directory()
+            )
+
             # Run the batch processing function from load_vicon_csv_split_batch.py
-            load_vicon_csv_split_batch.process_csv_files_first_level(src_directory, output_directory)
-    
+            load_vicon_csv_split_batch.process_csv_files_first_level(
+                src_directory, output_directory
+            )
+
             # Show success message once processing is completed
-            messagebox.showinfo("Success", "Batch processing of VICON Nexus CSV files completed successfully.")
-    
+            messagebox.showinfo(
+                "Success",
+                "Batch processing of VICON Nexus CSV files completed successfully.",
+            )
+
         except AttributeError as e:
             # Handle the case where the function is missing
             messagebox.showerror("Error", f"An error occurred: {e}")
-    
+
         except Exception as e:
             # General error handling
-            messagebox.showerror("Error", f"An error occurred during batch processing: {e}")
-       
+            messagebox.showerror(
+                "Error", f"An error occurred during batch processing: {e}"
+            )
+
     def data_import_html():
         messagebox.showinfo("Data Import", "You selected to import a .html file.")
         # Add your .html processing logic here
@@ -473,9 +515,9 @@ def import_file():
         ("Data Import: .tsv QUALYSIS", data_import_tsv_qualysis),
         ("Data Import: .mat MATLAB", data_import_mat_matlab),
         ("Data Import: .csv VICON NEXUS", data_import_csv_vicon_nexus),
-        ("Data Import: HTML", data_import_html),          # New HTML button
-        ("Data Import: XML", data_import_xml),            # New XML button
-        ("Data Import: XLSX", data_import_xlsx),          # New XLSX button
+        ("Data Import: HTML", data_import_html),  # New HTML button
+        ("Data Import: XML", data_import_xml),  # New XML button
+        ("Data Import: XLSX", data_import_xlsx),  # New XLSX button
         ("Data Import: BVH", data_import_bvh),
         ("Data Export: CSV", data_export_csv),
         ("Data Export: FBX", data_export_fbx),
@@ -489,6 +531,7 @@ def import_file():
 
     # Start the GUI event loop
     root.mainloop()
+
 
 def rename_files():
     # Print the directory and name of the script being executed
@@ -714,8 +757,8 @@ def transfer_file():
     # Initialize Tkinter root
     root = Tk()
     root.withdraw()  # Hide the root window
-    root.tk.call('wm', 'attributes', '.', '-topmost', '1')  # Keep window on top
-    
+    root.tk.call("wm", "attributes", ".", "-topmost", "1")  # Keep window on top
+
     # Prompt the user to select Upload or Download
     transfer_type = simpledialog.askstring(
         "Transfer Type", "Enter 'upload' to send files or 'download' to receive files:"
