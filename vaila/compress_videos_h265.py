@@ -39,7 +39,7 @@ import sys
 def compress_video_h265(input_file, output_file, preset="medium", crf=23):
     """
     Compress a video file to H.265/HEVC format using FFmpeg.
-    
+
     Parameters:
         input_file (str): Path to the input video file.
         output_file (str): Path to the output compressed video file.
@@ -72,7 +72,7 @@ def compress_video_h265(input_file, output_file, preset="medium", crf=23):
 def run_compress_videos_h265(video_directory, preset="medium", crf=23):
     """
     Compress all video files in a specified directory to H.265/HEVC format.
-    
+
     Parameters:
         video_directory (str): Directory containing videos to compress.
         preset (str): Compression preset for FFmpeg (default is "medium").
@@ -128,4 +128,3 @@ def compress_videos_h265_gui():
 
 if __name__ == "__main__":
     compress_videos_h265_gui()
-
