@@ -309,7 +309,7 @@ def convert_c3d_to_csv():
     output_directory = filedialog.askdirectory(title="Select Output Directory")
     print(f"Debug: output_directory = {output_directory}")
 
-    root.quit()  # Ensure Tkinter resources are released properly
+    root.destroy()  # Use root.destroy() to properly close the Tkinter resources
 
     if input_directory and output_directory:
         c3d_files = sorted(
@@ -371,3 +371,4 @@ def convert_c3d_to_csv():
 
 if __name__ == "__main__":
     convert_c3d_to_csv()
+
