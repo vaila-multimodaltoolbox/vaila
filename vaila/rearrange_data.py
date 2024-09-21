@@ -86,6 +86,10 @@ CONVERSIONS = {
 
 # Function to detect scientific notation and maximum precision in the data
 def detect_precision_and_notation(file_path):
+    # Print the directory and name of the script being executed
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+
     df = pd.read_csv(file_path, dtype=str)
     max_decimal_places = 0
     scientific_notation = False
@@ -101,12 +105,20 @@ def detect_precision_and_notation(file_path):
 
 # Function to save the DataFrame with the detected precision
 def save_dataframe(df, file_path, columns, max_decimal_places):
+    # Print the directory and name of the script being executed
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+
     float_format = f"%.{max_decimal_places}f"
     df.to_csv(file_path, index=False, columns=columns, float_format=float_format)
 
 
 # Function to get headers from the CSV file
 def get_headers(file_path):
+    # Print the directory and name of the script being executed
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+
     try:
         df = pd.read_csv(file_path, nrows=0)
         return df.columns.tolist()
@@ -117,6 +129,10 @@ def get_headers(file_path):
 
 # Function to reshape data
 def reshapedata(file_path, new_order, save_directory, suffix, max_decimal_places):
+    # Print the directory and name of the script being executed
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+
     try:
         print(f"Starting reshapedata for {file_path}")
         headers = get_headers(file_path)
@@ -154,6 +170,10 @@ def reshapedata(file_path, new_order, save_directory, suffix, max_decimal_places
 
 # Function to convert MediaPipe data to the format compatible with getpixelvideo.py
 def convert_mediapipe_to_pixel_format(file_path, save_directory):
+    # Print the directory and name of the script being executed
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+
     df = pd.read_csv(file_path)
 
     # Adjust the "frame" column to start from 0
@@ -188,6 +208,10 @@ def convert_mediapipe_to_pixel_format(file_path, save_directory):
 
 # Function to batch convert all MediaPipe CSV files in a directory
 def batch_convert_mediapipe(directory_path):
+    # Print the directory and name of the script being executed
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+
     if not directory_path:
         print("No directory selected.")
         return
