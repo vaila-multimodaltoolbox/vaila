@@ -89,7 +89,7 @@ Changelog for Version 1.2:
 
 License:
 
-This script is distributed under the MIT License
+This script is distributed under the GPL3 License
 ================================================================================
 """
 
