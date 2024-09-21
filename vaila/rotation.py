@@ -1,8 +1,68 @@
 """
-rotation.py
-Version: 2024-07-19 18:00:00
+================================================================================
+Rotation Tools - 3D Rotation and Transformation Toolkit
+================================================================================
+Author: Prof. Dr. Paulo R. P. Santiago
+Date: 2024-07-19
+Version: 1.0
+
+Overview:
+
+This Python script provides a comprehensive set of tools for performing 3D rotation and transformation operations using numpy and scipy. It includes methods for creating orthonormal bases from sets of points, calculating rotation matrices, converting rotations to Euler angles and quaternions, and rotating datasets.
+
+Main Features:
+
+    Orthonormal Base Creation:
+        - `createortbase`: Generates an orthonormal base from three 3D points, supporting different configurations ('A', 'B', 'C', 'D').
+        - `createortbase_4points`: Constructs an orthonormal base using four 3D points, tailored for both trunk and pelvis configurations.
+
+    Rotation Matrix Calculation:
+        - `calcmatrot`: Computes the rotation matrix between two bases or from one base to the canonical basis.
+
+    Euler Angles and Quaternions:
+        - `rotmat2euler`: Converts a rotation matrix to Euler angles in degrees.
+        - `rotmat2quat`: Converts a rotation matrix to quaternions.
+
+    Data Rotation:
+        - `rotdata`: Rotates a set of data points using specified rotation angles around the x, y, and z axes, with customizable order of rotations (e.g., 'xyz', 'zyx').
+
+Key Functions and Their Functionality:
+
+    createortbase():
+        Creates an orthonormal base from three points in space (p1, p2, p3), following different configurations ('A', 'B', 'C', 'D') to accommodate various biomechanical structures.
+
+    createortbase_4points():
+        Creates an orthonormal base using four points. Primarily designed for calculating the trunk and pelvis bases using 3D motion capture data from anatomical landmarks.
+
+    calcmatrot():
+        Computes the rotation matrix between two orthonormal bases, defaulting to the canonical basis if only one is provided.
+
+    rotmat2euler():
+        Converts a 3x3 rotation matrix into Euler angles, expressed in degrees, useful for analyzing rotational motion in biomechanics.
+
+    rotmat2quat():
+        Converts a 3x3 rotation matrix into quaternions, commonly used in 3D graphics and kinematic analysis for representing rotations compactly.
+
+    rotdata():
+        Rotates a dataset by applying rotations around the specified axes (x, y, z), allowing the user to define the order of rotation.
+
+Usage Notes:
+
+    - The functions in this script are particularly useful for biomechanical analysis, especially when dealing with motion capture data where body segment orientations are calculated.
+    - The `createortbase` and `createortbase_4points` functions are configured to handle anatomical points, making this toolkit essential for analyzing kinematic data from motion capture systems.
+
+Changelog for Version 1.0:
+
+    - Initial release with full support for orthonormal base creation, rotation matrix calculation, and conversion to Euler angles and quaternions.
+    - Added flexible data rotation using configurable Euler angles and axes order.
+
+License:
+
+This script is distributed under the GPL3 License.
+================================================================================
 """
 
+import os
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 
@@ -34,6 +94,11 @@ def createortbase(p1, p2, p3, configuration="C"):
     Returns:
     np.ndarray: An array containing the orthonormal basis vectors for each time step.
     """
+
+    # Print the directory and name of the script being executed
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+
     if configuration == "A":
         v1 = (p1 - p3) / np.linalg.norm(p3 - p2, axis=1, keepdims=True)
         v2 = (p2 - p3) / np.linalg.norm(p3 - p2, axis=1, keepdims=True)
@@ -117,7 +182,10 @@ def createortbase_4points(p1, p2, p3, p4, configuration="y"):
     Returns:
         numpy.ndarray: Orthonormal base matrix and the mean point. Shape (n, 3, 3) and (n, 3).
     """
-
+    # Print the directory and name of the script being executed
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+ 
     # Calculate the mean point
     pm = (p1 + p2 + p3 + p4) / 4
 
@@ -179,6 +247,11 @@ def calcmatrot(base1, base2=None):
     Returns:
     np.ndarray: An array containing the rotation matrices for each time step. Shape will be (3, 3) for a single time step or (n, 3, 3) for multiple time steps.
     """
+    
+    # Print the directory and name of the script being executed
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+ 
     if base2 is None:
         base2 = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
 
@@ -202,8 +275,12 @@ def rotmat2euler(matrot):
     Returns:
     np.ndarray: The Euler angles (phi, theta, psi) in degrees.
     """
-    r = R.from_matrix(matrot)
-    euler_angles = r.as_euler("xyz", degrees=False)
+    # Print the directory and name of the script being executed
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+ 
+    rotation_object = R.from_matrix(matrot)
+    euler_angles = rotation_object.as_euler("xyz", degrees=False)
     euler_angles_degrees = np.degrees(euler_angles)
     return euler_angles_degrees
 
@@ -218,8 +295,12 @@ def rotmat2quat(matrot):
     Returns:
     np.ndarray: The quaternions (w, x, y, z).
     """
-    r = R.from_matrix(matrot)
-    quaternions = r.as_quat()
+    # Print the directory and name of the script being executed
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+ 
+    rotation_object = R.from_matrix(matrot)
+    quaternions = rotation_object.as_quat()
     return quaternions
 
 
@@ -235,10 +316,15 @@ def rotdata(data, xth=0, yth=0, zth=0, ordem="xyz"):
     Returns:
     np.ndarray: The rotated data.
     """
+    # Print the directory and name of the script being executed
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+ 
     # Create the rotation object using Euler angles
-    r = R.from_euler(ordem, [xth, yth, zth], degrees=True)
+    rotation_object = R.from_euler(ordem, [xth, yth, zth], degrees=True)
 
     # Apply the rotation to the data
-    datrot = r.apply(data.T).T
+    datrot = rotation_object.apply(data.T).T
 
     return datrot
+
