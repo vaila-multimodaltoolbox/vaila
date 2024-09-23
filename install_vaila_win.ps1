@@ -28,17 +28,37 @@
 
     Author: Prof. Dr. Paulo R. P. Santiago
     Date: September 23, 2024
-    Version: 1.5
+    Version: 1.7
     OS: Windows 11
 #>
 
 # Define installation path
 $vailaProgramPath = "C:\ProgramData\vaila"
+$sourcePath = (Get-Location)
 
 # Ensure the directory exists
 If (-Not (Test-Path $vailaProgramPath)) {
     Write-Output "Creating directory $vailaProgramPath..."
     New-Item -ItemType Directory -Force -Path $vailaProgramPath
+}
+
+# Copy the vaila program files to C:\ProgramData\vaila (adjusting to avoid extra directory creation)
+Write-Output "Copying vaila program files from $sourcePath to $vailaProgramPath..."
+Copy-Item -Path "$sourcePath\*" -Destination "$vailaProgramPath" -Recurse -Force
+
+# Verify that files were copied successfully
+Write-Output "Verifying that files were copied correctly..."
+$sourceFiles = Get-ChildItem -Recurse "$sourcePath" | Where-Object { -not $_.PSIsContainer }
+$destFiles = Get-ChildItem -Recurse "$vailaProgramPath" | Where-Object { -not $_.PSIsContainer }
+
+# Compare the number of files
+$sourceCount = $sourceFiles.Count
+$destCount = $destFiles.Count
+
+If ($sourceCount -eq $destCount) {
+    Write-Output "All files were copied successfully."
+} Else {
+    Write-Warning "Some files may not have been copied. Source files: $sourceCount, Destination files: $destCount"
 }
 
 # Check if Conda is installed
@@ -133,10 +153,6 @@ If (-Not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
     Write-Output "FFmpeg is already installed."
 }
 
-# Copy the vaila program files to C:\ProgramData\vaila (adjusting to avoid extra directory creation)
-Write-Output "Copying vaila program files to $vailaProgramPath..."
-Copy-Item -Path (Get-Location)\* -Destination "$vailaProgramPath" -Recurse -Force
-
 # Check if Windows Terminal is installed
 $wtPath = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe"
 If (-Not (Test-Path $wtPath)) {
@@ -166,10 +182,10 @@ If ($wtInstalled) {
     $settingsJson = Get-Content -Path $settingsPath -Raw | ConvertFrom-Json
 
     # Remove existing vaila profile if it exists
-    $existingProfileIndex = $settingsJson.profiles.list.FindIndex({ $_.name -eq "vaila" })
-    If ($existingProfileIndex -ge 0) {
+    $existingProfileIndex = $settingsJson.profiles.list | Where-Object { $_.name -eq "vaila" }
+    If ($existingProfileIndex) {
         Write-Output "Removing existing vaila profile..."
-        $settingsJson.profiles.list.RemoveAt($existingProfileIndex)
+        $settingsJson.profiles.list = $settingsJson.profiles.list | Where-Object { $_.name -ne "vaila" }
     }
 
     # Define the new profile using "vaila" for system-related configurations
@@ -184,9 +200,6 @@ If ($wtInstalled) {
     }
 
     # Add the profile to settings.json
-    If (-Not $settingsJson.profiles.list) {
-        $settingsJson.profiles.list = @()
-    }
     $settingsJson.profiles.list += $vailaProfile
 
     # Save the updated settings.json with UTF-8 encoding
