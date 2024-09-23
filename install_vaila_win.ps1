@@ -28,7 +28,7 @@
 
     Author: Prof. Dr. Paulo R. P. Santiago
     Date: September 23, 2024
-    Version: 1.7
+    Version: 1.8
     OS: Windows 11
 #>
 
@@ -232,7 +232,7 @@ $wshell = New-Object -ComObject WScript.Shell
 $startShortcut = $wshell.CreateShortcut($startMenuPath)
 $startShortcut.TargetPath = "pwsh.exe"
 $startShortcut.Arguments = "-ExecutionPolicy Bypass -NoExit -Command `"& '$condaPath\shell\condabin\conda-hook.ps1' ; conda activate 'vaila' ; cd '$vailaProgramPath' ; python 'vaila.py'`""
-$startShortcut.IconLocation = "$vailaProgramPath\docs\images\vaila_ico.ico"
+$startShortcut.IconLocation = "$vailaProgramPath\docs\images\vaila_ico.ico"  # Ensure this points to the correct .ico file
 $startShortcut.WorkingDirectory = "$vailaProgramPath"
 $startShortcut.Save()
 
@@ -240,3 +240,4 @@ Write-Output "Start Menu shortcut for vaila created at $startMenuPath."
 
 Write-Output "Installation and configuration completed successfully!"
 Pause
+

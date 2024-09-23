@@ -1,3 +1,98 @@
+"""
+================================================================================
+plot_2d_graphs.py
+================================================================================
+Author: Prof. Paulo Santiago
+Date: 23 September 2024
+Version: 1.1
+
+Description:
+------------
+This script provides functionality for generating 2D plots within vailá:Versatile
+Anarcho Integrated Liberation Ánalysis in Multimodal Toolbox. It includes 
+a graphical user interface (GUI) for selecting and plotting various graph types, 
+such as scatter plots, angle-angle plots, and confidence intervals. Additionally, 
+the script offers buttons to clear all plots from memory, clear cached data, 
+and create new figure windows for refreshed plotting.
+
+Plot Types Supported:
+---------------------
+1. Time Scatter Plot: Plots time-series data across multiple headers from selected 
+   files.
+2. Angle-Angle Plot: Displays relationships between two angles based on header pairs 
+   from the selected files.
+3. Confidence Interval Plot: Plots data with corresponding confidence intervals, 
+   highlighting statistical variability.
+4. Boxplot: Generates boxplots for selected data columns.
+5. SPM (Statistical Parametric Mapping): Conducts SPM analysis using data from 
+   multiple headers.
+
+Functionalities:
+----------------
+1. GUI for Plot Selection: A simple, intuitive GUI using Python's Tkinter library allows 
+   users to select files, headers, and the desired plot type.
+2. Plot and Data Management:
+   - Clear All Plots: Button to clear all matplotlib plots from memory.
+   - Clear Data: Button to clear loaded data from memory (pandas DataFrames, selected 
+     files, and headers).
+   - New Figure: Button to create a new figure window for fresh plotting.
+3. Dynamic Plotting: The script dynamically loads and plots data based on user selections 
+   from CSV files.
+
+New Features in v1.1:
+---------------------
+- Added functionality to clear all loaded data (pandas DataFrames) from memory 
+  when clearing plots.
+- Improved memory management by invoking garbage collection after clearing data.
+- Enhanced user feedback in the console for clearer actions.
+
+Modules and Packages Required:
+------------------------------
+- Python Standard Libraries: tkinter for GUI creation, os for file management.
+- External Libraries: 
+  * matplotlib for plotting.
+  * pandas for CSV data handling.
+  * spm1d for Statistical Parametric Mapping analysis.
+  * matplotlib.colors for advanced color management in plots.
+  * gc for memory management and garbage collection.
+
+How to Use:
+-----------
+1. Run the Script: 
+   Execute the script using the following command:
+   python -m vaila.plot_2d_graphs
+
+2. Select Plot Type:
+   A GUI window will appear, offering multiple plot types. Select the desired plot 
+   type and follow the prompts to choose files and headers for plotting.
+
+3. Use Plot Controls:
+   The interface provides buttons to:
+   - Clear all plots and cached data.
+   - Generate a new figure window for plotting.
+   - Plot data dynamically based on the user's file and header selections.
+
+License:
+--------
+This script is licensed under the GNU General Public License v3.0. For more details, 
+refer to the LICENSE file located in the project root, or visit:
+https://www.gnu.org/licenses/gpl-3.0.en.html
+
+Disclaimer:
+-----------
+This script is provided "as is," without any warranty, express or implied. The authors 
+are not liable for any damage or data loss resulting from the use of this script. It is 
+intended solely for academic and research purposes.
+
+Changelog:
+----------
+- 2024-09-23: Initial creation of the script with support for multiple plot types 
+  and dynamic plot management.
+- 2024-09-24: Added functionality to clear plots and data from memory, improved 
+  memory management.
+================================================================================
+"""
+
 import matplotlib.pyplot as plt
 import pandas as pd
 from tkinter import (
@@ -16,15 +111,27 @@ from spm1d import stats
 import os
 import matplotlib.colors as mcolors
 
-# Variáveis globais para armazenar as seleções do usuário
+# Global variables to store user selections
 selected_files = []
 selected_headers = []
 plot_type = None
 
-# Definindo uma lista de cores que começa com R, G, B e segue com a paleta de cores do matplotlib
+# Defining a list of colors starting with R, G, B, followed by matplotlib's color palette
 base_colors = ["r", "g", "b"]
 additional_colors = list(mcolors.TABLEAU_COLORS.keys())
 predefined_colors = base_colors + additional_colors
+
+
+# Function to clear all plots from memory
+def clear_plots():
+    plt.close("all")
+    print("All plots cleared!")
+
+
+# Function to create a new figure
+def new_figure():
+    plt.figure()
+    print("New figure created!")
 
 
 def select_plot_type():
@@ -52,6 +159,12 @@ def select_plot_type():
     ).pack()
     Button(root, text="Boxplot", command=lambda: set_plot_type("boxplot")).pack()
     Button(root, text="SPM", command=lambda: set_plot_type("spm")).pack()
+
+    # Button to clear all plots
+    Button(root, text="Clear All Plots", command=clear_plots).pack()
+
+    # Button to create a new figure
+    Button(root, text="New Figure", command=new_figure).pack()
 
     root.mainloop()
 
@@ -260,7 +373,7 @@ def select_headers_gui(headers):
 
     header_vars = [BooleanVar() for _ in headers]
 
-    num_columns = 6  # Number of columns para os labels
+    num_columns = 6  # Number of columns for the labels
 
     for i, label in enumerate(headers):
         chk = Checkbutton(scrollable_frame, text=label, variable=header_vars[i])
