@@ -1,25 +1,58 @@
-# Initialize Conda in PowerShell
-$condaInstallPath = "C:\ProgramData\Anaconda3"  # Adjust if Conda is installed elsewhere
-$condaHookScript = Join-Path $condaInstallPath "shell\condabin\conda-hook.ps1"
+<#
+    Script: win_launch_vaila.ps1
+    Description: Launches the vailá - Multimodal Toolbox using the Anaconda PowerShell Prompt on Windows 11.
+                 The script activates the 'vaila' Conda environment and runs the vailá Python script.
 
-if (Test-Path $condaHookScript) {
-    & $condaHookScript
-    conda activate vaila
+    Usage:
+      1. Open "Anaconda PowerShell Prompt" with administrator privileges.
+      2. Navigate to the directory where this script is located.
+      3. Run the script using: .\win_launch_vaila.ps1
+
+    Features:
+      - Activates the 'vaila' Conda environment.
+      - Runs the vailá Python script from the installation directory (C:\ProgramData\vaila).
+      - Provides feedback to the user on progress and any issues encountered.
+
+    Notes:
+      - Ensure that Conda is installed and that the 'vaila' environment has been created during installation.
+      - This script should be run from the Anaconda PowerShell Prompt.
+
+    Author: Prof. Dr. Paulo R. P. Santiago
+    Date: September 23, 2024
+    Version: 1.1
+    OS: Windows 11
+#>
+
+# Print message to user
+Write-Host "Starting vailá toolbox launch..." -ForegroundColor Cyan
+Write-Host "Checking if 'vaila' Conda environment exists..." -ForegroundColor Cyan
+
+# Check if the vaila environment exists and activate it
+conda activate vaila
+
+# Check if activation succeeded
+if ($?) {
+    Write-Host "'vaila' Conda environment activated successfully." -ForegroundColor Green
+
+    # Run the vailá Python script
+    $scriptPath = "C:\ProgramData\vaila\vaila.py"
+    if (Test-Path $scriptPath) {
+        Write-Host "Found vaila.py at $scriptPath" -ForegroundColor Green
+        Write-Host "Navigating to the vaila directory and starting the vailá toolbox..." -ForegroundColor Cyan
+        cd "C:\ProgramData\vaila"
+        python vaila.py
+    } else {
+        Write-Host "Error: vaila.py not found at $scriptPath" -ForegroundColor Red
+        Read-Host "Press Enter to exit..."
+        exit
+    }
 } else {
-    Write-Host "Conda initialization script not found at $condaHookScript"
+    Write-Host "Error: Failed to activate the 'vaila' environment." -ForegroundColor Red
     Read-Host "Press Enter to exit..."
     exit
 }
 
-# Run the vailá Python script
-$scriptPath = "C:\vaila_programs\vaila\vaila.py"
-if (Test-Path $scriptPath) {
-    cd "C:\vaila_programs\vaila"
-    python vaila.py
-} else {
-    Write-Host "vaila.py not found at $scriptPath"
-}
-
-# Pause to keep the terminal open
+# Pause to keep the terminal open after execution
+Write-Host "vailá toolbox execution complete." -ForegroundColor Green
 Read-Host "Press Enter to exit..."
 

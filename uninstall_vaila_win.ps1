@@ -130,3 +130,4 @@ If (Test-Path $startMenuShortcutPath) {
 
 Write-Output "vaila uninstallation completed successfully!"
 Pause
+
