@@ -1,27 +1,59 @@
 """
+================================================================================
 EMG Analysis Toolkit - emg_labiocom
-Version: 1.0
-Author: Paulo R. P. Santiago
-Date: 2024-07-26
+================================================================================
+Author: Prof. Paulo Santiago
+Date: 23 September 2024
+Version: 1.1
 
 Description:
-This toolkit provides functions to analyze EMG (Electromyography) signals.
-It includes functionalities such as filtering, full-wave rectification,
-linear envelope calculation, RMS calculation, and median frequency analysis.
+------------
+This toolkit provides functions to analyze EMG (Electromyography) signals with 
+features like filtering, full-wave rectification, linear envelope calculation, 
+RMS calculation, and median frequency analysis. It now includes recursive 
+processing of all CSV files in the selected directory, enabling batch analysis.
 
-Usage:
-1. Run the script using `python3 vaila.py`.
-2. Follow the GUI prompts to select the directory with EMG files, 
-   choose an EMG file, enter the sampling rate, and specify the 
-   start and end line indices for the analysis.
-3. Results will be saved in the specified directory.
+Key Functionalities:
+---------------------
+1. Butterworth Lowpass and Bandpass Filtering.
+2. Full-Wave Rectification and Linear Envelope Calculation.
+3. RMS and Median Frequency Calculation for EMG signals.
+4. Polynomial Fitting for RMS and Median Frequency trends.
+5. Welch's Power Spectral Density Analysis.
+
+New Features in v1.1:
+----------------------
+- Recursive file processing for all CSV files within a selected directory.
+- Support for batch processing of EMG files using the GUI.
+- Enhanced error handling for out-of-bounds selection indices.
 
 Dependencies:
-- numpy
-- matplotlib
-- scipy
-- tkinter
+-------------
+- Python Standard Libraries: os, datetime, tkinter.
+- External Libraries: numpy, scipy, matplotlib.
 
+How to Use:
+-----------
+1. Run the script using `python3 emg_labiocom.py`.
+2. Use the GUI to select the directory containing EMG files, enter the sampling 
+   rate, and specify the start and end line indices for analysis.
+3. The script will recursively process all CSV files in the selected directory.
+4. Results will be saved in a timestamped folder within the selected directory.
+
+License:
+--------
+This script is licensed under the MIT License.
+
+Disclaimer:
+-----------
+This script is provided "as is," without any warranty, express or implied, and is 
+intended for academic and research purposes only.
+
+Changelog:
+----------
+- 2024-07-26: Initial creation of the toolkit with core analysis functions.
+- 2024-09-23: Added recursive file processing and improved GUI interaction.
+================================================================================
 """
 
 import os
@@ -234,86 +266,113 @@ def emg_analysis(emg_file, fs, start_index, end_index, no_plot, selected_path):
 
     print(f"Results written to {output_file}\n Have a good study!")
 
+    # Plotting and saving figures
+    save_formats = ["png", "svg"]  # Formats to save the plots
+
+    fig, axs = plt.subplots(2, 1, figsize=(12, 8))
+    axs[0].plot(time_full, emg_signal, label="Raw EMG", color="blue", linewidth=1)
+    axs[0].set_title("Raw EMG Full-Signal")
+    axs[0].set_xlabel("Sample")
+    axs[0].set_ylabel("sEMG (µ Volts)")
+    axs[0].axis("tight")
+    axs[0].grid(True)
+    axs[0].axvline(start_index, color="g", linestyle="--", label="Start Index")
+    axs[0].axvline(end_index, color="r", linestyle="--", label="End Index")
+    axs[0].legend()
+    axs[1].plot(
+        time,
+        emg_signal[start_index:end_index],
+        label="Raw EMG",
+        color="blue",
+        linewidth=3,
+    )
+    axs[1].plot(time, emg_filtered, label="Filtered EMG", color="red", linewidth=1)
+    axs[1].set_title("Cut and Filtered EMG Signal")
+    axs[1].set_xlabel("Sample")
+    axs[1].set_ylabel("sEMG (µ Volts)")
+    axs[1].axis("tight")
+    axs[1].legend()
+    axs[1].grid(True)
+    plt.tight_layout()
+
+    for fmt in save_formats:
+        plt.savefig(os.path.join(output_dir, f"{filename}_filtered_emg.{fmt}"))
+
     if not no_plot:
-        fig, axs = plt.subplots(2, 1, figsize=(12, 8))
-        axs[0].plot(time_full, emg_signal, label="Raw EMG", color="blue", linewidth=1)
-        axs[0].set_title("Raw EMG Full-Signal")
-        axs[0].set_xlabel("Sample")
-        axs[0].set_ylabel("sEMG (µ Volts)")
-        axs[0].axis("tight")
-        axs[0].grid(True)
-        axs[0].axvline(start_index, color="g", linestyle="--", label="Start Index")
-        axs[0].axvline(end_index, color="r", linestyle="--", label="End Index")
-        axs[0].legend()
-        axs[1].plot(
-            time,
-            emg_signal[start_index:end_index],
-            label="Raw EMG",
-            color="blue",
-            linewidth=3,
-        )
-        axs[1].plot(time, emg_filtered, label="Filtered EMG", color="red", linewidth=1)
-        axs[1].set_title("Cut and Filtered EMG Signal")
-        axs[1].set_xlabel("Sample")
-        axs[1].set_ylabel("sEMG (µ Volts)")
-        axs[1].axis("tight")
-        axs[1].legend()
-        axs[1].grid(True)
-        plt.tight_layout()
-        plt.savefig(os.path.join(output_dir, f"{filename}_filtered_emg.png"))
-        plt.close(fig)
+        plt.show()
+    plt.close(fig)
 
-        fig2 = plt.figure()
-        plt.plot(time, emg_abs)
-        plt.plot(time[: len(emg_envelope)], emg_envelope, color="r", linewidth=1)
-        plt.xlabel("Sample")
-        plt.ylabel("Rectified EMG (µ Volts)")
-        plt.title(f"FULL-WAVE & LINEAR ENVELOPE = {signal_integ:.1f} µVolts.s")
-        plt.grid(True)
-        plt.axis("tight")
-        plt.savefig(os.path.join(output_dir, f"{filename}_rectified_emg.png"))
-        plt.close(fig2)
+    fig2 = plt.figure()
+    plt.plot(time, emg_abs)
+    plt.plot(time[: len(emg_envelope)], emg_envelope, color="r", linewidth=1)
+    plt.xlabel("Sample")
+    plt.ylabel("Rectified EMG (µ Volts)")
+    plt.title(f"FULL-WAVE & LINEAR ENVELOPE = {signal_integ:.1f} µVolts.s")
+    plt.grid(True)
+    plt.axis("tight")
 
-        fig3 = plt.figure()
-        plt.plot(time_rms, rms_values)
-        plt.plot(time_rms, poly2_rms, color="red", linestyle="--")
-        plt.title("EMG - RMS")
-        plt.xlabel("Sample")
-        plt.ylabel("RMS (µ Volts)")
-        plt.grid(True)
-        plt.savefig(os.path.join(output_dir, f"{filename}_rms.png"))
-        plt.close(fig3)
+    for fmt in save_formats:
+        plt.savefig(os.path.join(output_dir, f"{filename}_rectified_emg.{fmt}"))
 
-        fig4 = plt.figure()
-        plt.plot(time_rms, median_freq_values)
-        plt.plot(time_rms, poly2_mdf, color="red", linestyle="--")
-        plt.title("EMG - Median Frequency")
-        plt.xlabel("Sample")
-        plt.ylabel("Frequency (Hz)")
-        plt.axis("tight")
-        plt.grid(True)
-        plt.savefig(os.path.join(output_dir, f"{filename}_median_frequency.png"))
-        plt.close(fig4)
+    if not no_plot:
+        plt.show()
+    plt.close(fig2)
 
-        fig5 = plt.figure()
-        plt.plot(freqs, psd)
-        plt.title("EMG - PWelch")
-        plt.ylabel("PSD (dB/Hz)")
-        plt.xlabel("Frequency (Hz)")
-        plt.axis("tight")
-        plt.grid(True)
-        plt.plot(freq_max, psd[index_max], "ro")
-        plt.annotate(
-            "Max: {:.2f}, {:.2f}".format(freq_max, psd[index_max]),
-            xy=(freq_max, psd[index_max]),
-            xycoords="data",
-            xytext=(+10, +30),
-            textcoords="offset points",
-            fontsize=12,
-            arrowprops=dict(arrowstyle="->", connectionstyle="arc3,rad=.2"),
-        )
-        plt.savefig(os.path.join(output_dir, f"{filename}_pwelch.png"))
-        plt.close(fig5)
+    fig3 = plt.figure()
+    plt.plot(time_rms, rms_values)
+    plt.plot(time_rms, poly2_rms, color="red", linestyle="--")
+    plt.title("EMG - RMS")
+    plt.xlabel("Sample")
+    plt.ylabel("RMS (µ Volts)")
+    plt.grid(True)
+
+    for fmt in save_formats:
+        plt.savefig(os.path.join(output_dir, f"{filename}_rms.{fmt}"))
+
+    if not no_plot:
+        plt.show()
+    plt.close(fig3)
+
+    fig4 = plt.figure()
+    plt.plot(time_rms, median_freq_values)
+    plt.plot(time_rms, poly2_mdf, color="red", linestyle="--")
+    plt.title("EMG - Median Frequency")
+    plt.xlabel("Sample")
+    plt.ylabel("Frequency (Hz)")
+    plt.axis("tight")
+    plt.grid(True)
+
+    for fmt in save_formats:
+        plt.savefig(os.path.join(output_dir, f"{filename}_median_frequency.{fmt}"))
+
+    if not no_plot:
+        plt.show()
+    plt.close(fig4)
+
+    fig5 = plt.figure()
+    plt.plot(freqs, psd)
+    plt.title("EMG - PWelch")
+    plt.ylabel("PSD (dB/Hz)")
+    plt.xlabel("Frequency (Hz)")
+    plt.axis("tight")
+    plt.grid(True)
+    plt.plot(freq_max, psd[index_max], "ro")
+    plt.annotate(
+        "Max: {:.2f}, {:.2f}".format(freq_max, psd[index_max]),
+        xy=(freq_max, psd[index_max]),
+        xycoords="data",
+        xytext=(+10, +30),
+        textcoords="offset points",
+        fontsize=12,
+        arrowprops=dict(arrowstyle="->", connectionstyle="arc3,rad=.2"),
+    )
+
+    for fmt in save_formats:
+        plt.savefig(os.path.join(output_dir, f"{filename}_pwelch.{fmt}"))
+
+    if not no_plot:
+        plt.show()
+    plt.close(fig5)
 
 
 def plot_initial_emg(emg_file, fs):
@@ -326,7 +385,9 @@ def plot_initial_emg(emg_file, fs):
 
     plt.figure(figsize=(12, 6))
     plt.plot(samples, emg_signal, label="Raw EMG", color="blue", linewidth=1)
-    plt.title("Raw EMG Signal")
+    plt.title(
+        "Raw sEMG - if you wish, write down the START and END index value to inform in the next window. Then you can close this Figure."
+    )
     plt.xlabel("Sample")
     plt.ylabel("sEMG (µ Volts)")
     plt.grid(True)
@@ -351,17 +412,17 @@ def run_emg_gui():
         return
 
     fs = simpledialog.askinteger(
-        "Input", "Enter Sampling Rate (Hz):", initialvalue=1000, minvalue=1
+        "Input", "Enter Sampling Rate (Hz):", initialvalue=2000, minvalue=1
     )
     if fs is None:
         messagebox.showerror("No Sampling Rate", "No sampling rate provided. Exiting.")
         return
 
-    plot_initial_emg(emg_file, fs)
+    plot_initial_emg(emg_file, fs)  # Now this function is recognized
 
     input_dialog = simpledialog.askstring(
         "Input",
-        "Enter Start Line, End Line, Plot Data (y/n) separated by commas:",
+        "Enter Start (integer sample index), End (integer sample index), Plot (y/n) separated by commas:",
         initialvalue="0,None,n",
     )
     if not input_dialog:
@@ -391,7 +452,7 @@ def run_emg_gui():
             emg_file = os.path.join(selected_path, filename)
             emg_analysis(emg_file, fs, start_index, end_index, no_plot, selected_path)
 
-    messagebox.showinfo("Success", "EMG analysis completed.")
+    messagebox.showinfo("Success", "EMG analysis completed!")
 
 
 if __name__ == "__main__":
