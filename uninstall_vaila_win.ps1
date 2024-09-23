@@ -1,9 +1,9 @@
 <#
     Script: uninstall_vaila_win.ps1
-    Description: Uninstalls the vailá - Multimodal Toolbox from Windows 11,
+    Description: Uninstalls the vaila - Multimodal Toolbox from Windows 11,
                  removing the Conda environment, deleting program files from
                  C:\ProgramData\vaila, removing FFmpeg if installed, 
-                 removing vailá profiles from Windows Terminal, and deleting
+                 removing vaila profiles from Windows Terminal, and deleting
                  Start Menu and Desktop shortcuts.
 
     Usage:
@@ -11,14 +11,14 @@
 
     Features:
       - Removes the 'vaila' Conda environment if it exists.
-      - Deletes the vailá program files from the installation directory (C:\ProgramData\vaila).
+      - Deletes the vaila program files from the installation directory (C:\ProgramData\vaila).
       - Uninstalls FFmpeg if it was installed by the script.
-      - Removes vailá shortcuts from the Start Menu and Desktop.
-      - Removes the vailá profile from Windows Terminal.
+      - Removes vaila shortcuts from the Start Menu and Desktop.
+      - Removes the vaila profile from Windows Terminal.
 
     Notes:
       - Administrator privileges are required to run this script.
-      - Ensure no programs are using the vailá environment before uninstalling.
+      - Ensure no programs are using the vaila environment before uninstalling.
 
     Author: Prof. Dr. Paulo R. P. Santiago
     Date: September 23, 2024
@@ -69,39 +69,39 @@ If (Get-Command ffmpeg -ErrorAction SilentlyContinue) {
 
 # Remove program files from C:\ProgramData\vaila
 If (Test-Path $vailaProgramPath) {
-    Write-Output "Deleting vailá program files from $vailaProgramPath..."
+    Write-Output "Deleting vaila program files from $vailaProgramPath..."
     Remove-Item -Recurse -Force -Path $vailaProgramPath
     Write-Output "Program files deleted."
 } Else {
-    Write-Output "vailá program files not found at $vailaProgramPath."
+    Write-Output "vaila program files not found at $vailaProgramPath."
 }
 
-# Remove Windows Terminal profile for vailá
+# Remove Windows Terminal profile for vaila (using "vaila" without accent)
 $wtPath = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe"
 If (Test-Path $wtPath) {
-    Write-Output "Checking for vailá profile in Windows Terminal settings..."
+    Write-Output "Checking for vaila profile in Windows Terminal settings..."
     $settingsPath = "$wtPath\LocalState\settings.json"
     If (Test-Path $settingsPath) {
         $settingsJson = Get-Content -Path $settingsPath -Raw | ConvertFrom-Json
 
-        # Find and remove vailá profile
-        $existingProfileIndex = $settingsJson.profiles.list.FindIndex({ $_.name -eq "vailá" -or $_.name -eq "vaila" })
+        # Find and remove vaila profile (without accent)
+        $existingProfileIndex = $settingsJson.profiles.list.FindIndex({ $_.name -eq "vaila" })
         If ($existingProfileIndex -ge 0) {
-            Write-Output "Removing vailá profile from Windows Terminal..."
+            Write-Output "Removing vaila profile from Windows Terminal..."
             $settingsJson.profiles.list.RemoveAt($existingProfileIndex)
 
             # Save updated settings with UTF-8 encoding
             $settingsJson | ConvertTo-Json -Depth 100 | Out-File -FilePath $settingsPath -Encoding UTF8
-            Write-Output "vailá profile removed from Windows Terminal."
+            Write-Output "vaila profile removed from Windows Terminal."
         } Else {
-            Write-Output "vailá profile not found in Windows Terminal."
+            Write-Output "vaila profile not found in Windows Terminal."
         }
     }
 } Else {
     Write-Output "Windows Terminal is not installed, skipping profile removal."
 }
 
-# Remove Desktop shortcut
+# Remove Desktop shortcut (which still uses "vailá")
 $desktopShortcutPath = "$env:USERPROFILE\Desktop\vailá.lnk"
 If (Test-Path $desktopShortcutPath) {
     Write-Output "Removing Desktop shortcut..."
@@ -111,7 +111,7 @@ If (Test-Path $desktopShortcutPath) {
     Write-Output "Desktop shortcut not found."
 }
 
-# Remove Start Menu shortcut
+# Remove Start Menu shortcut (uses "vaila")
 $startMenuShortcutPath = "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\vaila.lnk"
 If (Test-Path $startMenuShortcutPath) {
     Write-Output "Removing Start Menu shortcut..."
@@ -121,6 +121,6 @@ If (Test-Path $startMenuShortcutPath) {
     Write-Output "Start Menu shortcut not found."
 }
 
-Write-Output "vailá uninstallation completed successfully!"
+Write-Output "vaila uninstallation completed successfully!"
 Pause
 
