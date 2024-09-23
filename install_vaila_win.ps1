@@ -1,47 +1,5 @@
-<# 
-    Script: install_vaila_win.ps1
-    Description: Installs or updates the vailá - Multimodal Toolbox on Windows 11,
-                 setting up the Conda environment, copying program files to
-                 C:\vaila_programs\vaila, installing FFmpeg, adding a profile to
-                 Windows Terminal, and creating a desktop shortcut if Windows Terminal
-                 is not installed.
-
-    Usage:
-      1. Download the repository from GitHub manually and extract it.
-      2. Right-click the script and select "Run with PowerShell" as Administrator.
-
-    Notes:
-      - Ensure Conda is installed and accessible from the command line before running.
-      - The script checks for and installs Windows Terminal if necessary.
-      - If Windows Terminal is not available, a desktop shortcut will be created.
-
-    Author: Prof. Dr. Paulo R. P. Santiago
-    Date: September 17, 2024
-    Version: 1.2
-    OS: Windows 11
-#>
-
-
-# Ensure the script is running as administrator
-If (-Not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-    Write-Warning "This script requires administrative privileges. Please run as administrator."
-    Exit
-}
-
-# Check if Conda is installed
-If (-Not (Get-Command conda -ErrorAction SilentlyContinue)) {
-    Write-Warning "Conda is not installed. Please install Conda first."
-    Exit
-}
-
-# Get Conda installation path
-$condaPath = (conda info --base).Trim()
-
-# Initialize Conda in the script
-& "$condaPath\Scripts\activate.bat" base
-
 # Define installation path
-$vailaProgramPath = "C:\vaila_programs\vaila"
+$vailaProgramPath = "C:\ProgramData\vaila"
 
 # Ensure the directory exists
 If (-Not (Test-Path $vailaProgramPath)) {
@@ -108,25 +66,9 @@ If (-Not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
     Write-Output "FFmpeg is already installed."
 }
 
-# Copy the vaila program to C:\vaila_programs\vaila
+# Copy the vaila program to C:\ProgramData\vaila
 Write-Output "Copying vaila program to $vailaProgramPath..."
 Copy-Item -Path (Get-Location) -Destination "$vailaProgramPath" -Recurse -Force
-
-# Check if Windows Terminal is installed
-$wtPath = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe"
-If (-Not (Test-Path $wtPath)) {
-    Write-Warning "Windows Terminal is not installed. Installing via Microsoft Store..."
-    Try {
-        winget install --id Microsoft.WindowsTerminal -e
-        Write-Output "Windows Terminal installed successfully."
-        $wtInstalled = $true
-    } Catch {
-        Write-Warning "Failed to install Windows Terminal. A desktop shortcut will be created instead."
-        $wtInstalled = $false
-    }
-} Else {
-    $wtInstalled = $true
-}
 
 # Configure the vaila profile in Windows Terminal
 If ($wtInstalled) {
