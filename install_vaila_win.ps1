@@ -168,7 +168,7 @@ If ($wtInstalled) {
     # Remove existing vaila profile if it exists
     $existingProfileIndex = $settingsJson.profiles.list.FindIndex({ $_.name -eq "vaila" })
     If ($existingProfileIndex -ge 0) {
-        Write-Output "Removing existing vaila profile..."
+        Write-Output "Removing existing vailá profile..."
         $settingsJson.profiles.list.RemoveAt($existingProfileIndex)
     }
 
