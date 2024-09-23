@@ -22,7 +22,7 @@
 
     Author: Prof. Dr. Paulo R. P. Santiago
     Date: September 23, 2024
-    Version: 1.2
+    Version: 1.3
     OS: Windows 11
 #>
 
@@ -85,10 +85,17 @@ If (Test-Path $wtPath) {
         $settingsJson = Get-Content -Path $settingsPath -Raw | ConvertFrom-Json
 
         # Find and remove vaila profile (without accent)
-        $existingProfileIndex = $settingsJson.profiles.list.FindIndex({ $_.name -eq "vaila" })
-        If ($existingProfileIndex -ge 0) {
+        $profileIndex = -1
+        For ($i = 0; $i -lt $settingsJson.profiles.list.Count; $i++) {
+            if ($settingsJson.profiles.list[$i].name -eq "vaila") {
+                $profileIndex = $i
+                break
+            }
+        }
+
+        If ($profileIndex -ge 0) {
             Write-Output "Removing vaila profile from Windows Terminal..."
-            $settingsJson.profiles.list.RemoveAt($existingProfileIndex)
+            $settingsJson.profiles.list.RemoveAt($profileIndex)
 
             # Save updated settings with UTF-8 encoding
             $settingsJson | ConvertTo-Json -Depth 100 | Out-File -FilePath $settingsPath -Encoding UTF8
