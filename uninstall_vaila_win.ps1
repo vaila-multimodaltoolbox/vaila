@@ -1,230 +1,126 @@
 <#
-    Script: install_vaila_win.ps1
-    Description: Installs or updates the vailá - Multimodal Toolbox on Windows 11,
-                 setting up the Conda environment, copying program files to 
-                 C:\ProgramData\vaila, installing FFmpeg, configuring Windows 
-                 Terminal, adding a profile to it, creating a desktop shortcut 
-                 if Windows Terminal is not installed, and adding a Start Menu shortcut.
+    Script: uninstall_vaila_win.ps1
+    Description: Uninstalls the vailá - Multimodal Toolbox from Windows 11,
+                 removing the Conda environment, deleting program files from
+                 C:\ProgramData\vaila, removing FFmpeg if installed, 
+                 removing vailá profiles from Windows Terminal, and deleting
+                 Start Menu and Desktop shortcuts.
 
     Usage:
-      1. Download the repository from GitHub manually and extract it.
-      2. Right-click the script and select "Run with PowerShell" as Administrator.
+      1. Right-click the script and select "Run with PowerShell" as Administrator.
 
     Features:
-      - Checks if Conda is installed, activates the 'vaila' environment, 
-        installs necessary packages (e.g., moviepy), and updates the environment if it exists.
-      - Copies the vailá program to the installation directory (C:\ProgramData\vaila).
-      - Installs FFmpeg using winget or Chocolatey if not installed.
-      - Adds Conda to the PowerShell and Windows Terminal environment, making 
-        Conda commands accessible in future sessions.
-      - Configures a vailá profile in Windows Terminal, creates a desktop shortcut if Terminal is not available.
-      - Adds a shortcut for vailá to the Start Menu.
+      - Removes the 'vaila' Conda environment if it exists.
+      - Deletes the vailá program files from the installation directory (C:\ProgramData\vaila).
+      - Uninstalls FFmpeg if it was installed by the script.
+      - Removes vailá shortcuts from the Start Menu and Desktop.
+      - Removes the vailá profile from Windows Terminal.
 
     Notes:
-      - Make sure Conda is installed and accessible from the command line before running this script.
-      - The script checks for and installs Windows Terminal if necessary.
       - Administrator privileges are required to run this script.
-      - Conda will be initialized for PowerShell if not already done.
+      - Ensure no programs are using the vailá environment before uninstalling.
 
     Author: Prof. Dr. Paulo R. P. Santiago
     Date: September 23, 2024
-    Version: 1.4
+    Version: 1.0
     OS: Windows 11
 #>
 
 # Define installation path
 $vailaProgramPath = "C:\ProgramData\vaila"
 
-# Ensure the directory exists
-If (-Not (Test-Path $vailaProgramPath)) {
-    Write-Output "Creating directory $vailaProgramPath..."
-    New-Item -ItemType Directory -Force -Path $vailaProgramPath
-}
-
 # Check if Conda is installed
 If (-Not (Get-Command conda -ErrorAction SilentlyContinue)) {
-    Write-Warning "Conda is not installed or not in the PATH. Please install Conda first."
+    Write-Warning "Conda is not installed or not in the PATH. Uninstallation cannot proceed."
     Exit
 }
 
 # Get Conda installation path
 $condaPath = (conda info --base).Trim()
 
-# Initialize Conda for PowerShell if it is not already initialized
-Write-Output "Initializing Conda for PowerShell..."
-Try {
-    & "$condaPath\Scripts\conda.exe" init powershell
-    Write-Output "Conda initialized successfully in PowerShell."
-} Catch {
-    Write-Error "Failed to initialize Conda in PowerShell. Error: $_"
-    Exit
-}
-
-# Add Conda initialization to Windows Terminal and PowerShell profiles
-$profilePath = "$PROFILE"
-If (-Not (Test-Path $profilePath)) {
-    Write-Output "PowerShell profile not found. Creating it..."
-    New-Item -ItemType File -Path $profilePath -Force
-}
-
-Write-Output "Ensuring Conda initialization is added to PowerShell profile..."
-Add-Content -Path $profilePath -Value "& '$condaPath\shell\condabin\conda-hook.ps1'"
-
-# Reload PowerShell profile to reflect changes
-Write-Output "Reloading PowerShell profile to apply changes..."
-. $profilePath
-
-# Check if the 'vaila' environment already exists
+# Remove the 'vaila' Conda environment
 Write-Output "Checking if the 'vaila' Conda environment exists..."
 $envExists = conda env list | Select-String -Pattern "^vaila"
 If ($envExists) {
-    Write-Output "Conda environment 'vaila' already exists. Updating..."
+    Write-Output "Removing the 'vaila' Conda environment..."
     Try {
-        conda env update -n vaila -f "yaml_for_conda_env\vaila_win.yaml" --prune
-        Write-Output "'vaila' environment updated successfully."
+        conda env remove -n vaila
+        Write-Output "'vaila' Conda environment removed successfully."
     } Catch {
-        Write-Error "Failed to update 'vaila' environment. Error: $_"
-        Exit
+        Write-Error "Failed to remove the 'vaila' environment. Error: $_"
     }
 } Else {
-    Write-Output "Creating Conda environment from vaila_win.yaml..."
-    Try {
-        conda env create -f "yaml_for_conda_env\vaila_win.yaml"
-        Write-Output "'vaila' environment created successfully."
-    } Catch {
-        Write-Error "Failed to create 'vaila' environment. Error: $_"
-        Exit
-    }
+    Write-Output "'vaila' Conda environment does not exist."
 }
 
-# Activate the 'vaila' environment
-& "$condaPath\Scripts\activate.bat" vaila
-
-# Install moviepy using pip
-Write-Output "Installing moviepy..."
-Try {
-    pip install moviepy
-    Write-Output "moviepy installed successfully."
-} Catch {
-    Write-Error "Failed to install moviepy. Error: $_"
-}
-
-# Remove ffmpeg installed via Conda, if any
-Write-Output "Removing ffmpeg installed via Conda, if any..."
-conda remove -n vaila ffmpeg -y
-
-# Check if FFmpeg is installed
-If (-Not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
-    Write-Output "Installing FFmpeg via winget..."
+# Remove FFmpeg installed by the script
+Write-Output "Checking if FFmpeg is installed..."
+If (Get-Command ffmpeg -ErrorAction SilentlyContinue) {
+    Write-Output "Uninstalling FFmpeg..."
     Try {
-        winget install --id Gyan.FFmpeg -e --silent
-        Write-Output "FFmpeg installed successfully."
+        winget uninstall --id Gyan.FFmpeg -e --silent
+        Write-Output "FFmpeg uninstalled successfully."
     } Catch {
-        Write-Warning "Failed to install FFmpeg via winget. Attempting installation via Chocolatey..."
-        If (-Not (Get-Command choco -ErrorAction SilentlyContinue)) {
-            Write-Warning "Chocolatey is not installed. Installing Chocolatey..."
-            Set-ExecutionPolicy Bypass -Scope Process -Force
-            [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-            Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))
-        }
-        choco install ffmpeg -y
+        Write-Warning "Failed to uninstall FFmpeg via winget. Skipping."
     }
 } Else {
-    Write-Output "FFmpeg is already installed."
+    Write-Output "FFmpeg is not installed via this script."
 }
 
-# Copy the vaila program to C:\ProgramData\vaila
-Write-Output "Copying vaila program to $vailaProgramPath..."
-Copy-Item -Path (Get-Location) -Destination "$vailaProgramPath" -Recurse -Force
+# Remove program files from C:\ProgramData\vaila
+If (Test-Path $vailaProgramPath) {
+    Write-Output "Deleting vailá program files from $vailaProgramPath..."
+    Remove-Item -Recurse -Force -Path $vailaProgramPath
+    Write-Output "Program files deleted."
+} Else {
+    Write-Output "vailá program files not found at $vailaProgramPath."
+}
 
-# Check if Windows Terminal is installed
+# Remove Windows Terminal profile for vailá
 $wtPath = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe"
-If (-Not (Test-Path $wtPath)) {
-    Write-Warning "Windows Terminal is not installed. Installing via Microsoft Store..."
-    Try {
-        winget install --id Microsoft.WindowsTerminal -e
-        Write-Output "Windows Terminal installed successfully."
-        $wtInstalled = $true
-    } Catch {
-        Write-Warning "Failed to install Windows Terminal. A desktop shortcut will be created instead."
-        $wtInstalled = $false
-    }
-} Else {
-    $wtInstalled = $true
-}
-
-# Configure the vaila profile in Windows Terminal
-If ($wtInstalled) {
-    Write-Output "Configuring the vaila profile in Windows Terminal..."
+If (Test-Path $wtPath) {
+    Write-Output "Checking for vailá profile in Windows Terminal settings..."
     $settingsPath = "$wtPath\LocalState\settings.json"
-    $settingsBackupPath = "$wtPath\LocalState\settings_backup.json"
+    If (Test-Path $settingsPath) {
+        $settingsJson = Get-Content -Path $settingsPath -Raw | ConvertFrom-Json
 
-    # Backup the current settings.json
-    Copy-Item -Path $settingsPath -Destination $settingsBackupPath -Force
+        # Find and remove vailá profile
+        $existingProfileIndex = $settingsJson.profiles.list.FindIndex({ $_.name -eq "vailá" -or $_.name -eq "vaila" })
+        If ($existingProfileIndex -ge 0) {
+            Write-Output "Removing vailá profile from Windows Terminal..."
+            $settingsJson.profiles.list.RemoveAt($existingProfileIndex)
 
-    # Load settings.json
-    $settingsJson = Get-Content -Path $settingsPath -Raw | ConvertFrom-Json
-
-    # Remove existing vaila profile if it exists
-    $existingProfileIndex = $settingsJson.profiles.list.FindIndex({ $_.name -eq "vailá" -or $_.name -eq "vaila" })
-    If ($existingProfileIndex -ge 0) {
-        Write-Output "Removing existing vaila profile..."
-        $settingsJson.profiles.list.RemoveAt($existingProfileIndex)
+            # Save updated settings
+            $settingsJson | ConvertTo-Json -Depth 100 | Set-Content -Path $settingsPath -Encoding UTF8
+            Write-Output "vailá profile removed from Windows Terminal."
+        } Else {
+            Write-Output "vailá profile not found in Windows Terminal."
+        }
     }
-
-    # Define the new profile
-    $vailaProfile = @{
-        name = "vailá"
-        commandline = "pwsh.exe -ExecutionPolicy Bypass -NoExit -Command `"& '$condaPath\shell\condabin\conda-hook.ps1' ; conda activate 'vaila' ; cd '$vailaProgramPath' ; python 'vaila.py'`""
-        startingDirectory = "$vailaProgramPath"
-        icon = "$vailaProgramPath\docs\images\vaila_ico.png"
-        colorScheme = "Vintage"
-        guid = "{17ce5bfe-17ed-5f3a-ab15-5cd5baafed5b}"
-        hidden = $false
-    }
-
-    # Add the profile to settings.json
-    If (-Not $settingsJson.profiles.list) {
-        $settingsJson.profiles.list = @()
-    }
-    $settingsJson.profiles.list += $vailaProfile
-
-    # Save the updated settings.json
-    $settingsJson | ConvertTo-Json -Depth 100 | Set-Content -Path $settingsPath -Encoding UTF8
-
-    Write-Output "vailá profile added to Windows Terminal successfully."
-
-    # Open settings.json in Notepad for verification
-    Write-Output "Opening settings.json in Notepad for verification..."
-    notepad "$settingsPath"
 } Else {
-    # Create a desktop shortcut
-    Write-Output "Creating a desktop shortcut for vailá..."
-    $shortcutPath = "$env:USERPROFILE\Desktop\vailá.lnk"
-    $wshell = New-Object -ComObject WScript.Shell
-    $shortcut = $wshell.CreateShortcut($shortcutPath)
-    $shortcut.TargetPath = "pwsh.exe"
-    $shortcut.Arguments = "-ExecutionPolicy Bypass -NoExit -Command `"& '$condaPath\shell\condabin\conda-hook.ps1' ; conda activate 'vaila' ; cd '$vailaProgramPath' ; python 'vaila.py'`""
-    $shortcut.IconLocation = "$vailaProgramPath\docs\images\vaila_ico.ico"
-    $shortcut.WorkingDirectory = "$vailaProgramPath"
-    $shortcut.Save()
-
-    Write-Output "Desktop shortcut created at $shortcutPath"
+    Write-Output "Windows Terminal is not installed, skipping profile removal."
 }
 
-# Create Start Menu shortcut
-Write-Output "Creating Start Menu shortcut for vailá..."
-$startMenuPath = "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\vaila.lnk"
-$wshell = New-Object -ComObject WScript.Shell
-$startShortcut = $wshell.CreateShortcut($startMenuPath)
-$startShortcut.TargetPath = "pwsh.exe"
-$startShortcut.Arguments = "-ExecutionPolicy Bypass -NoExit -Command `"& '$condaPath\shell\condabin\conda-hook.ps1' ; conda activate 'vaila' ; cd '$vailaProgramPath' ; python 'vaila.py'`""
-$startShortcut.IconLocation = "$vailaProgramPath\docs\images\vaila_ico.ico"
-$startShortcut.WorkingDirectory = "$vailaProgramPath"
-$startShortcut.Save()
+# Remove Desktop shortcut
+$desktopShortcutPath = "$env:USERPROFILE\Desktop\vailá.lnk"
+If (Test-Path $desktopShortcutPath) {
+    Write-Output "Removing Desktop shortcut..."
+    Remove-Item $desktopShortcutPath -Force
+    Write-Output "Desktop shortcut removed."
+} Else {
+    Write-Output "Desktop shortcut not found."
+}
 
-Write-Output "Start Menu shortcut for vailá created at $startMenuPath."
+# Remove Start Menu shortcut
+$startMenuShortcutPath = "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\vaila.lnk"
+If (Test-Path $startMenuShortcutPath) {
+    Write-Output "Removing Start Menu shortcut..."
+    Remove-Item $startMenuShortcutPath -Force
+    Write-Output "Start Menu shortcut removed."
+} Else {
+    Write-Output "Start Menu shortcut not found."
+}
 
-Write-Output "Installation and configuration completed successfully!"
+Write-Output "vailá uninstallation completed successfully!"
 Pause
 
