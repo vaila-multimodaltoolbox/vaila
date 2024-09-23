@@ -28,7 +28,7 @@
 
     Author: Prof. Dr. Paulo R. P. Santiago
     Date: September 23, 2024
-    Version: 1.4
+    Version: 1.5
     OS: Windows 11
 #>
 
@@ -133,9 +133,9 @@ If (-Not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
     Write-Output "FFmpeg is already installed."
 }
 
-# Copy the vaila program to C:\ProgramData\vaila
-Write-Output "Copying vaila program to $vailaProgramPath..."
-Copy-Item -Path (Get-Location) -Destination "$vailaProgramPath" -Recurse -Force
+# Copy the vaila program files to C:\ProgramData\vaila (adjusting to avoid extra directory creation)
+Write-Output "Copying vaila program files to $vailaProgramPath..."
+Copy-Item -Path (Get-Location)\* -Destination "$vailaProgramPath" -Recurse -Force
 
 # Check if Windows Terminal is installed
 $wtPath = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe"
@@ -168,7 +168,7 @@ If ($wtInstalled) {
     # Remove existing vaila profile if it exists
     $existingProfileIndex = $settingsJson.profiles.list.FindIndex({ $_.name -eq "vailá" -or $_.name -eq "vaila" })
     If ($existingProfileIndex -ge 0) {
-        Write-Output "Removing existing vaila profile..."
+        Write-Output "Removing existing vailá profile..."
         $settingsJson.profiles.list.RemoveAt($existingProfileIndex)
     }
 
@@ -189,8 +189,8 @@ If ($wtInstalled) {
     }
     $settingsJson.profiles.list += $vailaProfile
 
-    # Save the updated settings.json
-    $settingsJson | ConvertTo-Json -Depth 100 | Set-Content -Path $settingsPath -Encoding UTF8
+    # Save the updated settings.json with UTF-8 encoding
+    $settingsJson | ConvertTo-Json -Depth 100 | Out-File -FilePath $settingsPath -Encoding UTF8
 
     Write-Output "vailá profile added to Windows Terminal successfully."
 
