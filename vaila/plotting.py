@@ -80,13 +80,31 @@ def get_colors():
 
     # Cluster 1 (Trunk) colors - inspired by the Jacksonville Jaguars football team
     # Official Jaguars team colors include gold (#fbbb9b), teal (#006778), and navy blue (#223D79)
-    trunk_axis_colors = ["#fbbb9b", "#006778", "#223D79"]  # Jaguars-inspired axis colors
-    trunk_marker_colors = ["#d3bc8d", "#006666", "#003f5c", "#8a7967"]  # More muted variations of Jaguars colors for markers
+    trunk_axis_colors = [
+        "#fbbb9b",
+        "#006778",
+        "#223D79",
+    ]  # Jaguars-inspired axis colors
+    trunk_marker_colors = [
+        "#d3bc8d",
+        "#006666",
+        "#003f5c",
+        "#8a7967",
+    ]  # More muted variations of Jaguars colors for markers
 
     # Cluster 2 (Pelvis) colors - inspired by the Jacksonville Jumbo Shrimp baseball team
     # Official Jumbo Shrimp colors include dark orange, khaki, gray, and indigo
-    pelvis_axis_colors = ["darkorange", "darkkhaki", "dimgray"]  # Jumbo Shrimp-inspired axis colors
-    pelvis_marker_colors = ["darkorange", "darkkhaki", "dimgray", "indigo"]  # Marker colors from the Jumbo Shrimp palette
+    pelvis_axis_colors = [
+        "darkorange",
+        "darkkhaki",
+        "dimgray",
+    ]  # Jumbo Shrimp-inspired axis colors
+    pelvis_marker_colors = [
+        "darkorange",
+        "darkkhaki",
+        "dimgray",
+        "indigo",
+    ]  # Marker colors from the Jumbo Shrimp palette
 
     return (
         trunk_axis_colors,

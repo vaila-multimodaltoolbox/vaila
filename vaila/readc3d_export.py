@@ -371,4 +371,3 @@ def convert_c3d_to_csv():
 
 if __name__ == "__main__":
     convert_c3d_to_csv()
-

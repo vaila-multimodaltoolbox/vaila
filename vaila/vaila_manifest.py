@@ -28,10 +28,10 @@ Requirements:
 
 """
 
-
 import tkinter as tk
 from PIL import Image, ImageTk
 import os
+
 
 def show_vaila_message():
     # Print the directory and name of the script being executed
@@ -43,7 +43,9 @@ def show_vaila_message():
     window.geometry("900x820")
 
     # Load the image with an absolute path
-    script_dir = os.path.dirname(os.path.abspath(__file__))  # Directory of the current script
+    script_dir = os.path.dirname(
+        os.path.abspath(__file__)
+    )  # Directory of the current script
     image_path = os.path.join(script_dir, "images", "vaila_logo.png")
 
     try:
@@ -111,6 +113,6 @@ def show_vaila_message():
     window.grab_set()
     window.mainloop()
 
+
 if __name__ == "__main__":
     show_vaila_message()
-
