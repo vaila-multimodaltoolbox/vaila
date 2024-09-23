@@ -1,4 +1,4 @@
-<#
+<<#
     Script: uninstall_vaila_win.ps1
     Description: Uninstalls the vaila - Multimodal Toolbox from Windows 11,
                  removing the Conda environment, deleting program files from
@@ -22,7 +22,7 @@
 
     Author: Prof. Dr. Paulo R. P. Santiago
     Date: September 23, 2024
-    Version: 1.1
+    Version: 1.2
     OS: Windows 11
 #>
 
