@@ -1,4 +1,25 @@
 @echo off
+REM Script: uninstall_vaila_win.bat
+REM Description: Uninstalls the vailá - Multimodal Toolbox on Windows,
+REM              removing the Conda environment, program files from
+REM              C:\vaila_programs\vaila, and removing the vailá profile from
+REM              Windows Terminal or desktop shortcut if it exists.
+REM 
+REM Usage:
+REM   1. Right-click the script and select "Run as Administrator."
+REM   2. Follow the on-screen instructions.
+REM
+REM Notes:
+REM   - Ensure Conda is installed before running this script.
+REM   - Administrative privileges are required for certain operations like
+REM     removing files from system directories.
+REM
+REM Author: Prof. Dr. Paulo R. P. Santiago
+REM Date: September 22, 2024
+REM Version: 1.0
+REM OS: Windows 11
+
+@echo off
 REM This script uninstalls the vailá environment on Windows
 
 echo Starting vailá uninstallation on Windows...

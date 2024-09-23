@@ -1,23 +1,18 @@
-<<#
-    Script: install_vaila_win.ps1
-    Description: Installs or updates the vailá - Multimodal Toolbox on Windows 11,
-                 setting up the Conda environment, copying program files to
-                 C:\vaila_programs\vaila, installing FFmpeg, adding a profile to
-                 Windows Terminal, and creating a desktop shortcut if Windows Terminal
-                 is not installed.
+<# 
+    Script: uninstall_vaila_win.ps1
+    Description: Uninstalls the vailá - Multimodal Toolbox from Windows,
+                 removing the Conda environment, program files from C:\vaila_programs\vaila,
+                 and Windows Terminal profile or desktop shortcut.
 
     Usage:
-      1. Download the repository from GitHub manually and extract it.
-      2. Right-click the script and select "Run with PowerShell" as Administrator.
+      1. Right-click the script and select "Run with PowerShell" as Administrator.
 
     Notes:
       - Ensure Conda is installed and accessible from the command line before running.
-      - The script checks for and installs Windows Terminal if necessary.
-      - If Windows Terminal is not available, a desktop shortcut will be created.
 
     Author: Prof. Dr. Paulo R. P. Santiago
-    Date: September 17, 2024
-    Version: 1.2
+    Date: September 22, 2024
+    Version: 1.0
     OS: Windows 11
 #>
 
@@ -29,7 +24,7 @@ If (-Not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdent
 
 # Check if Conda is installed
 If (-Not (Get-Command conda -ErrorAction SilentlyContinue)) {
-    Write-Warning "Conda is not installed. Please install Conda first."
+    Write-Warning "Conda is not installed. Uninstallation cannot proceed."
     Exit
 }
 
@@ -39,99 +34,48 @@ $condaPath = (conda info --base).Trim()
 # Initialize Conda in the script
 & "$condaPath\Scripts\activate.bat" base
 
+# Deactivate the current Conda environment if any
+Write-Output "Deactivating any active Conda environment..."
+conda deactivate
+
+# Check if the 'vaila' environment exists
+Write-Output "Checking for 'vaila' Conda environment..."
+$envExists = conda env list | Select-String -Pattern "^vaila"
+If ($envExists) {
+    Write-Output "Removing 'vaila' Conda environment..."
+    Try {
+        conda remove --name vaila --all -y
+        Write-Output "'vaila' environment removed successfully."
+    } Catch {
+        Write-Error "Failed to remove 'vaila' environment. Error: $_"
+        Exit
+    }
+} Else {
+    Write-Output "'vaila' Conda environment does not exist. Skipping environment removal."
+}
+
 # Define installation path
 $vailaProgramPath = "C:\vaila_programs\vaila"
 
-# Ensure the directory exists
-If (-Not (Test-Path $vailaProgramPath)) {
-    Write-Output "Creating directory $vailaProgramPath..."
-    New-Item -ItemType Directory -Force -Path $vailaProgramPath
-}
-
-# Check if the "vaila" environment already exists
-Write-Output "Checking if the 'vaila' Conda environment exists..."
-$envExists = conda env list | Select-String -Pattern "^vaila"
-If ($envExists) {
-    Write-Output "Conda environment 'vaila' already exists. Updating..."
+# Remove the vailá directory
+If (Test-Path $vailaProgramPath) {
+    Write-Output "Removing vailá program directory at $vailaProgramPath..."
     Try {
-        conda env update -n vaila -f "yaml_for_conda_env\vaila_win.yaml" --prune
-        Write-Output "'vaila' environment updated successfully."
+        Remove-Item -Recurse -Force -Path $vailaProgramPath
+        Write-Output "vailá directory removed successfully."
     } Catch {
-        Write-Error "Failed to update 'vaila' environment. Error: $_"
-        Exit
+        Write-Error "Failed to remove vailá directory. Error: $_"
     }
 } Else {
-    Write-Output "Creating Conda environment from vaila_win.yaml..."
-    Try {
-        conda env create -f "yaml_for_conda_env\vaila_win.yaml"
-        Write-Output "'vaila' environment created successfully."
-    } Catch {
-        Write-Error "Failed to create 'vaila' environment. Error: $_"
-        Exit
-    }
+    Write-Output "vailá directory not found. Skipping directory removal."
 }
 
-# Activate the 'vaila' environment
-& "$condaPath\Scripts\activate.bat" vaila
-
-# Install moviepy using pip
-Write-Output "Installing moviepy..."
-Try {
-    pip install moviepy
-    Write-Output "moviepy installed successfully."
-} Catch {
-    Write-Error "Failed to install moviepy. Error: $_"
-}
-
-# Remove ffmpeg installed via Conda, if any
-Write-Output "Removing ffmpeg installed via Conda, if any..."
-conda remove -n vaila ffmpeg -y
-
-# Check if FFmpeg is installed
-If (-Not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
-    Write-Output "Installing FFmpeg via winget..."
-    Try {
-        winget install --id Gyan.FFmpeg -e --silent
-        Write-Output "FFmpeg installed successfully."
-    } Catch {
-        Write-Warning "Failed to install FFmpeg via winget. Attempting installation via Chocolatey..."
-        If (-Not (Get-Command choco -ErrorAction SilentlyContinue)) {
-            Write-Warning "Chocolatey is not installed. Installing Chocolatey..."
-            Set-ExecutionPolicy Bypass -Scope Process -Force
-            [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-            Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))
-        }
-        choco install ffmpeg -y
-    }
-} Else {
-    Write-Output "FFmpeg is already installed."
-}
-
-# Copy the vaila program to C:\vaila_programs\vaila
-Write-Output "Copying vaila program to $vailaProgramPath..."
-Copy-Item -Path (Get-Location) -Destination "$vailaProgramPath" -Recurse -Force
-
-# Check if Windows Terminal is installed
+# Remove the vailá profile from Windows Terminal
 $wtPath = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe"
-If (-Not (Test-Path $wtPath)) {
-    Write-Warning "Windows Terminal is not installed. Installing via Microsoft Store..."
-    Try {
-        winget install --id Microsoft.WindowsTerminal -e
-        Write-Output "Windows Terminal installed successfully."
-        $wtInstalled = $true
-    } Catch {
-        Write-Warning "Failed to install Windows Terminal. A desktop shortcut will be created instead."
-        $wtInstalled = $false
-    }
-} Else {
-    $wtInstalled = $true
-}
-
-# Configure the vaila profile in Windows Terminal
-If ($wtInstalled) {
-    Write-Output "Configuring the vaila profile in Windows Terminal..."
+If (Test-Path $wtPath) {
+    Write-Output "Removing vailá profile from Windows Terminal..."
     $settingsPath = "$wtPath\LocalState\settings.json"
-    $settingsBackupPath = "$wtPath\LocalState\settings_backup.json"
+    $settingsBackupPath = "$wtPath\LocalState\settings_backup_uninstall.json"
 
     # Backup the current settings.json
     Copy-Item -Path $settingsPath -Destination $settingsBackupPath -Force
@@ -139,52 +83,36 @@ If ($wtInstalled) {
     # Load settings.json
     $settingsJson = Get-Content -Path $settingsPath -Raw | ConvertFrom-Json
 
-    # Remove existing vaila profile if it exists
+    # Find and remove vailá profile
     $existingProfileIndex = $settingsJson.profiles.list.FindIndex({ $_.name -eq "vailá" -or $_.name -eq "vaila" })
     If ($existingProfileIndex -ge 0) {
-        Write-Output "Removing existing vaila profile..."
+        Write-Output "Removing vailá profile..."
         $settingsJson.profiles.list.RemoveAt($existingProfileIndex)
+
+        # Save the updated settings.json
+        $settingsJson | ConvertTo-Json -Depth 100 | Set-Content -Path $settingsPath -Encoding UTF8
+        Write-Output "vailá profile removed from Windows Terminal."
+    } Else {
+        Write-Output "vailá profile not found in Windows Terminal. Skipping."
     }
-
-    # Define the new profile
-    $vailaProfile = @{
-        name = "vailá"
-        commandline = "pwsh.exe -ExecutionPolicy Bypass -NoExit -Command `"& '$condaPath\shell\condabin\conda-hook.ps1' ; conda activate 'vaila' ; cd '$vailaProgramPath' ; python 'vaila.py'`""
-        startingDirectory = "$vailaProgramPath"
-        icon = "$vailaProgramPath\docs\images\vaila_ico.png"
-        colorScheme = "Vintage"
-        guid = "{17ce5bfe-17ed-5f3a-ab15-5cd5baafed5b}"
-        hidden = $false
-    }
-
-    # Add the profile to settings.json
-    If (-Not $settingsJson.profiles.list) {
-        $settingsJson.profiles.list = @()
-    }
-    $settingsJson.profiles.list += $vailaProfile
-
-    # Save the updated settings.json
-    $settingsJson | ConvertTo-Json -Depth 100 | Set-Content -Path $settingsPath -Encoding UTF8
-
-    Write-Output "vailá profile added to Windows Terminal successfully."
-
-    # Open settings.json in Notepad for verification
-    Write-Output "Opening settings.json in Notepad for verification..."
-    notepad "$settingsPath"
 } Else {
-    # Create a desktop shortcut
-    Write-Output "Creating a desktop shortcut for vailá..."
-    $shortcutPath = "$env:USERPROFILE\Desktop\vailá.lnk"
-    $wshell = New-Object -ComObject WScript.Shell
-    $shortcut = $wshell.CreateShortcut($shortcutPath)
-    $shortcut.TargetPath = "pwsh.exe"
-    $shortcut.Arguments = "-ExecutionPolicy Bypass -NoExit -Command `"& '$condaPath\shell\condabin\conda-hook.ps1' ; conda activate 'vaila' ; cd '$vailaProgramPath' ; python 'vaila.py'`""
-    $shortcut.IconLocation = "$vailaProgramPath\docs\images\vaila_ico.ico"
-    $shortcut.WorkingDirectory = "$vailaProgramPath"
-    $shortcut.Save()
-
-    Write-Output "Desktop shortcut created at $shortcutPath"
+    Write-Output "Windows Terminal is not installed. Skipping profile removal."
 }
 
-Write-Output "Installation and configuration completed successfully!"
+# Remove desktop shortcut if it exists
+$shortcutPath = "$env:USERPROFILE\Desktop\vailá.lnk"
+If (Test-Path $shortcutPath) {
+    Write-Output "Removing desktop shortcut..."
+    Try {
+        Remove-Item -Force -Path $shortcutPath
+        Write-Output "Desktop shortcut removed successfully."
+    } Catch {
+        Write-Error "Failed to remove desktop shortcut. Error: $_"
+    }
+} Else {
+    Write-Output "Desktop shortcut not found. Skipping."
+}
+
+Write-Output "vailá has been successfully uninstalled."
 Pause
+
