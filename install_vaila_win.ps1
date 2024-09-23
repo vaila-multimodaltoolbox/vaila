@@ -1,6 +1,6 @@
 <#
     Script: install_vaila_win.ps1
-    Description: Installs or updates the vailá - Multimodal Toolbox on Windows 11,
+    Description: Installs or updates the vaila - Multimodal Toolbox on Windows 11,
                  setting up the Conda environment, copying program files to 
                  C:\ProgramData\vaila, installing FFmpeg, configuring Windows 
                  Terminal, adding a profile to it, creating a desktop shortcut 
@@ -13,12 +13,12 @@
     Features:
       - Checks if Conda is installed, activates the 'vaila' environment, 
         installs necessary packages (e.g., moviepy), and updates the environment if it exists.
-      - Copies the vailá program to the installation directory (C:\ProgramData\vaila).
+      - Copies the vaila program to the installation directory (C:\ProgramData\vaila).
       - Installs FFmpeg using winget or Chocolatey if not installed.
       - Adds Conda to the PowerShell and Windows Terminal environment, making 
         Conda commands accessible in future sessions.
-      - Configures a vailá profile in Windows Terminal, creates a desktop shortcut if Terminal is not available.
-      - Adds a shortcut for vailá to the Start Menu.
+      - Configures a vaila profile in Windows Terminal, creates a desktop shortcut if Terminal is not available.
+      - Adds a shortcut for vaila to the Start Menu.
 
     Notes:
       - Make sure Conda is installed and accessible from the command line before running this script.
@@ -153,7 +153,7 @@ If (-Not (Test-Path $wtPath)) {
     $wtInstalled = $true
 }
 
-# Configure the vaila profile in Windows Terminal
+# Configure the vaila profile in Windows Terminal using "vaila" for system configurations
 If ($wtInstalled) {
     Write-Output "Configuring the vaila profile in Windows Terminal..."
     $settingsPath = "$wtPath\LocalState\settings.json"
@@ -166,15 +166,15 @@ If ($wtInstalled) {
     $settingsJson = Get-Content -Path $settingsPath -Raw | ConvertFrom-Json
 
     # Remove existing vaila profile if it exists
-    $existingProfileIndex = $settingsJson.profiles.list.FindIndex({ $_.name -eq "vailá" -or $_.name -eq "vaila" })
+    $existingProfileIndex = $settingsJson.profiles.list.FindIndex({ $_.name -eq "vaila" })
     If ($existingProfileIndex -ge 0) {
         Write-Output "Removing existing vailá profile..."
         $settingsJson.profiles.list.RemoveAt($existingProfileIndex)
     }
 
-    # Define the new profile
+    # Define the new profile using "vaila" for system-related configurations
     $vailaProfile = @{
-        name = "vailá"
+        name = "vaila"
         commandline = "pwsh.exe -ExecutionPolicy Bypass -NoExit -Command `"& '$condaPath\shell\condabin\conda-hook.ps1' ; conda activate 'vaila' ; cd '$vailaProgramPath' ; python 'vaila.py'`""
         startingDirectory = "$vailaProgramPath"
         icon = "$vailaProgramPath\docs\images\vaila_ico.png"
@@ -192,7 +192,7 @@ If ($wtInstalled) {
     # Save the updated settings.json with UTF-8 encoding
     $settingsJson | ConvertTo-Json -Depth 100 | Out-File -FilePath $settingsPath -Encoding UTF8
 
-    Write-Output "vailá profile added to Windows Terminal successfully."
+    Write-Output "vaila profile added to Windows Terminal successfully."
 
     # Open settings.json in Notepad for verification
     Write-Output "Opening settings.json in Notepad for verification..."
@@ -212,8 +212,8 @@ If ($wtInstalled) {
     Write-Output "Desktop shortcut created at $shortcutPath"
 }
 
-# Create Start Menu shortcut
-Write-Output "Creating Start Menu shortcut for vailá..."
+# Create Start Menu shortcut using "vaila" for system configurations
+Write-Output "Creating Start Menu shortcut for vaila..."
 $startMenuPath = "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\vaila.lnk"
 $wshell = New-Object -ComObject WScript.Shell
 $startShortcut = $wshell.CreateShortcut($startMenuPath)
@@ -223,7 +223,7 @@ $startShortcut.IconLocation = "$vailaProgramPath\docs\images\vaila_ico.ico"
 $startShortcut.WorkingDirectory = "$vailaProgramPath"
 $startShortcut.Save()
 
-Write-Output "Start Menu shortcut for vailá created at $startMenuPath."
+Write-Output "Start Menu shortcut for vaila created at $startMenuPath."
 
 Write-Output "Installation and configuration completed successfully!"
 Pause
