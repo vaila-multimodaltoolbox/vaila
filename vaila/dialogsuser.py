@@ -53,7 +53,6 @@ This script is distributed under the GPL3 License.
 ================================================================================
 """
 
-
 import os
 import tkinter as tk
 from tkinter import ttk

@@ -76,6 +76,7 @@ import numpy as np
 import pandas as pd
 from vaila.rotation import rotdata
 
+
 def modify_lab_coords(data, labcoord_angles, ordem):
     if labcoord_angles:
         data = rotdata(
@@ -86,6 +87,7 @@ def modify_lab_coords(data, labcoord_angles, ordem):
             ordem=ordem,  # Apply the custom rotation order
         ).T
     return data
+
 
 def get_labcoord_angles(option):
     if option == "A":
@@ -99,7 +101,7 @@ def get_labcoord_angles(option):
             # Split the custom input if it includes both angles and rotation order
             parts = option.split(",")
             custom_angles = eval(parts[0])
-            
+
             if len(parts) == 2:
                 ordem = parts[1].strip()  # Extract the rotation order if provided
             else:
@@ -114,6 +116,7 @@ def get_labcoord_angles(option):
             print(f"Invalid base orientation input: {e}. Using canonical base.")
             return (0, 0, 0), "_canonical", "xyz"
 
+
 def process_files(input_dir, labcoord_angles, suffix, ordem):
     output_dir = os.path.join(input_dir, "rotated_files")
     os.makedirs(output_dir, exist_ok=True)
@@ -127,11 +130,16 @@ def process_files(input_dir, labcoord_angles, suffix, ordem):
         # Verificar se a coluna "Time" está presente em qualquer variação de maiúsculas e minúsculas
         time_col_present = any(col.lower() == "time" for col in data.columns)
         if not time_col_present:
-            print(f"Error: Column 'Time' not found in {file_name}. Please include a 'Time' column.")
+            print(
+                f"Error: Column 'Time' not found in {file_name}. Please include a 'Time' column."
+            )
             continue
 
         # Renomear a coluna de tempo para garantir que tenha um nome consistente
-        data.rename(columns={col: "Time" for col in data.columns if col.lower() == "time"}, inplace=True)
+        data.rename(
+            columns={col: "Time" for col in data.columns if col.lower() == "time"},
+            inplace=True,
+        )
 
         modified_data = data.copy()
         time_column = data["Time"]
@@ -160,7 +168,7 @@ def process_files(input_dir, labcoord_angles, suffix, ordem):
     print("     All files have been processed and saved successfully!     ")
     print("*" * 50 + "\n")
 
+
 def run_modify_labref(option, input_dir):
     labcoord_angles, suffix, ordem = get_labcoord_angles(option)
     process_files(input_dir, labcoord_angles, suffix, ordem)
-

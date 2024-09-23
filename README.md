@@ -339,7 +339,7 @@ C:\vaila_programs\vaila\win_launch_vaila.ps1
 
 - Be cautious when changing execution policies. 
 
-#### Troubleshooting - **Conda Not Found**: 
+### Troubleshooting - **Conda Not Found**: 
 
 - If you receive an error indicating that `conda` is not found, ensure that Conda is installed and added to your system's `PATH`. 
 - On Linux/macOS, you may need to initialize Conda in your shell. 
