@@ -1,4 +1,4 @@
-<#
+<<#
     Script: install_vaila_win.ps1
     Description: Installs or updates the vaila - Multimodal Toolbox on Windows 11,
                  setting up the Conda environment, copying program files to 
@@ -168,7 +168,7 @@ If ($wtInstalled) {
     # Remove existing vaila profile if it exists
     $existingProfileIndex = $settingsJson.profiles.list.FindIndex({ $_.name -eq "vaila" })
     If ($existingProfileIndex -ge 0) {
-        Write-Output "Removing existing vailá profile..."
+        Write-Output "Removing existing vaila profile..."
         $settingsJson.profiles.list.RemoveAt($existingProfileIndex)
     }
 
