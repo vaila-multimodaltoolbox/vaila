@@ -240,4 +240,3 @@ Write-Output "Start Menu shortcut for vaila created at $startMenuPath."
 
 Write-Output "Installation and configuration completed successfully!"
 Pause
-
