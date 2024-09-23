@@ -22,7 +22,7 @@
 
     Author: Prof. Dr. Paulo R. P. Santiago
     Date: September 23, 2024
-    Version: 1.0
+    Version: 1.1
     OS: Windows 11
 #>
 
@@ -90,8 +90,8 @@ If (Test-Path $wtPath) {
             Write-Output "Removing vailá profile from Windows Terminal..."
             $settingsJson.profiles.list.RemoveAt($existingProfileIndex)
 
-            # Save updated settings
-            $settingsJson | ConvertTo-Json -Depth 100 | Set-Content -Path $settingsPath -Encoding UTF8
+            # Save updated settings with UTF-8 encoding
+            $settingsJson | ConvertTo-Json -Depth 100 | Out-File -FilePath $settingsPath -Encoding UTF8
             Write-Output "vailá profile removed from Windows Terminal."
         } Else {
             Write-Output "vailá profile not found in Windows Terminal."

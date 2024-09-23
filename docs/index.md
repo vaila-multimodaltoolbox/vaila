@@ -111,14 +111,16 @@ To use this toolbox, simply select the desired option by typing the correspondin
 
 ## Environment Setup/Install
 
-* Install the complete [Anaconda](https://www.anaconda.com/download/success) virtual environment for your operating system. Remember to add the path and possible dependencies.
+vailá is designed to be cross-platform, supporting Linux, macOS, and Windows. Before proceeding, ensure that you have [Anaconda](https://www.anaconda.com/download) installed and accessible from the command line, as it is required for the vailá Conda environment.
 
-1. Clone the repository:
+### Step 1: Clone the repository
 
-    ```bash
-    git clone https://github.com/vaila-multimodaltoolbox/vaila
-    cd vaila
-    ```
+Clone the repository to your local machine:
+
+```bash
+git clone https://github.com/vaila-multimodaltoolbox/vaila
+cd vaila
+```
 
 2. Install the required environment and dependencies using the provided installation scripts:
 
