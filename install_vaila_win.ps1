@@ -1,4 +1,4 @@
-<<#
+<# 
     Script: install_vaila_win.ps1
     Description: Installs or updates the vailá - Multimodal Toolbox on Windows 11,
                  setting up the Conda environment, copying program files to
@@ -20,6 +20,7 @@
     Version: 1.2
     OS: Windows 11
 #>
+
 
 # Ensure the script is running as administrator
 If (-Not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
