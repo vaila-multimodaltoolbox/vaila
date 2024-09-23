@@ -1,3 +1,37 @@
+<#
+    Script: install_vaila_win.ps1
+    Description: Installs or updates the vailá - Multimodal Toolbox on Windows 11,
+                 setting up the Conda environment, copying program files to 
+                 C:\ProgramData\vaila, installing FFmpeg, configuring Windows 
+                 Terminal, adding a profile to it, creating a desktop shortcut 
+                 if Windows Terminal is not installed, and adding a Start Menu shortcut.
+
+    Usage:
+      1. Download the repository from GitHub manually and extract it.
+      2. Right-click the script and select "Run with PowerShell" as Administrator.
+
+    Features:
+      - Checks if Conda is installed, activates the 'vaila' environment, 
+        installs necessary packages (e.g., moviepy), and updates the environment if it exists.
+      - Copies the vailá program to the installation directory (C:\ProgramData\vaila).
+      - Installs FFmpeg using winget or Chocolatey if not installed.
+      - Adds Conda to the PowerShell and Windows Terminal environment, making 
+        Conda commands accessible in future sessions.
+      - Configures a vailá profile in Windows Terminal, creates a desktop shortcut if Terminal is not available.
+      - Adds a shortcut for vailá to the Start Menu.
+
+    Notes:
+      - Make sure Conda is installed and accessible from the command line before running this script.
+      - The script checks for and installs Windows Terminal if necessary.
+      - Administrator privileges are required to run this script.
+      - Conda will be initialized for PowerShell if not already done.
+
+    Author: Prof. Dr. Paulo R. P. Santiago
+    Date: September 23, 2024
+    Version: 1.4
+    OS: Windows 11
+#>
+
 # Define installation path
 $vailaProgramPath = "C:\ProgramData\vaila"
 
@@ -7,7 +41,40 @@ If (-Not (Test-Path $vailaProgramPath)) {
     New-Item -ItemType Directory -Force -Path $vailaProgramPath
 }
 
-# Check if the "vaila" environment already exists
+# Check if Conda is installed
+If (-Not (Get-Command conda -ErrorAction SilentlyContinue)) {
+    Write-Warning "Conda is not installed or not in the PATH. Please install Conda first."
+    Exit
+}
+
+# Get Conda installation path
+$condaPath = (conda info --base).Trim()
+
+# Initialize Conda for PowerShell if it is not already initialized
+Write-Output "Initializing Conda for PowerShell..."
+Try {
+    & "$condaPath\Scripts\conda.exe" init powershell
+    Write-Output "Conda initialized successfully in PowerShell."
+} Catch {
+    Write-Error "Failed to initialize Conda in PowerShell. Error: $_"
+    Exit
+}
+
+# Add Conda initialization to Windows Terminal and PowerShell profiles
+$profilePath = "$PROFILE"
+If (-Not (Test-Path $profilePath)) {
+    Write-Output "PowerShell profile not found. Creating it..."
+    New-Item -ItemType File -Path $profilePath -Force
+}
+
+Write-Output "Ensuring Conda initialization is added to PowerShell profile..."
+Add-Content -Path $profilePath -Value "& '$condaPath\shell\condabin\conda-hook.ps1'"
+
+# Reload PowerShell profile to reflect changes
+Write-Output "Reloading PowerShell profile to apply changes..."
+. $profilePath
+
+# Check if the 'vaila' environment already exists
 Write-Output "Checking if the 'vaila' Conda environment exists..."
 $envExists = conda env list | Select-String -Pattern "^vaila"
 If ($envExists) {
@@ -70,6 +137,22 @@ If (-Not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
 Write-Output "Copying vaila program to $vailaProgramPath..."
 Copy-Item -Path (Get-Location) -Destination "$vailaProgramPath" -Recurse -Force
 
+# Check if Windows Terminal is installed
+$wtPath = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe"
+If (-Not (Test-Path $wtPath)) {
+    Write-Warning "Windows Terminal is not installed. Installing via Microsoft Store..."
+    Try {
+        winget install --id Microsoft.WindowsTerminal -e
+        Write-Output "Windows Terminal installed successfully."
+        $wtInstalled = $true
+    } Catch {
+        Write-Warning "Failed to install Windows Terminal. A desktop shortcut will be created instead."
+        $wtInstalled = $false
+    }
+} Else {
+    $wtInstalled = $true
+}
+
 # Configure the vaila profile in Windows Terminal
 If ($wtInstalled) {
     Write-Output "Configuring the vaila profile in Windows Terminal..."
@@ -128,6 +211,19 @@ If ($wtInstalled) {
 
     Write-Output "Desktop shortcut created at $shortcutPath"
 }
+
+# Create Start Menu shortcut
+Write-Output "Creating Start Menu shortcut for vailá..."
+$startMenuPath = "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\vaila.lnk"
+$wshell = New-Object -ComObject WScript.Shell
+$startShortcut = $wshell.CreateShortcut($startMenuPath)
+$startShortcut.TargetPath = "pwsh.exe"
+$startShortcut.Arguments = "-ExecutionPolicy Bypass -NoExit -Command `"& '$condaPath\shell\condabin\conda-hook.ps1' ; conda activate 'vaila' ; cd '$vailaProgramPath' ; python 'vaila.py'`""
+$startShortcut.IconLocation = "$vailaProgramPath\docs\images\vaila_ico.ico"
+$startShortcut.WorkingDirectory = "$vailaProgramPath"
+$startShortcut.Save()
+
+Write-Output "Start Menu shortcut for vailá created at $startMenuPath."
 
 Write-Output "Installation and configuration completed successfully!"
 Pause
