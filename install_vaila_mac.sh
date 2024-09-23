@@ -18,8 +18,8 @@
 #   - Ensure Conda is installed and accessible from the command line before running.    #
 #                                                                                       #
 # Author: Prof. Dr. Paulo R. P. Santiago                                                #
-# Date: September 17, 2024                                                              #
-# Version: 1.9                                                                          #
+# Date: September 22, 2024                                                              #
+# Version: 2.0                                                                          #
 # OS: macOS                                                                             #
 #########################################################################################
 
@@ -109,13 +109,10 @@ cat <<EOF > "${APP_PATH}/Contents/Info.plist"
 </plist>
 EOF
 
-# Create the executable script for the app
+# Create the executable script for the app, using osascript to open in terminal
 cat <<EOF > "${APP_PATH}/Contents/MacOS/run_vaila.sh"
 #!/bin/zsh
-# Start Conda
-source ${HOME}/anaconda3/etc/profile.d/conda.sh
-conda activate vaila
-python3 ${HOME}/vaila/vaila.py
+osascript -e 'tell application "Terminal" to do script "source ${HOME}/anaconda3/etc/profile.d/conda.sh && conda activate vaila && python3 ${HOME}/vaila/vaila.py"'
 EOF
 
 # Make the executable script runnable

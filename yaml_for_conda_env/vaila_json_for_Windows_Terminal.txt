@@ -4,6 +4,6 @@
                 "guid": "{17ce5bfe-17ed-5f3a-ab15-5cd5baafed5b}",
                 "hidden": false,
                 "icon": "C:\\vaila_programs\\vaila\\vaila\\images\\vaila_ico.png",
-                "name": "vail\u00e1",
+                "name": "vailá",
                 "startingDirectory": "C:\\vaila_programs\\vaila"
             }
