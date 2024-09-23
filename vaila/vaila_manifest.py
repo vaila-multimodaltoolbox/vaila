@@ -1,28 +1,64 @@
 """
-vaila.py
-Version: 2024-07-19 23:00:00
+Script: vaila_manifest.py
+Description: Displays the vailá manifest and logo in a Tkinter window as part of the vailá - 
+             Multimodal Toolbox. The script opens a new window that shows a message with 
+             the vailá philosophy and includes the vailá logo if available.
+             
+             This script dynamically finds the logo image and adjusts paths to ensure 
+             compatibility when running both from the terminal and the macOS Launchpad.
+
+Version: 2024-09-22
+Author: Prof. Dr. Paulo R. P. Santiago
+
+Usage:
+    - Run directly as part of the vailá framework.
+    - The script loads and displays the vailá manifest and logo.
+    - Make sure that the image `vaila_logo.png` is in the `images` directory relative to the 
+      script or specify the absolute path.
+    
+Notes:
+    - Ensure that the PIL (Pillow) library is installed (`pip install Pillow`).
+    - The script automatically adjusts the image path based on the script's location, making
+      it compatible with both terminal and graphical launch methods (e.g., Launchpad).
+
+Requirements:
+    - Python 3.x
+    - Tkinter for GUI
+    - Pillow for image handling
+
 """
+
 
 import tkinter as tk
 from PIL import Image, ImageTk
 import os
 
-
 def show_vaila_message():
+    # Print the directory and name of the script being executed
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+
     window = tk.Toplevel()
     window.title("vailá")
     window.geometry("900x820")
 
-    # Load the image
-    image_path = os.path.join("vaila", "images", "vaila_logo.png")
-    image = Image.open(image_path)
-    image = image.resize((150, 150), Image.LANCZOS)
-    photo = ImageTk.PhotoImage(image)
+    # Load the image with an absolute path
+    script_dir = os.path.dirname(os.path.abspath(__file__))  # Directory of the current script
+    image_path = os.path.join(script_dir, "images", "vaila_logo.png")
 
-    # Create and place the image label
-    image_label = tk.Label(window, image=photo)
-    image_label.image = photo  # Keep a reference to avoid garbage collection
-    image_label.pack(pady=10)
+    try:
+        image = Image.open(image_path)
+        image = image.resize((150, 150), Image.LANCZOS)
+        photo = ImageTk.PhotoImage(image)
+
+        # Create and place the image label
+        image_label = tk.Label(window, image=photo)
+        image_label.image = photo  # Keep a reference to avoid garbage collection
+        image_label.pack(pady=10)
+
+    except FileNotFoundError as e:
+        print(f"Error: {e}")
+        tk.Label(window, text="Image not found!").pack(pady=10)
 
     # Create a frame for the text and scrollbar
     text_frame = tk.Frame(window)
@@ -75,6 +111,6 @@ def show_vaila_message():
     window.grab_set()
     window.mainloop()
 
-
 if __name__ == "__main__":
     show_vaila_message()
+
