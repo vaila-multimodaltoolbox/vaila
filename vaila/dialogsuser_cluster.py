@@ -57,7 +57,6 @@ This script is distributed under the GPL3 License.
 ================================================================================
 """
 
-
 import os
 import tkinter as tk
 from tkinter import ttk
@@ -167,4 +166,3 @@ def get_user_inputs():
     app.destroy()  # Close the GUI window after the main loop ends
 
     return user_inputs
-

@@ -68,7 +68,6 @@ This script is distributed under the GPL3 License.
 ================================================================================
 """
 
-
 import os
 import numpy as np
 import pandas as pd
@@ -84,6 +83,7 @@ from PIL import Image
 from rich import print
 
 # import ipdb
+
 
 def save_results_to_csv(
     base_dir, time, cluster1_euler_angles, cluster2_euler_angles, file_name
@@ -145,8 +145,9 @@ def analyze_cluster_data():
     )
 
     show_figures = messagebox.askyesno(
-        "Show Figures", "Do you want to generate and display the figures? "
-        "Note that all figures will be saved even if not displayed."
+        "Show Figures",
+        "Do you want to generate and display the figures? "
+        "Note that all figures will be saved even if not displayed.",
     )
 
     print(
@@ -465,4 +466,3 @@ def analyze_cluster_data():
 
 if __name__ == "__main__":
     analyze_cluster_data()
-

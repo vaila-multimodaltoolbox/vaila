@@ -185,7 +185,7 @@ def createortbase_4points(p1, p2, p3, p4, configuration="y"):
     # Print the directory and name of the script being executed
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
- 
+
     # Calculate the mean point
     pm = (p1 + p2 + p3 + p4) / 4
 
@@ -247,11 +247,11 @@ def calcmatrot(base1, base2=None):
     Returns:
     np.ndarray: An array containing the rotation matrices for each time step. Shape will be (3, 3) for a single time step or (n, 3, 3) for multiple time steps.
     """
-    
+
     # Print the directory and name of the script being executed
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
- 
+
     if base2 is None:
         base2 = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
 
@@ -278,7 +278,7 @@ def rotmat2euler(matrot):
     # Print the directory and name of the script being executed
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
- 
+
     rotation_object = R.from_matrix(matrot)
     euler_angles = rotation_object.as_euler("xyz", degrees=False)
     euler_angles_degrees = np.degrees(euler_angles)
@@ -298,7 +298,7 @@ def rotmat2quat(matrot):
     # Print the directory and name of the script being executed
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
- 
+
     rotation_object = R.from_matrix(matrot)
     quaternions = rotation_object.as_quat()
     return quaternions
@@ -319,7 +319,7 @@ def rotdata(data, xth=0, yth=0, zth=0, ordem="xyz"):
     # Print the directory and name of the script being executed
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
- 
+
     # Create the rotation object using Euler angles
     rotation_object = R.from_euler(ordem, [xth, yth, zth], degrees=True)
 
@@ -327,4 +327,3 @@ def rotdata(data, xth=0, yth=0, zth=0, ordem="xyz"):
     datrot = rotation_object.apply(data.T).T
 
     return datrot
-
