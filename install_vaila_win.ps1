@@ -1,4 +1,4 @@
-<<#
+<#
     Script: install_vaila_win.ps1
     Description: Installs or updates the vaila - Multimodal Toolbox on Windows 11,
                  setting up the Conda environment, copying program files to 
@@ -227,4 +227,3 @@ Write-Output "Start Menu shortcut for vaila created at $startMenuPath."
 
 Write-Output "Installation and configuration completed successfully!"
 Pause
-
