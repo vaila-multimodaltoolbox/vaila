@@ -56,7 +56,6 @@ import matplotlib.pyplot as plt
 import sys
 import os
 import csv
-from os.path import basename
 from datetime import datetime
 from scipy.signal import butter, filtfilt
 from scipy.signal import find_peaks
@@ -76,10 +75,6 @@ from tkinter import (
     messagebox,
     simpledialog,
 )
-
-# Print the directory and name of the script being executed
-print(f"Running script: {os.path.basename(__file__)}")
-print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
 
 
 def select_source_directory():
@@ -103,6 +98,69 @@ def select_output_directory():
     root.destroy()
     return output_dir
 
+def select_body_weight(data):
+    """
+    Allows the user to interactively select the range for calculating body_weight_newton.
+    If the majority of data is negative, it multiplies the data by -1 for visualization.
+    """
+   
+    fig, ax = plt.subplots()
+    ax.plot(data)
+    ax.set_title("Left Click to select the range for body weight calculation (2 clicks), Press 'Enter' to confirm")
+    ax.set_xlabel("Sample Index")
+    ax.set_ylabel("Force Value")
+    ax.grid(True)
+
+    points = []
+    space_held = False  # Variable to track if Space is held down
+
+    def on_key_press(event):
+        nonlocal space_held
+        if event.key == " ":
+            space_held = True
+        elif event.key == "enter":
+            plt.close(fig)  # Closes the figure when 'Enter' is pressed
+
+    def on_key_release(event):
+        nonlocal space_held
+        if event.key == " ":
+            space_held = False
+
+    def onclick(event):
+        if space_held and event.button == 1:  # Left mouse button with space held down
+            x_value = event.xdata
+            if x_value is not None:
+                points.append(int(x_value))
+                ax.axvline(x=x_value, color="black", linestyle="--")
+                fig.canvas.draw()
+        elif event.button == 3:  # Right mouse button to remove the last point
+            if points:
+                points.pop()
+                ax.cla()
+                ax.plot(data)
+                ax.grid(True)
+                for point in points:
+                    ax.axvline(x=point, color="black", linestyle="--")
+                fig.canvas.draw()
+
+    fig.canvas.mpl_connect("button_press_event", onclick)
+    fig.canvas.mpl_connect("key_press_event", on_key_press)
+    fig.canvas.mpl_connect("key_release_event", on_key_release)
+
+    plt.show(block=True)
+
+    if len(points) != 2:
+        print("Please select exactly two points for body weight.")
+        sys.exit(1)
+
+    start_index, end_index = sorted(points)
+    body_weight_newton = np.median(data[start_index:end_index])
+    
+    print(f"Selected body weight range: {start_index} to {end_index}")
+    print(f"Calculated Body Weight (in Newton): {body_weight_newton}")
+    plt.close(fig)
+
+    return body_weight_newton
 
 def process_file(
     file_path,
@@ -120,10 +178,16 @@ def process_file(
     """
     # Load the file and extract the selected column
     df = pd.read_csv(file_path)
-    data = df[selected_column].values
+    data = df[selected_column].to_numpy()
 
-    # Determine body weight from the data if not provided
-    body_weight_newton = np.median(data[10:110])
+    # Check if the majority of the data is negative and invert it if necessary
+    if np.median(data) < 0:
+        data = data * -1  # Invert the sign if the median is negative
+
+    # Interactive body weight selection
+    body_weight_newton = select_body_weight(data)
+  
+    ## Determine body weight from the data if not provided
     body_weight_kg = body_weight_newton / 9.81
     databw_norm = data / (body_weight_kg * 9.81)
 
@@ -306,6 +370,7 @@ def create_main_output_directory(output_dir, filename):
 def prompt_user_input(file_name):
     """
     Prompts the user for input parameters and displays the file name being processed.
+    Ensures case-insensitive input and standardizes it properly.
     """
     root = Tk()
     root.withdraw()  # Hide the main Tkinter window
@@ -314,9 +379,13 @@ def prompt_user_input(file_name):
     sidefoot = simpledialog.askstring(
         "Input", f"Enter Sidefoot (R or L) for {file_name}:", initialvalue="R"
     )
+    sidefoot = sidefoot.upper() if sidefoot and sidefoot.upper() in ["R", "L"] else "R"  # Ensure uppercase R or L
+
     dominance = simpledialog.askstring(
         "Input", f"Enter Dominance (R or L) for {file_name}:", initialvalue="R"
     )
+    dominance = dominance.upper() if dominance and dominance.upper() in ["R", "L"] else "R"  # Ensure uppercase R or L
+
     quality = simpledialog.askinteger(
         "Input", f"Enter Quality (integer) for {file_name}:", initialvalue=5
     )
@@ -326,15 +395,24 @@ def prompt_user_input(file_name):
     fs = simpledialog.askfloat(
         "Input", f"Enter Sampling Frequency (Fs) for {file_name}:", initialvalue=1000.0
     )
+
     generate_profile = simpledialog.askstring(
         "Input",
         f"Generate Profiling Report? (Yes or No) for {file_name}:",
         initialvalue="No",
     )
+    # Convert 'y' or 'Y' to 'Yes' and 'n' or 'N' to 'No'
+    if generate_profile:
+        generate_profile = generate_profile.strip().lower()  # Make input case-insensitive
+        if generate_profile in ["y", "yes"]:
+            generate_profile = "Yes"
+        elif generate_profile in ["n", "no"]:
+            generate_profile = "No"
+        else:
+            generate_profile = "No"  # Default to 'No' if not recognized
 
     root.destroy()
     return sidefoot, dominance, quality, threshold, fs, generate_profile
-
 
 def butterworthfilt(data, cutoff=59, Fs=1000):
     """
@@ -662,6 +740,7 @@ def calculate_cube_values(signal, Fs):
     )
 
 
+
 def makefig1(data, output_dir, filename):
     """
     Creates an interactive plot for selecting data points.
@@ -678,7 +757,7 @@ def makefig1(data, output_dir, filename):
     fig1, ax1 = plt.subplots()
     ax1.plot(data)
     ax1.set_title(
-        "Space + Left Click to select, Right Click to remove, press 'Enter' to finish"
+        "Select intervals of interest for Force Fz: Hold Space + Left Click to mark, Right Click to remove, 'Enter' to confirm"
     )
     ax1.set_xlabel("Sample Index")
     ax1.set_ylabel("Force Value")
@@ -1607,15 +1686,15 @@ def makefig4(
                     valr,
                 ],
                 dtype=object,
-            )  # Note que mudamos para 'dtype=object' para acomodar strings e floats.
+            )  # Note with changes to dytpe=object to accomodate strings and floats.
             result_array.append(matresults)
 
-            # Salva a figura em PNG e SVG
+        # Save the figure in PNG and SVG formats
         plt.savefig(result_plot_filename_png, format="png", dpi=300)
         plt.savefig(result_plot_filename_svg, format="svg")
-        plt.show(block=False)  # Mostra a figura sem bloquear o restante do código
-        plt.pause(1)  # Espera por 1 segundo
-        plt.close(fig4)  # Fecha a figura
+        plt.show(block=False)  # Show the figure without blocking the rest of the code.
+        plt.pause(1)  # Wait for 1 second before closing the figure
+        plt.close(fig4)  # close the figure 
 
         return result_array
 
@@ -1723,4 +1802,10 @@ def main():
 
 
 if __name__ == "__main__":
+    # Print the directory and name of the script being executed
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+
+    # Run the main function
     main()
+
