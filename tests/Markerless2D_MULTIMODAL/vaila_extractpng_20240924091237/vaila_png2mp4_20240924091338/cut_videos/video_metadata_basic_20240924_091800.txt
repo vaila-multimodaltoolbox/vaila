@@ -1,0 +1,14 @@
+File: camera_01_cube_test_png_196_190_446.mp4
+Frames: 257
+FPS: 30.0
+Resolution: 1920x1080
+Codec: h264
+Duration (s): 8.57
+
+File: camera_02_cube_test_png_192_186_442.mp4
+Frames: 257
+FPS: 30.0
+Resolution: 1920x1080
+Codec: h264
+Duration (s): 8.57
+
