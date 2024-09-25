@@ -1,0 +1,8 @@
+Video Path: /Users/preto/Desktop/Preto/vaila/tests/Markerless2D_MULTIMODAL/camera_01_cube_test_png_196_190_446_dbox.mp4
+Output Video Path: /Users/preto/Desktop/Preto/vaila/tests/Markerless2D_MULTIMODAL/mediapipe_20240924_092434/camera_01_cube_test_png_196_190_446_dbox/camera_01_cube_test_png_196_190_446_dbox_mp.mp4
+Codec: mp4v
+Resolution: 1920x1080
+FPS: 30.0
+Total Frames: 257
+Execution Time: 6.197577238082886 seconds
+MediaPipe Pose Configuration: {'min_detection_confidence': 0.01, 'min_tracking_confidence': 0.01}
