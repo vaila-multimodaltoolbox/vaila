@@ -1,15 +1,78 @@
-# markerless_2D_analysis.py
-# Author: Paulo Santiago
-# Version: 0.0.5
-# Last Updated: August 10, 2024
-# Description: This script performs batch processing of videos for 2D pose estimation using MediaPipe's Pose model.
-# --------------------------------------------------
-# Usage Instructions:
-# - Select the input directory containing video files (.mp4, .avi, .mov).
-# - Select the base output directory where the processed videos and landmarks will be saved.
-# - Enter the minimum detection and tracking confidence values in the provided dialog boxes.
-# - The script will process each video in the directory, save the processed video with pose landmarks overlaid, and output the landmark coordinates in both relative and pixel formats.
-# --------------------------------------------------
+"""
+Script: markerless_2D_analysis.py
+Author: Prof. Dr. Paulo Santiago
+Version: 0.0.5
+Last Updated: August 10, 2024
+
+Description:
+    This script performs batch processing of videos for 2D pose estimation using 
+    MediaPipe's Pose model. It processes videos in a specified input directory, overlays 
+    pose landmarks on each video frame, and exports both normalized and pixel-based 
+    landmark coordinates to CSV files.
+
+Usage:
+    - Run the script to open a graphical interface for selecting the input directory 
+      containing video files (.mp4, .avi, .mov), the output directory, and for specifying 
+      minimum detection and tracking confidence values.
+    - The script processes each video, generating an output video with overlaid pose landmarks, 
+      and CSV files containing both normalized and pixel-based landmark coordinates.
+
+How to Execute:
+    1. Ensure you have all dependencies installed:
+       - Install OpenCV: `pip install opencv-python`
+       - Install MediaPipe: `pip install mediapipe`
+       - Tkinter is usually bundled with Python installations.
+    2. Open a terminal and navigate to the directory where `markerless_2D_analysis.py` is located.
+    3. Run the script using Python:
+       ```bash
+       python markerless_2D_analysis.py
+       ```
+    4. Follow the graphical interface prompts:
+       - Select the input directory with videos (.mp4, .avi, .mov).
+       - Select the base output directory for processed videos and CSVs.
+       - Enter the desired confidence thresholds for detection and tracking.
+    5. The script will process the videos and save the outputs in the specified output directory.
+
+Requirements:
+    - Python 3.11.9
+    - OpenCV (`pip install opencv-python`)
+    - MediaPipe (`pip install mediapipe`)
+    - Tkinter (usually included with Python installations)
+    - Pillow (if using image manipulation: `pip install Pillow`)
+
+Output:
+    The following files are generated for each processed video:
+    1. Processed Video (`*_mp.mp4`): 
+       The video with the 2D pose landmarks overlaid on the original frames.
+    2. Normalized Landmark CSV (`*_mp_norm.csv`):
+       A CSV file containing the landmark coordinates normalized to a scale between 0 and 1 
+       for each frame. These coordinates represent the relative positions of landmarks in the video.
+    3. Pixel Landmark CSV (`*_mp_pixel.csv`):
+       A CSV file containing the landmark coordinates in pixel format. The x and y coordinates 
+       are scaled to the video’s resolution, representing the exact pixel positions of the landmarks.
+    4. Log File (`log_info.txt`):
+       A log file containing video metadata and processing information, such as resolution, frame rate, 
+       total number of frames, codec used, and the MediaPipe Pose configuration.
+
+Example:
+    1. Select a folder with videos in .mp4 format.
+    2. Choose the output directory for saving processed videos and CSVs.
+    3. Enter the desired confidence thresholds (e.g., detection: 0.5, tracking: 0.5).
+    4. The processed files will be saved with landmarks overlaid and CSVs in the chosen 
+       output directory.
+
+License:
+    This program is free software: you can redistribute it and/or modify it under the terms of 
+    the GNU General Public License as published by the Free Software Foundation, either version 3 
+    of the License, or (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; 
+    without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. 
+    See the GNU General Public License for more details.
+
+    You should have received a copy of the GNU GPLv3 (General Public License Version 3) along with this program. 
+    If not, see <https://www.gnu.org/licenses/>.
+"""
 
 import cv2
 import mediapipe as mp
@@ -190,6 +253,10 @@ def process_video(video_path, output_dir, pose_config):
 
 
 def process_videos_in_directory():
+    # Print the directory and name of the script being executed
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+
     root = tk.Tk()
     root.withdraw()
 

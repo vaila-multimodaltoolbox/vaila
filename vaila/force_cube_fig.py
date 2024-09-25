@@ -1,52 +1,105 @@
 """
 ================================================================================
-force_cube_fig.py
+Force Platform Data Analysis Toolkit - force_cube_fig.py
 ================================================================================
-Author: Paulo Santiago
+Author: Prof. Dr. Paulo R. P. Santiago
 Date: 9 September 2024
 Version: 0.5
+Python Version: 3.11.9
 
 Description:
 ------------
-This script provides functions to process biomechanical data from force platforms,
-analyzing the vertical ground reaction force (VGRF) to compute several metrics such
-as peak forces, time intervals, impulse, rate of force development (RFD), and stiffness
-parameters. The results are visualized through plots and saved to CSV files for further analysis.
+This script processes biomechanical data from force platforms, analyzing 
+the vertical ground reaction force (VGRF) to compute key metrics, including:
+- Peak forces, time intervals, impulse, rate of force development (RFD), 
+  and stiffness parameters.
+The results are visualized through interactive plots and saved to CSV files for 
+further analysis. The script allows batch processing of multiple files and provides 
+descriptive statistics for all analyzed data.
 
-The script includes the following main functionalities:
-1. **Data Selection**: Allows the user to select source and output directories, as well as columns from the input CSV files.
-2. **Data Processing**: Normalizes data, applies Butterworth filters, and computes key biomechanical metrics.
-3. **Visualization**: Generates multiple figures showing force-time curves with markers and highlighted regions.
-4. **Statistical Analysis**: Calculates descriptive statistics and optionally generates profiling reports using pandas and ydata_profiling.
-5. **Batch Processing**: Processes multiple files in a batch mode.
+Key Functionalities:
+---------------------
+1. Data Selection: 
+   - Allows the user to select input CSV files containing biomechanical data.
+   - Prompts the user to specify output directories.
+   - Prompts the user for input parameters (sampling frequency, thresholds, etc.).
+2. Data Processing: 
+   - Normalizes data, applies Butterworth filters, and computes key biomechanical metrics.
+   - Computes metrics such as peak force, impulse, and rate of force development.
+3. Visualization: 
+   - Generates and saves plots for force-time curves with relevant markers and highlighted regions.
+4. Statistical Analysis: 
+   - Provides descriptive statistics and optional profiling reports using pandas and ydata_profiling.
+5. Batch Processing: 
+   - Processes all CSV files in the selected source directory.
 
-Modules and Packages Required:
--------------------------------
-- Python Standard Libraries: os, sys, datetime, csv, tkinter
-- External Libraries: numpy, pandas, matplotlib, scipy, rich, ydata_profiling
+Input:
+------
+- CSV Files: 
+   Each CSV file should contain biomechanical data, specifically force data recorded 
+   from a force platform. The file must include a column for vertical ground reaction force (VGRF).
+   Example format:
+   Sample, Force (N)
+   0, 50.25
+   1, 51.60
+   2, 49.80
+   ...
 
-How to Use:
------------
-1. **Select Source and Output Directories**: The script uses a Tkinter GUI to allow the user to select the input directory containing CSV files and the output directory for saving results.
-2. **Select Data Columns**: Prompts the user to select which columns from the CSV files to analyze.
-3. **User Input Parameters**: The user is prompted to enter parameters such as sidefoot, dominance, quality, threshold, and sampling frequency (Fs).
-4. **Batch Processing**: Automatically processes all files in the source directory according to the selected parameters and outputs results to the specified directory.
-5. **Visualization**: Generates interactive plots for data selection and saves analysis figures.
+- User Input: 
+   The user will input various parameters through a graphical interface, including:
+   - Sidefoot (R/L)
+   - Dominance (R/L)
+   - Quality (integer)
+   - Threshold for activity detection
+   - Sampling frequency (Fs in Hz)
+   - Whether to generate a profiling report.
+
+Output:
+-------
+- CSV Files: 
+   A CSV file for each input file, containing results for key metrics such as:
+   * Peak force at 40 ms and 100 ms
+   * Impulse over different time intervals
+   * Rate of force development (RFD)
+   * Stiffness parameters
+   * Total contact time and time to reach peak forces
+
+- Plot Files: 
+   PNG and SVG plots of force-time curves, highlighting important events such as peak forces, 
+   rate of force development, and impact transient.
+
+- Statistical Report: 
+   A summary CSV file containing descriptive statistics for the processed files.
+   Optionally, a profiling report in HTML format for each file.
 
 How to Run:
 -----------
-To execute this script, ensure that all dependencies are installed and then run the script from the terminal using the following command:
+1. Ensure that all dependencies are installed, including numpy, pandas, matplotlib, scipy, 
+   ydata_profiling, rich, and tkinter. You can install these using pip.
+2. Run the script from the terminal:
+   python force_cube_fig.py
+3. A graphical interface will guide you to:
+   - Select the source directory containing CSV files.
+   - Select the output directory where results will be saved.
+   - Specify input parameters such as sampling frequency, sidefoot, and dominance.
+4. The script will process all files in the selected directory and generate CSV results 
+   and plots for each file.
 
-```bash
-python force_cube_fig.py
-Make sure to have the necessary permissions and access to both input and output directories. The script will prompt the user for inputs via a GUI.
 License:
+--------
+This script is licensed under the GNU General Public License v3.0 (GPLv3). 
+You may redistribute and modify the script under these terms. See the LICENSE file 
+or visit https://www.gnu.org/licenses/gpl-3.0.html for more details.
 
-This script is licensed under the MIT License. See LICENSE file in the project root for more details.
 Disclaimer:
+-----------
+This script is provided "as is" without warranty of any kind. It is intended for 
+academic and research purposes only. The author is not liable for any damage or 
+loss resulting from its use.
 
-This script is provided "as is" without warranty of any kind. Use at your own risk. For academic and research purposes only.
-
+Changelog:
+----------
+- 2024-09-09: Initial release with core biomechanical analysis functions.
 ================================================================================
 """
 
@@ -98,15 +151,18 @@ def select_output_directory():
     root.destroy()
     return output_dir
 
+
 def select_body_weight(data):
     """
     Allows the user to interactively select the range for calculating body_weight_newton.
     If the majority of data is negative, it multiplies the data by -1 for visualization.
     """
-   
+
     fig, ax = plt.subplots()
     ax.plot(data)
-    ax.set_title("Left Click to select the range for body weight calculation (2 clicks), Press 'Enter' to confirm")
+    ax.set_title(
+        "Left Click to select the range for body weight calculation (2 clicks), Press 'Enter' to confirm"
+    )
     ax.set_xlabel("Sample Index")
     ax.set_ylabel("Force Value")
     ax.grid(True)
@@ -155,12 +211,13 @@ def select_body_weight(data):
 
     start_index, end_index = sorted(points)
     body_weight_newton = np.median(data[start_index:end_index])
-    
+
     print(f"Selected body weight range: {start_index} to {end_index}")
     print(f"Calculated Body Weight (in Newton): {body_weight_newton}")
     plt.close(fig)
 
     return body_weight_newton
+
 
 def process_file(
     file_path,
@@ -186,7 +243,7 @@ def process_file(
 
     # Interactive body weight selection
     body_weight_newton = select_body_weight(data)
-  
+
     ## Determine body weight from the data if not provided
     body_weight_kg = body_weight_newton / 9.81
     databw_norm = data / (body_weight_kg * 9.81)
@@ -379,12 +436,16 @@ def prompt_user_input(file_name):
     sidefoot = simpledialog.askstring(
         "Input", f"Enter Sidefoot (R or L) for {file_name}:", initialvalue="R"
     )
-    sidefoot = sidefoot.upper() if sidefoot and sidefoot.upper() in ["R", "L"] else "R"  # Ensure uppercase R or L
+    sidefoot = (
+        sidefoot.upper() if sidefoot and sidefoot.upper() in ["R", "L"] else "R"
+    )  # Ensure uppercase R or L
 
     dominance = simpledialog.askstring(
         "Input", f"Enter Dominance (R or L) for {file_name}:", initialvalue="R"
     )
-    dominance = dominance.upper() if dominance and dominance.upper() in ["R", "L"] else "R"  # Ensure uppercase R or L
+    dominance = (
+        dominance.upper() if dominance and dominance.upper() in ["R", "L"] else "R"
+    )  # Ensure uppercase R or L
 
     quality = simpledialog.askinteger(
         "Input", f"Enter Quality (integer) for {file_name}:", initialvalue=5
@@ -403,7 +464,9 @@ def prompt_user_input(file_name):
     )
     # Convert 'y' or 'Y' to 'Yes' and 'n' or 'N' to 'No'
     if generate_profile:
-        generate_profile = generate_profile.strip().lower()  # Make input case-insensitive
+        generate_profile = (
+            generate_profile.strip().lower()
+        )  # Make input case-insensitive
         if generate_profile in ["y", "yes"]:
             generate_profile = "Yes"
         elif generate_profile in ["n", "no"]:
@@ -413,6 +476,7 @@ def prompt_user_input(file_name):
 
     root.destroy()
     return sidefoot, dominance, quality, threshold, fs, generate_profile
+
 
 def butterworthfilt(data, cutoff=59, Fs=1000):
     """
@@ -738,7 +802,6 @@ def calculate_cube_values(signal, Fs):
         vpeak_poi,
         time_poi,
     )
-
 
 
 def makefig1(data, output_dir, filename):
@@ -1694,7 +1757,7 @@ def makefig4(
         plt.savefig(result_plot_filename_svg, format="svg")
         plt.show(block=False)  # Show the figure without blocking the rest of the code.
         plt.pause(1)  # Wait for 1 second before closing the figure
-        plt.close(fig4)  # close the figure 
+        plt.close(fig4)  # close the figure
 
         return result_array
 
@@ -1808,4 +1871,3 @@ if __name__ == "__main__":
 
     # Run the main function
     main()
-

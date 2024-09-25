@@ -1,5 +1,7 @@
 """
 ================================================================================
+cluster_analysis.py
+
 Cluster Data Analysis Toolkit for Motion Capture
 ================================================================================
 Author: Prof. Dr. Paulo R. P. Santiago
@@ -8,63 +10,97 @@ Version: 1.0
 
 Overview:
 
-This Python script is designed to process motion capture data related to trunk and pelvis rotations using predefined clusters of anatomical markers. The script reads CSV files containing marker positions, calculates orthonormal bases for the clusters, computes the corresponding Euler angles, and optionally compares them with anatomical reference data. Visualizations are provided using `matplotlib`, with results saved to CSV for further analysis.
+This Python script processes motion capture data for trunk and pelvis rotations using clusters of anatomical markers. It reads CSV files with marker positions, computes orthonormal bases for the clusters, calculates Euler angles, and optionally compares these angles with anatomical reference data. The script generates 3D visualizations of clusters and saves results to CSV for further analysis.
 
 Main Features:
 
     1. Data Input and Filtering:
-        - Selects CSV files containing motion capture data.
-        - Allows the user to filter data using a Butterworth filter for noise reduction.
+        - Reads CSV files containing 3D motion capture data of anatomical markers.
+        - Applies a Butterworth filter for noise reduction.
 
     2. Orthonormal Bases and Euler Angles:
-        - `createortbase`: Computes orthonormal bases for clusters of anatomical markers.
-        - `calcmatrot` and `rotmat2euler`: Calculates rotation matrices and converts them into Euler angles for both the trunk and pelvis clusters.
+        - Calculates orthonormal bases for the anatomical marker clusters.
+        - Computes rotation matrices and converts them into Euler angles.
 
     3. Anatomical Reference Data:
-        - Option to incorporate anatomical angle data from a separate CSV file.
-        - Adjusts the calculated Euler angles based on the anatomical reference angles.
+        - Optionally reads anatomical reference angles from another CSV for comparison.
+        - Adjusts computed Euler angles based on these anatomical references.
 
     4. Data Visualization:
-        - Uses `matplotlib` to plot 3D orthonormal bases and Euler angles over time.
-        - Configurable cluster visualization for the trunk and pelvis in 3D space.
+        - Generates 3D visualizations of orthonormal bases and Euler angles over time.
+        - Saves visualizations as PNG images for further review.
 
     5. File Export:
-        - Saves processed data, including Euler angles, to CSV files.
-        - Exports `matplotlib` figures as PNG images for further analysis.
+        - Exports computed Euler angles and other results to CSV files.
+        - Saves visualizations of Euler angles and cluster configurations.
 
-Key Functions and Their Functionality:
+Input:
 
-    save_results_to_csv():
-        Saves the calculated Euler angles for both clusters to a CSV file with a timestamp.
+    - A folder containing CSV files with 3D marker coordinates for clusters (e.g., trunk and pelvis).
+    - Each CSV file should have headers identifying the coordinates for each marker in the cluster.
 
-    read_anatomical_csv():
-        Reads the anatomical reference data from a CSV file, extracting the median Euler angles for comparison.
+Outputs:
 
-    analyze_cluster_data():
-        The main function that handles the entire process:
-        - Prompts the user to select directories and files for input and output.
-        - Reads, filters, and processes motion capture data.
-        - Computes orthonormal bases and Euler angles.
-        - Plots 3D representations of the clusters and Euler angles over time.
-        - Saves the processed data and visualizations.
-        - Optionally incorporates anatomical reference data and compares the results.
+    1. Processed CSV Files (`*_cluster_*.csv`):
+        - These CSV files contain the Euler angles for both clusters over time, including the X, Y, and Z angles for each frame.
 
-Usage Notes:
+    2. PNG Files (`*_figure.png`):
+        - Visualizations of 3D orthonormal bases for each cluster and Euler angles over time.
 
-    - The script requires a folder containing CSV files with 3D marker coordinates for two clusters (e.g., trunk and pelvis).
-    - The user can select which headers to use for each cluster, and optionally adjust for anatomical reference angles.
-    - Plots of the clusters and the corresponding Euler angles are generated and saved for further analysis.
-    - A Butterworth filter is applied to the marker data to reduce noise before computing the orthonormal bases and Euler angles.
+    3. Log Files (`log_info.txt`):
+        - Logs that include details about the processing, such as the Euler angles, filtering parameters, and metadata of the motion capture session.
+
+Usage Instructions:
+
+    1. Install the necessary dependencies:
+        - `pip install numpy pandas matplotlib Pillow rich`
+
+    2. Open a terminal and navigate to the directory containing the script.
+
+    3. Run the script:
+        ```bash
+        python cluster_analysis.py
+        ```
+
+    4. Follow the prompts:
+        - Select the folder with CSV files containing marker positions.
+        - Choose the output directory for saving the processed data and visualizations.
+        - Optionally, select anatomical reference data for comparison.
+
+    5. The script will:
+        - Read and filter the marker data.
+        - Compute orthonormal bases for the clusters.
+        - Generate Euler angles for each cluster.
+        - Save the results as CSV files and visualizations as PNG images.
+
+Requirements:
+
+    - Python 3.x
+    - numpy (`pip install numpy`)
+    - pandas (`pip install pandas`)
+    - matplotlib (`pip install matplotlib`)
+    - Pillow (`pip install Pillow`)
+    - rich (`pip install rich`)
+
+Notes:
+
+    - The script supports reading CSV files with 3D marker positions in a specific format.
+    - The user selects the CSV headers to map to each anatomical marker cluster.
+    - A Butterworth filter is applied to reduce noise in the marker data.
+    - Euler angles and orthonormal bases are calculated for each cluster.
 
 Changelog for Version 1.0:
 
     - Initial release with support for reading, filtering, and processing motion capture data.
-    - Added options for anatomical angle comparisons.
+    - Added options for comparing computed angles with anatomical reference data.
     - Full integration of 3D visualization and result export to CSV and PNG.
 
 License:
 
-This script is distributed under the GPL3 License.
+    This script is distributed under the GNU General Public License v3.0 (GPLv3).
+    You are free to modify and redistribute this software, but it comes WITHOUT ANY WARRANTY; 
+    without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+    For more details, see <https://www.gnu.org/licenses/>.
 ================================================================================
 """
 
