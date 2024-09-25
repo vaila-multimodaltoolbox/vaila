@@ -1,30 +1,116 @@
-# --------------------------------------------------
-# Script Name: getpixelvideo.py
-# Version: 0.0.9
-# Last Updated: August 15, 2024
-# Description: A tool for marking and saving pixel
-# coordinates in a video with zoom functionality.
-# The tool allows loading and displaying pre-marked points from a CSV file.
-# --------------------------------------------------
-# Usage Instructions:
-# - Press 'Space' to toggle play/pause of the video.
-# - Press 'Escape' to close the video and exit the application.
-# - Press 'A' or 'Left Arrow' to go to the previous frame.
-# - Press 'D' or 'Right Arrow' to go to the next frame.
-# - Press 'W' or 'Up Arrow' to move to the next point.
-# - Press 'S' or 'Down Arrow' to move to the previous point.
-# - Press 'N' to go to the first frame.
-# - Press 'P' to go to the last frame.
-# - Press 'Ctrl m' to zoom in on the video.
-# - Press 'Ctrl l' to zoom out on the video.
-# - Press 'Ctrl h' to reset the zoom.
-# - Left-click to mark a point on the video.
-# - Right-click to remove the last marked point.
-#
-# Note: The current marker is not visually highlighted. Use the navigation
-# counter to track your position. To control the video with zoom and player,
-# you must select the control window.
-# --------------------------------------------------
+"""
+================================================================================
+Pixel Coordinate Tool - getpixelvideo.py
+================================================================================
+Author: Prof. Dr. Paulo R. P. Santiago
+Date: 15 August 2024
+Version: 0.0.9
+Python Version: 3.11.9
+
+Description:
+------------
+This tool enables marking and saving pixel coordinates in video frames, with zoom 
+functionality for more precise annotations. Users can interact with the video, marking points 
+on each frame and loading pre-marked points from a CSV file.
+
+Key Functionalities:
+---------------------
+1. Frame Navigation: Move through video frames to mark or adjust points.
+2. Zoom: Zoom in and out on the video for precise pixel selection.
+3. Point Marking: Left-click to mark a point, right-click to remove the last marked point.
+4. CSV Loading: Load pre-existing points from a CSV file for review and adjustment.
+5. Batch Processing: Save marked points as CSV, creating a log for each processed video.
+
+Input:
+------
+- Video Files: Supported formats include .mp4, .avi, .mov, .mkv.
+- CSV Files (Optional): CSV files containing pre-marked points for review and adjustment.
+
+Example of Input Format (CSV):
+------------------------------
+frame, p1_x, p1_y, p2_x, p2_y, ...
+0, 12, 34, 56, 78, ...
+1, 23, 45, 67, 89, ...
+...
+
+Output:
+-------
+For each processed video, the following outputs are generated:
+1. Marked Coordinates (CSV):
+    - CSV file containing the pixel coordinates of each marked point for each frame.
+    - Saved in the same directory as the input video with a suffix "_getpixel.csv".
+2. Log File (TXT):
+    - Summary of the video processing session, including the total number of frames processed and the coordinates saved.
+
+Example of Output Files:
+------------------------
+- video_filename_getpixel.csv: Contains the pixel coordinates for each frame of the video.
+- log_info.txt: A summary log with frame count, markers, and session details.
+
+How to Use:
+-----------
+1. Run the script:
+   python3 getpixelvideo.py
+2. The GUI will prompt you to:
+   - Select a video file to process.
+   - Optionally, load a CSV file with pre-marked points.
+3. Use the provided controls to navigate frames, mark points, and save the results.
+
+Example of Usage:
+-----------------
+1. Select a video file in .mp4 format.
+2. Optionally load an existing CSV file with pre-marked points.
+3. Navigate the video frames and mark new points or adjust existing ones.
+4. Save the marked coordinates and close the video.
+
+Controls:
+---------
+- Space: Play/Pause the video.
+- Escape: Close the video and exit the application.
+- A / Left Arrow: Move to the previous frame.
+- D / Right Arrow: Move to the next frame.
+- W / Up Arrow: Select the next point.
+- S / Down Arrow: Select the previous point.
+- N: Go to the first frame.
+- P: Go to the last frame.
+- Ctrl+m: Zoom in.
+- Ctrl+l: Zoom out.
+- Ctrl+h: Reset zoom.
+- Left-click: Mark a point.
+- Right-click: Remove the last marked point.
+
+Dependencies:
+-------------
+- Python Standard Libraries: os, tkinter, pandas.
+- External Libraries: numpy, OpenCV, matplotlib (Install via pip install numpy opencv-python matplotlib).
+
+New Features in v0.0.9:
+-----------------------
+- Zoom Functionality: Users can now zoom in/out for precise pixel marking.
+- CSV Loading: Load pre-existing marked points for review and adjustments.
+- Enhanced GUI Interaction: Improved interface for easier navigation and point marking.
+
+License:
+--------
+This program is free software: you can redistribute it and/or modify it under the terms of 
+the GNU General Public License as published by the Free Software Foundation, either version 3 
+of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; 
+without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. 
+See the GNU General Public License for more details.
+
+Disclaimer:
+-----------
+This script is provided "as is", without any warranty, express or implied, and is intended 
+for academic and research purposes only.
+
+Changelog:
+----------
+- 2024-08-10: Initial release of the pixel marking tool with basic navigation.
+- 2024-08-15: Added zoom functionality and CSV loading support.
+================================================================================
+"""
 
 import cv2
 import os

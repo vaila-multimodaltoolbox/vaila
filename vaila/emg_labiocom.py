@@ -2,56 +2,111 @@
 ================================================================================
 EMG Analysis Toolkit - emg_labiocom
 ================================================================================
-Author: Prof. Paulo Santiago
+Author: Prof. Dr. Paulo R. P. Santiago
 Date: 23 September 2024
 Version: 1.1
+Python Version: 3.11.9
 
 Description:
 ------------
-This toolkit provides functions to analyze EMG (Electromyography) signals with 
-features like filtering, full-wave rectification, linear envelope calculation, 
-RMS calculation, and median frequency analysis. It now includes recursive 
-processing of all CSV files in the selected directory, enabling batch analysis.
+This toolkit provides advanced functionalities to analyze EMG (Electromyography) signals. 
+It includes filtering, full-wave rectification, linear envelope calculation, RMS calculation, 
+and median frequency analysis. The toolkit now supports recursive processing of all CSV files 
+within a selected directory for batch analysis.
 
 Key Functionalities:
 ---------------------
-1. Butterworth Lowpass and Bandpass Filtering.
-2. Full-Wave Rectification and Linear Envelope Calculation.
-3. RMS and Median Frequency Calculation for EMG signals.
-4. Polynomial Fitting for RMS and Median Frequency trends.
-5. Welch's Power Spectral Density Analysis.
+1. Butterworth Filtering: Lowpass and Bandpass filtering to clean EMG data.
+2. Full-Wave Rectification: Rectifies EMG signals to prepare for envelope extraction.
+3. Linear Envelope Calculation: Computes a smoothed signal for muscle activity analysis.
+4. RMS and Median Frequency Calculation: Calculates Root Mean Square (RMS) and median frequency.
+5. Welch's Power Spectral Density (PSD) Analysis: Analyzes frequency components of the EMG signals.
+6. Batch Processing: Recursive processing of all CSV files in a directory.
 
-New Features in v1.1:
-----------------------
-- Recursive file processing for all CSV files within a selected directory.
-- Support for batch processing of EMG files using the GUI.
-- Enhanced error handling for out-of-bounds selection indices.
+Input:
+------
+- CSV files: The script reads CSV or text files containing raw EMG data. 
+  The first column is assumed to be sample numbers.
+  The second column is the EMG signal (in µVolts).
+
+Example of Input Format (CSV):
+------------------------------
+Sample, EMG (µVolts)
+0, 0.001
+1, 0.002
+2, 0.003
+...
+
+Output:
+-------
+For each processed file, the following outputs are generated:
+1. Processed Data (CSV):
+    - CSV files contain RMS, median frequency, linear envelope, maximum PSD, and other relevant metrics.
+    - These files are saved in a timestamped folder, named according to the input file.
+2. Graphs and Visualizations (PNG/SVG):
+    - Plots of raw, filtered, and rectified EMG signals.
+    - RMS and median frequency trends over time.
+    - Power Spectral Density (PSD) plot using Welch's method.
+3. Summary Report (TXT):
+    - A summary text file with key metrics for each EMG file, including RMS, median frequency, and maximum PSD.
+
+Example of Output Files:
+------------------------
+- filename_results_emg_labiocom.csv: Contains processed metrics for each EMG file.
+- filename_filtered_emg.png: Plot of filtered EMG signal.
+- filename_rms.png: Plot of RMS values over time.
+- filename_median_frequency.png: Plot of median frequency over time.
+- log_info.txt: A summary report with all key metrics and processing details.
+
+How to Use:
+-----------
+1. Run the script:
+   python3 emg_labiocom.py
+2. The GUI will prompt you to:
+   - Select a directory containing EMG CSV files.
+   - Input the sampling rate and specify start and end indices for analysis.
+3. The script will recursively process all CSV files in the selected directory and save the results in a timestamped folder.
+4. You can choose to plot the data interactively or save the plots without displaying them.
+
+Example of Usage:
+-----------------
+1. Select a folder with multiple CSV files containing EMG data.
+2. Enter the sampling rate (e.g., 2000 Hz).
+3. Specify the start and end indices for the data range you want to process (e.g., start: 0, end: 10000).
+4. The script will process each file in the folder and save the results in the output directory.
 
 Dependencies:
 -------------
 - Python Standard Libraries: os, datetime, tkinter.
-- External Libraries: numpy, scipy, matplotlib.
+- External Libraries: numpy, scipy, matplotlib (Install via pip install numpy scipy matplotlib).
 
-How to Use:
------------
-1. Run the script using `python3 emg_labiocom.py`.
-2. Use the GUI to select the directory containing EMG files, enter the sampling 
-   rate, and specify the start and end line indices for analysis.
-3. The script will recursively process all CSV files in the selected directory.
-4. Results will be saved in a timestamped folder within the selected directory.
+New Features in v1.1:
+----------------------
+- Recursive File Processing: Batch processing of all CSV files within a selected directory.
+- GUI Enhancements: Improved interface for selecting files, inputting parameters, and displaying results.
+- Error Handling: Enhanced error messages for out-of-bounds selections and empty signals.
 
 License:
 --------
-This script is licensed under the MIT License.
+This program is free software: you can redistribute it and/or modify it under the terms of 
+the GNU General Public License as published by the Free Software Foundation, either version 3 
+of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; 
+without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. 
+See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with this program. 
+If not, see https://www.gnu.org/licenses/.
 
 Disclaimer:
 -----------
-This script is provided "as is," without any warranty, express or implied, and is 
-intended for academic and research purposes only.
+This script is provided "as is," without any warranty, express or implied, and is intended for 
+academic and research purposes only.
 
 Changelog:
 ----------
-- 2024-07-26: Initial creation of the toolkit with core analysis functions.
+- 2024-07-26: Initial release with core EMG analysis functionalities.
 - 2024-09-23: Added recursive file processing and improved GUI interaction.
 ================================================================================
 """
