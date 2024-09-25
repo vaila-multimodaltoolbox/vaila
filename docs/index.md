@@ -257,6 +257,21 @@ If the Windows Terminal profile was not automatically added, follow the instruct
 
 Now the installation instructions are simplified, ensuring users download vailá, run the script with administrator privileges, and see the vailá icon in all the intended places (Desktop, Start Menu, and Windows Terminal).
 
+When vailá is installed on Windows, the files are copied to the following directory:
+
+```
+C:\ProgramData\vaila
+```
+
+This location is used to store data and configuration files that are accessible to all users on the system. However, the `ProgramData` directory is usually hidden in Windows. To access it, follow these steps:
+
+- Open File Explorer.
+- Go to the View tab in the top menu.
+- Check the Hidden items box to display the `C:\ProgramData` directory.
+- Navigate to `C:\ProgramData\vaila`.
+
+For more information about the ProgramData folder on Windows, you can refer to the official [Microsoft documentation](https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-shell-setup-folderlocations-programdata)
+
 ---
 
 ## Running the Application
