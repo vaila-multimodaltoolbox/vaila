@@ -19,7 +19,7 @@
 #                                                                                       #
 # Author: Prof. Dr. Paulo R. P. Santiago                                                #
 # Date: September 17, 2024                                                              #
-# Version: 1.6                                                                          #
+# Version: 1.7                                                                          #
 # OS: macOS                                                                             #
 #########################################################################################
 
@@ -62,10 +62,10 @@ USER_HOME="$HOME"
 VAILA_HOME="$USER_HOME/vaila"
 DESKTOP_ENTRY_PATH="$HOME/Desktop/vaila.desktop"
 
-# Copy the entire vaila program to the user's home directory, including the .git folder
+# Copy the entire vaila program to the user's home directory, including hidden files and .git folder
 echo "Copying vaila program to the user's home directory..."
 mkdir -p "$VAILA_HOME"
-cp -R "$(pwd)/"* "$(pwd)/.git" "$VAILA_HOME/"
+cp -Rfa . "$VAILA_HOME/"
 
 # Create a run_vaila.sh script
 RUN_SCRIPT="$VAILA_HOME/run_vaila.sh"
@@ -118,4 +118,3 @@ pip install moviepy
 
 echo "vaila Launcher created and available in the Applications menu!"
 echo "Installation and setup completed."
-
