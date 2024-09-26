@@ -157,7 +157,7 @@ dependencies:
   - jsonschema=4.23.0=pyhd8ed1ab_0
   - jsonschema-specifications=2023.12.1=pyhd8ed1ab_0
   - jsonschema-with-format-nongpl=4.23.0=hd8ed1ab_0
-  - jupyterlab=4.5.2
+  - jupyterlab=4.2.5
   - kiwisolver=1.4.5=py311h005e61a_1
   - krb5=1.21.3=hdf4eb48_0
   - lame=3.100=hcfcfb64_1003
