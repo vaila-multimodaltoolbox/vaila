@@ -3,23 +3,23 @@
 #########################################################################################
 #                                                                                       #
 # Script: install_vaila_mac.sh                                                          #
-# Description: Installs the vaila - Multimodal Toolbox on macOS, including the Conda    #
-#              environment setup, copying program files to the user's home directory,   #
-#              creating a desktop entry, and setting up the application in /Applications#
+# Description: Installs the vaila - Multimodal Toolbox on macOS, sets up the Conda      #
+#              environment, copies program files to the user's home directory,          #
+#              configures the macOS app icon, and creates a symlink in /Applications.   #
 #                                                                                       #
 # Usage:                                                                                #
-#   1. Download the repository from GitHub manually or using git clone.                 #
+#   1. Download the repository from GitHub manualmente ou usando git clone.             #
 #   2. Make the script executable:                                                      #
 #      chmod +x install_vaila_mac.sh                                                    #
-#   3. Run the script:                                                                  #
+#   3. Run the script from the root directory of the extracted repository:              #
 #      ./install_vaila_mac.sh                                                           #
 #                                                                                       #
 # Notes:                                                                                #
 #   - Ensure Conda is installed and accessible from the command line before running.    #
 #                                                                                       #
 # Author: Prof. Dr. Paulo R. P. Santiago                                                #
-# Date: September 17, 2024                                                              #
-# Version: 1.7                                                                          #
+# Date: September 22, 2024                                                              #
+# Version: 2.0                                                                          #
 # OS: macOS                                                                             #
 #########################################################################################
 
@@ -31,14 +31,10 @@ if ! command -v conda &> /dev/null; then
     exit 1
 fi
 
-# Get Conda base path
-CONDA_BASE=$(conda info --base)
-
 # Check if the "vaila" environment already exists
-if conda env list | grep -q "^vaila"; then
-    echo "Conda environment 'vaila' already exists. Updating it..."
-    # Update the existing environment
-    conda env update -n vaila -f yaml_for_conda_env/vaila_mac.yaml --prune
+if conda info --envs | grep -q "^vaila"; then
+    echo "Conda environment 'vaila' already exists. Updating..."
+    conda env update -f yaml_for_conda_env/vaila_mac.yaml --prune
     if [ $? -eq 0 ]; then
         echo "'vaila' environment updated successfully."
     else
@@ -46,7 +42,6 @@ if conda env list | grep -q "^vaila"; then
         exit 1
     fi
 else
-    # Create the environment if it does not exist
     echo "Creating Conda environment from vaila_mac.yaml..."
     conda env create -f yaml_for_conda_env/vaila_mac.yaml
     if [ $? -eq 0 ]; then
@@ -58,63 +53,86 @@ else
 fi
 
 # Define paths
-USER_HOME="$HOME"
-VAILA_HOME="$USER_HOME/vaila"
-DESKTOP_ENTRY_PATH="$HOME/Desktop/vaila.desktop"
+USER_HOME="${HOME}"
+VAILA_HOME="${USER_HOME}/vaila"
+APP_PATH="${VAILA_HOME}/vaila.app"
+ICON_PATH="$(pwd)/docs/images/vaila.icns"
 
-# Copy the entire vaila program to the user's home directory, including hidden files and .git folder
+# Copy the entire vaila program to the user's home directory, including the .git folder
 echo "Copying vaila program to the user's home directory..."
-mkdir -p "$VAILA_HOME"
-cp -Rfa . "$VAILA_HOME/"
+mkdir -p "${VAILA_HOME}"
+cp -Rfa "$(pwd)/." "${VAILA_HOME}/"
 
-# Create a run_vaila.sh script
-RUN_SCRIPT="$VAILA_HOME/run_vaila.sh"
-echo "Creating run_vaila.sh script..."
-cat <<EOF > "$RUN_SCRIPT"
-#!/bin/bash
-source "$CONDA_BASE/etc/profile.d/conda.sh"
-conda activate vaila
-python3 "$VAILA_HOME/vaila.py"
+# Ensure the application directory exists in the user's home directory
+echo "Configuring macOS app icon for vaila..."
+if [ ! -d "${APP_PATH}" ]; then
+    echo "Application not found at ${APP_PATH}, creating a new app directory..."
+    mkdir -p "${APP_PATH}/Contents/MacOS"
+    mkdir -p "${APP_PATH}/Contents/Resources"
+fi
+
+# Copy the .icns file to the app resources
+if [ -f "${ICON_PATH}" ]; then
+    cp "${ICON_PATH}" "${APP_PATH}/Contents/Resources/vaila.icns"
+else
+    echo "Icon file not found at ${ICON_PATH}. Please check the path."
+    exit 1
+fi
+
+# Create the Info.plist file
+cat <<EOF > "${APP_PATH}/Contents/Info.plist"
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDisplayName</key>
+    <string>vaila</string>
+    <key>CFBundleName</key>
+    <string>vaila</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.example.vaila</string>
+    <key>CFBundleVersion</key>
+    <string>1.0</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleIconFile</key>
+    <string>vaila.icns</string>
+    <key>CFBundleExecutable</key>
+    <string>run_vaila.sh</string>
+    <key>LSRequiresICloud</key>
+    <false/>
+    <key>LSMinimumSystemVersion</key>
+    <string>10.10</string>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.utilities</string>
+</dict>
+</plist>
 EOF
 
-# Make the run_vaila.sh script executable
-chmod +x "$RUN_SCRIPT"
-
-# Create a desktop entry for the application
-echo "Creating a desktop entry for vaila..."
-cat <<EOF > "$DESKTOP_ENTRY_PATH"
-[Desktop Entry]
-Version=1.0
-Name=vaila
-Comment=Multimodal Toolbox
-Exec=$RUN_SCRIPT
-Icon=$VAILA_HOME/docs/images/vaila.png
-Terminal=false
-Type=Application
-Categories=Utility;
+# Create the executable script for the app, using osascript to open in terminal
+cat <<EOF > "${APP_PATH}/Contents/MacOS/run_vaila.sh"
+#!/bin/zsh
+osascript -e 'tell application "Terminal" to do script "source ${HOME}/anaconda3/etc/profile.d/conda.sh && conda activate vaila && python3 ${HOME}/vaila/vaila.py"'
 EOF
+
+# Make the executable script runnable
+chmod +x "${APP_PATH}/Contents/MacOS/run_vaila.sh"
+
+# Create a symbolic link in /Applications
+echo "Creating a symbolic link in /Applications to the app in the user's home directory..."
+if [ -e "/Applications/vaila.app" ]; then
+    sudo rm -rf "/Applications/vaila.app"
+fi
+sudo ln -s "${APP_PATH}" "/Applications/vaila.app"
+
+# Ensure the symbolic link has the correct permissions
+echo "Ensuring correct permissions for the application link..."
+sudo chown -h "${USER}:admin" "/Applications/vaila.app"
 
 # Ensure the application directory is owned by the user and has the correct permissions
 echo "Ensuring correct ownership and permissions for the application..."
-chown -R "$USER:$USER" "$VAILA_HOME"
-chmod -R u+rwX "$VAILA_HOME"
-chmod +x "$RUN_SCRIPT"
+sudo chown -R "${USER}:admin" "${APP_PATH}"
+chmod -R +x "${APP_PATH}"
 
-# Remove ffmpeg from the Conda environment if installed
-echo "Removing ffmpeg installed via Conda..."
-conda remove -n vaila ffmpeg -y
-
-# Install the system version of ffmpeg
-echo "Installing ffmpeg from system repositories..."
-brew install ffmpeg
-
-# Activate the Conda environment
-source "$CONDA_BASE/etc/profile.d/conda.sh"
-conda activate vaila
-
-# Install moviepy using pip
-echo "Installing moviepy..."
-pip install moviepy
-
-echo "vaila Launcher created and available in the Applications menu!"
+echo "vaila Launcher created and configured in /Applications as a symbolic link! Check the Applications folder."
 echo "Installation and setup completed."
