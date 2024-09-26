@@ -161,7 +161,7 @@ def select_body_weight(data):
     fig, ax = plt.subplots()
     ax.plot(data)
     ax.set_title(
-        "Left Click to select the range for body weight calculation (2 clicks), Press 'Enter' to confirm"
+        "select the range for body weight calculation (2 clicks). Hold Space + Left Click to mark, Right Click to remove, 'Enter' to confirm."
     )
     ax.set_xlabel("Sample Index")
     ax.set_ylabel("Force Value")
