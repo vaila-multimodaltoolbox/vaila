@@ -133,7 +133,7 @@ def makefig1(data):
     fig1, ax1 = plt.subplots()
     ax1.plot(data * -1)
     ax1.set_title(
-        "Space + Left Click to select, Right Click to remove, press 'Enter' to finish"
+        "Select range to remove noise. Hold Space + Left Click to mark, Right Click to remove, 'Enter' to confirm."
     )
     ax1.set_xlabel("Sample Index")
     ax1.set_ylabel("Force Value")
