@@ -19,7 +19,7 @@
 #                                                                                       #
 # Author: Prof. Dr. Paulo R. P. Santiago                                                #
 # Date: September 17, 2024                                                              #
-# Version: 1.1                                                                          #
+# Version: 1.2                                                                          #
 # OS: Ubuntu Linux                                                                      #
 #########################################################################################
 
@@ -62,10 +62,10 @@ USER_HOME="$HOME"
 VAILA_HOME="$USER_HOME/vaila"
 DESKTOP_ENTRY_PATH="$HOME/.local/share/applications/vaila.desktop"
 
-# Copy the entire vaila program to the user's home directory
+# Copy the entire vaila program to the user's home directory using cp -Rfa
 echo "Copying vaila program to the user's home directory..."
 mkdir -p "$VAILA_HOME"
-cp -R "$(pwd)/"* "$VAILA_HOME/"
+cp -Rfa "$(pwd)/." "$VAILA_HOME/"
 
 # Create a run_vaila.sh script
 RUN_SCRIPT="$VAILA_HOME/run_vaila.sh"
