@@ -25,7 +25,7 @@ import os
 import subprocess
 import time
 from tkinter import filedialog, messagebox, simpledialog, Tk, Toplevel, Label, Button
-
+from rich import print
 
 class VideoProcessor:
     def __init__(self):
