@@ -1,31 +1,58 @@
 """
-File: extractpng.py
+Module: extractpng.py
 
 Description:
-This script allows users to either extract PNG frames from video files or create a video from a sequence of PNG images. The script ensures consistency and quality in extracted frames and generated videos, making them suitable for machine learning, computer vision, e biomechanics applications.
+This module offers functionality to either extract PNG frames from video files or create videos from a sequence of PNG images. It is designed for applications in machine learning, computer vision, and biomechanics, ensuring that all frames and videos maintain consistent quality and formatting.
 
-Version: 2.0
-Last Updated: August 25, 2024
-Author: Prof. Paulo Santiago
+The main features of the module include:
+- `extract_png_from_videos`: Extracts PNG frames from videos in RGB format to ensure compatibility with various machine learning models and image processing tasks. The function processes all video files in the specified source directory, creates a dedicated output directory for each video, and stores the frames using a customizable naming pattern.
+- `create_video_from_png`: Converts a sequence of PNG images into a video using the YUV420p color space and either the libx264 or libx265 codec. This function ensures that the video maintains a standard format suitable for various playback systems and machine learning pipelines.
 
-Features:
-- Extract PNG frames in RGB format to ensure compatibility with machine learning models.
-- Create videos in YUV420p format, with the option to choose between libx264 or libx265 codecs.
-- Automatically creates a directory for saving the output PNGs, named `vaila_extractpng_<timestamp>`.
-- Processes all video files in the selected source directory, creating a directory for PNG files extracted from each video.
-- Ensures consistent resolution, frame rate, and color space across all operations.
+Key Features:
+1. **Frame Extraction in RGB**: Extracts PNG frames in RGB format to ensure compatibility with image-based models in machine learning and computer vision.
+2. **Video Creation with Codec Choice**: Allows users to create videos in YUV420p format, selecting between H.264 and H.265 codecs for efficient compression.
+3. **Customizable Naming Pattern**: Users can define their own filename pattern for the output PNGs, enabling flexibility in frame numbering and organization.
+4. **Automated Directory Management**: The script creates timestamped directories for organizing output, ensuring a clean and structured workflow.
+5. **Comprehensive Video Support**: Works with common video formats like `.mp4`, `.avi`, `.mov`, and `.mkv`, ensuring broad compatibility across different media types.
+
+Usage:
+- `extract_png_from_videos`: Processes all video files in the specified directory and extracts PNG frames into organized subdirectories. The function also saves essential metadata like frame rate (FPS) for future reference.
+- `create_video_from_png`: Converts a sequence of PNG frames into a video, with options for selecting the compression codec and frame rate. Supports processing of individual directories or entire batches of PNG sequences.
 
 Dependencies:
 - Python 3.x
 - ffmpeg (installed via Conda or available in PATH)
-- Tkinter
+- Tkinter (for file and directory dialogs)
+
+Example usage:
+
+```python
+from extractpng import VideoProcessor
+
+# Create an instance of the VideoProcessor class
+processor = VideoProcessor()
+
+# Extract PNG frames from videos
+processor.extract_png_from_videos()
+
+# Create a video from PNG frames
+processor.create_video_from_png()
+Version: 2.0 Last Updated: August 25, 2024 Author: Prof. Paulo Santiago
+
+Changelog:
+
+Version 2.0 (2024-08-25): Added customizable PNG filename pattern and video codec selection. Improved error handling and user interface for batch processing multiple videos and directories.
+Version 1.0 (2023-12-15): Initial release with basic functionality for extracting PNG frames from videos and creating videos from PNG sequences.
+References:
+
+FFmpeg Documentation: https://ffmpeg.org/documentation.html
 """
 
 import os
 import subprocess
 import time
 from tkinter import filedialog, messagebox, simpledialog, Tk, Toplevel, Label, Button
-
+from rich import print
 
 class VideoProcessor:
     def __init__(self):
@@ -292,3 +319,4 @@ class VideoProcessor:
 if __name__ == "__main__":
     processor = VideoProcessor()
     processor.run()
+
