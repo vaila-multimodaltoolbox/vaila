@@ -1,7 +1,10 @@
-# General temporaly files
+# General temporary files
 .DS_Store
 .AppleDouble
 .LSOverride
+
+# Ignore .app directories (macOS application bundles)
+*.app
 
 # Video files
 *.MOV
@@ -38,8 +41,8 @@ var/
 MANIFEST
 
 # PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
+# Usually these files are written by a python script from a template
+# before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
 *.spec
 
@@ -104,3 +107,4 @@ dmypy.json
 hooks/*
 !hooks/pre-commit
 !install-hooks.sh
+
