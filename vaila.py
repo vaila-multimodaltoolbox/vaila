@@ -1,43 +1,65 @@
 """
+===============================================================================
 vaila.py
-
-Author: Paulo Santiago
+===============================================================================
+Author: Paulo R. P. Santiago
 Date: 7 September 2024
+Version: 1.0.0
+Python Version: 3.11.9
 
 Description:
-'vailá' is an open-source multimodal toolbox designed for comprehensive biomechanical analysis. It integrates various types of data and provides advanced tools for researchers and practitioners in the field of biomechanics. This script serves as the main application file, offering a graphical user interface (GUI) built with Tkinter to manage, analyze, and visualize multimodal data effectively.
+------------
+vailá (Versatile Anarcho Integrated Liberation Ánalysis) is an open-source, 
+Python-based multimodal toolbox designed to streamline biomechanical data 
+analysis. It integrates multiple types of biomechanical data (e.g., IMU, motion 
+capture, markerless tracking, force plates, GNSS/GPS, EMG) into a unified, 
+flexible platform for advanced human movement analysis. The software was 
+developed with a modular architecture to ensure easy expansion, transparency, 
+and community-driven contributions.
+
+vailá offers batch processing of large datasets, multimodal data analysis, 
+and cross-platform compatibility (Linux, macOS, Windows). It is developed to 
+handle complex biomechanical workflows, including kinematic and kinetic data 
+processing, visualization, and data conversion, as discussed in the associated 
+paper. The system fosters a collaborative, transparent environment for research, 
+allowing users to customize and expand the toolbox with new functionalities.
 
 Key Features:
-- **Multimodal Data Analysis**: 
-  - Supports analyses across multiple modalities including IMU sensors, motion capture (MoCap), markerless tracking (2D and 3D), force plates, GNSS/GPS, MEG/EEG, and HR/ECG.
-- **File Management**: 
-  - Comprehensive set of tools for file operations: Rename, Import, Export, Copy, Move, Remove, Tree, Find, and Transfer.
-- **Data Conversion**: 
-  - Converts between C3D and CSV data formats, and supports DLT (Direct Linear Transformation) methods for 2D and 3D reconstructions.
-- **Video Processing**: 
-  - Tools for video manipulation including conversion between video and images, cutting, compression (H.264 and HEVC H.265), synchronization, and extraction of pixel coordinates.
-- **Data Visualization**: 
-  - Provides tools for displaying and plotting 2D and 3D graphs, as well as viewing CSV and C3D data.
-
-Version: 7.9.1822 (First Release)
-
-Changelog:
-- **v7.9.1822**:
-  - Initial release with fully integrated GUI for multimodal data analysis.
-  - Added support for IMU analysis, cluster analysis, full-body motion capture, and markerless 2D/3D video tracking.
-  - Included comprehensive file management capabilities and advanced data conversion tools.
-  - Developed robust video processing functionalities including compression, synchronization, and pixel data extraction.
-  - Implemented advanced visualization tools for 2D and 3D plotting.
+-------------
+1. **Multimodal Data Integration**: 
+   - Supports data from IMUs, markerless tracking (2D and 3D), MoCap systems, 
+     force plates, GNSS/GPS, EMG, and other biomechanical sensors.
+2. **Data Processing and Batch Operations**: 
+   - Batch processing for large datasets across modalities, including video 
+     synchronization, pixel extraction, DLT-based 2D/3D reconstructions, and 
+     force analysis.
+3. **Data Conversion and File Management**: 
+   - Converts between multiple data formats (C3D <--> CSV), automates renaming, 
+     copying, and managing large sets of biomechanical files.
+4. **Visualization**: 
+   - Includes 2D and 3D plotting of biomechanical data using libraries such as 
+     Matplotlib and Plotly.
+5. **Cross-Platform**: 
+   - Designed for macOS, Linux, and Windows, with full transparency of execution 
+     flow through rich terminal outputs and print statements for debugging.
 
 Usage:
-- Launch the 'vailá' GUI by running this script.
-- Utilize the File Manager (Frame A) to handle files.
-- Perform various multimodal analyses (Frame B) such as IMU, MoCap, and markerless tracking.
-- Use the Available Tools (Frame C) for data conversion, video processing, and visualization.
-- Click the [imagination!] button for command-line tools access.
+------
+- Run this script to launch the main graphical user interface (GUI) built with 
+  Tkinter.
+- The GUI offers:
+  - **File Management (Frame A)**: Tools for renaming, importing, exporting, and 
+    manipulating large sets of files.
+  - **Multimodal Analysis (Frame B)**: Tools for analyzing biomechanical data 
+    (e.g., MoCap, IMU, and markerless tracking).
+  - **Available Tools (Frame C)**: Data conversion, video/image processing, 
+    DLT-based 2D/3D reconstructions, and visualization tools.
 
 License:
-© 2024 'vailá' - Multimodal Toolbox. Licensed under the GNU Lesser General Public License v3.0.
+--------
+This program is licensed under the GNU Lesser General Public License v3.0.
+For more details, visit: https://www.gnu.org/licenses/lgpl-3.0.html
+===============================================================================
 """
 
 import os
