@@ -1,32 +1,39 @@
 """
 Script: markerless_2D_analysis.py
 Author: Prof. Dr. Paulo Santiago
-Version: 0.1.0
+Version: 0.2.0
 Last Updated: September 28, 2024
 
 Description:
     This script performs batch processing of videos for 2D pose estimation using 
-    MediaPipe's Pose model. It processes videos in a specified input directory, overlays 
-    pose landmarks on each video frame, and exports both normalized and pixel-based 
-    landmark coordinates to CSV files. The script provides an interface for the user to 
-    configure key MediaPipe parameters, such as detection confidence, tracking confidence, 
-    model complexity, and whether to enable segmentation.
+    MediaPipe's Pose model. It processes videos in a specified input directory, 
+    overlays pose landmarks on each video frame, and exports both normalized and 
+    pixel-based landmark coordinates to CSV files. 
+
+    The user can configure key MediaPipe parameters via a graphical interface, 
+    including detection confidence, tracking confidence, model complexity, and 
+    whether to enable segmentation and smooth segmentation. The default settings 
+    are configured for the highest detection accuracy and tracking precision, 
+    optimizing for rigorous pose detection, although this may increase the 
+    computational cost.
 
 New Features:
-    - User-configurable parameters: `min_detection_confidence`, `min_tracking_confidence`, 
-      `model_complexity`, `enable_segmentation`, and `smooth_segmentation`.
-    - The model complexity parameter allows for fine-tuning the accuracy of the pose detection 
-      at the cost of processing time.
-    - Segmentation and smooth segmentation options allow for body masking to improve visualization 
-      in cases where background noise or artifacts may affect the detection.
+    - Default values for MediaPipe parameters are set to maximize detection and 
+      tracking accuracy:
+        - `min_detection_confidence=1.0`
+        - `min_tracking_confidence=1.0`
+        - `model_complexity=2` (maximum complexity)
+        - `enable_segmentation=True` (segmentation activated)
+        - `smooth_segmentation=True` (smooth segmentation enabled)
+    - User input dialog allows fine-tuning these values if desired.
 
 Usage:
     - Run the script to open a graphical interface for selecting the input directory 
-      containing video files (.mp4, .avi, .mov), the output directory, and for specifying 
-      the MediaPipe parameters such as detection and tracking confidence, model complexity, 
-      and segmentation options.
-    - The script processes each video, generating an output video with overlaid pose landmarks, 
-      and CSV files containing both normalized and pixel-based landmark coordinates.
+      containing video files (.mp4, .avi, .mov), the output directory, and for 
+      specifying the MediaPipe configuration parameters.
+    - The script processes each video, generating an output video with overlaid pose 
+      landmarks, and CSV files containing both normalized and pixel-based landmark 
+      coordinates.
 
 How to Execute:
     1. Ensure you have all dependencies installed:
@@ -35,14 +42,13 @@ How to Execute:
        - Tkinter is usually bundled with Python installations.
     2. Open a terminal and navigate to the directory where `markerless_2D_analysis.py` is located.
     3. Run the script using Python:
-
+       
        python markerless_2D_analysis.py
-
+       
     4. Follow the graphical interface prompts:
        - Select the input directory with videos (.mp4, .avi, .mov).
        - Select the base output directory for processed videos and CSVs.
-       - Configure the MediaPipe parameters (detection confidence, tracking confidence, 
-         model complexity, enable segmentation, and smooth segmentation).
+       - Configure the MediaPipe parameters (or leave them as default for maximum accuracy).
     5. The script will process the videos and save the outputs in the specified output directory.
 
 Requirements:
@@ -86,7 +92,6 @@ License:
     You should have received a copy of the GNU GPLv3 (General Public License Version 3) along with this program. 
     If not, see <https://www.gnu.org/licenses/>.
 """
-
 
 import cv2
 import mediapipe as mp
