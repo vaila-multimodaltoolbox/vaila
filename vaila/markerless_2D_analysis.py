@@ -1,19 +1,30 @@
 """
 Script: markerless_2D_analysis.py
 Author: Prof. Dr. Paulo Santiago
-Version: 0.0.5
-Last Updated: August 10, 2024
+Version: 0.1.0
+Last Updated: September 28, 2024
 
 Description:
     This script performs batch processing of videos for 2D pose estimation using 
     MediaPipe's Pose model. It processes videos in a specified input directory, overlays 
     pose landmarks on each video frame, and exports both normalized and pixel-based 
-    landmark coordinates to CSV files.
+    landmark coordinates to CSV files. The script provides an interface for the user to 
+    configure key MediaPipe parameters, such as detection confidence, tracking confidence, 
+    model complexity, and whether to enable segmentation.
+
+New Features:
+    - User-configurable parameters: `min_detection_confidence`, `min_tracking_confidence`, 
+      `model_complexity`, `enable_segmentation`, and `smooth_segmentation`.
+    - The model complexity parameter allows for fine-tuning the accuracy of the pose detection 
+      at the cost of processing time.
+    - Segmentation and smooth segmentation options allow for body masking to improve visualization 
+      in cases where background noise or artifacts may affect the detection.
 
 Usage:
     - Run the script to open a graphical interface for selecting the input directory 
       containing video files (.mp4, .avi, .mov), the output directory, and for specifying 
-      minimum detection and tracking confidence values.
+      the MediaPipe parameters such as detection and tracking confidence, model complexity, 
+      and segmentation options.
     - The script processes each video, generating an output video with overlaid pose landmarks, 
       and CSV files containing both normalized and pixel-based landmark coordinates.
 
@@ -24,13 +35,14 @@ How to Execute:
        - Tkinter is usually bundled with Python installations.
     2. Open a terminal and navigate to the directory where `markerless_2D_analysis.py` is located.
     3. Run the script using Python:
-       ```bash
+
        python markerless_2D_analysis.py
-       ```
+
     4. Follow the graphical interface prompts:
        - Select the input directory with videos (.mp4, .avi, .mov).
        - Select the base output directory for processed videos and CSVs.
-       - Enter the desired confidence thresholds for detection and tracking.
+       - Configure the MediaPipe parameters (detection confidence, tracking confidence, 
+         model complexity, enable segmentation, and smooth segmentation).
     5. The script will process the videos and save the outputs in the specified output directory.
 
 Requirements:
@@ -52,12 +64,13 @@ Output:
        are scaled to the video’s resolution, representing the exact pixel positions of the landmarks.
     4. Log File (`log_info.txt`):
        A log file containing video metadata and processing information, such as resolution, frame rate, 
-       total number of frames, codec used, and the MediaPipe Pose configuration.
+       total number of frames, codec used, and the MediaPipe Pose configuration used in the processing.
 
 Example:
     1. Select a folder with videos in .mp4 format.
     2. Choose the output directory for saving processed videos and CSVs.
-    3. Enter the desired confidence thresholds (e.g., detection: 0.5, tracking: 0.5).
+    3. Enter the desired values for detection confidence (e.g., 0.5), tracking confidence (e.g., 0.5), 
+       model complexity (0, 1, or 2), and segmentation options.
     4. The processed files will be saved with landmarks overlaid and CSVs in the chosen 
        output directory.
 
@@ -74,6 +87,7 @@ License:
     If not, see <https://www.gnu.org/licenses/>.
 """
 
+
 import cv2
 import mediapipe as mp
 import os
@@ -84,73 +98,54 @@ from tkinter import filedialog, messagebox
 
 # Mapping of landmark indices to their names
 landmark_names = [
-    "nose",
-    "left_eye_inner",
-    "left_eye",
-    "left_eye_outer",
-    "right_eye_inner",
-    "right_eye",
-    "right_eye_outer",
-    "left_ear",
-    "right_ear",
-    "mouth_left",
-    "mouth_right",
-    "left_shoulder",
-    "right_shoulder",
-    "left_elbow",
-    "right_elbow",
-    "left_wrist",
-    "right_wrist",
-    "left_pinky",
-    "right_pinky",
-    "left_index",
-    "right_index",
-    "left_thumb",
-    "right_thumb",
-    "left_hip",
-    "right_hip",
-    "left_knee",
-    "right_knee",
-    "left_ankle",
-    "right_ankle",
-    "left_heel",
-    "right_heel",
-    "left_foot_index",
-    "right_foot_index",
+    "nose", "left_eye_inner", "left_eye", "left_eye_outer", "right_eye_inner", "right_eye",
+    "right_eye_outer", "left_ear", "right_ear", "mouth_left", "mouth_right", "left_shoulder",
+    "right_shoulder", "left_elbow", "right_elbow", "left_wrist", "right_wrist", "left_pinky",
+    "right_pinky", "left_index", "right_index", "left_thumb", "right_thumb", "left_hip",
+    "right_hip", "left_knee", "right_knee", "left_ankle", "right_ankle", "left_heel",
+    "right_heel", "left_foot_index", "right_foot_index",
 ]
-
 
 class ConfidenceInputDialog(tk.simpledialog.Dialog):
     def body(self, master):
-        tk.Label(master, text="Enter minimum detection confidence (0.0 - 1.0):").grid(
-            row=0
-        )
-        tk.Label(master, text="Enter minimum tracking confidence (0.0 - 1.0):").grid(
-            row=1
-        )
+        tk.Label(master, text="Enter minimum detection confidence (0.0 - 1.0):").grid(row=0)
+        tk.Label(master, text="Enter minimum tracking confidence (0.0 - 1.0):").grid(row=1)
+        tk.Label(master, text="Enter model complexity (0, 1, or 2):").grid(row=2)
+        tk.Label(master, text="Enable segmentation? (True/False):").grid(row=3)
+        tk.Label(master, text="Smooth segmentation? (True/False):").grid(row=4)
 
-        self.min_detection_confidence = tk.DoubleVar(value=0.1)
-        self.min_tracking_confidence = tk.DoubleVar(value=0.1)
+        # Default values for high accuracy and computational cost
+        self.min_detection_confidence = tk.DoubleVar(value=1.0)  # Max detection confidence
+        self.min_tracking_confidence = tk.DoubleVar(value=1.0)   # Max tracking confidence
+        self.model_complexity = tk.IntVar(value=2)               # Highest complexity model
+        self.enable_segmentation = tk.BooleanVar(value=True)     # Enable segmentation
+        self.smooth_segmentation = tk.BooleanVar(value=True)     # Enable smooth segmentation
 
-        self.min_detection_entry = tk.Entry(
-            master, textvariable=self.min_detection_confidence
-        )
-        self.min_tracking_entry = tk.Entry(
-            master, textvariable=self.min_tracking_confidence
-        )
+        # Input fields
+        self.min_detection_entry = tk.Entry(master, textvariable=self.min_detection_confidence)
+        self.min_tracking_entry = tk.Entry(master, textvariable=self.min_tracking_confidence)
+        self.model_complexity_entry = tk.Entry(master, textvariable=self.model_complexity)
+        self.enable_segmentation_entry = tk.Entry(master, textvariable=self.enable_segmentation)
+        self.smooth_segmentation_entry = tk.Entry(master, textvariable=self.smooth_segmentation)
 
+        # Grid positions for inputs
         self.min_detection_entry.grid(row=0, column=1)
         self.min_tracking_entry.grid(row=1, column=1)
+        self.model_complexity_entry.grid(row=2, column=1)
+        self.enable_segmentation_entry.grid(row=3, column=1)
+        self.smooth_segmentation_entry.grid(row=4, column=1)
 
         return self.min_detection_entry  # initial focus
 
     def apply(self):
-        # Ensure the dialog's result captures the current value
+        # Capture the user's input
         self.result = {
             "min_detection_confidence": float(self.min_detection_entry.get()),
             "min_tracking_confidence": float(self.min_tracking_entry.get()),
+            "model_complexity": int(self.model_complexity_entry.get()),
+            "enable_segmentation": self.enable_segmentation.get(),
+            "smooth_segmentation": self.smooth_segmentation.get(),
         }
-
 
 def get_pose_config():
     root = tk.Tk()
@@ -162,7 +157,6 @@ def get_pose_config():
     else:
         messagebox.showerror("Error", "No values entered.")
         return None
-
 
 def process_video(video_path, output_dir, pose_config):
     print(f"Processing video: {video_path}")
@@ -179,9 +173,7 @@ def process_video(video_path, output_dir, pose_config):
 
     output_video_name = os.path.splitext(os.path.basename(video_path))[0] + "_mp.mp4"
     output_video_path = os.path.join(output_dir, output_video_name)
-    output_landmarks_name = (
-        os.path.splitext(os.path.basename(video_path))[0] + "_mp_norm.csv"
-    )
+    output_landmarks_name = os.path.splitext(os.path.basename(video_path))[0] + "_mp_norm.csv"
     output_file_path = os.path.join(output_dir, output_landmarks_name)
     output_pixel_file_path = os.path.join(
         output_dir, os.path.splitext(os.path.basename(video_path))[0] + "_mp_pixel.csv"
@@ -192,15 +184,20 @@ def process_video(video_path, output_dir, pose_config):
     out = cv2.VideoWriter(output_video_path, fourcc, fps, (width, height))
 
     # Use the pose_config provided by the user
-    pose = mp.solutions.pose.Pose(**pose_config)
+    pose = mp.solutions.pose.Pose(
+        static_image_mode=True,
+        max_num_poses=1,
+        min_detection_confidence=pose_config["min_detection_confidence"],
+        min_tracking_confidence=pose_config["min_tracking_confidence"],
+        model_complexity=pose_config["model_complexity"],
+        enable_segmentation=pose_config["enable_segmentation"],
+        smooth_segmentation=pose_config["smooth_segmentation"],
+        smooth_landmarks=True
+    )
 
     # Generate the headers for the files
-    headers = ["frame_index"] + [
-        f"{name}_x,{name}_y,{name}_z" for name in landmark_names
-    ]
-    pixel_headers = ["frame_index"] + [
-        f"{name}_x,{name}_y,{name}_z" for name in landmark_names
-    ]
+    headers = ["frame_index"] + [f"{name}_x,{name}_y,{name}_z" for name in landmark_names]
+    pixel_headers = ["frame_index"] + [f"{name}_x,{name}_y,{name}_z" for name in landmark_names]
 
     frame_count = 0
     with open(output_file_path, "w") as f, open(output_pixel_file_path, "w") as f_pixel:
@@ -251,9 +248,7 @@ def process_video(video_path, output_dir, pose_config):
         log_file.write(f"Execution Time: {execution_time} seconds\n")
         log_file.write(f"MediaPipe Pose Configuration: {pose_config}\n")
 
-
 def process_videos_in_directory():
-    # Print the directory and name of the script being executed
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
 
@@ -281,7 +276,6 @@ def process_videos_in_directory():
     os.makedirs(output_base, exist_ok=True)
 
     for root, dirs, files in os.walk(input_dir):
-        # Check if we are in the top level of the directory
         if root != input_dir:
             continue  # Skip subdirectories
 
@@ -293,6 +287,6 @@ def process_videos_in_directory():
                 print(f"Processing video: {video_path}")
                 process_video(video_path, output_dir, pose_config)
 
-
 if __name__ == "__main__":
     process_videos_in_directory()
+
