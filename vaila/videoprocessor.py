@@ -136,10 +136,18 @@ def process_videos(
     for source_video, percent, target_video in video_files:
         try:
             video_original = VideoFileClip(source_video)
-            video_A_duration = video_original.duration * (percent / 100)
-            video_A = video_original.subclip(0, video_A_duration)
+            
+            # If percentage is 100, use the entire video
+            if percent == 100:
+                video_A = video_original
+            else:
+                video_A_duration = video_original.duration * (percent / 100)
+                video_A = video_original.subclip(0, video_A_duration)
+            
             if reverse:
                 video_A = video_A.fx(vfx.time_mirror)  # Reverse the video segment
+            
+            # Use video_B if exists, otherwise use video_A for concatenation
             video_B = (
                 VideoFileClip(target_video)
                 if os.path.exists(target_video)
@@ -165,13 +173,11 @@ def process_videos(
         except Exception as e:
             print(f"Error processing video {source_video} into {target_video}: {e}")
 
-
 def process_videos_gui():
     # Print the directory and name of the script being executed
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
     print("Starting video processing...")
-
 
     # Ask user to select source directory
     source_dir = filedialog.askdirectory(title="Select Source Directory")
@@ -217,7 +223,6 @@ def process_videos_gui():
     process_videos(
         source_dir, target_dir, percentage, reverse, use_text_file, text_file_path
     )
-
 
 if __name__ == "__main__":
     process_videos_gui()
