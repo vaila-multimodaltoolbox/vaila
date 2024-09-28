@@ -6,16 +6,15 @@ Last Updated: September 28, 2024
 
 Description:
     This script performs batch processing of videos for 2D pose estimation using 
-    MediaPipe's Pose model. It processes videos in a specified input directory, 
+    MediaPipe's Pose model. It processes videos from a specified input directory, 
     overlays pose landmarks on each video frame, and exports both normalized and 
     pixel-based landmark coordinates to CSV files. 
 
     The user can configure key MediaPipe parameters via a graphical interface, 
     including detection confidence, tracking confidence, model complexity, and 
     whether to enable segmentation and smooth segmentation. The default settings 
-    are configured for the highest detection accuracy and tracking precision, 
-    optimizing for rigorous pose detection, although this may increase the 
-    computational cost.
+    prioritize the highest detection accuracy and tracking precision, which may 
+    increase computational cost.
 
 New Features:
     - Default values for MediaPipe parameters are set to maximize detection and 
@@ -118,38 +117,46 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
         tk.Label(master, text="Enter model complexity (0, 1, or 2):").grid(row=2)
         tk.Label(master, text="Enable segmentation? (True/False):").grid(row=3)
         tk.Label(master, text="Smooth segmentation? (True/False):").grid(row=4)
+        tk.Label(master, text="Static image mode? (True/False):").grid(row=5)  # New static_image_mode option
 
-        # Default values for high accuracy and computational cost
-        self.min_detection_confidence = tk.DoubleVar(value=1.0)  # Max detection confidence
-        self.min_tracking_confidence = tk.DoubleVar(value=1.0)   # Max tracking confidence
-        self.model_complexity = tk.IntVar(value=2)               # Highest complexity model
-        self.enable_segmentation = tk.BooleanVar(value=True)     # Enable segmentation
-        self.smooth_segmentation = tk.BooleanVar(value=True)     # Enable smooth segmentation
+        # Input fields with default values pre-filled
+        self.min_detection_entry = tk.Entry(master)
+        self.min_detection_entry.insert(0, "0.1")  # Default detection confidence
 
-        # Input fields
-        self.min_detection_entry = tk.Entry(master, textvariable=self.min_detection_confidence)
-        self.min_tracking_entry = tk.Entry(master, textvariable=self.min_tracking_confidence)
-        self.model_complexity_entry = tk.Entry(master, textvariable=self.model_complexity)
-        self.enable_segmentation_entry = tk.Entry(master, textvariable=self.enable_segmentation)
-        self.smooth_segmentation_entry = tk.Entry(master, textvariable=self.smooth_segmentation)
+        self.min_tracking_entry = tk.Entry(master)
+        self.min_tracking_entry.insert(0, "0.1")   # Default tracking confidence
 
-        # Grid positions for inputs
+        self.model_complexity_entry = tk.Entry(master)
+        self.model_complexity_entry.insert(0, "2")  # Highest complexity for best accuracy
+
+        self.enable_segmentation_entry = tk.Entry(master)
+        self.enable_segmentation_entry.insert(0, "True")  # Enable segmentation
+
+        self.smooth_segmentation_entry = tk.Entry(master)
+        self.smooth_segmentation_entry.insert(0, "True")  # Smooth segmentation enabled
+
+        self.static_image_mode_entry = tk.Entry(master)
+        self.static_image_mode_entry.insert(0, "False")  # Default to video mode (tracking after first detection)
+
+        # Grid positions for input fields
         self.min_detection_entry.grid(row=0, column=1)
         self.min_tracking_entry.grid(row=1, column=1)
         self.model_complexity_entry.grid(row=2, column=1)
         self.enable_segmentation_entry.grid(row=3, column=1)
         self.smooth_segmentation_entry.grid(row=4, column=1)
+        self.static_image_mode_entry.grid(row=5, column=1)  # New static_image_mode option
 
-        return self.min_detection_entry  # initial focus
+        return self.min_detection_entry  # Initial focus
 
     def apply(self):
-        # Capture the user's input
+        # Capture user input and convert to appropriate types
         self.result = {
             "min_detection_confidence": float(self.min_detection_entry.get()),
             "min_tracking_confidence": float(self.min_tracking_entry.get()),
             "model_complexity": int(self.model_complexity_entry.get()),
-            "enable_segmentation": self.enable_segmentation.get(),
-            "smooth_segmentation": self.smooth_segmentation.get(),
+            "enable_segmentation": self.enable_segmentation_entry.get().lower() == "true",
+            "smooth_segmentation": self.smooth_segmentation_entry.get().lower() == "true",
+            "static_image_mode": self.static_image_mode_entry.get().lower() == "true",  # Capture static_image_mode setting
         }
 
 def get_pose_config():
@@ -190,8 +197,7 @@ def process_video(video_path, output_dir, pose_config):
 
     # Use the pose_config provided by the user
     pose = mp.solutions.pose.Pose(
-        static_image_mode=True,
-        max_num_poses=1,
+        static_image_mode=pose_config["static_image_mode"],  # Use the static_image_mode set by the user
         min_detection_confidence=pose_config["min_detection_confidence"],
         min_tracking_confidence=pose_config["min_tracking_confidence"],
         model_complexity=pose_config["model_complexity"],
@@ -200,7 +206,7 @@ def process_video(video_path, output_dir, pose_config):
         smooth_landmarks=True
     )
 
-    # Generate the headers for the files
+    # Generate headers for the CSV files
     headers = ["frame_index"] + [f"{name}_x,{name}_y,{name}_z" for name in landmark_names]
     pixel_headers = ["frame_index"] + [f"{name}_x,{name}_y,{name}_z" for name in landmark_names]
 
