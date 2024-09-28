@@ -1,32 +1,38 @@
 """
 Script: markerless_2D_analysis.py
 Author: Prof. Dr. Paulo Santiago
-Version: 0.1.0
+Version: 0.2.0
 Last Updated: September 28, 2024
 
 Description:
     This script performs batch processing of videos for 2D pose estimation using 
-    MediaPipe's Pose model. It processes videos in a specified input directory, overlays 
-    pose landmarks on each video frame, and exports both normalized and pixel-based 
-    landmark coordinates to CSV files. The script provides an interface for the user to 
-    configure key MediaPipe parameters, such as detection confidence, tracking confidence, 
-    model complexity, and whether to enable segmentation.
+    MediaPipe's Pose model. It processes videos from a specified input directory, 
+    overlays pose landmarks on each video frame, and exports both normalized and 
+    pixel-based landmark coordinates to CSV files. 
+
+    The user can configure key MediaPipe parameters via a graphical interface, 
+    including detection confidence, tracking confidence, model complexity, and 
+    whether to enable segmentation and smooth segmentation. The default settings 
+    prioritize the highest detection accuracy and tracking precision, which may 
+    increase computational cost.
 
 New Features:
-    - User-configurable parameters: `min_detection_confidence`, `min_tracking_confidence`, 
-      `model_complexity`, `enable_segmentation`, and `smooth_segmentation`.
-    - The model complexity parameter allows for fine-tuning the accuracy of the pose detection 
-      at the cost of processing time.
-    - Segmentation and smooth segmentation options allow for body masking to improve visualization 
-      in cases where background noise or artifacts may affect the detection.
+    - Default values for MediaPipe parameters are set to maximize detection and 
+      tracking accuracy:
+        - `min_detection_confidence=1.0`
+        - `min_tracking_confidence=1.0`
+        - `model_complexity=2` (maximum complexity)
+        - `enable_segmentation=True` (segmentation activated)
+        - `smooth_segmentation=True` (smooth segmentation enabled)
+    - User input dialog allows fine-tuning these values if desired.
 
 Usage:
     - Run the script to open a graphical interface for selecting the input directory 
-      containing video files (.mp4, .avi, .mov), the output directory, and for specifying 
-      the MediaPipe parameters such as detection and tracking confidence, model complexity, 
-      and segmentation options.
-    - The script processes each video, generating an output video with overlaid pose landmarks, 
-      and CSV files containing both normalized and pixel-based landmark coordinates.
+      containing video files (.mp4, .avi, .mov), the output directory, and for 
+      specifying the MediaPipe configuration parameters.
+    - The script processes each video, generating an output video with overlaid pose 
+      landmarks, and CSV files containing both normalized and pixel-based landmark 
+      coordinates.
 
 How to Execute:
     1. Ensure you have all dependencies installed:
@@ -35,14 +41,13 @@ How to Execute:
        - Tkinter is usually bundled with Python installations.
     2. Open a terminal and navigate to the directory where `markerless_2D_analysis.py` is located.
     3. Run the script using Python:
-
+       
        python markerless_2D_analysis.py
-
+       
     4. Follow the graphical interface prompts:
        - Select the input directory with videos (.mp4, .avi, .mov).
        - Select the base output directory for processed videos and CSVs.
-       - Configure the MediaPipe parameters (detection confidence, tracking confidence, 
-         model complexity, enable segmentation, and smooth segmentation).
+       - Configure the MediaPipe parameters (or leave them as default for maximum accuracy).
     5. The script will process the videos and save the outputs in the specified output directory.
 
 Requirements:
@@ -87,7 +92,6 @@ License:
     If not, see <https://www.gnu.org/licenses/>.
 """
 
-
 import cv2
 import mediapipe as mp
 import os
@@ -113,38 +117,46 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
         tk.Label(master, text="Enter model complexity (0, 1, or 2):").grid(row=2)
         tk.Label(master, text="Enable segmentation? (True/False):").grid(row=3)
         tk.Label(master, text="Smooth segmentation? (True/False):").grid(row=4)
+        tk.Label(master, text="Static image mode? (True/False):").grid(row=5)  # New static_image_mode option
 
-        # Default values for high accuracy and computational cost
-        self.min_detection_confidence = tk.DoubleVar(value=1.0)  # Max detection confidence
-        self.min_tracking_confidence = tk.DoubleVar(value=1.0)   # Max tracking confidence
-        self.model_complexity = tk.IntVar(value=2)               # Highest complexity model
-        self.enable_segmentation = tk.BooleanVar(value=True)     # Enable segmentation
-        self.smooth_segmentation = tk.BooleanVar(value=True)     # Enable smooth segmentation
+        # Input fields with default values pre-filled
+        self.min_detection_entry = tk.Entry(master)
+        self.min_detection_entry.insert(0, "0.1")  # Default detection confidence
 
-        # Input fields
-        self.min_detection_entry = tk.Entry(master, textvariable=self.min_detection_confidence)
-        self.min_tracking_entry = tk.Entry(master, textvariable=self.min_tracking_confidence)
-        self.model_complexity_entry = tk.Entry(master, textvariable=self.model_complexity)
-        self.enable_segmentation_entry = tk.Entry(master, textvariable=self.enable_segmentation)
-        self.smooth_segmentation_entry = tk.Entry(master, textvariable=self.smooth_segmentation)
+        self.min_tracking_entry = tk.Entry(master)
+        self.min_tracking_entry.insert(0, "0.1")   # Default tracking confidence
 
-        # Grid positions for inputs
+        self.model_complexity_entry = tk.Entry(master)
+        self.model_complexity_entry.insert(0, "2")  # Highest complexity for best accuracy
+
+        self.enable_segmentation_entry = tk.Entry(master)
+        self.enable_segmentation_entry.insert(0, "True")  # Enable segmentation
+
+        self.smooth_segmentation_entry = tk.Entry(master)
+        self.smooth_segmentation_entry.insert(0, "True")  # Smooth segmentation enabled
+
+        self.static_image_mode_entry = tk.Entry(master)
+        self.static_image_mode_entry.insert(0, "False")  # Default to video mode (tracking after first detection)
+
+        # Grid positions for input fields
         self.min_detection_entry.grid(row=0, column=1)
         self.min_tracking_entry.grid(row=1, column=1)
         self.model_complexity_entry.grid(row=2, column=1)
         self.enable_segmentation_entry.grid(row=3, column=1)
         self.smooth_segmentation_entry.grid(row=4, column=1)
+        self.static_image_mode_entry.grid(row=5, column=1)  # New static_image_mode option
 
-        return self.min_detection_entry  # initial focus
+        return self.min_detection_entry  # Initial focus
 
     def apply(self):
-        # Capture the user's input
+        # Capture user input and convert to appropriate types
         self.result = {
             "min_detection_confidence": float(self.min_detection_entry.get()),
             "min_tracking_confidence": float(self.min_tracking_entry.get()),
             "model_complexity": int(self.model_complexity_entry.get()),
-            "enable_segmentation": self.enable_segmentation.get(),
-            "smooth_segmentation": self.smooth_segmentation.get(),
+            "enable_segmentation": self.enable_segmentation_entry.get().lower() == "true",
+            "smooth_segmentation": self.smooth_segmentation_entry.get().lower() == "true",
+            "static_image_mode": self.static_image_mode_entry.get().lower() == "true",  # Capture static_image_mode setting
         }
 
 def get_pose_config():
@@ -185,8 +197,7 @@ def process_video(video_path, output_dir, pose_config):
 
     # Use the pose_config provided by the user
     pose = mp.solutions.pose.Pose(
-        static_image_mode=True,
-        max_num_poses=1,
+        static_image_mode=pose_config["static_image_mode"],  # Use the static_image_mode set by the user
         min_detection_confidence=pose_config["min_detection_confidence"],
         min_tracking_confidence=pose_config["min_tracking_confidence"],
         model_complexity=pose_config["model_complexity"],
@@ -195,7 +206,7 @@ def process_video(video_path, output_dir, pose_config):
         smooth_landmarks=True
     )
 
-    # Generate the headers for the files
+    # Generate headers for the CSV files
     headers = ["frame_index"] + [f"{name}_x,{name}_y,{name}_z" for name in landmark_names]
     pixel_headers = ["frame_index"] + [f"{name}_x,{name}_y,{name}_z" for name in landmark_names]
 
