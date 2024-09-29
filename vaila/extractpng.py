@@ -6,18 +6,18 @@ This module offers functionality to either extract PNG frames from video files o
 
 The main features of the module include:
 - `extract_png_from_videos`: Extracts PNG frames from videos in RGB format to ensure compatibility with various machine learning models and image processing tasks. The function processes all video files in the specified source directory, creates a dedicated output directory for each video, and stores the frames using a customizable naming pattern.
-- `create_video_from_png`: Converts a sequence of PNG images into a video using the YUV420p color space and either the libx264 or libx265 codec. This function ensures that the video maintains a standard format suitable for various playback systems and machine learning pipelines.
+- `create_video_from_png`: Converts a sequence of PNG images into a video using the YUV420p color space and either the libx264 codec (CPU) or the h264_nvenc codec (GPU), depending on the availability of an NVIDIA GPU. This ensures efficient compression while leveraging hardware acceleration when available.
 
 Key Features:
 1. **Frame Extraction in RGB**: Extracts PNG frames in RGB format to ensure compatibility with image-based models in machine learning and computer vision.
-2. **Video Creation with Codec Choice**: Allows users to create videos in YUV420p format, selecting between H.264 and H.265 codecs for efficient compression.
+2. **GPU-Accelerated Video Creation**: Automatically detects if an NVIDIA GPU is available and uses `h264_nvenc` for video compression. Falls back to CPU-based encoding (`libx264`) if no GPU is detected.
 3. **Customizable Naming Pattern**: Users can define their own filename pattern for the output PNGs, enabling flexibility in frame numbering and organization.
 4. **Automated Directory Management**: The script creates timestamped directories for organizing output, ensuring a clean and structured workflow.
 5. **Comprehensive Video Support**: Works with common video formats like `.mp4`, `.avi`, `.mov`, and `.mkv`, ensuring broad compatibility across different media types.
 
 Usage:
 - `extract_png_from_videos`: Processes all video files in the specified directory and extracts PNG frames into organized subdirectories. The function also saves essential metadata like frame rate (FPS) for future reference.
-- `create_video_from_png`: Converts a sequence of PNG frames into a video, with options for selecting the compression codec and frame rate. Supports processing of individual directories or entire batches of PNG sequences.
+- `create_video_from_png`: Converts a sequence of PNG frames into a video, with options for selecting the compression codec and frame rate. Automatically uses GPU acceleration if available.
 
 Dependencies:
 - Python 3.x
@@ -26,7 +26,6 @@ Dependencies:
 
 Example usage:
 
-```python
 from extractpng import VideoProcessor
 
 # Create an instance of the VideoProcessor class
@@ -35,14 +34,17 @@ processor = VideoProcessor()
 # Extract PNG frames from videos
 processor.extract_png_from_videos()
 
-# Create a video from PNG frames
+# Create a video from PNG frames (uses GPU if available)
 processor.create_video_from_png()
-Version: 2.0 Last Updated: August 25, 2024 Author: Prof. Paulo Santiago
+
+Version: 2.1 Last Updated: September 29, 2024 Author: Prof. Paulo Santiago
 
 Changelog:
 
+Version 2.1 (2024-09-29): Added NVIDIA GPU detection for hardware-accelerated video creation using h264_nvenc. Fallback to libx264 for CPU encoding if no GPU is found.
 Version 2.0 (2024-08-25): Added customizable PNG filename pattern and video codec selection. Improved error handling and user interface for batch processing multiple videos and directories.
 Version 1.0 (2023-12-15): Initial release with basic functionality for extracting PNG frames from videos and creating videos from PNG sequences.
+
 References:
 
 FFmpeg Documentation: https://ffmpeg.org/documentation.html
@@ -54,12 +56,12 @@ import time
 from tkinter import filedialog, messagebox, simpledialog, Tk, Toplevel, Label, Button
 from rich import print
 
+
 class VideoProcessor:
     def __init__(self):
         self.pattern = "%09d.png"  # Default pattern
 
     def extract_png_from_videos(self):
-        # Print the directory and name of the script being executed
         print(f"Running script: {os.path.basename(__file__)}")
         print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
         print("Starting extracting PNG from videos...")
@@ -74,7 +76,6 @@ class VideoProcessor:
             messagebox.showerror("Error", "No source directory selected.")
             return
 
-        # Ask the user for the PNG filename pattern
         pattern = simpledialog.askstring(
             "PNG Filename Pattern",
             "Enter the filename pattern for PNG files (e.g., frame%07d.png):\nLeave empty for default (%09d.png):",
@@ -82,7 +83,6 @@ class VideoProcessor:
         if pattern:
             self.pattern = pattern
 
-        # Create a new main directory inside the selected destination directory for saving the output PNGs
         timestamp = time.strftime("%Y%m%d%H%M%S")
         dest_main_dir = os.path.join(src, f"vaila_extractpng_{timestamp}")
         os.makedirs(dest_main_dir, exist_ok=True)
@@ -101,10 +101,8 @@ class VideoProcessor:
                 os.makedirs(output_dir, exist_ok=True)
                 output_pattern = os.path.join(output_dir, self.pattern)
 
-                # Extract FPS using OpenCV
                 fps = self.get_fps(video_path)
 
-                # Extract frames with RGB color space
                 command = [
                     "ffmpeg",
                     "-i",
@@ -127,7 +125,6 @@ class VideoProcessor:
             messagebox.showerror("Error", f"Error extracting PNG frames: {e}")
 
     def create_video_from_png(self):
-        # Print the directory and name of the script being executed
         print(f"Running script: {os.path.basename(__file__)}")
         print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
         print("Starting Creating video from PNG...")
@@ -142,7 +139,6 @@ class VideoProcessor:
             messagebox.showerror("Error", "No source directory selected.")
             return
 
-        # Ask the user for the PNG filename pattern
         pattern = simpledialog.askstring(
             "PNG Filename Pattern",
             "Enter the filename pattern for PNG files (e.g., 'frame%07d.png'):\nLeave empty for default ('%09d.png'):",
@@ -150,37 +146,22 @@ class VideoProcessor:
         if pattern:
             self.pattern = pattern
 
-        # Ask the user to choose the codec
-        codec_choice = simpledialog.askstring(
-            "Codec Choice",
-            "Enter 'h264' for libx264 or 'h265' for libx265 (default is 'h264'):",
-        )
-        if not codec_choice:
-            codec_choice = "h264"
-        elif codec_choice not in ["h264", "h265"]:
-            messagebox.showerror("Error", "Invalid codec choice. Defaulting to 'h264'.")
-            codec_choice = "h264"
-
-        codec_map = {"h264": "libx264", "h265": "libx265"}
-        codec = codec_map[codec_choice]
-
-        # Create a new directory inside the selected source directory for saving the output videos
         timestamp = time.strftime("%Y%m%d%H%M%S")
         output_dir = os.path.join(src, f"vaila_png2mp4_{timestamp}")
         os.makedirs(output_dir, exist_ok=True)
+
+        # Verificar se há GPU NVIDIA disponível para usar NVENC
+        use_gpu = self.is_nvidia_gpu_available()
 
         try:
             # Verifica se há arquivos PNG diretamente no diretório selecionado
             png_files = [f for f in os.listdir(src) if f.endswith(".png")]
 
             if png_files:
-                # Se encontrar arquivos PNG no diretório raiz, processa-os diretamente
                 input_pattern = os.path.join(src, self.pattern)
-                # Usando o nome do diretório em vez de "output.mp4"
                 output_video_name = os.path.basename(src)
                 output_video_path = os.path.join(output_dir, f"{output_video_name}.mp4")
 
-                # Check for the info.txt file for FPS, default to 30 if not found
                 info_file = os.path.join(src, "info.txt")
                 if os.path.exists(info_file):
                     with open(info_file, "r") as f:
@@ -189,8 +170,8 @@ class VideoProcessor:
                 else:
                     fps = 30.0  # Default FPS
 
+                codec = "h264_nvenc" if use_gpu else "libx264"
                 try:
-                    # Create video in YUV420p color space for compatibility
                     command = [
                         "ffmpeg",
                         "-framerate",
@@ -216,12 +197,10 @@ class VideoProcessor:
             for dir_name in os.listdir(src):
                 dir_path = os.path.join(src, dir_name)
                 if os.path.isdir(dir_path):  # Check if it's a directory
-                    # Check for the existence of PNG files in the directory
                     png_files = [f for f in os.listdir(dir_path) if f.endswith(".png")]
                     if not png_files:
                         continue
 
-                    # Check for the info.txt file for FPS, default to 30 if not found
                     info_file = os.path.join(dir_path, "info.txt")
                     if os.path.exists(info_file):
                         with open(info_file, "r") as f:
@@ -233,8 +212,8 @@ class VideoProcessor:
                     input_pattern = os.path.join(dir_path, self.pattern)
                     output_video_path = os.path.join(output_dir, f"{dir_name}.mp4")
 
+                    codec = "h264_nvenc" if use_gpu else "libx264"
                     try:
-                        # Create video in YUV420p color space for compatibility
                         command = [
                             "ffmpeg",
                             "-framerate",
@@ -273,6 +252,17 @@ class VideoProcessor:
         cap.release()
         return fps
 
+    def is_nvidia_gpu_available(self):
+        """Check if an NVIDIA GPU is available and NVENC is supported."""
+        try:
+            result = subprocess.run(
+                ["ffmpeg", "-encoders"], capture_output=True, text=True
+            )
+            return "h264_nvenc" in result.stdout
+        except Exception as e:
+            print(f"Error checking for NVIDIA GPU: {e}")
+            return False
+
     def show_completion_message(self, message):
         root = Tk()
         root.withdraw()
@@ -296,7 +286,6 @@ class VideoProcessor:
         confirmation_window.mainloop()
 
     def run(self):
-        # Print the directory and name of the script being executed
         print(f"Running script: {os.path.basename(__file__)}")
         print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
         print("Starting vailá video processing...")
@@ -319,4 +308,3 @@ class VideoProcessor:
 if __name__ == "__main__":
     processor = VideoProcessor()
     processor.run()
-
