@@ -1,31 +1,63 @@
 """
-Batch Video Cutting Script
+Batch Video Cutting Script with GPU Acceleration
 Author: Prof. PhD. Paulo Santiago
-Date: August 12, 2024
-Version: 1.0
+Date: September 29, 2024
+Version: 1.1
 
 Description:
-This script performs batch video cutting, processing a list of videos and saving the specified parts
-in an output directory. The video list should contain the original video name, the new name for the cut
-video, the start frame, and the end frame.
+This script performs batch video cutting by processing a list of videos, extracting specified segments 
+based on frame ranges, and saving them in a structured output directory. The script supports GPU 
+acceleration via NVIDIA NVENC when available, defaulting to CPU-based processing if a GPU is not detected.
+
+The script reads a list file where each line specifies the original video name, the desired name 
+for the cut video, the start frame, and the end frame. The videos are processed and saved in a "cut_videos" 
+subdirectory inside the specified output directory.
 
 List file format:
 <original_name> <new_name> <start_frame> <end_frame>
 
 Example:
-PC001_STS_02_FLIRsagital.avi PC001_STS_02_FLIRsagital_200_100_300.mp4 100 300
+PC001_STS_02_FLIRsagital.avi PC001_STS_02_FLIRsagital_cut.mp4 100 300
 
-The script creates a "cut_videos" subdirectory in the specified output directory, where the cut videos
-will be saved. If the new name already contains the .mp4 extension, it will be removed to avoid duplication.
+The script automatically removes duplicate ".mp4" extensions from the new file name if necessary.
 
-Dependencies:
+### Key Features:
+1. **Batch Video Processing**: Processes multiple video files in a batch based on the segments specified 
+   in the list file.
+2. **Frame-Based Cutting**: Allows precise cutting of videos by specifying start and end frames for each segment.
+3. **GPU Acceleration**: Uses NVIDIA GPU with NVENC for accelerated video processing if available. Falls back 
+   to CPU-based processing using `libx264` if no GPU is detected.
+4. **Organized Output**: Saves all cut videos in a "cut_videos" subdirectory inside the specified output directory.
+
+### Dependencies:
 - FFmpeg (installed via Conda or available in PATH)
-- tkinter
+- tkinter (for file and directory selection dialogs)
+- rich (for enhanced console output)
 
-Usage:
-Run the script and follow the prompts to select the video directory, the list file, and the output
-directory.
+### Usage:
+1. Run the script.
+2. Select the directory containing the videos to be processed.
+3. Select the list file containing video names and frame ranges.
+4. Select the output directory where the cut videos will be saved.
 
+The script will then process the videos and save the cut segments in the "cut_videos" folder inside the output directory.
+
+### GPU Support:
+- If an NVIDIA GPU with NVENC support is detected, the script will use the `h264_nvenc` codec for hardware-accelerated video cutting.
+- If no GPU is available, the script will fall back to using the `libx264` codec for CPU-based processing.
+
+### Example list file format:
+<original_video_name> <new_video_name> <start_frame> <end_frame>
+PC001_STS_02_FLIRsagital.avi PC001_STS_02_FLIRsagital_cut.mp4 100 300
+
+### Changelog:
+Version 1.1 (2024-09-29):
+- Added GPU acceleration using NVIDIA NVENC when available.
+- Improved file name handling to avoid duplicate ".mp4" extensions.
+- Enhanced error handling and output organization.
+
+Version 1.0 (2024-08-12):
+- Initial release with basic batch video cutting functionality.
 """
 
 import os
@@ -33,12 +65,36 @@ import sys
 import subprocess
 import tkinter as tk
 from tkinter import filedialog
+from rich import print
+
+
+def is_nvidia_gpu_available():
+    """Check if an NVIDIA GPU is available and NVENC is supported."""
+    try:
+        result = subprocess.run(["ffmpeg", "-encoders"], capture_output=True, text=True)
+        return "h264_nvenc" in result.stdout
+    except Exception as e:
+        print(f"Error checking for NVIDIA GPU: {e}")
+        return False
 
 
 def batch_cut_videos(video_directory, list_file_path, output_directory):
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    print("Starting batch video cutting...")
+
     if not os.path.isfile(list_file_path):
         print(f"List file {list_file_path} does not exist.")
         return
+
+    # Check for GPU availability
+    use_gpu = is_nvidia_gpu_available()
+    codec = "h264_nvenc" if use_gpu else "libx264"
+
+    if use_gpu:
+        print("NVIDIA GPU detected. Using h264_nvenc for video processing.")
+    else:
+        print("No NVIDIA GPU detected. Using CPU-based libx264 for video processing.")
 
     # Create the "cut_videos" subdirectory inside the output directory
     output_directory = os.path.join(output_directory, "cut_videos")
@@ -81,6 +137,8 @@ def batch_cut_videos(video_directory, list_file_path, output_directory):
                 f"select=between(n\\,{start_frame}\\,{end_frame})",  # video filter
                 "-vsync",
                 "vfr",  # variable frame rate
+                "-c:v",
+                codec,  # Use GPU if available, otherwise CPU
                 new_path,  # output file
             ]
 

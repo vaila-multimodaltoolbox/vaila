@@ -102,32 +102,68 @@ from tkinter import filedialog, messagebox
 
 # Mapping of landmark indices to their names
 landmark_names = [
-    "nose", "left_eye_inner", "left_eye", "left_eye_outer", "right_eye_inner", "right_eye",
-    "right_eye_outer", "left_ear", "right_ear", "mouth_left", "mouth_right", "left_shoulder",
-    "right_shoulder", "left_elbow", "right_elbow", "left_wrist", "right_wrist", "left_pinky",
-    "right_pinky", "left_index", "right_index", "left_thumb", "right_thumb", "left_hip",
-    "right_hip", "left_knee", "right_knee", "left_ankle", "right_ankle", "left_heel",
-    "right_heel", "left_foot_index", "right_foot_index",
+    "nose",
+    "left_eye_inner",
+    "left_eye",
+    "left_eye_outer",
+    "right_eye_inner",
+    "right_eye",
+    "right_eye_outer",
+    "left_ear",
+    "right_ear",
+    "mouth_left",
+    "mouth_right",
+    "left_shoulder",
+    "right_shoulder",
+    "left_elbow",
+    "right_elbow",
+    "left_wrist",
+    "right_wrist",
+    "left_pinky",
+    "right_pinky",
+    "left_index",
+    "right_index",
+    "left_thumb",
+    "right_thumb",
+    "left_hip",
+    "right_hip",
+    "left_knee",
+    "right_knee",
+    "left_ankle",
+    "right_ankle",
+    "left_heel",
+    "right_heel",
+    "left_foot_index",
+    "right_foot_index",
 ]
+
 
 class ConfidenceInputDialog(tk.simpledialog.Dialog):
     def body(self, master):
-        tk.Label(master, text="Enter minimum detection confidence (0.0 - 1.0):").grid(row=0)
-        tk.Label(master, text="Enter minimum tracking confidence (0.0 - 1.0):").grid(row=1)
+        tk.Label(master, text="Enter minimum detection confidence (0.0 - 1.0):").grid(
+            row=0
+        )
+        tk.Label(master, text="Enter minimum tracking confidence (0.0 - 1.0):").grid(
+            row=1
+        )
         tk.Label(master, text="Enter model complexity (0, 1, or 2):").grid(row=2)
         tk.Label(master, text="Enable segmentation? (True/False):").grid(row=3)
         tk.Label(master, text="Smooth segmentation? (True/False):").grid(row=4)
-        tk.Label(master, text="Static image mode? (True/False):").grid(row=5)  # New static_image_mode option
+        tk.Label(master, text="Static image mode? (True/False):").grid(
+            row=5
+        )  # New static_image_mode option
 
         # Input fields with default values pre-filled
         self.min_detection_entry = tk.Entry(master)
         self.min_detection_entry.insert(0, "0.1")  # Default detection confidence
 
         self.min_tracking_entry = tk.Entry(master)
-        self.min_tracking_entry.insert(0, "0.1")   # Default tracking confidence
+        self.min_tracking_entry.insert(0, "0.1")  # Default tracking confidence
 
         self.model_complexity_entry = tk.Entry(master)
-        self.model_complexity_entry.insert(0, "2")  # Highest complexity for best accuracy
+        self.model_complexity_entry.insert(
+            0, "2"
+        )  # Highest complexity for best accuracy
 
         self.enable_segmentation_entry = tk.Entry(master)
         self.enable_segmentation_entry.insert(0, "True")  # Enable segmentation
@@ -136,7 +172,9 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
         self.smooth_segmentation_entry.insert(0, "True")  # Smooth segmentation enabled
 
         self.static_image_mode_entry = tk.Entry(master)
-        self.static_image_mode_entry.insert(0, "False")  # Default to video mode (tracking after first detection)
+        self.static_image_mode_entry.insert(
+            0, "False"
+        )  # Default to video mode (tracking after first detection)
 
         # Grid positions for input fields
         self.min_detection_entry.grid(row=0, column=1)
@@ -144,7 +182,9 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
         self.model_complexity_entry.grid(row=2, column=1)
         self.enable_segmentation_entry.grid(row=3, column=1)
         self.smooth_segmentation_entry.grid(row=4, column=1)
-        self.static_image_mode_entry.grid(row=5, column=1)  # New static_image_mode option
+        self.static_image_mode_entry.grid(
+            row=5, column=1
+        )  # New static_image_mode option
 
         return self.min_detection_entry  # Initial focus
 
@@ -154,10 +194,14 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
             "min_detection_confidence": float(self.min_detection_entry.get()),
             "min_tracking_confidence": float(self.min_tracking_entry.get()),
             "model_complexity": int(self.model_complexity_entry.get()),
-            "enable_segmentation": self.enable_segmentation_entry.get().lower() == "true",
-            "smooth_segmentation": self.smooth_segmentation_entry.get().lower() == "true",
-            "static_image_mode": self.static_image_mode_entry.get().lower() == "true",  # Capture static_image_mode setting
+            "enable_segmentation": self.enable_segmentation_entry.get().lower()
+            == "true",
+            "smooth_segmentation": self.smooth_segmentation_entry.get().lower()
+            == "true",
+            "static_image_mode": self.static_image_mode_entry.get().lower()
+            == "true",  # Capture static_image_mode setting
         }
+
 
 def get_pose_config():
     root = tk.Tk()
@@ -169,6 +213,7 @@ def get_pose_config():
     else:
         messagebox.showerror("Error", "No values entered.")
         return None
+
 
 def process_video(video_path, output_dir, pose_config):
     print(f"Processing video: {video_path}")
@@ -185,7 +230,9 @@ def process_video(video_path, output_dir, pose_config):
 
     output_video_name = os.path.splitext(os.path.basename(video_path))[0] + "_mp.mp4"
     output_video_path = os.path.join(output_dir, output_video_name)
-    output_landmarks_name = os.path.splitext(os.path.basename(video_path))[0] + "_mp_norm.csv"
+    output_landmarks_name = (
+        os.path.splitext(os.path.basename(video_path))[0] + "_mp_norm.csv"
+    )
     output_file_path = os.path.join(output_dir, output_landmarks_name)
     output_pixel_file_path = os.path.join(
         output_dir, os.path.splitext(os.path.basename(video_path))[0] + "_mp_pixel.csv"
@@ -197,18 +244,24 @@ def process_video(video_path, output_dir, pose_config):
 
     # Use the pose_config provided by the user
     pose = mp.solutions.pose.Pose(
-        static_image_mode=pose_config["static_image_mode"],  # Use the static_image_mode set by the user
+        static_image_mode=pose_config[
+            "static_image_mode"
+        ],  # Use the static_image_mode set by the user
         min_detection_confidence=pose_config["min_detection_confidence"],
         min_tracking_confidence=pose_config["min_tracking_confidence"],
         model_complexity=pose_config["model_complexity"],
         enable_segmentation=pose_config["enable_segmentation"],
         smooth_segmentation=pose_config["smooth_segmentation"],
-        smooth_landmarks=True
+        smooth_landmarks=True,
     )
 
     # Generate headers for the CSV files
-    headers = ["frame_index"] + [f"{name}_x,{name}_y,{name}_z" for name in landmark_names]
-    pixel_headers = ["frame_index"] + [f"{name}_x,{name}_y,{name}_z" for name in landmark_names]
+    headers = ["frame_index"] + [
+        f"{name}_x,{name}_y,{name}_z" for name in landmark_names
+    ]
+    pixel_headers = ["frame_index"] + [
+        f"{name}_x,{name}_y,{name}_z" for name in landmark_names
+    ]
 
     frame_count = 0
     with open(output_file_path, "w") as f, open(output_pixel_file_path, "w") as f_pixel:
@@ -259,6 +312,7 @@ def process_video(video_path, output_dir, pose_config):
         log_file.write(f"Execution Time: {execution_time} seconds\n")
         log_file.write(f"MediaPipe Pose Configuration: {pose_config}\n")
 
+
 def process_videos_in_directory():
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
@@ -298,6 +352,6 @@ def process_videos_in_directory():
                 print(f"Processing video: {video_path}")
                 process_video(video_path, output_dir, pose_config)
 
+
 if __name__ == "__main__":
     process_videos_in_directory()
-
