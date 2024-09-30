@@ -130,6 +130,10 @@ from tkinter import (
 )
 
 
+# Print the directory and name of the script being executed
+print(f"vailá - Running script: {os.path.basename(__file__)}")
+print(f"vailá - Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+
 def select_source_directory():
     """
     Opens a directory dialog to select the source directory containing CSV files.
@@ -236,10 +240,12 @@ def process_file(
     # Load the file and extract the selected column
     df = pd.read_csv(file_path)
     data = df[selected_column].to_numpy()
-
-    # Check if the majority of the data is negative and invert it if necessary
-    if np.median(data) < 0:
-        data = data * -1  # Invert the sign if the median is negative
+   
+    # Check if data mean is negative
+    force_negative = np.mean(data)
+    if force_negative < 0:
+        print("Fz force is negative. Inverting the sign of the data.")
+        data = data * -1  # Invert the sign if the majority is negative
 
     # Interactive body weight selection
     body_weight_newton = select_body_weight(data)
@@ -1866,7 +1872,7 @@ def main():
 
 if __name__ == "__main__":
     # Print the directory and name of the script being executed
-    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"vailá running script : {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
 
     # Run the main function
