@@ -156,20 +156,33 @@ If (-Not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
 # Check if Windows Terminal is installed
 $wtPath = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe"
 If (-Not (Test-Path $wtPath)) {
-    Write-Warning "Windows Terminal is not installed. Installing via Microsoft Store..."
+    Write-Warning "Windows Terminal is not installed. Installing via winget..."
     Try {
         winget install --id Microsoft.WindowsTerminal -e
         Write-Output "Windows Terminal installed successfully."
         $wtInstalled = $true
     } Catch {
-        Write-Warning "Failed to install Windows Terminal. A desktop shortcut will be created instead."
+        Write-Warning "Failed to install Windows Terminal."
         $wtInstalled = $false
     }
 } Else {
     $wtInstalled = $true
 }
 
-# Configure the vaila profile in Windows Terminal using "vaila" for system configurations
+# Check if Git is installed
+If (-Not (Get-Command git -ErrorAction SilentlyContinue)) {
+    Write-Output "Git is not installed. Installing via winget..."
+    Try {
+        winget install --id Git.Git -e --source winget
+        Write-Output "Git installed successfully."
+    } Catch {
+        Write-Warning "Failed to install Git via winget."
+    }
+} Else {
+    Write-Output "Git is already installed."
+}
+
+# Configure the vaila profile in Windows Terminal
 If ($wtInstalled) {
     Write-Output "Configuring the vaila profile in Windows Terminal..."
     $settingsPath = "$wtPath\LocalState\settings.json"
@@ -188,10 +201,10 @@ If ($wtInstalled) {
         $settingsJson.profiles.list = $settingsJson.profiles.list | Where-Object { $_.name -ne "vaila" }
     }
 
-    # Define the new profile using "vaila" for system-related configurations
+    # Define the new profile
     $vailaProfile = @{
         name = "vaila"
-        commandline = "pwsh.exe -ExecutionPolicy Bypass -NoExit -Command `"& '$condaPath\shell\condabin\conda-hook.ps1' ; conda activate 'vaila' ; cd '$vailaProgramPath' ; python 'vaila.py'`""
+        commandline = "pwsh.exe -ExecutionPolicy Bypass -NoExit -Command `"& '$condaPath\shell\condabin\conda-hook.ps1' ; conda activate 'vaila' ; cd '$vailaProgramPath' ; python 'vaila.py'`"" 
         startingDirectory = "$vailaProgramPath"
         icon = "$vailaProgramPath\docs\images\vaila_ico.png"
         colorScheme = "Vintage"
@@ -217,7 +230,7 @@ If ($wtInstalled) {
     $wshell = New-Object -ComObject WScript.Shell
     $shortcut = $wshell.CreateShortcut($shortcutPath)
     $shortcut.TargetPath = "pwsh.exe"
-    $shortcut.Arguments = "-ExecutionPolicy Bypass -NoExit -Command `"& '$condaPath\shell\condabin\conda-hook.ps1' ; conda activate 'vaila' ; cd '$vailaProgramPath' ; python 'vaila.py'`""
+    $shortcut.Arguments = "-ExecutionPolicy Bypass -NoExit -Command `"& '$condaPath\shell\condabin\conda-hook.ps1' ; conda activate 'vaila' ; cd '$vailaProgramPath' ; python 'vaila.py'`"" 
     $shortcut.IconLocation = "$vailaProgramPath\docs\images\vaila_ico.ico"
     $shortcut.WorkingDirectory = "$vailaProgramPath"
     $shortcut.Save()
@@ -225,14 +238,14 @@ If ($wtInstalled) {
     Write-Output "Desktop shortcut created at $shortcutPath"
 }
 
-# Create Start Menu shortcut using "vaila" for system configurations
+# Create Start Menu shortcut for vaila
 Write-Output "Creating Start Menu shortcut for vaila..."
 $startMenuPath = "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\vaila.lnk"
 $wshell = New-Object -ComObject WScript.Shell
 $startShortcut = $wshell.CreateShortcut($startMenuPath)
 $startShortcut.TargetPath = "pwsh.exe"
-$startShortcut.Arguments = "-ExecutionPolicy Bypass -NoExit -Command `"& '$condaPath\shell\condabin\conda-hook.ps1' ; conda activate 'vaila' ; cd '$vailaProgramPath' ; python 'vaila.py'`""
-$startShortcut.IconLocation = "$vailaProgramPath\docs\images\vaila_ico.ico"  # Ensure this points to the correct .ico file
+$startShortcut.Arguments = "-ExecutionPolicy Bypass -NoExit -Command `"& '$condaPath\shell\condabin\conda-hook.ps1' ; conda activate 'vaila' ; cd '$vailaProgramPath' ; python 'vaila.py'`"" 
+$startShortcut.IconLocation = "$vailaProgramPath\docs\images\vaila_ico.ico"
 $startShortcut.WorkingDirectory = "$vailaProgramPath"
 $startShortcut.Save()
 
