@@ -61,21 +61,30 @@ Version 1.0 (2024-08-12):
 """
 
 import os
-import sys
 import subprocess
+import platform
+import sys
 import tkinter as tk
 from tkinter import filedialog
 from rich import print
 
 
 def is_nvidia_gpu_available():
-    """Check if an NVIDIA GPU is available and NVENC is supported."""
+    """Check if an NVIDIA GPU is available using nvidia-smi."""
+    system_platform = platform.system()
     try:
-        result = subprocess.run(["ffmpeg", "-encoders"], capture_output=True, text=True)
-        return "h264_nvenc" in result.stdout
-    except Exception as e:
-        print(f"Error checking for NVIDIA GPU: {e}")
-        return False
+        if system_platform == "Windows" or system_platform == "Linux":
+            result = subprocess.run(["nvidia-smi"], capture_output=True, text=True)
+            if "NVIDIA" in result.stdout:
+                print("NVIDIA GPU detected.")
+                return True
+            else:
+                print("NVIDIA GPU not detected.")
+        else:
+            print(f"{system_platform} does not support NVIDIA GPUs.")
+    except FileNotFoundError:
+        print("nvidia-smi not found. No NVIDIA GPU available.")
+    return False
 
 
 def batch_cut_videos(video_directory, list_file_path, output_directory):
@@ -87,14 +96,14 @@ def batch_cut_videos(video_directory, list_file_path, output_directory):
         print(f"List file {list_file_path} does not exist.")
         return
 
-    # Check for GPU availability
+    # Perform GPU check once at the start
     use_gpu = is_nvidia_gpu_available()
     codec = "h264_nvenc" if use_gpu else "libx264"
 
     if use_gpu:
-        print("NVIDIA GPU detected. Using h264_nvenc for video processing.")
+        print("Using h264_nvenc for video processing (GPU).")
     else:
-        print("No NVIDIA GPU detected. Using CPU-based libx264 for video processing.")
+        print("Using libx264 for video processing (CPU).")
 
     # Create the "cut_videos" subdirectory inside the output directory
     output_directory = os.path.join(output_directory, "cut_videos")
@@ -109,9 +118,7 @@ def batch_cut_videos(video_directory, list_file_path, output_directory):
 
         parts = line.split()
         if len(parts) != 4:
-            print(
-                f"Line format error: {line.strip()} - expected 4 parts, got {len(parts)}"
-            )
+            print(f"Line format error: {line.strip()} - expected 4 parts, got {len(parts)}")
             continue
 
         original_name, new_name, start_frame, end_frame = parts
@@ -131,14 +138,10 @@ def batch_cut_videos(video_directory, list_file_path, output_directory):
             command = [
                 "ffmpeg",
                 "-y",  # overwrite output files
-                "-i",
-                original_path,  # input file
-                "-vf",
-                f"select=between(n\\,{start_frame}\\,{end_frame})",  # video filter
-                "-vsync",
-                "vfr",  # variable frame rate
-                "-c:v",
-                codec,  # Use GPU if available, otherwise CPU
+                "-i", original_path,  # input file
+                "-vf", f"select=between(n\\,{start_frame}\\,{end_frame})",  # video filter
+                "-vsync", "vfr",  # variable frame rate
+                "-c:v", codec,  # Use GPU if available, otherwise CPU
                 new_path,  # output file
             ]
 
@@ -152,16 +155,13 @@ def cut_videos():
     root = tk.Tk()
     root.withdraw()
 
-    video_directory = filedialog.askdirectory(
-        title="Select the directory containing videos"
-    )
+    video_directory = filedialog.askdirectory(title="Select the directory containing videos")
     if not video_directory:
         print("No video directory selected.")
         return
 
     list_file_path = filedialog.askopenfilename(
-        title="Select the list file",
-        filetypes=(("Text files", "*.txt"), ("All files", "*.*")),
+        title="Select the list file", filetypes=(("Text files", "*.txt"), ("All files", "*.*"))
     )
     if not list_file_path:
         print("No list file selected.")
@@ -179,3 +179,4 @@ def cut_videos():
 
 if __name__ == "__main__":
     cut_videos()
+
