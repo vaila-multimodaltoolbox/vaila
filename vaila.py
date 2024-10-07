@@ -1177,12 +1177,12 @@ class Vaila(tk.Tk):
                 ]
             )
 
-        elif platform.system() == "Windows":  # For Windows
-            # Open PowerShell and activate the Conda environment
-            subprocess.Popen(
-                "start powershell -NoExit -Command \"& 'C:\\ProgramData\\anaconda3\\shell\\condabin\\conda-hook.ps1'; conda activate vaila; xonsh\"",
-                shell=True,
-            )
+       elif platform.system() == "Windows":  # For Windows
+           # Open PowerShell 7 and activate the Conda environment
+           subprocess.Popen(
+               "start pwsh -NoExit -Command \"& 'C:\\ProgramData\\anaconda3\\shell\\condabin\\conda-hook.ps1'; conda activate vaila; xonsh\"",
+               shell=True,
+           )
 
         elif platform.system() == "Linux":  # For Linux
             # Open a terminal and activate the Conda environment using xonsh
