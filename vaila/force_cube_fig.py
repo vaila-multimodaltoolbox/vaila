@@ -237,8 +237,28 @@ def process_file(
     """
     Processes a single file for the selected column using the provided parameters.
     """
-    # Load the file and extract the selected column
-    df = pd.read_csv(file_path)
+    # Attempt to load the file and extract the selected column with various encoding and delimiter options
+    def load_csv_file(file_path):
+        encodings = ['utf-8', 'ISO-8859-1', 'latin1', 'windows-1252']
+        delimiters = [',', ';', '\t']
+        
+        for encoding in encodings:
+            for delimiter in delimiters:
+                try:
+                    df = pd.read_csv(file_path, encoding=encoding, delimiter=delimiter)
+                    return df
+                except UnicodeDecodeError:
+                    print(f"Failed to read {file_path} with encoding {encoding} and delimiter '{delimiter}', trying next...")
+                except Exception as e:
+                    print(f"An error occurred: {e}")
+        
+        # If all attempts fail, raise an error
+        raise UnicodeDecodeError(f"Failed to read the file {file_path} with the provided encodings and delimiters.")
+    
+    # Load the file using the new load_csv_file function
+    df = load_csv_file(file_path)
+
+    # Extract the selected column data
     data = df[selected_column].to_numpy()
    
     # Check if data mean is negative
@@ -250,7 +270,7 @@ def process_file(
     # Interactive body weight selection
     body_weight_newton = select_body_weight(data)
 
-    ## Determine body weight from the data if not provided
+    # Determine body weight from the data if not provided
     body_weight_kg = body_weight_newton / 9.81
     databw_norm = data / (body_weight_kg * 9.81)
 
@@ -294,7 +314,6 @@ def process_file(
     print(f"Processing completed for file: {file_path}")
     return results, result_stats, result_profile
 
-
 def batch_process_directory(
     source_dir,
     selected_column,
@@ -331,10 +350,23 @@ def select_headers_and_load_data(file_path):
 
     def get_csv_headers(file_path):
         """
-        Reads the headers from a CSV file.
+        Reads the headers from a CSV file with fallback for different encodings and delimiters.
         """
-        df = pd.read_csv(file_path)
-        return list(df.columns), df
+        encodings = ['utf-8', 'ISO-8859-1', 'latin1', 'windows-1252']  # Common encodings for CSV files
+        delimiters = [',', ';', '\t']  # Common delimiters (comma, semicolon, tab)
+        
+        for encoding in encodings:
+            for delimiter in delimiters:
+                try:
+                    df = pd.read_csv(file_path, encoding=encoding, delimiter=delimiter)
+                    return list(df.columns), df  # Return the headers and DataFrame if successful
+                except UnicodeDecodeError:
+                    print(f"Failed to read {file_path} with encoding {encoding} and delimiter '{delimiter}', trying next...")
+                except Exception as e:
+                    print(f"An error occurred: {e}")
+        
+        # If all encoding and delimiter attempts fail, raise an error
+        raise UnicodeDecodeError(f"Failed to read the file {file_path} with the provided encodings and delimiters.")
 
     headers, df = get_csv_headers(file_path)
     selected_headers = []
@@ -405,7 +437,6 @@ def select_headers_and_load_data(file_path):
     selected_data = df[selected_headers]
 
     return selected_headers, selected_data
-
 
 def create_main_output_directory(output_dir, filename):
     """
