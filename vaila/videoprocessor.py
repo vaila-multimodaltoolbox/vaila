@@ -38,7 +38,8 @@ Installation of FFmpeg (for video processing):
 import os
 import time
 import subprocess
-from tkinter import filedialog, messagebox, simpledialog
+from tkinter import filedialog, messagebox
+from rich import print
 
 def process_videos(
     source_dir,
@@ -46,50 +47,63 @@ def process_videos(
     use_text_file=False,
     text_file_path=None,
 ):
-    # Cria um novo diretório com timestamp
+    # Create a new directory with timestamp
     timestamp = time.strftime("%Y%m%d%H%M%S")
     output_dir = os.path.join(target_dir, f"mergedvid_{timestamp}")
     os.makedirs(output_dir, exist_ok=True)
 
-    # Usa o arquivo de texto, se especificado
+    video_files = []
+
+    # Use provided text file if specified
     if use_text_file and text_file_path:
-        video_files = []
         with open(text_file_path, "r") as file:
             for line in file.readlines():
                 line = line.strip()
                 if "," in line:
-                    # Dividir por vírgula para separar o vídeo de origem e de destino
+                    # Split by comma to get source and target video paths
                     source_video, target_video = line.split(",")
                     video_files.append(
                         (
-                            os.path.join(source_dir, source_video.strip()),  # Caminho do vídeo de origem
-                            os.path.join(source_dir, target_video.strip()),  # Caminho do segundo vídeo
-                            os.path.join(output_dir, f"{source_video.strip()}_merged.mp4")  # Nome do arquivo final
+                            os.path.join(source_dir, source_video.strip()),  # Source video path
+                            os.path.join(source_dir, target_video.strip()),  # Target video path
+                            os.path.join(output_dir, f"{source_video.strip()}_merged.mp4")  # Output merged video
                         )
                     )
                 else:
-                    print(f"Erro: A linha '{line}' não está formatada corretamente. Deve haver uma vírgula separando os dois vídeos.")
+                    print(f"Error: The line '{line}' is not correctly formatted. There should be a comma separating the two videos.")
     else:
-        print("Erro: Nenhum arquivo de texto foi fornecido ou selecionado.")
-        return
+        # No text file provided, process all videos in source_dir
+        for file in os.listdir(source_dir):
+            if file.lower().endswith((".mp4", ".avi", ".mov", ".mkv")):
+                video_path = os.path.join(source_dir, file)
+                video_files.append((video_path, video_path, os.path.join(output_dir, f"{file.strip()}_doubled.mp4")))
 
-    # Itera sobre os pares de vídeos e aplica o processo de merge
+    # Iterate over video pairs and apply the merge process
     for source_video, target_video, output_video in video_files:
         try:
-            print(f"Processing video pair: {source_video} and {target_video}")
+            print(f"Processing video: {source_video}")
 
-            # Comando do FFmpeg para concatenar os dois vídeos
-            ffmpeg_command = [
-                "ffmpeg", 
-                "-i", source_video,
-                "-i", target_video,
-                "-filter_complex", "[0:v][1:v]concat=n=2:v=1:a=0",  # Concatena os dois vídeos
-                "-c:v", "libx264", 
-                output_video
-            ]
-            
-            # Executa o comando do FFmpeg
-            subprocess.run(ffmpeg_command, check=True)
+            if source_video == target_video:
+                # Concatenate reversed video with original without saving the reversed video separately
+                ffmpeg_concat_command = [
+                    "ffmpeg",
+                    "-i", source_video,
+                    "-filter_complex", "[0:v]reverse[vrev];[vrev][0:v]concat=n=2:v=1:a=0",
+                    "-c:v", "libx264",
+                    output_video
+                ]
+                subprocess.run(ffmpeg_concat_command, check=True)
+            else:
+                # Concatenate two different videos
+                ffmpeg_concat_command = [
+                    "ffmpeg", 
+                    "-i", source_video,
+                    "-i", target_video,
+                    "-filter_complex", "[0:v][1:v]concat=n=2:v=1:a=0",
+                    "-c:v", "libx264", 
+                    output_video
+                ]
+                subprocess.run(ffmpeg_concat_command, check=True)
 
             print(f"Video processed and saved to: {output_video}")
         except Exception as e:
@@ -115,7 +129,7 @@ def process_videos_gui():
 
     # Ask if the user wants to use a text file
     use_text_file = messagebox.askyesno(
-        "Use Text File", "Do you want to use a text file (videos_e_frames.txt)?"
+        "Use Text File", "Do you want to use a text file (videos_e_frames.txt) to merge specific video pairs?"
     )
     text_file_path = None
     if use_text_file:
