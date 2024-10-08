@@ -1,5 +1,6 @@
 name: vaila
 channels:
+  - nvidia
   - ska
   - conda-forge
   - defaults
@@ -126,7 +127,6 @@ dependencies:
   - idna=3.7=pyhd8ed1ab_0
   - imagehash=4.3.1=pyhd8ed1ab_0
   - imageio=2.35.1=pyh12aca89_0
-  - imageio-ffmpeg=0.5.1=pyhd8ed1ab_0
   - importlib-metadata=8.0.0=pyha770c72_0
   - importlib_metadata=8.0.0=hd8ed1ab_0
   - importlib_resources=6.4.0=pyhd8ed1ab_0
@@ -143,18 +143,7 @@ dependencies:
   - jsonschema=4.23.0=pyhd8ed1ab_0
   - jsonschema-specifications=2023.12.1=pyhd8ed1ab_0
   - jsonschema-with-format-nongpl=4.23.0=hd8ed1ab_0
-  - jupyter=1.0.0=pyhd8ed1ab_10
-  - jupyter-lsp=2.2.5=pyhd8ed1ab_0
-  - jupyter_client=7.4.9=pyhd8ed1ab_0
-  - jupyter_console=6.6.3=pyhd8ed1ab_0
-  - jupyter_core=5.7.2=py311h38be061_0
-  - jupyter_events=0.10.0=pyhd8ed1ab_0
-  - jupyter_server=2.14.2=pyhd8ed1ab_0
-  - jupyter_server_terminals=0.5.3=pyhd8ed1ab_0
-  - jupyterlab=4.2.2=pyhd8ed1ab_0
-  - jupyterlab_pygments=0.3.0=pyhd8ed1ab_1
-  - jupyterlab_server=2.27.3=pyhd8ed1ab_0
-  - jupyterlab_widgets=3.0.11=pyhd8ed1ab_0
+  - jupyterlab=4.2.5
   - keyutils=1.6.1=h166bdaf_0
   - kiwisolver=1.4.5=py311h9547e67_1
   - krb5=1.21.3=h659f571_0
@@ -341,7 +330,7 @@ dependencies:
   - pygtk=2.16.0=0
   - pyparsing=3.0.9=pyhd8ed1ab_0
   - pysocks=1.7.1=pyha2e5f31_6
-  - python=3.11.8=hab00c5b_0_cpython
+  - python=3.11
   - python-dateutil=2.9.0post0=py311h06a4308_2
   - python-fastjsonschema=2.20.0=pyhd8ed1ab_0
   - python-json-logger=2.0.7=pyhd8ed1ab_0
@@ -447,7 +436,7 @@ dependencies:
   - xyzservices=2024.6.0=pyhd8ed1ab_0
   - xz=5.4.6=h5eee18b_1
   - yaml=0.2.5=h7f98852_2
-  - ydata-profiling=4.9.0=pyhd8ed1ab_0
+  - ydata-profiling=4.10.0
   - zeromq=4.3.5=h75354e8_4
   - zict=3.0.0=pyhd8ed1ab_0
   - zipp=3.19.2=pyhd8ed1ab_0
@@ -480,7 +469,7 @@ dependencies:
       - libclang==18.1.1
       - lxml==5.3.0
       - markdown==3.6
-      - mediapipe==0.10.14
+      - mediapipe==0.10.15
       - ml-dtypes==0.3.2
       - namex==0.0.8
       - opencv-contrib-python==4.10.0.84
@@ -489,25 +478,4 @@ dependencies:
       - paramiko==3.4.1
       - plotly==5.22.0
       - protobuf==4.25.3
-      - pyee==11.1.0
-      - pyexiftool==0.5.6
-      - pynacl==1.5.0
-      - pyqt5==5.15.11
-      - pyqt5-qt5==5.15.14
-      - pyqt5-sip==12.15.0
-      - pyside2==5.13.2
-      - retrying==1.3.4
-      - scp==0.15.0
-      - shiboken2==5.13.2
-      - sip==6.8.6
-      - sounddevice==0.4.7
-      - spm1d==0.4.32
-      - tenacity==8.5.0
-      - tensorboard==2.17.0
-      - tensorboard-data-server==0.7.2
-      - tensorflow-io-gcs-filesystem==0.37.1
-      - termcolor==2.4.0
-      - werkzeug==3.0.3
-      - wrapt==1.16.0
-      - 'xonsh[full]==0.18.3'
-      - scikit-learn==1.5.2
+      -
