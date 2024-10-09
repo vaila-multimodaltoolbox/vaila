@@ -44,13 +44,17 @@ Requirements:
 """
 
 import os
+import numpy as np
 import pandas as pd
 import tkinter as tk
 from tkinter import filedialog, simpledialog, messagebox, Scrollbar
 from datetime import datetime
 from vaila import modifylabref
-from vaila.mergestack import select_file, merge_csv_files, stack_csv_files
+from vaila.mergestack import select_file, merge_csv_files, stack_csv_files, fill_missing_rows, split_csv_half
 from vaila.standardize_header import standardize_header
+from rich import print
+from scipy.interpolate import interp1d
+from pykalman import KalmanFilter
 
 # Dictionary for metric unit conversions with abbreviations
 CONVERSIONS = {
@@ -1002,6 +1006,38 @@ def batch_convert_dvideo(directory_path):
         convert_dvideo_to_vaila(file_path, save_directory)
 
     print(f"All files have been converted and saved to {save_directory}")
+
+def fill_missing_rows_in_gui(self):
+    try:
+        csv_file = select_file("Select the CSV file to fill missing rows")
+        if not csv_file:
+            return
+
+        save_path = filedialog.asksaveasfilename(title="Save Filled CSV File As", defaultextension=".csv", filetypes=[("CSV files", "*.csv")])
+        if not save_path:
+            return
+
+        fill_missing_rows(csv_file, save_path)
+        messagebox.showinfo("Success", f"Missing rows added and saved to {save_path}.")
+    except Exception as e:
+        messagebox.showerror("Error", f"An error occurred: {e}")
+
+
+def split_csv_half_in_gui(self):
+    csv_file = select_file("Select the CSV file to split in half")
+    if not csv_file:
+        return
+
+    save_path = filedialog.asksaveasfilename(title="Save Split CSV File As", defaultextension=".csv", filetypes=[("CSV files", "*.csv")])
+    if not save_path:
+        return
+
+    split_csv_half(csv_file, save_path)
+    messagebox.showinfo("Success", f"Split CSV file saved to {save_path}.")
+
+# Adicione um botão para chamar a função no setup_gui()
+split_button = tk.Button(button_frame, text="Split CSV", command=self.split_csv_half_in_gui)
+split_button.grid(row=8, column=0, padx=5, pady=5, sticky="n")
 
 
 def rearrange_data_in_directory():
