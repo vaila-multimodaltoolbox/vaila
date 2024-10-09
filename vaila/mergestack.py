@@ -1,69 +1,18 @@
 """
 mergestack.py
 Version: 2024-07-31 15:30:00
-Author: Paulo Santiago
-
-Description:
--------------
-This script provides tools for merging, stacking, filling, and splitting CSV data files.
-It includes functions for:
-- Merging and stacking CSV files.
-- Filling missing rows in a CSV file by interpolating values and applying a Kalman filter for smoothing.
-- Splitting a CSV file into half, keeping only the second half of the data.
-- Interactive GUI selection for file operations using Tkinter.
-
-Features:
----------
-- Batch processing of CSV files with options for merging, stacking, and filling missing data.
-- Support for GUI-based file selection, merging, stacking, and splitting of CSV files.
-- Linear interpolation and Kalman filter-based smoothing for missing data rows.
-
-Changelog:
-----------
-- 2024-07-31: Added merging and stacking CSV functionalities.
-- 2024-10-09: Added function for filling missing rows using interpolation and Kalman filter.
-- 2024-10-09: Added function for splitting CSV files and keeping only the second half of the data.
-
-Usage:
-------
-- Use merge_csv_files() to merge two CSV files into one at a specified column position.
-- Use stack_csv_files() to stack one CSV file on top of another.
-- Use fill_missing_rows() to fill in missing rows in a CSV file based on linear interpolation and a Kalman filter.
-- Use split_csv_half() to split a CSV file and keep only the second half.
-- GUI functions are provided for easier file selection and operation.
-
-Requirements:
--------------
-- Python 3.x
-- pandas
-- numpy
-- scipy
-- pykalman
-- rich
-- tkinter
-
 """
 
 import pandas as pd
-import numpy as np
-from scipy.interpolate import interp1d
-from pykalman import KalmanFilter
-import os
 from tkinter import filedialog, messagebox
-from rich import print
+import os
 
-# Print the directory and name of the script being executed
-print(f"Running script: {os.path.basename(__file__)}")
-print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
 
 def select_file(prompt):
     return filedialog.askopenfilename(title=prompt, filetypes=[("CSV files", "*.csv")])
 
-def merge_csv_files(base_file, merge_file, save_path, insert_position=None):
-    # Print the directory and name of the script being executed
-    print(f"Running script: {os.path.basename(__file__)}")
-    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
 
+def merge_csv_files(base_file, merge_file, save_path, insert_position=None):
     base_file_name = os.path.basename(base_file)
     merge_file_name = os.path.basename(merge_file)
     save_file_name = os.path.basename(save_path)
@@ -95,11 +44,8 @@ def merge_csv_files(base_file, merge_file, save_path, insert_position=None):
     print(f"Merged file saved as {save_file_name}.")
     messagebox.showinfo("Success", f"Merged file saved as {save_file_name}.")
 
-def stack_csv_files(base_file, stack_file, save_path, position="end"):
-    # Print the directory and name of the script being executed
-    print(f"Running script: {os.path.basename(__file__)}")
-    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
 
+def stack_csv_files(base_file, stack_file, save_path, position="end"):
     base_file_name = os.path.basename(base_file)
     stack_file_name = os.path.basename(stack_file)
     save_file_name = os.path.basename(save_path)
@@ -123,110 +69,3 @@ def stack_csv_files(base_file, stack_file, save_path, position="end"):
 
     print(f"Stacked file saved as {save_file_name}.")
     messagebox.showinfo("Success", f"Stacked file saved as {save_file_name}.")
-
-def fill_missing_rows(csv_file, save_path):
-    # Print the directory and name of the script being executed
-    print(f"Running script: {os.path.basename(__file__)}")
-    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
-
-    # Read the CSV file
-    df = pd.read_csv(csv_file)
-    
-    # Determine which frame indices are missing
-    all_indices = set(range(df['frame_index'].min(), df['frame_index'].max() + 1))
-    current_indices = set(df['frame_index'])
-    missing_indices = sorted(list(all_indices - current_indices))
-    
-    # If there are no missing rows, return early
-    if not missing_indices:
-        print(f"No missing indices in {csv_file}.")
-        return
-
-    print(f"Missing indices in {csv_file}: {missing_indices}")
-
-    # Set the frame index as the DataFrame index for easier interpolation
-    df.set_index('frame_index', inplace=True)
-    
-    # Interpolate linearly to create values for the missing rows
-    interpolated_data = []
-    for column in df.columns:
-        if df[column].dtype == np.float64 or df[column].dtype == np.int64:
-            f = interp1d(df.index, df[column], kind='linear', fill_value='extrapolate')
-            interpolated_values = f(missing_indices)
-            interpolated_data.append(interpolated_values)
-        else:
-            # For non-numeric columns, fill with the nearest value
-            f = interp1d(df.index, df[column], kind='nearest', fill_value='extrapolate')
-            interpolated_values = f(missing_indices)
-            interpolated_data.append(interpolated_values)
-    
-    # Create new DataFrame for missing rows
-    new_rows = pd.DataFrame(np.array(interpolated_data).T, columns=df.columns, index=missing_indices)
-    new_rows.index.name = 'frame_index'
-    
-    # Concatenate the existing and new DataFrames, then sort by frame index
-    complete_df = pd.concat([df, new_rows]).sort_index()
-    
-    # Optionally, apply a Kalman filter to smooth the data further
-    kf = KalmanFilter(initial_state_mean=complete_df.iloc[0], n_dim_obs=complete_df.shape[1])
-    kf = kf.em(complete_df.values, n_iter=10)
-    (filtered_state_means, _) = kf.filter(complete_df.values)
-    complete_df.loc[:, :] = filtered_state_means
-    
-    # Save the complete DataFrame to a new CSV file
-    complete_df.reset_index(inplace=True)
-    complete_df.to_csv(save_path, index=False)
-    print(f"Missing rows added and saved to {save_path}.")
-
-def fill_missing_rows_in_gui():
-    # Print the directory and name of the script being executed
-    print(f"Running script: {os.path.basename(__file__)}")
-    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
-
-    csv_file = select_file("Select the CSV file to fill missing rows")
-    if not csv_file:
-        return
-
-    save_path = filedialog.asksaveasfilename(title="Save Filled CSV File As", defaultextension=".csv", filetypes=[("CSV files", "*.csv")])
-    if not save_path:
-        return
-
-    fill_missing_rows(csv_file, save_path)
-    messagebox.showinfo("Success", f"Missing rows added and saved to {save_path}.")
-
-def split_csv_half(csv_file, save_path):
-    # Print the directory and name of the script being executed
-    print(f"Running script: {os.path.basename(__file__)}")
-    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
-
-    # Read the CSV file
-    df = pd.read_csv(csv_file)
-
-    # Calculate the middle index
-    middle_index = len(df) // 2
-
-    # Keep only the second half of the DataFrame
-    half_df = df.iloc[middle_index:].reset_index(drop=True)
-
-    # Reset the index starting from 0
-    half_df.index.name = 'frame_index'
-
-    # Save the half DataFrame to a new CSV file
-    half_df.to_csv(save_path, index=True)
-    print(f"Split CSV file saved to {save_path}.")
-
-def split_csv_half_in_gui():
-    # Print the directory and name of the script being executed
-    print(f"Running script: {os.path.basename(__file__)}")
-    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
-
-    csv_file = select_file("Select the CSV file to split in half")
-    if not csv_file:
-        return
-
-    save_path = filedialog.asksaveasfilename(title="Save Split CSV File As", defaultextension=".csv", filetypes=[("CSV files", "*.csv")])
-    if not save_path:
-        return
-
-    split_csv_half(csv_file, save_path)
-    messagebox.showinfo("Success", f"Split CSV file saved to {save_path}.")
