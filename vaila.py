@@ -763,7 +763,7 @@ class Vaila(tk.Tk):
         # C_B_r3_c1 - Video: Get Pixel Coords
         getpixelvideo_btn = tk.Button(
             tools_col2,
-            text="Get Pixel Coords",
+            text="Get Pixel Coord",
             command=self.getpixelvideo,
             width=button_width,
         )
@@ -777,7 +777,7 @@ class Vaila(tk.Tk):
         # C_B_r3_c3 - Video: Merge Videos
         video_processing_btn = tk.Button(
             tools_col2,
-            text="Merge Videos",
+            text="Merge|Split Video",
             command=self.process_videos_gui,
             width=button_width,
         )
