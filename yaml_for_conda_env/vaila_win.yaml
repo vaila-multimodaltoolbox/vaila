@@ -464,3 +464,4 @@ dependencies:
       - wrapt==1.16.0
       - 'xonsh[full]==0.18.3'
       - scikit-learn==1.5.2
+      - pykalman==0.9.7
