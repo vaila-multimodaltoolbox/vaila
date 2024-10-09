@@ -478,4 +478,4 @@ dependencies:
       - paramiko==3.4.1
       - plotly==5.22.0
       - protobuf==4.25.3
-      -
+      - pykalman==0.9.7
