@@ -1,3 +1,49 @@
+"""
+mergestack.py
+Version: 2024-07-31 15:30:00
+Author: Paulo Santiago
+
+Description:
+-------------
+This script provides tools for merging, stacking, filling, and splitting CSV data files.
+It includes functions for:
+- Merging and stacking CSV files.
+- Filling missing rows in a CSV file by interpolating values and applying a Kalman filter for smoothing.
+- Splitting a CSV file into half, keeping only the second half of the data.
+- Interactive GUI selection for file operations using Tkinter.
+
+Features:
+---------
+- Batch processing of CSV files with options for merging, stacking, and filling missing data.
+- Support for GUI-based file selection, merging, stacking, and splitting of CSV files.
+- Linear interpolation and Kalman filter-based smoothing for missing data rows.
+
+Changelog:
+----------
+- 2024-07-31: Added merging and stacking CSV functionalities.
+- 2024-10-09: Added function for filling missing rows using interpolation and Kalman filter.
+- 2024-10-09: Added function for splitting CSV files and keeping only the second half of the data.
+
+Usage:
+------
+- Use merge_csv_files() to merge two CSV files into one at a specified column position.
+- Use stack_csv_files() to stack one CSV file on top of another.
+- Use fill_missing_rows() to fill in missing rows in a CSV file based on linear interpolation and a Kalman filter.
+- Use split_csv_half() to split a CSV file and keep only the second half.
+- GUI functions are provided for easier file selection and operation.
+
+Requirements:
+-------------
+- Python 3.x
+- pandas
+- numpy
+- scipy
+- pykalman
+- rich
+- tkinter
+
+"""
+
 import pandas as pd
 import numpy as np
 from scipy.interpolate import interp1d
@@ -147,3 +193,40 @@ def fill_missing_rows_in_gui():
 
     fill_missing_rows(csv_file, save_path)
     messagebox.showinfo("Success", f"Missing rows added and saved to {save_path}.")
+
+def split_csv_half(csv_file, save_path):
+    # Print the directory and name of the script being executed
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+
+    # Read the CSV file
+    df = pd.read_csv(csv_file)
+
+    # Calculate the middle index
+    middle_index = len(df) // 2
+
+    # Keep only the second half of the DataFrame
+    half_df = df.iloc[middle_index:].reset_index(drop=True)
+
+    # Reset the index starting from 0
+    half_df.index.name = 'frame_index'
+
+    # Save the half DataFrame to a new CSV file
+    half_df.to_csv(save_path, index=True)
+    print(f"Split CSV file saved to {save_path}.")
+
+def split_csv_half_in_gui():
+    # Print the directory and name of the script being executed
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+
+    csv_file = select_file("Select the CSV file to split in half")
+    if not csv_file:
+        return
+
+    save_path = filedialog.asksaveasfilename(title="Save Split CSV File As", defaultextension=".csv", filetypes=[("CSV files", "*.csv")])
+    if not save_path:
+        return
+
+    split_csv_half(csv_file, save_path)
+    messagebox.showinfo("Success", f"Split CSV file saved to {save_path}.")
