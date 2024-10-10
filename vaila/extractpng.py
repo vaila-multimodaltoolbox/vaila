@@ -56,6 +56,7 @@ import time
 from tkinter import filedialog, messagebox, simpledialog, Tk, Toplevel, Label, Button
 from rich import print
 
+
 class VideoProcessor:
     def __init__(self):
         self.pattern = "%09d.png"  # Default pattern
@@ -66,7 +67,9 @@ class VideoProcessor:
         root = Tk()
         root.withdraw()
 
-        src = filedialog.askdirectory(title="Select the source directory containing videos")
+        src = filedialog.askdirectory(
+            title="Select the source directory containing videos"
+        )
         if not src:
             messagebox.showerror("Error", "No source directory selected.")
             return
@@ -83,7 +86,11 @@ class VideoProcessor:
         os.makedirs(dest_main_dir, exist_ok=True)
 
         try:
-            video_files = [f for f in os.listdir(src) if f.endswith((".avi", ".mp4", ".mov", ".mkv"))]
+            video_files = [
+                f
+                for f in os.listdir(src)
+                if f.endswith((".avi", ".mp4", ".mov", ".mkv"))
+            ]
 
             for item in video_files:
                 video_path = os.path.join(src, item)
@@ -130,15 +137,16 @@ class VideoProcessor:
             return
 
         frame_numbers = simpledialog.askstring(
-            "Frame Numbers", 
-            "Enter the frame numbers to extract (e.g., 0,3,5,7,9):"
+            "Frame Numbers", "Enter the frame numbers to extract (e.g., 0,3,5,7,9):"
         )
         if not frame_numbers:
             messagebox.showerror("Error", "No frame numbers provided.")
             return
 
         timestamp = time.strftime("%Y%m%d%H%M%S")
-        output_dir = os.path.join(os.path.dirname(video_file), f"vaila_grabframes_{timestamp}")
+        output_dir = os.path.join(
+            os.path.dirname(video_file), f"vaila_grabframes_{timestamp}"
+        )
         os.makedirs(output_dir, exist_ok=True)
 
         frames = frame_numbers.replace(" ", "").split(",")
@@ -225,4 +233,3 @@ class VideoProcessor:
 if __name__ == "__main__":
     processor = VideoProcessor()
     processor.run()
-
