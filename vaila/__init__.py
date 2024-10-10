@@ -81,7 +81,7 @@ from .spectral_features import (
     energy_content_above_2,
     frequency_quotient,
 )
-from .linear_interpolation_split import run_fill_split_dialog
+from .interpolation_split import run_fill_split_dialog
 
 __all__ = [
     "plot_ellipse_pca",
