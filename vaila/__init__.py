@@ -9,13 +9,14 @@ Version: 2024-08-16 12:00:00
 
 Changelog:
 - 2024-08-16: Added `process_videos_gui` functionality for video processing. This update integrates the video processing GUI into the package, allowing users to define and concatenate video segments through a user-friendly interface.
+- 2024-10-09: Added `linear_interpolation_split` functionality for applying linear interpolation and data splitting. This update provides enhancing data_processingta cleaning and manipulation features.
 
 Author: Prof. Paulo Santiago
 """
 
 from .ellipse import plot_ellipse_pca, plot_cop_pathway_with_ellipse
 from .data_processing import read_cluster_csv, read_mocap_csv
-from .filter_utils import butter_filter  # Import the updated filter function
+from .filter_utils import butter_filter
 from .plotting import plot_orthonormal_bases
 from .rotation import rotdata, createortbase, calcmatrot, rotmat2euler
 from .readcsv import (
@@ -80,13 +81,14 @@ from .spectral_features import (
     energy_content_above_2,
     frequency_quotient,
 )
+from .linear_interpolation_split import run_fill_split_dialog
 
 __all__ = [
     "plot_ellipse_pca",
     "plot_cop_pathway_with_ellipse",
     "read_cluster_csv",
     "read_mocap_csv",
-    "butter_filter",  # Updated filter function name
+    "butter_filter",
     "plot_orthonormal_bases",
     "rotdata",
     "createortbase",
@@ -152,4 +154,5 @@ __all__ = [
     "energy_content_0_5_2",
     "energy_content_above_2",
     "frequency_quotient",
+    "run_fill_split_dialog",
 ]

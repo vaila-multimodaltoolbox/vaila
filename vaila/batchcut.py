@@ -118,7 +118,9 @@ def batch_cut_videos(video_directory, list_file_path, output_directory):
 
         parts = line.split()
         if len(parts) != 4:
-            print(f"Line format error: {line.strip()} - expected 4 parts, got {len(parts)}")
+            print(
+                f"Line format error: {line.strip()} - expected 4 parts, got {len(parts)}"
+            )
             continue
 
         original_name, new_name, start_frame, end_frame = parts
@@ -138,10 +140,14 @@ def batch_cut_videos(video_directory, list_file_path, output_directory):
             command = [
                 "ffmpeg",
                 "-y",  # overwrite output files
-                "-i", original_path,  # input file
-                "-vf", f"select=between(n\\,{start_frame}\\,{end_frame})",  # video filter
-                "-vsync", "vfr",  # variable frame rate
-                "-c:v", codec,  # Use GPU if available, otherwise CPU
+                "-i",
+                original_path,  # input file
+                "-vf",
+                f"select=between(n\\,{start_frame}\\,{end_frame})",  # video filter
+                "-vsync",
+                "vfr",  # variable frame rate
+                "-c:v",
+                codec,  # Use GPU if available, otherwise CPU
                 new_path,  # output file
             ]
 
@@ -155,13 +161,16 @@ def cut_videos():
     root = tk.Tk()
     root.withdraw()
 
-    video_directory = filedialog.askdirectory(title="Select the directory containing videos")
+    video_directory = filedialog.askdirectory(
+        title="Select the directory containing videos"
+    )
     if not video_directory:
         print("No video directory selected.")
         return
 
     list_file_path = filedialog.askopenfilename(
-        title="Select the list file", filetypes=(("Text files", "*.txt"), ("All files", "*.*"))
+        title="Select the list file",
+        filetypes=(("Text files", "*.txt"), ("All files", "*.*")),
     )
     if not list_file_path:
         print("No list file selected.")
@@ -179,4 +188,3 @@ def cut_videos():
 
 if __name__ == "__main__":
     cut_videos()
-

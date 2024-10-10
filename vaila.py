@@ -110,7 +110,9 @@ from vaila import (
     plot_2d,
     plot_3d,
     process_videos_gui,
+    run_fill_split_dialog,
 )
+
 
 text = """
 :::::::::'##::::'##::::'###::::'####:'##::::::::::'###::::'####::::::::::
@@ -646,7 +648,14 @@ class Vaila(tk.Tk):
             command=self.convert_c3d_csv,
             width=button_width,
         )
-        # C_A_r1_c3 - Data Files: vailá
+        # C_A_r1_c3 - Data Files: linear interpolation and split data csv
+        gapfill_btn = tk.Button(
+            tools_col1,
+            text="GapFill - split",
+            command=self.gapfill_split,  # Assuming this correctly calls the method in the Vaila class
+            width=button_width,
+        )
+        # C_A_r1_c4 - Data Files: vailá
         vaila_btn8to9 = tk.Button(
             tools_col1,
             text="vailá",
@@ -709,7 +718,7 @@ class Vaila(tk.Tk):
         # Packing Data Files buttons
         reorder_csv_btn.grid(row=0, column=0, padx=2, pady=2)
         convert_btn.grid(row=0, column=1, padx=2, pady=2)
-        vaila_btn8to9.grid(row=0, column=2, padx=2, pady=2)
+        gapfill_btn.grid(row=0, column=2, padx=2, pady=2)
         dlt2d_btn.grid(row=1, column=0, padx=2, pady=2)
         rec2d_one_btn.grid(row=1, column=1, padx=2, pady=2)
         rec2d_multiple_btn.grid(row=1, column=2, padx=2, pady=2)
@@ -1039,8 +1048,8 @@ class Vaila(tk.Tk):
         button_csv_to_c3d.pack(side="right", padx=20, pady=20)
 
     # C_A_r1_c3
-    # def vaila(self):
-    #     vaila()
+    def gapfill_split(self):
+        run_fill_split_dialog()
 
     # C_A_r2_c1
     def dlt2d(self):
@@ -1178,11 +1187,11 @@ class Vaila(tk.Tk):
             )
 
         elif platform.system() == "Windows":  # For Windows
-           # Open PowerShell 7 and activate the Conda environment
-           subprocess.Popen(
-               "start pwsh -NoExit -Command \"& 'C:\\ProgramData\\anaconda3\\shell\\condabin\\conda-hook.ps1'; conda activate vaila; xonsh\"",
-               shell=True,
-           )
+            # Open PowerShell 7 and activate the Conda environment
+            subprocess.Popen(
+                "start pwsh -NoExit -Command \"& 'C:\\ProgramData\\anaconda3\\shell\\condabin\\conda-hook.ps1'; conda activate vaila; xonsh\"",
+                shell=True,
+            )
 
         elif platform.system() == "Linux":  # For Linux
             # Open a terminal and activate the Conda environment using xonsh
