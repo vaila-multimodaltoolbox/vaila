@@ -47,7 +47,7 @@ def dlt2d(F, L):
     Lt = L.transpose()
     C = Lt.flatten("F").transpose()
     m = np.size(F, 0)
-    
+
     B = np.zeros((2 * m, 8))
     for i in range(m):
         B[2 * i, 0:3] = [F[i, 0], F[i, 1], 1]
@@ -121,7 +121,7 @@ def process_files(pixel_file, real_file):
                 dlt_params.append((i, [np.nan] * 8))
         else:
             dlt_params.append((i, [np.nan] * 8))
-    
+
     return dlt_params
 
 
@@ -138,7 +138,7 @@ def save_dlt_parameters(output_file, dlt_params):
         csvwriter.writerow(["frame"] + [f"dlt_param_{j}" for j in range(1, 9)])
         for frame, params in dlt_params:
             csvwriter.writerow([frame] + list(params))
-    
+
     messagebox.showinfo("Success", f"DLT parameters saved to {output_file}")
     print(f"DLT parameters saved to {output_file}")
 
@@ -147,7 +147,7 @@ def main():
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
     print("Starting DLT2D calculation...")
- 
+
     root = Tk()
     root.withdraw()
 
@@ -167,7 +167,9 @@ def main():
         real_file = create_ref2d_template(pixel_file)
         messagebox.showinfo("Success", f"Template REF2D file created: {real_file}")
         print(f"Template REF2D file created: {real_file}")
-        print("Please edit the REF2D file with real coordinates and run the DLT process again.")
+        print(
+            "Please edit the REF2D file with real coordinates and run the DLT process again."
+        )
         return
     else:
         real_file = filedialog.askopenfilename(
@@ -185,4 +187,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
