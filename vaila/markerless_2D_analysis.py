@@ -84,7 +84,6 @@ You should have received a copy of the GNU GPLv3 (General Public License Version
 If not, see <https://www.gnu.org/licenses/>.
 """
 
-
 import cv2
 import mediapipe as mp
 import os
@@ -94,18 +93,50 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 
 landmark_names = [
-    "nose", "left_eye_inner", "left_eye", "left_eye_outer", "right_eye_inner", "right_eye",
-    "right_eye_outer", "left_ear", "right_ear", "mouth_left", "mouth_right", "left_shoulder",
-    "right_shoulder", "left_elbow", "right_elbow", "left_wrist", "right_wrist", "left_pinky",
-    "right_pinky", "left_index", "right_index", "left_thumb", "right_thumb", "left_hip",
-    "right_hip", "left_knee", "right_knee", "left_ankle", "right_ankle", "left_heel", "right_heel",
-    "left_foot_index", "right_foot_index"
+    "nose",
+    "left_eye_inner",
+    "left_eye",
+    "left_eye_outer",
+    "right_eye_inner",
+    "right_eye",
+    "right_eye_outer",
+    "left_ear",
+    "right_ear",
+    "mouth_left",
+    "mouth_right",
+    "left_shoulder",
+    "right_shoulder",
+    "left_elbow",
+    "right_elbow",
+    "left_wrist",
+    "right_wrist",
+    "left_pinky",
+    "right_pinky",
+    "left_index",
+    "right_index",
+    "left_thumb",
+    "right_thumb",
+    "left_hip",
+    "right_hip",
+    "left_knee",
+    "right_knee",
+    "left_ankle",
+    "right_ankle",
+    "left_heel",
+    "right_heel",
+    "left_foot_index",
+    "right_foot_index",
 ]
+
 
 class ConfidenceInputDialog(tk.simpledialog.Dialog):
     def body(self, master):
-        tk.Label(master, text="Enter minimum detection confidence (0.0 - 1.0):").grid(row=0)
-        tk.Label(master, text="Enter minimum tracking confidence (0.0 - 1.0):").grid(row=1)
+        tk.Label(master, text="Enter minimum detection confidence (0.0 - 1.0):").grid(
+            row=0
+        )
+        tk.Label(master, text="Enter minimum tracking confidence (0.0 - 1.0):").grid(
+            row=1
+        )
         tk.Label(master, text="Enter model complexity (0, 1, or 2):").grid(row=2)
         tk.Label(master, text="Enable segmentation? (True/False):").grid(row=3)
         tk.Label(master, text="Smooth segmentation? (True/False):").grid(row=4)
@@ -138,10 +169,13 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
             "min_detection_confidence": float(self.min_detection_entry.get()),
             "min_tracking_confidence": float(self.min_tracking_entry.get()),
             "model_complexity": int(self.model_complexity_entry.get()),
-            "enable_segmentation": self.enable_segmentation_entry.get().lower() == "true",
-            "smooth_segmentation": self.smooth_segmentation_entry.get().lower() == "true",
+            "enable_segmentation": self.enable_segmentation_entry.get().lower()
+            == "true",
+            "smooth_segmentation": self.smooth_segmentation_entry.get().lower()
+            == "true",
             "static_image_mode": self.static_image_mode_entry.get().lower() == "true",
         }
+
 
 def get_pose_config():
     root = tk.Tk()
@@ -152,6 +186,7 @@ def get_pose_config():
     else:
         messagebox.showerror("Error", "No values entered.")
         return None
+
 
 def process_video(video_path, output_dir, pose_config):
     print(f"Processing video: {video_path}")
@@ -172,7 +207,9 @@ def process_video(video_path, output_dir, pose_config):
     # Garantir que o diretório de saída exista
     os.makedirs(output_dir, exist_ok=True)
 
-    output_landmarks_name = os.path.splitext(os.path.basename(video_path))[0] + "_mp_norm.csv"
+    output_landmarks_name = (
+        os.path.splitext(os.path.basename(video_path))[0] + "_mp_norm.csv"
+    )
     output_file_path = os.path.join(output_dir, output_landmarks_name)
     output_pixel_file_path = os.path.join(
         output_dir, os.path.splitext(os.path.basename(video_path))[0] + "_mp_pixel.csv"
@@ -192,8 +229,12 @@ def process_video(video_path, output_dir, pose_config):
         smooth_landmarks=True,
     )
 
-    headers = ["frame_index"] + [f"{name}_x,{name}_y,{name}_z" for name in landmark_names]
-    pixel_headers = ["frame_index"] + [f"{name}_x,{name}_y,{name}_z" for name in landmark_names]
+    headers = ["frame_index"] + [
+        f"{name}_x,{name}_y,{name}_z" for name in landmark_names
+    ]
+    pixel_headers = ["frame_index"] + [
+        f"{name}_x,{name}_y,{name}_z" for name in landmark_names
+    ]
 
     frame_count = 0
     with open(output_file_path, "w") as f, open(output_pixel_file_path, "w") as f_pixel:
@@ -210,12 +251,16 @@ def process_video(video_path, output_dir, pose_config):
                 mp.solutions.drawing_utils.draw_landmarks(
                     frame, results.pose_landmarks, mp.solutions.pose.POSE_CONNECTIONS
                 )
-                landmarks = [f"{landmark.x:.6f},{landmark.y:.6f},{landmark.z:.6f}"
-                             for landmark in results.pose_landmarks.landmark]
+                landmarks = [
+                    f"{landmark.x:.6f},{landmark.y:.6f},{landmark.z:.6f}"
+                    for landmark in results.pose_landmarks.landmark
+                ]
                 f.write(f"{frame_count}," + ",".join(landmarks) + "\n")
 
-                pixel_landmarks = [f"{int(landmark.x * width)},{int(landmark.y * height)},{landmark.z:.6f}"
-                                   for landmark in results.pose_landmarks.landmark]
+                pixel_landmarks = [
+                    f"{int(landmark.x * width)},{int(landmark.y * height)},{landmark.z:.6f}"
+                    for landmark in results.pose_landmarks.landmark
+                ]
                 f_pixel.write(f"{frame_count}," + ",".join(pixel_landmarks) + "\n")
 
             out.write(frame)
@@ -238,6 +283,7 @@ def process_video(video_path, output_dir, pose_config):
         log_file.write(f"Total Frames: {frame_count}\n")
         log_file.write(f"Execution Time: {execution_time} seconds\n")
         log_file.write(f"MediaPipe Pose Configuration: {pose_config}\n")
+
 
 def process_videos_in_directory():
     print(f"Running script: {os.path.basename(__file__)}")
@@ -277,6 +323,7 @@ def process_videos_in_directory():
                 os.makedirs(output_dir, exist_ok=True)
                 print(f"Processing video: {video_path}")
                 process_video(video_path, output_dir, pose_config)
+
 
 if __name__ == "__main__":
     process_videos_in_directory()
