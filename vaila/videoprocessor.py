@@ -45,7 +45,10 @@ import time
 import subprocess
 from tkinter import filedialog, messagebox, simpledialog
 
-def process_videos_merge(source_dir, target_dir, use_text_file=False, text_file_path=None):
+
+def process_videos_merge(
+    source_dir, target_dir, use_text_file=False, text_file_path=None
+):
     # Create a new directory with timestamp
     timestamp = time.strftime("%Y%m%d%H%M%S")
     output_dir = os.path.join(target_dir, f"mergedvid_{timestamp}")
@@ -64,7 +67,9 @@ def process_videos_merge(source_dir, target_dir, use_text_file=False, text_file_
         # No text file provided, process all videos in source_dir
         with os.scandir(source_dir) as entries:
             for entry in entries:
-                if entry.is_file() and entry.name.lower().endswith((".mp4", ".avi", ".mov", ".mkv")):
+                if entry.is_file() and entry.name.lower().endswith(
+                    (".mp4", ".avi", ".mov", ".mkv")
+                ):
                     video_files.append(entry.path)
 
     # Iterate over video files and apply the merge process
@@ -73,31 +78,47 @@ def process_videos_merge(source_dir, target_dir, use_text_file=False, text_file_
             print(f"Processing video: {video_path}")
 
             # Output video path
-            output_video = os.path.join(output_dir, f"{os.path.splitext(os.path.basename(video_path))[0]}_double.mp4")
+            output_video = os.path.join(
+                output_dir,
+                f"{os.path.splitext(os.path.basename(video_path))[0]}_double.mp4",
+            )
 
             # Command to reverse the video and concatenate with the original
             ffmpeg_command = [
                 "ffmpeg",
-                "-i", video_path,
-                "-vf", "reverse",
-                "-c:v", "libx264",
-                "-preset", "fast",
-                "-f", "mpegts",
-                "pipe:1"
+                "-i",
+                video_path,
+                "-vf",
+                "reverse",
+                "-c:v",
+                "libx264",
+                "-preset",
+                "fast",
+                "-f",
+                "mpegts",
+                "pipe:1",
             ]
             reverse_process = subprocess.Popen(ffmpeg_command, stdout=subprocess.PIPE)
 
             ffmpeg_concat_command = [
                 "ffmpeg",
-                "-i", video_path,
-                "-f", "mpegts",
-                "-i", "pipe:0",
-                "-filter_complex", "[1:v][0:v]concat=n=2:v=1:a=0",
-                "-c:v", "libx264",
-                "-preset", "fast",
-                output_video
+                "-i",
+                video_path,
+                "-f",
+                "mpegts",
+                "-i",
+                "pipe:0",
+                "-filter_complex",
+                "[1:v][0:v]concat=n=2:v=1:a=0",
+                "-c:v",
+                "libx264",
+                "-preset",
+                "fast",
+                output_video,
             ]
-            subprocess.run(ffmpeg_concat_command, stdin=reverse_process.stdout, check=True)
+            subprocess.run(
+                ffmpeg_concat_command, stdin=reverse_process.stdout, check=True
+            )
 
             print(f"Video processed and saved to: {output_video}")
         except subprocess.CalledProcessError as e:
@@ -105,7 +126,10 @@ def process_videos_merge(source_dir, target_dir, use_text_file=False, text_file_
         except Exception as e:
             print(f"Error processing video {video_path}: {e}")
 
-def process_videos_split(source_dir, target_dir, use_text_file=False, text_file_path=None):
+
+def process_videos_split(
+    source_dir, target_dir, use_text_file=False, text_file_path=None
+):
     # Create a new directory with timestamp
     timestamp = time.strftime("%Y%m%d%H%M%S")
     output_dir = os.path.join(target_dir, f"splitvid_{timestamp}")
@@ -124,7 +148,9 @@ def process_videos_split(source_dir, target_dir, use_text_file=False, text_file_
         # No text file provided, process all videos in source_dir
         with os.scandir(source_dir) as entries:
             for entry in entries:
-                if entry.is_file() and entry.name.lower().endswith((".mp4", ".avi", ".mov", ".mkv")):
+                if entry.is_file() and entry.name.lower().endswith(
+                    (".mp4", ".avi", ".mov", ".mkv")
+                ):
                     video_files.append(entry.path)
 
     # Iterate over video files and apply the split process
@@ -134,24 +160,45 @@ def process_videos_split(source_dir, target_dir, use_text_file=False, text_file_
 
             # Get total number of frames using ffprobe
             ffprobe_frames_command = [
-                "ffprobe", "-v", "error", "-select_streams", "v:0", "-count_frames", "-show_entries",
-                "stream=nb_read_frames", "-of", "default=nokey=1:noprint_wrappers=1", video_path
+                "ffprobe",
+                "-v",
+                "error",
+                "-select_streams",
+                "v:0",
+                "-count_frames",
+                "-show_entries",
+                "stream=nb_read_frames",
+                "-of",
+                "default=nokey=1:noprint_wrappers=1",
+                video_path,
             ]
-            frames_result = subprocess.run(ffprobe_frames_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            frames_result = subprocess.run(
+                ffprobe_frames_command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
             total_frames = int(frames_result.stdout.strip())
             half_frame = total_frames // 2
 
             # Output video path
-            output_video = os.path.join(output_dir, f"{os.path.splitext(os.path.basename(video_path))[0]}_2half.mp4")
+            output_video = os.path.join(
+                output_dir,
+                f"{os.path.splitext(os.path.basename(video_path))[0]}_2half.mp4",
+            )
 
             # Command to extract the second half of the video by frames
             ffmpeg_command = [
                 "ffmpeg",
-                "-i", video_path,
-                "-vf", f"select='gte(n,{half_frame})'",  # Select frames starting from the half
-                "-vsync", "vfr",
-                "-c:v", "libx264",
-                output_video
+                "-i",
+                video_path,
+                "-vf",
+                f"select='gte(n,{half_frame})'",  # Select frames starting from the half
+                "-vsync",
+                "vfr",
+                "-c:v",
+                "libx264",
+                output_video,
             ]
             subprocess.run(ffmpeg_command, check=True)
 
@@ -160,6 +207,7 @@ def process_videos_split(source_dir, target_dir, use_text_file=False, text_file_
             print(f"FFmpeg error processing video {video_path}: {e}")
         except Exception as e:
             print(f"Error processing video {video_path}: {e}")
+
 
 def process_videos_gui():
     # Print the directory and name of the script being executed
@@ -180,14 +228,22 @@ def process_videos_gui():
         return
 
     # Ask user to select the operation (Merge or Split)
-    operation = simpledialog.askstring("Operation", "Enter 'm' for merge or 's' for split:").strip().lower()
+    operation = (
+        simpledialog.askstring("Operation", "Enter 'm' for merge or 's' for split:")
+        .strip()
+        .lower()
+    )
     if not operation or operation not in ["m", "s"]:
-        messagebox.showerror("Error", "Invalid operation selected. Please enter 'm' for merge or 's' for split.")
+        messagebox.showerror(
+            "Error",
+            "Invalid operation selected. Please enter 'm' for merge or 's' for split.",
+        )
         return
 
     # Ask if the user wants to use a text file
     use_text_file = messagebox.askyesno(
-        "Use Text File", "Do you want to use a text file (videos_e_frames.txt) to specify videos to process?"
+        "Use Text File",
+        "Do you want to use a text file (videos_e_frames.txt) to specify videos to process?",
     )
     text_file_path = None
     if use_text_file:
@@ -199,10 +255,11 @@ def process_videos_gui():
             return
 
     # Call the appropriate function based on the selected operation
-    if operation == 'm':
+    if operation == "m":
         process_videos_merge(source_dir, target_dir, use_text_file, text_file_path)
-    elif operation == 's':
+    elif operation == "s":
         process_videos_split(source_dir, target_dir, use_text_file, text_file_path)
+
 
 if __name__ == "__main__":
     process_videos_gui()
