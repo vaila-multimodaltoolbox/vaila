@@ -3,7 +3,7 @@
 vaila.py
 ===============================================================================
 Author: Paulo R. P. Santiago
-Date: 7 September 2024
+Date: 10 Oct 2024
 Version: 1.0.0
 Python Version: 3.11.9
 
@@ -71,6 +71,13 @@ import tkinter as tk
 from tkinter import messagebox, filedialog, ttk, Toplevel, Label, Button
 from PIL import Image, ImageTk
 import webbrowser
+
+# Conditionally import AppKit only for macOS
+if platform.system() == "Darwin":
+    try:
+        from AppKit import NSBundle
+    except ImportError:
+        NSBundle = None
 
 from vaila import (
     cluster_analysis,
@@ -158,7 +165,7 @@ B3_r3_c4 - vailá          B3_r3_c5 - vailá
 
 ============================== Tools Available (Frame C) ===================
 C_A: Data Files
-C_A_r1_c1 - Edit CSV      C_A_r1_c2 - C3D <--> CSV   C_A_r1_c3 - vailá
+C_A_r1_c1 - Edit CSV      C_A_r1_c2 - C3D <--> CSV   C_A_r1_c3 - Gapfill | split
 C_A_r2_c1 - Make DLT2D    C_A_r2_c2 - Rec2D 1DLT     C_A_r2_c3 - Rec2D MultiDLT
 C_A_r3_c1 - Make DLT3D    C_A_r3_c2 - Rec3D 1DLT     C_A_r3_c3 - Rec3D MultiDLT
 C_A_r4_c1 - vailá         C_A_r4_c2 - vailá          C_A_r4_c3 - vailá
@@ -181,19 +188,20 @@ Use the button 'imagination!' to access command-line (xonsh) tools for advanced 
 
 print(text)
 
-
-if platform.system() == "Darwin":
-    try:
-        import AppKit
-    except ImportError:
-        AppKit = None
-
-
 class Vaila(tk.Tk):
     def __init__(self):
+        """
+        Initializes the Vaila application.
+
+        Sets the window title, geometry, button dimensions, and font size based on the operating system.
+        Sets the window icon based on the operating system.
+        Sets the application name for the macOS dock if AppKit is available.
+
+        Calls the create_widgets method to create the application's widgets.
+        """
         super().__init__()
         self.title("vailá - 7.9.1822")
-        self.geometry("1280x720")
+        self.geometry("1280x725")
 
         # Set button dimensions and font size based on OS
         self.set_dimensions_based_on_os()  # Chamada para ajustar dimensões e fonte
@@ -214,12 +222,17 @@ class Vaila(tk.Tk):
             self.iconphoto(True, img)
 
         # Set application name for macOS dock
-        if platform.system() == "Darwin" and AppKit is not None:
-            AppKit.NSBundle.mainBundle().infoDictionary()["CFBundleName"] = "Vaila"
+        if platform.system() == "Darwin" and NSBundle is not None:
+            NSBundle.mainBundle().infoDictionary()["CFBundleName"] = "Vaila"
 
         self.create_widgets()
 
     def set_dimensions_based_on_os(self):
+        """
+        Adjusts the width of buttons and the font size of text in the application
+        based on the operating system.
+        """
+        
         if platform.system() == "Darwin":
             # Specific adjustments for macOS
             self.button_width = 10
@@ -238,6 +251,9 @@ class Vaila(tk.Tk):
             self.font_size = 11
 
     def create_widgets(self):
+        """
+        Creates the widgets of the application.
+        """
         button_width = self.button_width  # Use the adjusted button width
         font = ("default", self.font_size)  # Use the length-adjusted font
 
@@ -346,6 +362,7 @@ class Vaila(tk.Tk):
             font=("default", 17),
             labelanchor="n",
         )
+
         file_manager_frame.pack(pady=10, fill="x")
         file_manager_btn_frame = tk.Frame(file_manager_frame)
         file_manager_btn_frame.pack(pady=5)
@@ -358,6 +375,7 @@ class Vaila(tk.Tk):
             command=self.rename_files,
             width=button_width,
         )
+
         # A_r1_c2 - File Manager Button: Import
         import_btn = tk.Button(
             file_manager_btn_frame,
@@ -365,6 +383,7 @@ class Vaila(tk.Tk):
             command=self.import_file,
             width=button_width,
         )
+
         # A_r1_c3 - File Manager Button: Export
         export_btn = tk.Button(
             file_manager_btn_frame,
@@ -372,6 +391,7 @@ class Vaila(tk.Tk):
             command=self.export_file,
             width=button_width,
         )
+
         # A_r1_c4 - File Manager Button: Copy
         copy_btn = tk.Button(
             file_manager_btn_frame,
@@ -379,6 +399,7 @@ class Vaila(tk.Tk):
             command=self.copy_file,
             width=button_width,
         )
+
         # A_r1_c5 - File Manager Button: Move
         move_btn = tk.Button(
             file_manager_btn_frame,
@@ -386,6 +407,7 @@ class Vaila(tk.Tk):
             command=self.move_file,
             width=button_width,
         )
+
         # A_r1_c6 - File Manager Button: Remove
         remove_btn = tk.Button(
             file_manager_btn_frame,
@@ -393,6 +415,7 @@ class Vaila(tk.Tk):
             command=self.remove_file,
             width=button_width,
         )
+
         # A_r1_c7 - File Manager Button: Tree
         tree_btn = tk.Button(
             file_manager_btn_frame,
@@ -400,6 +423,7 @@ class Vaila(tk.Tk):
             command=self.tree_file,
             width=button_width,
         )
+
         # A_r1_c8 - File Manager Button: Find
         find_btn = tk.Button(
             file_manager_btn_frame,
@@ -407,6 +431,7 @@ class Vaila(tk.Tk):
             command=self.find_file,
             width=button_width,
         )
+
         # A_r1_c9 - File Manager Button: Transfer
         transfer_btn = tk.Button(
             file_manager_btn_frame,
@@ -466,6 +491,7 @@ class Vaila(tk.Tk):
         imu_analysis_btn = tk.Button(
             row1_frame, text="IMU", width=button_width, command=self.imu_analysis
         )
+
         # B1_r1_c2 - Motion Capture
         cluster_analysis_btn = tk.Button(
             row1_frame,
@@ -473,6 +499,7 @@ class Vaila(tk.Tk):
             width=button_width,
             command=self.cluster_analysis,
         )
+
         # B1_r1_c3 - Motion Capture
         mocap_analysis_btn = tk.Button(
             row1_frame,
@@ -480,6 +507,7 @@ class Vaila(tk.Tk):
             width=button_width,
             command=self.mocap_analysis,
         )
+
         # B1_r1_c4 - Markerless 2D
         markerless_2d_analysis_btn = tk.Button(
             row1_frame,
@@ -487,6 +515,7 @@ class Vaila(tk.Tk):
             width=button_width,
             command=self.markerless_2d_analysis,
         )
+
         # B1_r1_c5 - Markerless 3D
         markerless_3d_analysis_btn = tk.Button(
             row1_frame,
@@ -516,10 +545,12 @@ class Vaila(tk.Tk):
             width=button_width,
             command=self.vector_coding,
         )
+
         # B2_r2_c2 - EMG
         emg_analysis_btn = tk.Button(
             row2_frame, text="EMG", width=button_width, command=self.emg_analysis
         )
+
         # B2_r2_c3 - Force Plate
         forceplate_btn = tk.Button(
             row2_frame,
@@ -527,6 +558,7 @@ class Vaila(tk.Tk):
             width=button_width,
             command=self.force_analysis,
         )
+
         # B2_r2_c4 - GNSS/GPS
         gnss_btn = tk.Button(
             row2_frame,
@@ -534,6 +566,7 @@ class Vaila(tk.Tk):
             width=button_width,
             command=self.gnss_analysis,
         )
+
         # B2_r2_c5 - MEG/EEG
         vaila_btn3 = tk.Button(
             row2_frame,
@@ -567,6 +600,7 @@ class Vaila(tk.Tk):
             ),
             # command=self.heart_rate_analysis,
         )
+
         # B3_r3_c2 - vailá
         vaila_btn5 = tk.Button(
             row3_frame,
@@ -574,6 +608,7 @@ class Vaila(tk.Tk):
             width=button_width,
             command=self.show_vaila_message,
         )
+
         # B3_r3_c3 - vailá
         vaila_btn6 = tk.Button(
             row3_frame,
@@ -581,6 +616,7 @@ class Vaila(tk.Tk):
             width=button_width,
             command=self.show_vaila_message,
         )
+
         # B3_r3_c4 - vailá
         vaila_btn7 = tk.Button(
             row3_frame,
@@ -588,6 +624,7 @@ class Vaila(tk.Tk):
             width=button_width,
             command=self.show_vaila_message,
         )
+
         # B3_r3_c5 - vailá
         vaila_btn8 = tk.Button(
             row3_frame,
@@ -641,6 +678,7 @@ class Vaila(tk.Tk):
             command=self.reorder_csv_data,
             width=button_width,
         )
+
         # C_A_r1_c2 - Data Files: C3D <--> CSV
         convert_btn = tk.Button(
             tools_col1,
@@ -648,13 +686,15 @@ class Vaila(tk.Tk):
             command=self.convert_c3d_csv,
             width=button_width,
         )
-        # C_A_r1_c3 - Data Files: linear interpolation and split data csv
+
+        # C_A_r1_c3 - Data Files: GapFill - interpolation and split data csv
         gapfill_btn = tk.Button(
             tools_col1,
             text="GapFill - split",
             command=self.gapfill_split,  # Assuming this correctly calls the method in the Vaila class
             width=button_width,
         )
+
         # C_A_r1_c4 - Data Files: vailá
         vaila_btn8to9 = tk.Button(
             tools_col1,
@@ -662,10 +702,12 @@ class Vaila(tk.Tk):
             command=self.show_vaila_message,
             width=button_width,
         )
+
         # C_A_r2_c1 - Data Files: Make DLT2D
         dlt2d_btn = tk.Button(
             tools_col1, text="Make DLT2D", command=self.dlt2d, width=button_width
         )
+
         # C_A_r2_c2 - Data Files: Rec2D 1DLT
         rec2d_one_btn = tk.Button(
             tools_col1,
@@ -673,6 +715,7 @@ class Vaila(tk.Tk):
             command=self.rec2d_one_dlt2d,
             width=button_width,
         )
+
         # C_A_r2_c3 - Data Files: Rec2D MultiDLT
         rec2d_multiple_btn = tk.Button(
             tools_col1, text="Rec2D MultiDLT", command=self.rec2d, width=button_width
@@ -681,6 +724,7 @@ class Vaila(tk.Tk):
         dlt3d_btn = tk.Button(
             tools_col1, text="Make DLT3D", command=self.dlt3d, width=button_width
         )
+
         # C_A_r3_c2 - Data Files: Rec3D 1DLT
         rec3d_one_btn = tk.Button(
             tools_col1,
@@ -692,6 +736,7 @@ class Vaila(tk.Tk):
         rec3d_multiple_btn = tk.Button(
             tools_col1, text="Rec3D MultiDLT", command=self.rec3d, width=button_width
         )
+
         # Avaliable blank (vailá) buttons for future tools (10-11)
         # C_A_r4_c1 - Data Files: vailá
         vaila_btn9 = tk.Button(
@@ -700,6 +745,7 @@ class Vaila(tk.Tk):
             command=self.show_vaila_message,
             width=button_width,
         )
+
         # C_A_r4_c2 - Data Files: vailá
         vaila_btn10 = tk.Button(
             tools_col1,
@@ -707,6 +753,7 @@ class Vaila(tk.Tk):
             command=self.show_vaila_message,
             width=button_width,
         )
+
         # C_A_r4_c3 - Data Files: vailá
         vaila_btn11 = tk.Button(
             tools_col1,
@@ -740,14 +787,17 @@ class Vaila(tk.Tk):
             command=self.extract_png_from_videos,
             width=button_width,
         )
+
         # C_B_r1_c2 - Video: Cut Videos
         cut_videos_btn = tk.Button(
             tools_col2, text="Cut Videos", command=self.cut_videos, width=button_width
         )
+
         # C_B_r1_c3 - Video: Draw Box
         draw_box_btn = tk.Button(
             tools_col2, text="Draw Box", command=self.draw_box, width=button_width
         )
+
         # C_B_r2_c1 - Video: Compress H.264
         compress_videos_h264_btn = tk.Button(
             tools_col2,
@@ -755,6 +805,7 @@ class Vaila(tk.Tk):
             command=self.compress_videos_h264_gui,
             width=button_width,
         )
+
         # C_B_r2_c2 - Video: Compress H.265
         compress_videos_h265_btn = tk.Button(
             tools_col2,
@@ -762,6 +813,7 @@ class Vaila(tk.Tk):
             command=self.compress_videos_h265_gui,
             width=button_width,
         )
+
         # C_B_r2_c3 - Video: Make Sync Videos
         sync_videos_btn = tk.Button(
             tools_col2,
@@ -769,6 +821,7 @@ class Vaila(tk.Tk):
             command=self.sync_videos,
             width=button_width,
         )
+
         # C_B_r3_c1 - Video: Get Pixel Coords
         getpixelvideo_btn = tk.Button(
             tools_col2,
@@ -776,6 +829,7 @@ class Vaila(tk.Tk):
             command=self.getpixelvideo,
             width=button_width,
         )
+
         # C_B_r3_c2 - Video: Metadata info
         count_frames_btn = tk.Button(
             tools_col2,
@@ -790,6 +844,7 @@ class Vaila(tk.Tk):
             command=self.process_videos_gui,
             width=button_width,
         )
+
         # Avaliable blank (vailá) buttons for future tools (12-15)
         # C_B_r4_c1 - Video: vailá
         vaila_btn13 = tk.Button(
@@ -798,6 +853,7 @@ class Vaila(tk.Tk):
             command=self.show_vaila_message,
             width=button_width,
         )
+
         # C_B_r4_c2 - Video: vailá
         vaila_btn14 = tk.Button(
             tools_col2,
@@ -805,6 +861,7 @@ class Vaila(tk.Tk):
             command=self.show_vaila_message,
             width=button_width,
         )
+
         # C_B_r4_c3 - Video: vailá
         vaila_btn15 = tk.Button(
             tools_col2,
@@ -835,14 +892,17 @@ class Vaila(tk.Tk):
         show_c3d_btn = tk.Button(
             tools_col3, text="Show C3D", command=self.show_c3d_data, width=button_width
         )
+
         # C_C_r1_c2 - Visualization: Show CSV
         show_csv_btn = tk.Button(
             tools_col3, text="Show CSV", command=self.show_csv_file, width=button_width
         )
+
         # C_C_r2_c1 - Visualization: Plot 2D
         plot_2d_btn = tk.Button(
             tools_col3, text="Plot 2D", command=self.plot_2d_data, width=button_width
         )
+
         # C_C_r2_c2 - Visualization: Plot 3D
         plot_3d_btn = tk.Button(
             tools_col3,
@@ -850,6 +910,7 @@ class Vaila(tk.Tk):
             command=self.plot_3d_data,
             width=button_width,
         )
+
         # C_C_r3_c1 - Visualization: vailá
         vaila_btn16 = tk.Button(
             tools_col3,
@@ -857,6 +918,7 @@ class Vaila(tk.Tk):
             command=self.show_vaila_message,
             width=button_width,
         )
+
         # C_C_r3_c2 - Visualization: vailá
         vaila_btn17 = tk.Button(
             tools_col3,
@@ -864,6 +926,7 @@ class Vaila(tk.Tk):
             command=self.show_vaila_message,
             width=button_width,
         )
+
         # C_C_r4_c1 - Visualization: vailá
         vaila_btn18 = tk.Button(
             tools_col3,
@@ -871,6 +934,7 @@ class Vaila(tk.Tk):
             command=self.show_vaila_message,
             width=button_width,
         )
+
         # C_C_r4_c2 - Visualization: vailá
         vaila_btn19 = tk.Button(
             tools_col3,
@@ -878,6 +942,7 @@ class Vaila(tk.Tk):
             command=self.show_vaila_message,
             width=button_width,
         )
+
         # C_C_r4_c2 - Visualization: vailá
         vaila_btn19 = tk.Button(
             tools_col3,
@@ -916,93 +981,313 @@ class Vaila(tk.Tk):
 
     # Class definition
     def show_vaila_message(self):
+        """Display a message with information about vailá
+
+        This function creates a new window and displays a message with
+        information about vailá, including the name, version and a short
+        description. The window is non-modal and stays open until the user
+        closes it.
+
+        """
         show_vaila_message()
 
     # A First FRAME Block
     # A_r1_c1
     def rename_files(self):
+        """Rename files in a directory by replacing a string with another string.
+
+        This function will prompt the user to select a directory containing the files
+        to rename and will ask for the text to replace and the replacement text.
+
+        """
         rename_files()
 
     # A_r1_c2
     def import_file(self):
+        """Import a file from a directory to the current working directory.
+
+        This function will prompt the user to select a source directory and file to
+        import. The selected file will be copied to the current working directory.
+
+        """
         import_file()
 
     # A_r1_c3
     def export_file(self):
+        """Export a file from the current working directory to a destination directory.
+
+        This function will prompt the user to select a source file in the current working
+        directory and a destination directory. The selected file will be copied from the
+        current working directory to the destination directory.
+
+        """
         export_file()
 
     # A_r1_c4
     def copy_file(self):
+        """Copy files from a source directory to a destination directory.
+
+        This function will prompt the user to select a source directory and a destination
+        directory. The selected files will be copied from the source directory to the
+        destination directory.
+
+        """
         copy_file()
 
     # A_r1_c5
     def move_file(self):
+        """Move files from a source directory to a destination directory.
+
+        This function will prompt the user to select a source directory and a destination
+        directory. The selected files will be moved from the source directory to the
+        destination directory.
+
+        """
         move_file()
 
     # A_r1_c6
     def remove_file(self):
+        """Remove files or directories based on extension, directory name, or filename pattern.
+
+        This function will prompt the user to select a root directory, file extension, directory
+        name pattern, or filename pattern. The files or directories matching the selected
+        criteria will then be removed from the root directory.
+
+        The function includes safeguards to avoid the accidental removal of critical system
+        files by confirming patterns and offering multiple user confirmations.
+
+        """
         remove_file()
 
     # A_r1_c7
     def tree_file(self):
+        """Generate a tree structure of files in the source directory, matching a specific file extension.
+
+        This function will prompt the user to select a source directory and a file extension.
+        The function will then generate a tree structure of files in the source directory,
+        matching the selected file extension.
+
+        The tree structure will be saved to a text file in the source directory, with
+        the filename in the format "tree_<timestamp>.txt".
+
+        This function is useful for generating reports or summaries of directory contents.
+
+        """
         tree_file()
 
     # A_r1_c8
     def find_file(self):
+        """Search the source directory for files matching a pattern and extension.
+
+        This function will prompt the user to select a source directory, a file extension,
+        and a pattern to search for. The function will then search the source directory
+        for files matching the selected extension and pattern.
+
+        The results of the search will be saved to a text file, which includes the count
+        and total size of matched files. This function is useful for quickly locating
+        specific files in large datasets.
+
+        """
+
         find_file()
 
     # A_r1_c9
     def transfer_file(self):
+        """Transfer files between a local machine and a remote server using SSH.
+
+        This function will prompt the user to select Upload or Download, and then
+        select a source file or directory for upload or specify a destination
+        directory for download.
+
+        The function supports both local and remote file transfers, and will
+        automatically create subdirectories in the destination directory to
+        organize the transferred files.
+
+        """
         transfer_file()
 
     # B Second FRAME Block
     # B_r1_c1
     def imu_analysis(self):
+        """Runs the IMU analysis module.
+
+        This function runs the IMU analysis module, which can be used to analyze
+        Inertial Measurement Unit (IMU) data stored in CSV or C3D format. The
+        analysis will process and interpret motion data from wearable IMU sensors.
+
+        The user will be prompted to select the file type (CSV or C3D), the sample
+        rate, and the output directory. The user may also select specific headers for
+        processing or, if no selection is made, the module will automatically use the
+        first 18 columns (or channels).
+
+        The module will then process the selected files, calculate tilt angles and
+        Euler angles, and generate graphs and CSV files with the processed results.
+
+        """
         imu_analysis.analyze_imu_data()
 
     # B_r1_c2
     def cluster_analysis(self):
+        """Runs the Cluster Analysis module.
+
+        This function runs the Cluster Analysis module, which can be used to analyze
+        cluster marker data stored in CSV format. The analysis will process and interpret
+        motion data collected from marker-based motion capture systems.
+
+        The user will be prompted to select the sample rate and the configuration for the
+        trunk and pelvis. Optionally, provide anatomical position data for comparison.
+
+        The module will then process the selected files, calculate Euler angles and
+        orthonormal bases for the clusters, and generate graphs and CSV files with the
+        processed results.
+
+        """
         cluster_analysis.analyze_cluster_data()
 
     # B_r1_c3
     def mocap_analysis(self):
+        """Runs the Full Body Motion Capture Analysis module.
+
+        This function runs the Full Body Motion Capture Analysis module, which can be
+        used to analyze full-body motion capture data in C3D format. The analysis will
+        process the data captured by motion capture systems that track full-body
+        movements.
+
+        The user will be prompted to select the directory containing the C3D files, and
+        the output directory. The module will then process the selected files,
+        calculate Euler angles and orthonormal bases for the full body, and generate
+        graphs and CSV files with the processed results.
+
+        """
         mocap_analysis.analyze_mocap_fullbody_data()
 
     # B_r1_c4
     def markerless_2d_analysis(self):
+        """Runs the Markerless 2D Analysis module.
+
+        This function runs the Markerless 2D Analysis module, which can be used to analyze
+        2D video data without using markers. It processes the motion data from 2D video
+        recordings to extract relevant motion parameters.
+
+        The user will be prompted to select the directory containing the 2D video files.
+        The module will then process the selected files, extract motion data and generate
+        CSV files with the processed results.
+
+        """
         markerless_2D_analysis.process_videos_in_directory()
 
     # B_r1_c5
     def markerless_3d_analysis(self):
+        """Runs the Markerless 3D Analysis module.
+
+        This function runs the Markerless 3D Analysis module, which can be used to analyze
+        3D video data without using markers. It processes the motion data from 3D video
+        recordings to extract relevant motion parameters.
+
+        The user will be prompted to select the directory containing the 3D video files.
+        The module will then process the selected files, extract motion data and generate
+        CSV files with the processed results.
+
+        """
         selected_path = filedialog.askdirectory()
         if selected_path:
             markerless_3D_analysis.analyze_markerless_3D_data(selected_path)
 
     # B_r2_c1
     def vector_coding(self):
+        """Runs the Vector Coding module.
+
+        This function runs the Vector Coding module, which can be used to calculate
+        the coupling angle between two joints from a C3D file containing 3D marker
+        positions.
+
+        The user will be prompted to select the file, the axis, and the names of the
+        two joints. The module will then calculate the coupling angle between the two
+        joints and save the result in a CSV file.
+
+        """
         show_vaila_message()
         # vector_coding.run_vector_coding()
 
     # B_r2_c2
     def emg_analysis(self):
+        """Runs the EMG Analysis module.
+
+        This function runs the EMG Analysis module, which can be used to analyze EMG data
+        from CSV files. It processes the EMG data to extract relevant metrics such as
+        RMS, median frequency, and maximum PSD. The module will then generate CSV files
+        with the processed results and plots of the EMG signals.
+
+        The user will be prompted to select the directory containing the EMG CSV files
+        and input the sampling rate and start and end indices for analysis.
+
+        """
         emg_labiocom.run_emg_gui()
 
     # B_r2_c3
     def force_analysis(self):
+        """Runs the Force Analysis module.
+
+        This function runs the Force Analysis module, which can be used to analyze
+        force data from CSV files. It processes the force data to extract relevant
+        metrics such as peak forces, impulses, and rate of force development.
+        The module will then generate CSV files with the processed results and
+        plots of the force signals.
+
+        The user will be prompted to select the directory containing the force CSV
+        files, input the sampling rate and start and end indices for analysis, and
+        choose the type of force analysis to perform.
+
+        """
         forceplate_analysis.run_force_analysis()
 
     # B_r2_c4
     def gnss_analysis(self):
+        """Runs the GNSS Analysis module.
+
+        This function runs the GNSS Analysis module, which can be used to analyze
+        GNSS data from CSV files. It processes the GNSS data to extract relevant
+        metrics such as speed, distance, and time. The module will then generate CSV
+        files with the processed results and plots of the GNSS signals.
+
+        The user will be prompted to select the directory containing the GNSS CSV
+        files and input the sampling rate and start and end indices for analysis.
+
+        """
         show_vaila_message()
         # gnss_analysis.run_gnss_analysis()
 
     # B_r2_c5
     def eeg_analysis(self):
+        """Runs the EEG Analysis module.
+
+        This function runs the EEG Analysis module, which can be used to analyze EEG
+        data from CSV files. It processes the EEG data to extract relevant metrics
+        such as power spectral density, coherence, and phase-locking values. The
+        module will then generate CSV files with the processed results and plots of
+        the EEG signals.
+
+        The user will be prompted to select the directory containing the EEG CSV
+        files and input the sampling rate and start and end indices for analysis.
+
+        """
         show_vaila_message()
         # eeg_analysis.run_eeg_analysis()
 
     # B_r3_c1
     def hr_analysis(self):
+        """Runs the Heart Rate Analysis module.
+
+        This function runs the Heart Rate Analysis module, which can be used to analyze
+        heart rate data from CSV files. It processes the heart rate data to extract relevant
+        metrics such as average heart rate, heart rate variability, and peak heart rate.
+        The module will then generate CSV files with the processed results and plots of
+        the heart rate signals.
+
+        The user will be prompted to select the directory containing the heart rate CSV
+        files and input the sampling rate and start and end indices for analysis.
+
+        """
         show_vaila_message()
         # hr_analysis.run_hr_analysis()
 
@@ -1020,11 +1305,31 @@ class Vaila(tk.Tk):
 
     # C_A_r1_c1
     def reorder_csv_data(self):
+        """Runs the Reorder CSV Data module.
+
+        This function runs the Reorder CSV Data module, which can be used to reorder the
+        columns of CSV files. It allows the user to select the directory containing the
+        CSV files and reorder the columns according to their preference. The module will
+        then save the reordered CSV files in a new directory.
+
+        The user will be prompted to select the directory containing the CSV files.
+
+        """
         rearrange_data_in_directory()  # Edit CSV
 
     # C_A_r1_c2
     def convert_c3d_csv(self):
         # Cria uma nova janela para a escolha da ação
+        """Runs the Convert C3D/CSV module.
+
+        This function runs the Convert C3D/CSV module, which can be used to convert
+        C3D files to CSV format and vice versa. It allows the user to select the
+        directory containing the C3D files and choose whether to convert them to
+        CSV or vice versa.
+
+        The user will be prompted to select the directory containing the C3D files.
+
+        """
         window = Toplevel()
         window.title("Choose Action")
         # Mensagem para o usuário
@@ -1049,30 +1354,95 @@ class Vaila(tk.Tk):
 
     # C_A_r1_c3
     def gapfill_split(self):
+        """Runs the Linear Interpolation or Split Data module.
+
+        This function runs the Linear Interpolation or Split Data module, which can be used to fill
+        missing data in CSV files using linear interpolation or to split CSV files into two parts.
+
+        The user will be prompted to select the directory containing the CSV files and choose
+        whether to perform linear interpolation or splitting.
+
+        """
         run_fill_split_dialog()
 
     # C_A_r2_c1
     def dlt2d(self):
+        """Runs the DLT2D module.
+
+        This function runs the DLT2D module, which can be used to perform 2D direct linear
+        transformation (DLT) calibration of a camera. The module will then generate a
+        calibration file that can be used for 2D reconstruction.
+
+        The user will be prompted to select the directory containing the CSV files and
+        input the sample rate and start and end indices for analysis.
+
+        """
         dlt2d()
 
     # C_A_r2_c2
     def rec2d_one_dlt2d(self):
+        """Runs the Reconstruction 2D module with one DLT2D.
+
+        This function runs the Reconstruction 2D module with one DLT2D, which can be used to
+        perform 2D reconstruction of 2D coordinates using a single DLT parameters file.
+
+        The user will be prompted to select the directory containing the CSV files and
+        input the sample rate and start and end indices for analysis.
+
+        """
         rec2d_one_dlt2d()
 
     # C_A_r2_c3 - for multi dlts in rows
     def rec2d(self):
+        """Runs the Reconstruction 2D module.
+
+        This function runs the Reconstruction 2D module, which can be used to perform 2D
+        reconstruction of 2D coordinates using a set of DLT parameters files.
+
+        The user will be prompted to select the directory containing the CSV files and
+        input the sample rate and start and end indices for analysis.
+
+        """
         rec2d()
 
     # C_A_r3_c1
     def dlt3d(self):
+        """Runs the DLT3D module.
+
+        This function runs the DLT3D module, which can be used to perform 3D direct linear
+        transformation (DLT) calibration of a camera. The module will then generate a
+        calibration file that can be used for 3D reconstruction.
+
+        The user will be prompted to select the directory containing the CSV files and
+        input the sample rate and start and end indices for analysis.
+
+        """
         pass  # Aqui você deve adicionar a lógica para o DLT3D
 
     # C_A_r3_c2 - for multi dlts in rows
     def rec3d_one_dlt3d(self):
+        """Runs the Reconstruction 3D module with one DLT3D.
+
+        This function runs the Reconstruction 3D module with one DLT3D, which can be used to
+        perform 3D reconstruction of 3D coordinates using a single DLT parameters file.
+
+        The user will be prompted to select the directory containing the CSV files and
+        input the sample rate and start and end indices for analysis.
+
+        """
         pass  # Aqui você deve adicionar a lógica para a reconstrução 3D com 1 DLT
 
     # C_A_r3_c3 - for multi dlts in rows
     def rec3d(self):
+        """Runs the Reconstruction 3D module.
+
+        This function runs the Reconstruction 3D module with multiple DLT3D, which can be used to
+        perform 3D reconstruction of 3D coordinates using multiple DLT parameters files.
+
+        The user will be prompted to select the directory containing the CSV files and
+        input the sample rate and start and end indices for analysis.
+
+        """
         pass  # Aqui você deve adicionar a lógica para a reconstrução 3D com múltiplos DLTs
 
     # C_A_r4_c1
@@ -1088,55 +1458,154 @@ class Vaila(tk.Tk):
 
     # C_B_r1_c1
     def extract_png_from_videos(self):
+        """Runs the video to PNG frame extraction module.
+
+        This function runs the video to PNG frame extraction module, which can be used to
+        extract PNG frames from video files. The module will prompt the user to select the
+        directory containing the video files and input the sample rate and start and end
+        indices for analysis.
+
+        """
         processor = VideoProcessor()
         processor.run()
 
     # C_B_r1_c2
     def cut_videos(self):
+        """Runs the batch video cutting module.
+
+        This function runs the batch video cutting module, which can be used to
+        cut videos based on a list of specified time intervals. The module will
+        prompt the user to select the directory containing the video files and
+        input the list of time intervals for analysis.
+
+        """
         cut_videos()
 
     # C_B_r1_c3
     def draw_box(self):
+        """Runs the video box drawing module.
+
+        This function runs the video box drawing module, which can be used to
+        draw a box around a region of interest in video files. The module will
+        prompt the user to select the directory containing the video files and
+        input the coordinates for the box.
+
+        """
         run_drawboxe()
 
     # C_B_r2_c1
     def compress_videos_h264_gui(self):
+        """Runs the video compression module for H.264 format.
+
+        This function runs the video compression module for H.264 format, which can be used to
+        compress video files. The module will prompt the user to select the directory containing
+        the video files and input the sample rate and start and end indices for analysis.
+
+        """
         compress_videos_h264_gui()
 
     # C_B_r2_c2
     def compress_videos_h265_gui(self):
+        """Runs the video compression module for H.265 format.
+
+        This function runs the video compression module for H.265 format, which can be used to
+        compress video files. The module will prompt the user to select the directory containing
+        the video files and input the sample rate and start and end indices for analysis.
+
+        """
         compress_videos_h265_gui()
 
     # C_B_r2_c3
     def sync_videos(self):
+        """Runs the video synchronization module.
+
+        This function runs the video synchronization module, which can be used to
+        synchronize multiple video files based on a flash or brightness change.
+        The module will prompt the user to select the directory containing the
+        video files and input the sample rate and start and end indices for
+        analysis.
+
+        """
         sync_videos()
 
     # C_B_r3_c1
     def getpixelvideo(self):
+        """Runs the video pixel marking module.
+
+        This function runs the video pixel marking module, which can be used to
+        mark specific pixels in a video file. The module will prompt the user to
+        select the directory containing the video files and input the coordinates
+        and sample rate for analysis.
+
+        """
         getpixelvideo()
 
     # C_B_r3_c2
     def count_frames_in_videos(self):
+        """Runs the video frame counting module.
+
+        This function runs the video frame counting module, which can be used to
+        count the number of frames in a video file. The module will prompt the
+        user to select the directory containing the video files and input the
+        sample rate and start and end indices for analysis.
+
+        """
         count_frames_in_videos()
 
     # C_B_r3_c3
     def process_videos_gui(self):
+        """Runs the video processing module.
+
+        This function runs the video processing module, which can be used to
+        process video files. The module will prompt the user to select the
+        directory containing the video files and input the sample rate and start
+        and end indices for analysis.
+
+        """
         process_videos_gui()
 
     # C_C_r1_c1
     def show_c3d_data(self):
+        """Runs the show_c3d_data module.
+
+        This function runs the show_c3d_data module, which can be used to
+        visualize data from .c3d files using Dash and Plotly, with marker
+        selection interface and frame animation.
+
+        """
         show_c3d()
 
     # C_C_r1_c2
     def show_csv_file(self):
+        """Runs the show_csv_file module.
+
+        This function runs the show_csv_file module, which can be used to
+        visualize data from CSV files using Dash and Plotly, with column
+        selection interface and line animation.
+
+        """
         show_csv()
 
     # C_C_r1_c3
     def plot_2d_data(self):
+        """Runs the plot_2d_data module.
+
+        This function runs the plot_2d_data module, which can be used to
+        visualize data from CSV files using Matplotlib, with column selection
+        interface and line animation.
+
+        """
         plot_2d()
 
     # C_C_r2_c2
     def plot_3d_data(self):
+        """Runs the plot_3d_data module.
+
+        This function runs the plot_3d_data module, which can be used to
+        visualize data from CSV files using Matplotlib, with column selection
+        interface and 3D animation.
+
+        """
         plot_3d()
 
     # C_C_r3_c1
@@ -1159,6 +1628,12 @@ class Vaila(tk.Tk):
 
     # Help, Exit and About
     def display_help(self):
+        """Displays the help file for the Multimodal Toolbox.
+
+        The help file is a static HTML file located in the "docs" directory
+        of the Multimodal Toolbox source code. If the file is not found,
+        an error message is shown.
+        """
         help_file_path = os.path.join(os.path.dirname(__file__), "docs", "help.html")
         if os.path.exists(help_file_path):
             os.system(
@@ -1176,6 +1651,21 @@ class Vaila(tk.Tk):
 
     def open_terminal_shell(self):
         # Open a new terminal with the Conda environment activated using xonsh
+        """Opens a new terminal with the Conda environment activated using xonsh.
+
+        The Multimodal Toolbox provides a convenient way to open a new terminal with
+        the Conda environment activated. On macOS, the Terminal app is used. On Windows,
+        PowerShell 7 is used, and on Linux, the default terminal emulator is used.
+
+        The Conda environment is activated using the `conda activate` command, and then
+        the xonsh shell is started. This allows you to access the Conda environment and
+        any packages installed in it, as well as the xonsh shell features.
+
+        Note that this function does not work if the Multimodal Toolbox is not installed
+        in the default location. If you have installed the Multimodal Toolbox in a custom
+        location, you should use the `conda activate` command manually to activate the
+        environment and then start xonsh.
+        """
         if platform.system() == "Darwin":  # For macOS
             # Use osascript to open Terminal and activate the Conda environment, then start xonsh
             subprocess.Popen(
@@ -1207,6 +1697,14 @@ class Vaila(tk.Tk):
             )
 
     def quit_app(self):
+        """Quits the Multimodal Toolbox application.
+
+        This method is called when the user clicks the "Exit" menu option.
+        It first calls the `destroy` method on the root window to close the
+        application window, and then kills the process using the `os.kill`
+        method to ensure that any spawned processes are also terminated.
+
+        """
         self.destroy()
         os.kill(os.getpid(), signal.SIGTERM)
 
