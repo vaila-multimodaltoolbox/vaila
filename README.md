@@ -478,7 +478,7 @@ If you use *vailá* in your research or project, please consider citing our work
 
 ```bibtex
 @misc{vaila2024,
-  title={VAILÁ - Versatile Anarcho Integrated Liberation Ánalysis in Multimodal Toolbox},
+  title={vailá - Versatile Anarcho Integrated Liberation Ánalysis in Multimodal Toolbox},
   author={Paulo Roberto Pereira Santiago and Guilherme Manna Cesar and Ligia Yumi Mochida and Juan Aceros and others},
   year={2024},
   eprint={2410.07238},
