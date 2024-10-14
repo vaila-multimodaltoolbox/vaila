@@ -93,6 +93,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 from pathlib import Path
 import platform
+import numpy as np  # Adicionado para trabalhar com NaN
 
 landmark_names = [
     "nose",
@@ -130,15 +131,10 @@ landmark_names = [
     "right_foot_index",
 ]
 
-
 class ConfidenceInputDialog(tk.simpledialog.Dialog):
     def body(self, master):
-        tk.Label(master, text="Enter minimum detection confidence (0.0 - 1.0):").grid(
-            row=0
-        )
-        tk.Label(master, text="Enter minimum tracking confidence (0.0 - 1.0):").grid(
-            row=1
-        )
+        tk.Label(master, text="Enter minimum detection confidence (0.0 - 1.0):").grid(row=0)
+        tk.Label(master, text="Enter minimum tracking confidence (0.0 - 1.0):").grid(row=1)
         tk.Label(master, text="Enter model complexity (0, 1, or 2):").grid(row=2)
         tk.Label(master, text="Enable segmentation? (True/False):").grid(row=3)
         tk.Label(master, text="Smooth segmentation? (True/False):").grid(row=4)
@@ -171,13 +167,10 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
             "min_detection_confidence": float(self.min_detection_entry.get()),
             "min_tracking_confidence": float(self.min_tracking_entry.get()),
             "model_complexity": int(self.model_complexity_entry.get()),
-            "enable_segmentation": self.enable_segmentation_entry.get().lower()
-            == "true",
-            "smooth_segmentation": self.smooth_segmentation_entry.get().lower()
-            == "true",
+            "enable_segmentation": self.enable_segmentation_entry.get().lower() == "true",
+            "smooth_segmentation": self.smooth_segmentation_entry.get().lower() == "true",
             "static_image_mode": self.static_image_mode_entry.get().lower() == "true",
         }
-
 
 def get_pose_config():
     root = tk.Tk()
@@ -188,7 +181,6 @@ def get_pose_config():
     else:
         messagebox.showerror("Error", "No values entered.")
         return None
-
 
 def process_video(video_path, output_dir, pose_config):
     if platform.system() == "Windows" and platform.version().startswith("10."):
@@ -238,43 +230,73 @@ def process_video(video_path, output_dir, pose_config):
     headers = ["frame_index"] + [
         f"{name}_x,{name}_y,{name}_z" for name in landmark_names
     ]
-    pixel_headers = ["frame_index"] + [
-        f"{name}_x,{name}_y,{name}_z" for name in landmark_names
-    ]
+
+    # Inicializa listas para armazenar os dados
+    normalized_landmarks_list = []
+    pixel_landmarks_list = []
+    frames_with_missing_data = []
 
     frame_count = 0
-    with open(output_file_path, "w") as f, open(output_pixel_file_path, "w") as f_pixel:
-        f.write(",".join(headers) + "\n")
-        f_pixel.write(",".join(pixel_headers) + "\n")
+    while cap.isOpened():
+        success, frame = cap.read()
+        if not success:
+            break
 
-        while cap.isOpened():
-            success, frame = cap.read()
-            if not success:
-                break
+        results = pose.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+        if results.pose_landmarks:
+            mp.solutions.drawing_utils.draw_landmarks(
+                frame, results.pose_landmarks, mp.solutions.pose.POSE_CONNECTIONS
+            )
+            landmarks = [
+                [landmark.x, landmark.y, landmark.z]
+                for landmark in results.pose_landmarks.landmark
+            ]
+            normalized_landmarks_list.append(landmarks)
 
-            results = pose.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-            if results.pose_landmarks:
-                mp.solutions.drawing_utils.draw_landmarks(
-                    frame, results.pose_landmarks, mp.solutions.pose.POSE_CONNECTIONS
-                )
-                landmarks = [
-                    f"{landmark.x:.6f},{landmark.y:.6f},{landmark.z:.6f}"
-                    for landmark in results.pose_landmarks.landmark
-                ]
-                f.write(f"{frame_count}," + ",".join(landmarks) + "\n")
+            pixel_landmarks = [
+                [int(landmark.x * width), int(landmark.y * height), landmark.z]
+                for landmark in results.pose_landmarks.landmark
+            ]
+            pixel_landmarks_list.append(pixel_landmarks)
+        else:
+            # Insere NaN para os frames com dados ausentes
+            num_landmarks = len(landmark_names)
+            nan_landmarks = [[np.nan, np.nan, np.nan] for _ in range(num_landmarks)]
+            normalized_landmarks_list.append(nan_landmarks)
+            pixel_landmarks_list.append(nan_landmarks)
+            frames_with_missing_data.append(frame_count)
 
-                pixel_landmarks = [
-                    f"{int(landmark.x * width)},{int(landmark.y * height)},{landmark.z:.6f}"
-                    for landmark in results.pose_landmarks.landmark
-                ]
-                f_pixel.write(f"{frame_count}," + ",".join(pixel_landmarks) + "\n")
-
-            out.write(frame)
-            frame_count += 1
+        out.write(frame)
+        frame_count += 1
 
     cap.release()
     out.release()
     pose.close()
+
+    total_frames = len(normalized_landmarks_list)
+
+    # Escreve os dados nos arquivos CSV
+    with open(output_file_path, "w") as f_norm, open(output_pixel_file_path, "w") as f_pixel:
+        f_norm.write(",".join(headers) + "\n")
+        f_pixel.write(",".join(headers) + "\n")
+
+        for frame_idx in range(total_frames):
+            landmarks_norm = normalized_landmarks_list[frame_idx]
+            landmarks_pixel = pixel_landmarks_list[frame_idx]
+
+            flat_landmarks_norm = [coord for landmark in landmarks_norm for coord in landmark]
+            flat_landmarks_pixel = [coord for landmark in landmarks_pixel for coord in landmark]
+
+            # Converte valores NaN para a string 'NaN'
+            landmarks_norm_str = ",".join(
+                "NaN" if np.isnan(value) else f"{value:.6f}" for value in flat_landmarks_norm
+            )
+            landmarks_pixel_str = ",".join(
+                "NaN" if np.isnan(value) else str(value) for value in flat_landmarks_pixel
+            )
+
+            f_norm.write(f"{frame_idx}," + landmarks_norm_str + "\n")
+            f_pixel.write(f"{frame_idx}," + landmarks_pixel_str + "\n")
 
     end_time = time.time()
     execution_time = end_time - start_time
@@ -289,7 +311,10 @@ def process_video(video_path, output_dir, pose_config):
         log_file.write(f"Total Frames: {frame_count}\n")
         log_file.write(f"Execution Time: {execution_time} seconds\n")
         log_file.write(f"MediaPipe Pose Configuration: {pose_config}\n")
-
+        if frames_with_missing_data:
+            log_file.write(f"Frames with missing data (NaN inserted): {frames_with_missing_data}\n")
+        else:
+            log_file.write("No frames with missing data.\n")
 
 def process_videos_in_directory():
     print(f"Running script: {Path(__file__).name}")
@@ -325,7 +350,6 @@ def process_videos_in_directory():
             output_dir.mkdir(parents=True, exist_ok=True)
             print(f"Processing video: {video_file}")
             process_video(video_file, output_dir, pose_config)
-
 
 if __name__ == "__main__":
     process_videos_in_directory()
