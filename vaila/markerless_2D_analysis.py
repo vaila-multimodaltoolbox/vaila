@@ -91,6 +91,8 @@ import time
 import datetime
 import tkinter as tk
 from tkinter import filedialog, messagebox
+from pathlib import Path
+import platform
 
 landmark_names = [
     "nose",
@@ -189,10 +191,18 @@ def get_pose_config():
 
 
 def process_video(video_path, output_dir, pose_config):
+    if platform.system() == "Windows" and platform.version().startswith("10."):
+        if len(str(video_path)) > 255 or len(str(output_dir)) > 255:
+            messagebox.showerror(
+                "Path Too Long",
+                "The selected path is too long. Please choose a shorter path for both the input video and output directory.",
+            )
+            return
+
     print(f"Processing video: {video_path}")
     start_time = time.time()
 
-    cap = cv2.VideoCapture(video_path)
+    cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
         print(f"Failed to open video: {video_path}")
         return
@@ -201,23 +211,19 @@ def process_video(video_path, output_dir, pose_config):
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = cap.get(cv2.CAP_PROP_FPS)
 
-    output_video_name = os.path.splitext(os.path.basename(video_path))[0] + "_mp.mp4"
-    output_video_path = os.path.join(output_dir, output_video_name)
+    output_video_name = video_path.stem + "_mp.mp4"
+    output_video_path = output_dir / output_video_name
 
-    # Garantir que o diretório de saída exista
-    os.makedirs(output_dir, exist_ok=True)
+    # Ensure the output directory exists
+    output_dir.mkdir(parents=True, exist_ok=True)
 
-    output_landmarks_name = (
-        os.path.splitext(os.path.basename(video_path))[0] + "_mp_norm.csv"
-    )
-    output_file_path = os.path.join(output_dir, output_landmarks_name)
-    output_pixel_file_path = os.path.join(
-        output_dir, os.path.splitext(os.path.basename(video_path))[0] + "_mp_pixel.csv"
-    )
+    output_landmarks_name = video_path.stem + "_mp_norm.csv"
+    output_file_path = output_dir / output_landmarks_name
+    output_pixel_file_path = output_dir / f"{video_path.stem}_mp_pixel.csv"
 
     codec = "mp4v"
     fourcc = cv2.VideoWriter_fourcc(*codec)
-    out = cv2.VideoWriter(output_video_path, fourcc, fps, (width, height))
+    out = cv2.VideoWriter(str(output_video_path), fourcc, fps, (width, height))
 
     pose = mp.solutions.pose.Pose(
         static_image_mode=pose_config["static_image_mode"],
@@ -273,7 +279,7 @@ def process_video(video_path, output_dir, pose_config):
     end_time = time.time()
     execution_time = end_time - start_time
 
-    log_info_path = os.path.join(output_dir, "log_info.txt")
+    log_info_path = output_dir / "log_info.txt"
     with open(log_info_path, "w") as log_file:
         log_file.write(f"Video Path: {video_path}\n")
         log_file.write(f"Output Video Path: {output_video_path}\n")
@@ -286,8 +292,8 @@ def process_video(video_path, output_dir, pose_config):
 
 
 def process_videos_in_directory():
-    print(f"Running script: {os.path.basename(__file__)}")
-    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    print(f"Running script: {Path(__file__).name}")
+    print(f"Script directory: {Path(__file__).parent.resolve()}")
 
     root = tk.Tk()
     root.withdraw()
@@ -309,20 +315,16 @@ def process_videos_in_directory():
         return
 
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_base = os.path.join(output_base, f"mediapipe_{timestamp}")
-    os.makedirs(output_base, exist_ok=True)
+    output_base = Path(output_base) / f"mediapipe_{timestamp}"
+    output_base.mkdir(parents=True, exist_ok=True)
 
-    for root, dirs, files in os.walk(input_dir):
-        if root != input_dir:
-            continue  # Skip subdirectories
-
-        for file in files:
-            if file.lower().endswith((".mp4", ".avi", ".mov")):
-                video_path = os.path.join(root, file)
-                output_dir = os.path.join(output_base, os.path.splitext(file)[0])
-                os.makedirs(output_dir, exist_ok=True)
-                print(f"Processing video: {video_path}")
-                process_video(video_path, output_dir, pose_config)
+    input_dir = Path(input_dir)
+    for video_file in input_dir.glob("*.*"):
+        if video_file.suffix.lower() in [".mp4", ".avi", ".mov"]:
+            output_dir = output_base / video_file.stem
+            output_dir.mkdir(parents=True, exist_ok=True)
+            print(f"Processing video: {video_file}")
+            process_video(video_file, output_dir, pose_config)
 
 
 if __name__ == "__main__":

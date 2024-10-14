@@ -188,6 +188,7 @@ Use the button 'imagination!' to access command-line (xonsh) tools for advanced 
 
 print(text)
 
+
 class Vaila(tk.Tk):
     def __init__(self):
         """
@@ -232,7 +233,7 @@ class Vaila(tk.Tk):
         Adjusts the width of buttons and the font size of text in the application
         based on the operating system.
         """
-        
+
         if platform.system() == "Darwin":
             # Specific adjustments for macOS
             self.button_width = 10
@@ -790,7 +791,10 @@ class Vaila(tk.Tk):
 
         # C_B_r1_c2 - Video: Cut Videos
         cut_videos_btn = tk.Button(
-            tools_col2, text="Cut Videos", command=self.cut_videos, width=button_width
+            tools_col2,
+            text="Cut|Sync Video",
+            command=self.cut_videos,
+            width=button_width,
         )
 
         # C_B_r1_c3 - Video: Draw Box
