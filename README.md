@@ -472,6 +472,27 @@ vaila
 └── videoprocessor2.py
 ```
 
+## Citing *vailá*
+
+If you use *vailá* in your research or project, please consider citing our work:
+
+```bibtex
+@misc{vaila2024,
+  title={vailá - Versatile Anarcho Integrated Liberation Ánalysis in Multimodal Toolbox},
+  author={Paulo Roberto Pereira Santiago and Guilherme Manna Cesar and Ligia Yumi Mochida and Juan Aceros and others},
+  year={2024},
+  eprint={2410.07238},
+  archivePrefix={arXiv},
+  primaryClass={cs.HC},
+  url={https://arxiv.org/abs/2410.07238}
+}
+```
+
+## You can also refer to the tool's GitHub repository for more details and updates:
+
+- [*vailá* on arXiv](https://arxiv.org/abs/2410.07238)
+- [*vailá* GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
+
 ## Authors
 
 - **Paulo Roberto Pereira Santiago** [ORCID: 0000-0002-9460-8847](https://orcid.org/0000-0002-9460-8847)  
