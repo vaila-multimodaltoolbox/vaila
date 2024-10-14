@@ -120,12 +120,20 @@ def process_videos_merge(
                 ffmpeg_concat_command, stdin=reverse_process.stdout, check=True
             )
 
+            # Write a log file with the frame information
+            log_file_path = os.path.join(
+                output_dir, f"{os.path.splitext(os.path.basename(video_path))[0]}_merge_frames.txt"
+            )
+            with open(log_file_path, "w") as log_file:
+                log_file.write(f"Video: {video_path}\n")
+                log_file.write(f"Frame where merge starts: 0 (since it's the full video + reverse)\n")
+
             print(f"Video processed and saved to: {output_video}")
         except subprocess.CalledProcessError as e:
             print(f"FFmpeg error processing video {video_path}: {e}")
         except Exception as e:
             print(f"Error processing video {video_path}: {e}")
-
+            
 
 def process_videos_split(
     source_dir, target_dir, use_text_file=False, text_file_path=None
@@ -202,11 +210,20 @@ def process_videos_split(
             ]
             subprocess.run(ffmpeg_command, check=True)
 
+            # Write a log file with the frame information
+            log_file_path = os.path.join(
+                output_dir, f"{os.path.splitext(os.path.basename(video_path))[0]}_split_frames.txt"
+            )
+            with open(log_file_path, "w") as log_file:
+                log_file.write(f"Video: {video_path}\n")
+                log_file.write(f"Frame where split starts: {half_frame}\n")
+
             print(f"Video processed and saved to: {output_video}")
         except subprocess.CalledProcessError as e:
             print(f"FFmpeg error processing video {video_path}: {e}")
         except Exception as e:
             print(f"Error processing video {video_path}: {e}")
+
 
 
 def process_videos_gui():
