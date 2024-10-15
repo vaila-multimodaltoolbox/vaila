@@ -1,114 +1,145 @@
 """
-# vailá - Multimodal Toolbox
-# © Paulo Santiago, Guilherme Cesar, Ligia Mochida, Bruno Bedo
-# https://github.com/paulopreto/vaila-multimodaltoolbox
-# Please see AUTHORS for contributors.
-#
-# Licensed under GNU Lesser General Public License v3.0
-#
-# compress_videos_h264.py
-#
-# Description:
-# This script compresses videos in a specified directory to H.264 format using the FFmpeg tool. 
-# It provides a GUI for selecting the directory containing the videos, and processes each video, 
-# saving the compressed versions in a subdirectory named 'compressed_h264'. The script supports 
-# GPU acceleration using NVIDIA NVENC if available or falls back to CPU encoding with libx264.
-#
-# Usage:
-# - Run the script to open a GUI, select the directory containing the videos, 
-#   and the compression process will start automatically.
-# 
-# Requirements:
-# - FFmpeg must be installed and accessible in the system PATH.
-# - This script is designed to work in a Conda environment where FFmpeg is installed via conda-forge.
-#
-# Dependencies:
-# - Python 3.11.8
-# - Tkinter (included with Python)
-# - FFmpeg (installed via Conda or available in PATH)
-#
-# Installation of FFmpeg in Conda:
-#   conda install -c conda-forge ffmpeg
-#
-# NVIDIA GPU Installation and FFmpeg NVENC Support
-# 
-# To use NVIDIA GPU acceleration for video encoding in FFmpeg, follow the steps below for your operating system:
-# 
-# ## Windows:
-# 1. **Install NVIDIA Drivers**:
-#    - Download and install the latest NVIDIA drivers from the official site: https://www.nvidia.com/Download/index.aspx.
-#    - Ensure your GPU supports NVENC (Kepler series or newer).
-# 
-# 2. **Install FFmpeg**:
-#    - Download the FFmpeg build with NVENC support from: https://www.gyan.dev/ffmpeg/builds/.
-#    - Extract the files, add the `bin` directory to your system’s PATH, and verify installation by running:
-#      ```bash
-#      ffmpeg -encoders | findstr nvenc
-#      ```
-#    - Look for `h264_nvenc` and `hevc_nvenc` in the output.
-# 
-# ## Linux:
-# 1. **Install NVIDIA Drivers**:
-#    - For Ubuntu, run the following commands to install drivers from the PPA:
-#      ```bash
-#      sudo add-apt-repository ppa:graphics-drivers/ppa
-#      sudo apt update
-#      sudo apt install nvidia-driver-<version>
-#      ```
-#    - Verify your GPU with:
-#      ```bash
-#      nvidia-smi
-#      ```
-# 
-# 2. **Install CUDA**:
-#    - Download and install CUDA from: https://developer.nvidia.com/cuda-downloads.
-#    - Follow the installation instructions for your Linux distribution.
-#    - Add CUDA to your environment variables:
-#      ```bash
-#      export PATH=/usr/local/cuda/bin:${PATH:+:${PATH}}
-#      export LD_LIBRARY_PATH=/usr/local/cuda/lib64:${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
-#      source ~/.bashrc
-#      ```
-# 
-# 3. **Compile FFmpeg with NVENC Support**:
-#    - Download and compile FFmpeg with NVENC support by following instructions here: https://ffmpeg.org/download.html or:
-#      ```bash
-#      sudo apt install ffmpeg
-#      git clone https://git.ffmpeg.org/ffmpeg.git ffmpeg/
-#      cd ffmpeg
-#      ./configure --enable-nonfree --enable-nvenc --enable-gpl
-#      make
-#      sudo make install
-#      ```
-# 
-# 4. **Verify NVENC Support**:
-#    - Run the command below to verify installation:
-#      ```bash
-#      ffmpeg -encoders | grep nvenc
-#      ```
-# 
-# More details on NVIDIA support for FFmpeg can be found at:
-# - [NVIDIA Developer Guide for FFmpeg](https://developer.nvidia.com/ffmpeg)
-# - [FFmpeg Documentation](https://ffmpeg.org/documentation.html)
-#
-# Note:
-# This process may take several hours depending on the size of the videos and the performance of your computer.
-#
+vailá - Multimodal Toolbox
+© Paulo Santiago, Guilherme Cesar, Ligia Mochida, Bruno Bedo
+https://github.com/paulopreto/vaila-multimodaltoolbox
+Please see AUTHORS for contributors.
+
+Licensed under GNU Lesser General Public License v3.0
+
+compress_videos_h264.py
+
+Description:
+This script compresses videos in a specified directory to H.264 format using the FFmpeg tool.
+It provides a GUI for selecting the directory containing the videos and processes each video,
+saving the compressed versions in a subdirectory named 'compressed_h264'.
+The script supports GPU acceleration using NVIDIA NVENC if available or falls back to CPU encoding
+with libx264.
+
+The script has been updated to work on Windows, Linux, and macOS.
+It includes cross-platform detection of NVIDIA GPUs to utilize GPU acceleration where possible.
+On systems without an NVIDIA GPU (e.g., macOS), the script defaults to CPU-based compression.
+
+Usage:
+- Run the script to open a GUI, select the directory containing the videos,
+  and the compression process will start automatically.
+
+Requirements:
+- FFmpeg must be installed and accessible in the system PATH.
+- The script is designed to work on Windows, Linux, and macOS.
+
+Dependencies:
+- Python 3.x
+- Tkinter (included with Python)
+- FFmpeg (available in PATH)
+
+NVIDIA GPU Installation and FFmpeg NVENC Support
+
+To use NVIDIA GPU acceleration for video encoding in FFmpeg, follow the steps below for your operating system:
+
+## Windows:
+1. **Install NVIDIA Drivers**:
+   - Download and install the latest NVIDIA drivers from the official site: https://www.nvidia.com/Download/index.aspx.
+   - Ensure your GPU supports NVENC (Kepler series or newer).
+
+2. **Install FFmpeg**:
+   - Download the FFmpeg build with NVENC support from: https://www.gyan.dev/ffmpeg/builds/.
+   - Extract the files, add the `bin` directory to your system's PATH, and verify installation by running:
+     ```bash
+     ffmpeg -encoders | findstr nvenc
+     ```
+   - Look for `h264_nvenc` and `hevc_nvenc` in the output.
+
+## Linux:
+1. **Install NVIDIA Drivers**:
+   - Install the appropriate NVIDIA drivers for your GPU. For Ubuntu, you can add the graphics drivers PPA:
+     ```bash
+     sudo add-apt-repository ppa:graphics-drivers/ppa
+     sudo apt update
+     sudo apt install nvidia-driver-<version>
+     ```
+   - Verify your GPU and driver installation with:
+     ```bash
+     nvidia-smi
+     ```
+
+2. **Install CUDA Toolkit (if necessary)**:
+   - Download and install the CUDA Toolkit from: https://developer.nvidia.com/cuda-downloads.
+   - Follow the installation instructions for your Linux distribution.
+
+3. **Install or Compile FFmpeg with NVENC Support**:
+   - Some Linux distributions provide FFmpeg packages with NVENC support. Check if `h264_nvenc` is available:
+     ```bash
+     ffmpeg -encoders | grep nvenc
+     ```
+   - If not available, you may need to compile FFmpeg with NVENC support:
+     ```bash
+     sudo apt install build-essential pkg-config
+     sudo apt build-dep ffmpeg
+     git clone https://git.ffmpeg.org/ffmpeg.git ffmpeg/
+     cd ffmpeg
+     ./configure --enable-gpl --enable-nonfree --enable-cuda-nvcc --enable-libnpp --enable-libx264 --enable-libx265 --enable-nvenc --enable-cuvid --enable-cuda
+     make -j$(nproc)
+     sudo make install
+     ```
+
+## macOS:
+- Recent versions of macOS do not support NVIDIA GPUs; NVENC acceleration is not available.
+- The script will default to CPU-based encoding on macOS.
+
+Note:
+- Ensure that FFmpeg is installed and accessible in your system PATH.
+- This process may take several hours depending on the size of the videos and the performance of your computer.
 """
 
 import os
 import subprocess
 import platform
-from tkinter import filedialog, messagebox, Tk
 import tempfile
+from tkinter import filedialog, messagebox, Tk
 
+# Global variables for success and failure counts
+success_count = 0
+failure_count = 0
 
 def is_nvidia_gpu_available():
-    """Check if an NVIDIA GPU is available and NVENC is supported."""
+    """Check if an NVIDIA GPU is available in the system."""
+    os_type = platform.system()
+
     try:
-        # Check for NVIDIA GPU with NVENC support
-        result = subprocess.run(["ffmpeg", "-encoders"], capture_output=True, text=True)
-        return "h264_nvenc" in result.stdout
+        if os_type == "Windows":
+            # Use wmic command to get GPU names
+            result = subprocess.run(
+                ["wmic", "path", "win32_VideoController", "get", "name"],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            if "NVIDIA" in result.stdout:
+                return True
+            else:
+                return False
+
+        elif os_type == "Linux":
+            # Use lspci to get GPU names
+            result = subprocess.run(
+                ["lspci"],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            if "NVIDIA" in result.stdout:
+                return True
+            else:
+                return False
+
+        elif os_type == "Darwin":  # macOS
+            # No recent NVIDIA GPUs are supported on macOS
+            return False
+
+        else:
+            # Unsupported operating system
+            return False
+
     except Exception as e:
         print(f"Error checking for NVIDIA GPU: {e}")
         return False
@@ -137,9 +168,11 @@ def create_temp_file_with_videos(video_files):
 
 
 def run_compress_videos_h264(
-    temp_file_path, output_directory, preset="medium", crf=22, use_gpu=False
+    temp_file_path, output_directory, preset="medium", crf=23, use_gpu=False
 ):
     """Compress the list of video files stored in the temporary file to H.264 format using either CPU or GPU."""
+    global success_count, failure_count
+
     print("!!!ATTENTION!!!")
     print(
         "This process might take several hours depending on your computer and the size of your videos. Please be patient or use a high-performance computer!"
@@ -198,13 +231,16 @@ def run_compress_videos_h264(
         try:
             subprocess.run(command, check=True)
             print(f"Done compressing {video_file} to H.264.")
+            success_count += 1
         except subprocess.CalledProcessError as e:
             print(f"Error compressing {video_file}: {e}")
+            failure_count += 1
 
-    print("All videos have been compressed successfully!")
+    print(f"Compression completed: {success_count} succeeded, {failure_count} failed.")
 
 
 def compress_videos_h264_gui():
+    global success_count, failure_count
     root = Tk()
     root.withdraw()
 
@@ -222,19 +258,13 @@ def compress_videos_h264_gui():
     os_type = platform.system()
     print(f"Operating System: {os_type}")
 
-    if os_type == "Linux" or os_type == "Windows":
-        # Check if NVIDIA GPU with NVENC is available
-        use_gpu = is_nvidia_gpu_available()
-        if use_gpu:
-            print("NVIDIA GPU with NVENC detected. Using GPU for video compression.")
-        else:
-            print("No NVIDIA GPU detected. Falling back to CPU-based compression.")
-    elif os_type == "Darwin":  # macOS
-        print("macOS detected. Using CPU-based compression (NVENC not available).")
-        use_gpu = False
+    # Check if NVIDIA GPU is available
+    use_gpu = is_nvidia_gpu_available()
+
+    if use_gpu:
+        print("NVIDIA GPU detected. Using GPU for video compression.")
     else:
-        print("Unsupported operating system. Using CPU-based compression.")
-        use_gpu = False
+        print("No NVIDIA GPU detected. Using CPU-based compression.")
 
     # Find all video files recursively, ignoring the output directory
     video_files = find_videos_recursively(video_directory, output_directory)
@@ -257,7 +287,7 @@ def compress_videos_h264_gui():
 
     messagebox.showinfo(
         "Success",
-        "Video compression completed. All videos have been compressed successfully!",
+        f"Video compression completed.\n\n{success_count} succeeded, {failure_count} failed.",
     )
 
 
