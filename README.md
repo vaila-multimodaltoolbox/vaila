@@ -149,6 +149,7 @@ sudo chmod +x install_vaila_mac.sh
 - Ensure that Conda is added to your PATH and accessible from the command line.
 
 ---
+
 ## 🔵 For Windows:
 
 1. **Install Anaconda**:
@@ -175,13 +176,17 @@ sudo chmod +x install_vaila_mac.sh
 4. **Ensure Git Bash is installed**:
    - If you don’t have Git Bash, [download and install it](https://gitforwindows.org/).
 
-5. **FFmpeg and Windows Terminal**:
+5. **Install FFmpeg and Windows Terminal**:
    - The script will check if **FFmpeg** and **Windows Terminal** are installed. If they aren't, the script will automatically install them.
 
-6. **Shortcuts and Configurations**:
+6. **Recommendation**: We recommend that you have **Windows Terminal** installed for an optimal experience. The script will configure a vailá profile in Windows Terminal for easier access and management. If you don't have it installed, the script will attempt to install it via **winget**.
+
+7. **Shortcuts and Configurations**:
    - The script will automatically create shortcuts for vailá on the Desktop and Start Menu and configure a profile in Windows Terminal.
 
 After this, vailá will be installed and ready for use on your Windows system.
+
+---
 
 ## Running the Application
 
