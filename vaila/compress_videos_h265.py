@@ -1,108 +1,12 @@
-"""
-vailá - Multimodal Toolbox
-© Paulo Santiago, Guilherme Cesar, Ligia Mochida, Bruno Bedo
-https://github.com/paulopreto/vaila-multimodaltoolbox
-Please see AUTHORS for contributors.
-
-Licensed under GNU Lesser General Public License v3.0
-
-compress_videos_h265.py
-
-Description:
-This script compresses videos in a specified directory to H.265/HEVC format using the FFmpeg tool.
-It provides a GUI for selecting the directory containing the videos, and processes each video,
-saving the compressed versions in a subdirectory named 'compressed_h265'.
-The script supports GPU acceleration using NVIDIA NVENC if available or falls back to CPU encoding
-with libx265.
-
-Usage:
-- Run the script to open a GUI, select the directory containing the videos,
-  and the compression process will start automatically.
-
-Requirements:
-- FFmpeg must be installed and accessible in the system PATH.
-- This script is designed to work in a Conda environment where FFmpeg is installed via conda-forge.
-
-Dependencies:
-- Python 3.11.8
-- Tkinter (included with Python)
-- FFmpeg (installed via Conda or available in PATH)
-
-Installation of FFmpeg in Conda:
-  conda install -c conda-forge ffmpeg
-
-NVIDIA GPU Installation and FFmpeg NVENC Support
-
-To use NVIDIA GPU acceleration for video encoding in FFmpeg, follow the steps below for your operating system:
-
-## Windows:
-1. **Install NVIDIA Drivers**:
-   - Download and install the latest NVIDIA drivers from the official site: https://www.nvidia.com/Download/index.aspx.
-   - Ensure your GPU supports NVENC (Kepler series or newer).
-
-2. **Install FFmpeg**:
-   - Download the FFmpeg build with NVENC support from: https://www.gyan.dev/ffmpeg/builds/.
-   - Extract the files, add the `bin` directory to your system’s PATH, and verify installation by running:
-     ```bash
-     ffmpeg -encoders | findstr nvenc
-     ```
-   - Look for `h264_nvenc` and `hevc_nvenc` in the output.
-
-## Linux:
-1. **Install NVIDIA Drivers**:
-   - For Ubuntu, run the following commands to install drivers from the PPA:
-     ```bash
-     sudo add-apt-repository ppa:graphics-drivers/ppa
-     sudo apt update
-     sudo apt install nvidia-driver-<version>
-     ```
-   - Verify your GPU with:
-     ```bash
-     nvidia-smi
-     ```
-
-2. **Install CUDA**:
-   - Download and install CUDA from: https://developer.nvidia.com/cuda-downloads.
-   - Follow the installation instructions for your Linux distribution.
-   - Add CUDA to your environment variables:
-     ```bash
-     export PATH=/usr/local/cuda/bin:${PATH:+:${PATH}}
-     export LD_LIBRARY_PATH=/usr/local/cuda/lib64:${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
-     source ~/.bashrc
-     ```
-
-3. **Compile FFmpeg with NVENC Support**:
-   - Download and compile FFmpeg with NVENC support by following instructions here: https://ffmpeg.org/download.html or:
-     ```bash
-     sudo apt install ffmpeg
-     git clone https://git.ffmpeg.org/ffmpeg.git ffmpeg/
-     cd ffmpeg
-     ./configure --enable-nonfree --enable-nvenc --enable-gpl
-     make
-     sudo make install
-     ```
-
-4. **Verify NVENC Support**:
-   - Run the command below to verify installation:
-     ```bash
-     ffmpeg -encoders | grep nvenc
-     ```
-
-More details on NVIDIA support for FFmpeg can be found at:
-- [NVIDIA Developer Guide for FFmpeg](https://developer.nvidia.com/ffmpeg)
-- [FFmpeg Documentation](https://ffmpeg.org/documentation.html)
-
-Note:
-This process may take several hours depending on the size of the videos and the performance of your computer.
-
-"""
-
 import os
 import subprocess
 import platform
 import tempfile
 from tkinter import filedialog, messagebox, Tk
 
+# Global variables for success and failure counts
+success_count = 0
+failure_count = 0
 
 def is_nvidia_gpu_available():
     """Check if an NVIDIA GPU is available in the system."""
@@ -148,12 +52,12 @@ def is_nvidia_gpu_available():
         return False
 
 
-def find_videos_recursively(directory, output_directory):
-    """Find all video files recursively in the directory, avoiding the output directory."""
+def find_videos_recursively(directory, output_directories):
+    """Find all video files recursively in the directory, avoiding the output directories."""
     video_files = []
     for root, dirs, files in os.walk(directory):
-        # Ignore the output directory
-        if output_directory in root:
+        # Ignore the output directories
+        if any(os.path.abspath(output_dir) in os.path.abspath(root) for output_dir in output_directories):
             continue
         for file in files:
             if file.lower().endswith((".mp4", ".avi", ".mov", ".mkv", ".wmv")):
@@ -171,9 +75,11 @@ def create_temp_file_with_videos(video_files):
 
 
 def run_compress_videos_h265(
-    temp_file_path, output_directory, preset="medium", crf=23, use_gpu=False
+    temp_file_path, output_directory, preset="slower", crf=28, use_gpu=False
 ):
     """Compress the list of video files stored in the temporary file to H.265/HEVC format."""
+    global success_count, failure_count
+
     print("!!!ATTENTION!!!")
     print(
         "This process might take several hours depending on your computer and the size of your videos. Please be patient or use a high-performance computer!"
@@ -184,9 +90,6 @@ def run_compress_videos_h265(
     # Read the video files from the temp file
     with open(temp_file_path, "r") as temp_file:
         video_files = [line.strip() for line in temp_file]
-
-    success_count = 0
-    failure_count = 0
 
     for video_file in video_files:
         input_path = video_file
@@ -212,8 +115,8 @@ def run_compress_videos_h265(
                 "hevc_nvenc",  # Use NVIDIA NVENC for H.265
                 "-preset",
                 preset,  # preset for encoding speed
-                "-b:v",
-                "5M",  # bitrate (adjust as needed)
+                "-crf",
+                str(crf),  # constant rate factor for quality
                 output_path,  # output file
             ]
         else:
@@ -245,6 +148,9 @@ def run_compress_videos_h265(
 
 def compress_videos_h265_gui():
     global success_count, failure_count
+    success_count = 0  # Reset counters at the beginning
+    failure_count = 0
+
     root = Tk()
     root.withdraw()
 
@@ -270,8 +176,14 @@ def compress_videos_h265_gui():
     else:
         print("No NVIDIA GPU detected. Using CPU-based compression.")
 
-    # Find all video files recursively, ignoring the output directory
-    video_files = find_videos_recursively(video_directory, output_directory)
+    # Exclude both 'compressed_h264' and 'compressed_h265' directories
+    output_directories = [
+        os.path.join(video_directory, "compressed_h264"),
+        output_directory
+    ]
+
+    # Find all video files recursively, ignoring the output directories
+    video_files = find_videos_recursively(video_directory, output_directories)
 
     if not video_files:
         messagebox.showerror("Error", "No video files found.")
@@ -281,8 +193,8 @@ def compress_videos_h265_gui():
     temp_file_path = create_temp_file_with_videos(video_files)
 
     # Run the compression for all found videos
-    preset = "medium"
-    crf = 23
+    preset = "slower"
+    crf = 28  # Adjusted for better compression
 
     run_compress_videos_h265(temp_file_path, output_directory, preset, crf, use_gpu)
 
