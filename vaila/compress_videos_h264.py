@@ -145,16 +145,12 @@ def is_nvidia_gpu_available():
         return False
 
 
-def find_videos_recursively(directory, output_directory):
-    """Find all video files recursively in the directory, avoiding the output directory."""
+def find_videos(directory):
+    """Find all video files in the specified directory without searching subdirectories."""
     video_files = []
-    for root, dirs, files in os.walk(directory):
-        # Ignore the output directory
-        if output_directory in root:
-            continue
-        for file in files:
-            if file.lower().endswith((".mp4", ".avi", ".mov", ".mkv", ".wmv")):
-                video_files.append(os.path.join(root, file))
+    for file in os.listdir(directory):
+        if file.lower().endswith((".mp4", ".avi", ".mov", ".mkv", ".wmv")):
+            video_files.append(os.path.join(directory, file))
     return video_files
 
 
@@ -266,8 +262,8 @@ def compress_videos_h264_gui():
     else:
         print("No NVIDIA GPU detected. Using CPU-based compression.")
 
-    # Find all video files recursively, ignoring the output directory
-    video_files = find_videos_recursively(video_directory, output_directory)
+    # Find all video files in the specified directory without searching subdirectories
+    video_files = find_videos(video_directory)
 
     if not video_files:
         messagebox.showerror("Error", "No video files found.")
