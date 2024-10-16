@@ -150,91 +150,41 @@ sudo chmod +x install_vaila_mac.sh
 
 ---
 
-
 ## 🔵 For Windows:
 
-1. **Download and Install Anaconda**:
-
-- Make sure to download and install [Anaconda](https://www.anaconda.com/download/success).
-- Ensure that **Conda** is installed and accessible from the command line.
+1. **Install Anaconda**:
+   - Download and install [Anaconda](https://www.anaconda.com/download/success).
+   - Make sure **Conda** is accessible from the terminal.
 
 2. **Download vailá**:
-  You can either:
+   - Use **Git** to clone the repository:
+     ```bash
+     git clone https://github.com/vaila-multimodaltoolbox/vaila
+     cd vaila
+     ```
+   - **Or download the zip file**:
+     - Go to `https://github.com/vaila-multimodaltoolbox/vaila/archive/refs/heads/main.zip` and extract the file.
 
-- **Clone the repository** using git:
+3. **Run the installation script as administrator**:
+   - Open **Anaconda PowerShell** as **administrator**.
+   - Navigate to the directory where vailá was downloaded/extracted.
+   - Run the command:
+     ```bash
+     ./install_vaila_win11.ps1
+     ```
 
-  ```bash
-  git clone https://github.com/vaila-multimodaltoolbox/vaila
-  cd vaila
-  ```
-  
-- **Or download the vailá zip file directly from your browser:**
-  - **Go to** `https://github.com/vaila-multimodaltoolbox/vaila/archive/refs/heads/main.zip`
-  - **Unzip the downloaded file (for example, into your Downloads folder).**
+4. **Ensure Git Bash is installed**:
+   - If you don’t have Git Bash, [download and install it](https://gitforwindows.org/).
 
-3. **Run the Installation Script as Administrator:**
-  
-  Now you need to install vailá `Anaconda Powershell Prompt` as an administrator:
+5. **Install FFmpeg and Windows Terminal**:
+   - The script will check if **FFmpeg** and **Windows Terminal** are installed. If they aren't, the script will automatically install them.
 
-- Press the Windows key and search for "Anaconda PowerShell Prompt".
-- Right-click on Anaconda PowerShell Prompt and select "Run as administrator".
-- Navigate to the directory where you git clone or downloaded unzipped the vailá files (e.g., C:\Users\YourUserName\Downloads\vaila).
-- Run the installation script:
+6. **Recommendation**: We recommend that you have **Windows Terminal** installed for an optimal experience. The script will configure a vailá profile in Windows Terminal for easier access and management. If you don't have it installed, the script will attempt to install it via **winget**.
 
-  ```Anaconda Powershell Prompt
-  ./install_vaila_win.ps1
-  ```
+7. **Shortcuts and Configurations**:
+   - The script will automatically create shortcuts for vailá on the Desktop and Start Menu and configure a profile in Windows Terminal.
 
-4. **Allow Script Execution (if necessary):**
-
-If the script execution is blocked, you may need to change the execution policy. Run this command in PowerShell as Administrator:
-
-  ```Anaconda Powershell Prompt
-  Set-ExecutionPolicy RemoteSigned
-  ```
-
-5. **The Instructions Displayed by the Script:**
-
-The script will:
-
-- Set up the Conda environment using `vaila_win.yaml` inside directory/folder `yaml_for_conda_env`.  
-- Install FFmpeg using winget or Chocolatey if necessary.
-- Copy program files to C:\ProgramData\vaila.
-- Configure the vaila profile in Windows Terminal (recommend you have Windows Terminal installed on your computer).
-- Create a Desktop a Start Menu shortcut.
-
-6. **If the Windows Terminal profile was not automatically added, follow the instructions below to manually add it. (if necessary)**
-
-### Manual Addition to Windows Terminal (if necessary)
-
- ```json
-{
-    "name": "vaila",
-    "commandline": "pwsh.exe -ExecutionPolicy Bypass -NoExit -Command '& \"%ProgramData%\\Anaconda3\\shell\\condabin\\conda-hook.ps1\" ; conda activate \"vaila\" ; cd \"C:\\ProgramData\\vaila\" ; python \"vaila.py\"'",
-    "startingDirectory": "C:\\ProgramData\\vaila",
-    "icon": "C:\\ProgramData\\vaila\\docs\\images\\vaila_ico.png",
-    "colorScheme": "Vintage",
-    "guid": "{17ce5bfe-17ed-5f3a-ab15-5cd5baafed5b}",
-    "hidden": false
-}
-```
-
-Now the installation instructions are simplified, ensuring users download vailá, run the script with administrator privileges, and see the vailá icon in all the intended places (Desktop, Start Menu, and Windows Terminal).
-
-When vailá is installed on Windows, the files are copied to the following directory:
-
-  ```PowerShell
-  C:\ProgramData\vaila
-  ```
-
-This location is used to store data and configuration files that are accessible to all users on the system. However, the `ProgramData` directory is usually hidden in Windows. To access it, follow these steps:
-
-- Open File Explorer.
-- Go to the View tab in the top menu.
-- Check the Hidden items box to display the `C:\ProgramData` directory.
-- Navigate to `C:\ProgramData\vaila`.
-
-For more information about the ProgramData folder on Windows, you can refer to the official [Microsoft documentation](https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-shell-setup-folderlocations-programdata)
+After this, vailá will be installed and ready for use on your Windows system.
 
 ---
 
