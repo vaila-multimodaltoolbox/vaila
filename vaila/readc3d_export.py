@@ -85,7 +85,6 @@ def save_info_file(datac3d, file_name, output_dir):
 
     print(f".info file saved at: {info_file_path}")
 
-
 def save_short_info_file(
     marker_labels,
     marker_freq,
@@ -113,10 +112,9 @@ def save_short_info_file(
 
     print(f"Short info file saved at: {short_info_file_path}")
 
-
 def save_events(datac3d, file_name, output_dir):
     """
-    Save events data from the C3D file into a CSV file.
+    Save events data from the C3D file into a CSV file, including the frame number.
     """
     print(f"Saving events for {file_name}")
 
@@ -124,17 +122,18 @@ def save_events(datac3d, file_name, output_dir):
     event_labels = datac3d["parameters"]["EVENT"]["LABELS"]["value"]
     event_times = datac3d["parameters"]["EVENT"]["TIMES"]["value"][1, :]
     event_contexts = datac3d["parameters"]["EVENT"]["CONTEXTS"]["value"]
+    marker_freq = datac3d["header"]["points"]["frame_rate"]
 
     events_data = []
     for context, label, time in zip(event_contexts, event_labels, event_times):
-        events_data.append({"Context": context, "Label": label, "Time": time})
+        frame = int(round(time * marker_freq))
+        events_data.append({"Context": context, "Label": label, "Time": time, "Frame": frame})
 
     # Save to a CSV file
     events_df = pd.DataFrame(events_data)
     events_file_path = os.path.join(output_dir, f"{file_name}_events.csv")
     events_df.to_csv(events_file_path, index=False)
     print(f"Events CSV saved at: {events_file_path}")
-
 
 def importc3d(dat):
     """
