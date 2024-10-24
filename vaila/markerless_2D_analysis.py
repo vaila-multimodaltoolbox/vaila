@@ -131,10 +131,15 @@ landmark_names = [
     "right_foot_index",
 ]
 
+
 class ConfidenceInputDialog(tk.simpledialog.Dialog):
     def body(self, master):
-        tk.Label(master, text="Enter minimum detection confidence (0.0 - 1.0):").grid(row=0)
-        tk.Label(master, text="Enter minimum tracking confidence (0.0 - 1.0):").grid(row=1)
+        tk.Label(master, text="Enter minimum detection confidence (0.0 - 1.0):").grid(
+            row=0
+        )
+        tk.Label(master, text="Enter minimum tracking confidence (0.0 - 1.0):").grid(
+            row=1
+        )
         tk.Label(master, text="Enter model complexity (0, 1, or 2):").grid(row=2)
         tk.Label(master, text="Enable segmentation? (True/False):").grid(row=3)
         tk.Label(master, text="Smooth segmentation? (True/False):").grid(row=4)
@@ -167,10 +172,13 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
             "min_detection_confidence": float(self.min_detection_entry.get()),
             "min_tracking_confidence": float(self.min_tracking_entry.get()),
             "model_complexity": int(self.model_complexity_entry.get()),
-            "enable_segmentation": self.enable_segmentation_entry.get().lower() == "true",
-            "smooth_segmentation": self.smooth_segmentation_entry.get().lower() == "true",
+            "enable_segmentation": self.enable_segmentation_entry.get().lower()
+            == "true",
+            "smooth_segmentation": self.smooth_segmentation_entry.get().lower()
+            == "true",
             "static_image_mode": self.static_image_mode_entry.get().lower() == "true",
         }
+
 
 def get_pose_config():
     root = tk.Tk()
@@ -181,6 +189,7 @@ def get_pose_config():
     else:
         messagebox.showerror("Error", "No values entered.")
         return None
+
 
 def process_video(video_path, output_dir, pose_config):
     if platform.system() == "Windows" and platform.version().startswith("10."):
@@ -276,7 +285,9 @@ def process_video(video_path, output_dir, pose_config):
     total_frames = len(normalized_landmarks_list)
 
     # Escreve os dados nos arquivos CSV
-    with open(output_file_path, "w") as f_norm, open(output_pixel_file_path, "w") as f_pixel:
+    with open(output_file_path, "w") as f_norm, open(
+        output_pixel_file_path, "w"
+    ) as f_pixel:
         f_norm.write(",".join(headers) + "\n")
         f_pixel.write(",".join(headers) + "\n")
 
@@ -284,15 +295,21 @@ def process_video(video_path, output_dir, pose_config):
             landmarks_norm = normalized_landmarks_list[frame_idx]
             landmarks_pixel = pixel_landmarks_list[frame_idx]
 
-            flat_landmarks_norm = [coord for landmark in landmarks_norm for coord in landmark]
-            flat_landmarks_pixel = [coord for landmark in landmarks_pixel for coord in landmark]
+            flat_landmarks_norm = [
+                coord for landmark in landmarks_norm for coord in landmark
+            ]
+            flat_landmarks_pixel = [
+                coord for landmark in landmarks_pixel for coord in landmark
+            ]
 
             # Converte valores NaN para a string 'NaN'
             landmarks_norm_str = ",".join(
-                "NaN" if np.isnan(value) else f"{value:.6f}" for value in flat_landmarks_norm
+                "NaN" if np.isnan(value) else f"{value:.6f}"
+                for value in flat_landmarks_norm
             )
             landmarks_pixel_str = ",".join(
-                "NaN" if np.isnan(value) else str(value) for value in flat_landmarks_pixel
+                "NaN" if np.isnan(value) else str(value)
+                for value in flat_landmarks_pixel
             )
 
             f_norm.write(f"{frame_idx}," + landmarks_norm_str + "\n")
@@ -312,9 +329,12 @@ def process_video(video_path, output_dir, pose_config):
         log_file.write(f"Execution Time: {execution_time} seconds\n")
         log_file.write(f"MediaPipe Pose Configuration: {pose_config}\n")
         if frames_with_missing_data:
-            log_file.write(f"Frames with missing data (NaN inserted): {frames_with_missing_data}\n")
+            log_file.write(
+                f"Frames with missing data (NaN inserted): {frames_with_missing_data}\n"
+            )
         else:
             log_file.write("No frames with missing data.\n")
+
 
 def process_videos_in_directory():
     print(f"Running script: {Path(__file__).name}")
@@ -350,6 +370,7 @@ def process_videos_in_directory():
             output_dir.mkdir(parents=True, exist_ok=True)
             print(f"Processing video: {video_file}")
             process_video(video_file, output_dir, pose_config)
+
 
 if __name__ == "__main__":
     process_videos_in_directory()
