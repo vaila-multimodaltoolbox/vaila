@@ -2,7 +2,7 @@
 File: readc3d_export.py
 
 Description:
-This script processes .c3d files, extracting marker data, analog data, and points residuals,
+This script processes .c3d files, extracting marker data, analog data, events, and points residuals,
 and saves them into CSV files. It also allows the option to save the data in Excel format.
 The script leverages Dask for efficient data handling and processing, particularly useful
 when working with large datasets.
@@ -10,6 +10,7 @@ when working with large datasets.
 Features:
 - Extracts and saves marker data with time columns.
 - Extracts and saves analog data with time columns, including their units.
+- Extracts and saves events with their labels and times.
 - Extracts and saves points residuals with time columns.
 - Supports saving the data in CSV format.
 - Optionally saves the data in Excel format (can be slow for large files).
@@ -26,8 +27,8 @@ Dependencies:
 - Numpy
 - Openpyxl (optional, for saving Excel files)
 
-Version: 1.7
-Date: September 2024
+Version: 1.8
+Date: October 2024
 Author: Prof. Paulo Santiago
 
 Usage:
@@ -111,6 +112,28 @@ def save_short_info_file(
             f.write(f"{label} ({unit})\n")
 
     print(f"Short info file saved at: {short_info_file_path}")
+
+
+def save_events(datac3d, file_name, output_dir):
+    """
+    Save events data from the C3D file into a CSV file.
+    """
+    print(f"Saving events for {file_name}")
+
+    events = datac3d["parameters"]["EVENT"]["CONTEXTS"]["value"]
+    event_labels = datac3d["parameters"]["EVENT"]["LABELS"]["value"]
+    event_times = datac3d["parameters"]["EVENT"]["TIMES"]["value"][1, :]
+    event_contexts = datac3d["parameters"]["EVENT"]["CONTEXTS"]["value"]
+
+    events_data = []
+    for context, label, time in zip(event_contexts, event_labels, event_times):
+        events_data.append({"Context": context, "Label": label, "Time": time})
+
+    # Save to a CSV file
+    events_df = pd.DataFrame(events_data)
+    events_file_path = os.path.join(output_dir, f"{file_name}_events.csv")
+    events_df.to_csv(events_file_path, index=False)
+    print(f"Events CSV saved at: {events_file_path}")
 
 
 def importc3d(dat):
@@ -209,6 +232,8 @@ def save_to_files(
         dir_name,
         file_name,
     )
+    # Save events data
+    save_events(datac3d, file_name, dir_name)
 
     # Prepare marker columns
     marker_columns = [
