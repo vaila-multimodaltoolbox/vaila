@@ -8,6 +8,7 @@ from tkinter import filedialog, messagebox, Tk
 success_count = 0
 failure_count = 0
 
+
 def is_nvidia_gpu_available():
     """Check if an NVIDIA GPU is available in the system."""
     os_type = platform.system()
@@ -19,7 +20,7 @@ def is_nvidia_gpu_available():
                 ["wmic", "path", "win32_VideoController", "get", "name"],
                 capture_output=True,
                 text=True,
-                check=True
+                check=True,
             )
             if "NVIDIA" in result.stdout:
                 return True
@@ -29,10 +30,7 @@ def is_nvidia_gpu_available():
         elif os_type == "Linux":
             # Specific command for Linux
             result = subprocess.run(
-                ["lspci"],
-                capture_output=True,
-                text=True,
-                check=True
+                ["lspci"], capture_output=True, text=True, check=True
             )
             if "NVIDIA" in result.stdout:
                 return True
@@ -57,7 +55,10 @@ def find_videos_recursively(directory, output_directories):
     video_files = []
     for root, dirs, files in os.walk(directory):
         # Ignore the output directories
-        if any(os.path.abspath(output_dir) in os.path.abspath(root) for output_dir in output_directories):
+        if any(
+            os.path.abspath(output_dir) in os.path.abspath(root)
+            for output_dir in output_directories
+        ):
             continue
         for file in files:
             if file.lower().endswith((".mp4", ".avi", ".mov", ".mkv", ".wmv")):
@@ -179,7 +180,7 @@ def compress_videos_h265_gui():
     # Exclude both 'compressed_h264' and 'compressed_h265' directories
     output_directories = [
         os.path.join(video_directory, "compressed_h264"),
-        output_directory
+        output_directory,
     ]
 
     # Find all video files recursively, ignoring the output directories
