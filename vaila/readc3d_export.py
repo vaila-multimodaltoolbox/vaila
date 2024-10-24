@@ -135,7 +135,6 @@ def save_events(datac3d, file_name, output_dir):
     events_df.to_csv(events_file_path, index=False)
     print(f"Events CSV saved at: {events_file_path}")
 
-
 def importc3d(dat):
     """
     Import C3D file data and parameters.
