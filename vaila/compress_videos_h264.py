@@ -101,6 +101,7 @@ from tkinter import filedialog, messagebox, Tk
 success_count = 0
 failure_count = 0
 
+
 def is_nvidia_gpu_available():
     """Check if an NVIDIA GPU is available in the system."""
     os_type = platform.system()
@@ -112,7 +113,7 @@ def is_nvidia_gpu_available():
                 ["wmic", "path", "win32_VideoController", "get", "name"],
                 capture_output=True,
                 text=True,
-                check=True
+                check=True,
             )
             if "NVIDIA" in result.stdout:
                 return True
@@ -122,10 +123,7 @@ def is_nvidia_gpu_available():
         elif os_type == "Linux":
             # Use lspci to get GPU names
             result = subprocess.run(
-                ["lspci"],
-                capture_output=True,
-                text=True,
-                check=True
+                ["lspci"], capture_output=True, text=True, check=True
             )
             if "NVIDIA" in result.stdout:
                 return True
