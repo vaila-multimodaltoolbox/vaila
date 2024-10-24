@@ -120,39 +120,59 @@ def run_interpolation(method):
             file_path = os.path.join(source_dir, filename)
             df = pd.read_csv(file_path)
 
-            original_first_col_name = df.columns[0]  # Preserve the original name of the first column
+            original_first_col_name = df.columns[
+                0
+            ]  # Preserve the original name of the first column
 
             # Ensure the first column is treated as integers (no interpolation)
             df[original_first_col_name] = df[original_first_col_name].astype(int)
 
             # Generate the full sequence of frame_index
-            full_index = pd.Series(range(df[original_first_col_name].min(), df[original_first_col_name].max() + 1))
-            
+            full_index = pd.Series(
+                range(
+                    df[original_first_col_name].min(),
+                    df[original_first_col_name].max() + 1,
+                )
+            )
+
             # Detect missing indices
             missing_indices = full_index[~full_index.isin(df[original_first_col_name])]
-            
+
             # Create rows with NaN for missing indices
             nan_rows = pd.DataFrame({original_first_col_name: missing_indices})
             for col in df.columns[1:]:
                 nan_rows[col] = np.nan
 
             # Append missing rows and sort by frame_index
-            df = pd.concat([df, nan_rows]).sort_values(by=original_first_col_name).reset_index(drop=True)
+            df = (
+                pd.concat([df, nan_rows])
+                .sort_values(by=original_first_col_name)
+                .reset_index(drop=True)
+            )
 
-            numeric_cols = df.select_dtypes(include=[np.number]).columns.drop(original_first_col_name)
+            numeric_cols = df.select_dtypes(include=[np.number]).columns.drop(
+                original_first_col_name
+            )
 
             # Capture the number of decimal places for each column
             decimals_info = {
-                col: df[col].dropna().apply(lambda x: len(str(x).split(".")[1]) if "." in str(x) else 0).max()
+                col: df[col]
+                .dropna()
+                .apply(lambda x: len(str(x).split(".")[1]) if "." in str(x) else 0)
+                .max()
                 for col in numeric_cols
             }
 
             for col in numeric_cols:
                 original_data = df[col].copy()  # Preserve original data
                 if method == "linear":
-                    df[col] = df[col].interpolate(method="linear", limit_direction="both")
+                    df[col] = df[col].interpolate(
+                        method="linear", limit_direction="both"
+                    )
                 elif method == "nearest":
-                    df[col] = df[col].interpolate(method="nearest", limit_direction="both")
+                    df[col] = df[col].interpolate(
+                        method="nearest", limit_direction="both"
+                    )
                 elif method == "kalman":
                     # Apply Kalman filter only to NaN positions
                     observations = df[col].values
@@ -161,7 +181,9 @@ def run_interpolation(method):
                         # Initialize Kalman Filter
                         kf = KalmanFilter()
                         # Use existing data to fit the filter
-                        smoothed_state_means, _ = kf.em(observations, n_iter=5).smooth(observations)
+                        smoothed_state_means, _ = kf.em(observations, n_iter=5).smooth(
+                            observations
+                        )
                         # Update only NaN positions
                         df.loc[nan_mask, col] = smoothed_state_means[nan_mask, 0]
                 elif method == "savgol":
@@ -170,13 +192,21 @@ def run_interpolation(method):
                     nan_mask = np.isnan(observations)
                     if nan_mask.any():
                         # Fill NaNs temporarily for filtering
-                        observations_filled = pd.Series(observations).interpolate(method='linear').fillna(method='bfill').fillna(method='ffill').values
+                        observations_filled = (
+                            pd.Series(observations)
+                            .interpolate(method="linear")
+                            .fillna(method="bfill")
+                            .fillna(method="ffill")
+                            .values
+                        )
                         window_length = (
                             min(7, len(observations_filled))
                             if len(observations_filled) % 2 != 0
                             else min(7, len(observations_filled) - 1)
                         )
-                        filtered_values = savgol_filter(observations_filled, window_length, polyorder=2)
+                        filtered_values = savgol_filter(
+                            observations_filled, window_length, polyorder=2
+                        )
                         # Update only NaN positions
                         df.loc[nan_mask, col] = filtered_values[nan_mask]
                 elif method == "nan":
@@ -187,10 +217,14 @@ def run_interpolation(method):
 
                 # Apply the number of decimal places when saving the data
                 decimals = decimals_info.get(col, 0)
-                df[col] = df[col].apply(lambda x: round(x, decimals) if pd.notna(x) else x)
+                df[col] = df[col].apply(
+                    lambda x: round(x, decimals) if pd.notna(x) else x
+                )
 
             # Save data to CSV, preserving the number formatting
-            dest_file_path = os.path.join(dest_dir, f"{filename.split('.csv')[0]}_{method}_fill.csv")
+            dest_file_path = os.path.join(
+                dest_dir, f"{filename.split('.csv')[0]}_{method}_fill.csv"
+            )
             df.to_csv(dest_file_path, index=False)
 
             # Create a report of the gaps in the frame index and the ranges filled
@@ -200,11 +234,13 @@ def run_interpolation(method):
             with open(report_path, "w") as report_file:
                 report_file.write(f"Gaps detected and filled for file: {filename}\n")
                 report_file.write(f"Method used: {method}\n")
-                
+
                 # Report gaps in the first column where np.diff != 1
                 report_file.write(f"Gaps in {original_first_col_name}:\n")
                 for idx in missing_indices:
-                    report_file.write(f"Gap at index {idx}, missing frame_index: {int(idx)}\n")
+                    report_file.write(
+                        f"Gap at index {idx}, missing frame_index: {int(idx)}\n"
+                    )
 
             # Add file to the list of processed files
             processed_files.append(filename)
@@ -238,15 +274,15 @@ def split_data():
             df_part2 = df.iloc[midpoint:].copy()
 
             # Reset the 'frame' and 'frame_index' columns to start from 0 for the second part
-            df_part2['frame'] = range(len(df_part2))
-            df_part2['frame_index'] = range(len(df_part2))
+            df_part2["frame"] = range(len(df_part2))
+            df_part2["frame_index"] = range(len(df_part2))
 
             # Save the second part with correct 'frame' and 'frame_index' starting from 0
             part2_file_path = os.path.join(
                 dest_dir, f"{filename.split('.csv')[0]}_part2_split.csv"
             )
             df_part2.to_csv(part2_file_path, index=False)
-            
+
             messagebox.showinfo("Split Data", f"Split data saved to {part2_file_path}")
 
 
