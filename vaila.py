@@ -118,6 +118,7 @@ from vaila import (
     plot_3d,
     process_videos_gui,
     run_fill_split_dialog,
+    vaila_and_jump,
 )
 
 
@@ -160,7 +161,7 @@ B1_r1_c4 - Markerless2D   B1_r1_c5 - Markerless3D
 B2_r2_c1 - Vector Coding  B2_r2_c2 - EMG             B2_r2_c3 - Force Plate
 B2_r2_c4 - GNSS/GPS       B2_r2_c5 - MEG/EEG
 
-B3_r3_c1 - HR/ECG         B3_r3_c2 - vailá           B3_r3_c3 - vailá
+B3_r3_c1 - HR/ECG         B3_r3_c2 - vailá           B3_r3_c3 - vailá_and_jump
 B3_r3_c4 - vailá          B3_r3_c5 - vailá
 
 ============================== Tools Available (Frame C) ===================
@@ -468,7 +469,7 @@ class Vaila(tk.Tk):
             B3:
             - HR/ECG
             - vailá
-            - vailá
+            - vailá_and_jump
             - vailá
             - vailá
         """
@@ -493,7 +494,7 @@ class Vaila(tk.Tk):
             row1_frame, text="IMU", width=button_width, command=self.imu_analysis
         )
 
-        # B1_r1_c2 - Motion Capture
+        # B1_r1_c2 - Motion Capture Cluster
         cluster_analysis_btn = tk.Button(
             row1_frame,
             text="Motion Capture Cluster",
@@ -501,7 +502,7 @@ class Vaila(tk.Tk):
             command=self.cluster_analysis,
         )
 
-        # B1_r1_c3 - Motion Capture
+        # B1_r1_c3 - Motion Capture Full Body
         mocap_analysis_btn = tk.Button(
             row1_frame,
             text="Motion Capture Full Body",
@@ -587,11 +588,11 @@ class Vaila(tk.Tk):
         gnss_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         vaila_btn3.pack(side="left", expand=True, fill="x", padx=2, pady=2)
 
-        # 3 - Multimodal Toolbox Analysis: Third row of buttons (HR/ECG, vailá, vailá, vailá)
+        # 3 - Multimodal Toolbox Analysis: Third row of buttons (HR/ECG, vailá, vailá_and_jump, vailá)
         # B3_r3_c1 - HR/ECG
         row3_frame = tk.Frame(analysis_frame)
         row3_frame.pack(fill="x")
-        vaila_btn4 = tk.Button(
+        ecg_btn = tk.Button(
             row3_frame,
             text="HR/ECG",
             width=button_width,
@@ -610,12 +611,12 @@ class Vaila(tk.Tk):
             command=self.show_vaila_message,
         )
 
-        # B3_r3_c3 - vailá
-        vaila_btn6 = tk.Button(
+        # B3_r3_c3 - vaila_and_jump
+        vailajump_btn = tk.Button(
             row3_frame,
-            text="vailá",
+            text="Vertical Jump",
             width=button_width,
-            command=self.show_vaila_message,
+            command=self.vailajump,
         )
 
         # B3_r3_c4 - vailá
@@ -634,9 +635,9 @@ class Vaila(tk.Tk):
             command=self.show_vaila_message,
         )
         # Pack the buttons
-        vaila_btn4.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        ecg_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         vaila_btn5.pack(side="left", expand=True, fill="x", padx=2, pady=2)
-        vaila_btn6.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        vailajump_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         vaila_btn7.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         vaila_btn8.pack(side="left", expand=True, fill="x", padx=2, pady=2)
 
@@ -1299,7 +1300,20 @@ class Vaila(tk.Tk):
     # def vaila
 
     # B_r3_c3
-    # def vaila
+    def vailajump(self):
+        """Runs the VailaJump module.
+
+        This function runs the VailaJump module, which can be used to analyze VailaJump
+        data from CSV files. It processes the VailaJump data to extract relevant
+        metrics such as acceleration, speed, and distance. The module will then
+        generate CSV files with the processed results and plots of the VailaJump
+        signals.
+
+        The user will be prompted to select the directory containing the VailaJump CSV
+        files and input the sampling rate and start and end indices for analysis.
+
+        """
+        vaila_and_jump()
 
     # B_r3_c4
     # def vaila
