@@ -1,3 +1,96 @@
+"""
+vailá - Multimodal Toolbox
+© Paulo Santiago, Guilherme Cesar, Ligia Mochida, Bruno Bedo
+https://github.com/paulopreto/vaila-multimodaltoolbox
+Please see AUTHORS for contributors.
+
+Licensed under GNU Lesser General Public License v3.0
+
+compress_videos_h265.py
+
+Description:
+This script compresses videos in a specified directory to H.265/HEVC format using the FFmpeg tool.
+It provides a GUI for selecting the directory containing the videos, and processes each video,
+saving the compressed versions in a subdirectory named 'compressed_h265'.
+The script supports GPU acceleration using NVIDIA NVENC if available, or falls back to CPU encoding
+with libx265.
+
+The script has been updated to work on Windows, Linux, and macOS.
+It includes cross-platform detection of NVIDIA GPUs to utilize GPU acceleration where possible.
+On systems without an NVIDIA GPU (e.g., macOS), the script defaults to CPU-based compression.
+
+Usage:
+- Run the script to open a GUI, select the directory containing the videos, and the compression process
+  will start automatically.
+
+Requirements:
+- FFmpeg must be installed and accessible in the system PATH.
+- The script is designed to work on Windows, Linux, and macOS.
+
+Dependencies:
+- Python 3.x
+- Tkinter (included with Python)
+- FFmpeg (available in PATH)
+
+NVIDIA GPU Installation and FFmpeg NVENC Support
+
+To use NVIDIA GPU acceleration for video encoding in FFmpeg, follow the steps below for your operating system:
+
+## Windows:
+1. **Install NVIDIA Drivers**:
+   - Download and install the latest NVIDIA drivers from the official site: https://www.nvidia.com/Download/index.aspx.
+   - Ensure your GPU supports NVENC (Kepler series or newer).
+
+2. **Install FFmpeg**:
+   - Download the FFmpeg build with NVENC support from: https://www.gyan.dev/ffmpeg/builds/.
+   - Extract the files, add the `bin` directory to your system's PATH, and verify installation by running:
+     ```bash
+     ffmpeg -encoders | findstr nvenc
+     ```
+   - Look for `h264_nvenc` and `hevc_nvenc` in the output.
+
+## Linux:
+1. **Install NVIDIA Drivers**:
+   - Install the appropriate NVIDIA drivers for your GPU. For Ubuntu, you can add the graphics drivers PPA:
+     ```bash
+     sudo add-apt-repository ppa:graphics-drivers/ppa
+     sudo apt update
+     sudo apt install nvidia-driver-<version>
+     ```
+   - Verify your GPU and driver installation with:
+     ```bash
+     nvidia-smi
+     ```
+
+2. **Install CUDA Toolkit (if necessary)**:
+   - Download and install the CUDA Toolkit from: https://developer.nvidia.com/cuda-downloads.
+   - Follow the installation instructions for your Linux distribution.
+
+3. **Install or Compile FFmpeg with NVENC Support**:
+   - Some Linux distributions provide FFmpeg packages with NVENC support. Check if `h265_nvenc` is available:
+     ```bash
+     ffmpeg -encoders | grep nvenc
+     ```
+   - If not available, you may need to compile FFmpeg with NVENC support:
+     ```bash
+     sudo apt install build-essential pkg-config
+     sudo apt build-dep ffmpeg
+     git clone https://git.ffmpeg.org/ffmpeg.git ffmpeg/
+     cd ffmpeg
+     ./configure --enable-gpl --enable-nonfree --enable-cuda-nvcc --enable-libnpp --enable-libx264 --enable-libx265 --enable-nvenc --enable-cuvid --enable-cuda
+     make -j$(nproc)
+     sudo make install
+     ```
+
+## macOS:
+- Recent versions of macOS do not support NVIDIA GPUs; NVENC acceleration is not available.
+- The script will default to CPU-based encoding on macOS.
+
+Note:
+- Ensure that FFmpeg is installed and accessible in your system PATH.
+- This process may take several hours depending on the size of the videos and the performance of your computer.
+"""
+
 import os
 import subprocess
 import platform
