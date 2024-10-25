@@ -4,7 +4,7 @@ vaila_and_jump.py
 ===============================================================================
 Author: Prof. Paulo R. P. Santiago
 Date: 24 Oct 2024
-Version: 1.0.2
+Version: 1.0.3
 Python Version: 3.11.9
 
 Description:
@@ -20,8 +20,8 @@ Features:
   - Based on time of flight (calculates jump height)
   - Based on measured jump height (uses the height directly)
 - Calculates various metrics for each jump:
-  - Force
-  - Velocity
+  - Required Force
+  - Exit Velocity
   - Potential Energy
   - Kinetic Energy
   - Average Power (if contact time is provided)
@@ -67,42 +67,39 @@ from datetime import datetime
 from pathlib import Path
 from rich import print
 
+def calculate_required_force(mass, velocity, contact_time, gravity=9.81):
+    """Calculate the force required to achieve the given exit velocity."""
+    if pd.notna(contact_time) and contact_time > 0:
+        acceleration = velocity / contact_time
+        return mass * (gravity + acceleration)
+    else:
+        return mass * gravity  # If contact time is not available, fallback to body weight
 
-def calculate_force(mass, gravity=9.81):
-    return mass * gravity
-
-
-def calculate_jump_height(time_of_flight, gravity=9.81):
-    return (gravity * time_of_flight**2) / 8
-
-
-def calculate_power(force, height, contact_time):
-    work = force * height
-    return work / contact_time
-
-
-def calculate_velocity(height, gravity=9.81):
-    return math.sqrt(2 * gravity * height)
-
-
-def calculate_kinetic_energy(mass, velocity):
-    return 0.5 * mass * velocity**2
-
+def calculate_exit_velocity(height, time_of_flight, gravity=9.81):
+    """Calculate the exit velocity based on height or time of flight."""
+    if pd.notna(height):
+        # Use height to calculate exit velocity
+        return math.sqrt(2 * gravity * height)
+    elif pd.notna(time_of_flight):
+        # Use time of flight to calculate exit velocity
+        return (gravity * time_of_flight) / 2
+    else:
+        return None
 
 def calculate_potential_energy(mass, height, gravity=9.81):
     return mass * gravity * height
 
+def calculate_kinetic_energy(mass, velocity):
+    return 0.5 * mass * velocity ** 2
 
 def calculate_average_power(potential_energy, contact_time):
     return potential_energy / contact_time
-
 
 def format_number(num, decimals=3):
     """Format a number to a fixed number of decimal places."""
     if pd.isna(num):
         return ""
     return f"{num:.{decimals}f}"
-
 
 def process_jump_data(input_file, output_dir, use_time_of_flight):
     """
@@ -124,40 +121,34 @@ def process_jump_data(input_file, output_dir, use_time_of_flight):
             if use_time_of_flight:
                 # Calculate height based on time_of_flight
                 time_of_flight = second_value
-                height = calculate_jump_height(time_of_flight)
+                height = (9.81 * time_of_flight ** 2) / 8
             else:
                 # Use height directly
                 height = second_value
                 time_of_flight = None
 
-            # Perform calculations
-            force = calculate_force(mass)
-            velocity = calculate_velocity(height)
+            # Calculate the exit velocity
+            velocity = calculate_exit_velocity(height, time_of_flight)
+
+            # Calculate the required force
+            force = calculate_required_force(mass, velocity, contact_time)
+
+            # Perform energy calculations
             potential_energy = calculate_potential_energy(mass, height)
             kinetic_energy = calculate_kinetic_energy(mass, velocity)
-            total_time = (
-                time_of_flight + contact_time
-                if time_of_flight is not None and pd.notna(contact_time)
-                else None
-            )
-            average_power = (
-                calculate_average_power(potential_energy, contact_time)
-                if pd.notna(contact_time)
-                else None
-            )
+            total_time = time_of_flight + contact_time if time_of_flight is not None and pd.notna(contact_time) else None
+            average_power = calculate_average_power(potential_energy, contact_time) if pd.notna(contact_time) else None
 
             # Append the results for each row
-            results.append(
-                {
-                    "height_m": format_number(height),
-                    "force_N": format_number(force),
-                    "velocity_m/s": format_number(velocity),
-                    "potential_energy_J": format_number(potential_energy),
-                    "kinetic_energy_J": format_number(kinetic_energy),
-                    "average_power_W": format_number(average_power),
-                    "total_time_s": format_number(total_time),
-                }
-            )
+            results.append({
+                'height_m': format_number(height),
+                'required_force_N': format_number(force),
+                'exit_velocity_m/s': format_number(velocity),
+                'potential_energy_J': format_number(potential_energy),
+                'kinetic_energy_J': format_number(kinetic_energy),
+                'average_power_W': format_number(average_power),
+                'total_time_s': format_number(total_time)
+            })
 
         # Convert results to DataFrame
         results_df = pd.DataFrame(results)
@@ -165,15 +156,12 @@ def process_jump_data(input_file, output_dir, use_time_of_flight):
         # Generate output file name with timestamp
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         base_name = os.path.splitext(os.path.basename(input_file))[0]
-        output_file_path = os.path.join(
-            output_dir, f"{base_name}_vjump_{timestamp}.csv"
-        )
+        output_file_path = os.path.join(output_dir, f"{base_name}_vjump_{timestamp}.csv")
         results_df.to_csv(output_file_path, index=False)
 
         print(f"Results saved successfully at: {output_file_path}")
     except Exception as e:
         print(f"An error occurred while processing {input_file}: {str(e)}")
-
 
 def process_all_files_in_directory(target_dir, use_time_of_flight):
     """
@@ -195,39 +183,33 @@ def process_all_files_in_directory(target_dir, use_time_of_flight):
 
     print("All files have been processed successfully.")
 
-
 def vaila_and_jump():
     """
     Main function to handle user input and execute the jump analysis for all .csv files in a directory.
     """
     print(f"Running script: {Path(__file__).name}")
     print(f"Script directory: {Path(__file__).parent.resolve()}")
-
+    
     root = Tk()
     root.withdraw()
 
     # Ask user for the target directory
-    target_dir = filedialog.askdirectory(
-        title="Select the target directory containing .csv files"
-    )
+    target_dir = filedialog.askdirectory(title="Select the target directory containing .csv files")
     if not target_dir:
         messagebox.showwarning("Warning", "No target directory selected.")
         return
 
     # Ask if the data is based on time of flight or height
     use_time_of_flight = messagebox.askyesno(
-        "Data Type",
-        "Are the files based on time of flight data? (Select 'No' if based on jump height)",
+        "Data Type", 
+        "Are the files based on time of flight data? (Select 'No' if based on jump height)"
     )
 
     # Perform the analysis for all .csv files in the selected directory
     process_all_files_in_directory(target_dir, use_time_of_flight)
 
     root.destroy()
-    messagebox.showinfo(
-        "Success", "All .csv files have been processed and results saved."
-    )
-
+    messagebox.showinfo("Success", "All .csv files have been processed and results saved.")
 
 if __name__ == "__main__":
     vaila_and_jump()
