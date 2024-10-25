@@ -82,6 +82,7 @@ from .spectral_features import (
     frequency_quotient,
 )
 from .interpolation_split import run_fill_split_dialog
+from .vaila_and_jump import vaila_and_jump
 
 __all__ = [
     "plot_ellipse_pca",
@@ -155,4 +156,5 @@ __all__ = [
     "energy_content_above_2",
     "frequency_quotient",
     "run_fill_split_dialog",
+    "vaila_and_jump",
 ]
