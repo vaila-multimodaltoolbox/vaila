@@ -152,37 +152,41 @@ sudo chmod +x install_vaila_mac.sh
 
 ## 🔵 For Windows:
 
-1. **Install Anaconda**:
+### 1. **Install Anaconda**
    - Download and install [Anaconda](https://www.anaconda.com/download/success).
-   - Make sure **Conda** is accessible from the terminal.
+   - Ensure that **Conda** is accessible from the terminal after installation.
 
-2. **Download vailá**:
+### 2. **Download vailá**
    - Use **Git** to clone the repository:
      ```bash
      git clone https://github.com/vaila-multimodaltoolbox/vaila
      cd vaila
      ```
    - **Or download the zip file**:
-     - Go to `https://github.com/vaila-multimodaltoolbox/vaila/archive/refs/heads/main.zip` and extract the file.
+     - Go to `https://github.com/vaila-multimodaltoolbox/vaila/archive/refs/heads/main.zip`, download, and extract the contents.
 
-3. **Run the installation script as administrator**:
+### 3. **Run the Installation Script as Administrator**
    - Open **Anaconda PowerShell** as **administrator**.
-   - Navigate to the directory where vailá was downloaded/extracted.
-   - Run the command:
-     ```bash
-     ./install_vaila_win11.ps1
+   - Navigate to the directory where vailá was downloaded or extracted.
+   - Run the installation command:
+     ```powershell
+     ./install_vaila_win.ps1
      ```
 
-4. **Ensure Git Bash is installed**:
-   - If you don’t have Git Bash, [download and install it](https://gitforwindows.org/).
+### 4. **Ensure Git Bash is Installed**
+   - If you do not have Git Bash installed, [download and install it here](https://gitforwindows.org/).
 
-5. **Install FFmpeg and Windows Terminal**:
-   - The script will check if **FFmpeg** and **Windows Terminal** are installed. If they aren't, the script will automatically install them.
+### 5. **Automatic Dependency Installation**
+   - The script will automatically check for and install dependencies like **FFmpeg**, **Windows Terminal**, **PowerShell 7**, and **oh-my-posh** using **winget**, if any of them are missing.
 
-6. **Recommendation**: We recommend that you have **Windows Terminal** installed for an optimal experience. The script will configure a vailá profile in Windows Terminal for easier access and management. If you don't have it installed, the script will attempt to install it via **winget**.
+### 6. **Recommendation: Use Windows Terminal**
+   - For an optimized experience, we recommend having **Windows Terminal** installed. The script will configure a `vailá` profile in Windows Terminal, allowing quick access to `vailá` with a pre-configured environment.
 
-7. **Shortcuts and Configurations**:
-   - The script will automatically create shortcuts for vailá on the Desktop and Start Menu and configure a profile in Windows Terminal.
+### 7. **Automatic Shortcuts and Configurations**
+   - The script will automatically create shortcuts for `vailá` on the Desktop and Start Menu and set up a dedicated profile in Windows Terminal for easy access.
+
+### ⚠️ **After Installation**
+   - After running the script, `vailá` will be installed and ready to use on your Windows system, with all necessary configurations and dependencies in place.
 
 After this, vailá will be installed and ready for use on your Windows system.
 
