@@ -2,32 +2,13 @@
     Script: uninstall_vaila_win.ps1
     Description: Uninstalls the vaila - Multimodal Toolbox from Windows 11,
                  removing the Conda environment, deleting program files from
-                 C:\ProgramData\vaila, removing FFmpeg if installed, 
+                 AppData\Local\vaila, removing FFmpeg if installed, 
                  removing vaila profiles from Windows Terminal, and deleting
                  Start Menu and Desktop shortcuts.
-
-    Usage:
-      1. Right-click the script and select "Run with PowerShell" as Administrator.
-
-    Features:
-      - Removes the 'vaila' Conda environment if it exists.
-      - Deletes the vaila program files from the installation directory (C:\ProgramData\vaila).
-      - Uninstalls FFmpeg if it was installed by the script.
-      - Removes vaila shortcuts from the Start Menu and Desktop.
-      - Removes the vaila profile from Windows Terminal.
-
-    Notes:
-      - Administrator privileges are required to run this script.
-      - Ensure no programs are using the vaila environment before uninstalling.
-
-    Author: Prof. Dr. Paulo R. P. Santiago
-    Date: September 23, 2024
-    Version: 1.3
-    OS: Windows 11
 #>
 
-# Define installation path
-$vailaProgramPath = "C:\ProgramData\vaila"
+# Define installation path in AppData\Local
+$vailaProgramPath = "$env:LOCALAPPDATA\vaila"
 
 # Check if Conda is installed
 If (-Not (Get-Command conda -ErrorAction SilentlyContinue)) {
@@ -53,7 +34,21 @@ If ($envExists) {
     Write-Output "'vaila' Conda environment does not exist."
 }
 
-# Remove FFmpeg installed by the script
+# Uninstall oh-my-posh if installed via winget
+Write-Output "Checking if oh-my-posh is installed..."
+If (Get-Command oh-my-posh -ErrorAction SilentlyContinue) {
+    Write-Output "Uninstalling oh-my-posh..."
+    Try {
+        winget uninstall --id JanDeDobbeleer.OhMyPosh -e
+        Write-Output "oh-my-posh uninstalled successfully."
+    } Catch {
+        Write-Warning "Failed to uninstall oh-my-posh via winget. Skipping."
+    }
+} Else {
+    Write-Output "oh-my-posh is not installed via this script."
+}
+
+# Uninstall FFmpeg if installed by the script
 Write-Output "Checking if FFmpeg is installed..."
 If (Get-Command ffmpeg -ErrorAction SilentlyContinue) {
     Write-Output "Uninstalling FFmpeg..."
@@ -67,7 +62,7 @@ If (Get-Command ffmpeg -ErrorAction SilentlyContinue) {
     Write-Output "FFmpeg is not installed via this script."
 }
 
-# Remove program files from C:\ProgramData\vaila
+# Remove program files from AppData\Local\vaila
 If (Test-Path $vailaProgramPath) {
     Write-Output "Deleting vaila program files from $vailaProgramPath..."
     Remove-Item -Recurse -Force -Path $vailaProgramPath
@@ -76,7 +71,7 @@ If (Test-Path $vailaProgramPath) {
     Write-Output "vaila program files not found at $vailaProgramPath."
 }
 
-# Remove Windows Terminal profile for vaila (using "vaila" without accent)
+# Remove Windows Terminal profile for vaila
 $wtPath = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe"
 If (Test-Path $wtPath) {
     Write-Output "Checking for vaila profile in Windows Terminal settings..."
@@ -84,7 +79,7 @@ If (Test-Path $wtPath) {
     If (Test-Path $settingsPath) {
         $settingsJson = Get-Content -Path $settingsPath -Raw | ConvertFrom-Json
 
-        # Find and remove vaila profile (without accent)
+        # Find and remove vaila profile
         $profileIndex = -1
         For ($i = 0; $i -lt $settingsJson.profiles.list.Count; $i++) {
             if ($settingsJson.profiles.list[$i].name -eq "vaila") {
@@ -108,7 +103,7 @@ If (Test-Path $wtPath) {
     Write-Output "Windows Terminal is not installed, skipping profile removal."
 }
 
-# Remove Desktop shortcut (which still uses "vailá")
+# Remove Desktop shortcut (uses "vailá")
 $desktopShortcutPath = "$env:USERPROFILE\Desktop\vailá.lnk"
 If (Test-Path $desktopShortcutPath) {
     Write-Output "Removing Desktop shortcut..."
@@ -130,4 +125,3 @@ If (Test-Path $startMenuShortcutPath) {
 
 Write-Output "vaila uninstallation completed successfully!"
 Pause
-
