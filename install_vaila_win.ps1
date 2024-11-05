@@ -3,8 +3,7 @@
     Description: Installs or updates the vaila - Multimodal Toolbox on Windows 11,
                  setting up the Conda environment, copying program files to
                  AppData\Local\vaila, installing FFmpeg, configuring Windows
-                 Terminal, adding a profile to it, creating a desktop shortcut
-                 if Windows Terminal is not installed, and adding a Start Menu shortcut.
+                 Terminal, and adding a profile for easy access.
 #>
 
 # Define installation path in AppData\Local
@@ -54,7 +53,7 @@ Add-Content -Path $profilePath -Value "& '$condaPath\shell\condabin\conda-hook.p
 Write-Output "Reloading PowerShell profile to apply changes..."
 . $profilePath
 
-# Check if the 'vaila' Conda environment already exists and create/update
+# Check if the 'vaila' Conda environment exists and create/update it
 Write-Output "Checking if the 'vaila' Conda environment exists..."
 $envExists = conda env list | Select-String -Pattern "^vaila"
 If ($envExists) {
@@ -87,11 +86,11 @@ Try {
     Write-Error "Failed to install moviepy. Error: $_"
 }
 
-# Remove ffmpeg installed via Conda, if any, to avoid conflicts
+# Remove ffmpeg installed via Conda, if any
 Write-Output "Removing ffmpeg installed via Conda, if any..."
 conda remove -n vaila ffmpeg -y
 
-# Check if FFmpeg is installed and install via winget if not
+# Install FFmpeg via winget if not already installed
 If (-Not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
     Write-Output "Installing FFmpeg via winget..."
     Try {
@@ -102,25 +101,15 @@ If (-Not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
     }
 }
 
-# Install Windows Terminal, PowerShell 7, nvim, and oh-my-posh via winget
-Write-Output "Installing Windows Terminal, PowerShell 7, nvim, and oh-my-posh..."
+# Install Windows Terminal and PowerShell 7 via winget
+Write-Output "Installing Windows Terminal and PowerShell 7..."
 Try {
     winget install --id Microsoft.WindowsTerminal -e --source winget
     winget install --id Microsoft.Powershell -e --source winget
-    winget install --id JanDeDobbeleer.OhMyPosh -e --source winget
-    winget install --id Neovim.Neovim -e --source winget
-    Write-Output "Windows Terminal, PowerShell 7, nvim, and oh-my-posh installed successfully."
+    Write-Output "Windows Terminal and PowerShell 7 installed successfully."
 } Catch {
-    Write-Warning "Failed to install one or more applications via winget."
+    Write-Warning "Failed to install Windows Terminal or PowerShell 7 via winget."
 }
-
-# Configure oh-my-posh for PowerShell
-Write-Output "Configuring oh-my-posh for PowerShell..."
-$ohMyPoshConfig = "$env:POSH_THEMES_PATH\jandedobbeleer.omp.json"
-Add-Content -Path $profilePath -Value "`noh-my-posh init pwsh --config '$ohMyPoshConfig' | Invoke-Expression"
-
-# Reload PowerShell profile
-. $profilePath
 
 # Configure the vaila profile in Windows Terminal
 $wtPath = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe"
