@@ -165,8 +165,8 @@ sudo chmod +x install_vaila_mac.sh
    - **Or download the zip file**:
      - Go to `https://github.com/vaila-multimodaltoolbox/vaila/archive/refs/heads/main.zip`, download, and extract the contents.
 
-### 3. **Run the Installation Script as Administrator**
-   - Open **Anaconda PowerShell** as **administrator**.
+### 3. **Run the Installation Script **
+   - Open **Anaconda PowerShell**.
    - Navigate to the directory where vailá was downloaded or extracted.
    - Run the installation command:
      ```powershell
