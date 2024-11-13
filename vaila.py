@@ -195,62 +195,58 @@ class Vaila(tk.Tk):
         """
         Initializes the Vaila application.
 
-        Sets the window title, geometry, button dimensions, and font size based on the operating system.
-        Sets the window icon based on the operating system.
-        Sets the application name for the macOS dock if AppKit is available.
+        - Sets the window title, geometry, button dimensions, and font size based on the operating system.
+        - Configures the window icon based on the operating system.
+        - For macOS, sets the application name in the dock if AppKit is available.
+        - Creates the widgets for the application.
 
-        Calls the create_widgets method to create the application's widgets.
         """
         super().__init__()
         self.title("vailá - 7.9.1822")
-        self.geometry("1280x725")
 
-        # Set button dimensions and font size based on OS
-        self.set_dimensions_based_on_os()  # Chamada para ajustar dimensões e fonte
+        # Adjust dimensions and layout based on the operating system
+        self.set_dimensions_based_on_os()
 
-        # Set window icon based on OS
-        icon_path_ico = os.path.join(
-            os.path.dirname(__file__), "vaila", "images", "vaila.ico"
-        )
-        icon_path_png = os.path.join(
-            os.path.dirname(__file__), "vaila", "images", "vaila_ico_mac.png"
-        )
+        # Configure the window icon based on the operating system
+        icon_path_ico = os.path.join(os.path.dirname(__file__), "vaila", "images", "vaila.ico")
+        icon_path_png = os.path.join(os.path.dirname(__file__), "vaila", "images", "vaila_ico_mac.png")
 
         if platform.system() == "Windows":
-            self.iconbitmap(icon_path_ico)
+            self.iconbitmap(icon_path_ico)  # Set .ico file for Windows
         else:
+            # Set .png icon for macOS and Linux
             img = Image.open(icon_path_png)
             img = ImageTk.PhotoImage(img)
             self.iconphoto(True, img)
 
-        # Set application name for macOS dock
+        # For macOS, set the application name in the dock if AppKit is available
         if platform.system() == "Darwin" and NSBundle is not None:
             NSBundle.mainBundle().infoDictionary()["CFBundleName"] = "Vaila"
 
+        # Call method to create the widgets
         self.create_widgets()
 
     def set_dimensions_based_on_os(self):
         """
-        Adjusts the width of buttons and the font size of text in the application
-        based on the operating system.
+        Adjusts the window dimensions, button width, and font size based on the operating system.
         """
+        if platform.system() == "Darwin":  # macOS
+            self.geometry("1280x725")  # Wider window for macOS
+            self.button_width = 12  # Slightly wider buttons
+            self.font_size = 11  # Standard font size
+        elif platform.system() == "Windows":  # Windows
+            self.geometry("1024x725")  # Compact horizontal size for Windows
+            self.button_width = 13  # Narrower buttons for reduced width
+            self.font_size = 11  # Standard font size
+        elif platform.system() == "Linux":  # Linux
+            self.geometry("1280x725")  # Similar to macOS dimensions for Linux
+            self.button_width = 12  # Wider buttons
+            self.font_size = 11  # Standard font size
+        else:  # Default for other systems
+            self.geometry("1280x725")  # Default dimensions
+            self.button_width = 12  # Default button width
+            self.font_size = 11  # Default font size
 
-        if platform.system() == "Darwin":
-            # Specific adjustments for macOS
-            self.button_width = 10
-            self.font_size = 11
-        elif platform.system() == "Windows":
-            # Specific adjustments for Windows
-            self.button_width = 12
-            self.font_size = 11
-        elif platform.system() == "Linux":
-            # Specific adjustments for Linux
-            self.button_width = 13
-            self.font_size = 11
-        else:
-            # Default values
-            self.button_width = 12
-            self.font_size = 11
 
     def create_widgets(self):
         """

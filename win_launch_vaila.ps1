@@ -5,12 +5,11 @@
 
     Usage:
       1. Open "Anaconda PowerShell Prompt" with administrator privileges.
-      2. Navigate to the directory where this script is located.
-      3. Run the script using: .\win_launch_vaila.ps1
+      2. Run the script using: .\win_launch_vaila.ps1
 
     Features:
       - Activates the 'vaila' Conda environment.
-      - Runs the vailá Python script from the installation directory (C:\ProgramData\vaila).
+      - Runs the vailá Python script from the new installation directory (AppData\Local\vaila).
       - Provides feedback to the user on progress and any issues encountered.
 
     Notes:
@@ -35,11 +34,11 @@ if ($?) {
     Write-Host "'vaila' Conda environment activated successfully." -ForegroundColor Green
 
     # Run the vailá Python script
-    $scriptPath = "C:\ProgramData\vaila\vaila.py"
+    $scriptPath = "$env:LOCALAPPDATA\vaila\vaila.py"
     if (Test-Path $scriptPath) {
         Write-Host "Found vaila.py at $scriptPath" -ForegroundColor Green
         Write-Host "Navigating to the vaila directory and starting the vailá toolbox..." -ForegroundColor Cyan
-        cd "C:\ProgramData\vaila"
+        cd "$env:LOCALAPPDATA\vaila"
         python vaila.py
     } else {
         Write-Host "Error: vaila.py not found at $scriptPath" -ForegroundColor Red
