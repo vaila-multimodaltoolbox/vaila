@@ -170,6 +170,7 @@ sudo chmod +x install_vaila_mac.sh
    - Navigate to the directory where vailá was downloaded or extracted.
    - Run the installation command:
      ```powershell
+     powershell -ExecutionPolicy Bypass -File .\install_vaila_win.ps1
      ./install_vaila_win.ps1
      ```
 
@@ -327,7 +328,10 @@ sudo chmod +x uninstall_vaila_mac.sh
 1. **Run the uninstallation script as Administrator in Anaconda PowerShell Prompt**:
 
 - PowerShell Script:
-  - Execute `.\uninstall_vaila_win.ps1`.
+  ```powershell
+  ExecutionPolicy Bypass -File .\uninstall_vaila_win.ps1
+  .\uninstall_vaila_win.ps1
+  ```
 
 1. **Follow the Instructions Displayed by the Script**:
 
