@@ -65,25 +65,15 @@ If (Test-Path $wtPath) {
     If (Test-Path $settingsPath) {
         $settingsJson = Get-Content -Path $settingsPath -Raw | ConvertFrom-Json
 
-        # Find and remove vaila profile
-        $profileIndex = -1
-        For ($i = 0; $i -lt $settingsJson.profiles.list.Count; $i++) {
-            if ($settingsJson.profiles.list[$i].name -eq "vaila") {
-                $profileIndex = $i
-                break
-            }
-        }
+        # Remove all vaila profiles from the list
+        $updatedProfiles = $settingsJson.profiles.list | Where-Object { $_.name -ne "vaila" }
+        $settingsJson.profiles.list = $updatedProfiles
 
-        If ($profileIndex -ge 0) {
-            Write-Output "Removing vaila profile from Windows Terminal..."
-            $settingsJson.profiles.list.RemoveAt($profileIndex)
-
-            # Save updated settings with UTF-8 encoding
-            $settingsJson | ConvertTo-Json -Depth 100 | Out-File -FilePath $settingsPath -Encoding UTF8
-            Write-Output "vaila profile removed from Windows Terminal."
-        } Else {
-            Write-Output "vaila profile not found in Windows Terminal."
-        }
+        # Save updated settings with UTF-8 encoding
+        $settingsJson | ConvertTo-Json -Depth 100 | Out-File -FilePath $settingsPath -Encoding UTF8
+        Write-Output "vaila profile removed from Windows Terminal."
+    } Else {
+        Write-Output "Windows Terminal settings.json not found. Skipping profile removal."
     }
 } Else {
     Write-Output "Windows Terminal is not installed, skipping profile removal."
