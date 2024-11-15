@@ -120,12 +120,26 @@ def save_events(datac3d, file_name, output_dir):
     """
     print(f"Saving events for {file_name}")
 
-    events = datac3d["parameters"]["EVENT"]["CONTEXTS"]["value"]
-    event_labels = datac3d["parameters"]["EVENT"]["LABELS"]["value"]
-    event_times = datac3d["parameters"]["EVENT"]["TIMES"]["value"][1, :]
-    event_contexts = datac3d["parameters"]["EVENT"]["CONTEXTS"]["value"]
+    # Verificar se os parâmetros necessários para eventos estão disponíveis
+    if "EVENT" not in datac3d["parameters"]:
+        print(f"No events found for {file_name}, saving empty file.")
+        save_empty_file(os.path.join(output_dir, f"{file_name}_events.csv"))
+        return
+
+    event_params = datac3d["parameters"]["EVENT"]
+    required_keys = ["CONTEXTS", "LABELS", "TIMES"]
+    if not all(key in event_params for key in required_keys):
+        print(f"Event parameters incomplete for {file_name}, saving empty file.")
+        save_empty_file(os.path.join(output_dir, f"{file_name}_events.csv"))
+        return
+
+    # Coletar os dados de eventos
+    event_contexts = event_params["CONTEXTS"]["value"]
+    event_labels = event_params["LABELS"]["value"]
+    event_times = event_params["TIMES"]["value"][1, :]  # Apenas os tempos (linha 1)
     marker_freq = datac3d["header"]["points"]["frame_rate"]
 
+    # Construir os dados de eventos
     events_data = []
     for context, label, time in zip(event_contexts, event_labels, event_times):
         frame = int(round(time * marker_freq))
@@ -133,7 +147,7 @@ def save_events(datac3d, file_name, output_dir):
             {"Context": context, "Label": label, "Time": time, "Frame": frame}
         )
 
-    # Save to a CSV file
+    # Salvar para um arquivo CSV
     events_df = pd.DataFrame(events_data)
     events_file_path = os.path.join(output_dir, f"{file_name}_events.csv")
     events_df.to_csv(events_file_path, index=False)
