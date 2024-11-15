@@ -3,7 +3,7 @@
     Description: Installs or updates the vaila - Multimodal Toolbox on Windows 11,
                  setting up the Conda environment, copying program files to
                  AppData\Local\vaila, installing FFmpeg, configuring Windows
-                 Terminal, and adding a profile for easy access.
+                 Terminal, and adding a profile for easy access with shortcuts.
 #>
 
 # Define installation path in AppData\Local
@@ -124,31 +124,37 @@ If (Test-Path $wtPath) {
     # Load settings.json
     $settingsJson = Get-Content -Path $settingsPath -Raw | ConvertFrom-Json
 
-    # Define and add the vaila profile
+    # Remove existing 'vaila' profiles if they exist
+    Write-Output "Removing existing 'vaila' profiles..."
+    $settingsJson.profiles.list = $settingsJson.profiles.list | Where-Object { $_.name -ne "vaila" }
+
+    # Add the new vaila profile
     $vailaProfile = @{
         name = "vaila"
-        commandline = "pwsh.exe -ExecutionPolicy Bypass -NoExit -Command `"& `'$condaPath\shell\condabin\conda-hook.ps1`'; conda activate `'vaila`'; cd `'$vailaProgramPath`'; python `'vaila.py`'"
+        commandline = "pwsh.exe -ExecutionPolicy Bypass -NoExit -Command `"& `'$condaPath\shell\condabin\conda-hook.ps1`'; conda activate `'vaila`'; cd `'C:\Users\paulo\AppData\Local\vaila`'; python `'vaila.py`'"
         startingDirectory = "$vailaProgramPath"
         icon = "$vailaProgramPath\docs\images\vaila_ico.png"
         guid = "{17ce5bfe-17ed-5f3a-ab15-5cd5baafed5b}"
         hidden = $false
     }
+
     $settingsJson.profiles.list += $vailaProfile
     $settingsJson | ConvertTo-Json -Depth 100 | Out-File -FilePath $settingsPath -Encoding UTF8
     Write-Output "vaila profile added to Windows Terminal successfully."
 }
 
-# Create Start Menu shortcut for vaila
-Write-Output "Creating Start Menu shortcut for vaila..."
-$startMenuPath = "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\vaila.lnk"
+# Create a Desktop shortcut for vaila
+Write-Output "Creating Desktop shortcut for vaila..."
+$desktopShortcutPath = "$env:USERPROFILE\Desktop\vaila.lnk"
 $wshell = New-Object -ComObject WScript.Shell
-$startShortcut = $wshell.CreateShortcut($startMenuPath)
-$startShortcut.TargetPath = "pwsh.exe"
-$startShortcut.Arguments = "-ExecutionPolicy Bypass -NoExit -Command `"& `'$condaPath\shell\condabin\conda-hook.ps1`'; conda activate `'vaila`'; cd `'$vailaProgramPath`'; python `'vaila.py`'"
-$startShortcut.IconLocation = "$vailaProgramPath\docs\images\vaila_ico.ico"
-$startShortcut.WorkingDirectory = "$vailaProgramPath"
-$startShortcut.Save()
+$desktopShortcut = $wshell.CreateShortcut($desktopShortcutPath)
+$desktopShortcut.TargetPath = "pwsh.exe"
+$desktopShortcut.Arguments = "-ExecutionPolicy Bypass -NoExit -Command `"& `'$condaPath\shell\condabin\conda-hook.ps1`'; conda activate `'vaila`'; cd `'C:\Users\paulo\AppData\Local\vaila`'; python `'vaila.py`'"
+$desktopShortcut.IconLocation = "$vailaProgramPath\docs\images\vaila_ico.ico"
+$desktopShortcut.WorkingDirectory = "$vailaProgramPath"
+$desktopShortcut.Save()
 
-Write-Output "Start Menu shortcut for vaila created at $startMenuPath."
+Write-Output "Desktop shortcut for vaila created at $desktopShortcutPath."
+
 Write-Output "Installation and configuration completed successfully!"
 Pause
