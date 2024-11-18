@@ -145,7 +145,7 @@ def createortbase(p1, p2, p3, configuration="C"):
         v1 = (p1 - p2) / np.linalg.norm(p1 - p2, axis=1, keepdims=True)
         v2 = (p3 - p2) / np.linalg.norm(p3 - p2, axis=1, keepdims=True)
         v3_ml = (p1 - p3) / np.linalg.norm(p1 - p3, axis=1, keepdims=True)
-        v4_ap = np.cross(v2, v1)
+        v4_ap = np.cross(v1, v2)
         v4_ap /= np.linalg.norm(v4_ap, axis=1, keepdims=True)
         z_axis = np.cross(v3_ml, v4_ap)
         z_axis /= np.linalg.norm(z_axis, axis=1, keepdims=True)
