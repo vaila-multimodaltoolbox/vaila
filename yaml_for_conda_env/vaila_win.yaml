@@ -462,7 +462,7 @@ dependencies:
       - watchdog
       - werkzeug
       - wrapt
-      - 'xonsh[full]
+      - 'xonsh[full]'
       - scikit-learn
       - pykalman
       - ipdb
