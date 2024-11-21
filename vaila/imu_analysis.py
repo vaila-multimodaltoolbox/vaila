@@ -3,8 +3,8 @@
 IMU Analysis Tool - imu_analysis.py
 ================================================================================
 Author: Prof. Ph.D. Paulo Santiago (paulosantiago@usp.br)
-Date: 2024-07-28
-Version: 1.1
+Date: 2024-11-21
+Version: 1.2
 
 Description:
 ------------
@@ -42,6 +42,32 @@ from .filtering import apply_filter
 from .readcsv import select_headers_gui, get_csv_headers
 from .dialogsuser import get_user_inputs
 from rich import print
+
+
+def importc3d(file_path):
+    """Reads C3D file and extracts markers, analog data, and other metadata."""
+    datac3d = ezc3d.c3d(file_path)
+    print(f"\nProcessing file: {file_path}")
+    print(f'Number of markers: {datac3d["parameters"]["POINT"]["USED"]["value"][0]}')
+    
+    point_data = datac3d["data"]["points"]
+    analogs = datac3d["data"]["analogs"]
+    marker_labels = datac3d["parameters"]["POINT"]["LABELS"]["value"]
+    analog_labels = datac3d["parameters"]["ANALOG"]["LABELS"]["value"]
+    marker_freq = datac3d["header"]["points"]["frame_rate"]
+    analog_freq = datac3d["header"]["analogs"]["frame_rate"]
+
+    markers = point_data[0:3, :, :].T.reshape(-1, len(marker_labels) * 3)
+    
+    return (
+        markers,
+        marker_labels,
+        marker_freq,
+        analogs,
+        None,  # Placeholder for points residuals (not used)
+        analog_labels,
+        analog_freq,
+    )
 
 
 def imu_orientations(accelerometer, gyroscope, time, sample_rate, sensor_name):
@@ -313,6 +339,57 @@ def analyze_imu_data():
                 messagebox.showerror(
                     "Error", f"An error occurred while processing {file_name}: {e}"
                 )
+        elif file_type == "c3d" and file_name.endswith(".c3d"):
+            try:
+                _, _, _, analogs, _, analog_labels, analog_freq = importc3d(file_path)
+                df_analogs = pd.DataFrame(
+                    analogs.reshape(
+                        analogs.shape[0] * analogs.shape[1], analogs.shape[2]
+                    ).T,
+                    columns=analog_labels,
+                )
+                if selected_headers:
+                    data = df_analogs[selected_headers]
+                else:
+                    data = df_analogs.iloc[:, :18]  # Default to first 18 channels
+                
+                accelerometer = data.iloc[:, [0, 2, 1]].values / gravity
+                gyroscope = data.iloc[:, [3, 5, 4]].values * (180 / np.pi)
+
+                time = np.linspace(
+                    0, (len(accelerometer) - 1) / analog_freq, len(accelerometer)
+                )
+                tilt, euler, quaternions = imu_orientations(
+                    accelerometer, gyroscope, time, analog_freq, "Sensor"
+                )
+
+                plot_and_save_sensor_data(
+                    time,
+                    gyroscope,
+                    accelerometer,
+                    euler,
+                    tilt,
+                    quaternions,
+                    "Sensor",
+                    base_dir_figures,
+                    file_prefix,
+                )
+
+                save_results_to_csv(
+                    base_dir_processed_data,
+                    time,
+                    gyroscope,
+                    accelerometer,
+                    euler,
+                    tilt,
+                    quaternions,
+                    "Sensor",
+                    file_prefix,
+                )
+            except Exception as e:
+                messagebox.showerror(
+                    "Error", f"An error occurred while processing {file_name}: {e}"
+                )
 
     root.destroy()
     messagebox.showinfo(
@@ -322,3 +399,4 @@ def analyze_imu_data():
 
 if __name__ == "__main__":
     analyze_imu_data()
+
