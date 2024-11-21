@@ -605,7 +605,7 @@ dependencies:
       - pygments
       - prompt-toolkit
       - setproctitle
-      - 'xonsh[full]
+      - 'xonsh[full]'
       - scikit-learn
       - pykalman
       - ipdb
