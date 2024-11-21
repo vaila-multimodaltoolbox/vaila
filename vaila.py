@@ -3,9 +3,9 @@
 vaila.py
 ===============================================================================
 Author: Paulo R. P. Santiago
-Date: 10 Oct 2024
-Version: 1.0.0
-Python Version: 3.11.9
+Date: 21 Nov 2024
+Version: 0.07
+Python Version: 3.11
 
 Description:
 ------------
@@ -202,7 +202,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 7.9.1822")
+        self.title("vailá - 21.11.20224")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -240,11 +240,11 @@ class Vaila(tk.Tk):
             self.font_size = 11  # Standard font size
         elif platform.system() == "Linux":  # Linux
             self.geometry("1280x725")  # Similar to macOS dimensions for Linux
-            self.button_width = 12  # Wider buttons
+            self.button_width = 15  # Wider buttons
             self.font_size = 11  # Standard font size
         else:  # Default for other systems
             self.geometry("1280x725")  # Default dimensions
-            self.button_width = 12  # Default button width
+            self.button_width = 15  # Default button width
             self.font_size = 11  # Default font size
 
 
