@@ -309,7 +309,7 @@ dependencies:
   - pyqt
   - pyqt5-sip
   - pysocks
-  - python
+  - python=3.11.10
   - python-dateutil
   - python-fastjsonschema
   - python-json-logger
