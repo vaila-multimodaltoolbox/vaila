@@ -1,44 +1,33 @@
 """
-Name: imu_analysis.py
-Date: 2024-07-28
-Version: 1.1
+================================================================================
+IMU Analysis Tool - imu_analysis.py
+================================================================================
+Author: Prof. Ph.D. Paulo Santiago (paulosantiago@usp.br)
+Date: 2024-11-21
+Version: 1.2
 
 Description:
+------------
 This script performs IMU sensor data analysis from CSV and C3D files. 
-The script processes accelerometer and gyroscope data, calculates tilt angles and Euler angles,
-and generates graphs and CSV files with the processed results. The script allows the user to 
-select specific headers for processing or, if no selection is made, automatically uses the first 
-18 columns (excluding the time column in the case of CSV, or the first 18 analog channels in the case of C3D).
+It processes accelerometer and gyroscope data, calculates tilt angles and Euler angles,
+and generates graphs and CSV files with the processed results. File names for outputs 
+include the prefix of the processed file.
 
 Features:
 - Support for CSV and C3D files.
 - Processing of accelerometer and gyroscope data.
 - Calculation of tilt angles and Euler angles.
-- Saving graphs in PNG format.
-- Exporting processed data to CSV files.
+- Saving graphs in PNG format with file-specific prefixes.
+- Exporting processed data to uniquely named CSV files.
 - Graphical interface for selecting directories and headers.
-- Automatic processing of default headers if the user opts not to select them manually.
+- Automatic processing of default headers if no selection is made.
 
 Requirements:
 - Python 3.x
 - Libraries: numpy, pandas, imufusion, matplotlib, tkinter, ezc3d, rich
 - Custom modules: filtering, readcsv, dialogsuser
 
-How to Use:
-1. Run the script. You will be prompted to select the file type (CSV or C3D).
-2. Select the directory containing the files for analysis.
-3. Choose the directory where you want to save the results.
-4. Choose whether to manually select headers for all files.
-   - If "Yes," choose a file to define the headers.
-   - If "No," the script will automatically use the first 18 columns (or channels).
-5. The script will process all files in the directory and save the results in the specified directory.
-
-Author:
-Prof. Ph.D. Paulo Santiago (paulosantiago@usp.br)
-
-Version History:
-- 1.0: Initial version.
-- 1.1: Implementation of automatic processing of the first 18 columns/channels and general code improvements.
+================================================================================
 """
 
 import os
@@ -55,10 +44,34 @@ from .dialogsuser import get_user_inputs
 from rich import print
 
 
+def importc3d(file_path):
+    """Reads C3D file and extracts markers, analog data, and other metadata."""
+    datac3d = ezc3d.c3d(file_path)
+    print(f"\nProcessing file: {file_path}")
+    print(f'Number of markers: {datac3d["parameters"]["POINT"]["USED"]["value"][0]}')
+    
+    point_data = datac3d["data"]["points"]
+    analogs = datac3d["data"]["analogs"]
+    marker_labels = datac3d["parameters"]["POINT"]["LABELS"]["value"]
+    analog_labels = datac3d["parameters"]["ANALOG"]["LABELS"]["value"]
+    marker_freq = datac3d["header"]["points"]["frame_rate"]
+    analog_freq = datac3d["header"]["analogs"]["frame_rate"]
+
+    markers = point_data[0:3, :, :].T.reshape(-1, len(marker_labels) * 3)
+    
+    return (
+        markers,
+        marker_labels,
+        marker_freq,
+        analogs,
+        None,  # Placeholder for points residuals (not used)
+        analog_labels,
+        analog_freq,
+    )
+
+
 def imu_orientations(accelerometer, gyroscope, time, sample_rate, sensor_name):
     """Process accelerometer and gyroscope data to compute orientations and plot results."""
-
-    # Calculate tilt angles in radians
     tilt_x_rad = np.arctan2(
         accelerometer[:, 0],
         np.sqrt(accelerometer[:, 1] ** 2 + accelerometer[:, 2] ** 2),
@@ -72,25 +85,20 @@ def imu_orientations(accelerometer, gyroscope, time, sample_rate, sensor_name):
         accelerometer[:, 2],
     )
 
-    # Convert radians to degrees and combine into a single array
     tilt_deg = np.stack(
         (np.degrees(tilt_x_rad), np.degrees(tilt_y_rad), np.degrees(tilt_z_rad)),
         axis=-1,
     )
 
-    # Initialize the AHRS algorithm
     ahrs = imufusion.Ahrs()
     euler = np.empty((len(time), 3))
-
-    # Initialize array numpy to quaternions
-    quaternions = np.empty((len(time), 4))  # Create a four-column array for w, x, y, z
+    quaternions = np.empty((len(time), 4))
 
     for index in range(len(time)):
         ahrs.update_no_magnetometer(
             gyroscope[index], accelerometer[index], (1 / sample_rate)
-        )  # Assuming Hz sampling rate
+        )
         euler[index] = ahrs.quaternion.to_euler()
-        # quaternion in numpy array
         quaternions[index] = [
             ahrs.quaternion.w,
             ahrs.quaternion.x,
@@ -102,9 +110,9 @@ def imu_orientations(accelerometer, gyroscope, time, sample_rate, sensor_name):
 
 
 def plot_and_save_graphs(
-    time, data, labels, title, xlabel, ylabel, sensor_name, save_path
+    time, data, labels, title, xlabel, ylabel, sensor_name, save_path, file_prefix
 ):
-    colors = ["red", "green", "blue"]  # Specific colors for X, Y, and Z axes
+    colors = ["red", "green", "blue"]
     plt.figure(figsize=(10, 6))
     for i, (label, color) in enumerate(zip(labels, colors)):
         plt.plot(time, data[:, i], label=label, color=color)
@@ -113,12 +121,16 @@ def plot_and_save_graphs(
     plt.ylabel(ylabel)
     plt.legend()
     plt.tight_layout()
-    plt.savefig(save_path)
+    save_file_path = os.path.join(
+        save_path, f"{file_prefix}_{sensor_name}_{title.replace(' ', '_')}.png"
+    )
+    plt.savefig(save_file_path)
     plt.close()
+    print(f"Saved plot: {save_file_path}")
 
 
 def save_results_to_csv(
-    base_dir, time, gyroscope, accelerometer, euler, tilt_deg, quaternions, sensor_name
+    base_dir, time, gyroscope, accelerometer, euler, tilt_deg, quaternions, sensor_name, file_prefix
 ):
     results = {
         "Time": time,
@@ -141,8 +153,9 @@ def save_results_to_csv(
     }
 
     df = pd.DataFrame(results)
-    csv_path = os.path.join(base_dir, f"{sensor_name}_results.csv")
+    csv_path = os.path.join(base_dir, f"{file_prefix}_{sensor_name}_results.csv")
     df.to_csv(csv_path, index=False)
+    print(f"Saved CSV: {csv_path}")
 
 
 def plot_and_save_sensor_data(
@@ -154,6 +167,7 @@ def plot_and_save_sensor_data(
     quaternions,
     sensor_name,
     base_dir_figures,
+    file_prefix,
 ):
     plot_and_save_graphs(
         time,
@@ -163,7 +177,8 @@ def plot_and_save_sensor_data(
         "Time (s)",
         "Acceleration (g)",
         sensor_name,
-        f"{base_dir_figures}/{sensor_name}_Accelerometer_Data.png",
+        base_dir_figures,
+        file_prefix,
     )
     plot_and_save_graphs(
         time,
@@ -173,7 +188,8 @@ def plot_and_save_sensor_data(
         "Time (s)",
         "Gyroscope (°/s)",
         sensor_name,
-        f"{base_dir_figures}/{sensor_name}_Gyroscope_Data.png",
+        base_dir_figures,
+        file_prefix,
     )
     plot_and_save_graphs(
         time,
@@ -183,7 +199,8 @@ def plot_and_save_sensor_data(
         "Time (s)",
         "Tilt (°)",
         sensor_name,
-        f"{base_dir_figures}/{sensor_name}_Tilt_Angles.png",
+        base_dir_figures,
+        file_prefix,
     )
     plot_and_save_graphs(
         time,
@@ -193,49 +210,17 @@ def plot_and_save_sensor_data(
         "Time (s)",
         "Euler (°)",
         sensor_name,
-        f"{base_dir_figures}/{sensor_name}_Euler_Angles.png",
-    )
-
-
-def importc3d(dat):
-    datac3d = ezc3d.c3d(dat)
-    print(f"\nProcessing file: {dat}")
-    print(f'Number of markers = {datac3d["parameters"]["POINT"]["USED"]["value"][0]}')
-    point_data = datac3d["data"]["points"]
-    points_residuals = datac3d["data"]["meta_points"]["residuals"]
-    analogs = datac3d["data"]["analogs"]
-    marker_labels = datac3d["parameters"]["POINT"]["LABELS"]["value"]
-    analog_labels = datac3d["parameters"]["ANALOG"]["LABELS"]["value"]
-    markers = point_data[0:3, :, :].T.reshape(-1, len(marker_labels) * 3)
-    marker_freq = datac3d["header"]["points"]["frame_rate"]
-    analog_freq = datac3d["header"]["analogs"]["frame_rate"]
-
-    # Print summary information
-    num_analog_channels = datac3d["parameters"]["ANALOG"]["USED"]["value"][0]
-    print(f"Number of marker labels = {len(marker_labels)}")
-    print(f"Number of analog channels = {num_analog_channels}")
-    print(f"Marker frequency = {marker_freq} Hz")
-    print(f"Analog frequency = {analog_freq} Hz")
-
-    return (
-        markers,
-        marker_labels,
-        marker_freq,
-        analogs,
-        points_residuals,
-        analog_labels,
-        analog_freq,
+        base_dir_figures,
+        file_prefix,
     )
 
 
 def analyze_imu_data():
-    """
-    Analyzes all IMU CSV and C3D files in the specified directory.
-    """
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
     root = Tk()
-    root.withdraw()  # Hide the main Tkinter window
+    root.withdraw()
 
-    # Get user inputs
     user_inputs = get_user_inputs()
     file_type = user_inputs.get("file_type")
     sample_rate = user_inputs.get("sample_rate")
@@ -248,13 +233,11 @@ def analyze_imu_data():
         messagebox.showerror("Error", "Invalid sample rate provided.")
         return
 
-    # Request the input directory from the user
     directory_path = filedialog.askdirectory(title="Select directory to read files")
     if not directory_path:
         messagebox.showerror("Error", "No input directory selected.")
         return
 
-    # Request the output directory from the user
     output_directory = filedialog.askdirectory(
         title="Choose directory to save analysis"
     )
@@ -262,14 +245,12 @@ def analyze_imu_data():
         messagebox.showerror("Error", "No output directory selected.")
         return
 
-    # Ask the user if they want to select headers for all files
     select_headers_for_all = messagebox.askyesno(
         "Header Selection", "Select headers for all files?"
     )
 
     selected_headers = None
     if select_headers_for_all:
-        # Select a file to choose headers from
         selected_file = filedialog.askopenfilename(
             title="Pick file to select headers",
             filetypes=[("CSV files", "*.csv"), ("C3D files", "*.c3d")],
@@ -282,278 +263,140 @@ def analyze_imu_data():
             selected_headers = select_headers_gui(headers)
         elif selected_file.endswith(".c3d"):
             _, _, _, analogs, _, analog_labels, analog_freq = importc3d(selected_file)
-            # Convert analogs to 2D array
-            analogs_2d = analogs.reshape(
-                analogs.shape[0] * analogs.shape[1], analogs.shape[2]
-            )
             df_analogs = pd.DataFrame(
-                analogs_2d.T, columns=analog_labels
-            )  # Convert to DataFrame for easier selection
+                analogs.reshape(
+                    analogs.shape[0] * analogs.shape[1], analogs.shape[2]
+                ).T,
+                columns=analog_labels,
+            )
             selected_headers = select_headers_gui(df_analogs.columns)
-    else:
-        # Caso o usuário selecione "No", usar as 18 primeiras colunas ou canais
-        def process_default_headers(data):
-            return data.iloc[
-                :, 1:19
-            ].values  # Pular a primeira coluna (tempo) e selecionar as próximas 18 colunas
 
-    # Apply the chosen filter to accelerometer and gyroscope data ('butterworth' or 'fir')
     filter_method = "fir"
     gravity = 9.81
 
-    # List all files in the directory
     for file_name in os.listdir(directory_path):
         file_path = os.path.join(directory_path, file_name)
 
         if not os.path.isfile(file_path):
             continue
 
+        file_name_without_extension, _ = os.path.splitext(file_name)
+        file_prefix = file_name_without_extension.replace(" ", "_").replace("-", "_")
+
+        current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+        base_dir_figures = os.path.join(
+            output_directory,
+            "IMU_multimodal_results",
+            f"figure/IMU_{file_prefix}_{current_time}",
+        )
+        base_dir_processed_data = os.path.join(
+            output_directory,
+            "IMU_multimodal_results",
+            f"processed_data/IMU_{file_prefix}_{current_time}",
+        )
+        os.makedirs(base_dir_figures, exist_ok=True)
+        os.makedirs(base_dir_processed_data, exist_ok=True)
+
         if file_type == "csv" and file_name.endswith(".csv"):
             try:
-                # Obter o nome do arquivo sem a extensão
-                file_name_without_extension, file_extension = os.path.splitext(
-                    file_name
+                data = pd.read_csv(file_path)
+                if selected_headers:
+                    data = data[selected_headers]
+                accelerometer = data.iloc[:, [0, 2, 1]].values / gravity
+                gyroscope = data.iloc[:, [3, 5, 4]].values * (180 / np.pi)
+
+                time = np.linspace(
+                    0, (len(accelerometer) - 1) / sample_rate, len(accelerometer)
+                )
+                tilt, euler, quaternions = imu_orientations(
+                    accelerometer, gyroscope, time, sample_rate, "Sensor"
                 )
 
-                # Substituir a extensão com _csv ou _c3d conforme o tipo do arquivo
-                if file_extension == ".csv":
-                    file_name_sanitized = f"{file_name_without_extension}_csv"
-                elif file_extension == ".c3d":
-                    file_name_sanitized = f"{file_name_without_extension}_c3d"
-                else:
-                    file_name_sanitized = file_name_without_extension  # fallback
+                plot_and_save_sensor_data(
+                    time,
+                    gyroscope,
+                    accelerometer,
+                    euler,
+                    tilt,
+                    quaternions,
+                    "Sensor",
+                    base_dir_figures,
+                    file_prefix,
+                )
 
-                # Read the CSV file with selected headers if applicable
-                if selected_headers:
-                    data = pd.read_csv(file_path, usecols=selected_headers).values
-                else:
-                    data = pd.read_csv(file_path)  # Read full CSV file
-                    data = process_default_headers(
-                        data
-                    )  # Use as primeiras 18 colunas após a de tempo
-
-                if data is not None:
-                    dataf = apply_filter(data, sample_rate, method=filter_method)
-                    accelerometer_1 = (
-                        dataf[:, [0, 2, 1]] * np.array([1, 1, -1])
-                    ) / gravity
-                    gyroscope_1 = (dataf[:, [3, 5, 4]] * np.array([1, 1, -1])) * (
-                        180 / np.pi
-                    )
-                    accelerometer_2 = (
-                        dataf[:, [9, 11, 10]] * np.array([1, 1, -1])
-                    ) / gravity
-                    gyroscope_2 = (dataf[:, [12, 14, 13]] * np.array([1, 1, -1])) * (
-                        180 / np.pi
-                    )
-
-                    time = np.linspace(
-                        0,
-                        (len(accelerometer_1) - 1) / sample_rate,
-                        len(accelerometer_1),
-                    )
-
-                    tilt_1, euler_1, quaternions_1 = imu_orientations(
-                        accelerometer_1, gyroscope_1, time, sample_rate, "Sensor Trunk"
-                    )
-                    tilt_2, euler_2, quaternions_2 = imu_orientations(
-                        accelerometer_2, gyroscope_2, time, sample_rate, "Sensor Pelvis"
-                    )
-
-                    print(f"Processed {file_name}:")
-
-                    current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
-                    base_dir_figures = os.path.join(
-                        output_directory,
-                        "IMU_multimodal_results",
-                        f"figure/IMU_{file_name_sanitized}_{current_time}",
-                    )
-                    base_dir_processed_data = os.path.join(
-                        output_directory,
-                        "IMU_multimodal_results",
-                        f"processed_data/IMU_{file_name_sanitized}_{current_time}",
-                    )
-                    os.makedirs(base_dir_figures, exist_ok=True)
-                    os.makedirs(base_dir_processed_data, exist_ok=True)
-
-                    # Plot and save the data for each sensor
-                    plot_and_save_sensor_data(
-                        time,
-                        gyroscope_1,
-                        accelerometer_1,
-                        euler_1,
-                        tilt_1,
-                        quaternions_1,
-                        "Sensor Trunk",
-                        base_dir_figures,
-                    )
-                    plot_and_save_sensor_data(
-                        time,
-                        gyroscope_2,
-                        accelerometer_2,
-                        euler_2,
-                        tilt_2,
-                        quaternions_2,
-                        "Sensor Pelvis",
-                        base_dir_figures,
-                    )
-
-                    # Save processed data for each sensor
-                    save_results_to_csv(
-                        base_dir_processed_data,
-                        time,
-                        gyroscope_1,
-                        accelerometer_1,
-                        euler_1,
-                        tilt_1,
-                        quaternions_1,
-                        "Sensor Trunk",
-                    )
-                    save_results_to_csv(
-                        base_dir_processed_data,
-                        time,
-                        gyroscope_2,
-                        accelerometer_2,
-                        euler_2,
-                        tilt_2,
-                        quaternions_2,
-                        "Sensor Pelvis",
-                    )
-
+                save_results_to_csv(
+                    base_dir_processed_data,
+                    time,
+                    gyroscope,
+                    accelerometer,
+                    euler,
+                    tilt,
+                    quaternions,
+                    "Sensor",
+                    file_prefix,
+                )
             except Exception as e:
                 messagebox.showerror(
                     "Error", f"An error occurred while processing {file_name}: {e}"
                 )
-
         elif file_type == "c3d" and file_name.endswith(".c3d"):
             try:
-                # Obter o nome do arquivo sem a extensão
-                file_name_without_extension, file_extension = os.path.splitext(
-                    file_name
-                )
-
-                # Substituir a extensão com _csv ou _c3d conforme o tipo do arquivo
-                if file_extension == ".csv":
-                    file_name_sanitized = f"{file_name_without_extension}_csv"
-                elif file_extension == ".c3d":
-                    file_name_sanitized = f"{file_name_without_extension}_c3d"
-                else:
-                    file_name_sanitized = file_name_without_extension  # fallback
-
-                # Importar dados do C3D
                 _, _, _, analogs, _, analog_labels, analog_freq = importc3d(file_path)
-
+                df_analogs = pd.DataFrame(
+                    analogs.reshape(
+                        analogs.shape[0] * analogs.shape[1], analogs.shape[2]
+                    ).T,
+                    columns=analog_labels,
+                )
                 if selected_headers:
-                    # Se o usuário selecionou "Yes", usa os headers selecionados
-                    df_analogs = pd.DataFrame(
-                        analogs.reshape(
-                            analogs.shape[0] * analogs.shape[1], analogs.shape[2]
-                        ).T,
-                        columns=analog_labels,
-                    )
-                    analogs_selected = df_analogs[selected_headers].values
+                    data = df_analogs[selected_headers]
                 else:
-                    # Se o usuário selecionou "No", seleciona automaticamente os primeiros 18 canais de `analogs`
-                    analogs_selected = analogs[:, :18, :].reshape(-1, 18)
-
-                # Aplicar o filtro e realizar as análises
-                dataf = apply_filter(
-                    analogs_selected, sample_rate, method=filter_method
-                )
-                accelerometer_1 = (dataf[:, [0, 2, 1]] * np.array([1, 1, -1])) / gravity
-                gyroscope_1 = (dataf[:, [3, 5, 4]] * np.array([1, 1, -1])) * (
-                    180 / np.pi
-                )
-                accelerometer_2 = (
-                    dataf[:, [9, 11, 10]] * np.array([1, 1, -1])
-                ) / gravity
-                gyroscope_2 = (dataf[:, [12, 14, 13]] * np.array([1, 1, -1])) * (
-                    180 / np.pi
-                )
+                    data = df_analogs.iloc[:, :18]  # Default to first 18 channels
+                
+                accelerometer = data.iloc[:, [0, 2, 1]].values / gravity
+                gyroscope = data.iloc[:, [3, 5, 4]].values * (180 / np.pi)
 
                 time = np.linspace(
-                    0, (len(accelerometer_1) - 1) / sample_rate, len(accelerometer_1)
+                    0, (len(accelerometer) - 1) / analog_freq, len(accelerometer)
+                )
+                tilt, euler, quaternions = imu_orientations(
+                    accelerometer, gyroscope, time, analog_freq, "Sensor"
                 )
 
-                tilt_1, euler_1, quaternions_1 = imu_orientations(
-                    accelerometer_1, gyroscope_1, time, sample_rate, "Sensor Trunk"
-                )
-                tilt_2, euler_2, quaternions_2 = imu_orientations(
-                    accelerometer_2, gyroscope_2, time, sample_rate, "Sensor Pelvis"
-                )
-
-                print(f"Processed {file_name}:")
-
-                current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
-                base_dir_figures = os.path.join(
-                    output_directory,
-                    "IMU_multimodal_results",
-                    f"figure/IMU_{file_name_sanitized}_{current_time}",
-                )
-                base_dir_processed_data = os.path.join(
-                    output_directory,
-                    "IMU_multimodal_results",
-                    f"processed_data/IMU_{file_name_sanitized}_{current_time}",
-                )
-                os.makedirs(base_dir_figures, exist_ok=True)
-                os.makedirs(base_dir_processed_data, exist_ok=True)
-
-                # Plot and save the data for each sensor
                 plot_and_save_sensor_data(
                     time,
-                    gyroscope_1,
-                    accelerometer_1,
-                    euler_1,
-                    tilt_1,
-                    quaternions_1,
-                    "Sensor Trunk",
+                    gyroscope,
+                    accelerometer,
+                    euler,
+                    tilt,
+                    quaternions,
+                    "Sensor",
                     base_dir_figures,
-                )
-                plot_and_save_sensor_data(
-                    time,
-                    gyroscope_2,
-                    accelerometer_2,
-                    euler_2,
-                    tilt_2,
-                    quaternions_2,
-                    "Sensor Pelvis",
-                    base_dir_figures,
+                    file_prefix,
                 )
 
-                # Save processed data for each sensor
                 save_results_to_csv(
                     base_dir_processed_data,
                     time,
-                    gyroscope_1,
-                    accelerometer_1,
-                    euler_1,
-                    tilt_1,
-                    quaternions_1,
-                    "Sensor Trunk",
+                    gyroscope,
+                    accelerometer,
+                    euler,
+                    tilt,
+                    quaternions,
+                    "Sensor",
+                    file_prefix,
                 )
-                save_results_to_csv(
-                    base_dir_processed_data,
-                    time,
-                    gyroscope_2,
-                    accelerometer_2,
-                    euler_2,
-                    tilt_2,
-                    quaternions_2,
-                    "Sensor Pelvis",
-                )
-
             except Exception as e:
                 messagebox.showerror(
                     "Error", f"An error occurred while processing {file_name}: {e}"
                 )
 
     root.destroy()
-
     messagebox.showinfo(
         "Success", "All files have been processed and saved successfully."
     )
 
 
-# Main function call
 if __name__ == "__main__":
     analyze_imu_data()
+
