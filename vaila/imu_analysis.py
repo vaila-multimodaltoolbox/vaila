@@ -102,8 +102,7 @@ def imu_orientations(accelerometer, gyroscope, time, sample_rate, sensor_name):
 
 
 def plot_and_save_graphs(
-    time, data, labels, title, xlabel, ylabel, sensor_name, save_path
-):
+    time, data, labels, title, xlabel, ylabel, sensor_name, save_path, file_prefix):
     colors = ["red", "green", "blue"]  # Specific colors for X, Y, and Z axes
     plt.figure(figsize=(10, 6))
     for i, (label, color) in enumerate(zip(labels, colors)):
@@ -113,12 +112,14 @@ def plot_and_save_graphs(
     plt.ylabel(ylabel)
     plt.legend()
     plt.tight_layout()
-    plt.savefig(save_path)
+    save_file_path = f"{save_path}/{file_prefix}_{sensor_name}_{title.replace(' ', '_')}.png"
+    plt.savefig(save_file_path)
     plt.close()
+    print(f"Saved plot: {save_file_path}")
 
 
 def save_results_to_csv(
-    base_dir, time, gyroscope, accelerometer, euler, tilt_deg, quaternions, sensor_name
+    base_dir, time, gyroscope, accelerometer, euler, tilt_deg, quaternions, sensor_name, file_prefix
 ):
     results = {
         "Time": time,
@@ -141,8 +142,9 @@ def save_results_to_csv(
     }
 
     df = pd.DataFrame(results)
-    csv_path = os.path.join(base_dir, f"{sensor_name}_results.csv")
+    csv_path = os.path.join(base_dir, f"{file_prefix}_{sensor_name}_results.csv")
     df.to_csv(csv_path, index=False)
+    print(f"Saved CSV: {csv_path}")
 
 
 def plot_and_save_sensor_data(
@@ -232,6 +234,9 @@ def analyze_imu_data():
     """
     Analyzes all IMU CSV and C3D files in the specified directory.
     """
+    # Print the directory and name of the script being executed
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
     root = Tk()
     root.withdraw()  # Hide the main Tkinter window
 
