@@ -312,6 +312,11 @@ Remove directory `vaila` inside `C:ProgramData\`.
 
 ## Project Structure
 
+<p align="center">
+  <img src="docs/images/vaila_start_gui.png" alt="vailá Start GUI" width="300"/>
+</p>
+
+
 An overview of the project structure:
 
 ```bash
