@@ -157,4 +157,3 @@ Write-Output "Desktop shortcut for vaila created at $desktopShortcutPath."
 
 Write-Output "Installation and configuration completed successfully!"
 Pause
-
