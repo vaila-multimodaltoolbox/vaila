@@ -6,7 +6,7 @@
                  Terminal, and adding a profile for easy access with shortcuts.
 #>
 
-# Define installation path in AppData\Local
+# Define installation path in AppData\Local dynamically for the current user
 $vailaProgramPath = "$env:LOCALAPPDATA\vaila"
 $sourcePath = (Get-Location)
 
@@ -27,7 +27,7 @@ If (-Not (Get-Command conda -ErrorAction SilentlyContinue)) {
 }
 
 # Get Conda installation path
-$condaPath = (conda info --base).Trim()
+$condaPath = (& conda info --base).Trim()
 
 # Initialize Conda for PowerShell if it is not already initialized
 Write-Output "Initializing Conda for PowerShell..."
@@ -40,14 +40,14 @@ Try {
 }
 
 # Add Conda initialization to PowerShell profile
-$profilePath = "$PROFILE"
+$profilePath = $PROFILE
 If (-Not (Test-Path $profilePath)) {
     Write-Output "PowerShell profile not found. Creating it..."
     New-Item -ItemType File -Path $profilePath -Force
 }
 
 Write-Output "Ensuring Conda initialization is added to PowerShell profile..."
-Add-Content -Path $profilePath -Value "& '$condaPath\shell\condabin\conda-hook.ps1'"
+Add-Content -Path $profilePath -Value "`n& '$condaPath\shell\condabin\conda-hook.ps1'"
 
 # Reload PowerShell profile to reflect changes
 Write-Output "Reloading PowerShell profile to apply changes..."
@@ -78,7 +78,7 @@ If ($envExists) {
 
 # Install moviepy using pip in the 'vaila' environment
 Write-Output "Installing moviepy in the 'vaila' environment..."
-& conda activate vaila
+conda activate vaila
 Try {
     pip install moviepy
     Write-Output "moviepy installed successfully."
@@ -125,13 +125,12 @@ If (Test-Path $wtPath) {
     $settingsJson = Get-Content -Path $settingsPath -Raw | ConvertFrom-Json
 
     # Remove existing 'vaila' profiles if they exist
-    Write-Output "Removing existing 'vaila' profiles..."
     $settingsJson.profiles.list = $settingsJson.profiles.list | Where-Object { $_.name -ne "vaila" }
 
     # Add the new vaila profile
     $vailaProfile = @{
         name = "vaila"
-        commandline = "pwsh.exe -ExecutionPolicy Bypass -NoExit -Command `"& `'$condaPath\shell\condabin\conda-hook.ps1`'; conda activate `'vaila`'; cd `'C:\Users\paulo\AppData\Local\vaila`'; python `'vaila.py`'"
+        commandline = "pwsh.exe -ExecutionPolicy Bypass -NoExit -Command `"& `'$condaPath\shell\condabin\conda-hook.ps1`'; conda activate `'vaila`'; cd `'$vailaProgramPath`'; python `'vaila.py`'"
         startingDirectory = "$vailaProgramPath"
         icon = "$vailaProgramPath\docs\images\vaila_ico.png"
         guid = "{17ce5bfe-17ed-5f3a-ab15-5cd5baafed5b}"
@@ -149,7 +148,7 @@ $desktopShortcutPath = "$env:USERPROFILE\Desktop\vaila.lnk"
 $wshell = New-Object -ComObject WScript.Shell
 $desktopShortcut = $wshell.CreateShortcut($desktopShortcutPath)
 $desktopShortcut.TargetPath = "pwsh.exe"
-$desktopShortcut.Arguments = "-ExecutionPolicy Bypass -NoExit -Command `"& `'$condaPath\shell\condabin\conda-hook.ps1`'; conda activate `'vaila`'; cd `'C:\Users\paulo\AppData\Local\vaila`'; python `'vaila.py`'"
+$desktopShortcut.Arguments = "-ExecutionPolicy Bypass -NoExit -Command `"& `'$condaPath\shell\condabin\conda-hook.ps1`'; conda activate `'vaila`'; cd `'$vailaProgramPath`'; python `'vaila.py`'"
 $desktopShortcut.IconLocation = "$vailaProgramPath\docs\images\vaila_ico.ico"
 $desktopShortcut.WorkingDirectory = "$vailaProgramPath"
 $desktopShortcut.Save()
@@ -158,3 +157,4 @@ Write-Output "Desktop shortcut for vaila created at $desktopShortcutPath."
 
 Write-Output "Installation and configuration completed successfully!"
 Pause
+
