@@ -75,6 +75,7 @@ from rich import print
 # Global variable to track if save is requested
 should_save = False
 
+
 def save_coordinates(video_path, coordinates, total_frames):
     base_name = os.path.splitext(os.path.basename(video_path))[0]
     video_dir = os.path.dirname(video_path)
@@ -99,6 +100,7 @@ def save_coordinates(video_path, coordinates, total_frames):
 
 def load_coordinates_from_csv(video_path):
     from tkinter import Tk, filedialog
+
     root = Tk()
     root.withdraw()
     csv_path = filedialog.askopenfilename(
@@ -148,11 +150,17 @@ def play_video(video_path, initial_coordinates=None):
     frame_count = 0
     paused = True
     zoom_level = 1.0
-    coordinates = initial_coordinates if initial_coordinates else {i: [] for i in range(total_frames)}
+    coordinates = (
+        initial_coordinates
+        if initial_coordinates
+        else {i: [] for i in range(total_frames)}
+    )
 
     def draw_points(frame, points, scale_factor):
         for i, (x, y) in enumerate(points):
-            pygame.draw.circle(frame, (0, 255, 0), (int(x * scale_factor), int(y * scale_factor)), 5)
+            pygame.draw.circle(
+                frame, (0, 255, 0), (int(x * scale_factor), int(y * scale_factor)), 5
+            )
             font = pygame.font.Font(None, 24)
             text = font.render(str(i + 1), True, (255, 255, 255))
             frame.blit(text, (int(x * scale_factor) + 10, int(y * scale_factor) - 10))
@@ -162,7 +170,9 @@ def play_video(video_path, initial_coordinates=None):
         control_surface.fill((30, 30, 30))
 
         font = pygame.font.Font(None, 24)
-        text = font.render(f"Frame: {frame_count + 1}/{total_frames}", True, (255, 255, 255))
+        text = font.render(
+            f"Frame: {frame_count + 1}/{total_frames}", True, (255, 255, 255)
+        )
         control_surface.blit(text, (10, 10))
 
         screen.blit(control_surface, (0, height))
@@ -194,13 +204,17 @@ def play_video(video_path, initial_coordinates=None):
                 screen = pygame.display.set_mode((event.w, event.h), pygame.RESIZABLE)
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 x, y = event.pos
-                scale_factor = min(screen.get_width() / width, (screen.get_height() - 50) / height)
+                scale_factor = min(
+                    screen.get_width() / width, (screen.get_height() - 50) / height
+                )
                 if y > height:
                     # Click in the control area (can implement buttons here)
                     pass
                 else:
                     if event.button == 1:  # Left mouse button
-                        coordinates[frame_count].append((x / scale_factor, y / scale_factor))
+                        coordinates[frame_count].append(
+                            (x / scale_factor, y / scale_factor)
+                        )
                     elif event.button == 3:  # Right mouse button
                         if coordinates[frame_count]:
                             coordinates[frame_count].pop()
@@ -215,8 +229,12 @@ def play_video(video_path, initial_coordinates=None):
 
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         frame = pygame.surfarray.make_surface(frame.swapaxes(0, 1))
-        scale_factor = min(screen.get_width() / width, (screen.get_height() - 50) / height)
-        scaled_frame = pygame.transform.scale(frame, (int(width * scale_factor), int(height * scale_factor)))
+        scale_factor = min(
+            screen.get_width() / width, (screen.get_height() - 50) / height
+        )
+        scaled_frame = pygame.transform.scale(
+            frame, (int(width * scale_factor), int(height * scale_factor))
+        )
         screen.blit(scaled_frame, (0, 0))
         draw_points(screen, coordinates[frame_count], scale_factor)
         draw_controls()
@@ -232,6 +250,7 @@ def play_video(video_path, initial_coordinates=None):
 
 def get_video_path():
     from tkinter import Tk, filedialog
+
     root = Tk()
     root.withdraw()
     video_path = filedialog.askopenfilename(
@@ -244,7 +263,9 @@ def get_video_path():
 def main():
     # Print script name and directory
     print(f"[bold green]Running script:[/bold green] {os.path.basename(__file__)}")
-    print(f"[bold blue]Script directory:[/bold blue] {os.path.dirname(os.path.abspath(__file__))}")
+    print(
+        f"[bold blue]Script directory:[/bold blue] {os.path.dirname(os.path.abspath(__file__))}"
+    )
 
     video_path = get_video_path()
     if video_path:
@@ -254,4 +275,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
