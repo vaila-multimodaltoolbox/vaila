@@ -67,115 +67,82 @@ Changelog:
 
 import os
 import pygame
+import cv2
 import pandas as pd
 import numpy as np
-import cv2
-from rich import print
-
-# Global variable to track if save is requested
-should_save = False
 
 
-def save_coordinates(video_path, coordinates, total_frames):
-    base_name = os.path.splitext(os.path.basename(video_path))[0]
-    video_dir = os.path.dirname(video_path)
-    output_file = os.path.join(video_dir, f"{base_name}_getpixel.csv")
-
-    columns = ["frame"] + [f"p{i}_{c}" for i in range(1, 101) for c in ["x", "y"]]
-    df = pd.DataFrame(np.nan, index=range(total_frames), columns=columns)
-    df["frame"] = df.index
-
-    for frame_num, points in coordinates.items():
-        for i, (x, y) in enumerate(points):
-            df.at[frame_num, f"p{i+1}_x"] = x
-            df.at[frame_num, f"p{i+1}_y"] = y
-
-    last_point = max(len(points) for points in coordinates.values())
-    if last_point < 100:
-        df = df.iloc[:, : 1 + 2 * last_point]
-
-    df.to_csv(output_file, index=False)
-    print(f"[bold green]Coordinates saved to:[/bold green] {output_file}")
-
-
-def load_coordinates_from_csv(video_path):
-    from tkinter import Tk, filedialog
-
-    root = Tk()
-    root.withdraw()
-    csv_path = filedialog.askopenfilename(
-        title="Select CSV File with Pre-marked Points",
-        filetypes=[("CSV Files", "*.csv")],
-    )
-    if not csv_path:
-        return None
-
-    df = pd.read_csv(csv_path)
-    coordinates = {}
-
-    for _, row in df.iterrows():
-        frame = int(row["frame"])
-        points = []
-        for i in range(1, (len(row) - 1) // 2 + 1):
-            x = row.get(f"p{i}_x")
-            y = row.get(f"p{i}_y")
-            if not pd.isna(x) and not pd.isna(y):
-                points.append((x, y))
-        coordinates[frame] = points
-
-    print(f"[bold yellow]Loaded coordinates from:[/bold yellow] {csv_path}")
-    return coordinates
-
-
-def play_video(video_path, initial_coordinates=None):
-    global should_save
+def play_video_with_controls(video_path):
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
-        print("[bold red]Error opening video.[/bold red]")
+        print("Error opening video file.")
         return
 
     # Video properties
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    original_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    original_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     fps = int(cap.get(cv2.CAP_PROP_FPS))
 
     # Initialize Pygame
     pygame.init()
-    screen = pygame.display.set_mode((width, height + 50), pygame.RESIZABLE)
-    pygame.display.set_caption("Pixel Coordinate Tool - Pygame")
+    screen_width, screen_height = (
+        pygame.display.Info().current_w,
+        pygame.display.Info().current_h,
+    )
+    window_width = min(original_width, screen_width - 100)
+    window_height = min(original_height, screen_height - 150)
+    screen = pygame.display.set_mode(
+        (window_width, window_height + 80), pygame.RESIZABLE
+    )
+    pygame.display.set_caption("Video Player with Controls")
     clock = pygame.time.Clock()
 
-    # Initialize variables
+    # Scaling factors and zoom
+    zoom_level = 1.0
+    offset_x, offset_y = 0, 0
     frame_count = 0
     paused = True
-    zoom_level = 1.0
-    coordinates = (
-        initial_coordinates
-        if initial_coordinates
-        else {i: [] for i in range(total_frames)}
-    )
-
-    def draw_points(frame, points, scale_factor):
-        for i, (x, y) in enumerate(points):
-            pygame.draw.circle(
-                frame, (0, 255, 0), (int(x * scale_factor), int(y * scale_factor)), 5
-            )
-            font = pygame.font.Font(None, 24)
-            text = font.render(str(i + 1), True, (255, 255, 255))
-            frame.blit(text, (int(x * scale_factor) + 10, int(y * scale_factor) - 10))
+    coordinates = {i: [] for i in range(total_frames)}
 
     def draw_controls():
-        control_surface = pygame.Surface((width, 50))
-        control_surface.fill((30, 30, 30))
+        """
+        Draws the slider and frame information on the screen.
+        Returns the slider's position and dimensions for handling clicks.
+        """
+        slider_surface = pygame.Surface((window_width, 80))
+        slider_surface.fill((30, 30, 30))
 
+        # Draw slider bar
+        slider_width = int(window_width * 0.8)
+        slider_x = (window_width - slider_width) // 2
+        slider_y = 30
+        slider_height = 10
+        pygame.draw.rect(
+            slider_surface,
+            (60, 60, 60),
+            (slider_x, slider_y, slider_width, slider_height),
+        )
+
+        # Draw slider handle
+        slider_pos = slider_x + int((frame_count / total_frames) * slider_width)
+        pygame.draw.circle(
+            slider_surface,
+            (255, 255, 255),
+            (slider_pos, slider_y + slider_height // 2),
+            8,
+        )
+
+        # Draw frame information
         font = pygame.font.Font(None, 24)
-        text = font.render(
+        frame_text = font.render(
             f"Frame: {frame_count + 1}/{total_frames}", True, (255, 255, 255)
         )
-        control_surface.blit(text, (10, 10))
+        slider_surface.blit(frame_text, (10, 10))
 
-        screen.blit(control_surface, (0, height))
+        screen.blit(slider_surface, (0, window_height))
+
+        return slider_x, slider_width, slider_y, slider_height
 
     running = True
     while running:
@@ -191,33 +158,54 @@ def play_video(video_path, initial_coordinates=None):
                     frame_count = min(frame_count + 1, total_frames - 1)
                 elif event.key == pygame.K_LEFT and paused:
                     frame_count = max(frame_count - 1, 0)
+                elif event.key == pygame.K_UP and paused:
+                    frame_count = min(frame_count + 60, total_frames - 1)
+                elif event.key == pygame.K_DOWN and paused:
+                    frame_count = max(frame_count - 60, 0)
                 elif event.key == pygame.K_PLUS or event.key == pygame.K_EQUALS:
                     zoom_level *= 1.2
                 elif event.key == pygame.K_MINUS:
-                    zoom_level /= 1.2
-                elif event.key == pygame.K_c:
-                    # Load coordinates from CSV
-                    loaded_coordinates = load_coordinates_from_csv(video_path)
-                    if loaded_coordinates:
-                        coordinates.update(loaded_coordinates)
-            elif event.type == pygame.VIDEORESIZE:
-                screen = pygame.display.set_mode((event.w, event.h), pygame.RESIZABLE)
+                    zoom_level = max(
+                        0.2, zoom_level / 1.2
+                    )  # Allow zoom out below original size
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 x, y = event.pos
-                scale_factor = min(
-                    screen.get_width() / width, (screen.get_height() - 50) / height
+                slider_x, slider_width, slider_y, slider_height = draw_controls()
+
+                # Handle slider clicks
+                if slider_y <= y <= slider_y + slider_height:
+                    rel_x = x - slider_x
+                    frame_count = int((rel_x / slider_width) * total_frames)
+                    frame_count = max(0, min(frame_count, total_frames - 1))
+                    paused = True
+                elif event.button == 1:  # Left-click to add a marker
+                    if y < window_height:
+                        video_x = (x - offset_x) / zoom_level
+                        video_y = (y - offset_y) / zoom_level
+                        coordinates[frame_count].append((video_x, video_y))
+                elif event.button == 3:  # Right-click to remove the last marker
+                    if coordinates[frame_count]:
+                        coordinates[frame_count].pop()
+                elif event.button == 4:  # Scroll up (move video up)
+                    offset_y = max(offset_y - 20, 0)
+                elif event.button == 5:  # Scroll down (move video down)
+                    offset_y = min(
+                        offset_y + 20, int(original_height * zoom_level) - window_height
+                    )
+            elif (
+                event.type == pygame.MOUSEMOTION and event.buttons[1]
+            ):  # Middle button drag
+                dx, dy = event.rel
+                offset_x = max(
+                    0,
+                    min(offset_x - dx, int(original_width * zoom_level) - window_width),
                 )
-                if y > height:
-                    # Click in the control area (can implement buttons here)
-                    pass
-                else:
-                    if event.button == 1:  # Left mouse button
-                        coordinates[frame_count].append(
-                            (x / scale_factor, y / scale_factor)
-                        )
-                    elif event.button == 3:  # Right mouse button
-                        if coordinates[frame_count]:
-                            coordinates[frame_count].pop()
+                offset_y = max(
+                    0,
+                    min(
+                        offset_y - dy, int(original_height * zoom_level) - window_height
+                    ),
+                )
 
         if not paused:
             frame_count = (frame_count + 1) % total_frames
@@ -227,16 +215,31 @@ def play_video(video_path, initial_coordinates=None):
         if not ret:
             break
 
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        frame = pygame.surfarray.make_surface(frame.swapaxes(0, 1))
-        scale_factor = min(
-            screen.get_width() / width, (screen.get_height() - 50) / height
+        # Apply zoom
+        zoomed_width = int(original_width * zoom_level)
+        zoomed_height = int(original_height * zoom_level)
+        zoomed_frame = cv2.resize(frame, (zoomed_width, zoomed_height))
+        crop_x = max(0, min(zoomed_width - window_width, offset_x))
+        crop_y = max(0, min(zoomed_height - window_height, offset_y))
+        cropped_frame = zoomed_frame[
+            crop_y : crop_y + window_height, crop_x : crop_x + window_width
+        ]
+
+        frame_surface = pygame.surfarray.make_surface(
+            cv2.cvtColor(cropped_frame, cv2.COLOR_BGR2RGB).swapaxes(0, 1)
         )
-        scaled_frame = pygame.transform.scale(
-            frame, (int(width * scale_factor), int(height * scale_factor))
-        )
-        screen.blit(scaled_frame, (0, 0))
-        draw_points(screen, coordinates[frame_count], scale_factor)
+        screen.blit(frame_surface, (0, 0))
+
+        # Draw markers
+        for i, (x, y) in enumerate(coordinates[frame_count]):
+            screen_x, screen_y = int((x * zoom_level) - crop_x), int(
+                (y * zoom_level) - crop_y
+            )
+            pygame.draw.circle(screen, (0, 255, 0), (screen_x, screen_y), 5)
+            font = pygame.font.Font(None, 24)
+            text_surface = font.render(str(i + 1), True, (255, 255, 255))
+            screen.blit(text_surface, (screen_x + 5, screen_y - 15))
+
         draw_controls()
         pygame.display.flip()
         clock.tick(fps)
@@ -244,8 +247,30 @@ def play_video(video_path, initial_coordinates=None):
     cap.release()
     pygame.quit()
 
-    # Save coordinates on exit
+    # Save coordinates to CSV on exit
     save_coordinates(video_path, coordinates, total_frames)
+
+
+def save_coordinates(video_path, coordinates, total_frames):
+    base_name = os.path.splitext(os.path.basename(video_path))[0]
+    video_dir = os.path.dirname(video_path)
+    output_file = os.path.join(video_dir, f"{base_name}_markers.csv")
+
+    columns = ["frame"] + [f"p{i}_{c}" for i in range(1, 101) for c in ["x", "y"]]
+    df = pd.DataFrame(np.nan, index=range(total_frames), columns=columns)
+    df["frame"] = df.index
+
+    for frame_num, points in coordinates.items():
+        for i, (x, y) in enumerate(points):
+            df.at[frame_num, f"p{i+1}_x"] = x
+            df.at[frame_num, f"p{i+1}_y"] = y
+
+    last_point = max(len(points) for points in coordinates.values())
+    if last_point < 100:
+        df = df.iloc[:, : 1 + 2 * last_point]
+
+    df.to_csv(output_file, index=False)
+    print(f"Coordinates saved to: {output_file}")
 
 
 def get_video_path():
@@ -261,16 +286,9 @@ def get_video_path():
 
 
 def main():
-    # Print script name and directory
-    print(f"[bold green]Running script:[/bold green] {os.path.basename(__file__)}")
-    print(
-        f"[bold blue]Script directory:[/bold blue] {os.path.dirname(os.path.abspath(__file__))}"
-    )
-
     video_path = get_video_path()
     if video_path:
-        initial_coordinates = None  # If you want to implement CSV loading
-        play_video(video_path, initial_coordinates)
+        play_video_with_controls(video_path)
 
 
 if __name__ == "__main__":
