@@ -155,5 +155,18 @@ $desktopShortcut.Save()
 
 Write-Output "Desktop shortcut for vaila created at $desktopShortcutPath."
 
+# Create a Start Menu shortcut for vaila
+Write-Output "Creating Start Menu shortcut for vaila..."
+$startMenuPath = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\vaila.lnk"
+$startMenuShortcut = $wshell.CreateShortcut($startMenuPath)
+$startMenuShortcut.TargetPath = "pwsh.exe"
+$startMenuShortcut.Arguments = "-ExecutionPolicy Bypass -NoExit -Command `"& `'$condaPath\shell\condabin\conda-hook.ps1`'; conda activate `'vaila`'; cd `'$vailaProgramPath`'; python `'vaila.py`'"
+$startMenuShortcut.IconLocation = "$vailaProgramPath\docs\images\vaila_ico.ico"
+$startMenuShortcut.WorkingDirectory = "$vailaProgramPath"
+$startMenuShortcut.Save()
+
+Write-Output "Start Menu shortcut for vaila created at $startMenuPath."
+
 Write-Output "Installation and configuration completed successfully!"
 Pause
+
