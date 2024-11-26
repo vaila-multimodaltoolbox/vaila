@@ -1,9 +1,79 @@
 """
-Code Name: dlt2d.py
-Version: v0.02
-Date and Time: 2024-09-30
-Creator: vailá
-Email: vailamultimodaltoolbox@gmail.com
+Script: dlt2d.py
+Author: vailá
+Version: 0.02
+Last Updated: November 26, 2024
+
+Description:
+    This script calculates the Direct Linear Transformation (DLT) parameters for 2D coordinate transformations. 
+    It uses pixel coordinates from video calibration data and corresponding real-world coordinates to compute 
+    the DLT parameters for each frame in a dataset.
+
+    The script also allows users to create a template REF2D file from a pixel file, which can then be edited 
+    manually to include real-world coordinates. The main functionality includes reading input files, 
+    performing DLT calculations, and saving the results to an output file.
+
+New Features:
+    - Automatic generation of REF2D templates from pixel coordinate files.
+    - Validation of input coordinate pairs to ensure compatibility before processing.
+    - Detailed logging of DLT parameter calculation for each frame.
+    - User-friendly graphical interface for file selection using Tkinter.
+    - Integration with the Rich library for enhanced console output.
+
+Usage:
+    1. Run the script to start the Direct Linear Transformation (DLT) process.
+    2. A graphical interface will prompt you to select:
+       - A pixel coordinate file (CSV format) for calibration.
+       - (Optional) Create a REF2D template file or use an existing REF2D file for real-world coordinates.
+    3. The script processes the input files and calculates the DLT parameters.
+    4. The calculated parameters are saved as a `.dlt2d` CSV file in the same directory as the input pixel file.
+
+How to Execute:
+    1. Ensure you have all dependencies installed:
+       - Install numpy: `pip install numpy`
+       - Install pandas: `pip install pandas`
+       - Install rich: `pip install rich`
+    2. Open a terminal and navigate to the directory where `dlt2d.py` is located.
+    3. Run the script using Python:
+
+       python dlt2d.py
+
+    4. Follow the graphical prompts to select input files and process the data.
+
+Requirements:
+    - Python 3.11.9
+    - Numpy (`pip install numpy`)
+    - Pandas (`pip install pandas`)
+    - Rich (`pip install rich`)
+    - Tkinter (usually included with Python installations)
+
+Output:
+    - REF2D Template File (`*.ref2d`):
+      A template file for real-world coordinates created from the pixel file.
+    - DLT Parameters File (`*.dlt2d`):
+      A CSV file containing the DLT parameters for each processed frame.
+
+Output Structure:
+    - Frame: The frame index from the input pixel file.
+    - DLT Parameters: The 8 calculated DLT parameters for each frame.
+
+Example Workflow:
+    1. Select a pixel coordinate CSV file containing calibration data.
+    2. Choose to create a REF2D template file or use an existing REF2D file with real-world coordinates.
+    3. Edit the REF2D template file to include the real-world coordinates.
+    4. Re-run the script and process the files to generate the DLT parameters.
+
+License:
+    This program is free software: you can redistribute it and/or modify it under the terms of
+    the GNU General Public License as published by the Free Software Foundation, either version 3
+    of the License, or (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+    without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+    See the GNU General Public License for more details.
+
+    You should have received a copy of the GNU GPLv3 (General Public License Version 3) along with this program.
+    If not, see <https://www.gnu.org/licenses/>.
 """
 
 import os
