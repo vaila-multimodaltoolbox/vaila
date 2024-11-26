@@ -49,7 +49,7 @@ def importc3d(file_path):
     datac3d = ezc3d.c3d(file_path)
     print(f"\nProcessing file: {file_path}")
     print(f'Number of markers: {datac3d["parameters"]["POINT"]["USED"]["value"][0]}')
-    
+
     point_data = datac3d["data"]["points"]
     analogs = datac3d["data"]["analogs"]
     marker_labels = datac3d["parameters"]["POINT"]["LABELS"]["value"]
@@ -58,7 +58,7 @@ def importc3d(file_path):
     analog_freq = datac3d["header"]["analogs"]["frame_rate"]
 
     markers = point_data[0:3, :, :].T.reshape(-1, len(marker_labels) * 3)
-    
+
     return (
         markers,
         marker_labels,
@@ -130,7 +130,15 @@ def plot_and_save_graphs(
 
 
 def save_results_to_csv(
-    base_dir, time, gyroscope, accelerometer, euler, tilt_deg, quaternions, sensor_name, file_prefix
+    base_dir,
+    time,
+    gyroscope,
+    accelerometer,
+    euler,
+    tilt_deg,
+    quaternions,
+    sensor_name,
+    file_prefix,
 ):
     results = {
         "Time": time,
@@ -352,7 +360,7 @@ def analyze_imu_data():
                     data = df_analogs[selected_headers]
                 else:
                     data = df_analogs.iloc[:, :18]  # Default to first 18 channels
-                
+
                 accelerometer = data.iloc[:, [0, 2, 1]].values / gravity
                 gyroscope = data.iloc[:, [3, 5, 4]].values * (180 / np.pi)
 
@@ -399,4 +407,3 @@ def analyze_imu_data():
 
 if __name__ == "__main__":
     analyze_imu_data()
-
