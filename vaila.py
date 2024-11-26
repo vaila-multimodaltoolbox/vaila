@@ -208,8 +208,12 @@ class Vaila(tk.Tk):
         self.set_dimensions_based_on_os()
 
         # Configure the window icon based on the operating system
-        icon_path_ico = os.path.join(os.path.dirname(__file__), "vaila", "images", "vaila.ico")
-        icon_path_png = os.path.join(os.path.dirname(__file__), "vaila", "images", "vaila_ico_mac.png")
+        icon_path_ico = os.path.join(
+            os.path.dirname(__file__), "vaila", "images", "vaila.ico"
+        )
+        icon_path_png = os.path.join(
+            os.path.dirname(__file__), "vaila", "images", "vaila_ico_mac.png"
+        )
 
         if platform.system() == "Windows":
             self.iconbitmap(icon_path_ico)  # Set .ico file for Windows
@@ -246,7 +250,6 @@ class Vaila(tk.Tk):
             self.geometry("1280x725")  # Default dimensions
             self.button_width = 15  # Default button width
             self.font_size = 11  # Default font size
-
 
     def create_widgets(self):
         """
