@@ -150,6 +150,56 @@ sudo chmod +x install_vaila_mac.sh
 
 ---
 
+## 🔵 For Windows:
+
+### 1. **Install Anaconda**
+   - Download and install [Anaconda](https://www.anaconda.com/download/success).
+   - Ensure that **Conda** is accessible from the terminal after installation.
+
+### 2. **Download *vailá***
+   - Use **Git** to clone the repository:
+     ```bash
+     git clone https://github.com/vaila-multimodaltoolbox/vaila
+     cd vaila
+     ```
+   - **Or download the zip file**:
+     - Go to [*vailá* GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila), download the `.zip` file, and extract the contents.
+
+### 3. **Run the Installation Script**
+   - Open **PowerShell** (with Anaconda initialized) or **Anaconda PowerShell Prompt**.
+   - Navigate to the directory where *vailá* was downloaded or extracted.
+   - Execute the installation script:
+     ```powershell
+     powershell -ExecutionPolicy Bypass -File .\install_vaila_win.ps1
+     ```
+
+### 4. **Automatic Configuration**
+   - The script will:
+     - Set up the Conda environment using `yaml_for_conda_env/vaila_win.yaml`.
+     - Copy *vailá* program files to `C:\Users\<YourUser>\AppData\Local\vaila`.
+     - Initialize Conda for PowerShell.
+     - Install **FFmpeg**, **Windows Terminal**, and **PowerShell 7** using **winget** (if not already installed).
+     - Add a profile for *vailá* in **Windows Terminal** for quick access.
+     - Create shortcuts for launching *vailá*:
+       - **Desktop shortcut**: A shortcut will be created on your desktop.
+       - **Start Menu shortcut**: A shortcut will be added to the Windows Start Menu.
+
+### ⚠️ **Important Notes**
+   - Ensure **Conda** is accessible from the command line before running the script.
+   - The installation script dynamically configures paths, so no manual adjustments are necessary for user-specific directories.
+
+### 5. **Launching *vailá***
+   - After installation, you can launch *vailá*:
+     - Using the Desktop shortcut.
+     - From the **Windows Start Menu** under *vailá*.
+     - From **Windows Terminal** via the pre-configured *vailá* profile.
+     - Manually, by running the following commands:
+       ```powershell
+       conda activate vaila
+       python vaila.py
+       ```
+---
+
 ## Running the Application
 
 ### Running the Application After installation, you can launch *vailá* from your applications menu or directly from the terminal, depending on your operating system.
