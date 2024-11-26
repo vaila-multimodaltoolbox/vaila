@@ -363,11 +363,9 @@ def analyze_data_2d(
     data, output_dir, file_name, fs, plate_width, plate_height, timestamp
 ):
     """Analyzes selected 2D data and saves the results."""
-
     print(f"Starting analysis for file: {file_name}")
 
-    # Keep the original data in 'data'
-    # Apply the Butterworth filter to the data, creating 'dataf'
+    # Apply the Butterworth filter to the data
     try:
         print("Applying Butterworth filter...")
         dataf = butter_filter(
@@ -375,32 +373,25 @@ def analyze_data_2d(
         )
     except ValueError as e:
         print(f"Filtering error: {e}")
-        messagebox.showerror(
-            "Filtering Error", f"An error occurred during filtering:\n{e}"
-        )
         return
 
-    # Extract variables from filtered data 'dataf'
+    # Extract filtered CoP data
     cop_x_f = dataf[:, 0]  # Filtered CoP in the X direction (ML)
     cop_y_f = dataf[:, 1]  # Filtered CoP in the Y direction (AP)
 
-    # Create time vector based on the sampling frequency
+    # Create time vector
     N = len(cop_x_f)
-    T = N / fs  # Total duration
+    T = N / fs
     time = np.linspace(0, (len(cop_x_f) - 1) / fs, len(cop_x_f))
 
-    # Calculate mean values of ML and AP coordinates
+    # Mean values and centered coordinates
     mean_ML = np.mean(cop_x_f)
     mean_AP = np.mean(cop_y_f)
-
-    # Centered coordinates
     X_n = cop_x_f - mean_ML
     Y_n = cop_y_f - mean_AP
 
-    # Radius
+    # Radius and covariance
     R_n = np.sqrt(X_n**2 + Y_n**2)
-
-    # Covariance
     COV = np.mean(X_n * Y_n)
 
     # Velocity components
@@ -419,28 +410,25 @@ def analyze_data_2d(
 
     # Compute spectral features
     print("Computing spectral features...")
-    # ML direction
     total_power_ml = total_power(freqs_ml, psd_ml)
-    power_freq_50_ml = power_frequency_50(freqs_ml, psd_ml)
-    power_freq_95_ml = power_frequency_95(freqs_ml, psd_ml)
-    power_mode_ml = power_mode(freqs_ml, psd_ml)
-    centroid_freq_ml = centroid_frequency(freqs_ml, psd_ml)
-    freq_dispersion_ml = frequency_dispersion(freqs_ml, psd_ml)
-    energy_below_0_5_ml = energy_content_below_0_5(freqs_ml, psd_ml)
-    energy_0_5_2_ml = energy_content_0_5_2(freqs_ml, psd_ml)
-    energy_above_2_ml = energy_content_above_2(freqs_ml, psd_ml)
-    freq_quotient_ml = frequency_quotient(freqs_ml, psd_ml)
-
-    # AP direction
     total_power_ap = total_power(freqs_ap, psd_ap)
+    power_freq_50_ml = power_frequency_50(freqs_ml, psd_ml)
     power_freq_50_ap = power_frequency_50(freqs_ap, psd_ap)
+    power_freq_95_ml = power_frequency_95(freqs_ml, psd_ml)
     power_freq_95_ap = power_frequency_95(freqs_ap, psd_ap)
+    power_mode_ml = power_mode(freqs_ml, psd_ml)
     power_mode_ap = power_mode(freqs_ap, psd_ap)
+    centroid_freq_ml = centroid_frequency(freqs_ml, psd_ml)
     centroid_freq_ap = centroid_frequency(freqs_ap, psd_ap)
+    freq_dispersion_ml = frequency_dispersion(freqs_ml, psd_ml)
     freq_dispersion_ap = frequency_dispersion(freqs_ap, psd_ap)
+    energy_below_0_5_ml = energy_content_below_0_5(freqs_ml, psd_ml)
     energy_below_0_5_ap = energy_content_below_0_5(freqs_ap, psd_ap)
+    energy_0_5_2_ml = energy_content_0_5_2(freqs_ml, psd_ml)
     energy_0_5_2_ap = energy_content_0_5_2(freqs_ap, psd_ap)
+    energy_above_2_ml = energy_content_above_2(freqs_ml, psd_ml)
     energy_above_2_ap = energy_content_above_2(freqs_ap, psd_ap)
+    freq_quotient_ml = frequency_quotient(freqs_ml, psd_ml)
     freq_quotient_ap = frequency_quotient(freqs_ap, psd_ap)
 
     # Compute MSD for a time interval Δt
@@ -469,77 +457,85 @@ def analyze_data_2d(
     sway_density_ml = compute_sway_density(X_n, fs, radius=0.3)
     sway_density_ap = compute_sway_density(Y_n, fs, radius=0.3)
 
-    # Update metrics dictionary
-    metrics = {
-        "Total Duration (s)": T,
-        "Number of Points": N,
-        "Sampling Frequency (Hz)": fs,
-        "Mean ML (cm)": mean_ML,
-        "Mean AP (cm)": mean_AP,
-        "Min ML (cm)": np.min(X_n),
-        "Max ML (cm)": np.max(X_n),
-        "Min AP (cm)": np.min(Y_n),
-        "Max AP (cm)": np.max(Y_n),
-        "RMS ML (cm)": rms_ml,
-        "RMS AP (cm)": rms_ap,
-        "Covariance (cm²)": COV,
-        "Total Path Length (cm)": total_path_length,
-        "Mean Speed ML (cm/s)": mean_speed_ml,
-        "Mean Speed AP (cm/s)": mean_speed_ap,
-        "Mean Velocity Norm (cm/s)": mean_velocity_norm,
-        "MSD ML (cm²)": msd_ml,
-        "MSD AP (cm²)": msd_ap,
-        "Zero Crossings ML": zero_crossings_ml,
-        "Zero Crossings AP": zero_crossings_ap,
-        "Number of Peaks ML": num_peaks_ml,
-        "Number of Peaks AP": num_peaks_ap,
-        "Total Power ML": total_power_ml,
-        "Total Power AP": total_power_ap,
-        "Power Frequency 50 ML": power_freq_50_ml,
-        "Power Frequency 50 AP": power_freq_50_ap,
-        "Power Frequency 95 ML": power_freq_95_ml,
-        "Power Frequency 95 AP": power_freq_95_ap,
-        "Power Mode ML": power_mode_ml,
-        "Power Mode AP": power_mode_ap,
-        "Centroid Frequency ML": centroid_freq_ml,
-        "Centroid Frequency AP": centroid_freq_ap,
-        "Frequency Dispersion ML": freq_dispersion_ml,
-        "Frequency Dispersion AP": freq_dispersion_ap,
-        "Energy Content Below 0.5 ML": energy_below_0_5_ml,
-        "Energy Content Below 0.5 AP": energy_below_0_5_ap,
-        "Energy Content 0.5-2 ML": energy_0_5_2_ml,
-        "Energy Content 0.5-2 AP": energy_0_5_2_ap,
-        "Energy Content Above 2 ML": energy_above_2_ml,
-        "Energy Content Above 2 AP": energy_above_2_ap,
-        "Frequency Quotient ML": freq_quotient_ml,
-        "Frequency Quotient AP": freq_quotient_ap,
-    }
-
-    # Define output path to save files
-    output_path = os.path.join(output_dir, f"{file_name}_cop_analysis_{timestamp}")
-
-    # Save metrics to CSV
-    print("Saving metrics to CSV...")
-    save_metrics_to_csv(metrics, output_path)
-
-    # Plot and save stabilogram using centered data and time vector
-    print("Plotting stabilogram...")
-    plot_stabilogram(time, X_n, Y_n, output_path)
-
-    # Plot and save power spectrum
-    print("Plotting power spectrum...")
-    plot_power_spectrum(freqs_ml, psd_ml, freqs_ap, psd_ap, output_path)
-
     # Calculate and plot confidence ellipse
-    print("Calculating and plotting confidence ellipse...")
+    print("Calculating confidence ellipse...")
     area, angle, bounds, ellipse_data = plot_ellipse_pca(
         np.column_stack((X_n, Y_n)), confidence=0.95
     )
+
+    # Update metrics dictionary with all required variables
+    metrics = {
+        "Total_Duration_s": T,
+        "Number_of_Points": N,
+        "Sampling_Frequency_Hz": fs,
+        "Mean_ML_cm": mean_ML,
+        "Mean_AP_cm": mean_AP,
+        "Min_ML_cm": np.min(X_n),
+        "Max_ML_cm": np.max(X_n),
+        "Min_AP_cm": np.min(Y_n),
+        "Max_AP_cm": np.max(Y_n),
+        "RMS_ML_cm": rms_ml,
+        "RMS_AP_cm": rms_ap,
+        "Covariance_cm2": COV,
+        "Total_Path_Length_cm": total_path_length,
+        "Mean_Speed_ML_cmps": mean_speed_ml,
+        "Mean_Speed_AP_cmps": mean_speed_ap,
+        "Mean_Velocity_Norm_cmps": mean_velocity_norm,
+        "Sway_Area_cm2": area,
+        "Ellipse_Angle_degrees": angle,
+        "MSD_ML_cm2": msd_ml,
+        "MSD_AP_cm2": msd_ap,
+        "Zero_Crossings_ML": zero_crossings_ml,
+        "Zero_Crossings_AP": zero_crossings_ap,
+        "Number_of_Peaks_ML": num_peaks_ml,
+        "Number_of_Peaks_AP": num_peaks_ap,
+        "Total_Power_ML": total_power_ml,
+        "Total_Power_AP": total_power_ap,
+        "Power_Frequency_50_ML": power_freq_50_ml,
+        "Power_Frequency_50_AP": power_freq_50_ap,
+        "Power_Frequency_95_ML": power_freq_95_ml,
+        "Power_Frequency_95_AP": power_freq_95_ap,
+        "Power_Mode_ML": power_mode_ml,
+        "Power_Mode_AP": power_mode_ap,
+        "Centroid_Frequency_ML": centroid_frequency(freqs_ml, psd_ml),
+        "Centroid_Frequency_AP": centroid_frequency(freqs_ap, psd_ap),
+        "Frequency_Dispersion_ML": freq_dispersion_ml,
+        "Frequency_Dispersion_AP": freq_dispersion_ap,
+        "Energy_Content_Below_0.5_ML": energy_below_0_5_ml,
+        "Energy_Content_Below_0.5_AP": energy_below_0_5_ap,
+        "Energy_Content_0.5_2_ML": energy_0_5_2_ml,
+        "Energy_Content_0.5_2_AP": energy_0_5_2_ap,
+        "Energy_Content_Above_2_ML": energy_above_2_ml,
+        "Energy_Content_Above_2_AP": energy_above_2_ap,
+        "Frequency_Quotient_ML": freq_quotient_ml,
+        "Frequency_Quotient_AP": freq_quotient_ap,
+    }
+
+    # Save metrics to CSV
+    print("Saving metrics to CSV...")
+    metrics_file = os.path.join(output_dir, f"{file_name}_metrics.csv")
+    save_metrics_to_csv(metrics, metrics_file)
+
+    # Plot and save stabilogram
+    print("Plotting stabilogram...")
+    stabilogram_file = os.path.join(output_dir, f"{file_name}_stabilogram.png")
+    plot_stabilogram(time, X_n, Y_n, stabilogram_file)
+
+    # Plot power spectrum
+    print("Plotting power spectrum...")
+    power_spectrum_file = os.path.join(output_dir, f"{file_name}_power_spectrum.png")
+    plot_power_spectrum(freqs_ml, psd_ml, freqs_ap, psd_ap, power_spectrum_file)
+
+    # Plot CoP pathway with confidence ellipse
+    print("Plotting CoP pathway with ellipse...")
+    cop_pathway_file = os.path.join(output_dir, f"{file_name}_cop_pathway.png")
     plot_cop_pathway_with_ellipse(
-        X_n, Y_n, area, angle, ellipse_data, file_name, output_path
+        X_n, Y_n, area, angle, ellipse_data, file_name, cop_pathway_file
     )
 
-    # Call plot_final_figure with the precomputed ellipse data
+    # Create final figure
+    print("Creating final figure...")
+    final_figure_file = os.path.join(output_dir, f"{file_name}_final_figure.png")
     plot_final_figure(
         time,
         X_n,
@@ -549,12 +545,14 @@ def analyze_data_2d(
         freqs_ap,
         psd_ap,
         metrics,
-        output_path,
+        final_figure_file,
         area,
         angle,
         bounds,
         ellipse_data,
     )
+
+    print(f"Analysis completed for file: {file_name}")
 
 
 def main():
