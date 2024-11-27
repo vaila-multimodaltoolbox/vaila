@@ -8,8 +8,8 @@
 # vailá - Multimodal Toolbox environment
 # This file sets up the conda environment for the vailá - Multimodal Toolbox.
 # 
-# Install this environment with: conda env create -f vaila_mac.yaml
-# Update this environment with: conda env update -f vaila_mac.yaml
+# Install this environment with: conda env create -f vaila_win.yaml
+# Update this environment with: conda env update -f vaila_win.yaml
 #
 # Remove this environment with: conda remove -n vaila --all
 
@@ -309,7 +309,7 @@ dependencies:
   - pyqt
   - pyqt5-sip
   - pysocks
-  - python=3.11.10
+  - python=3.11
   - python-dateutil
   - python-fastjsonschema
   - python-json-logger
@@ -466,4 +466,4 @@ dependencies:
       - scikit-learn
       - pykalman
       - ipdb
-      - pygame   
+      - pygame
