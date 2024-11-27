@@ -539,11 +539,18 @@ def butterworthfilt(data, cutoff=59, Fs=1000):
     """
     Applies a Butterworth filter to the data.
     """
-    pad_length = 100
-    padded_data = np.pad(data, (pad_length, pad_length), "edge")
-    b, a = butter(4, cutoff / (Fs / 2), "low")
-    filtered_padded = filtfilt(b, a, padded_data)
-    filtered_data = filtered_padded[pad_length:-pad_length]
+    nyquist = Fs / 2
+    # Ensure the cutoff frequency is an integer
+    cutoff = int(cutoff)
+    # Adjust the cutoff frequency if necessary
+    while cutoff >= nyquist:
+        # Halve the cutoff frequency and ensure it's at least 1 Hz
+        cutoff = max(cutoff // 2, 1)
+        print(
+            f"The cutoff frequency has been adjusted to {cutoff} Hz due to low sampling frequency."
+        )
+    b, a = butter(4, cutoff / nyquist, "low")
+    filtered_data = filtfilt(b, a, data)
     return filtered_data
 
 
