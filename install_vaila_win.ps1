@@ -1,9 +1,8 @@
 <#
     Script: install_vaila_win.ps1
     Description: Installs or updates the vaila - Multimodal Toolbox on Windows 11,
-                 setting up the Conda environment, copying program files to
-                 AppData\Local\vaila, installing FFmpeg, configuring Windows
-                 Terminal, and adding a profile for easy access with shortcuts.
+                 setting up the Conda environment, configuring MediaPipe, and
+                 ensuring all dependencies are properly installed.
 #>
 
 # Define installation path in AppData\Local dynamically for the current user
@@ -76,14 +75,14 @@ If ($envExists) {
     }
 }
 
-# Install moviepy using pip in the 'vaila' environment
-Write-Output "Installing moviepy in the 'vaila' environment..."
+# Install dependencies using pip
+Write-Output "Installing additional dependencies in the 'vaila' environment..."
 conda activate vaila
 Try {
-    pip install moviepy
-    Write-Output "moviepy installed successfully."
+    pip install mediapipe moviepy
+    Write-Output "mediapipe and moviepy installed successfully."
 } Catch {
-    Write-Error "Failed to install moviepy. Error: $_"
+    Write-Error "Failed to install mediapipe or moviepy. Error: $_"
 }
 
 # Remove ffmpeg installed via Conda, if any
@@ -142,6 +141,21 @@ If (Test-Path $wtPath) {
     Write-Output "vaila profile added to Windows Terminal successfully."
 }
 
+# Grant full permissions to the MediaPipe model directory in the Conda environment
+$mediapipeModelDir = "$condaPath\envs\vaila\Lib\site-packages\mediapipe\modules\pose_landmark"
+Write-Output "Granting full permissions to the directory $mediapipeModelDir..."
+
+If (Test-Path $mediapipeModelDir) {
+    Try {
+        Start-Process "icacls.exe" -ArgumentList "`"$mediapipeModelDir`" /grant Users:(OI)(CI)F /T" -Wait -NoNewWindow
+        Write-Output "Permissions successfully granted for $mediapipeModelDir."
+    } Catch {
+        Write-Warning "Failed to grant permissions for $mediapipeModelDir. Details: $_"
+    }
+} Else {
+    Write-Warning "Directory $mediapipeModelDir not found. No permissions were changed."
+}
+
 # Create a Desktop shortcut for vaila
 Write-Output "Creating Desktop shortcut for vaila..."
 $desktopShortcutPath = "$env:USERPROFILE\Desktop\vaila.lnk"
@@ -154,18 +168,6 @@ $desktopShortcut.WorkingDirectory = "$vailaProgramPath"
 $desktopShortcut.Save()
 
 Write-Output "Desktop shortcut for vaila created at $desktopShortcutPath."
-
-# Create a Start Menu shortcut for vaila
-Write-Output "Creating Start Menu shortcut for vaila..."
-$startMenuPath = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\vaila.lnk"
-$startMenuShortcut = $wshell.CreateShortcut($startMenuPath)
-$startMenuShortcut.TargetPath = "pwsh.exe"
-$startMenuShortcut.Arguments = "-ExecutionPolicy Bypass -NoExit -Command `"& `'$condaPath\shell\condabin\conda-hook.ps1`'; conda activate `'vaila`'; cd `'$vailaProgramPath`'; python `'vaila.py`'"
-$startMenuShortcut.IconLocation = "$vailaProgramPath\docs\images\vaila_ico.ico"
-$startMenuShortcut.WorkingDirectory = "$vailaProgramPath"
-$startMenuShortcut.Save()
-
-Write-Output "Start Menu shortcut for vaila created at $startMenuPath."
 
 Write-Output "Installation and configuration completed successfully!"
 Pause
