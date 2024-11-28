@@ -2,82 +2,6 @@
 ================================================================================
 Gait Data Analysis Toolkit - grf_gait.py
 ================================================================================
-Author: Paulo Santiago
-Date: 28 Nov 2024
-Version: 1.0
-Python Version: 3.x
-
-Description:
-------------
-This script processes gait data from force platforms, analyzing a single
-contact strike to compute key metrics, including:
-- Peak forces, impulse, rate of force development (RFD), and contact time.
-
-The results are visualized through interactive plots and saved to CSV files for
-further analysis.
-
-Key Functionalities:
----------------------
-1. Data Selection:
-   - Allows the user to select an input CSV file containing gait data.
-   - Prompts the user to specify output directories.
-   - Prompts the user for input parameters (sampling frequency, thresholds, etc.).
-2. Data Processing:
-   - Normalizes data, applies Butterworth filters, and computes key biomechanical metrics.
-3. Visualization:
-   - Generates and saves plots for force-time curves with relevant markers and highlighted regions.
-4. Output:
-   - Saves results to a CSV file and generates plots for the analyzed contact strike.
-
-Input:
-------
-- CSV File:
-   The CSV file should contain force data recorded from a force platform during gait.
-   The file must include a column for vertical ground reaction force (VGRF).
-
-   Example format:
-   Sample, GRF (N)
-   0, 50.25
-   1, 51.60
-   2, 49.80
-   ...
-
-- User Input:
-   - Sampling frequency (Fs in Hz).
-   - Threshold for activity detection.
-
-Output:
--------
-- CSV File:
-   A CSV file containing results for key metrics such as:
-   * Peak force
-   * Impulse
-   * Rate of force development (RFD)
-   * Contact time
-
-- Plot Files:
-   PNG and SVG plots of force-time curves, highlighting key events.
-
-How to Run:
------------
-1. Ensure required dependencies are installed:
-   pip install numpy pandas matplotlib scipy
-2. Run the script:
-   python grf_gait.py
-3. Follow on-screen prompts to select data and define parameters.
-
-License:
---------
-This script is provided "as is," without warranty. It is intended for academic 
-and research purposes only.
-
-================================================================================
-"""
-
-"""
-================================================================================
-Gait Data Analysis Toolkit - grf_gait.py
-================================================================================
 Author: [Your Name]
 Date: [Current Date]
 Version: 1.0
@@ -147,6 +71,111 @@ License:
 This script is provided "as is," without warranty. It is intended for academic 
 and research purposes only.
 
+================================================================================
+"""
+
+"""
+================================================================================
+Force Platform Data Analysis Toolkit - force_cube_fig.py
+================================================================================
+Author: Prof. Dr. Paulo R. P. Santiago Ligia
+Date: 9 September 2024
+Version: 0.5
+Python Version: 3.11
+
+Description:
+------------
+This script processes biomechanical data from force platforms, analyzing 
+the vertical ground reaction force (VGRF) to compute key metrics, including:
+- Peak forces, time intervals, impulse, rate of force development (RFD), 
+  and stiffness parameters.
+The results are visualized through interactive plots and saved to CSV files for 
+further analysis. The script allows batch processing of multiple files and provides 
+descriptive statistics for all analyzed data.
+
+Key Functionalities:
+---------------------
+1. Data Selection: 
+   - Allows the user to select input CSV files containing biomechanical data.
+   - Prompts the user to specify output directories.
+   - Prompts the user for input parameters (sampling frequency, thresholds, etc.).
+2. Data Processing: 
+   - Normalizes data, applies Butterworth filters, and computes key biomechanical metrics.
+   - Computes metrics such as peak force, impulse, and rate of force development.
+3. Visualization: 
+   - Generates and saves plots for force-time curves with relevant markers and highlighted regions.
+4. Statistical Analysis: 
+   - Provides descriptive statistics and optional profiling reports using pandas and ydata_profiling.
+5. Batch Processing: 
+   - Processes all CSV files in the selected source directory.
+
+Input:
+------
+- CSV Files: 
+   Each CSV file should contain biomechanical data, specifically force data recorded 
+   from a force platform. The file must include a column for vertical ground reaction force (VGRF).
+   Example format:
+   Sample, Force (N)
+   0, 50.25
+   1, 51.60
+   2, 49.80
+   ...
+
+- User Input: 
+   The user will input various parameters through a graphical interface, including:
+   - Sidefoot (R/L)
+   - Dominance (R/L)
+   - Quality (integer)
+   - Threshold for activity detection
+   - Sampling frequency (Fs in Hz)
+   - Whether to generate a profiling report.
+
+Output:
+-------
+- CSV Files: 
+   A CSV file for each input file, containing results for key metrics such as:
+   * Peak force at 40 ms and 100 ms
+   * Impulse over different time intervals
+   * Rate of force development (RFD)
+   * Stiffness parameters
+   * Total contact time and time to reach peak forces
+
+- Plot Files: 
+   PNG and SVG plots of force-time curves, highlighting important events such as peak forces, 
+   rate of force development, and impact transient.
+
+- Statistical Report: 
+   A summary CSV file containing descriptive statistics for the processed files.
+   Optionally, a profiling report in HTML format for each file.
+
+How to Run:
+-----------
+1. Ensure that all dependencies are installed, including numpy, pandas, matplotlib, scipy, 
+   ydata_profiling, rich, and tkinter. You can install these using pip.
+2. Run the script from the terminal:
+   python force_cube_fig.py
+3. A graphical interface will guide you to:
+   - Select the source directory containing CSV files.
+   - Select the output directory where results will be saved.
+   - Specify input parameters such as sampling frequency, sidefoot, and dominance.
+4. The script will process all files in the selected directory and generate CSV results 
+   and plots for each file.
+
+License:
+--------
+This script is licensed under the GNU General Public License v3.0 (GPLv3). 
+You may redistribute and modify the script under these terms. See the LICENSE file 
+or visit https://www.gnu.org/licenses/gpl-3.0.html for more details.
+
+Disclaimer:
+-----------
+This script is provided "as is" without warranty of any kind. It is intended for 
+academic and research purposes only. The author is not liable for any damage or 
+loss resulting from its use.
+
+Changelog:
+----------
+- 2024-09-09: Initial release with core biomechanical analysis functions.
 ================================================================================
 """
 
@@ -1177,10 +1206,10 @@ def makefig3(
 
             # Ajustando o limite y do gráfico em y
             max_active_segment_data = np.max(active_segment_data)
-            if max_active_segment_data > 3.7:
+            if max_active_segment_data > 2.5:
                 ax3[i].set_ylim(0, max_active_segment_data + 0.1)
             else:
-                ax3[i].set_ylim(0, 3.7)
+                ax3[i].set_ylim(0, 2.5)
 
             # Get current ticks and add custom tick for 40ms
             current_ticks = np.append(
@@ -1594,10 +1623,10 @@ def makefig4(
 
             # Ajustando o limite y do gráfico em y
             max_active_segment_data = np.max(active_segment_data)
-            if max_active_segment_data > 3.7:
+            if max_active_segment_data > 2.5:
                 ax4[i].set_ylim(0, max_active_segment_data + 0.1)
             else:
-                ax4[i].set_ylim(0, 3.7)
+                ax4[i].set_ylim(0, 2.5)
 
             # Get current ticks and add custom tick for 40ms
             current_ticks = np.append(
