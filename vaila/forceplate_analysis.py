@@ -4,7 +4,8 @@ forceplate_analysis.py
 ================================================================================
 Author: Prof. Paulo Santiago
 Date: 9 September 2024
-Version: 0.6
+Update: 28 November 2024 
+Version: 0.7
 
 Description:
 ------------
@@ -133,8 +134,10 @@ def choose_analysis_type():
 
     choice_window = tk.Toplevel()
     choice_window.title("Choose Analysis Type")
+    # Set the desired size of the window (e.g., 500x300) and center it
+    choice_window.geometry("300x500")  # Width x Height
 
-    tk.Label(choice_window, text="Select which analysis to run:").pack(pady=10)
+    tk.Label(choice_window, text="Select which analysis to run:").pack(pady=17)
 
     btn_force_cube = tk.Button(
         choice_window, text="Force Cube Analysis", command=select_force_cube_fig
@@ -164,10 +167,10 @@ def choose_analysis_type():
     # New button for "Gait Analysis"
     btn_gait_analysis = tk.Button(
         choice_window,
-        text="Gait Analysis (Single Strike)",
+        text="Gait Analysis (Fz vertical)",
         command=select_gait_analysis,
     )
-    btn_gait_analysis.pack(pady=5)
+    btn_gait_analysis.pack(pady=7)
 
     choice_window.mainloop()
 
