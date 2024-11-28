@@ -156,6 +156,8 @@ sudo chmod +x install_vaila_mac.sh
 
 > *vailá* values freedom and the goodwill to learn. If you are not the owner of your computer and do not have permission to perform the installation, we recommend doing it on your own computer. If you are prevented from installing software, it means you are not prepared to liberate yourself, make your modifications, and create, which is the philosophy of *vailá!*
 
+If you need any further adjustments or have additional requests, feel free to let me know!
+
 ### 1. **Install Anaconda**
    - Download and install [Anaconda](https://www.anaconda.com/download/success).
    - Ensure that **Conda** is accessible from the terminal after installation.
@@ -168,6 +170,7 @@ sudo chmod +x install_vaila_mac.sh
      ```
    - **Or download the zip file**:
      - Go to [*vailá* GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila), download the `.zip` file, and extract the contents.
+     - **Included the Reminder**: Added a note in both the **Download *vailá*** section and the **Important Notes** section to remind users to rename the directory from `vaila-main` to `vaila` if they downloaded the zip file.
 
 ### 3. **Run the Installation Script**
    - Open **PowerShell** (with Anaconda initialized) or **Anaconda PowerShell Prompt**.
