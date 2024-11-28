@@ -5,6 +5,13 @@
                  ensuring all dependencies are properly installed.
 #>
 
+# Check for administrative privileges
+If (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator"))
+{
+    Write-Warning "Este script precisa ser executado como Administrador."
+    Exit
+}
+
 # Define installation path in AppData\Local dynamically for the current user
 $vailaProgramPath = "$env:LOCALAPPDATA\vaila"
 $sourcePath = (Get-Location)
@@ -169,6 +176,24 @@ $desktopShortcut.Save()
 
 Write-Output "Desktop shortcut for vaila created at $desktopShortcutPath."
 
+# Create Start Menu shortcut for vaila
+Write-Output "Creating Start Menu shortcut for vaila..."
+
+$startMenuPath = "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\vaila"
+If (-Not (Test-Path $startMenuPath)) {
+    Write-Output "Creating directory $startMenuPath..."
+    New-Item -ItemType Directory -Force -Path $startMenuPath
+}
+
+$startMenuShortcutPath = "$startMenuPath\vaila.lnk"
+$startMenuShortcut = $wshell.CreateShortcut($startMenuShortcutPath)
+$startMenuShortcut.TargetPath = "pwsh.exe"
+$startMenuShortcut.Arguments = "-ExecutionPolicy Bypass -NoExit -Command `"& `'$condaPath\shell\condabin\conda-hook.ps1`'; conda activate `'vaila`'; cd `'$vailaProgramPath`'; python `'vaila.py`'"
+$startMenuShortcut.IconLocation = "$vailaProgramPath\docs\images\vaila_ico.ico"
+$startMenuShortcut.WorkingDirectory = "$vailaProgramPath"
+$startMenuShortcut.Save()
+
+Write-Output "Start Menu shortcut for vaila created at $startMenuShortcutPath."
+
 Write-Output "Installation and configuration completed successfully!"
 Pause
-
