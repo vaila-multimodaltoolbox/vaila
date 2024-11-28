@@ -7,6 +7,13 @@
                  Start Menu and Desktop shortcuts.
 #>
 
+# Check for administrative privileges
+If (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator"))
+{
+    Write-Warning "Este script precisa ser executado como Administrador."
+    Exit
+}
+
 # Define installation path in AppData\Local
 $vailaProgramPath = "$env:LOCALAPPDATA\vaila"
 
@@ -17,7 +24,7 @@ If (-Not (Get-Command conda -ErrorAction SilentlyContinue)) {
 }
 
 # Get Conda installation path
-$condaPath = (conda info --base).Trim()
+$condaPath = (& conda info --base).Trim()
 
 # Remove the 'vaila' Conda environment
 Write-Output "Checking if the 'vaila' Conda environment exists..."
@@ -25,7 +32,7 @@ $envExists = conda env list | Select-String -Pattern "^vaila"
 If ($envExists) {
     Write-Output "Removing the 'vaila' Conda environment..."
     Try {
-        conda env remove -n vaila
+        conda env remove -n vaila -y
         Write-Output "'vaila' Conda environment removed successfully."
     } Catch {
         Write-Error "Failed to remove the 'vaila' environment. Error: $_"
@@ -79,8 +86,8 @@ If (Test-Path $wtPath) {
     Write-Output "Windows Terminal is not installed, skipping profile removal."
 }
 
-# Remove Desktop shortcut (uses "vailá")
-$desktopShortcutPath = "$env:USERPROFILE\Desktop\vailá.lnk"
+# Remove Desktop shortcut
+$desktopShortcutPath = "$env:USERPROFILE\Desktop\vaila.lnk"
 If (Test-Path $desktopShortcutPath) {
     Write-Output "Removing Desktop shortcut..."
     Remove-Item $desktopShortcutPath -Force
@@ -89,14 +96,22 @@ If (Test-Path $desktopShortcutPath) {
     Write-Output "Desktop shortcut not found."
 }
 
-# Remove Start Menu shortcut (uses "vaila")
-$startMenuShortcutPath = "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\vaila.lnk"
+# Remove Start Menu shortcut
+$startMenuShortcutPath = "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\vaila\vaila.lnk"
 If (Test-Path $startMenuShortcutPath) {
     Write-Output "Removing Start Menu shortcut..."
     Remove-Item $startMenuShortcutPath -Force
     Write-Output "Start Menu shortcut removed."
 } Else {
     Write-Output "Start Menu shortcut not found."
+}
+
+# Remove Start Menu folder if empty
+$startMenuFolderPath = "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\vaila"
+If ((Test-Path $startMenuFolderPath) -and ((Get-ChildItem $startMenuFolderPath | Measure-Object).Count -eq 0)) {
+    Write-Output "Removing empty Start Menu folder..."
+    Remove-Item $startMenuFolderPath -Force
+    Write-Output "Start Menu folder removed."
 }
 
 Write-Output "vaila uninstallation completed successfully!"
