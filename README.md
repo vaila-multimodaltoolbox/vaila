@@ -354,7 +354,7 @@ sudo chmod +x uninstall_vaila_mac.sh
 
 - The script will:
   - Remove the `vaila` Conda environment.
-  - Delete the `C:\ProgramData\vaila` directory.
+  - Delete the `C:\Users\your_user_name_here\AppData\Local\vaila` directory.
   - Remove the Windows Terminal profile (settings.json file).
   - Delete the desktop shortcut if it exists.
 
@@ -366,7 +366,7 @@ sudo chmod +x uninstall_vaila_mac.sh
 conda remove -n vaila --all
 ```
 
-Remove directory `vaila` inside `C:ProgramData\`.
+Remove directory `vaila` inside `C:\Users\your_user_name_here\AppData\Local\vaila`.
 
 ---
 
