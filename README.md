@@ -152,6 +152,10 @@ sudo chmod +x install_vaila_mac.sh
 
 ## 🔵 For Windows:
 
+### **Important Notice Before Installation**
+
+> **vailá values freedom and the goodwill to learn. If you are not the owner of your computer and do not have permission to perform the installation, we recommend doing it on your own computer. If you are prevented from installing software, it means you are not prepared to liberate yourself, make your modifications, and create, which is the philosophy of vailá!**
+
 ### 1. **Install Anaconda**
    - Download and install [Anaconda](https://www.anaconda.com/download/success).
    - Ensure that **Conda** is accessible from the terminal after installation.
