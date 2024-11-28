@@ -152,6 +152,9 @@ sudo chmod +x install_vaila_mac.sh
 
 ## 🔵 For Windows:
 
+## YouTube How to install *vailá* Windows 11
+[How to Install Vailá on Windows 11 | Step-by-Step Guide](https://youtu.be/w2iZfeD_j30)
+
 ### **Important Notice Before Installation**
 
 > *vailá* values freedom and the goodwill to learn. If you are not the owner of your computer and do not have permission to perform the installation, we recommend doing it on your own computer. If you are prevented from installing software, it means you are not prepared to liberate yourself, make your modifications, and create, which is the philosophy of *vailá!*
