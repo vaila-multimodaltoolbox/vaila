@@ -5,7 +5,7 @@ Force Platform Data Analysis Toolkit - force_cube_fig.py
 Author: Prof. Dr. Paulo R. P. Santiago Ligia
 Date: 9 September 2024
 Version: 0.5
-Python Version: 3.11.9
+Python Version: 3.11
 
 Description:
 ------------

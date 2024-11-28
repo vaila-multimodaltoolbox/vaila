@@ -4,7 +4,7 @@ forceplate_analysis.py
 ================================================================================
 Author: Prof. Paulo Santiago
 Date: 9 September 2024
-Version: 0.5
+Version: 0.6
 
 Description:
 ------------
@@ -12,8 +12,8 @@ This script serves as the central control interface for the VAILA (Virtual Analy
 for Interactive Learning in Biomechanics) toolbox, providing a user-friendly graphical 
 user interface (GUI) for selecting and executing various biomechanical analysis scripts. 
 The analyses offered in this toolbox support the study and evaluation of postural control, 
-dynamic balance, and force measurements, which are critical in both clinical and research 
-settings.
+dynamic balance, gait data, and force measurements, which are critical in both clinical 
+and research settings.
 
 Key Analyses Supported:
 -----------------------
@@ -26,7 +26,9 @@ Key Analyses Supported:
    countermovement jump to assess athletic performance, muscle power, and explosiveness.
 4. Noise Signal Fixing: Identifies and corrects noise artifacts in force signals, ensuring 
    data accuracy for subsequent analyses.
-5. Calculate CoP: Executes a new process to calculate the CoP data.
+5. Calculate CoP: Executes a process to calculate the CoP data.
+6. Gait Analysis (Single Strike): Analyzes a single contact strike in gait data, calculating 
+   key metrics such as peak force, impulse, and rate of force development.
 
 Functionalities:
 ----------------
@@ -47,6 +49,7 @@ Modules and Packages Required:
   * force_cmj: For analyzing countermovement jump dynamics.
   * fixnoise: For correcting noise in force data.
   * cop_calculate: For calculating CoP data.
+  * gait_analysis: For analyzing single strike gait data.
 
 How to Use:
 -----------
@@ -80,6 +83,7 @@ Changelog:
 - 2024-09-09: Initial creation of the script with dynamic analysis selection functionality.
 - 2024-09-10: Added support for CoP Balance Analysis (cop_analysis.py).
 - 2024-09-14: Added "Calculate CoP" button and functionality (cop_calculate.py).
+- 2024-11-27: Added "Gait Analysis (Single Strike)" button and functionality (gait_analysis.py).
 ================================================================================
 """
 
@@ -122,6 +126,11 @@ def choose_analysis_type():
         choice_window.quit()
         choice_window.destroy()
 
+    def select_gait_analysis():
+        choice.append("gait_analysis")
+        choice_window.quit()
+        choice_window.destroy()
+
     choice_window = tk.Toplevel()
     choice_window.title("Choose Analysis Type")
 
@@ -147,11 +156,18 @@ def choose_analysis_type():
     )
     btn_fix_noise.pack(pady=5)
 
-    # New button for "Calculate CoP"
     btn_calculate_cop = tk.Button(
         choice_window, text="Calculate CoP", command=select_calculate_cop
     )
     btn_calculate_cop.pack(pady=5)
+
+    # New button for "Gait Analysis"
+    btn_gait_analysis = tk.Button(
+        choice_window,
+        text="Gait Analysis (Single Strike)",
+        command=select_gait_analysis,
+    )
+    btn_gait_analysis.pack(pady=5)
 
     choice_window.mainloop()
 
@@ -211,11 +227,23 @@ def run_calculate_cop():
     Runs the Calculate CoP process.
     """
     try:
-        from . import cop_calculate  # Import the new script
+        from . import cop_calculate
 
-        cop_calculate.main()  # Call the main function in cop_calculate.py
+        cop_calculate.main()
     except ImportError as e:
         print(f"Error importing cop_calculate: {e}")
+
+
+def run_gait_analysis():
+    """
+    Runs the Gait Analysis for a single strike.
+    """
+    try:
+        from . import grf_gait
+
+        grf_gait.main()
+    except ImportError as e:
+        print(f"Error importing gait_analysis: {e}")
 
 
 def run_force_analysis():
@@ -236,7 +264,9 @@ def run_force_analysis():
     elif analysis_type == "fix_noise":
         run_fix_noise()
     elif analysis_type == "calculate_cop":
-        run_calculate_cop()  # Call the new function when "Calculate CoP" is selected
+        run_calculate_cop()
+    elif analysis_type == "gait_analysis":
+        run_gait_analysis()
     else:
         print("No analysis type selected.")
 
