@@ -29,30 +29,60 @@ import subprocess
 
 
 def get_video_info(video_path):
+    """
+    Extract video metadata using ffprobe.
+    """
+    # Print the directory and name of the script being executed
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+
     try:
-        cap = cv2.VideoCapture(video_path)
-        if not cap.isOpened():
-            print(f"Error: Cannot open video file {video_path}")
+        # ffprobe command to extract video metadata
+        command = [
+            "ffprobe",
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=nb_frames,r_frame_rate,width,height,codec_name",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "json",
+            video_path,
+        ]
+        result = subprocess.run(
+            command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+        )
+        if result.returncode != 0:
+            print(f"Error: ffprobe failed for {video_path}: {result.stderr}")
             return None
-        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        fps = cap.get(cv2.CAP_PROP_FPS)
-        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        codec = int(cap.get(cv2.CAP_PROP_FOURCC))
-        codec_str = f"{chr(codec & 0xFF)}{chr((codec >> 8) & 0xFF)}{chr((codec >> 16) & 0xFF)}{chr((codec >> 24) & 0xFF)}"
 
-        duration = frame_count / fps if fps else 0
+        import json
 
-        cap.release()
+        metadata = json.loads(result.stdout)
+
+        # Extract relevant metadata
+        stream_info = metadata.get("streams", [{}])[0]
+        format_info = metadata.get("format", {})
+
+        frame_count = int(stream_info.get("nb_frames", 0))
+        fps = eval(stream_info.get("r_frame_rate", "0"))
+        width = stream_info.get("width", 0)
+        height = stream_info.get("height", 0)
+        codec = stream_info.get("codec_name", "unknown")
+        duration = float(format_info.get("duration", 0))
 
         return {
             "file_name": os.path.basename(video_path),
             "frame_count": frame_count,
             "fps": fps,
             "resolution": f"{width}x{height}",
-            "codec": codec_str,
+            "codec": codec,
             "duration": duration,
         }
+
     except Exception as e:
         print(f"Error parsing video info for {video_path}: {str(e)}")
         return None
