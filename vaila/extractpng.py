@@ -177,8 +177,90 @@ class VideoProcessor:
             messagebox.showerror("Error", f"Error extracting frames: {e}")
 
     def create_video_from_png(self):
-        # Same implementation as before...
-        pass
+        print("Starting creation of videos from PNG sequences...")
+
+        root = Tk()
+        root.withdraw()
+
+        src = filedialog.askdirectory(
+            title="Select the main directory containing PNG subdirectories"
+        )
+        if not src:
+            messagebox.showerror("Error", "No source directory selected.")
+            return
+
+        timestamp = time.strftime("%Y%m%d%H%M%S")
+        dest_main_dir = os.path.join(src, f"vaila_png2videos_{timestamp}")
+        os.makedirs(dest_main_dir, exist_ok=True)
+
+        try:
+            # Iterate through subdirectories
+            for subdir, _, files in os.walk(src):
+                png_files = sorted([f for f in files if f.endswith(".png")])
+
+                if png_files:
+                    output_video_name = os.path.basename(subdir) + ".mp4"
+                    output_video_path = os.path.join(dest_main_dir, output_video_name)
+
+                    temp_list_path = os.path.join(subdir, "file_list.txt")
+
+                    # Create a list file with normalized paths
+                    with open(temp_list_path, "w") as file_list:
+                        for file_name in png_files:
+                            full_path = os.path.join(subdir, file_name)
+                            # Normalize the path to use forward slashes
+                            normalized_path = full_path.replace("\\", "/")
+                            file_list.write(f"file '{normalized_path}'\n")
+
+                    # FFmpeg command for video creation using the list
+                    command = [
+                        "ffmpeg",
+                        "-f",
+                        "concat",
+                        "-safe",
+                        "0",
+                        "-i",
+                        temp_list_path,
+                        "-framerate",
+                        "1",  # 1 frame per second; adjust as needed
+                        "-c:v",
+                        "libx264",
+                        "-pix_fmt",
+                        "yuv420p",
+                        "-g",
+                        "1",  # Force all frames to be keyframes
+                        output_video_path,
+                    ]
+                    subprocess.run(command, check=True)
+                    print(f"Video created: {output_video_path}")
+
+            self.show_completion_message("Video creation completed successfully.")
+        except Exception as e:
+            messagebox.showerror("Error", f"Error creating videos: {e}")
+
+    def is_pattern_consistent(self, files):
+        """
+        Check if the files in the directory follow the expected numeric pattern.
+        """
+        print("Checking file naming pattern...")
+        try:
+            # Expected file names based on the default pattern
+            expected_files = [self.pattern % i for i in range(len(files))]
+            actual_files = sorted(files)
+            print(f"Expected files: {actual_files}")
+            return actual_files == expected_files
+        except ValueError:
+            # Return False if file names do not follow the numeric pattern
+            return False
+
+    def is_nvidia_gpu_available(self):
+        try:
+            result = subprocess.run(
+                ["nvidia-smi"], stdout=subprocess.PIPE, stderr=subprocess.PIPE
+            )
+            return result.returncode == 0
+        except FileNotFoundError:
+            return False
 
     def get_fps(self, video_path):
         import cv2
@@ -211,6 +293,9 @@ class VideoProcessor:
         confirmation_window.mainloop()
 
     def run(self):
+        # Print the directory and name of the script being executed
+        print(f"Running script: {os.path.basename(__file__)}")
+        print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
         print("Starting vailá video processing...")
 
         root = Tk()
