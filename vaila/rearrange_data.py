@@ -51,6 +51,7 @@ from datetime import datetime
 from vaila import modifylabref
 from vaila.mergestack import select_file, merge_csv_files, stack_csv_files
 from vaila.standardize_header import standardize_header
+from vaila.dlc2vaila import batch_convert_dlc
 
 # Dictionary for metric unit conversions with abbreviations
 CONVERSIONS = {
@@ -384,10 +385,18 @@ class ColumnReorderGUI(tk.Tk):
         )
         dvideo_button.grid(row=5, column=0, padx=5, pady=5, sticky="n")
 
+        dlc_button = tk.Button(
+            button_frame,
+            text="Convert DLC to vaila",
+            command=lambda: batch_convert_dlc(self.directory_path),
+        )
+        dlc_button.grid(row=6, column=0, padx=5, pady=5, sticky="n")
+
         standardize_button = tk.Button(
             button_frame, text="Standardize Header", command=standardize_header
         )
-        standardize_button.grid(row=6, column=0, padx=5, pady=5, sticky="n")
+        standardize_button.grid(row=7, column=0, padx=5, pady=5, sticky="n")
+
 
         # Bind events to functions
         self.bind("<Return>", self.swap_columns)
