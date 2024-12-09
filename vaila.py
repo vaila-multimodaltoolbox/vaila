@@ -1345,7 +1345,6 @@ class Vaila(tk.Tk):
         """
         animal_open_field.run_animal_open_field()
 
-
     # C_A_r1_c1
     def reorder_csv_data(self):
         """Runs the Reorder CSV Data module.

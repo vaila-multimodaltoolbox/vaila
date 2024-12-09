@@ -59,6 +59,7 @@ from datetime import datetime
 from pathlib import Path
 from rich import print
 
+
 def calculate_total_distance_traveled(position_data):
     """
     Calculate the total distance traveled by the animal based on X and Y coordinates over time.
@@ -71,6 +72,7 @@ def calculate_total_distance_traveled(position_data):
     """
     # Future logic: Calculate the sum of distances between consecutive points.
     return None
+
 
 def calculate_speed(position_data):
     """
@@ -85,6 +87,7 @@ def calculate_speed(position_data):
     # Future logic: Calculate instantaneous speeds = delta_distance / delta_time, then average.
     return None
 
+
 def calculate_time_in_each_zone(position_data, zones_definition):
     """
     Calculate the total time spent in each zone of the open field.
@@ -98,6 +101,7 @@ def calculate_time_in_each_zone(position_data, zones_definition):
     """
     # Future logic: Check position at each time point, categorize into zones, sum up time.
     return None
+
 
 def process_open_field_data(input_file, output_dir):
     """
@@ -117,8 +121,11 @@ def process_open_field_data(input_file, output_dir):
 
         # Example zones - just a placeholder
         zones_definition = {
-            "center": [(0, 0), (1, 1)],   # Example: define the central region of the field
-            "periphery": [(1, 1), (2, 2)] # Example: define the periphery
+            "center": [
+                (0, 0),
+                (1, 1),
+            ],  # Example: define the central region of the field
+            "periphery": [(1, 1), (2, 2)],  # Example: define the periphery
         }
         time_zones = calculate_time_in_each_zone(data, zones_definition)
 
@@ -147,6 +154,7 @@ def process_open_field_data(input_file, output_dir):
     except Exception as e:
         print(f"An error occurred while processing {input_file}: {str(e)}")
 
+
 def process_all_files_in_directory(target_dir):
     """
     Process all .csv files in the specified directory and save the results.
@@ -172,6 +180,7 @@ def process_all_files_in_directory(target_dir):
         process_open_field_data(input_file, output_dir)
 
     print("All files have been processed successfully.")
+
 
 def run_animal_open_field():
     """
@@ -199,6 +208,7 @@ def run_animal_open_field():
     messagebox.showinfo(
         "Success", "All .csv files have been processed and results saved."
     )
+
 
 if __name__ == "__main__":
     run_animal_open_field()
