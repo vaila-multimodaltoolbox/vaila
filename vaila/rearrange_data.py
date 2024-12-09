@@ -387,7 +387,7 @@ class ColumnReorderGUI(tk.Tk):
 
         dlc_button = tk.Button(
             button_frame,
-            text="Convert DLC to vaila",
+            text="Convert DLC to vailá",
             command=lambda: batch_convert_dlc(self.directory_path),
         )
         dlc_button.grid(row=6, column=0, padx=5, pady=5, sticky="n")
