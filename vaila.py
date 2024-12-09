@@ -3,8 +3,8 @@
 vaila.py
 ===============================================================================
 Author: Paulo R. P. Santiago
-Date: 21 Nov 2024
-Version: 0.07
+Date: 09 December 2024
+Version: 09.Dec.2024
 Python Version: 3.11
 
 Description:
@@ -29,19 +29,27 @@ Key Features:
 1. **Multimodal Data Integration**: 
    - Supports data from IMUs, markerless tracking (2D and 3D), MoCap systems, 
      force plates, GNSS/GPS, EMG, and other biomechanical sensors.
+
 2. **Data Processing and Batch Operations**: 
    - Batch processing for large datasets across modalities, including video 
      synchronization, pixel extraction, DLT-based 2D/3D reconstructions, and 
      force analysis.
+
 3. **Data Conversion and File Management**: 
    - Converts between multiple data formats (C3D <--> CSV), automates renaming, 
      copying, and managing large sets of biomechanical files.
+
 4. **Visualization**: 
    - Includes 2D and 3D plotting of biomechanical data using libraries such as 
      Matplotlib and Plotly.
+
 5. **Cross-Platform**: 
    - Designed for macOS, Linux, and Windows, with full transparency of execution 
      flow through rich terminal outputs and print statements for debugging.
+
+6. **Open Field Test Analysis** (New Feature):
+   - Provides tools for analyzing open field test data for rodents, including 
+     calculations of total distance traveled, speed, and time spent in each zone.
 
 Usage:
 ------
@@ -54,6 +62,8 @@ Usage:
     (e.g., MoCap, IMU, and markerless tracking).
   - **Available Tools (Frame C)**: Data conversion, video/image processing, 
     DLT-based 2D/3D reconstructions, and visualization tools.
+  - **Open Field Test Analysis (Frame D)**: Tools for analyzing open field test 
+    data, providing insights into animal behavior and movement patterns.
 
 License:
 --------
@@ -119,6 +129,7 @@ from vaila import (
     process_videos_gui,
     run_fill_split_dialog,
     vaila_and_jump,
+    animal_open_field,
 )
 
 
@@ -162,7 +173,7 @@ B2_r2_c1 - Vector Coding  B2_r2_c2 - EMG             B2_r2_c3 - Force Plate
 B2_r2_c4 - GNSS/GPS       B2_r2_c5 - MEG/EEG
 
 B3_r3_c1 - HR/ECG         B3_r3_c2 - vailá           B3_r3_c3 - vailá_and_jump
-B3_r3_c4 - vailá          B3_r3_c5 - vailá
+B3_r3_c4 - vailá          B3_r3_c5 - Animal Open Field 
 
 ============================== Tools Available (Frame C) ===================
 C_A: Data Files
@@ -202,7 +213,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 21.11.20224")
+        self.title("vailá - 09.Dec.2024")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -470,7 +481,7 @@ class Vaila(tk.Tk):
             - vailá
             - vailá_and_jump
             - vailá
-            - vailá
+            - Animal Open Field
         """
         # B - Multimodal Analysis FRAME
         analysis_frame = tk.LabelFrame(
@@ -626,19 +637,19 @@ class Vaila(tk.Tk):
             command=self.show_vaila_message,
         )
 
-        # B3_r3_c5 - vailá
-        vaila_btn8 = tk.Button(
+        # B3_r3_c5 - Animal Open Field
+        vaila_animalof = tk.Button(
             row3_frame,
-            text="vailá",
+            text="Animal Open Field",
             width=button_width,
-            command=self.show_vaila_message,
+            command=self.animal_open_field,
         )
         # Pack the buttons
         ecg_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         vaila_btn5.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         vailajump_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         vaila_btn7.pack(side="left", expand=True, fill="x", padx=2, pady=2)
-        vaila_btn8.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        vaila_animalof.pack(side="left", expand=True, fill="x", padx=2, pady=2)
 
         ## VVVVVVVVVVVVVVV TOOLS BUTTONS VVVVVVVVVVVVVVVV
         # Tools Frame
@@ -1318,7 +1329,21 @@ class Vaila(tk.Tk):
     # def vaila
 
     # B_r3_c5
-    # def vaila
+    def animal_open_field(self):
+        """Runs the Animal Open Field module.
+
+        This function runs the Animal Open Field module, which can be used to analyze
+        animal open field data from CSV files. It processes the animal open field data
+        to extract relevant metrics such as speed, distance, and time. The module will
+        then generate CSV files with the processed results and plots of the animal
+        open field signals.
+
+        The user will be prompted to select the directory containing the animal open
+        field CSV files and input the sampling rate and start and end indices for
+        analysis.
+
+        """
+        animal_open_field.run_animal_open_field()
 
     # C_A_r1_c1
     def reorder_csv_data(self):
