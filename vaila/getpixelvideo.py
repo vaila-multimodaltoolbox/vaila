@@ -3,8 +3,8 @@
 Pixel Coordinate Tool - getpixelvideo.py
 ================================================================================
 Author: Prof. Dr. Paulo R. P. Santiago
-Date: 21 November 2024
-Version: 2.3.0
+Date: 09 December 2024
+Version: 2.3.4
 Python Version: 3.11
 
 Description:
