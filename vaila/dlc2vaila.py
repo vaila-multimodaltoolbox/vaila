@@ -180,10 +180,11 @@ def batch_convert_dlc(directory=None):
 
     # Show a success message
     messagebox.showinfo(
-    "DLC to vailá Conversion",
-    f"Batch conversion of DLC files to vailá format completed successfully!\n\n"
-    f"All converted files have been saved in the directory:\n{save_directory}"
+        "DLC to vailá Conversion",
+        f"Batch conversion of DLC files to vailá format completed successfully!\n\n"
+        f"All converted files have been saved in the directory:\n{save_directory}",
     )
+
 
 # Main function
 if __name__ == "__main__":
