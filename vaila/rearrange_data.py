@@ -397,7 +397,6 @@ class ColumnReorderGUI(tk.Tk):
         )
         standardize_button.grid(row=7, column=0, padx=5, pady=5, sticky="n")
 
-
         # Bind events to functions
         self.bind("<Return>", self.swap_columns)
         self.bind("d", self.delete_columns)
