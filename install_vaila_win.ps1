@@ -1,15 +1,27 @@
 <#
     Script: install_vaila_win.ps1
-    Description: Installs or updates the vaila - Multimodal Toolbox on Windows 11,
+    Description: Installs or updates the vailá - Multimodal Toolbox on Windows 11,
                  setting up the Conda environment, configuring MediaPipe, and
                  ensuring all dependencies are properly installed.
+    Creation Date: 2024-12-10
+    Author: Paulo R. P. Santiago
 #>
 
 # Check for administrative privileges
 If (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator"))
 {
-    Write-Warning "Este script precisa ser executado como Administrador."
+    Write-Warning "This script must be run as Administrator."
     Exit
+}
+
+# Before installing or updating 'vaila', we perform the following updates:
+# 1 - Update all packages via winget
+Write-Output "Upgrading all packages via winget..."
+Try {
+    winget upgrade --all --silent
+    Write-Output "winget upgrades completed."
+} Catch {
+    Write-Warning "Failed to upgrade packages via winget. Continuing anyway."
 }
 
 # Define installation path in AppData\Local dynamically for the current user
@@ -19,7 +31,7 @@ $sourcePath = (Get-Location)
 # Ensure the directory exists
 If (-Not (Test-Path $vailaProgramPath)) {
     Write-Output "Creating directory $vailaProgramPath..."
-    New-Item -ItemType Directory -Force -Path $vailaProgramPath
+    New-Item -ItemType Directory -Force -Path $vailaProgramPath | Out-Null
 }
 
 # Copy the vaila program files to AppData\Local\vaila
@@ -32,13 +44,24 @@ If (-Not (Get-Command conda -ErrorAction SilentlyContinue)) {
     Exit
 }
 
+# 2 - Update conda and all packages before proceeding with the vaila environment setup
+Write-Output "Updating conda and all related packages..."
+Try {
+    conda update conda -y
+    conda update --all -y
+    conda upgrade --all -y
+    Write-Output "Conda and all packages updated successfully."
+} Catch {
+    Write-Warning "Failed to update conda or packages. Attempting to continue."
+}
+
 # Get Conda installation path
 $condaPath = (& conda info --base).Trim()
 
 # Initialize Conda for PowerShell if it is not already initialized
 Write-Output "Initializing Conda for PowerShell..."
 Try {
-    & "$condaPath\Scripts\conda.exe" init powershell
+    & "$condaPath\Scripts\conda.exe" init powershell | Out-Null
     Write-Output "Conda initialized successfully in PowerShell."
 } Catch {
     Write-Error "Failed to initialize Conda in PowerShell. Error: $_"
@@ -49,7 +72,7 @@ Try {
 $profilePath = $PROFILE
 If (-Not (Test-Path $profilePath)) {
     Write-Output "PowerShell profile not found. Creating it..."
-    New-Item -ItemType File -Path $profilePath -Force
+    New-Item -ItemType File -Path $profilePath -Force | Out-Null
 }
 
 Write-Output "Ensuring Conda initialization is added to PowerShell profile..."
@@ -72,7 +95,7 @@ If ($envExists) {
         Exit
     }
 } Else {
-    Write-Output "Creating Conda environment from vaila_win.yaml..."
+    Write-Output "Creating 'vaila' Conda environment from vaila_win.yaml..."
     Try {
         & conda env create -f "$vailaProgramPath\yaml_for_conda_env\vaila_win.yaml"
         Write-Output "'vaila' environment created successfully."
@@ -82,8 +105,8 @@ If ($envExists) {
     }
 }
 
-# Install dependencies using pip
-Write-Output "Installing additional dependencies in the 'vaila' environment..."
+# Install dependencies using pip in the 'vaila' environment
+Write-Output "Installing additional dependencies (mediapipe, moviepy) in the 'vaila' environment..."
 conda activate vaila
 Try {
     pip install mediapipe moviepy
@@ -120,7 +143,7 @@ Try {
 # Configure the vaila profile in Windows Terminal
 $wtPath = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe"
 If (Test-Path $wtPath) {
-    Write-Output "Configuring the vaila profile in Windows Terminal..."
+    Write-Output "Configuring the 'vaila' profile in Windows Terminal..."
     $settingsPath = "$wtPath\LocalState\settings.json"
     $settingsBackupPath = "$wtPath\LocalState\settings_backup.json"
 
@@ -145,7 +168,7 @@ If (Test-Path $wtPath) {
 
     $settingsJson.profiles.list += $vailaProfile
     $settingsJson | ConvertTo-Json -Depth 100 | Out-File -FilePath $settingsPath -Encoding UTF8
-    Write-Output "vaila profile added to Windows Terminal successfully."
+    Write-Output "'vaila' profile added to Windows Terminal successfully."
 }
 
 # Grant full permissions to the MediaPipe model directory in the Conda environment
@@ -164,7 +187,7 @@ If (Test-Path $mediapipeModelDir) {
 }
 
 # Create a Desktop shortcut for vaila
-Write-Output "Creating Desktop shortcut for vaila..."
+Write-Output "Creating Desktop shortcut for 'vaila'..."
 $desktopShortcutPath = "$env:USERPROFILE\Desktop\vaila.lnk"
 $wshell = New-Object -ComObject WScript.Shell
 $desktopShortcut = $wshell.CreateShortcut($desktopShortcutPath)
@@ -174,15 +197,15 @@ $desktopShortcut.IconLocation = "$vailaProgramPath\docs\images\vaila_ico.ico"
 $desktopShortcut.WorkingDirectory = "$vailaProgramPath"
 $desktopShortcut.Save()
 
-Write-Output "Desktop shortcut for vaila created at $desktopShortcutPath."
+Write-Output "Desktop shortcut for 'vaila' created at $desktopShortcutPath."
 
 # Create Start Menu shortcut for vaila
-Write-Output "Creating Start Menu shortcut for vaila..."
+Write-Output "Creating Start Menu shortcut for 'vaila'..."
 
 $startMenuPath = "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\vaila"
 If (-Not (Test-Path $startMenuPath)) {
     Write-Output "Creating directory $startMenuPath..."
-    New-Item -ItemType Directory -Force -Path $startMenuPath
+    New-Item -ItemType Directory -Force -Path $startMenuPath | Out-Null
 }
 
 $startMenuShortcutPath = "$startMenuPath\vaila.lnk"
@@ -193,7 +216,7 @@ $startMenuShortcut.IconLocation = "$vailaProgramPath\docs\images\vaila_ico.ico"
 $startMenuShortcut.WorkingDirectory = "$vailaProgramPath"
 $startMenuShortcut.Save()
 
-Write-Output "Start Menu shortcut for vaila created at $startMenuShortcutPath."
+Write-Output "Start Menu shortcut for 'vaila' created at $startMenuShortcutPath."
 
-Write-Output "Installation and configuration completed successfully!"
+Write-Output "Installation and configuration of 'vaila' completed successfully!"
 Pause
