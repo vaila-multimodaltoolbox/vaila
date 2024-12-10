@@ -5,6 +5,8 @@
                  AppData\Local\vaila, removing FFmpeg if installed,
                  removing vaila profiles from Windows Terminal, and deleting
                  Start Menu and Desktop shortcuts.
+    Creation Date: 2024-12-10
+    Author: Paulo R. P. Santiago
 #>
 
 # Check for administrative privileges
@@ -96,22 +98,45 @@ If (Test-Path $desktopShortcutPath) {
     Write-Output "Desktop shortcut not found."
 }
 
-# Remove Start Menu shortcut
-$startMenuShortcutPath = "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\vaila\vaila.lnk"
-If (Test-Path $startMenuShortcutPath) {
-    Write-Output "Removing Start Menu shortcut..."
-    Remove-Item $startMenuShortcutPath -Force
-    Write-Output "Start Menu shortcut removed."
+# ---------------------------------------------------
+# Remove Start Menu shortcuts from both common and user locations
+# ---------------------------------------------------
+
+# Common Start Menu
+$commonStartMenuPrograms = [System.Environment]::GetFolderPath("CommonPrograms")
+$commonStartMenuVailaLnk = Join-Path $commonStartMenuPrograms "vaila\vaila.lnk"
+If (Test-Path $commonStartMenuVailaLnk) {
+    Write-Output "Removing common Start Menu shortcut..."
+    Remove-Item $commonStartMenuVailaLnk -Force
+    Write-Output "Common Start Menu shortcut removed."
+    
+    $commonStartMenuVailaFolder = Join-Path $commonStartMenuPrograms "vaila"
+    if (Test-Path $commonStartMenuVailaFolder -and (Get-ChildItem $commonStartMenuVailaFolder | Measure-Object).Count -eq 0) {
+        Write-Output "Removing empty common Start Menu folder..."
+        Remove-Item $commonStartMenuVailaFolder -Force
+        Write-Output "Common Start Menu folder removed."
+    }
 } Else {
-    Write-Output "Start Menu shortcut not found."
+    Write-Output "No common Start Menu shortcut found."
 }
 
-# Remove Start Menu folder if empty
-$startMenuFolderPath = "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\vaila"
-If ((Test-Path $startMenuFolderPath) -and ((Get-ChildItem $startMenuFolderPath | Measure-Object).Count -eq 0)) {
-    Write-Output "Removing empty Start Menu folder..."
-    Remove-Item $startMenuFolderPath -Force
-    Write-Output "Start Menu folder removed."
+# User Start Menu
+$userStartMenuPrograms = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs"
+$userStartMenuVailaLnk = Join-Path $userStartMenuPrograms "vaila\vaila.lnk"
+
+If (Test-Path $userStartMenuVailaLnk) {
+    Write-Output "Removing user Start Menu shortcut..."
+    Remove-Item $userStartMenuVailaLnk -Force
+    Write-Output "User Start Menu shortcut removed."
+    
+    $userStartMenuVailaFolder = Join-Path $userStartMenuPrograms "vaila"
+    if (Test-Path $userStartMenuVailaFolder -and (Get-ChildItem $userStartMenuVailaFolder | Measure-Object).Count -eq 0) {
+        Write-Output "Removing empty user Start Menu folder..."
+        Remove-Item $userStartMenuVailaFolder -Force
+        Write-Output "User Start Menu folder removed."
+    }
+} Else {
+    Write-Output "No user Start Menu shortcut found."
 }
 
 Write-Output "vaila uninstallation completed successfully!"
