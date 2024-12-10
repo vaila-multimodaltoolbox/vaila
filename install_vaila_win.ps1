@@ -1,6 +1,6 @@
 <#
     Script: install_vaila_win.ps1
-    Description: Installs or updates the vaila - Multimodal Toolbox on Windows 11,
+    Description: Installs or updates the vailá - Multimodal Toolbox on Windows 11,
                  setting up the Conda environment, configuring MediaPipe, and
                  ensuring all dependencies are properly installed.
     Creation Date: 2024-12-10
