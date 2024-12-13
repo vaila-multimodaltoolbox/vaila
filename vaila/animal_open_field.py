@@ -388,4 +388,3 @@ def run_animal_open_field():
 
 if __name__ == "__main__":
     run_animal_open_field()
-
