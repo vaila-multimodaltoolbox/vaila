@@ -1,6 +1,6 @@
 """
 ===============================================================================
-heatmap_pathway_plot.py
+animal_open_field.py
 ===============================================================================
 Author: Prof. Paulo R. P. Santiago
 Date: 16 December 2024
@@ -55,7 +55,7 @@ Usage:
 
 Example:
 --------
-$ python heatmap_pathway_plot.py
+$ python animal_open_field.py
 
 Notes:
 ------
