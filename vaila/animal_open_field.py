@@ -51,341 +51,328 @@ Notes:
 """
 
 import os
-import math
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from scipy.signal import butter, filtfilt
 from tkinter import Tk, filedialog, simpledialog, messagebox
 from datetime import datetime
 from pathlib import Path
 
+
 def butter_lowpass_filter(data, cutoff, fs, order=4):
-    """
-    Apply a low-pass Butterworth filter to the data.
-
-    Args:
-        data (array-like): Input data to filter.
-        cutoff (float): Cutoff frequency in Hz.
-        fs (float): Sampling frequency in Hz.
-        order (int): Order of the filter.
-
-    Returns:
-        array-like: Filtered data.
-    """
     nyquist = 0.5 * fs
     normal_cutoff = cutoff / nyquist
     b, a = butter(order, normal_cutoff, btype="low", analog=False)
     return filtfilt(b, a, data)
 
-def generate_time_vector(num_samples, fs):
+
+def calculate_zone_occupancy(x, y):
+    zones = {
+        (i, j): 0 for i in range(3) for j in range(3)
+    }  # Inicializar contagem das zonas
+    total_points = len(x)
+
+    # Contar os pontos em cada zona
+    for i in range(len(x)):
+        if 0 <= x[i] <= 0.6 and 0 <= y[i] <= 0.6:
+            zone_x = min(int(x[i] // 0.2), 2)
+            zone_y = min(int(y[i] // 0.2), 2)
+            zones[(zone_x, zone_y)] += 1
+
+    # Calcular os percentuais
+    raw_percentages = {
+        zone: (count / total_points) * 100 for zone, count in zones.items()
+    }
+    total_percentage = sum(raw_percentages.values())
+
+    # Ajustar o último percentual para fechar 100%
+    last_zone = list(raw_percentages.keys())[-1]  # Última zona
+    raw_percentages[last_zone] += 100 - total_percentage  # Ajuste no último percentual
+
+    return zones, raw_percentages
+
+
+def calculate_center_and_border_occupancy(x, y):
+    total_points = len(x)
+    points_in_center = sum(
+        1 for i in range(len(x)) if 0.1 <= x[i] <= 0.5 and 0.1 <= y[i] <= 0.5
+    )
+    points_in_border = total_points - points_in_center
+    return {
+        "points_in_center": points_in_center,
+        "percentage_in_center": (points_in_center / total_points) * 100,
+        "points_in_border": points_in_border,
+        "percentage_in_border": (points_in_border / total_points) * 100,
+    }
+
+
+def calculate_zone_occupancy(x, y):
     """
-    Generate a time vector based on the number of samples and sampling frequency.
+    Calcula a quantidade de pontos e porcentagens em cada zona 3x3.
 
     Args:
-        num_samples (int): Number of samples in the dataset.
-        fs (float): Sampling frequency in Hz.
+        x (array-like): Coordenadas X.
+        y (array-like): Coordenadas Y.
 
     Returns:
-        numpy.ndarray: Time vector.
+        zones (dict): Contagem de pontos por zona.
+        percentages (dict): Porcentagens de pontos por zona.
     """
-    return np.linspace(0, (num_samples - 1) / fs, num_samples)
+    zones = {(i, j): 0 for i in range(3) for j in range(3)}  # Inicializar zonas
+    total_points = len(x)
 
+    # Contar pontos em cada zona
+    for i in range(len(x)):
+        if 0 <= x[i] <= 0.6 and 0 <= y[i] <= 0.6:
+            zone_x = int(x[i] // 0.2)  # Dividir em faixas de 0.2 m (3 zonas no X)
+            zone_y = 2 - int(
+                y[i] // 0.2
+            )  # Inverter o eixo Y para corresponder ao gráfico
+            zones[(zone_x, zone_y)] += 1
 
-def plot_heatmap(x, y, output_dir, base_name):
-    """
-    Plot a heatmap of the animal's movement in the open field using seaborn KDE.
-
-    Args:
-        x (array-like): X coordinates of the movement (in meters).
-        y (array-like): Y coordinates of the movement (in meters).
-        output_dir (str): Directory to save the plot.
-        base_name (str): Base name of the input file.
-
-    Returns:
-        str: Path to the saved heatmap file.
-    """
-    fig, ax = plt.subplots(figsize=(6, 6))  # Adjusted to be square
-    sns.kdeplot(x=x, y=y, cmap="coolwarm", fill=True, levels=40, ax=ax)
-
-    # Adjust plot limits and labels
-    ax.set_xlim(0, 0.6)
-    ax.set_ylim(0, 0.6)
-    ax.set_xlabel("Position X (m)")
-    ax.set_ylabel("Position Y (m)")
-    ax.set_title("Heatmap of Animal Movement (in m)")
-
-    # Set aspect ratio to equal
-    ax.set_aspect('equal')
-
-    # Save the plot
-    output_file_path = os.path.join(output_dir, f"{base_name}_heatmap.png")
-    plt.savefig(output_file_path, bbox_inches="tight")
-    plt.close()
-    print(f"Heatmap plot saved at: {output_file_path}")
-    return output_file_path
+    # Calcular as porcentagens
+    percentages = {zone: (count / total_points) * 100 for zone, count in zones.items()}
+    return zones, percentages
 
 
 def plot_pathway(x, y, output_dir, base_name):
     """
-    Plot the pathway of the animal's movement in the open field.
+    Plota o caminho (pathway) do movimento do animal no open field.
 
     Args:
-        x (array-like): X coordinates of the movement (in meters).
-        y (array-like): Y coordinates of the movement (in meters).
-        output_dir (str): Directory to save the plot.
-        base_name (str): Base name of the input file.
-
-    Returns:
-        str: Path to the saved pathway plot file.
+        x (array-like): Coordenadas X.
+        y (array-like): Coordenadas Y.
+        output_dir (str): Diretório de saída.
+        base_name (str): Nome base do arquivo.
     """
-    fig, ax = plt.subplots(figsize=(6, 6))  # Adjusted to be square
-    ax.plot(x, y, color="blue", label="Pathway", alpha=0.7, linewidth=2)
+    os.makedirs(output_dir, exist_ok=True)
 
-    # Highlight start and end points
-    ax.scatter(x[0], y[0], color="green", label="Start", s=100, edgecolors="black")
-    ax.scatter(x[-1], y[-1], color="red", label="End", s=100, edgecolors="black")
+    # Criar a figura do caminho
+    fig, ax = plt.subplots(figsize=(6, 6))
+    ax.plot(x, y, color="blue", linewidth=1.5, alpha=0.7, label="Pathway")
+    ax.scatter(
+        x[0], y[0], color="green", s=50, label="Start", zorder=5
+    )  # Ponto inicial
+    ax.scatter(x[-1], y[-1], color="red", s=50, label="End", zorder=5)  # Ponto final
 
-    # Adjust plot limits and labels
+    # Adicionar grid e limites
     ax.set_xlim(0, 0.6)
     ax.set_ylim(0, 0.6)
     ax.set_xlabel("Position X (m)")
     ax.set_ylabel("Position Y (m)")
-    ax.set_title("Pathway of Animal Movement (in m)")
-    ax.legend()
+    ax.set_title("Pathway of Animal Movement")
+    # ax.legend()
 
-    # Set aspect ratio to equal
-    ax.set_aspect('equal')
+    # Adicionar linhas de grade das zonas (3x3)
+    for i in range(1, 3):
+        ax.axvline(i * 0.2, color="black", linestyle="--", linewidth=0.8)
+        ax.axhline(i * 0.2, color="black", linestyle="--", linewidth=0.8)
 
-    # Save the plot
+    # Salvar o gráfico
     output_file_path = os.path.join(output_dir, f"{base_name}_pathway.png")
     plt.savefig(output_file_path, bbox_inches="tight")
     plt.close()
     print(f"Pathway plot saved at: {output_file_path}")
+
+
+def plot_heatmap(x, y, output_dir, base_name, zone_percentages):
+    """
+    Plota o heatmap corrigido com as zonas e porcentagens corretas.
+
+    Args:
+        x (array-like): Coordenadas X.
+        y (array-like): Coordenadas Y.
+        output_dir (str): Diretório de saída.
+        base_name (str): Nome base do arquivo.
+        zone_percentages (dict): Percentagens calculadas para cada zona.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Criar o heatmap
+    fig, ax = plt.subplots(figsize=(6, 6))
+    sns.kdeplot(
+        x=x, y=y, cmap="coolwarm", fill=True, levels=100, bw_adjust=1.5, thresh=0, ax=ax
+    )
+    ax.set_xlim(0, 0.6)
+    ax.set_ylim(0, 0.6)
+    ax.set_xlabel("Position X (m)")
+    ax.set_ylabel("Position Y (m)")
+    ax.set_title("Heatmap with Zone Grid")
+
+    # Adicionar linhas de grade
+    for i in range(1, 3):
+        ax.axvline(i * 0.2, color="black", linestyle="--", linewidth=0.8)
+        ax.axhline(i * 0.2, color="black", linestyle="--", linewidth=0.8)
+
+    # Mapear as zonas corretamente (de baixo para cima)
+    zone_mapping = {
+        1: (0, 2),
+        2: (1, 2),
+        3: (2, 2),
+        4: (0, 1),
+        5: (1, 1),
+        6: (2, 1),
+        7: (0, 0),
+        8: (1, 0),
+        9: (2, 0),
+    }
+
+    # Adicionar labels das zonas e porcentagens
+    for zone_id, (zone_x, zone_y) in zone_mapping.items():
+        center_x = (zone_x + 0.5) * 0.2
+        center_y = (zone_y + 0.5) * 0.2
+        percentage = zone_percentages.get((zone_x, zone_y), 0)
+        ax.text(
+            center_x,
+            center_y,
+            f"Z{zone_id}\n{percentage:.1f}%",
+            color="black",
+            ha="center",
+            va="center",
+            fontsize=10,
+            weight="bold",
+        )
+
+    # Salvar o heatmap
+    output_file_path = os.path.join(output_dir, f"{base_name}_heatmap.png")
+    plt.savefig(output_file_path, bbox_inches="tight")
+    plt.close()
+    print(f"Heatmap plot saved at: {output_file_path}")
+
+
+def plot_center_and_border_heatmap(x, y, output_dir, base_name):
+    os.makedirs(output_dir, exist_ok=True)
+    fig, ax = plt.subplots(figsize=(6, 6))
+    sns.kdeplot(
+        x=x, y=y, cmap="coolwarm", fill=True, levels=100, bw_adjust=1.5, thresh=0, ax=ax
+    )
+    rect = plt.Rectangle(
+        (0.1, 0.1), 0.4, 0.4, linewidth=2, edgecolor="black", facecolor="none"
+    )
+    ax.add_patch(rect)
+    ax.set_xlim(0, 0.6)
+    ax.set_ylim(0, 0.6)
+    ax.set_xlabel("Position X (m)")
+    ax.set_ylabel("Position Y (m)")
+    ax.set_title("Heatmap with Central and Border Areas")
+    output_file_path = os.path.join(
+        output_dir, f"{base_name}_center_border_heatmap.png"
+    )
+    plt.savefig(output_file_path, bbox_inches="tight")
+    plt.close()
+    print(f"Central and border heatmap saved at: {output_file_path}")
     return output_file_path
 
-def calculate_total_distance_traveled(x, y):
-    """
-    Calculate the total distance traveled by the animal based on X and Y coordinates over time.
 
-    Args:
-        x (array-like): X coordinates of the movement.
-        y (array-like): Y coordinates of the movement.
-
-    Returns:
-        float: Total distance traveled (in meters).
-    """
-    return np.sum(np.sqrt(np.diff(x) ** 2 + np.diff(y) ** 2))
-
-def calculate_average_speed(total_distance, total_time):
-    """
-    Calculate the average speed of the animal.
-
-    Args:
-        total_distance (float): Total distance traveled by the animal (in meters).
-        total_time (float): Total time of the movement (in seconds).
-
-    Returns:
-        float: Average speed (in meters per second).
-    """
-    if total_time > 0:
-        return total_distance / total_time
-    else:
-        return 0.0
-
-def calculate_time_in_zones(x, y, time_vector):
-    """
-    Calculate the time spent in each 20x20 cm zone of a 60x60 cm grid.
-
-    Args:
-        x (array-like): X coordinates of the movement (in meters).
-        y (array-like): Y coordinates of the movement (in meters).
-        time_vector (array-like): Time vector corresponding to the coordinates.
-
-    Returns:
-        dict: Time spent in each zone (keys are zone indices, values are times in seconds).
-    """
-    zones = {(i, j): 0 for i in range(3) for j in range(3)}  # 3x3 grid
-
-    for i in range(1, len(x)):
-        # Skip coordinates outside the grid (0 to 60 cm)
-        if not (0 <= x[i] <= 0.6 and 0 <= y[i] <= 0.6):
-            continue
-
-        # Determine the current zone
-        zone_x = min(int(x[i] // 0.2), 2)
-        zone_y = min(int(y[i] // 0.2), 2)
-        
-        # Calculate time spent in the current zone
-        dt = time_vector[i] - time_vector[i - 1]
-        zones[(zone_x, zone_y)] += dt
-
-    return zones
-
-def save_results_to_txt(results, output_dir, base_name):
-    """
-    Save the results and file paths to a .txt file.
-
-    Args:
-        results (dict): Dictionary containing the results.
-        output_dir (str): Directory to save the .txt file.
-        base_name (str): Base name of the input file.
-    """
+def save_results_to_csv(results, center_border_results, output_dir, base_name):
     try:
-        txt_file_path = os.path.join(output_dir, f"{base_name}_results.txt")
-
-        # Ensure directory exists and is writable
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
-        if not os.access(output_dir, os.W_OK):
-            raise PermissionError(f"Cannot write to directory: {output_dir}")
-
-        # Save results to file
-        with open(txt_file_path, "w", encoding="utf-8") as f:
-            f.write("Analysis Results\n")
-            f.write("=" * 20 + "\n")
-            for key, value in results.items():
-                if isinstance(value, dict):  # For nested dictionaries (e.g., zones)
-                    f.write(f"{key}:\n")
-                    for sub_key, sub_value in value.items():
-                        if isinstance(sub_value, (float, int)):
-                            f.write(f"  Zone {sub_key}: {sub_value:.2f} seconds\n")
-                        else:
-                            f.write(f"  Zone {sub_key}: {sub_value}\n")
-                else:
-                    if isinstance(value, (float, int)):
-                        f.write(f"{key}: {value:.2f}\n")
-                    else:
-                        f.write(f"{key}: {value}\n")
-        print(f"Results saved to: {txt_file_path}")
-    except PermissionError as e:
-        print(f"Permission error: {e}")
+        combined_file_path = os.path.join(output_dir, f"{base_name}_summary_zones.csv")
+        header = ["zone_id", "points", "percentage"]
+        data = []
+        for (zone_x, zone_y), count in results["zone_counts"].items():
+            zone_id = (zone_x * 3 + zone_y) + 1
+            data.append([zone_id, count, results["zone_percentages"][(zone_x, zone_y)]])
+        data.append(
+            [
+                "Center",
+                center_border_results["points_in_center"],
+                center_border_results["percentage_in_center"],
+            ]
+        )
+        data.append(
+            [
+                "Border",
+                center_border_results["points_in_border"],
+                center_border_results["percentage_in_border"],
+            ]
+        )
+        with open(combined_file_path, "w", encoding="utf-8") as f:
+            f.write(",".join(header) + "\n")
+            for row in data:
+                f.write(",".join(map(str, row)) + "\n")
+        print(f"Results saved to: {combined_file_path}")
     except Exception as e:
-        print(f"Error saving results to {txt_file_path}: {e}")
+        print(f"Error saving results to CSV: {e}")
         raise
+
+
+def save_position_data(time_vector, x, y, distance, speed, output_dir, base_name):
+    try:
+        position_file_path = os.path.join(output_dir, f"{base_name}_position_data.csv")
+        with open(position_file_path, "w", encoding="utf-8") as f:
+            f.write("time_s,x_m,y_m,distance_m,speed_m/s\n")
+            for i in range(len(time_vector)):
+                f.write(
+                    f"{time_vector[i]:.6f},{x[i]:.6f},{y[i]:.6f},{distance[i]:.6f},{speed[i]:.6f}\n"
+                )
+        print(f"Position data saved to: {position_file_path}")
+    except Exception as e:
+        print(f"Error saving position data to CSV: {e}")
+        raise
+
 
 def process_open_field_data(input_file, main_output_dir, fs):
-    """
-    Process data from an open field test file and save results to the output directory.
-
-    Args:
-        input_file (str): Path to the input CSV file.
-        main_output_dir (str): Path to the main output directory.
-        fs (float): Sampling frequency in Hz.
-    """
     try:
-        # Determine base name of the file
         base_name = os.path.splitext(os.path.basename(input_file))[0]
-
-        # Create a specific output directory for this file
         output_dir = os.path.join(main_output_dir, base_name)
         os.makedirs(output_dir, exist_ok=True)
-
-        # Load data using numpy and select columns 1 and 2 (x and y coordinates)
         data = np.loadtxt(input_file, delimiter=",", skiprows=1, usecols=(1, 2))
         x, y = data[:, 0], data[:, 1]
-
-        # Apply Butterworth filter to coordinates
-        x = butter_lowpass_filter(x, cutoff=6, fs=fs, order=4)
-        y = butter_lowpass_filter(y, cutoff=6, fs=fs, order=4)
-
-        # Generate time vector
-        time_vector = generate_time_vector(len(x), fs)
-
-        # Plot heatmap and pathway
-        heatmap_path = plot_heatmap(x, y, output_dir, base_name)
-        pathway_path = plot_pathway(x, y, output_dir, base_name)
-
-        # Calculate total distance
-        total_distance = calculate_total_distance_traveled(x, y)
-
-        # Calculate average speed
-        total_time = time_vector[-1] - time_vector[0]
-        average_speed = calculate_average_speed(total_distance, total_time)
-
-        # Calculate time spent in zones
-        time_in_zones = calculate_time_in_zones(x, y, time_vector)
-
-        # Save results to a .txt file
-        results = {
-            "total_distance_m": total_distance,
-            "average_speed_m/s": average_speed,
-            "time_in_zones_s": time_in_zones,
-            "heatmap_path": heatmap_path,
-            "pathway_path": pathway_path,
-        }
-        save_results_to_txt(results, output_dir, base_name)
-
+        time_vector = np.linspace(0, len(x) / fs, len(x))
+        distance = np.insert(np.sqrt(np.diff(x) ** 2 + np.diff(y) ** 2), 0, 0)
+        speed = np.insert(distance[1:] / (1 / fs), 0, 0)
+        zones, zone_percentages = calculate_zone_occupancy(x, y)
+        center_border_results = calculate_center_and_border_occupancy(x, y)
+        results = {"zone_counts": zones, "zone_percentages": zone_percentages}
+        save_results_to_csv(results, center_border_results, output_dir, base_name)
+        save_position_data(time_vector, x, y, distance, speed, output_dir, base_name)
+        plot_center_and_border_heatmap(x, y, output_dir, base_name)
+        plot_heatmap(x, y, output_dir, base_name, zone_percentages)
+        plot_pathway(x, y, output_dir, base_name)  # Adicionar a plotagem do pathway
+        plot_center_and_border_heatmap(x, y, output_dir, base_name)
         print(f"Processing of file {input_file} completed successfully.")
     except Exception as e:
-        print(f"An error occurred while processing {input_file}: {str(e)}")
+        print(f"An error occurred while processing {input_file}: {e}")
         raise
 
+
 def process_all_files_in_directory(target_dir, fs):
-    """
-    Process all .csv files in the specified directory and save the results.
-
-    Args:
-        target_dir (str): Path to the directory containing CSV files.
-        fs (float): Sampling frequency in Hz.
-    """
-    # Generate the main output directory with timestamp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    main_output_dir = os.path.join(target_dir, f"vaila_openfield_{timestamp}")
+    main_output_dir = os.path.join(target_dir, f"openfield_results_{timestamp}")
     os.makedirs(main_output_dir, exist_ok=True)
-
-    # List all .csv files in the target directory
     csv_files = [
         os.path.join(target_dir, f)
         for f in os.listdir(target_dir)
         if f.endswith(".csv")
     ]
-
-    # Process each .csv file
     for input_file in csv_files:
         print(f"Processing file: {input_file}")
         process_open_field_data(input_file, main_output_dir, fs)
-
     print("All files have been processed successfully.")
 
-def run_animal_open_field():
-    """
-    Main function to handle user input and execute the open field analysis
-    on all .csv files in a directory.
-    """
-    print(f"Running script: {Path(__file__).name}")
-    print(f"Script directory: {Path(__file__).parent.resolve()}")
 
+def run_animal_open_field():
+    print("Running open field analysis...")
     root = Tk()
     root.withdraw()
-
-    # Ask user for the target directory
     target_dir = filedialog.askdirectory(
         title="Select the directory containing .csv files of open field data"
     )
     if not target_dir:
         messagebox.showwarning("Warning", "No directory selected.")
         return
-
-    # Ask user for the frame rate
     fs = simpledialog.askfloat(
-        "Frame Rate",
-        "Enter the frame rate of the data (fps in Hz):",
-        minvalue=0.1,
-        maxvalue=1000,
+        "Sampling Frequency", "Enter the sampling frequency (Hz):", minvalue=0.1
     )
     if not fs:
-        messagebox.showwarning("Warning", "No frame rate provided.")
+        messagebox.showwarning("Warning", "Sampling frequency not provided.")
         return
-
-    # Process all files in the directory
     process_all_files_in_directory(target_dir, fs)
-
     root.destroy()
     messagebox.showinfo(
         "Success", "All .csv files have been processed and results saved."
     )
 
+
 if __name__ == "__main__":
     run_animal_open_field()
-
