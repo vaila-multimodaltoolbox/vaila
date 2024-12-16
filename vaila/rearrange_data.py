@@ -241,6 +241,98 @@ def batch_convert_mediapipe(directory_path):
     )
 
 
+def convert_kinovea_to_vaila(file_path, save_directory):
+    try:
+        # Read the CSV file
+        df = pd.read_csv(file_path)
+
+        # Generate the correct header based on the number of trajectories
+        num_columns = len(df.columns) - 1  # Exclude the first column (frame/time)
+        num_points = num_columns // 2  # Each point has X and Y
+        correct_header = ["frame"] + [
+            f"p{i+1}_{coord}" for i in range(num_points) for coord in ["x", "y"]
+        ]
+
+        # Assign the correct header to the DataFrame
+        df.columns = correct_header[: len(df.columns)]
+
+        # Format the columns with adjusted decimal precision
+        float_format = "%.1f"
+        if "frame" in df.columns:
+            df.iloc[:, 1:] = df.iloc[:, 1:].astype(float).round(1)
+        else:
+            df = df.astype(float).round(1)
+
+        # Save the corrected file in Vailá format
+        base_name = os.path.splitext(os.path.basename(file_path))[0]
+        new_file_name = f"{base_name}_vaila.csv"
+        new_file_path = os.path.join(save_directory, new_file_name)
+
+        if not os.path.exists(save_directory):
+            os.makedirs(save_directory)
+
+        df.to_csv(new_file_path, index=False, float_format=float_format)
+        print(f"Corrected and converted Kinovea data saved to {new_file_path}")
+    except Exception as e:
+        print(f"Error converting {file_path}: {e}")
+
+
+def batch_convert_kinovea(directory_path):
+    """
+    Processes all files in the Kinovea format within a directory,
+    converts them to the Vailá format, and saves the output in a subdirectory.
+    """
+    if not directory_path:
+        print("No directory selected.")
+        return
+
+    csv_files = [f for f in os.listdir(directory_path) if f.endswith(".csv")]
+    if not csv_files:
+        print("No CSV files found in the directory.")
+        messagebox.showwarning("No Files Found", "No CSV files found in the directory.")
+        return
+
+    # Create a subdirectory to save the converted files
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    save_directory = os.path.join(
+        directory_path, f"Convert_Kinovea_to_vaila_{timestamp}"
+    )
+    os.makedirs(save_directory, exist_ok=True)
+
+    converted_files = []
+    errors = []
+    for file_name in csv_files:
+        file_path = os.path.join(directory_path, file_name)
+        try:
+            # Call the conversion function
+            convert_kinovea_to_vaila(file_path, save_directory)
+            converted_files.append(file_name)
+        except Exception as e:
+            print(f"Error processing {file_name}: {e}")
+            errors.append((file_name, str(e)))
+
+    # Final summary message
+    if converted_files:
+        success_message = (
+            f"Conversion completed for {len(converted_files)} file(s).\n"
+            f"Files have been saved in: {save_directory}"
+        )
+        print(success_message)
+        if errors:
+            error_message = (
+                f"\nHowever, there were errors with {len(errors)} file(s):\n"
+                + "\n".join(f"{name}: {error}" for name, error in errors)
+            )
+            success_message += error_message
+        messagebox.showinfo("Batch Conversion Completed", success_message)
+    elif errors:
+        error_message = f"All files failed to convert.\nErrors:\n" + "\n".join(
+            f"{name}: {error}" for name, error in errors
+        )
+        print(error_message)
+        messagebox.showerror("Batch Conversion Failed", error_message)
+
+
 class ColumnReorderGUI(tk.Tk):
     def __init__(self, original_headers, file_names, directory_path):
         super().__init__()
@@ -396,6 +488,13 @@ class ColumnReorderGUI(tk.Tk):
             button_frame, text="Standardize Header", command=standardize_header
         )
         standardize_button.grid(row=7, column=0, padx=5, pady=5, sticky="n")
+
+        kinovea_button = tk.Button(
+            button_frame,
+            text="Convert Kinovea to vailá",
+            command=lambda: batch_convert_kinovea(self.directory_path),
+        )
+        kinovea_button.grid(row=8, column=0, padx=5, pady=5, sticky="n")
 
         # Bind events to functions
         self.bind("<Return>", self.swap_columns)
