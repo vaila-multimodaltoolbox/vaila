@@ -3,7 +3,7 @@
     Description: Installs or updates the vailá - Multimodal Toolbox on Windows 11,
                  setting up the Conda environment, configuring MediaPipe, and
                  ensuring all dependencies are properly installed.
-    Creation Date: 2024-12-10
+    Creation Date: 2024-12-17
     Author: Paulo R. P. Santiago & David Williams
 #>
 
@@ -72,6 +72,43 @@ Add-Content -Path $profilePath -Value "`n& '$condaPath\shell\condabin\conda-hook
 Write-Output "Reloading PowerShell profile to apply changes..."
 . $profilePath
 
+# Check if the 'vaila' Conda environment exists and create/update it
+Write-Output "Checking if the 'vaila' Conda environment exists..."
+$envExists = conda env list | Select-String -Pattern "^vaila"
+If ($envExists) {
+    Write-Output "Conda environment 'vaila' already exists. Updating..."
+    Try {
+        & conda env update -n vaila -f "$vailaProgramPath\yaml_for_conda_env\vaila_win.yaml" --prune
+        Write-Output "'vaila' environment updated successfully."
+    } Catch {
+        Write-Error "Failed to update 'vaila' environment. Error: $_"
+        Exit
+    }
+} Else {
+    Write-Output "Creating 'vaila' Conda environment from vaila_win.yaml..."
+    Try {
+        & conda env create -f "$vailaProgramPath\yaml_for_conda_env\vaila_win.yaml"
+        Write-Output "'vaila' environment created successfully."
+    } Catch {
+        Write-Error "Failed to create 'vaila' environment. Error: $_"
+        Exit
+    }
+}
+
+# Install dependencies using pip in the 'vaila' environment
+Write-Output "Installing additional dependencies (mediapipe, moviepy) in the 'vaila' environment..."
+conda activate vaila
+Try {
+    pip install mediapipe moviepy
+    Write-Output "mediapipe and moviepy installed successfully."
+} Catch {
+    Write-Error "Failed to install mediapipe or moviepy. Error: $_"
+}
+
+# Remove ffmpeg installed via Conda, if any
+Write-Output "Removing ffmpeg installed via Conda, if any..."
+conda remove -n vaila ffmpeg -y
+
 # Separate Installation and Upgrade Logic for Specific Packages
 
 # 1. PowerShell 7
@@ -137,43 +174,6 @@ If ($wtInstalled) {
     }
 }
 
-# Check if the 'vaila' Conda environment exists and create/update it
-Write-Output "Checking if the 'vaila' Conda environment exists..."
-$envExists = conda env list | Select-String -Pattern "^vaila"
-If ($envExists) {
-    Write-Output "Conda environment 'vaila' already exists. Updating..."
-    Try {
-        & conda env update -n vaila -f "$vailaProgramPath\yaml_for_conda_env\vaila_win.yaml" --prune
-        Write-Output "'vaila' environment updated successfully."
-    } Catch {
-        Write-Error "Failed to update 'vaila' environment. Error: $_"
-        Exit
-    }
-} Else {
-    Write-Output "Creating 'vaila' Conda environment from vaila_win.yaml..."
-    Try {
-        & conda env create -f "$vailaProgramPath\yaml_for_conda_env\vaila_win.yaml"
-        Write-Output "'vaila' environment created successfully."
-    } Catch {
-        Write-Error "Failed to create 'vaila' environment. Error: $_"
-        Exit
-    }
-}
-
-# Install dependencies using pip in the 'vaila' environment
-Write-Output "Installing additional dependencies (mediapipe, moviepy) in the 'vaila' environment..."
-conda activate vaila
-Try {
-    pip install mediapipe moviepy
-    Write-Output "mediapipe and moviepy installed successfully."
-} Catch {
-    Write-Error "Failed to install mediapipe or moviepy. Error: $_"
-}
-
-# Remove ffmpeg installed via Conda, if any
-Write-Output "Removing ffmpeg installed via Conda, if any..."
-conda remove -n vaila ffmpeg -y
-
 # Configure the vaila profile in Windows Terminal
 $wtPath = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe"
 If (Test-Path $wtPath) {
@@ -222,7 +222,8 @@ If (Test-Path $mediapipeModelDir) {
 
 # Create a Desktop shortcut for vaila
 Write-Output "Creating Desktop shortcut for 'vaila'..."
-$desktopShortcutPath = "$env:USERPROFILE\Desktop\vaila.lnk"
+$desktopPath = [Environment]::GetFolderPath("Desktop")
+$desktopShortcutPath = Join-Path $desktopPath "vaila.lnk"
 $wshell = New-Object -ComObject WScript.Shell
 $desktopShortcut = $wshell.CreateShortcut($desktopShortcutPath)
 $desktopShortcut.TargetPath = "pwsh.exe"
