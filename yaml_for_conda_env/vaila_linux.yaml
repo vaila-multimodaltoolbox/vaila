@@ -376,7 +376,7 @@ dependencies:
   - rpds-py
   - s2n
   - scipy
-  - seaborn-base
+  - seaborn
   - send2trash
   - setuptools
   - six
