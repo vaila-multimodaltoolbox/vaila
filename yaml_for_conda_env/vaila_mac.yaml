@@ -24,7 +24,6 @@
 name: vaila
 channels:
   - conda-forge
-  - defaults
   - apple
 dependencies:
   - annotated-types
