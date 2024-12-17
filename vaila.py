@@ -3,9 +3,9 @@
 vaila.py
 ===============================================================================
 Author: Paulo R. P. Santiago
-Date: 09 December 2024
-Version: 09.Dec.2024
-Python Version: 3.11
+Date: 17 December 2024
+Version: 17.Dec.2024
+Python Version: 3.11.11
 
 Description:
 ------------
@@ -213,7 +213,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 09.Dec.2024")
+        self.title("vailá - 17.Dec.2024")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
