@@ -27,27 +27,56 @@
 
 The analysis of human movement is fundamental in both health and sports biomechanics, providing valuable insights into various aspects of physical performance, rehabilitation, and injury prevention. However, existing software often restricts user control and customization, acting as a "black box." With *vailá*, users have the freedom to explore, customize, and create their own tools in a truly open-source and collaborative environment.
 
+## Table of Contents
+- [Introduction](#introduction)
+- [New Key Features in v17.Dec.2024](#new-key-features-in-v17dec2024)
+- [Description](#description)
+- [Installation and Setup](#installation-and-setup)
+- [Running the Application](#running-the-application)
+- [Uninstallation Instructions](#unistallation-instructions)
+- [Project Structure](#project-structure)
+- [Citing *vailá*](#citing-vailá)
+- [Authors](#authors)
+- [Contribution](#contribution)
+- [License](#license)
+
+---
 *vailá* (Versatile Anarcho Integrated Liberation Ánalysis) is an open-source multimodal toolbox that leverages data from multiple biomechanical systems to enhance human movement analysis. It integrates data from:
 
-- **Retroreflective Motion Capture Systems** (e.g., Vicon, OptiTrack)
-- **Inertial Measurement Unit (IMU) Systems** (e.g., Delsys, Noraxon)
-- **Markerless Video Capture Technology** (e.g., OpenPose, MediaPipe)
-- **Electromyography (EMG) Systems** (e.g., Delsys, Noraxon)
-- **Force Plate Systems** (e.g., AMTI, Bertec)
-- **GPS/GNSS Systems** (e.g., Garmin, Trimble)
-- **MEG/EEG Systems** (for brain activity monitoring)
-- **HR/ECG Systems** (for heart rate and electrical activity)
+### Supported Systems and Data Sources:
+- **Motion Capture Systems** (Vicon, OptiTrack)
+- **IMU Sensors** (Delsys, Noraxon)
+- **Markerless Tracking** (OpenPose, MediaPipe)
+- **Force Plates** (AMTI, Bertec)
+- **Electromyography (EMG)**
+- **GNSS/GPS Systems**
+- **Heart Rate/ECG**
+- **MEG/EEG**
+- **Video Analysis**
 
-By integrating these diverse data sources, *vailá* allows for comprehensive and accurate analysis of movement patterns, which is particularly beneficial for research and clinical applications.
+## New Key Features in v17.Dec.2024
 
-## Key Features
+### 🚀 **1. Multimodal Analysis**
+- 🐭 **Animal Open Field Test**: Analyze rodent open field test data to calculate:
+  - 📏 Total distance traveled
+  - ⏱️ Time spent in zones
+  - 📊 Movement speed distribution
+- 🎥 **Markerless 2D/3D Tracking**: Enhanced support for markerless tracking videos.
+- 🦾 **Force Analysis**: Expanded tools for kinetic data analysis (e.g., force plate).
 
-- **Multimodal Data Analysis**: Analyze data from various sources such as IMU sensors, motion capture, markerless tracking, EMG, force plates, and GPS/GNSS systems.
-- **File Management**: Tools for file operations, including rename, import, export, copy, move, remove, tree, find, and transfer.
-- **Data Conversion**: Convert between C3D and CSV formats, and perform Direct Linear Transformation (DLT) methods for 2D and 3D reconstructions.
-- **Video Processing**: Tools for converting videos to images, cutting videos, compressing (H.264 and HEVC H.265), synchronizing videos, and extracting pixel coordinates.
-- **Data Visualization**: Display and plot 2D and 3D graphs; visualize CSV and C3D data.
+### **2. File Management**
+- Batch tools for renaming, copying, importing, exporting, and organizing files.
+- Tree generation and advanced file search based on patterns or extensions.
 
+### **3. Video Processing**
+- **Frame Extraction**: Convert videos to PNG frames.
+- **Compression**: Support for H.264 and H.265 (HEVC) video compression.
+- **Synchronization**: Align videos based on timestamps or flashes.
+- **Pixel Coordinates Extraction**: Retrieve pixel data for video-based analysis.
+
+### **4. Visualization Tools**
+- **2D/3D Plotting**: Enhanced visualization for biomechanical data.
+- **C3D and CSV Display**: Interactive tools for viewing and analyzing raw motion data.
 ---
 
 ## Description
@@ -179,6 +208,10 @@ If you need any further adjustments or have additional requests, feel free to le
    - Open **PowerShell** (with Anaconda initialized) or **Anaconda PowerShell Prompt**.
    - Navigate to the directory where *vailá* was downloaded or extracted.
    - Execute the installation script:
+     ```powershell
+     .\install_vaila_win.ps1
+     ```
+   - **Or run the script with Admin privileges Policy**:
      ```powershell
      powershell -ExecutionPolicy Bypass -File .\install_vaila_win.ps1
      ```
@@ -380,76 +413,84 @@ Remove directory `vaila` inside `C:\Users\your_user_name_here\AppData\Local\vail
 An overview of the project structure:
 
 ```bash
-tree vaila
-
 vaila
-├── __init__.py
-├── __pycache__
-├── batchcut.py
-├── cluster_analysis.py
-├── cluster_analysis_cli.py
-├── common_utils.py
-├── compress_videos_h264.py
-├── compress_videos_h265.py
-├── compressvideo.py
-├── cop_analysis.py
-├── cop_calculate.py
-├── data_processing.py
-├── dialogsuser.py
-├── dialogsuser_cluster.py
-├── dlt2d.py
-├── dlt3d.py
-├── drawboxe.py
-├── ellipse.py
-├── emg_labiocom.py
-├── extractpng.py
-├── filemanager.py
-├── filter_utils.py
-├── filtering.py
-├── fixnoise.py
-├── fonts
-├── force_cmj.py
-├── force_cube_fig.py
-├── forceplate_analysis.py
-├── getpixelvideo.py
-├── gnss_analysis.py
-├── images
-├── imu_analysis.py
-├── listjointsnames.py
-├── maintools.py
-├── markerless_2D_analysis.py
-├── markerless_3D_analysis.py
-├── mergestack.py
-├── mocap_analysis.py
-├── modifylabref.py
-├── modifylabref_cli.py
-├── numberframes.py
-├── plotting.py
-├── readc3d_export.py
-├── readcsv.py
-├── readcsv_export.py
-├── rearrange_data.py
-├── rearrange_data_dask.py
-├── rec2d.py
-├── rec2d_one_dlt2d.py
-├── rotation.py
-├── run_vector_coding.py
-├── run_vector_coding_GUI.py
-├── showc3d.py
-├── showc3d_nodash.py
-├── spectral_features.py
-├── stabilogram_analysis.py
-├── standardize_header.py
-├── sync_flash.py
-├── syncvid.py
-├── utils.py
-├── vaila_manifest.py
-├── vaila_upscaler.py
-├── vailaplot2d.py
-├── vailaplot3d.py
-├── vector_coding.py
-├── videoprocessor.py
-└── videoprocessor2.py
+├── vaila.py              # Main script
+├── animal_open_field.py  # Animal Open Field analysis
+├── batchcut.py           # Batch video cutting tools
+├── cluster_analysis.py   # Cluster analysis for motion capture
+├── common_utils.py       # Common utility functions
+├── compress_videos_h264.py # H.264 video compression
+├── compress_videos_h265.py # H.265 (HEVC) video compression
+├── cop_analysis.py       # Center of Pressure (CoP) analysis
+├── cop_calculate.py      # CoP calculations
+├── data_processing.py    # General data processing tools
+├── dialogsuser.py        # User interaction dialogs
+├── dialogsuser_cluster.py # Dialog tools for cluster analysis
+├── dlc2vaila.py          # Convert DeepLabCut to vailá format
+├── dlt2d.py              # 2D Direct Linear Transformation (DLT)
+├── dlt3d.py              # 3D Direct Linear Transformation (DLT)
+├── drawboxe.py           # Draw box in video frames
+├── ellipse.py            # Ellipse fitting tools
+├── emg_labiocom.py       # EMG signal analysis tools
+├── extractpng.py         # Extract PNG frames from videos
+├── filemanager.py        # File management utilities
+├── filtering.py          # Data filtering methods
+├── filter_utils.py       # Additional filter utility tools
+├── fixnoise.py           # Noise reduction tools
+├── fonts/                # Custom fonts
+│   └── mrrobot.ttf       # Font example
+├── forceplate_analysis.py # Force plate analysis tools
+├── force_cmj.py          # Countermovement jump analysis
+├── force_cube_fig.py     # 3D force data visualization
+├── getpixelvideo.py      # Extract pixel coordinates from video
+├── gnss_analysis.py      # GNSS/GPS data analysis tools
+├── grf_gait.py           # Ground Reaction Force (GRF) gait analysis
+├── images/               # GUI assets and images
+│   ├── cluster_config.png
+│   ├── gui.png
+│   ├── vaila_logo.png
+│   └── ...
+├── imu_analysis.py       # IMU sensor data analysis
+├── interpolation_split.py # Interpolation and split data tool
+├── join2dataset.py       # Join multiple datasets
+├── linear_interpolation_split.py # Linear interpolation split tool
+├── listjointsnames.py    # List joint names from datasets
+├── load_vicon_csv_split_batch.py # Load Vicon data in batch
+├── maintools.py          # Core tools for analysis
+├── markerless_2D_analysis.py # Markerless 2D tracking analysis
+├── markerless_3D_analysis.py # Markerless 3D tracking analysis
+├── mergestack.py         # Merge datasets into stacks
+├── mocap_analysis.py     # Motion capture full body analysis
+├── modifylabref.py       # Modify laboratory references
+├── modifylabref_cli.py   # Command-line interface for modify lab ref
+├── numberframes.py       # Frame numbering tools
+├── plotting.py           # Data plotting tools
+├── readc3d_export.py     # Read and export C3D files
+├── readcsv.py            # Read CSV data
+├── readcsv_export.py     # Export CSV data
+├── rearrange_data.py     # Rearrange and clean datasets
+├── rec2d.py              # 2D Reconstruction
+├── rec2d_one_dlt2d.py    # 2D reconstruction with single DLT
+├── rotation.py           # Rotation analysis tools
+├── run_vector_coding.py  # Run vector coding analysis
+├── run_vector_coding_GUI.py # GUI for vector coding analysis
+├── showc3d.py            # Visualize C3D data
+├── showc3d_nodash.py     # Non-Dash C3D visualization
+├── spectral_features.py  # Spectral feature extraction
+├── stabilogram_analysis.py # Stabilogram analysis tools
+├── standardize_header.py # Standardize data headers
+├── syncvid.py            # Synchronize video files
+├── sync_flash.py         # Synchronize flash-based data
+├── utils.py              # General utility scripts
+├── vailaplot2d.py        # Plot 2D biomechanical data
+├── vailaplot3d.py        # Plot 3D biomechanical data
+├── vaila_and_jump.py     # Vertical jump analysis tool
+├── vaila_manifest.py     # Manifest file for vailá
+├── vaila_upscaler.py     # Data upscaling tools
+├── vector_coding.py      # Joint vector coding analysis
+├── videoprocessor.py     # Video processing tools
+├── __init__.py           # Package initializer
+└── __pycache__/          # Compiled Python files cache
 ```
 
 ## Citing *vailá*
