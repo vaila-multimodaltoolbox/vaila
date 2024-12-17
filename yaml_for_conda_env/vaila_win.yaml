@@ -25,7 +25,6 @@
 name: vaila
 channels:
   - conda-forge
-  - defaults
 dependencies:
   - _libdav1d_api
   - annotated-types
@@ -234,7 +233,6 @@ dependencies:
   - markdown-it-py
   - markupsafe
   - matplotlib
-  - matplotlib-base
   - matplotlib-inline
   - mdurl
   - mistune
@@ -334,7 +332,7 @@ dependencies:
   - rich
   - rpds-py
   - scipy
-  - seaborn-base
+  - seaborn
   - send2trash
   - setproctitle
   - setuptools
