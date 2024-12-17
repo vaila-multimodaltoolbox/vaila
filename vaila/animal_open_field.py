@@ -209,118 +209,128 @@ def define_center_zone():
     return center_zone
 
 
-def calculate_zone_occupancy(x, y):
+def calculate_zone_occupancy(x, y, distance):
     """
-    Calculates the number of points and percentages in each zone (3x3 grid).
+    Calculates the number of points, percentages, and distance covered in each zone.
 
     Args:
         x (array-like): X coordinates.
         y (array-like): Y coordinates.
+        distance (array-like): Distance traveled between consecutive points.
 
     Returns:
         zones_count (dict): Count of points in each zone.
         zones_percentage (dict): Percentage of points in each zone.
+        zones_distance (dict): Distance covered in each zone.
     """
-    zones = define_zones()  # Get zone definitions
-    zones_count = {zone: 0 for zone in zones}  # Initialize counts for each zone
+    zones = define_zones()
+    zones_count = {zone: 0 for zone in zones}
+    zones_distance = {zone: 0.0 for zone in zones}
     total_points = len(x)
 
-    # Count points in zones
-    for xi, yi in zip(x, y):
+    # Add counter for points outside all zones
+    points_outside_zones = 0
+
+    # Iterate through all positions and calculate distances
+    for i in range(len(x)):  # Ensure all points (including 0) are processed
+        point_found = False
         for zone_name, limits in zones.items():
             if (
-                limits["xmin"] <= xi <= limits["xmax"]
-                and limits["ymin"] <= yi <= limits["ymax"]
+                limits["xmin"] <= x[i] <= limits["xmax"]
+                and limits["ymin"] <= y[i] <= limits["ymax"]
             ):
                 zones_count[zone_name] += 1
-                break  # Avoid double counting
+                zones_distance[zone_name] += distance[i]
+                point_found = True
+                break  # Exit loop once a zone is found
+        if not point_found:
+            points_outside_zones += 1  # Count points that are outside all zones
 
     # Calculate percentages
     zones_percentage = {
         zone: (count / total_points) * 100 for zone, count in zones_count.items()
     }
 
-    return zones_count, zones_percentage
+    # Check for missing points
+    total_counted_points = sum(zones_count.values())
+    print(f"Total points counted in zones: {total_counted_points}")
+    print(f"Points outside zones: {points_outside_zones}")
+    print(f"Expected total points: {total_points}")
+
+    return zones_count, zones_percentage, zones_distance
 
 
-def calculate_center_and_border_occupancy(x, y):
+def calculate_center_and_border_occupancy(x, y, distance):
     """
-    Calculates the number of points and percentages in the center and border zones.
+    Calculates the number of points, percentages, and distances in the center and border zones.
 
     Args:
         x (array-like): X coordinates.
         y (array-like): Y coordinates.
+        distance (array-like): Distance traveled between consecutive points.
 
     Returns:
-        dict: Count and percentages of points in the center and border zones.
+        dict: Count, percentages, and distances in the center and border zones.
     """
-    center_zone = define_center_zone()  # Get the limits of the center zone
+    center_zone = define_center_zone()
     total_points = len(x)
 
-    # Count the points within the center zone
-    points_in_center = sum(
-        1
-        for xi, yi in zip(x, y)
-        if center_zone["xmin"] <= xi <= center_zone["xmax"]
-        and center_zone["ymin"] <= yi <= center_zone["ymax"]
-    )
+    # Initialize counters
+    points_in_center = 0
+    distance_in_center = 0.0
+    distance_in_border = 0.0
 
-    # Points outside the center zone are considered to be in the border zone
+    # Count points and calculate distances
+    for i in range(1, len(x)):
+        if (
+            center_zone["xmin"] <= x[i] <= center_zone["xmax"]
+            and center_zone["ymin"] <= y[i] <= center_zone["ymax"]
+        ):
+            points_in_center += 1
+            distance_in_center += distance[i]
+        else:
+            distance_in_border += distance[i]
+
     points_in_border = total_points - points_in_center
 
-    # Return the results as a formatted dictionary
     return {
         "points_in_center": points_in_center,
         "percentage_in_center": (points_in_center / total_points) * 100,
         "points_in_border": points_in_border,
         "percentage_in_border": (points_in_border / total_points) * 100,
+        "distance_in_center": distance_in_center,
+        "distance_in_border": distance_in_border,
     }
 
 
 def calculate_kinematics(x, y, fs):
-    """
-    Calculate kinematic metrics including distance, speed, time stationary, and speed ranges.
-
-    Args:
-        x (array-like): Filtered X coordinates.
-        y (array-like): Filtered Y coordinates.
-        fs (float): Sampling frequency in Hz.
-
-    Returns:
-        distance (array-like): Distance traveled between consecutive points.
-        speed (array-like): Speed calculated from the distance and sampling frequency.
-        time_stationary (float): Total time the animal was stationary (speed < 0.05 m/s).
-        speed_range_counts_frames (dict): Count of occurrences in each speed range (frames).
-        speed_range_counts_seconds (dict): Total time in seconds spent in each speed range.
-    """
-    # Calculate distance between consecutive points
     distance = np.insert(np.sqrt(np.diff(x) ** 2 + np.diff(y) ** 2), 0, 0)
-
-    # Calculate speed as distance divided by time (1/fs for each interval)
     speed = np.insert(distance[1:] / (1 / fs), 0, 0)
 
-    # Calculate time stationary (speed < 0.05 m/s)
-    stationary_threshold = 0.05  # m/s
-    time_stationary = np.sum(speed < stationary_threshold) / fs  # Total time in seconds
+    # Calculate time stationary
+    stationary_threshold = 0.05
+    time_stationary = np.sum(speed < stationary_threshold) / fs
 
-    # Define speed ranges (convert to m/min: multiply by 60)
-    speed_ranges = [(3 * i, 3 * (i + 1)) for i in range(15)]  # From 0 to 45 m/min
+    # Speed ranges
+    speed_ranges = [(3 * i, 3 * (i + 1)) for i in range(15)]  # 0 to 45 m/min
     speed_range_counts_frames = {f"{low}-{high} m/min": 0 for low, high in speed_ranges}
     speed_range_counts_seconds = {
         f"{low}-{high} m/min": 0 for low, high in speed_ranges
     }
 
-    # Count occurrences in each speed range and calculate time in seconds
-    for s in speed * 60:  # Convert speed to m/min
+    # Count speed ranges
+    for s in speed * 60:  # Convert m/s to m/min
         for low, high in speed_ranges:
             if low <= s < high:
-                speed_range_counts_frames[
-                    f"{low}-{high} m/min"
-                ] += 1  # Increment frame count
-                speed_range_counts_seconds[f"{low}-{high} m/min"] += (
-                    1 / fs
-                )  # Convert to seconds
+                speed_range_counts_frames[f"{low}-{high} m/min"] += 1
+                speed_range_counts_seconds[f"{low}-{high} m/min"] += 1 / fs
                 break
+
+    # Call zone functions
+    zones_count, zones_percentage, zones_distance = calculate_zone_occupancy(
+        x, y, distance
+    )
+    center_border_results = calculate_center_and_border_occupancy(x, y, distance)
 
     return (
         distance,
@@ -328,6 +338,10 @@ def calculate_kinematics(x, y, fs):
         time_stationary,
         speed_range_counts_frames,
         speed_range_counts_seconds,
+        zones_count,
+        zones_percentage,
+        zones_distance,
+        center_border_results,
     )
 
 
@@ -558,8 +572,9 @@ def plot_center_and_border_heatmap(x, y, output_dir, base_name, center_border_re
         ax.set_ylim(0, 0.6)
         ax.set_xlabel("Position X (m)")
         ax.set_ylabel("Position Y (m)")
-        ax.set_title("Heatmap with Central and Border Areas")
-
+        ax.set_title(
+            f"Heatmap with Central and Border Distances: Center: {center_border_results['distance_in_center']:.2f} m | Border: {center_border_results['distance_in_border']:.2f} m"
+        )
         # Save the heatmap
         output_file_path = os.path.join(
             output_dir, f"{base_name}_center_border_heatmap.png"
@@ -694,14 +709,17 @@ def plot_speed_over_time_with_tags(
     print(f"Speed over time plot with tags saved at: {output_file_path}")
 
 
-def save_results_to_csv(results, center_border_results, fs, output_dir, base_name):
+def save_results_to_csv(
+    results, center_border_results, zones_distance, fs, output_dir, base_name
+):
     """
-    Save results including zone occupancy, stationary time, and speed range counts
-    in both frames and seconds.
+    Save results including zone occupancy, stationary time, speed range counts,
+    and distances covered in zones and center/border areas.
 
     Args:
         results (dict): Processed results containing zone counts, percentages, and speed data.
-        center_border_results (dict): Results for center and border occupancy.
+        center_border_results (dict): Results for center and border occupancy and distances.
+        zones_distance (dict): Distances covered in each zone.
         fs (float): Sampling frequency in Hz.
         output_dir (str): Directory to save the output CSV.
         base_name (str): Base name for the output file.
@@ -712,11 +730,15 @@ def save_results_to_csv(results, center_border_results, fs, output_dir, base_nam
         # Create column headers
         zone_headers_points = [f"z{i}_npoints" for i in range(1, 10)]
         zone_headers_percentage = [f"z{i}_percentage" for i in range(1, 10)]
+        zone_headers_distance = [f"z{i}_distance_m" for i in range(1, 10)]
+
         additional_headers = [
             "zcenter_npoints",
             "zborder_npoints",
             "zcenter_percentage",
             "zborder_percentage",
+            "distance_in_center_m",
+            "distance_in_border_m",
         ]
         time_headers = ["time_stationary_seconds"]
         speed_range_headers_frames = [
@@ -729,6 +751,7 @@ def save_results_to_csv(results, center_border_results, fs, output_dir, base_nam
         headers = (
             zone_headers_points
             + zone_headers_percentage
+            + zone_headers_distance
             + additional_headers
             + time_headers
             + speed_range_headers_frames
@@ -740,11 +763,15 @@ def save_results_to_csv(results, center_border_results, fs, output_dir, base_nam
         zone_percentages = [
             results["zone_percentages"].get(f"Z{i}", 0.0) for i in range(1, 10)
         ]
+        zone_distances = [zones_distance.get(f"Z{i}", 0.0) for i in range(1, 10)]
+
         center_border_data = [
             center_border_results["points_in_center"],
             center_border_results["points_in_border"],
             center_border_results["percentage_in_center"],
             center_border_results["percentage_in_border"],
+            center_border_results["distance_in_center"],
+            center_border_results["distance_in_border"],
         ]
         time_data = [results["time_stationary"]]
 
@@ -755,6 +782,7 @@ def save_results_to_csv(results, center_border_results, fs, output_dir, base_nam
         row_data = (
             zone_points
             + zone_percentages
+            + zone_distances
             + center_border_data
             + time_data
             + speed_range_frames
@@ -822,23 +850,23 @@ def process_open_field_data(input_file, main_output_dir, fs, cutoff):
             time_stationary,
             speed_range_counts_frames,
             speed_range_counts_seconds,
+            zones_count,
+            zones_percentage,
+            zones_distance,
+            center_border_results,
         ) = calculate_kinematics(x_filtered, y_filtered, fs)
-
-        # Analyze zones and center/border occupancy
-        zones, zone_percentages = calculate_zone_occupancy(x_filtered, y_filtered)
-        center_border_results = calculate_center_and_border_occupancy(
-            x_filtered, y_filtered
-        )
 
         # Save results and data
         results = {
-            "zone_counts": zones,
-            "zone_percentages": zone_percentages,
+            "zone_counts": zones_count,
+            "zone_percentages": zones_percentage,
             "time_stationary": time_stationary,
             "speed_range_counts_frames": speed_range_counts_frames,
             "speed_range_counts_seconds": speed_range_counts_seconds,
         }
-        save_results_to_csv(results, center_border_results, fs, output_dir, base_name)
+        save_results_to_csv(
+            results, center_border_results, zones_distance, fs, output_dir, base_name
+        )
         save_position_data(
             time_vector, x_filtered, y_filtered, distance, speed, output_dir, base_name
         )

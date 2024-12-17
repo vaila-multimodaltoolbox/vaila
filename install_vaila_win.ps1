@@ -3,7 +3,7 @@
     Description: Installs or updates the vailá - Multimodal Toolbox on Windows 11,
                  setting up the Conda environment, configuring MediaPipe, and
                  ensuring all dependencies are properly installed.
-    Creation Date: 2024-12-10
+    Creation Date: 2024-12-16
     Author: Paulo R. P. Santiago
 #>
 
@@ -14,7 +14,6 @@ If (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
     Exit
 }
 
-# Before installing or updating 'vaila', we perform the following updates:
 # 1 - Update all packages via winget
 Write-Output "Upgrading all packages via winget..."
 Try {
@@ -188,7 +187,8 @@ If (Test-Path $mediapipeModelDir) {
 
 # Create a Desktop shortcut for vaila
 Write-Output "Creating Desktop shortcut for 'vaila'..."
-$desktopShortcutPath = "$env:USERPROFILE\Desktop\vaila.lnk"
+$desktopPath = [Environment]::GetFolderPath("Desktop")
+$desktopShortcutPath = Join-Path $desktopPath "vaila.lnk"
 $wshell = New-Object -ComObject WScript.Shell
 $desktopShortcut = $wshell.CreateShortcut($desktopShortcutPath)
 $desktopShortcut.TargetPath = "pwsh.exe"
@@ -220,3 +220,4 @@ Write-Output "Start Menu shortcut for 'vaila' created at $startMenuShortcutPath.
 
 Write-Output "Installation and configuration of 'vaila' completed successfully!"
 Pause
+
