@@ -130,7 +130,7 @@ dependencies:
   - gmp
   - gnutls
   - graphite2
-  - gst-plugins-base
+  - gst-plugins
   - gstreamer
   - gtk3
   - h11
@@ -254,7 +254,7 @@ dependencies:
   - libuuid
   - libvorbis
   - libvpx
-  - libwebp-base
+  - libwebp
   - libxcb
   - libxcrypt
   - libxkbcommon
@@ -268,7 +268,7 @@ dependencies:
   - markdown-it-py
   - markupsafe
   - matplotlib
-  - matplotlib-base
+  - matplotlib
   - matplotlib-inline
   - mdurl
   - mistune
@@ -299,7 +299,6 @@ dependencies:
   - numba
   - numexpr
   - numpy
-  - numpy-base
   - openblas
   - openh264
   - openjpeg
@@ -350,7 +349,7 @@ dependencies:
   - pygtk
   - pyparsing
   - pysocks
-  - python=3.11.10
+  - python=3.12.8
   - python-dateutil
   - python-fastjsonschema
   - python-json-logger
@@ -364,7 +363,6 @@ dependencies:
   - qhull
   - qt-main
   - qtconsole
-  - qtconsole-base
   - qtpy
   - re2
   - readline
@@ -504,7 +502,8 @@ dependencies:
       - pyqt5
       - pyqt5-qt5
       - pyqt5-sip
-      - pyside2
+      - pyside6
+      - pyside6-addons
       - retrying
       - scp
       - shiboken2

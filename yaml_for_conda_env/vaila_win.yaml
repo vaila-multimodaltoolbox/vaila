@@ -125,7 +125,7 @@ dependencies:
   - glib-tools
   - glog
   - graphite2
-  - gst-plugins-base
+  - gst-plugins
   - gstreamer
   - h11
   - h2
@@ -214,7 +214,7 @@ dependencies:
   - libtiff
   - libutf8proc
   - libvorbis
-  - libwebp-base
+  - libwebp
   - libxcb
   - libxml2
   - libzlib
@@ -258,7 +258,6 @@ dependencies:
   - numba
   - numexpr
   - numpy
-  - numpy-base
   - openjpeg
   - openmp
   - openpyxl
@@ -304,10 +303,10 @@ dependencies:
   - pygobject
   - pyparsing
   - pyperclip
-  - pyqt
+  - pyqt5
   - pyqt5-sip
   - pysocks
-  - python=3.11
+  - python=3.12.8
   - python-dateutil
   - python-fastjsonschema
   - python-json-logger
@@ -322,7 +321,7 @@ dependencies:
   - pyzmq
   - qhull
   - qt-main
-  - qtconsole-base
+  - qtconsole
   - qtpy
   - re2
   - referencing
@@ -449,6 +448,8 @@ dependencies:
       - pyexiftool
       - pymdown-extensions
       - pynacl
+      - pyside6
+      - pyside6-addons 
       - pyyaml-env-tag
       - regex
       - retrying
