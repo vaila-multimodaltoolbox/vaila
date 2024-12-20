@@ -55,6 +55,7 @@ import subprocess
 import time
 from tkinter import filedialog, messagebox, simpledialog, Tk, Toplevel, Label, Button
 from rich import print
+import shutil
 
 
 class VideoProcessor:
@@ -89,7 +90,7 @@ class VideoProcessor:
             video_files = [
                 f
                 for f in os.listdir(src)
-                if f.endswith((".avi", ".mp4", ".mov", ".mkv"))
+                if f.endswith((".avi", ".mp4", ".mov", ".mkv", '.MP4', '.AVI', '.MOV', '.MKV'))
             ]
 
             for item in video_files:
@@ -199,6 +200,25 @@ class VideoProcessor:
                 png_files = sorted([f for f in files if f.endswith(".png")])
 
                 if png_files:
+                    # Check if filenames are in proper numeric order
+                    if not self.is_pattern_consistent(png_files):
+                        print(f"Inconsistent naming in {subdir}. Creating temporary sorted files...")
+
+                        # Create a temporary directory for sorted copies
+                        temp_dir = os.path.join(subdir, "temp_sorted")
+                        os.makedirs(temp_dir, exist_ok=True)
+
+                        # Copy and rename files to temp directory
+                        for index, old_name in enumerate(sorted(png_files)):
+                            old_path = os.path.join(subdir, old_name)
+                            new_name = self.pattern % index
+                            new_path = os.path.join(temp_dir, new_name)
+                            shutil.copy2(old_path, new_path)
+
+                        # Update subdir to use temp directory
+                        subdir = temp_dir
+                        png_files = sorted([f for f in os.listdir(subdir) if f.endswith(".png")])
+
                     output_video_name = os.path.basename(subdir) + ".mp4"
                     output_video_path = os.path.join(dest_main_dir, output_video_name)
 
@@ -222,17 +242,19 @@ class VideoProcessor:
                         "-i",
                         temp_list_path,
                         "-framerate",
-                        "1",  # 1 frame per second; adjust as needed
+                        "25",  # Adjust as needed
                         "-c:v",
                         "libx264",
                         "-pix_fmt",
                         "yuv420p",
-                        "-g",
-                        "1",  # Force all frames to be keyframes
                         output_video_path,
                     ]
                     subprocess.run(command, check=True)
                     print(f"Video created: {output_video_path}")
+
+                    # Clean up temporary directory
+                    if os.path.exists(temp_dir):
+                        shutil.rmtree(temp_dir)
 
             self.show_completion_message("Video creation completed successfully.")
         except Exception as e:
@@ -247,7 +269,6 @@ class VideoProcessor:
             # Expected file names based on the default pattern
             expected_files = [self.pattern % i for i in range(len(files))]
             actual_files = sorted(files)
-            print(f"Expected files: {actual_files}")
             return actual_files == expected_files
         except ValueError:
             # Return False if file names do not follow the numeric pattern
@@ -318,3 +339,4 @@ class VideoProcessor:
 if __name__ == "__main__":
     processor = VideoProcessor()
     processor.run()
+

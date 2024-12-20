@@ -216,7 +216,7 @@ dependencies:
   - libunistring
   - libutf8proc
   - libvpx
-  - libwebp-base
+  - libwebp
   - libxcb
   - libxml2
   - libzlib
@@ -228,7 +228,6 @@ dependencies:
   - markdown-it-py
   - markupsafe
   - matplotlib
-  - matplotlib-base
   - matplotlib-inline
   - mdurl
   - mistune
@@ -252,7 +251,6 @@ dependencies:
   - numba
   - numexpr
   - numpy
-  - numpy-base
   - openh264
   - openjpeg
   - openpyxl
@@ -298,7 +296,7 @@ dependencies:
   - pyparsing
   - pyperclip
   - pysocks
-  - python=3.11.10
+  - python=3.12.8
   - python-dateutil
   - python-fastjsonschema
   - python-json-logger
@@ -309,7 +307,7 @@ dependencies:
   - pywavelets
   - pyyaml
   - pyzmq
-  - qtconsole-base
+  - qtconsole
   - qtpy
   - re2
   - readline
@@ -321,7 +319,6 @@ dependencies:
   - rpds-py
   - scipy
   - seaborn
-  - seaborn-base
   - send2trash
   - setproctitle
   - setuptools
@@ -609,3 +606,4 @@ dependencies:
       - pykalman
       - ipdb
       - pygame
+      - pyqt5
