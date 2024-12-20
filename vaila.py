@@ -3,9 +3,9 @@
 vaila.py
 ===============================================================================
 Author: Paulo R. P. Santiago
-Date: 17 December 2024
-Version: 17.Dec.2024
-Python Version: 3.11.11
+Date: 20 December 2024
+Version: 20.Dec.2024
+Python Version: 3.12.8
 
 Description:
 ------------
@@ -130,6 +130,7 @@ from vaila import (
     run_fill_split_dialog,
     vaila_and_jump,
     animal_open_field,
+    vaila_lensdistortvideo,
 )
 
 
@@ -186,7 +187,7 @@ C_B: Video and Image
 C_B_r1_c1 - Video<-->PNG  C_B_r1_c2 - Cut Videos    C_B_r1_c3 - Draw Box
 C_B_r2_c1 - CompressH264  C_B_r2_c2 - Compress H265 C_B_r2_c3 - Make Sync file
 C_B_r3_c1 - GetPixelCoord C_B_r3_c2 - Metadata info C_B_r3_c3 - Merge Videos
-C_B_r4_c1 - vailá         C_B_r4_c2 - vailá         C_B_r4_c3 - vailá
+C_B_r4_c1 - Distort video C_B_r4_c2 - vailá         C_B_r4_c3 - vailá
 
 C_C: Visualization
 C_C_r1_c1 - Show C3D      C_C_r1_c2 - Show CSV       C_C_r2_c1 - Plot 2D
@@ -213,7 +214,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 17.Dec.2024")
+        self.title("vailá - 20.Dec.2024")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -862,10 +863,10 @@ class Vaila(tk.Tk):
 
         # Avaliable blank (vailá) buttons for future tools (12-15)
         # C_B_r4_c1 - Video: vailá
-        vaila_btn13 = tk.Button(
+        vaila_distortvideo_btn = tk.Button(
             tools_col2,
-            text="vailá",
-            command=self.show_vaila_message,
+            text="Distort video",
+            command=self.run_distortvideo,
             width=button_width,
         )
 
@@ -895,7 +896,7 @@ class Vaila(tk.Tk):
         getpixelvideo_btn.grid(row=2, column=0, padx=2, pady=2)
         count_frames_btn.grid(row=2, column=1, padx=2, pady=2)
         video_processing_btn.grid(row=2, column=2, padx=2, pady=2)
-        vaila_btn13.grid(row=3, column=0, padx=2, pady=2)
+        vaila_distortvideo_btn.grid(row=3, column=0, padx=2, pady=2)
         vaila_btn14.grid(row=3, column=1, padx=2, pady=2)
         vaila_btn15.grid(row=3, column=2, padx=2, pady=2)
 
@@ -1605,6 +1606,16 @@ class Vaila(tk.Tk):
 
         """
         process_videos_gui()
+
+    # C_B_r4_c1
+    def run_distortvideo(self):
+        """Runs the Lens Distortion Correction Module.
+
+        This method integrates with the `vaila_lensdistortvideo` module to process videos by applying lens distortion correction.
+
+        The lens distortion correction is performed using intrinsic camera parameters (focal length, optical center) and distortion coefficients (radial and tangential). These parameters, typically derived from camera calibration, are loaded from a user-selected CSV file.
+        """
+        vaila_lensdistortvideo.run_distortvideo()
 
     # C_C_r1_c1
     def show_c3d_data(self):
