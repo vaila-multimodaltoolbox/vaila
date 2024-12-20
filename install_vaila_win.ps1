@@ -3,8 +3,8 @@
     Description: Installs or updates the vailá - Multimodal Toolbox on Windows 11,
                  setting up the Conda environment, configuring MediaPipe, and
                  ensuring all dependencies are properly installed.
-    Creation Date: 2024-12-16
-    Author: Paulo R. P. Santiago
+    Creation Date: 2024-12-17
+    Author: Paulo R. P. Santiago & David Williams
 #>
 
 # Check for administrative privileges
@@ -12,15 +12,6 @@ If (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 {
     Write-Warning "This script must be run as Administrator."
     Exit
-}
-
-# 1 - Update all packages via winget
-Write-Output "Upgrading all packages via winget..."
-Try {
-    winget upgrade --all --silent
-    Write-Output "winget upgrades completed."
-} Catch {
-    Write-Warning "Failed to upgrade packages via winget. Continuing anyway."
 }
 
 # Define installation path in AppData\Local dynamically for the current user
@@ -118,25 +109,69 @@ Try {
 Write-Output "Removing ffmpeg installed via Conda, if any..."
 conda remove -n vaila ffmpeg -y
 
-# Install FFmpeg via winget if not already installed
-If (-Not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
-    Write-Output "Installing FFmpeg via winget..."
+# Separate Installation and Upgrade Logic for Specific Packages
+
+# 1. PowerShell 7
+Write-Output "Checking if PowerShell 7 is installed..."
+$psInstalled = Get-Command pwsh -ErrorAction SilentlyContinue
+If ($psInstalled) {
+    Write-Output "PowerShell 7 is already installed. Upgrading..."
     Try {
-        winget install --id Gyan.FFmpeg -e --source winget
+        winget upgrade --id Microsoft.Powershell -e --source winget --silent
+        Write-Output "PowerShell 7 upgraded successfully."
+    } Catch {
+        Write-Warning "Failed to upgrade PowerShell 7."
+    }
+} Else {
+    Write-Output "PowerShell 7 is not installed. Installing..."
+    Try {
+        winget install --id Microsoft.Powershell -e --source winget --silent
+        Write-Output "PowerShell 7 installed successfully."
+    } Catch {
+        Write-Warning "Failed to install PowerShell 7 via winget."
+    }
+}
+
+# 2. FFmpeg
+Write-Output "Checking if FFmpeg is installed..."
+$ffmpegInstalled = Get-Command ffmpeg -ErrorAction SilentlyContinue
+If ($ffmpegInstalled) {
+    Write-Output "FFmpeg is already installed. Upgrading..."
+    Try {
+        winget upgrade --id Gyan.FFmpeg -e --source winget --silent
+        Write-Output "FFmpeg upgraded successfully."
+    } Catch {
+        Write-Warning "Failed to upgrade FFmpeg."
+    }
+} Else {
+    Write-Output "FFmpeg is not installed. Installing..."
+    Try {
+        winget install --id Gyan.FFmpeg -e --source winget --silent
         Write-Output "FFmpeg installed successfully."
     } Catch {
         Write-Warning "Failed to install FFmpeg via winget."
     }
 }
 
-# Install Windows Terminal and PowerShell 7 via winget
-Write-Output "Installing Windows Terminal and PowerShell 7..."
-Try {
-    winget install --id Microsoft.WindowsTerminal -e --source winget
-    winget install --id Microsoft.Powershell -e --source winget
-    Write-Output "Windows Terminal and PowerShell 7 installed successfully."
-} Catch {
-    Write-Warning "Failed to install Windows Terminal or PowerShell 7 via winget."
+# 3. Windows Terminal
+Write-Output "Checking if Windows Terminal is installed..."
+$wtInstalled = Get-Command wt.exe -ErrorAction SilentlyContinue
+If ($wtInstalled) {
+    Write-Output "Windows Terminal is already installed. Upgrading..."
+    Try {
+        winget upgrade --id Microsoft.WindowsTerminal -e --source winget --silent
+        Write-Output "Windows Terminal upgraded successfully."
+    } Catch {
+        Write-Warning "Failed to upgrade Windows Terminal."
+    }
+} Else {
+    Write-Output "Windows Terminal is not installed. Installing..."
+    Try {
+        winget install --id Microsoft.WindowsTerminal -e --source winget --silent
+        Write-Output "Windows Terminal installed successfully."
+    } Catch {
+        Write-Warning "Failed to install Windows Terminal via winget."
+    }
 }
 
 # Configure the vaila profile in Windows Terminal
@@ -220,4 +255,3 @@ Write-Output "Start Menu shortcut for 'vaila' created at $startMenuShortcutPath.
 
 Write-Output "Installation and configuration of 'vaila' completed successfully!"
 Pause
-
