@@ -24,7 +24,6 @@ name: vaila
 channels:
   - ska
   - conda-forge
-  - defaults
 dependencies:
   - _libgcc_mutex
   - _openmp_mutex
@@ -106,7 +105,6 @@ dependencies:
   - exceptiongroup
   - executing
   - expat
-  - ezc3d
   - font-ttf-dejavu-sans-mono
   - font-ttf-inconsolata
   - font-ttf-source-code-pro
@@ -130,9 +128,7 @@ dependencies:
   - gmp
   - gnutls
   - graphite2
-  - gst-plugins
   - gstreamer
-  - gtk3
   - h11
   - h2
   - harfbuzz
@@ -525,3 +521,4 @@ dependencies:
       - pykalman
       - ipdb
       - pygame
+      - ezc3d
