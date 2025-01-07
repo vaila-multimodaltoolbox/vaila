@@ -96,7 +96,6 @@ dependencies:
   - exceptiongroup
   - executing
   - expat
-  - ezc3d
   - font-ttf-dejavu-sans-mono
   - font-ttf-inconsolata
   - font-ttf-source-code-pro
@@ -593,7 +592,6 @@ dependencies:
       - tensorflow
       - tensorflow-io-gcs-filesystem
       - tensorflow-macos
-      - tensorflow-metal
       - termcolor
       - watchdog
       - werkzeug
@@ -607,3 +605,4 @@ dependencies:
       - ipdb
       - pygame
       - pyqt5
+      - ezc3d
