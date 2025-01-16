@@ -135,35 +135,27 @@ from vaila import (
     animal_open_field,
     vaila_lensdistortvideo,
     cube2d_kinematics,
+    markerless2d_mpyolo,
 )
 
 
-text = """
-:::::::::'##::::'##::::'###::::'####:'##::::::::::'###::::'####::::::::::
-::::::::: ##:::: ##:::'## ##:::. ##:: ##:::::::::'## ##::: ####::::::::::
-::::::::: ##:::: ##::'##:. ##::: ##:: ##::::::::'##:. ##::. ##:::::::::::
-::::::::: ##:::: ##:'##:::. ##:: ##:: ##:::::::'##:::. ##:'##::::::::::::
-:::::::::. ##:: ##:: #########:: ##:: ##::::::: #########:..:::::::::::::
-::::::::::. ## ##::: ##.... ##:: ##:: ##::::::: ##.... ##::::::::::::::::
-:::::::::::. ###:::: ##:::: ##:'####: ########: ##:::: ##::::::::::::::::
-::::::::::::...:::::..:::::..::....::........::..:::::..:::::::::::::::::
-
+text = r"""
+                                             o
+                                _,  o |\  _,/
+                          |  |_/ |  | |/ / |
+                           \/  \/|_/|/|_/\/|_/                    
+##########################################################################
 Mocap fullbody_c3d        Markerless_3D_videos       Markerless_2D_video
-                  \\                |                /
-                   v               v               v
-            +-------------------------------------------+
-IMU_csv --> |          vailá - multimodal toolbox        | <-- Cluster_csv
-            +-------------------------------------------+
-                                  |
-                                  v
-                   +-----------------------------+
-                   |           Results           |
-                   +-----------------------------+
-                                  |
-                                  v
-                       +---------------------+
-                       | Visualization/Graph |
-                       +---------------------+
+                  \                |                /
+                   v               v               v        
+   CUBE2D  --> +---------------------------------------+ <-- Vector Coding
+   IMU_csv --> |       vailá - multimodal toolbox      | <-- Cluster_csv
+Open Field --> +---------------------------------------+ <-- Force Plate
+              ^                   |
+        EMG__/                    v
+                    +--------------------------+
+                    | Results: Data and Figure | 
+                    +--------------------------+
 
 ============================ File Manager (Frame A) ========================
 A_r1_c1 - Rename          A_r1_c2 - Import           A_r1_c3 - Export
@@ -177,7 +169,7 @@ B1_r1_c4 - Markerless2D   B1_r1_c5 - Markerless3D
 B2_r2_c1 - Vector Coding  B2_r2_c2 - EMG             B2_r2_c3 - Force Plate
 B2_r2_c4 - GNSS/GPS       B2_r2_c5 - MEG/EEG
 
-B3_r3_c1 - HR/ECG         B3_r3_c2 - vailá           B3_r3_c3 - vailá_and_jump
+B3_r3_c1 - HR/ECG         B3_r3_c2 - Markerless_MP_Yolo  B3_r3_c3 - vailá_and_jump
 B3_r3_c4 - Cube2D         B3_r3_c5 - Animal Open Field 
 
 ============================== Tools Available (Frame C) ===================
@@ -218,7 +210,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 15.Jan.2025")
+        self.title("vailá - 16.Jan.2025")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -489,9 +481,9 @@ class Vaila(tk.Tk):
             - MEG/EEG
             B3:
             - HR/ECG
-            - vailá
+            - Markerless_MP_Yolo
             - vailá_and_jump
-            - vailá
+            - Cube2D
             - Animal Open Field
         """
         # B - Multimodal Analysis FRAME
@@ -624,12 +616,12 @@ class Vaila(tk.Tk):
             # command=self.heart_rate_analysis,
         )
 
-        # B3_r3_c2 - vailá
-        vaila_btn5 = tk.Button(
+        # B3_r3_c2 - markerless2d_mpyolo
+        markerless2d_mpyolo_btn = tk.Button(
             row3_frame,
-            text="vailá",
+            text="Markerless_MP + Yolo",
             width=button_width,
-            command=self.show_vaila_message,
+            command=self.markerless2d_mpyolo,
         )
 
         # B3_r3_c3 - vaila_and_jump
@@ -657,7 +649,7 @@ class Vaila(tk.Tk):
         )
         # Pack the buttons
         ecg_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
-        vaila_btn5.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        markerless2d_mpyolo_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         vailajump_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         cube2d_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         vaila_animalof.pack(side="left", expand=True, fill="x", padx=2, pady=2)
@@ -999,7 +991,7 @@ class Vaila(tk.Tk):
 
         license_label = tk.Label(
             scrollable_frame,
-            text="© 2024 vailá - Multimodal Toolbox. Licensed under the GNU Lesser General Public License v3.0.",
+            text="© 2025 vailá - Multimodal Toolbox. Licensed under the GNU Lesser General Public License v3.0.",
             font=("default", 11),
             anchor="center",
         )
@@ -1778,6 +1770,10 @@ class Vaila(tk.Tk):
         """
         self.destroy()
         os.kill(os.getpid(), signal.SIGTERM)
+
+    def markerless2d_mpyolo(self):
+        """Runs the markerless2d_mpyolo analysis."""
+        markerless2d_mpyolo.run_markerless2d_mpyolo()
 
 
 if __name__ == "__main__":
