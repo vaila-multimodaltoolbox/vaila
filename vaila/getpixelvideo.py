@@ -4,8 +4,9 @@ Pixel Coordinate Tool - getpixelvideo.py
 ================================================================================
 Author: Prof. Dr. Paulo R. P. Santiago
 Date: 09 December 2024
-Version: 2.3.4
-Python Version: 3.11
+Update: 16 January 2025
+Version: 0.0.2
+Python Version: 3.12.8
 
 Description:
 ------------
@@ -48,7 +49,6 @@ def play_video_with_controls(video_path, coordinates=None):
         pygame.display.Info().current_w,
         pygame.display.Info().current_h,
     )
-    # Incluímos um espaço extra para o slider (80px)
     window_width = min(original_width, screen_width - 100)
     window_height = min(original_height, screen_height - 150)
     screen = pygame.display.set_mode(
@@ -57,21 +57,18 @@ def play_video_with_controls(video_path, coordinates=None):
     pygame.display.set_caption("Video Player with Controls")
     clock = pygame.time.Clock()
 
-    # Scaling factors and zoom
+    # Initialize variables
     zoom_level = 1.0
     offset_x, offset_y = 0, 0
     frame_count = 0
     paused = True
+    scrolling = False
 
     # Initialize fresh coordinates if not loaded
     if coordinates is None:
         coordinates = {i: [] for i in range(total_frames)}
 
     def draw_controls():
-        """
-        Draws the slider and frame information on the screen.
-        Returns the slider's position and dimensions for handling clicks.
-        """
         slider_surface = pygame.Surface((window_width, 80))
         slider_surface.fill((30, 30, 30))
 
@@ -102,17 +99,49 @@ def play_video_with_controls(video_path, coordinates=None):
         )
         slider_surface.blit(frame_text, (10, 10))
 
+        # Draw help and save buttons (smaller size and better aligned)
+        button_width = 60  # Reduced from 80
+        button_height = 25  # Reduced from 30
+        button_y = 10
+
+        # Save button
+        save_button_rect = pygame.Rect(window_width - 140, button_y, button_width, button_height)
+        pygame.draw.rect(slider_surface, (100, 100, 100), save_button_rect)
+        save_text = font.render("Save", True, (255, 255, 255))
+        text_rect = save_text.get_rect(center=save_button_rect.center)
+        slider_surface.blit(save_text, text_rect)
+
+        # Help button
+        help_button_rect = pygame.Rect(window_width - 70, button_y, button_width, button_height)
+        pygame.draw.rect(slider_surface, (100, 100, 100), help_button_rect)
+        help_text = font.render("Help", True, (255, 255, 255))
+        text_rect = help_text.get_rect(center=help_button_rect.center)
+        slider_surface.blit(help_text, text_rect)
+
         # Blit the slider surface at the bottom of the window area
         screen.blit(slider_surface, (0, window_height))
 
-        # Calcula o y absoluto do slider em relação à tela
-        slider_abs_y = window_height + slider_y
+        return slider_x, slider_width, slider_y, slider_height, help_button_rect, save_button_rect
 
-        return slider_x, slider_width, slider_abs_y, slider_height
+    def show_help_dialog():
+        help_message = (
+            "Video Player Controls:\n"
+            "- Space: Play/Pause\n"
+            "- Right Arrow: Next Frame\n"
+            "- Left Arrow: Previous Frame\n"
+            "- Up Arrow: Fast Forward\n"
+            "- Down Arrow: Rewind\n"
+            "- +: Zoom In\n"
+            "- -: Zoom Out\n"
+            "- Left Click: Add Marker\n"
+            "- Right Click: Remove Last Marker\n"
+            "- Drag Slider: Jump to Frame\n"
+        )
+        messagebox.showinfo("Help", help_message)
 
     running = True
+    saved = False
     while running:
-        # Ler o frame atual
         cap.set(cv2.CAP_PROP_POS_FRAMES, frame_count)
         ret, frame = cap.read()
         if not ret:
@@ -138,31 +167,29 @@ def play_video_with_controls(video_path, coordinates=None):
             screen_x, screen_y = int((x * zoom_level) - crop_x), int(
                 (y * zoom_level) - crop_y
             )
-            pygame.draw.circle(screen, (0, 255, 0), (screen_x, screen_y), 5)
+            pygame.draw.circle(screen, (0, 255, 0), (screen_x, screen_y), 3)
             font = pygame.font.Font(None, 24)
             text_surface = font.render(str(i + 1), True, (255, 255, 255))
             screen.blit(text_surface, (screen_x + 5, screen_y - 15))
 
-        # Desenha os controles e obtém as posições do slider antes de processar eventos
-        slider_x, slider_width, slider_abs_y, slider_height = draw_controls()
+        slider_x, slider_width, slider_y, slider_height, help_button_rect, save_button_rect = draw_controls()
         pygame.display.flip()
 
-        # Processa eventos
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
 
             elif event.type == pygame.VIDEORESIZE:
-                # Ajusta a janela ao novo tamanho
                 new_w, new_h = event.w, event.h
-                # Manteremos 80px para o slider no final
                 if new_h > 80:
-                    # O vídeo fica com altura new_h - 80
                     window_width, window_height = new_w, new_h - 80
                     screen = pygame.display.set_mode((new_w, new_h), pygame.RESIZABLE)
 
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
+                    save_coordinates(video_path, coordinates, total_frames)
+                    saved = True
+                    messagebox.showinfo("Success", "Coordinates saved successfully!")
                     running = False
                 elif event.key == pygame.K_SPACE:
                     paused = not paused
@@ -182,22 +209,40 @@ def play_video_with_controls(video_path, coordinates=None):
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 x, y = event.pos
 
-                # Verifica clique no slider
-                if slider_abs_y <= y <= slider_abs_y + slider_height:
+                if event.button == 2:  # Botão do meio do mouse
+                    pygame.mouse.get_rel()  # Resetar o movimento relativo
+                    scrolling = True
+                elif help_button_rect.collidepoint(x, y - window_height):  # Corrigido
+                    show_help_dialog()
+                elif slider_y <= y <= slider_y + slider_height:
                     rel_x = x - slider_x
                     frame_count = int((rel_x / slider_width) * total_frames)
                     frame_count = max(0, min(frame_count, total_frames - 1))
                     paused = True
                 else:
-                    # Clique na área do vídeo
-                    if event.button == 1:  # Left-click to add a marker
+                    if event.button == 1:
                         if y < window_height:
                             video_x = (x + crop_x) / zoom_level
                             video_y = (y + crop_y) / zoom_level
                             coordinates[frame_count].append((video_x, video_y))
-                    elif event.button == 3:  # Right-click to remove the last marker
+                    elif event.button == 3:
                         if coordinates[frame_count]:
                             coordinates[frame_count].pop()
+
+                if save_button_rect.collidepoint(x, y - window_height):
+                    save_coordinates(video_path, coordinates, total_frames)
+                    saved = True
+                    messagebox.showinfo("Success", "Coordinates saved successfully!")
+
+            elif event.type == pygame.MOUSEBUTTONUP:
+                if event.button == 2:  # Botão do meio do mouse
+                    scrolling = False
+
+            elif event.type == pygame.MOUSEMOTION:
+                if scrolling:
+                    rel_x, rel_y = pygame.mouse.get_rel()
+                    offset_x = max(0, min(zoomed_width - window_width, offset_x - rel_x))
+                    offset_y = max(0, min(zoomed_height - window_height, offset_y - rel_y))
 
         if not paused:
             frame_count = (frame_count + 1) % total_frames
@@ -207,14 +252,13 @@ def play_video_with_controls(video_path, coordinates=None):
     cap.release()
     pygame.quit()
 
-    # Save coordinates to CSV on exit
-    save_coordinates(video_path, coordinates, total_frames)
+    if saved:
+        print("Coordinates were saved.")
+    else:
+        print("Coordinates were not saved.")
 
 
 def load_coordinates_from_file(total_frames):
-    """
-    Allow the user to select a keypoint file and load the coordinates.
-    """
     root = Tk()
     root.withdraw()
     input_file = filedialog.askopenfilename(
@@ -230,7 +274,7 @@ def load_coordinates_from_file(total_frames):
         coordinates = {i: [] for i in range(total_frames)}
         for _, row in df.iterrows():
             frame_num = int(row["frame"])
-            for i in range(1, 101):  # Up to 100 points
+            for i in range(1, 101):
                 x_col = f"p{i}_x"
                 y_col = f"p{i}_y"
                 if pd.notna(row.get(x_col)) and pd.notna(row.get(y_col)):
@@ -243,9 +287,6 @@ def load_coordinates_from_file(total_frames):
 
 
 def save_coordinates(video_path, coordinates, total_frames):
-    """
-    Save coordinates to CSV, supporting up to 100 marker points.
-    """
     base_name = os.path.splitext(os.path.basename(video_path))[0]
     video_dir = os.path.dirname(video_path)
     output_file = os.path.join(video_dir, f"{base_name}_markers.csv")
