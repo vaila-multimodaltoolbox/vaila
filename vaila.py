@@ -3,8 +3,8 @@
 vaila.py
 ===============================================================================
 Author: Paulo R. P. Santiago
-Date: 20 December 2024
-Version: 20.Dec.2024
+Date: 15 January 2025
+Version updated: 15.Jan.2025
 Python Version: 3.12.8
 
 Description:
@@ -86,8 +86,11 @@ import webbrowser
 if platform.system() == "Darwin":
     try:
         from AppKit import NSBundle
+
+        NSBundle.mainBundle().infoDictionary()["CFBundleName"] = "Vaila"
     except ImportError:
-        NSBundle = None
+        # Silently continue if AppKit is not available
+        pass
 
 from vaila import (
     cluster_analysis,
@@ -131,6 +134,7 @@ from vaila import (
     vaila_and_jump,
     animal_open_field,
     vaila_lensdistortvideo,
+    cube2d_kinematics,
 )
 
 
@@ -174,7 +178,7 @@ B2_r2_c1 - Vector Coding  B2_r2_c2 - EMG             B2_r2_c3 - Force Plate
 B2_r2_c4 - GNSS/GPS       B2_r2_c5 - MEG/EEG
 
 B3_r3_c1 - HR/ECG         B3_r3_c2 - vailá           B3_r3_c3 - vailá_and_jump
-B3_r3_c4 - vailá          B3_r3_c5 - Animal Open Field 
+B3_r3_c4 - Cube2D         B3_r3_c5 - Animal Open Field 
 
 ============================== Tools Available (Frame C) ===================
 C_A: Data Files
@@ -214,7 +218,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 20.Dec.2024")
+        self.title("vailá - 15.Jan.2025")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -236,8 +240,14 @@ class Vaila(tk.Tk):
             self.iconphoto(True, img)
 
         # For macOS, set the application name in the dock if AppKit is available
-        if platform.system() == "Darwin" and NSBundle is not None:
-            NSBundle.mainBundle().infoDictionary()["CFBundleName"] = "Vaila"
+        if platform.system() == "Darwin":  # macOS
+            try:
+                from AppKit import NSBundle
+
+                NSBundle.mainBundle().infoDictionary()["CFBundleName"] = "Vaila"
+            except ImportError:
+                # Silently continue if AppKit is not available
+                pass
 
         # Call method to create the widgets
         self.create_widgets()
@@ -630,12 +640,12 @@ class Vaila(tk.Tk):
             command=self.vailajump,
         )
 
-        # B3_r3_c4 - vailá
-        vaila_btn7 = tk.Button(
+        # B3_r3_c4 - Cube2D
+        cube2d_btn = tk.Button(
             row3_frame,
-            text="vailá",
+            text="Cube2D",
             width=button_width,
-            command=self.show_vaila_message,
+            command=self.cube2d_kinematics,
         )
 
         # B3_r3_c5 - Animal Open Field
@@ -649,7 +659,7 @@ class Vaila(tk.Tk):
         ecg_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         vaila_btn5.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         vailajump_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
-        vaila_btn7.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        cube2d_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         vaila_animalof.pack(side="left", expand=True, fill="x", padx=2, pady=2)
 
         ## VVVVVVVVVVVVVVV TOOLS BUTTONS VVVVVVVVVVVVVVVV
@@ -1308,7 +1318,15 @@ class Vaila(tk.Tk):
         # hr_analysis.run_hr_analysis()
 
     # B_r3_c2
-    # def vaila
+    def cube2d_kinematics(self):
+        """Runs the Cube2D Kinematics module.
+
+        This function runs the Cube2D Kinematics module, which can be used to analyze
+        Cube2D kinematics data from CSV files. It processes the Cube2D kinematics data
+        to extract relevant metrics such as speed, distance, and time.
+
+        """
+        cube2d_kinematics.run_cube2d_kinematics()
 
     # B_r3_c3
     def vailajump(self):
