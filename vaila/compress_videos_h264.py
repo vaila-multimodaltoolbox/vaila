@@ -95,6 +95,7 @@ import os
 import subprocess
 import platform
 import tempfile
+import json
 from tkinter import filedialog, messagebox, Tk
 
 # Global variables for success and failure counts
@@ -161,76 +162,96 @@ def create_temp_file_with_videos(video_files):
     return temp_file.name
 
 
-def run_compress_videos_h264(
-    temp_file_path, output_directory, preset="medium", crf=23, use_gpu=False
-):
-    """Compress the list of video files stored in the temporary file to H.264 format using either CPU or GPU."""
+def run_compress_videos_h264(temp_file_path, output_directory, preset="medium", crf=23, use_gpu=False):
+    """Compress videos optimized for ML frameworks like MediaPipe and YOLO while preserving metadata and FPS."""
     global success_count, failure_count
 
-    print("!!!ATTENTION!!!")
-    print(
-        "This process might take several hours depending on your computer and the size of your videos. Please be patient or use a high-performance computer!"
-    )
+    print("\n=== Video Compression Settings (ML-Optimized) ===")
+    print(f"Preset: {preset}")
+    print(f"CRF: {crf}")
+    print(f"Using GPU: {use_gpu}")
+    print("\nOptimized settings for MediaPipe and YOLO processing")
 
     os.makedirs(output_directory, exist_ok=True)
 
-    # Read the video files from the temp file
     with open(temp_file_path, "r") as temp_file:
         video_files = [line.strip() for line in temp_file]
 
-    for video_file in video_files:
+    total_videos = len(video_files)
+    for index, video_file in enumerate(video_files, 1):
         input_path = video_file
-        # Create corresponding output file path in the new directory
         relative_path = os.path.relpath(input_path, os.path.dirname(output_directory))
         output_path = os.path.join(
             output_directory, f"{os.path.splitext(relative_path)[0]}_h264.mp4"
         )
 
-        # Ensure output directory for the specific file exists
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
-        print(f"Compressing {video_file}...")
+        print(f"\nProcessing video {index}/{total_videos}: {video_file}")
 
-        if use_gpu:
-            # If GPU is available, use NVIDIA NVENC for encoding
-            command = [
-                "ffmpeg",
-                "-y",  # overwrite output files
-                "-i",
-                input_path,  # input file
-                "-c:v",
-                "h264_nvenc",  # Use NVIDIA NVENC for H.264
-                "-preset",
-                preset,  # preset for encoding speed
-                "-b:v",
-                "5M",  # bitrate (optional, adjust as needed)
-                output_path,  # output file
-            ]
-        else:
-            # Fallback to CPU-based encoding (libx264)
-            command = [
-                "ffmpeg",
-                "-y",  # overwrite output files
-                "-i",
-                input_path,  # input file
-                "-c:v",
-                "libx264",  # video codec
-                "-preset",
-                preset,  # preset for encoding speed
-                "-crf",
-                str(crf),  # constant rate factor for quality
-                output_path,  # output file
-            ]
+        # Print original video info using ffprobe
+        probe_cmd = [
+            "ffprobe",
+            "-v", "quiet",
+            "-print_format", "json",
+            "-show_streams",
+            input_path
+        ]
+        probe_result = subprocess.run(probe_cmd, capture_output=True, text=True)
+        video_info = json.loads(probe_result.stdout)
+        
+        for stream in video_info['streams']:
+            if stream['codec_type'] == 'video':
+                print(f"Original video FPS: {stream.get('r_frame_rate', 'N/A')}")
+                break
 
         try:
-            subprocess.run(command, check=True)
-            print(f"Done compressing {video_file} to H.264.")
-            success_count += 1
-        except subprocess.CalledProcessError as e:
-            print(f"Error compressing {video_file}: {e}")
-            failure_count += 1
+            if use_gpu:
+                command = [
+                    "ffmpeg",
+                    "-y",
+                    "-i", input_path,
+                    "-c:v", "h264_nvenc",
+                    "-preset", preset,
+                    "-b:v", "5M",
+                    "-maxrate", "5M",
+                    "-bufsize", "10M",
+                    "-pix_fmt", "yuv420p",
+                    "-vf", "format=yuv420p",
+                    "-g", "30",
+                    "-c:a", "aac",
+                    "-map_metadata", "0",
+                    "-fps_mode", "passthrough",
+                    output_path
+                ]
+            else:
+                command = [
+                    "ffmpeg",
+                    "-y",
+                    "-i", input_path,
+                    "-c:v", "libx264",
+                    "-preset", preset,
+                    "-crf", str(crf),
+                    "-pix_fmt", "yuv420p",
+                    "-vf", "format=yuv420p",
+                    "-g", "30",
+                    "-c:a", "aac",
+                    "-map_metadata", "0",
+                    "-fps_mode", "passthrough",
+                    output_path
+                ]
 
-    print(f"Compression completed: {success_count} succeeded, {failure_count} failed.")
+            # Simpler process execution that was working before
+            process = subprocess.run(command, check=True, stderr=subprocess.PIPE, universal_newlines=True)
+            print(process.stderr)  # This will show the progress after completion
+
+            success_count += 1
+            print(f"\nSuccessfully compressed: {video_file}")
+        except subprocess.CalledProcessError as e:
+            failure_count += 1
+            print(f"\nError compressing {video_file}: {e}")
+
+    print(f"\nCompression completed: {success_count} succeeded, {failure_count} failed.")
 
 
 def compress_videos_h264_gui():

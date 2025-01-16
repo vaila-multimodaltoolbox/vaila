@@ -65,8 +65,9 @@ The data should be sampled at a consistent frequency (fs) which will be specifie
 during processing. The coordinates should represent positions in meters relative
 to a defined origin point (typically the center of the movement area).
 
-Example files can be found in the tests/cube2d directory.
-
+Example files can be found in the tests/Cube2d_kinematics directory.
+conda activate vaila
+python vaila/cube2d_kinematics.py
 """
 
 import os
@@ -274,9 +275,9 @@ def plot_pathway_with_quadrants(x, y, quadrants_df, time_vector):
     # Criar o gradiente de cores para o caminho
     points = np.array([x, y]).T.reshape(-1, 1, 2)
     segments = np.concatenate([points[:-1], points[1:]], axis=1)
-    norm = plt.Normalize(0, len(time_vector))
+    norm = plt.Normalize(0, 1)
     lc = LineCollection(segments, cmap="plasma", norm=norm)
-    lc.set_array(time_vector)
+    lc.set_array(np.linspace(0, 1, len(time_vector)))
     lc.set_linewidth(2)
     line = ax.add_collection(lc)
 
@@ -289,6 +290,8 @@ def plot_pathway_with_quadrants(x, y, quadrants_df, time_vector):
     # Adicionar barra de cores
     cbar = plt.colorbar(line, ax=ax, orientation="vertical")
     cbar.set_label("Time (s)")
+    cbar.set_ticks([0, 1])
+    cbar.set_ticklabels([f"{time_vector[0]:.2f}", f"{time_vector[-1]:.2f}"])
 
     # Configurações do gráfico
     ax.set_title("CUBE 2D Pathway with Time-Based Color Gradient", fontsize=14)
@@ -318,7 +321,7 @@ def process_all_files(file_paths, quadrants, output_dir):
 
 
 def process_file(file_path, quadrants_df, output_dir, fs, base_name):
-    # Process the file with the selected fs
+            # Process the file with the selected fs
     x, y = load_data(file_path)
     x = butter_lowpass_filter(x, 6, fs)
     y = butter_lowpass_filter(y, 6, fs)

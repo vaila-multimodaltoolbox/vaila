@@ -179,6 +179,21 @@ class VideoProcessor:
         except Exception as e:
             messagebox.showerror("Error", f"Error extracting frames: {e}")
 
+    def get_fps_from_user(self):
+        """Prompt user to enter desired FPS for output video."""
+        root = Tk()
+        root.withdraw()
+        
+        fps = simpledialog.askfloat(
+            "FPS Configuration",
+            "Enter the desired FPS for the output video:",
+            initialvalue=30.0,
+            minvalue=1.0,
+            maxvalue=240.0
+        )
+        
+        return fps if fps is not None else 30.0
+
     def create_video_from_png(self):
         print("Starting creation of videos from PNG sequences...")
 
@@ -192,75 +207,33 @@ class VideoProcessor:
             messagebox.showerror("Error", "No source directory selected.")
             return
 
+        # Get FPS from user
+        fps = self.get_fps_from_user()
+
         timestamp = time.strftime("%Y%m%d%H%M%S")
         dest_main_dir = os.path.join(src, f"vaila_png2videos_{timestamp}")
         os.makedirs(dest_main_dir, exist_ok=True)
 
         try:
-            # Iterate through subdirectories
             for subdir, _, files in os.walk(src):
                 png_files = sorted([f for f in files if f.endswith(".png")])
 
                 if png_files:
-                    # Check if filenames are in proper numeric order
-                    if not self.is_pattern_consistent(png_files):
-                        print(
-                            f"Inconsistent naming in {subdir}. Creating temporary sorted files..."
-                        )
-
-                        # Create a temporary directory for sorted copies
-                        temp_dir = os.path.join(subdir, "temp_sorted")
-                        os.makedirs(temp_dir, exist_ok=True)
-
-                        # Copy and rename files to temp directory
-                        for index, old_name in enumerate(sorted(png_files)):
-                            old_path = os.path.join(subdir, old_name)
-                            new_name = self.pattern % index
-                            new_path = os.path.join(temp_dir, new_name)
-                            shutil.copy2(old_path, new_path)
-
-                        # Update subdir to use temp directory
-                        subdir = temp_dir
-                        png_files = sorted(
-                            [f for f in os.listdir(subdir) if f.endswith(".png")]
-                        )
-
                     output_video_name = os.path.basename(subdir) + ".mp4"
                     output_video_path = os.path.join(dest_main_dir, output_video_name)
 
-                    temp_list_path = os.path.join(subdir, "file_list.txt")
-
-                    # Create a list file with normalized paths
-                    with open(temp_list_path, "w") as file_list:
-                        for file_name in png_files:
-                            full_path = os.path.join(subdir, file_name)
-                            # Normalize the path to use forward slashes
-                            normalized_path = full_path.replace("\\", "/")
-                            file_list.write(f"file '{normalized_path}'\n")
-
-                    # FFmpeg command for video creation using the list
+                    # Modified FFmpeg command to use image sequence directly
                     command = [
                         "ffmpeg",
-                        "-f",
-                        "concat",
-                        "-safe",
-                        "0",
-                        "-i",
-                        temp_list_path,
-                        "-framerate",
-                        "25",  # Adjust as needed
-                        "-c:v",
-                        "libx264",
-                        "-pix_fmt",
-                        "yuv420p",
-                        output_video_path,
+                        "-framerate", str(fps),
+                        "-i", os.path.join(subdir, "%09d.png"),  # Use 9-digit pattern
+                        "-c:v", "libx264",
+                        "-preset", "medium",
+                        "-pix_fmt", "yuv420p",
+                        output_video_path
                     ]
                     subprocess.run(command, check=True)
                     print(f"Video created: {output_video_path}")
-
-                    # Clean up temporary directory
-                    if os.path.exists(temp_dir):
-                        shutil.rmtree(temp_dir)
 
             self.show_completion_message("Video creation completed successfully.")
         except Exception as e:
