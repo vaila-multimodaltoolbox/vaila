@@ -1,8 +1,8 @@
 """
 Script: markerless_2D_analysis.py
 Author: Prof. Dr. Paulo Santiago
-Version: 0.2.0
-Last Updated: September 28, 2024
+Version: 0.2.1
+Last Updated: January 15, 2025
 
 Description:
 This script performs batch processing of videos for 2D pose estimation using 
@@ -245,11 +245,22 @@ def process_video(video_path, output_dir, pose_config):
     pixel_landmarks_list = []
     frames_with_missing_data = []
 
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    print(f"\nTotal frames to process: {total_frames}")
+
     frame_count = 0
     while cap.isOpened():
         success, frame = cap.read()
         if not success:
             break
+
+        # Display progress every 30 frames
+        if frame_count % 30 == 0:
+            progress = (frame_count / total_frames) * 100
+            print(
+                f"\rProcessing frame {frame_count}/{total_frames} ({progress:.1f}%)",
+                end="",
+            )
 
         results = pose.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
         if results.pose_landmarks:
@@ -335,6 +346,10 @@ def process_video(video_path, output_dir, pose_config):
         else:
             log_file.write("No frames with missing data.\n")
 
+    print(f"\nCompleted processing {video_path.name}")
+    print(f"Output saved to: {output_dir}")
+    print(f"Processing time: {time.time() - start_time:.2f} seconds\n")
+
 
 def process_videos_in_directory():
     print(f"Running script: {Path(__file__).name}")
@@ -364,12 +379,18 @@ def process_videos_in_directory():
     output_base.mkdir(parents=True, exist_ok=True)
 
     input_dir = Path(input_dir)
-    for video_file in input_dir.glob("*.*"):
-        if video_file.suffix.lower() in [".mp4", ".avi", ".mov"]:
-            output_dir = output_base / video_file.stem
-            output_dir.mkdir(parents=True, exist_ok=True)
-            print(f"Processing video: {video_file}")
-            process_video(video_file, output_dir, pose_config)
+    video_files = list(input_dir.glob("*.*"))
+    video_files = [
+        f for f in video_files if f.suffix.lower() in [".mp4", ".avi", ".mov"]
+    ]
+
+    print(f"\nFound {len(video_files)} videos to process")
+
+    for i, video_file in enumerate(video_files, 1):
+        print(f"\nProcessing video {i}/{len(video_files)}: {video_file.name}")
+        output_dir = output_base / video_file.stem
+        output_dir.mkdir(parents=True, exist_ok=True)
+        process_video(video_file, output_dir, pose_config)
 
 
 if __name__ == "__main__":

@@ -429,6 +429,7 @@ dependencies:
       - pymdown-extensions
       - pynacl
       - pyobjc
+      - pyobjc-framework-Cocoa
       - pyobjc-framework-accessibility
       - pyobjc-framework-accounts
       - pyobjc-framework-addressbook
@@ -606,3 +607,4 @@ dependencies:
       - pygame
       - pyqt5
       - ezc3d
+
