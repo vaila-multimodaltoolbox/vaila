@@ -90,7 +90,9 @@ class VideoProcessor:
             video_files = [
                 f
                 for f in os.listdir(src)
-                if f.endswith((".avi", ".mp4", ".mov", ".mkv", '.MP4', '.AVI', '.MOV', '.MKV'))
+                if f.endswith(
+                    (".avi", ".mp4", ".mov", ".mkv", ".MP4", ".AVI", ".MOV", ".MKV")
+                )
             ]
 
             for item in video_files:
@@ -202,7 +204,9 @@ class VideoProcessor:
                 if png_files:
                     # Check if filenames are in proper numeric order
                     if not self.is_pattern_consistent(png_files):
-                        print(f"Inconsistent naming in {subdir}. Creating temporary sorted files...")
+                        print(
+                            f"Inconsistent naming in {subdir}. Creating temporary sorted files..."
+                        )
 
                         # Create a temporary directory for sorted copies
                         temp_dir = os.path.join(subdir, "temp_sorted")
@@ -217,7 +221,9 @@ class VideoProcessor:
 
                         # Update subdir to use temp directory
                         subdir = temp_dir
-                        png_files = sorted([f for f in os.listdir(subdir) if f.endswith(".png")])
+                        png_files = sorted(
+                            [f for f in os.listdir(subdir) if f.endswith(".png")]
+                        )
 
                     output_video_name = os.path.basename(subdir) + ".mp4"
                     output_video_path = os.path.join(dest_main_dir, output_video_name)
@@ -339,4 +345,3 @@ class VideoProcessor:
 if __name__ == "__main__":
     processor = VideoProcessor()
     processor.run()
-
