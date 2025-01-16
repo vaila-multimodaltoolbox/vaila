@@ -128,19 +128,33 @@ def process_video(video_path, output_path, parameters):
     frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = int(cap.get(cv2.CAP_PROP_FPS))
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
 
     out = cv2.VideoWriter(output_path, fourcc, fps, (frame_width, frame_height))
 
-    camera_matrix = np.array([
-        [parameters["fx"], 0, parameters["cx"]],
-        [0, parameters["fy"], parameters["cy"]],
-        [0, 0, 1]
-    ])
-    dist_coeffs = np.array([parameters["k1"], parameters["k2"], parameters["p1"], parameters["p2"], parameters["k3"]])
+    camera_matrix = np.array(
+        [
+            [parameters["fx"], 0, parameters["cx"]],
+            [0, parameters["fy"], parameters["cy"]],
+            [0, 0, 1],
+        ]
+    )
+    dist_coeffs = np.array(
+        [
+            parameters["k1"],
+            parameters["k2"],
+            parameters["p1"],
+            parameters["p2"],
+            parameters["k3"],
+        ]
+    )
 
     new_camera_matrix, _ = cv2.getOptimalNewCameraMatrix(
-        camera_matrix, dist_coeffs, (frame_width, frame_height), 1, (frame_width, frame_height)
+        camera_matrix,
+        dist_coeffs,
+        (frame_width, frame_height),
+        1,
+        (frame_width, frame_height),
     )
 
     while cap.isOpened():
@@ -148,7 +162,9 @@ def process_video(video_path, output_path, parameters):
         if not ret:
             break
 
-        undistorted_frame = cv2.undistort(frame, camera_matrix, dist_coeffs, None, new_camera_matrix)
+        undistorted_frame = cv2.undistort(
+            frame, camera_matrix, dist_coeffs, None, new_camera_matrix
+        )
         out.write(undistorted_frame)
 
     cap.release()
@@ -182,7 +198,7 @@ def run_distortvideo():
     # Print the directory and name of the script being executed
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
-    
+
     print("Select the video directory:")
     video_directory = select_directory()
     if not video_directory:
@@ -205,7 +221,9 @@ def run_distortvideo():
 
     for file in os.listdir(video_directory):
         file_path = os.path.join(video_directory, file)
-        if os.path.isfile(file_path) and file.lower().endswith(('.mp4', '.avi', '.mov', '.mkv')):
+        if os.path.isfile(file_path) and file.lower().endswith(
+            (".mp4", ".avi", ".mov", ".mkv")
+        ):
             output_path = os.path.join(output_directory, f"distorted_{file}")
             print(f"Processing: {file_path}")
             process_video(file_path, output_path, parameters)
@@ -215,4 +233,3 @@ def run_distortvideo():
 
 if __name__ == "__main__":
     run_distortvideo()
-
