@@ -607,4 +607,5 @@ dependencies:
       - pygame
       - pyqt5
       - ezc3d
+      - ultralytics
 
