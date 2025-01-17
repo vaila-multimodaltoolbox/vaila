@@ -65,16 +65,25 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
         self.yolo_conf_entry.insert(0, "0.5")
         self.yolo_conf_entry.grid(row=1, column=1)
 
-        # MediaPipe Configuration
-        tk.Label(master, text="\nMediaPipe Configuration", font=('Arial', 10, 'bold')).grid(
+        # Person Limit Configuration
+        tk.Label(master, text="\nPerson Limit Configuration", font=('Arial', 10, 'bold')).grid(
             row=2, columnspan=2, pady=10
         )
-        tk.Label(master, text="Enter minimum detection confidence (0.0 - 1.0):").grid(row=3)
-        tk.Label(master, text="Enter minimum tracking confidence (0.0 - 1.0):").grid(row=4)
-        tk.Label(master, text="Enter model complexity (0, 1, or 2):").grid(row=5)
-        tk.Label(master, text="Enable segmentation? (True/False):").grid(row=6)
-        tk.Label(master, text="Smooth segmentation? (True/False):").grid(row=7)
-        tk.Label(master, text="Static image mode? (True/False):").grid(row=8)
+        tk.Label(master, text="Maximum number of persons to track (0 = no limit):").grid(row=3)
+        self.max_persons_entry = tk.Entry(master)
+        self.max_persons_entry.insert(0, "0")
+        self.max_persons_entry.grid(row=3, column=1)
+
+        # MediaPipe Configuration
+        tk.Label(master, text="\nMediaPipe Configuration", font=('Arial', 10, 'bold')).grid(
+            row=4, columnspan=2, pady=10
+        )
+        tk.Label(master, text="Enter minimum detection confidence (0.0 - 1.0):").grid(row=5)
+        tk.Label(master, text="Enter minimum tracking confidence (0.0 - 1.0):").grid(row=6)
+        tk.Label(master, text="Enter model complexity (0, 1, or 2):").grid(row=7)
+        tk.Label(master, text="Enable segmentation? (True/False):").grid(row=8)
+        tk.Label(master, text="Smooth segmentation? (True/False):").grid(row=9)
+        tk.Label(master, text="Static image mode? (True/False):").grid(row=10)
 
         self.min_detection_entry = tk.Entry(master)
         self.min_detection_entry.insert(0, "0.1")
@@ -89,12 +98,12 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
         self.static_image_mode_entry = tk.Entry(master)
         self.static_image_mode_entry.insert(0, "False")
 
-        self.min_detection_entry.grid(row=3, column=1)
-        self.min_tracking_entry.grid(row=4, column=1)
-        self.model_complexity_entry.grid(row=5, column=1)
-        self.enable_segmentation_entry.grid(row=6, column=1)
-        self.smooth_segmentation_entry.grid(row=7, column=1)
-        self.static_image_mode_entry.grid(row=8, column=1)
+        self.min_detection_entry.grid(row=5, column=1)
+        self.min_tracking_entry.grid(row=6, column=1)
+        self.model_complexity_entry.grid(row=7, column=1)
+        self.enable_segmentation_entry.grid(row=8, column=1)
+        self.smooth_segmentation_entry.grid(row=9, column=1)
+        self.static_image_mode_entry.grid(row=10, column=1)
 
         return self.min_detection_entry
 
@@ -102,6 +111,9 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
         self.result = {
             # YOLO config
             "yolo_conf": float(self.yolo_conf_entry.get()),
+            
+            # Person Limit config
+            "max_persons": int(self.max_persons_entry.get()),
             
             # MediaPipe config
             "min_detection_confidence": float(self.min_detection_entry.get()),
@@ -179,18 +191,22 @@ def process_video(video_path, output_dir, config):
         # Convert YOLO detections to tracker format
         if len(results[0].boxes) > 0:
             dets = results[0].boxes.data.cpu().numpy()
-            # Filtrar apenas pessoas (classe 0) e adicionar a classe às detecções
             person_mask = dets[:, 5] == 0
             if person_mask.any():
                 dets = dets[person_mask]
-                # Formato esperado: [x1, y1, x2, y2, conf, class]
+                
+                # Limitar o número de detecções se max_persons > 0
+                if config['max_persons'] > 0 and len(dets) > config['max_persons']:
+                    # Ordenar por confiança e pegar os top-N
+                    conf_sort_idx = np.argsort(dets[:, 4])[::-1]  # Ordenar por confiança (decrescente)
+                    dets = dets[conf_sort_idx[:config['max_persons']]]
+                
                 dets_for_tracker = np.column_stack((
-                    dets[:, :4],  # bbox coordinates
-                    dets[:, 4],   # confidence scores
-                    np.zeros(len(dets))  # class id (0 for person)
+                    dets[:, :4],
+                    dets[:, 4],
+                    np.zeros(len(dets))
                 ))
                 
-                # Update tracker
                 tracks = tracker.update(dets_for_tracker, frame)
 
                 # Process each tracked person
