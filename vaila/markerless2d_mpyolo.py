@@ -134,6 +134,29 @@ def get_pose_config():
         messagebox.showerror("Error", "No values entered.")
         return None
 
+def expand_bbox(x_min, y_min, x_max, y_max, frame_height, frame_width, expansion_factor=1.2):
+    """
+    Expande o bbox mantendo a proporção e respeitando os limites do frame
+    """
+    width = x_max - x_min
+    height = y_max - y_min
+    
+    # Calcula o centro do bbox
+    center_x = (x_min + x_max) / 2
+    center_y = (y_min + y_max) / 2
+    
+    # Expande as dimensões
+    new_width = width * expansion_factor
+    new_height = height * expansion_factor
+    
+    # Calcula as novas coordenadas
+    new_x_min = max(0, int(center_x - new_width / 2))
+    new_y_min = max(0, int(center_y - new_height / 2))
+    new_x_max = min(frame_width, int(center_x + new_width / 2))
+    new_y_max = min(frame_height, int(center_y + new_height / 2))
+    
+    return new_x_min, new_y_min, new_x_max, new_y_max
+
 def process_video(video_path, output_dir, config):
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
@@ -153,7 +176,7 @@ def process_video(video_path, output_dir, config):
     yolo_path = current_dir / 'yolo11n.pt'
     yolo = YOLO(str(yolo_path))
     
-    # Initialize StrongSort with minimal parameters
+    # Initialize StrongSort
     tracker = StrongSort(
         reid_weights=Path(current_dir) / 'osnet_x0_25_msmt17.pt',
         device=torch.device('cuda' if torch.cuda.is_available() else 'cpu'),
@@ -188,17 +211,13 @@ def process_video(video_path, output_dir, config):
         # Get YOLO detections
         results = yolo(frame, conf=config['yolo_conf'])
         
-        # Convert YOLO detections to tracker format
         if len(results[0].boxes) > 0:
             dets = results[0].boxes.data.cpu().numpy()
             person_mask = dets[:, 5] == 0
             if person_mask.any():
                 dets = dets[person_mask]
-                
-                # Limitar o número de detecções se max_persons > 0
                 if config['max_persons'] > 0 and len(dets) > config['max_persons']:
-                    # Ordenar por confiança e pegar os top-N
-                    conf_sort_idx = np.argsort(dets[:, 4])[::-1]  # Ordenar por confiança (decrescente)
+                    conf_sort_idx = np.argsort(dets[:, 4])[::-1]
                     dets = dets[conf_sort_idx[:config['max_persons']]]
                 
                 dets_for_tracker = np.column_stack((
@@ -209,11 +228,15 @@ def process_video(video_path, output_dir, config):
                 
                 tracks = tracker.update(dets_for_tracker, frame)
 
-                # Process each tracked person
                 for track in tracks:
-                    # track format: [x1, y1, x2, y2, track_id, class_id, conf]
                     x_min, y_min, x_max, y_max = map(int, track[:4])
                     track_id = int(track[4])
+
+                    # Expande o bbox para melhor detecção
+                    x_min, y_min, x_max, y_max = expand_bbox(
+                        x_min, y_min, x_max, y_max, 
+                        frame.shape[0], frame.shape[1]
+                    )
 
                     # Draw bounding box with persistent ID
                     cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
@@ -225,14 +248,12 @@ def process_video(video_path, output_dir, config):
                     thickness = 2
                     text_size = cv2.getTextSize(text, font, font_scale, thickness)[0]
                     
-                    # Draw background rectangle for text
                     cv2.rectangle(frame, 
                                 (x_min, y_min - text_size[1] - 10), 
                                 (x_min + text_size[0] + 10, y_min), 
                                 (0, 255, 0), 
                                 -1)
                     
-                    # Draw text
                     cv2.putText(frame, 
                                text, 
                                (x_min + 5, y_min - 5), 
@@ -241,19 +262,46 @@ def process_video(video_path, output_dir, config):
                                (0, 0, 0),
                                thickness)
 
-                    # Process MediaPipe pose
+                    # Process MediaPipe pose com zoom
                     person_frame = frame[y_min:y_max, x_min:x_max]
                     if person_frame.size == 0:
                         continue
 
-                    person_frame_rgb = cv2.cvtColor(person_frame, cv2.COLOR_BGR2RGB)
+                    scale_factor = 2.0
+                    person_frame_large = cv2.resize(
+                        person_frame, 
+                        (int(person_frame.shape[1] * scale_factor),
+                         int(person_frame.shape[0] * scale_factor))
+                    )
+
+                    person_frame_rgb = cv2.cvtColor(person_frame_large, cv2.COLOR_BGR2RGB)
                     pose_results = pose.process(person_frame_rgb)
 
                     if pose_results.pose_landmarks:
+                        # Ajusta as coordenadas para o frame original
+                        for landmark in pose_results.pose_landmarks.landmark:
+                            # 1. Converter coordenadas normalizadas para pixels no frame expandido
+                            x_pixels = landmark.x * person_frame_large.shape[1]
+                            y_pixels = landmark.y * person_frame_large.shape[0]
+                            
+                            # 2. Desfazer o zoom (scale_factor)
+                            x_unscaled = x_pixels / scale_factor
+                            y_unscaled = y_pixels / scale_factor
+                            
+                            # 3. Converter para coordenadas globais adicionando offset do bbox
+                            x_global = x_min + x_unscaled
+                            y_global = y_min + y_unscaled
+                            
+                            # 4. Normalizar para o frame completo
+                            landmark.x = x_global / frame.shape[1]
+                            landmark.y = y_global / frame.shape[0]
+
+                        # Desenha os landmarks no frame original
                         mp.solutions.drawing_utils.draw_landmarks(
-                            frame[y_min:y_max, x_min:x_max],
+                            frame,
                             pose_results.pose_landmarks,
-                            mp_pose.POSE_CONNECTIONS
+                            mp_pose.POSE_CONNECTIONS,
+                            mp.solutions.drawing_styles.get_default_pose_landmarks_style()
                         )
 
                         # Store landmarks with persistent track_id
