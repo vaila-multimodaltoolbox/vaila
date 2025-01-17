@@ -26,10 +26,10 @@ Usage:
 3. Follow prompts to select input/output directories and configuration options.
 
 Requirements:
-- Python 3.11.9
+- Python 3.12.8
 - OpenCV
 - MediaPipe
-- Ultralytics (YOLOv8)
+- Ultralytics (YOLOv11)
 - Tkinter
 
 Output:
@@ -121,10 +121,6 @@ def get_pose_config():
         return None
 
 def process_video(video_path, output_dir, config):
-    # Create a specific directory for this video
-    video_output_dir = output_dir / video_path.stem
-    video_output_dir.mkdir(parents=True, exist_ok=True)
-
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
         print(f"Failed to open video: {video_path}")
@@ -135,7 +131,7 @@ def process_video(video_path, output_dir, config):
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
     # Update output paths to use video-specific directory
-    output_video_path = video_output_dir / f"{video_path.stem}_processed.mp4"
+    output_video_path = output_dir / f"{video_path.stem}_processed.mp4"
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     out = cv2.VideoWriter(str(output_video_path), fourcc, fps, (width, height))
 
@@ -216,7 +212,7 @@ def process_video(video_path, output_dir, config):
 
                 # Store landmarks for this person
                 if person_idx not in person_landmarks:
-                    output_csv_path = video_output_dir / f"{video_path.stem}_landmarks_person_{person_idx}.csv"
+                    output_csv_path = output_dir / f"{video_path.stem}_landmarks_person_{person_idx}.csv"
                     person_landmarks[person_idx] = open(output_csv_path, 'w')
                     person_landmarks[person_idx].write(",".join(headers) + "\n")
 
@@ -235,20 +231,14 @@ def process_video(video_path, output_dir, config):
     cap.release()
     out.release()
 
-    # Show completion dialog with updated path
-    root = tk.Tk()
-    root.withdraw()
-    messagebox.showinfo(
-        "Processing Complete",
-        f"Video processing completed successfully!\n\n"
-        f"Output directory: {video_output_dir}\n"
-        f"Output video: {output_video_path.name}\n"
-        f"Number of person tracks: {len(person_landmarks)}"
-    )
+    print(f"Completed processing: {video_path.name}")
 
 def run_markerless2d_mpyolo():
     root = tk.Tk()
     root.withdraw()
+
+    print(f"Running script: {Path(__file__).name}")
+    print(f"Script directory: {Path(__file__).parent.resolve()}")
 
     input_dir = filedialog.askdirectory(title="Select Input Directory")
     if not input_dir:
@@ -264,13 +254,39 @@ def run_markerless2d_mpyolo():
     if not config:
         return
 
-    input_dir, output_base_dir = Path(input_dir), Path(output_base_dir)
-    
+    # Create timestamp directory (main directory)
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    main_output_dir = Path(output_base_dir) / f"vaila_mpyolo_{timestamp}"
+    main_output_dir.mkdir(parents=True, exist_ok=True)
+
+    input_dir = Path(input_dir)
     video_files = list(input_dir.glob("*.*"))
     video_files = [f for f in video_files if f.suffix.lower() in [".mp4", ".avi", ".mov"]]
 
-    for video_file in video_files:
-        process_video(video_file, output_base_dir, config)
+    total_videos = len(video_files)
+    print(f"\nFound {total_videos} videos to process")
+    
+    success_count = 0
+    for i, video_file in enumerate(video_files, 1):
+        print(f"\nProcessing video {i}/{total_videos}: {video_file.name}")
+        
+        # Create video-specific directory inside main directory
+        video_output_dir = main_output_dir / video_file.stem
+        video_output_dir.mkdir(parents=True, exist_ok=True)
+        
+        try:
+            process_video(video_file, video_output_dir, config)
+            success_count += 1
+        except Exception as e:
+            print(f"Error processing {video_file.name}: {str(e)}")
+
+    # Final completion dialog
+    messagebox.showinfo(
+        "Batch Processing Complete",
+        f"Processing completed!\n\n"
+        f"Total videos processed: {success_count}/{total_videos}\n"
+        f"Output directory: {main_output_dir}"
+    )
 
 if __name__ == "__main__":
     run_markerless2d_mpyolo()
