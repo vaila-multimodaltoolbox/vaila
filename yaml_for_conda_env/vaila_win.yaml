@@ -86,3 +86,4 @@ dependencies:
       - pykalman
       - ydata_profiling
       - 'xonsh[full]'
+      - ultralytics
