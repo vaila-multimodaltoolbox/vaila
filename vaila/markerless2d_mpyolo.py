@@ -51,6 +51,8 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 from pathlib import Path
 from ultralytics import YOLO
+from boxmot import StrongSort
+import torch
 
 class ConfidenceInputDialog(tk.simpledialog.Dialog):
     def body(self, master):
@@ -130,16 +132,25 @@ def process_video(video_path, output_dir, config):
     fps = cap.get(cv2.CAP_PROP_FPS)
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-    # Update output paths to use video-specific directory
     output_video_path = output_dir / f"{video_path.stem}_processed.mp4"
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     out = cv2.VideoWriter(str(output_video_path), fourcc, fps, (width, height))
 
-    # Use YOLO from vaila directory
+    # Initialize YOLO
     current_dir = Path(__file__).parent
     yolo_path = current_dir / 'yolo11n.pt'
     yolo = YOLO(str(yolo_path))
     
+    # Initialize StrongSort with minimal parameters
+    tracker = StrongSort(
+        reid_weights=Path(current_dir) / 'osnet_x0_25_msmt17.pt',
+        device=torch.device('cuda' if torch.cuda.is_available() else 'cpu'),
+        half=False,
+        max_age=70,
+        n_init=3,
+        nn_budget=100,
+    )
+
     mp_pose = mp.solutions.pose
     pose = mp_pose.Pose(
         static_image_mode=config['static_image_mode'],
@@ -162,65 +173,84 @@ def process_video(video_path, output_dir, config):
         if not success:
             break
 
+        # Get YOLO detections
         results = yolo(frame, conf=config['yolo_conf'])
         
-        for person_idx, detection in enumerate(results[0].boxes.data):
-            x_min, y_min, x_max, y_max, conf, cls = detection.cpu().numpy()
-            if int(cls) != 0:  # Only process persons (class 0)
-                continue
+        # Convert YOLO detections to tracker format
+        if len(results[0].boxes) > 0:
+            dets = results[0].boxes.data.cpu().numpy()
+            # Filtrar apenas pessoas (classe 0) e adicionar a classe às detecções
+            person_mask = dets[:, 5] == 0
+            if person_mask.any():
+                dets = dets[person_mask]
+                # Formato esperado: [x1, y1, x2, y2, conf, class]
+                dets_for_tracker = np.column_stack((
+                    dets[:, :4],  # bbox coordinates
+                    dets[:, 4],   # confidence scores
+                    np.zeros(len(dets))  # class id (0 for person)
+                ))
+                
+                # Update tracker
+                tracks = tracker.update(dets_for_tracker, frame)
 
-            # Draw bounding box and ID
-            x_min, y_min, x_max, y_max = map(int, [x_min, y_min, x_max, y_max])
-            cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
-            
-            # Add person ID text with background
-            text = f"ID: {person_idx}"
-            font = cv2.FONT_HERSHEY_SIMPLEX
-            font_scale = 0.8
-            thickness = 2
-            text_size = cv2.getTextSize(text, font, font_scale, thickness)[0]
-            
-            # Draw background rectangle for text
-            cv2.rectangle(frame, 
-                        (x_min, y_min - text_size[1] - 10), 
-                        (x_min + text_size[0] + 10, y_min), 
-                        (0, 255, 0), 
-                        -1)  # Filled rectangle
-            
-            # Draw text
-            cv2.putText(frame, 
-                       text, 
-                       (x_min + 5, y_min - 5), 
-                       font, 
-                       font_scale, 
-                       (0, 0, 0),  # Black text
-                       thickness)
+                # Process each tracked person
+                for track in tracks:
+                    # track format: [x1, y1, x2, y2, track_id, class_id, conf]
+                    x_min, y_min, x_max, y_max = map(int, track[:4])
+                    track_id = int(track[4])
 
-            person_frame = frame[y_min:y_max, x_min:x_max]
-            if person_frame.size == 0:
-                continue
+                    # Draw bounding box with persistent ID
+                    cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
+                    
+                    # Add person ID text with background
+                    text = f"ID: {track_id}"
+                    font = cv2.FONT_HERSHEY_SIMPLEX
+                    font_scale = 0.8
+                    thickness = 2
+                    text_size = cv2.getTextSize(text, font, font_scale, thickness)[0]
+                    
+                    # Draw background rectangle for text
+                    cv2.rectangle(frame, 
+                                (x_min, y_min - text_size[1] - 10), 
+                                (x_min + text_size[0] + 10, y_min), 
+                                (0, 255, 0), 
+                                -1)
+                    
+                    # Draw text
+                    cv2.putText(frame, 
+                               text, 
+                               (x_min + 5, y_min - 5), 
+                               font, 
+                               font_scale, 
+                               (0, 0, 0),
+                               thickness)
 
-            person_frame_rgb = cv2.cvtColor(person_frame, cv2.COLOR_BGR2RGB)
-            pose_results = pose.process(person_frame_rgb)
+                    # Process MediaPipe pose
+                    person_frame = frame[y_min:y_max, x_min:x_max]
+                    if person_frame.size == 0:
+                        continue
 
-            if pose_results.pose_landmarks:
-                mp.solutions.drawing_utils.draw_landmarks(
-                    frame[y_min:y_max, x_min:x_max],
-                    pose_results.pose_landmarks,
-                    mp_pose.POSE_CONNECTIONS
-                )
+                    person_frame_rgb = cv2.cvtColor(person_frame, cv2.COLOR_BGR2RGB)
+                    pose_results = pose.process(person_frame_rgb)
 
-                # Store landmarks for this person
-                if person_idx not in person_landmarks:
-                    output_csv_path = output_dir / f"{video_path.stem}_landmarks_person_{person_idx}.csv"
-                    person_landmarks[person_idx] = open(output_csv_path, 'w')
-                    person_landmarks[person_idx].write(",".join(headers) + "\n")
+                    if pose_results.pose_landmarks:
+                        mp.solutions.drawing_utils.draw_landmarks(
+                            frame[y_min:y_max, x_min:x_max],
+                            pose_results.pose_landmarks,
+                            mp_pose.POSE_CONNECTIONS
+                        )
 
-                landmark_data = [frame_idx] + [
-                    coord for landmark in pose_results.pose_landmarks.landmark
-                    for coord in (landmark.x, landmark.y, landmark.z)
-                ]
-                person_landmarks[person_idx].write(",".join(map(str, landmark_data)) + "\n")
+                        # Store landmarks with persistent track_id
+                        if track_id not in person_landmarks:
+                            output_csv_path = output_dir / f"{video_path.stem}_landmarks_person_{track_id}.csv"
+                            person_landmarks[track_id] = open(output_csv_path, 'w')
+                            person_landmarks[track_id].write(",".join(headers) + "\n")
+
+                        landmark_data = [frame_idx] + [
+                            coord for landmark in pose_results.pose_landmarks.landmark
+                            for coord in (landmark.x, landmark.y, landmark.z)
+                        ]
+                        person_landmarks[track_id].write(",".join(map(str, landmark_data)) + "\n")
 
         out.write(frame)
 
