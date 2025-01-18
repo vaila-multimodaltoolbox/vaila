@@ -321,7 +321,7 @@ def process_all_files(file_paths, quadrants, output_dir):
 
 
 def process_file(file_path, quadrants_df, output_dir, fs, base_name):
-            # Process the file with the selected fs
+    # Process the file with the selected fs
     x, y = load_data(file_path)
     x = butter_lowpass_filter(x, 6, fs)
     y = butter_lowpass_filter(y, 6, fs)
