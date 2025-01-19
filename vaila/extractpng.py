@@ -183,15 +183,15 @@ class VideoProcessor:
         """Prompt user to enter desired FPS for output video."""
         root = Tk()
         root.withdraw()
-        
+
         fps = simpledialog.askfloat(
             "FPS Configuration",
             "Enter the desired FPS for the output video:",
             initialvalue=30.0,
             minvalue=1.0,
-            maxvalue=240.0
+            maxvalue=240.0,
         )
-        
+
         return fps if fps is not None else 30.0
 
     def create_video_from_png(self):
@@ -225,12 +225,17 @@ class VideoProcessor:
                     # Modified FFmpeg command to use image sequence directly
                     command = [
                         "ffmpeg",
-                        "-framerate", str(fps),
-                        "-i", os.path.join(subdir, "%09d.png"),  # Use 9-digit pattern
-                        "-c:v", "libx264",
-                        "-preset", "medium",
-                        "-pix_fmt", "yuv420p",
-                        output_video_path
+                        "-framerate",
+                        str(fps),
+                        "-i",
+                        os.path.join(subdir, "%09d.png"),  # Use 9-digit pattern
+                        "-c:v",
+                        "libx264",
+                        "-preset",
+                        "medium",
+                        "-pix_fmt",
+                        "yuv420p",
+                        output_video_path,
                     ]
                     subprocess.run(command, check=True)
                     print(f"Video created: {output_video_path}")

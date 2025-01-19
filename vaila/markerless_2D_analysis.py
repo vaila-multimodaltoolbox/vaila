@@ -194,15 +194,15 @@ def get_pose_config():
 def process_video(video_path, output_dir, pose_config):
     """
     Process a video file using MediaPipe Pose estimation.
-    
+
     Args:
         video_path (Path): Path to the input video file
         output_dir (Path): Directory to save output files
         pose_config (dict): MediaPipe Pose configuration parameters
-        
+
     Returns:
         None
-        
+
     Outputs:
         - Processed video with pose landmarks
         - CSV file with normalized coordinates
