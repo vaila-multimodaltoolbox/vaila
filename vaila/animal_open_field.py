@@ -78,10 +78,24 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 import seaborn as sns
-from tkinter import Tk, filedialog, simpledialog, messagebox
+from tkinter import (
+    Tk,
+    filedialog,
+    simpledialog,
+    messagebox,
+    StringVar,
+    Label,
+    Radiobutton,
+    Entry,
+    Button,
+    Frame,
+    LEFT,
+)
 from datetime import datetime
 from pathlib import Path
 from scipy.signal import butter, filtfilt
+from scipy.ndimage import median_filter
+from scipy.signal import savgol_filter
 
 
 def load_and_preprocess_data(input_file):
@@ -373,8 +387,10 @@ def plot_pathway(x, y, time_vector, total_distance, output_dir, base_name):
         time_in_minutes.max() - time_in_minutes.min()
     )
 
+    # Create the pathway plot with larger figure size
+    fig, ax = plt.subplots(figsize=(12, 12))  # Increased from 6,6 to 12,12
+
     # Create the pathway plot
-    fig, ax = plt.subplots(figsize=(6, 6))
     for i in range(len(x) - 1):
         ax.plot(
             x[i : i + 2],
@@ -414,9 +430,9 @@ def plot_pathway(x, y, time_vector, total_distance, output_dir, base_name):
     cbar = plt.colorbar(sm, ax=ax, orientation="vertical", fraction=0.046, pad=0.04)
     cbar.set_label("Time (minutes)", rotation=270, labelpad=15)
 
-    # Save the plot
+    # Save the plot with higher DPI
     output_file_path = os.path.join(output_dir, f"{base_name}_pathway_colored.png")
-    plt.savefig(output_file_path, bbox_inches="tight")
+    plt.savefig(output_file_path, bbox_inches="tight", dpi=300)  # Added dpi=300
     plt.close()
     print(f"Pathway plot saved at: {output_file_path}")
 
@@ -441,7 +457,7 @@ def plot_heatmap(x, y, output_dir, base_name, results):
 
     # Create the heatmap
     try:
-        fig, ax = plt.subplots(figsize=(6, 6))
+        fig, ax = plt.subplots(figsize=(12, 12))  # Increased from 6,6 to 12,12
         sns.kdeplot(
             x=x,
             y=y,
@@ -486,9 +502,9 @@ def plot_heatmap(x, y, output_dir, base_name, results):
             ax.axhline(limits["ymin"], color="black", linestyle="--", linewidth=0.8)
             ax.axhline(limits["ymax"], color="black", linestyle="--", linewidth=0.8)
 
-        # Save the heatmap
+        # Save the heatmap with higher DPI
         output_file_path = os.path.join(output_dir, f"{base_name}_heatmap.png")
-        plt.savefig(output_file_path, bbox_inches="tight")
+        plt.savefig(output_file_path, bbox_inches="tight", dpi=300)  # Added dpi=300
         plt.close()
         print(f"Heatmap plot saved at: {output_file_path}")
 
@@ -520,7 +536,7 @@ def plot_center_and_border_heatmap(x, y, output_dir, base_name, center_border_re
 
     # Create the heatmap
     try:
-        fig, ax = plt.subplots(figsize=(6, 6))
+        fig, ax = plt.subplots(figsize=(12, 12))  # Increased from 6,6 to 12,12
         sns.kdeplot(
             x=x,
             y=y,
@@ -575,11 +591,11 @@ def plot_center_and_border_heatmap(x, y, output_dir, base_name, center_border_re
         ax.set_title(
             f"Heatmap with Central and Border Distances: Center: {center_border_results['distance_in_center']:.2f} m | Border: {center_border_results['distance_in_border']:.2f} m"
         )
-        # Save the heatmap
+        # Save the heatmap with higher DPI
         output_file_path = os.path.join(
             output_dir, f"{base_name}_center_border_heatmap.png"
         )
-        plt.savefig(output_file_path, bbox_inches="tight")
+        plt.savefig(output_file_path, bbox_inches="tight", dpi=300)  # Added dpi=300
         plt.close()
         print(f"Central and border heatmap saved at: {output_file_path}")
 
@@ -613,11 +629,8 @@ def plot_speed_ranges(
     # Add stationary time to the first range (0-3 m/min)
     speed_range_counts_seconds["0-3 m/min"] += time_stationary_seconds
 
-    # Plot the bar chart
-    fig, ax = plt.subplots(figsize=(10, 6))
-    ranges = list(speed_range_counts_seconds.keys())
-    times = list(speed_range_counts_seconds.values())
-    ax.bar(ranges, times, color="blue", alpha=0.7)
+    # Plot the bar chart with larger figure size
+    fig, ax = plt.subplots(figsize=(15, 9))  # Increased from 10,6 to 15,9
 
     # Add labels and title
     ax.set_xlabel("Speed Range (m/min)")
@@ -625,9 +638,14 @@ def plot_speed_ranges(
     ax.set_title("Distribution of Speed Ranges")
     plt.xticks(rotation=45, ha="right")
 
-    # Save the plot
+    # Plot the bar chart
+    ranges = list(speed_range_counts_seconds.keys())
+    times = list(speed_range_counts_seconds.values())
+    ax.bar(ranges, times, color="blue", alpha=0.7)
+
+    # Save the plot with higher DPI
     output_file_path = os.path.join(output_dir, f"{base_name}_speed_ranges.png")
-    plt.savefig(output_file_path, bbox_inches="tight")
+    plt.savefig(output_file_path, bbox_inches="tight", dpi=300)  # Added dpi=300
     plt.close()
     print(f"Speed ranges plot saved at: {output_file_path}")
 
@@ -659,8 +677,10 @@ def plot_speed_over_time_with_tags(
     # Speed ranges (3 m/min to 45 m/min)
     speed_ranges = [3 * i for i in range(16)]  # 0, 3, 6, ..., 45 m/min
 
+    # Create the plot with larger figure size
+    plt.figure(figsize=(18, 9))  # Increased from 12,6 to 18,9
+
     # Create the plot
-    plt.figure(figsize=(12, 6))
     plt.plot(
         time_vector, speed_m_per_min, color="blue", linewidth=1.5, label="Speed (m/min)"
     )
@@ -699,11 +719,11 @@ def plot_speed_over_time_with_tags(
     # Add legend
     plt.legend(fontsize=10)
 
-    # Save the plot
+    # Save the plot with higher DPI
     output_file_path = os.path.join(
         output_dir, f"{base_name}_speed_over_time_with_tags.png"
     )
-    plt.savefig(output_file_path, bbox_inches="tight")
+    plt.savefig(output_file_path, bbox_inches="tight", dpi=300)  # Added dpi=300
     plt.close()
 
     print(f"Speed over time plot with tags saved at: {output_file_path}")
@@ -817,7 +837,15 @@ def save_position_data(time_vector, x, y, distance, speed, output_dir, base_name
         raise
 
 
-def process_open_field_data(input_file, main_output_dir, fs, cutoff):
+def process_open_field_data(
+    input_file,
+    main_output_dir,
+    fs,
+    cutoff,
+    filter_type=None,
+    window_size=None,
+    poly_order=None,
+):
     try:
         # Extract base name and create output directory
         base_name = os.path.splitext(os.path.basename(input_file))[0]
@@ -830,12 +858,24 @@ def process_open_field_data(input_file, main_output_dir, fs, cutoff):
         # Apply time vector
         time_vector = np.linspace(0, len(x) / fs, len(x))
 
-        # Apply Butterworth low-pass filter with padding
+        # Apply initial filtering if requested
+        if filter_type:
+            if filter_type == "median":
+                x_filtered_initial = median_filter(x, window_size)
+                y_filtered_initial = median_filter(y, window_size)
+            else:  # 'savgol'
+                x_filtered_initial = savgol_filter(x, window_size, poly_order)
+                y_filtered_initial = savgol_filter(y, window_size, poly_order)
+        else:
+            x_filtered_initial = x
+            y_filtered_initial = y
+
+        # Then apply Butterworth low-pass filter with padding
         x_filtered = butter_lowpass_filter(
-            x, cutoff=cutoff, fs=fs, order=4, padding=True
+            x_filtered_initial, cutoff=cutoff, fs=fs, order=4, padding=True
         )
         y_filtered = butter_lowpass_filter(
-            y, cutoff=cutoff, fs=fs, order=4, padding=True
+            y_filtered_initial, cutoff=cutoff, fs=fs, order=4, padding=True
         )
 
         # Adjust x and y to stay within the bounds
@@ -843,7 +883,7 @@ def process_open_field_data(input_file, main_output_dir, fs, cutoff):
             x_filtered, y_filtered, xmin=0, xmax=0.6, ymin=0, ymax=0.6
         )
 
-        # Calculate kinematics
+        # Calculate kinematics using filtered data
         (
             distance,
             speed,
@@ -854,7 +894,9 @@ def process_open_field_data(input_file, main_output_dir, fs, cutoff):
             zones_percentage,
             zones_distance,
             center_border_results,
-        ) = calculate_kinematics(x_filtered, y_filtered, fs)
+        ) = calculate_kinematics(
+            x_filtered, y_filtered, fs
+        )  # Using filtered coordinates
 
         # Save results and data
         results = {
@@ -864,14 +906,8 @@ def process_open_field_data(input_file, main_output_dir, fs, cutoff):
             "speed_range_counts_frames": speed_range_counts_frames,
             "speed_range_counts_seconds": speed_range_counts_seconds,
         }
-        save_results_to_csv(
-            results, center_border_results, zones_distance, fs, output_dir, base_name
-        )
-        save_position_data(
-            time_vector, x_filtered, y_filtered, distance, speed, output_dir, base_name
-        )
 
-        # Generate visualizations
+        # Generate visualizations using filtered data
         plot_pathway(
             x_filtered, y_filtered, time_vector, sum(distance), output_dir, base_name
         )
@@ -886,21 +922,29 @@ def process_open_field_data(input_file, main_output_dir, fs, cutoff):
             time_vector, speed, int(2 * fs), output_dir, base_name
         )
 
+        # Save filtered position data
+        save_position_data(
+            time_vector, x_filtered, y_filtered, distance, speed, output_dir, base_name
+        )
+
+        # Save results to CSV
+        save_results_to_csv(
+            results, center_border_results, zones_distance, fs, output_dir, base_name
+        )
+
         print(f"Processing of file {input_file} completed successfully.")
+        return x_filtered, y_filtered, speed  # Return filtered data for verification
+
     except Exception as e:
         print(f"An error occurred while processing {input_file}: {e}")
         raise
 
 
-def process_all_files_in_directory(target_dir, fs, cutoff):
+def process_all_files_in_directory(
+    target_dir, fs, cutoff, filter_type=None, window_size=None, poly_order=None
+):
     """
-    Processes all files in the selected directory, applying the specified
-    sampling frequency and cutoff frequency for the Butterworth filter.
-
-    Args:
-        target_dir (str): Directory containing CSV files.
-        fs (float): Sampling frequency in Hz.
-        cutoff (float): Butterworth filter cutoff frequency in Hz.
+    Process all files in the directory with the specified filtering parameters.
     """
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     main_output_dir = os.path.join(target_dir, f"openfield_results_{timestamp}")
@@ -912,14 +956,20 @@ def process_all_files_in_directory(target_dir, fs, cutoff):
     ]
     for input_file in csv_files:
         print(f"Processing file: {input_file}")
-        process_open_field_data(input_file, main_output_dir, fs, cutoff)
-    print("All files have been processed successfully.")
+        process_open_field_data(
+            input_file,
+            main_output_dir,
+            fs,
+            cutoff,
+            filter_type,
+            window_size,
+            poly_order,
+        )
 
 
 def run_animal_open_field():
     """
-    Run the open field analysis process, allowing the user to select the directory
-    and input the sampling frequency and Butterworth cutoff frequency.
+    Run the open field analysis process with user input for filtering parameters.
     """
     print("Running open field analysis...")
     root = Tk()
@@ -941,6 +991,120 @@ def run_animal_open_field():
         messagebox.showwarning("Warning", "Sampling frequency not provided.")
         return
 
+    # Ask if user wants to apply outlier filtering
+    apply_outlier_filter = messagebox.askyesno(
+        "Outlier Filter", "Do you want to apply a filter to remove outliers/spikes?"
+    )
+
+    filter_type = None
+    window_size = None
+    poly_order = None
+
+    if apply_outlier_filter:
+        # Create a new window for filter settings
+        filter_window = Tk()
+        filter_window.title("Filter Settings")
+        filter_window.geometry("400x400")  # Increased height from 300 to 400
+
+        # Variables to store settings
+        filter_var = StringVar(master=filter_window, value="savgol")
+        window_var = StringVar(master=filter_window, value=str(int(fs * 0.2)))
+        poly_var = StringVar(master=filter_window, value="3")
+
+        # Function to validate and save settings
+        def save_settings():
+            nonlocal filter_type, window_size, poly_order
+            try:
+                window_size = int(window_var.get())
+                if window_size < 3:
+                    raise ValueError("Window size must be at least 3")
+                if window_size % 2 == 0:
+                    window_size += 1  # Ensure odd number
+
+                poly_order = int(poly_var.get())
+                if poly_order < 1:
+                    raise ValueError("Polynomial order must be at least 1")
+                if poly_order >= window_size:
+                    raise ValueError("Polynomial order must be less than window size")
+
+                filter_type = filter_var.get()
+                filter_window.destroy()
+            except ValueError as e:
+                messagebox.showerror("Error", str(e))
+
+        # Add help button function
+        def show_help():
+            help_text = """
+            Filter Settings Help:
+
+            Savitzky-Golay Filter:
+            - Better preserves signal features
+            - Recommended for biomechanical data
+            - Polynomial order should be less than window size
+            - Typical polynomial order: 3-5
+
+            Median Filter:
+            - Better for removing isolated spikes
+            - Simpler but may distort signal more
+            - Only uses window size parameter
+
+            Window Size:
+            - Must be odd number (will be adjusted if even)
+            - Recommended: 0.1-0.3 seconds of data
+            - Current default: 0.2 seconds
+            """
+            messagebox.showinfo("Help", help_text)
+
+        # Title label
+        Label(filter_window, text="Filter Settings", font=("Arial", 12, "bold")).pack(
+            pady=15
+        )
+
+        # Filter type selection with more padding
+        Label(filter_window, text="Select filter type:").pack(pady=15)
+        Radiobutton(
+            filter_window, text="Savitzky-Golay", variable=filter_var, value="savgol"
+        ).pack(pady=5)
+        Radiobutton(
+            filter_window, text="Median", variable=filter_var, value="median"
+        ).pack(pady=5)
+
+        # Window size entry with more padding
+        Label(filter_window, text="Window size (in frames):").pack(pady=15)
+        Entry(filter_window, textvariable=window_var).pack(pady=5)
+
+        # Polynomial order entry with more padding
+        Label(filter_window, text="Polynomial order (Savitzky-Golay only):").pack(
+            pady=15
+        )
+        Entry(filter_window, textvariable=poly_var).pack(pady=5)
+
+        # Frame for buttons
+        button_frame = Frame(filter_window)
+        button_frame.pack(pady=20)
+
+        # Add Help and Save buttons side by side
+        Button(button_frame, text="Help", command=show_help, width=15).pack(
+            side=LEFT, padx=10
+        )
+        Button(
+            button_frame, text="Save Settings", command=save_settings, width=15
+        ).pack(side=LEFT, padx=10)
+
+        # Center the window
+        filter_window.update_idletasks()
+        width = filter_window.winfo_width()
+        height = filter_window.winfo_height()
+        x = (filter_window.winfo_screenwidth() // 2) - (width // 2)
+        y = (filter_window.winfo_screenheight() // 2) - (height // 2)
+        filter_window.geometry("{}x{}+{}+{}".format(width, height, x, y))
+
+        # Wait for window to close
+        filter_window.wait_window()
+
+        if filter_type is None:  # User closed window without saving
+            return
+
     # Ask user to input the Butterworth cutoff frequency (Hz)
     cutoff = simpledialog.askfloat(
         "Butterworth Cutoff Frequency",
@@ -952,11 +1116,53 @@ def run_animal_open_field():
         return
 
     # Process all files in the selected directory
-    process_all_files_in_directory(target_dir, fs, cutoff)
+    process_all_files_in_directory(
+        target_dir, fs, cutoff, filter_type, window_size, poly_order
+    )
     root.destroy()
     messagebox.showinfo(
         "Success", "All .csv files have been processed and results saved."
     )
+
+
+def plot_filtering_comparison(
+    x, y, x_filtered, y_filtered, time_vector, fs, output_dir, base_name
+):
+    """
+    Plots a comparison of the original and filtered data.
+    """
+    # Calculate speeds
+    speed_original = np.insert(np.sqrt(np.diff(x) ** 2 + np.diff(y) ** 2), 0, 0) * fs
+    speed_filtered = (
+        np.insert(np.sqrt(np.diff(x_filtered) ** 2 + np.diff(y_filtered) ** 2), 0, 0)
+        * fs
+    )
+
+    # Create the comparison plot
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(15, 10))
+
+    # Plot positions
+    ax1.plot(x, y, "b-", alpha=0.5, label="Original")
+    ax1.plot(x_filtered, y_filtered, "r-", alpha=0.5, label="Filtered")
+    ax1.set_title("Position Comparison")
+    ax1.set_xlabel("X (m)")
+    ax1.set_ylabel("Y (m)")
+    ax1.legend()
+    ax1.grid(True)
+
+    # Plot speeds
+    ax2.plot(time_vector, speed_original, "b-", alpha=0.5, label="Original")
+    ax2.plot(time_vector, speed_filtered, "r-", alpha=0.5, label="Filtered")
+    ax2.set_title("Speed Comparison")
+    ax2.set_xlabel("Time (s)")
+    ax2.set_ylabel("Speed (m/s)")
+    ax2.legend()
+    ax2.grid(True)
+
+    plt.tight_layout()
+    output_file_path = os.path.join(output_dir, f"{base_name}_filtering_comparison.png")
+    plt.savefig(output_file_path, dpi=300, bbox_inches="tight")
+    plt.close()
 
 
 if __name__ == "__main__":
