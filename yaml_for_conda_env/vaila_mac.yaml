@@ -608,4 +608,5 @@ dependencies:
       - pyqt5
       - ezc3d
       - ultralytics
+      - boxmot
 

@@ -105,14 +105,18 @@ def play_video_with_controls(video_path, coordinates=None):
         button_y = 10
 
         # Save button
-        save_button_rect = pygame.Rect(window_width - 140, button_y, button_width, button_height)
+        save_button_rect = pygame.Rect(
+            window_width - 140, button_y, button_width, button_height
+        )
         pygame.draw.rect(slider_surface, (100, 100, 100), save_button_rect)
         save_text = font.render("Save", True, (255, 255, 255))
         text_rect = save_text.get_rect(center=save_button_rect.center)
         slider_surface.blit(save_text, text_rect)
 
         # Help button
-        help_button_rect = pygame.Rect(window_width - 70, button_y, button_width, button_height)
+        help_button_rect = pygame.Rect(
+            window_width - 70, button_y, button_width, button_height
+        )
         pygame.draw.rect(slider_surface, (100, 100, 100), help_button_rect)
         help_text = font.render("Help", True, (255, 255, 255))
         text_rect = help_text.get_rect(center=help_button_rect.center)
@@ -121,7 +125,14 @@ def play_video_with_controls(video_path, coordinates=None):
         # Blit the slider surface at the bottom of the window area
         screen.blit(slider_surface, (0, window_height))
 
-        return slider_x, slider_width, slider_y, slider_height, help_button_rect, save_button_rect
+        return (
+            slider_x,
+            slider_width,
+            slider_y,
+            slider_height,
+            help_button_rect,
+            save_button_rect,
+        )
 
     def show_help_dialog():
         help_message = (
@@ -172,7 +183,14 @@ def play_video_with_controls(video_path, coordinates=None):
             text_surface = font.render(str(i + 1), True, (255, 255, 255))
             screen.blit(text_surface, (screen_x + 5, screen_y - 15))
 
-        slider_x, slider_width, slider_y, slider_height, help_button_rect, save_button_rect = draw_controls()
+        (
+            slider_x,
+            slider_width,
+            slider_y,
+            slider_height,
+            help_button_rect,
+            save_button_rect,
+        ) = draw_controls()
         pygame.display.flip()
 
         for event in pygame.event.get():
@@ -241,8 +259,12 @@ def play_video_with_controls(video_path, coordinates=None):
             elif event.type == pygame.MOUSEMOTION:
                 if scrolling:
                     rel_x, rel_y = pygame.mouse.get_rel()
-                    offset_x = max(0, min(zoomed_width - window_width, offset_x - rel_x))
-                    offset_y = max(0, min(zoomed_height - window_height, offset_y - rel_y))
+                    offset_x = max(
+                        0, min(zoomed_width - window_width, offset_x - rel_x)
+                    )
+                    offset_y = max(
+                        0, min(zoomed_height - window_height, offset_y - rel_y)
+                    )
 
         if not paused:
             frame_count = (frame_count + 1) % total_frames

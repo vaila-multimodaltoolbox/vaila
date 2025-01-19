@@ -523,3 +523,4 @@ dependencies:
       - pygame
       - ezc3d
       - ultralytics
+      - boxmot
