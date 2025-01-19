@@ -162,7 +162,9 @@ def create_temp_file_with_videos(video_files):
     return temp_file.name
 
 
-def run_compress_videos_h264(temp_file_path, output_directory, preset="medium", crf=23, use_gpu=False):
+def run_compress_videos_h264(
+    temp_file_path, output_directory, preset="medium", crf=23, use_gpu=False
+):
     """Compress videos optimized for ML frameworks like MediaPipe and YOLO while preserving metadata and FPS."""
     global success_count, failure_count
 
@@ -192,16 +194,18 @@ def run_compress_videos_h264(temp_file_path, output_directory, preset="medium", 
         # Print original video info using ffprobe
         probe_cmd = [
             "ffprobe",
-            "-v", "quiet",
-            "-print_format", "json",
+            "-v",
+            "quiet",
+            "-print_format",
+            "json",
             "-show_streams",
-            input_path
+            input_path,
         ]
         probe_result = subprocess.run(probe_cmd, capture_output=True, text=True)
         video_info = json.loads(probe_result.stdout)
-        
-        for stream in video_info['streams']:
-            if stream['codec_type'] == 'video':
+
+        for stream in video_info["streams"]:
+            if stream["codec_type"] == "video":
                 print(f"Original video FPS: {stream.get('r_frame_rate', 'N/A')}")
                 break
 
@@ -210,39 +214,63 @@ def run_compress_videos_h264(temp_file_path, output_directory, preset="medium", 
                 command = [
                     "ffmpeg",
                     "-y",
-                    "-i", input_path,
-                    "-c:v", "h264_nvenc",
-                    "-preset", preset,
-                    "-b:v", "5M",
-                    "-maxrate", "5M",
-                    "-bufsize", "10M",
-                    "-pix_fmt", "yuv420p",
-                    "-vf", "format=yuv420p",
-                    "-g", "30",
-                    "-c:a", "aac",
-                    "-map_metadata", "0",
-                    "-fps_mode", "passthrough",
-                    output_path
+                    "-i",
+                    input_path,
+                    "-c:v",
+                    "h264_nvenc",
+                    "-preset",
+                    preset,
+                    "-b:v",
+                    "5M",
+                    "-maxrate",
+                    "5M",
+                    "-bufsize",
+                    "10M",
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-vf",
+                    "format=yuv420p",
+                    "-g",
+                    "30",
+                    "-c:a",
+                    "aac",
+                    "-map_metadata",
+                    "0",
+                    "-fps_mode",
+                    "passthrough",
+                    output_path,
                 ]
             else:
                 command = [
                     "ffmpeg",
                     "-y",
-                    "-i", input_path,
-                    "-c:v", "libx264",
-                    "-preset", preset,
-                    "-crf", str(crf),
-                    "-pix_fmt", "yuv420p",
-                    "-vf", "format=yuv420p",
-                    "-g", "30",
-                    "-c:a", "aac",
-                    "-map_metadata", "0",
-                    "-fps_mode", "passthrough",
-                    output_path
+                    "-i",
+                    input_path,
+                    "-c:v",
+                    "libx264",
+                    "-preset",
+                    preset,
+                    "-crf",
+                    str(crf),
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-vf",
+                    "format=yuv420p",
+                    "-g",
+                    "30",
+                    "-c:a",
+                    "aac",
+                    "-map_metadata",
+                    "0",
+                    "-fps_mode",
+                    "passthrough",
+                    output_path,
                 ]
 
             # Simpler process execution that was working before
-            process = subprocess.run(command, check=True, stderr=subprocess.PIPE, universal_newlines=True)
+            process = subprocess.run(
+                command, check=True, stderr=subprocess.PIPE, universal_newlines=True
+            )
             print(process.stderr)  # This will show the progress after completion
 
             success_count += 1
@@ -251,7 +279,9 @@ def run_compress_videos_h264(temp_file_path, output_directory, preset="medium", 
             failure_count += 1
             print(f"\nError compressing {video_file}: {e}")
 
-    print(f"\nCompression completed: {success_count} succeeded, {failure_count} failed.")
+    print(
+        f"\nCompression completed: {success_count} succeeded, {failure_count} failed."
+    )
 
 
 def compress_videos_h264_gui():
