@@ -87,3 +87,4 @@ dependencies:
       - ydata_profiling
       - 'xonsh[full]'
       - ultralytics
+      - boxmot
