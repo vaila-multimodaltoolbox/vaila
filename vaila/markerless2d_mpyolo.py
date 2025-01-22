@@ -63,7 +63,7 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
         )
         tk.Label(master, text="YOLO confidence threshold (0.0 - 1.0):").grid(row=1)
         self.yolo_conf_entry = tk.Entry(master)
-        self.yolo_conf_entry.insert(0, "0.5")
+        self.yolo_conf_entry.insert(0, "0.3")
         self.yolo_conf_entry.grid(row=1, column=1)
 
         # Person Limit Configuration
@@ -99,9 +99,9 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
         self.model_complexity_entry = tk.Entry(master)
         self.model_complexity_entry.insert(0, "2")
         self.enable_segmentation_entry = tk.Entry(master)
-        self.enable_segmentation_entry.insert(0, "False")
+        self.enable_segmentation_entry.insert(0, "True")
         self.smooth_segmentation_entry = tk.Entry(master)
-        self.smooth_segmentation_entry.insert(0, "False")
+        self.smooth_segmentation_entry.insert(0, "True")
         self.static_image_mode_entry = tk.Entry(master)
         self.static_image_mode_entry.insert(0, "False")
 
@@ -178,7 +178,14 @@ def process_video(video_path, output_dir, config):
     )
     fps = cap.get(cv2.CAP_PROP_FPS)
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-
+    duration = total_frames / fps
+    
+    print(f"\nProcessing video: {os.path.basename(video_path)}")
+    print(f"Total frames: {total_frames}")
+    print(f"FPS: {fps:.2f}")
+    print(f"Duration: {duration:.2f} seconds")
+    print(f"Max persons: {config['max_persons']}")
+    
     output_video_path = output_dir / f"{video_path.stem}_processed.mp4"
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     out = cv2.VideoWriter(str(output_video_path), fourcc, fps, (width, height))
@@ -217,10 +224,22 @@ def process_video(video_path, output_dir, config):
         f"{landmark}_{axis}" for landmark in range(33) for axis in ["x", "y", "z"]
     ]
 
+    start_time = time.time()
     for frame_idx in range(total_frames):
         success, frame = cap.read()
         if not success:
             break
+            
+        # Mostrar progresso a cada 30 frames (ou ajuste conforme necessário)
+        if frame_idx % 30 == 0:
+            progress = (frame_idx / total_frames) * 100
+            elapsed_time = time.time() - start_time
+            frames_remaining = total_frames - frame_idx
+            if frame_idx > 0:
+                time_per_frame = elapsed_time / frame_idx
+                estimated_time_remaining = frames_remaining * time_per_frame
+                print(f"\rProgress: {progress:.1f}% | Frame: {frame_idx}/{total_frames} | "
+                      f"Remaining time: {estimated_time_remaining:.1f}s", end="", flush=True)
 
         # Get YOLO detections
         results = yolo(frame, conf=config["yolo_conf"])
@@ -350,7 +369,8 @@ def process_video(video_path, output_dir, config):
     cap.release()
     out.release()
 
-    print(f"Completed processing: {video_path.name}")
+    print(f"\nProcessing completed for {os.path.basename(video_path)}")
+    print(f"Total time: {time.time() - start_time:.1f} seconds")
 
 
 def run_markerless2d_mpyolo():

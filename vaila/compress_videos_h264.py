@@ -97,6 +97,8 @@ import platform
 import tempfile
 import json
 from tkinter import filedialog, messagebox, Tk
+import time
+import re
 
 # Global variables for success and failure counts
 success_count = 0
@@ -162,10 +164,26 @@ def create_temp_file_with_videos(video_files):
     return temp_file.name
 
 
+def get_video_duration(input_path):
+    """Get video duration in seconds using ffprobe."""
+    try:
+        cmd = [
+            'ffprobe', 
+            '-v', 'error',
+            '-show_entries', 'format=duration',
+            '-of', 'default=noprint_wrappers=1:nokey=1',
+            input_path
+        ]
+        output = subprocess.check_output(cmd).decode().strip()
+        return float(output)
+    except:
+        return None
+
+
 def run_compress_videos_h264(
     temp_file_path, output_directory, preset="medium", crf=23, use_gpu=False
 ):
-    """Compress videos optimized for ML frameworks like MediaPipe and YOLO while preserving metadata and FPS."""
+    """Compress videos with progress monitoring."""
     global success_count, failure_count
 
     print("\n=== Video Compression Settings (ML-Optimized) ===")
@@ -189,7 +207,14 @@ def run_compress_videos_h264(
 
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
-        print(f"\nProcessing video {index}/{total_videos}: {video_file}")
+        # Get video duration and size
+        duration = get_video_duration(input_path)
+        file_size = os.path.getsize(input_path) / (1024 * 1024)  # Size in MB
+        
+        print(f"\nProcessing video {index}/{total_videos}")
+        print(f"File: {os.path.basename(video_file)}")
+        print(f"Duration: {duration:.2f} seconds" if duration else "Duration: Unknown")
+        print(f"Original size: {file_size:.2f} MB")
 
         # Print original video info using ffprobe
         probe_cmd = [
@@ -207,6 +232,7 @@ def run_compress_videos_h264(
         for stream in video_info["streams"]:
             if stream["codec_type"] == "video":
                 print(f"Original video FPS: {stream.get('r_frame_rate', 'N/A')}")
+                print(f"Resolution: {stream.get('width', 'N/A')}x{stream.get('height', 'N/A')}")
                 break
 
         try:
@@ -238,6 +264,8 @@ def run_compress_videos_h264(
                     "0",
                     "-fps_mode",
                     "passthrough",
+                    "-progress",
+                    "pipe:1",
                     output_path,
                 ]
             else:
@@ -264,24 +292,64 @@ def run_compress_videos_h264(
                     "0",
                     "-fps_mode",
                     "passthrough",
+                    "-progress",
+                    "pipe:1",
                     output_path,
                 ]
 
-            # Simpler process execution that was working before
-            process = subprocess.run(
-                command, check=True, stderr=subprocess.PIPE, universal_newlines=True
+            process = subprocess.Popen(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                universal_newlines=True,
+                bufsize=1
             )
-            print(process.stderr)  # This will show the progress after completion
 
-            success_count += 1
-            print(f"\nSuccessfully compressed: {video_file}")
+            print("\nCompression Progress:")
+            start_time = time.time()
+            last_update = 0
+
+            while True:
+                output = process.stdout.readline()
+                if output == '' and process.poll() is not None:
+                    break
+                if output:
+                    if 'frame=' in output:
+                        current_time = time.time()
+                        if current_time - last_update >= 1:  # Update every second
+                            # Extract progress information
+                            frame_match = re.search(r'frame=\s*(\d+)', output)
+                            time_match = re.search(r'time=\s*(\d+:\d+:\d+.\d+)', output)
+                            speed_match = re.search(r'speed=\s*(\d+.\d+)x', output)
+                            
+                            if frame_match and time_match:
+                                elapsed = current_time - start_time
+                                print(f"\rTime: {time_match.group(1)} | "
+                                      f"Speed: {speed_match.group(1) if speed_match else 'N/A'}x | "
+                                      f"Elapsed: {int(elapsed)}s", end='', flush=True)
+                            last_update = current_time
+
+            process.wait()
+            
+            if process.returncode == 0:
+                success_count += 1
+                # Get compressed file size
+                compressed_size = os.path.getsize(output_path) / (1024 * 1024)  # Size in MB
+                compression_ratio = (file_size - compressed_size) / file_size * 100
+                
+                print(f"\n\nSuccess! Compression completed for: {os.path.basename(video_file)}")
+                print(f"Original size: {file_size:.2f} MB")
+                print(f"Compressed size: {compressed_size:.2f} MB")
+                print(f"Compression ratio: {compression_ratio:.1f}%")
+            else:
+                failure_count += 1
+                print(f"\nError compressing {video_file}")
+                
         except subprocess.CalledProcessError as e:
             failure_count += 1
             print(f"\nError compressing {video_file}: {e}")
 
-    print(
-        f"\nCompression completed: {success_count} succeeded, {failure_count} failed."
-    )
+    print(f"\nCompression completed: {success_count} succeeded, {failure_count} failed.")
 
 
 def compress_videos_h264_gui():
