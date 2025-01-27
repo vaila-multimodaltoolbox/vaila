@@ -97,8 +97,12 @@ import platform
 import tempfile
 import json
 from tkinter import filedialog, messagebox, Tk
+import time
+import re
+import tkinter as tk
+from tkinter import simpledialog
 
-# Global variables for success and failure counts
+# Variáveis globais
 success_count = 0
 failure_count = 0
 
@@ -154,68 +158,54 @@ def find_videos(directory):
 
 
 def create_temp_file_with_videos(video_files):
-    """Create a temporary file containing the list of video files to process."""
-    temp_file = tempfile.NamedTemporaryFile(delete=False, mode="w")
-    for video in video_files:
-        temp_file.write(f"{video}\n")
-    temp_file.close()
-    return temp_file.name
+    """Create temporary file with list of videos."""
+    temp_path = "temp_video_list.txt"
+    with open(temp_path, "w") as f:
+        for video in video_files:
+            f.write(f"{video}\n")  # Simplificado
+    return temp_path
 
 
-def run_compress_videos_h264(
-    temp_file_path, output_directory, preset="medium", crf=23, use_gpu=False
-):
-    """Compress videos optimized for ML frameworks like MediaPipe and YOLO while preserving metadata and FPS."""
-    global success_count, failure_count
-
-    print("\n=== Video Compression Settings (ML-Optimized) ===")
-    print(f"Preset: {preset}")
-    print(f"CRF: {crf}")
-    print(f"Using GPU: {use_gpu}")
-    print("\nOptimized settings for MediaPipe and YOLO processing")
-
-    os.makedirs(output_directory, exist_ok=True)
-
-    with open(temp_file_path, "r") as temp_file:
-        video_files = [line.strip() for line in temp_file]
-
-    total_videos = len(video_files)
-    for index, video_file in enumerate(video_files, 1):
-        input_path = video_file
-        relative_path = os.path.relpath(input_path, os.path.dirname(output_directory))
-        output_path = os.path.join(
-            output_directory, f"{os.path.splitext(relative_path)[0]}_h264.mp4"
-        )
-
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-
-        print(f"\nProcessing video {index}/{total_videos}: {video_file}")
-
-        # Print original video info using ffprobe
-        probe_cmd = [
+def get_video_duration(input_path):
+    """Get video duration in seconds using ffprobe."""
+    try:
+        cmd = [
             "ffprobe",
             "-v",
-            "quiet",
-            "-print_format",
-            "json",
-            "-show_streams",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
             input_path,
         ]
-        probe_result = subprocess.run(probe_cmd, capture_output=True, text=True)
-        video_info = json.loads(probe_result.stdout)
+        output = subprocess.check_output(cmd).decode().strip()
+        return float(output)
+    except:
+        return None
 
-        for stream in video_info["streams"]:
-            if stream["codec_type"] == "video":
-                print(f"Original video FPS: {stream.get('r_frame_rate', 'N/A')}")
-                break
+
+def run_compress_videos_h264(input_list, output_dir, preset, crf, use_gpu):
+    """Run the actual compression."""
+    global success_count, failure_count
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    with open(input_list, "r") as f:
+        video_paths = [line.strip() for line in f]
+
+    for video_path in video_paths:
+        output_path = os.path.join(
+            output_dir, os.path.splitext(os.path.basename(video_path))[0] + "_h264.mp4"
+        )
 
         try:
             if use_gpu:
-                command = [
+                cmd = [
                     "ffmpeg",
                     "-y",
                     "-i",
-                    input_path,
+                    video_path,
                     "-c:v",
                     "h264_nvenc",
                     "-preset",
@@ -226,71 +216,105 @@ def run_compress_videos_h264(
                     "5M",
                     "-bufsize",
                     "10M",
-                    "-pix_fmt",
-                    "yuv420p",
-                    "-vf",
-                    "format=yuv420p",
-                    "-g",
-                    "30",
                     "-c:a",
-                    "aac",
-                    "-map_metadata",
-                    "0",
-                    "-fps_mode",
-                    "passthrough",
+                    "copy",
                     output_path,
                 ]
             else:
-                command = [
+                cmd = [
                     "ffmpeg",
                     "-y",
                     "-i",
-                    input_path,
+                    video_path,
                     "-c:v",
                     "libx264",
                     "-preset",
                     preset,
                     "-crf",
                     str(crf),
-                    "-pix_fmt",
-                    "yuv420p",
-                    "-vf",
-                    "format=yuv420p",
-                    "-g",
-                    "30",
                     "-c:a",
-                    "aac",
-                    "-map_metadata",
-                    "0",
-                    "-fps_mode",
-                    "passthrough",
+                    "copy",
                     output_path,
                 ]
 
-            # Simpler process execution that was working before
-            process = subprocess.run(
-                command, check=True, stderr=subprocess.PIPE, universal_newlines=True
-            )
-            print(process.stderr)  # This will show the progress after completion
-
+            print(f"\nProcessing: {os.path.basename(video_path)}")
+            subprocess.run(cmd, check=True)
             success_count += 1
-            print(f"\nSuccessfully compressed: {video_file}")
+            print(f"Successfully compressed: {os.path.basename(video_path)}")
+
         except subprocess.CalledProcessError as e:
             failure_count += 1
-            print(f"\nError compressing {video_file}: {e}")
+            print(f"Failed to compress: {os.path.basename(video_path)}")
+            print(f"Error: {str(e)}")
 
-    print(
-        f"\nCompression completed: {success_count} succeeded, {failure_count} failed."
-    )
+
+class CompressionConfigDialog(tk.simpledialog.Dialog):
+    def body(self, master):
+        # Compression Configuration
+        tk.Label(
+            master, text="Video Compression Settings", font=("Arial", 10, "bold")
+        ).grid(row=0, columnspan=2, pady=10)
+
+        # Preset selection
+        tk.Label(master, text="Preset:").grid(row=1)
+        self.preset_var = tk.StringVar(value="medium")
+        presets = [
+            "ultrafast",
+            "superfast",
+            "veryfast",
+            "faster",
+            "fast",
+            "medium",
+            "slow",
+            "slower",
+            "veryslow",
+        ]
+        self.preset_menu = tk.OptionMenu(master, self.preset_var, *presets)
+        self.preset_menu.grid(row=1, column=1, sticky="ew")
+
+        # CRF value
+        tk.Label(master, text="CRF Value (0-51, lower is better quality):").grid(row=2)
+        self.crf_entry = tk.Entry(master)
+        self.crf_entry.insert(0, "23")
+        self.crf_entry.grid(row=2, column=1)
+
+        # GPU usage
+        tk.Label(master, text="Use GPU acceleration if available:").grid(row=3)
+        self.use_gpu_var = tk.BooleanVar(value=False)
+        self.use_gpu_check = tk.Checkbutton(master, variable=self.use_gpu_var)
+        self.use_gpu_check.grid(row=3, column=1)
+
+        return self.preset_menu
+
+    def validate(self):
+        try:
+            crf = int(self.crf_entry.get())
+            if not (0 <= crf <= 51):
+                messagebox.showerror("Error", "CRF value must be between 0 and 51")
+                return False
+            return True
+        except ValueError:
+            messagebox.showerror("Error", "CRF value must be a number")
+            return False
+
+    def apply(self):
+        self.result = {
+            "preset": self.preset_var.get(),
+            "crf": int(self.crf_entry.get()),
+            "use_gpu": self.use_gpu_var.get(),
+        }
 
 
 def compress_videos_h264_gui():
-    # Print the directory and name of the script being executed
-    print(f"Running script: {os.path.basename(__file__)}")
-    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
-    global success_count, failure_count
-    root = Tk()
+    root = tk.Tk()
     root.withdraw()
+
+    # Get compression settings from dialog
+    dialog = CompressionConfigDialog(root, title="Compression Settings")
+    if not dialog.result:
+        return
+
+    compression_config = dialog.result
 
     video_directory = filedialog.askdirectory(
         title="Select the directory containing videos to compress"
@@ -306,15 +330,14 @@ def compress_videos_h264_gui():
     os_type = platform.system()
     print(f"Operating System: {os_type}")
 
-    # Check if NVIDIA GPU is available
-    use_gpu = is_nvidia_gpu_available()
+    # Check if NVIDIA GPU is available when GPU is selected
+    use_gpu = compression_config["use_gpu"] and is_nvidia_gpu_available()
+    if compression_config["use_gpu"] and not use_gpu:
+        print(
+            "GPU acceleration requested but no NVIDIA GPU detected. Using CPU instead."
+        )
 
-    if use_gpu:
-        print("NVIDIA GPU detected. Using GPU for video compression.")
-    else:
-        print("No NVIDIA GPU detected. Using CPU-based compression.")
-
-    # Find all video files in the specified directory without searching subdirectories
+    # Find all video files
     video_files = find_videos(video_directory)
 
     if not video_files:
@@ -324,11 +347,14 @@ def compress_videos_h264_gui():
     # Create a temporary file with the list of video files
     temp_file_path = create_temp_file_with_videos(video_files)
 
-    # Run the compression for all found videos
-    preset = "medium"
-    crf = 23
-
-    run_compress_videos_h264(temp_file_path, output_directory, preset, crf, use_gpu)
+    # Run the compression with user-defined settings
+    run_compress_videos_h264(
+        temp_file_path,
+        output_directory,
+        preset=compression_config["preset"],
+        crf=compression_config["crf"],
+        use_gpu=use_gpu,
+    )
 
     # Remove temporary file
     os.remove(temp_file_path)

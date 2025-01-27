@@ -1,3 +1,7 @@
+# Project specific
+datasets/
+vaila/models/
+
 # General temporary files
 .DS_Store
 .AppleDouble
