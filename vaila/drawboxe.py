@@ -128,14 +128,29 @@ def apply_boxes_to_frames(frames_dir, coordinates, selections, frame_intervals):
             if start_frame <= frame_number <= end_frame:
                 frame_path = os.path.join(frames_dir, filename)
                 img = cv2.imread(frame_path)
-                for (x1, y1, x2, y2), selection in zip(coordinates, selections):
-                    if selection == "outside":
-                        img[:y1, :] = (0, 0, 0)
-                        img[y2:, :] = (0, 0, 0)
-                        img[y1:y2, :x1] = (0, 0, 0)
-                        img[y1:y2, x2:] = (0, 0, 0)
-                    else:
-                        img = cv2.rectangle(img, (x1, y1), (x2, y2), (0, 0, 0), -1)
+                for coords, (mode, shape_type) in zip(coordinates, selections):
+                    if shape_type == "rectangle":
+                        # Usar apenas os pontos inicial e final para o retângulo
+                        x1, y1 = int(coords[0][0]), int(coords[0][1])
+                        x2, y2 = int(coords[2][0]), int(coords[2][1])
+                        
+                        # Garantir que x1,y1 seja o ponto superior esquerdo
+                        x1, x2 = min(x1, x2), max(x1, x2)
+                        y1, y2 = min(y1, y2), max(y1, y2)
+                        
+                        if mode == "outside":
+                            mask = np.zeros_like(img)
+                            cv2.rectangle(mask, (x1, y1), (x2, y2), (255, 255, 255), -1)
+                            mask = cv2.bitwise_not(mask)
+                            img = cv2.bitwise_and(img, mask)
+                        else:  # inside mode
+                            # Desenhar diretamente o retângulo preenchido
+                            cv2.rectangle(img, (x1, y1), (x2, y2), (0, 0, 0), -1)
+                    elif shape_type == "trapezoid":
+                        pts = np.array(coords, np.int32)
+                        if mode == "inside":
+                            cv2.fillPoly(img, [pts], (0, 0, 0))
+                
                 cv2.imwrite(frame_path, img)
 
 
