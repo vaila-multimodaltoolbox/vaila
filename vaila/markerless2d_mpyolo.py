@@ -84,10 +84,7 @@ def run_markerless2d_mpyolo():
     main_output_dir = os.path.join(output_base_dir, f"markerless2d_mpyolo_{timestamp}")
     os.makedirs(main_output_dir, exist_ok=True)
 
-    # Inicializa YOLOv11 e MediaPipe
-    model_path = os.path.join(os.path.dirname(__file__), 'models', 'yolo11x.pt')
-    model = YOLO(model_path)
-
+    # Initialize MediaPipe
     mp_pose = mp.solutions.pose
     pose = mp_pose.Pose(
         static_image_mode=False,
@@ -99,8 +96,14 @@ def run_markerless2d_mpyolo():
     )
     mp_drawing = mp.solutions.drawing_utils
 
+    # Get model path
+    model_path = os.path.join(os.path.dirname(__file__), 'models', 'yolo11x.pt')
+
     for video_file in os.listdir(video_dir):
         if video_file.endswith(('.mp4', '.avi', '.mov')):
+            # Initialize a new YOLO model for each video
+            model = YOLO(model_path)
+            
             video_path = os.path.join(video_dir, video_file)
             video_name = os.path.splitext(os.path.basename(video_path))[0]
             output_dir = os.path.join(main_output_dir, video_name)
