@@ -96,6 +96,7 @@ import subprocess
 import platform
 import tempfile
 from tkinter import filedialog, messagebox, Tk
+import tkinter as tk
 
 # Global variables for success and failure counts
 success_count = 0
@@ -240,6 +241,59 @@ def run_compress_videos_h265(
     print(f"Compression completed: {success_count} succeeded, {failure_count} failed.")
 
 
+class CompressionConfigDialog(tk.simpledialog.Dialog):
+    def body(self, master):
+        tk.Label(
+            master, text="Video Compression Settings", font=("Arial", 10, "bold")
+        ).grid(row=0, columnspan=2, pady=10)
+
+        tk.Label(master, text="Preset:").grid(row=1)
+        self.preset_var = tk.StringVar(value="medium")
+        presets = [
+            "ultrafast",
+            "superfast",
+            "veryfast",
+            "faster",
+            "fast",
+            "medium",
+            "slow",
+            "slower",
+            "veryslow",
+        ]
+        self.preset_menu = tk.OptionMenu(master, self.preset_var, *presets)
+        self.preset_menu.grid(row=1, column=1, sticky="ew")
+
+        tk.Label(master, text="CRF Value (0-51, lower is better quality):").grid(row=2)
+        self.crf_entry = tk.Entry(master)
+        self.crf_entry.insert(0, "23")
+        self.crf_entry.grid(row=2, column=1)
+
+        tk.Label(master, text="Use GPU acceleration if available:").grid(row=3)
+        self.use_gpu_var = tk.BooleanVar(value=False)
+        self.use_gpu_check = tk.Checkbutton(master, variable=self.use_gpu_var)
+        self.use_gpu_check.grid(row=3, column=1)
+
+        return self.preset_menu
+
+    def validate(self):
+        try:
+            crf = int(self.crf_entry.get())
+            if not (0 <= crf <= 51):
+                messagebox.showerror("Error", "CRF value must be between 0 and 51")
+                return False
+            return True
+        except ValueError:
+            messagebox.showerror("Error", "CRF value must be a number")
+            return False
+
+    def apply(self):
+        self.result = {
+            "preset": self.preset_var.get(),
+            "crf": int(self.crf_entry.get()),
+            "use_gpu": self.use_gpu_var.get(),
+        }
+
+
 def compress_videos_h265_gui():
     # Print the directory and name of the script being executed
     print(f"Running script: {os.path.basename(__file__)}")
@@ -250,6 +304,12 @@ def compress_videos_h265_gui():
 
     root = Tk()
     root.withdraw()
+
+    dialog = CompressionConfigDialog(root, title="Compression Settings")
+    if not dialog.result:
+        return
+
+    compression_config = dialog.result
 
     video_directory = filedialog.askdirectory(
         title="Select the directory containing videos to compress"
@@ -266,12 +326,12 @@ def compress_videos_h265_gui():
     print(f"Operating System: {os_type}")
 
     # Check if an NVIDIA GPU is available
-    use_gpu = is_nvidia_gpu_available()
+    use_gpu = compression_config["use_gpu"] and is_nvidia_gpu_available()
 
-    if use_gpu:
-        print("NVIDIA GPU detected. Using GPU for video compression.")
-    else:
-        print("No NVIDIA GPU detected. Using CPU-based compression.")
+    if compression_config["use_gpu"] and not use_gpu:
+        print(
+            "GPU acceleration requested but no NVIDIA GPU detected. Using CPU instead."
+        )
 
     # Exclude both 'compressed_h264' and 'compressed_h265' directories
     output_directories = [
@@ -290,10 +350,13 @@ def compress_videos_h265_gui():
     temp_file_path = create_temp_file_with_videos(video_files)
 
     # Run the compression for all found videos
-    preset = "medium"
-    crf = 23  # Adjusted for better compression
-
-    run_compress_videos_h265(temp_file_path, output_directory, preset, crf, use_gpu)
+    run_compress_videos_h265(
+        temp_file_path,
+        output_directory,
+        preset=compression_config["preset"],
+        crf=compression_config["crf"],
+        use_gpu=use_gpu,
+    )
 
     # Remove temporary file
     os.remove(temp_file_path)
