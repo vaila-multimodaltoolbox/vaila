@@ -57,6 +57,19 @@ else
     fi
 fi
 
+# Check for NVIDIA GPU and install PyTorch with CUDA if available
+if command -v nvidia-smi &> /dev/null; then
+    echo "NVIDIA GPU detected. Installing PyTorch with CUDA support..."
+    conda install pytorch torchvision torchaudio pytorch-cuda -c pytorch -c nvidia -n vaila
+    if [ $? -eq 0 ]; then
+        echo "PyTorch with CUDA support installed successfully."
+    else
+        echo "Failed to install PyTorch with CUDA support."
+    fi
+else
+    echo "No NVIDIA GPU detected. Skipping PyTorch with CUDA installation."
+fi
+
 # Define paths
 USER_HOME="$HOME"
 VAILA_HOME="$USER_HOME/vaila"
