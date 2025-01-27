@@ -10,7 +10,8 @@ can be used for batch processing of videos in a directory.
 
 Version:
 --------
-2024-08-12 08:00:00 (New York Time)
+0.0.2
+date: 2025-01-22
 
 Author:
 -------
@@ -23,6 +24,7 @@ This code is licensed under the MIT License. See the LICENSE file for more detai
 Version History:
 ----------------
 - v1.0 (2024-08-12): Initial version with support for adding boxes to videos and extracting frames.
+- v0.0.2 (2025-01-22): Added draw shape trapezoid.
 
 Contact:
 --------
@@ -34,7 +36,7 @@ Contributions are welcome. Please follow the contribution guidelines provided in
 
 Dependencies:
 -------------
-- Python 3.11.8 (Anaconda environment)
+- Python 3.12.8 (Anaconda environment)
 - os
 - ffmpeg (installed via Conda or available in PATH)
 - matplotlib
@@ -47,6 +49,7 @@ Additional Notes:
 - The script assumes that the input videos are in a format supported by OpenCV.
 """
 
+import numpy as np
 import os
 import subprocess
 import matplotlib.pyplot as plt
@@ -88,14 +91,23 @@ def apply_boxes_directly_to_video(input_path, output_path, coordinates, selectio
         ret, frame = vidcap.read()
         if not ret:
             break
-        for (x1, y1, x2, y2), selection in zip(coordinates, selections):
-            if selection == "outside":
-                frame[:y1, :] = (0, 0, 0)
-                frame[y2:, :] = (0, 0, 0)
-                frame[y1:y2, :x1] = (0, 0, 0)
-                frame[y1:y2, x2:] = (0, 0, 0)
-            else:
-                frame = cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 0), -1)
+
+        for coords, (mode, shape_type) in zip(coordinates, selections):
+            if shape_type == "rectangle":
+                x1, y1 = coords[0]
+                x2, y2 = coords[1]
+                if mode == "outside":
+                    frame[:y1, :] = (0, 0, 0)
+                    frame[y2:, :] = (0, 0, 0)
+                    frame[y1:y2, :x1] = (0, 0, 0)
+                    frame[y1:y2, x2:] = (0, 0, 0)
+                else:
+                    frame = cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 0), -1)
+            elif shape_type == "trapezoid":
+                pts = np.array(coords, np.int32)
+                if mode == "inside":
+                    cv2.fillPoly(frame, [pts], (0, 0, 0))
+
         out.write(frame)
         frame_count += 1
         print(
@@ -151,12 +163,15 @@ def clean_up(directory):
 def get_box_coordinates(image_path):
     img = plt.imread(image_path)
     fig, ax = plt.subplots()
-    selection_mode = {"mode": "inside"}  # Default mode is 'inside'
+    selection_mode = {"mode": "inside", "shape": "rectangle"}  # Added shape type
 
     def update_title():
+        shape_text = (
+            "trapezoid" if selection_mode["shape"] == "trapezoid" else "rectangle"
+        )
         ax.set_title(
-            f'Red box: inside, Blue box: outside\nCurrent mode: {selection_mode["mode"]}\n'
-            'Click to select corners of the box. Press "e" to toggle mode, Enter to finish.'
+            f'Red box: inside, Blue box: outside\nCurrent mode: {selection_mode["mode"]}, Shape: {shape_text}\n'
+            'Click to select corners. Press "e" to toggle mode, "t" to toggle shape, Enter to finish.'
         )
         fig.canvas.draw()
 
@@ -164,8 +179,9 @@ def get_box_coordinates(image_path):
     update_title()
 
     points = []
-    rects = []
+    shapes = []
     selections = []
+    temp_points = []
 
     def on_key(event):
         if event.key == "e":  # Toggle mode
@@ -173,57 +189,82 @@ def get_box_coordinates(image_path):
                 "outside" if selection_mode["mode"] == "inside" else "inside"
             )
             update_title()
+        elif event.key == "t":  # Toggle shape type
+            selection_mode["shape"] = (
+                "trapezoid" if selection_mode["shape"] == "rectangle" else "rectangle"
+            )
+            temp_points.clear()  # Clear temporary points when switching modes
+            update_title()
         elif event.key == "enter":  # Close the window
             plt.close()
 
     def on_click(event):
-        nonlocal points, rects, selections
+        nonlocal points, shapes, selections, temp_points
 
-        if event.button == 3:  # Right mouse button to remove the last box
-            if len(points) > 0:
-                points = points[:-2]  # Remove the last pair of points
-                if rects:
-                    rects[-1].remove()  # Remove the last rectangle from the plot
-                    rects.pop()
-                    selections.pop()
+        if event.button == 3:  # Right mouse button to remove the last shape
+            if shapes:
+                shapes[-1].remove()
+                shapes.pop()
+                selections.pop()
+                if len(points) >= 4:
+                    points = points[:-4]
+                temp_points.clear()
                 plt.draw()
             return
 
         if event.button == 1:  # Left mouse button to add a point
-            if len(points) % 2 == 0:
-                points.append((event.xdata, event.ydata))
+            if selection_mode["shape"] == "rectangle":
+                # Original rectangle logic
+                if len(points) % 2 == 0:
+                    points.append((event.xdata, event.ydata))
+                else:
+                    points.append((event.xdata, event.ydata))
+                    color = "b" if selection_mode["mode"] == "outside" else "r"
+                    rect = patches.Rectangle(
+                        (points[-2][0], points[-2][1]),
+                        points[-1][0] - points[-2][0],
+                        points[-1][1] - points[-2][1],
+                        linewidth=1,
+                        edgecolor=color,
+                        facecolor="none",
+                    )
+                    ax.add_patch(rect)
+                    shapes.append(rect)
+                    selections.append((selection_mode["mode"], "rectangle"))
+                    plt.draw()
             else:
-                points.append((event.xdata, event.ydata))
-                color = "b" if selection_mode["mode"] == "outside" else "r"
-                rect = patches.Rectangle(
-                    (points[-2][0], points[-2][1]),
-                    points[-1][0] - points[-2][0],
-                    points[-1][1] - points[-2][1],
-                    linewidth=1,
-                    edgecolor=color,
-                    facecolor="none",
-                )
-                ax.add_patch(rect)
-                rects.append(rect)
-                selections.append(selection_mode["mode"])
-                plt.draw()
+                # Trapezoid logic
+                temp_points.append((event.xdata, event.ydata))
+                if len(temp_points) == 4:
+                    color = "b" if selection_mode["mode"] == "outside" else "r"
+                    trap = patches.Polygon(
+                        temp_points,
+                        linewidth=1,
+                        edgecolor=color,
+                        facecolor="none",
+                    )
+                    ax.add_patch(trap)
+                    shapes.append(trap)
+                    points.extend(temp_points)
+                    selections.append((selection_mode["mode"], "trapezoid"))
+                    temp_points.clear()
+                    plt.draw()
 
     fig.canvas.mpl_connect("button_press_event", on_click)
     fig.canvas.mpl_connect("key_press_event", on_key)
     plt.show()
 
-    if len(points) % 2 != 0:
-        raise ValueError("An incomplete box was defined.")
+    if temp_points:  # Check for incomplete shapes
+        raise ValueError("An incomplete shape was defined.")
 
-    boxes = [
-        (
-            int(points[i][0]),
-            int(points[i][1]),
-            int(points[i + 1][0]),
-            int(points[i + 1][1]),
-        )
-        for i in range(0, len(points), 2)
-    ]
+    # Convert points to the format expected by the video processing functions
+    boxes = []
+    for i in range(0, len(points), 4):
+        if i + 3 < len(points):
+            box_points = [
+                (int(points[j][0]), int(points[j][1])) for j in range(i, i + 4)
+            ]
+            boxes.append(box_points)
 
     return boxes, selections
 

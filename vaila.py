@@ -3,8 +3,8 @@
 vaila.py
 ===============================================================================
 Author: Paulo R. P. Santiago
-Date: 15 January 2025
-Version updated: 15.Jan.2025
+Date: 22 January 2025
+Version updated: 22.Jan.2025
 Python Version: 3.12.8
 
 Description:
@@ -136,6 +136,7 @@ from vaila import (
     vaila_lensdistortvideo,
     cube2d_kinematics,
     markerless2d_mpyolo,
+    yolov11track,
 )
 
 
@@ -145,14 +146,14 @@ text = r"""
                           |  |_/ |  | |/ / |
                            \/  \/|_/|/|_/\/|_/                    
 ##########################################################################
-Mocap fullbody_c3d        Markerless_3D_videos       Markerless_2D_video
+Mocap fullbody_c3d           Markerless_3D       Markerless_2D_MP
                   \                |                /
                    v               v               v        
    CUBE2D  --> +---------------------------------------+ <-- Vector Coding
    IMU_csv --> |       vailá - multimodal toolbox      | <-- Cluster_csv
 Open Field --> +---------------------------------------+ <-- Force Plate
-              ^                   |
-        EMG__/                    v
+              ^                   |                    ^
+        EMG__/                    v                     \__Tracker YOLOv11
                     +--------------------------+
                     | Results: Data and Figure | 
                     +--------------------------+
@@ -171,7 +172,8 @@ B2_r2_c4 - GNSS/GPS       B2_r2_c5 - MEG/EEG
 
 B3_r3_c1 - HR/ECG         B3_r3_c2 - Markerless_MP_Yolo  B3_r3_c3 - vailá_and_jump
 B3_r3_c4 - Cube2D         B3_r3_c5 - Animal Open Field 
-
+B3_r4_c1 - Tracker        B3_r4_c2 - vailá           B3_r4_c3 - vailá
+B3_r4_c4 - vailá          B3_r4_c5 - vailá
 ============================== Tools Available (Frame C) ===================
 C_A: Data Files
 C_A_r1_c1 - Edit CSV      C_A_r1_c2 - C3D <--> CSV   C_A_r1_c3 - Gapfill | split
@@ -210,7 +212,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 16.Jan.2025")
+        self.title("vailá - 23.Jan.2025")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -249,19 +251,19 @@ class Vaila(tk.Tk):
         Adjusts the window dimensions, button width, and font size based on the operating system.
         """
         if platform.system() == "Darwin":  # macOS
-            self.geometry("1280x725")  # Wider window for macOS
+            self.geometry("1280x900")  # Wider window for macOS
             self.button_width = 12  # Slightly wider buttons
             self.font_size = 11  # Standard font size
         elif platform.system() == "Windows":  # Windows
-            self.geometry("1024x725")  # Compact horizontal size for Windows
+            self.geometry("1024x900")  # Compact horizontal size for Windows
             self.button_width = 13  # Narrower buttons for reduced width
             self.font_size = 11  # Standard font size
         elif platform.system() == "Linux":  # Linux
-            self.geometry("1280x725")  # Similar to macOS dimensions for Linux
+            self.geometry("1280x900")  # Similar to macOS dimensions for Linux
             self.button_width = 15  # Wider buttons
             self.font_size = 11  # Standard font size
         else:  # Default for other systems
-            self.geometry("1280x725")  # Default dimensions
+            self.geometry("1280x900")  # Default dimensions
             self.button_width = 15  # Default button width
             self.font_size = 11  # Default font size
 
@@ -485,6 +487,12 @@ class Vaila(tk.Tk):
             - vailá_and_jump
             - Cube2D
             - Animal Open Field
+            B4:
+            - Tracker
+            - vailá
+            - vailá
+            - vailá
+            - vailá
         """
         # B - Multimodal Analysis FRAME
         analysis_frame = tk.LabelFrame(
@@ -496,6 +504,10 @@ class Vaila(tk.Tk):
             labelanchor="n",
         )
         analysis_frame.pack(pady=10, fill="x")
+
+        # Define row4_frame before using it
+        row4_frame = tk.Frame(analysis_frame)
+        row4_frame.pack(fill="x")
 
         # VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV
         ## Insert the buttons for each Multimodal Toolbox Analysis
@@ -619,7 +631,7 @@ class Vaila(tk.Tk):
         # B3_r3_c2 - markerless2d_mpyolo
         markerless2d_mpyolo_btn = tk.Button(
             row3_frame,
-            text="Markerless_MP + Yolo",
+            text="Yolo + Markerless_MP",
             width=button_width,
             command=self.markerless2d_mpyolo,
         )
@@ -647,12 +659,64 @@ class Vaila(tk.Tk):
             width=button_width,
             command=self.animal_open_field,
         )
-        # Pack the buttons
+
+        # Pack row3 buttons
         ecg_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         markerless2d_mpyolo_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         vailajump_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         cube2d_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         vaila_animalof.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+
+        # Create row4_frame
+        row4_frame = tk.Frame(analysis_frame)
+        row4_frame.pack(fill="x")
+
+        # B4_r4_c1 - Tracker
+        tracker_btn = tk.Button(
+            row4_frame,
+            text="Tracker",
+            width=button_width,
+            command=self.tracker,
+        )
+
+        # B4_r4_c2 - vailá
+        vaila_btn4 = tk.Button(
+            row4_frame,
+            text="vailá",
+            width=button_width,
+            command=self.show_vaila_message,
+        )
+
+        # B4_r4_c3 - vailá
+        vaila_btn5 = tk.Button(
+            row4_frame,
+            text="vailá",
+            width=button_width,
+            command=self.show_vaila_message,
+        )
+
+        # B4_r4_c4 - vailá
+        vaila_btn6 = tk.Button(
+            row4_frame,
+            text="vailá",
+            width=button_width,
+            command=self.show_vaila_message,
+        )
+
+        # B4_r4_c5 - vailá
+        vaila_btn7 = tk.Button(
+            row4_frame,
+            text="vailá",
+            width=button_width,
+            command=self.show_vaila_message,
+        )
+
+        # Pack row4 buttons
+        tracker_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        vaila_btn4.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        vaila_btn5.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        vaila_btn6.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        vaila_btn7.pack(side="left", expand=True, fill="x", padx=2, pady=2)
 
         ## VVVVVVVVVVVVVVV TOOLS BUTTONS VVVVVVVVVVVVVVVV
         # Tools Frame
@@ -1337,7 +1401,9 @@ class Vaila(tk.Tk):
         vaila_and_jump()
 
     # B_r3_c4
-    # def vaila
+    def markerless2d_mpyolo(self):
+        """Runs the markerless2d_mpyolo analysis."""
+        markerless2d_mpyolo.run_markerless2d_mpyolo()
 
     # B_r3_c5
     def animal_open_field(self):
@@ -1355,6 +1421,12 @@ class Vaila(tk.Tk):
 
         """
         animal_open_field.run_animal_open_field()
+
+    # B_r4_c1
+    def tracker(self):
+        """Runs the yolov11track analysis."""
+        print("Running tracker analysis...")
+        yolov11track.run_yolov11track()
 
     # C_A_r1_c1
     def reorder_csv_data(self):
@@ -1770,10 +1842,6 @@ class Vaila(tk.Tk):
         """
         self.destroy()
         os.kill(os.getpid(), signal.SIGTERM)
-
-    def markerless2d_mpyolo(self):
-        """Runs the markerless2d_mpyolo analysis."""
-        markerless2d_mpyolo.run_markerless2d_mpyolo()
 
 
 if __name__ == "__main__":
