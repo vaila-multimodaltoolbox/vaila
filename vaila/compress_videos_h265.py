@@ -144,19 +144,12 @@ def is_nvidia_gpu_available():
         return False
 
 
-def find_videos_recursively(directory, output_directories):
-    """Find all video files recursively in the directory, avoiding the output directories."""
+def find_videos(directory):
+    """Find all video files in the specified directory without searching subdirectories."""
     video_files = []
-    for root, dirs, files in os.walk(directory):
-        # Ignore the output directories
-        if any(
-            os.path.abspath(output_dir) in os.path.abspath(root)
-            for output_dir in output_directories
-        ):
-            continue
-        for file in files:
-            if file.lower().endswith((".mp4", ".avi", ".mov", ".mkv", ".wmv")):
-                video_files.append(os.path.join(root, file))
+    for file in os.listdir(directory):
+        if file.lower().endswith((".mp4", ".avi", ".mov", ".mkv", ".wmv")):
+            video_files.append(os.path.join(directory, file))
     return video_files
 
 
@@ -200,43 +193,55 @@ def run_compress_videos_h265(
         print(f"Compressing {video_file}...")
 
         if use_gpu:
-            # If GPU is available, use NVIDIA NVENC for encoding
+            # Updated GPU-based encoding command
             command = [
                 "ffmpeg",
-                "-y",  # overwrite output files
+                "-y",
                 "-i",
-                input_path,  # input file
+                input_path,
                 "-c:v",
-                "hevc_nvenc",  # Use NVIDIA NVENC for H.265
+                "hevc_nvenc",
                 "-preset",
-                preset,  # preset for encoding speed
-                "-crf",
-                str(crf),  # constant rate factor for quality
-                output_path,  # output file
+                preset,
+                "-b:v",
+                "5M",          # Add bitrate control
+                "-maxrate",
+                "5M",
+                "-bufsize",
+                "10M",
+                "-c:a",
+                "copy",        # Preserve audio
+                output_path,
             ]
         else:
-            # Fallback to CPU-based encoding (libx265)
+            # Updated CPU-based encoding command
             command = [
                 "ffmpeg",
-                "-y",  # overwrite output files
+                "-y",
                 "-i",
-                input_path,  # input file
+                input_path,
                 "-c:v",
-                "libx265",  # video codec for H.265
+                "libx265",
                 "-preset",
-                preset,  # preset for encoding speed
+                preset,
                 "-crf",
-                str(crf),  # constant rate factor for quality
-                output_path,  # output file
+                str(crf),
+                "-c:a",
+                "copy",        # Preserve audio
+                output_path,
             ]
 
         try:
-            subprocess.run(command, check=True)
-            print(f"Done compressing {video_file} to H.265.")
+            print(f"\nProcessing: {os.path.basename(input_path)}")
+            subprocess.run(command, check=True, stderr=subprocess.PIPE)
             success_count += 1
+            print(f"Successfully compressed: {os.path.basename(input_path)}")
+            
         except subprocess.CalledProcessError as e:
-            print(f"Error compressing {video_file}: {e}")
+            print(f"Failed to compress: {os.path.basename(input_path)}")
+            print(f"Error: {e.stderr.decode()}")
             failure_count += 1
+            continue
 
     print(f"Compression completed: {success_count} succeeded, {failure_count} failed.")
 
@@ -335,15 +340,9 @@ def compress_videos_h265_gui():
             "GPU acceleration requested but no NVIDIA GPU detected. Using CPU instead."
         )
 
-    # Exclude both 'compressed_h264' and 'compressed_h265' directories
-    output_directories = [
-        os.path.join(video_directory, "compressed_h264"),
-        output_directory,
-    ]
-
-    # Find all video files recursively, ignoring the output directories
-    video_files = find_videos_recursively(video_directory, output_directories)
-
+    # Replace the recursive search with direct directory search
+    video_files = find_videos(video_directory)
+    
     if not video_files:
         messagebox.showerror("Error", "No video files found.")
         return

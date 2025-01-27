@@ -283,6 +283,24 @@ class VideoProcessor:
         # Get FPS from user
         fps = self.get_fps_from_user()
 
+        # Get codec choice from user
+        codec_choice = simpledialog.askstring(
+            "Codec Selection",
+            "Choose codec (type '264' for H.264 or '265' for H.265):",
+            initialvalue="264"
+        )
+        
+        # Set codec and preset based on user choice
+        if codec_choice == "265":
+            codec = "libx265"
+            preset = "medium"
+            # Add specific H.265 parameters
+            extra_params = ["-x265-params", "log-level=error"]
+        else:  # default to H.264
+            codec = "libx264"
+            preset = "medium"
+            extra_params = []
+
         timestamp = time.strftime("%Y%m%d%H%M%S")
         dest_main_dir = os.path.join(src, f"vaila_png2videos_{timestamp}")
         os.makedirs(dest_main_dir, exist_ok=True)
@@ -295,23 +313,31 @@ class VideoProcessor:
                     output_video_name = os.path.basename(subdir) + ".mp4"
                     output_video_path = os.path.join(dest_main_dir, output_video_name)
 
-                    # Modified FFmpeg command to use image sequence directly
+                    # Base command
                     command = [
                         "ffmpeg",
                         "-framerate",
                         str(fps),
                         "-i",
-                        os.path.join(subdir, "%09d.png"),  # Use 9-digit pattern
+                        os.path.join(subdir, "%09d.png"),
                         "-c:v",
-                        "libx264",
+                        codec,
                         "-preset",
-                        "medium",
+                        preset,
                         "-pix_fmt",
-                        "yuv420p",
-                        output_video_path,
+                        "yuv420p"
                     ]
+                    
+                    # Add extra parameters if any
+                    if extra_params:
+                        command.extend(extra_params)
+                    
+                    # Add output path
+                    command.append(output_video_path)
+                    
                     subprocess.run(command, check=True)
                     print(f"Video created: {output_video_path}")
+                    print(f"Using codec: {codec}")
 
             self.show_completion_message("Video creation completed successfully.")
         except Exception as e:
