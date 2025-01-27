@@ -1,53 +1,60 @@
 """
-Module: extractpng.py
+================================================================================
+Extract PNG Tool - extractpng.py
+================================================================================
+Author: Prof. Dr. Paulo R. P. Santiago
+Laboratory of Biomechanics and Motor Control (LaBioCoM)
+School of Physical Education and Sport of Ribeirão Preto
+University of São Paulo (USP)
+
+Contact: paulosantiago@usp.br
+Laboratory website: https://github.com/vaila-multimodaltoolbox/vaila
+
+Created: December 15, 2023
+Last Updated: January 27, 2025
+Version: 2.1.0
 
 Description:
-This module offers functionality to either extract PNG frames from video files or create videos from a sequence of PNG images. It is designed for applications in machine learning, computer vision, and biomechanics, ensuring that all frames and videos maintain consistent quality and formatting.
+------------
+This module offers functionality to either extract PNG frames from video files or 
+create videos from a sequence of PNG images. It is designed for applications in 
+machine learning, computer vision, and biomechanics, ensuring that all frames and 
+videos maintain consistent quality and formatting.
 
 The main features of the module include:
-- `extract_png_from_videos`: Extracts PNG frames from videos in RGB format to ensure compatibility with various machine learning models and image processing tasks. The function processes all video files in the specified source directory, creates a dedicated output directory for each video, and stores the frames using a customizable naming pattern.
-- `create_video_from_png`: Converts a sequence of PNG images into a video using the YUV420p color space and either the libx264 codec (CPU) or the h264_nvenc codec (GPU), depending on the availability of an NVIDIA GPU. This ensures efficient compression while leveraging hardware acceleration when available.
-
-Key Features:
-1. **Frame Extraction in RGB**: Extracts PNG frames in RGB format to ensure compatibility with image-based models in machine learning and computer vision.
-2. **GPU-Accelerated Video Creation**: Automatically detects if an NVIDIA GPU is available and uses `h264_nvenc` for video compression. Falls back to CPU-based encoding (`libx264`) if no GPU is detected.
-3. **Customizable Naming Pattern**: Users can define their own filename pattern for the output PNGs, enabling flexibility in frame numbering and organization.
-4. **Automated Directory Management**: The script creates timestamped directories for organizing output, ensuring a clean and structured workflow.
-5. **Comprehensive Video Support**: Works with common video formats like `.mp4`, `.avi`, `.mov`, and `.mkv`, ensuring broad compatibility across different media types.
-
-Usage:
-- `extract_png_from_videos`: Processes all video files in the specified directory and extracts PNG frames into organized subdirectories. The function also saves essential metadata like frame rate (FPS) for future reference.
-- `create_video_from_png`: Converts a sequence of PNG frames into a video, with options for selecting the compression codec and frame rate. Automatically uses GPU acceleration if available.
+- Extract PNG frames from videos in RGB format
+- Create videos from PNG sequences
+- GPU-accelerated video processing when available
+- Customizable frame naming patterns
+- Comprehensive video format support
 
 Dependencies:
+------------
 - Python 3.x
 - ffmpeg (installed via Conda or available in PATH)
-- Tkinter (for file and directory dialogs)
-
-Example usage:
-
-from extractpng import VideoProcessor
-
-# Create an instance of the VideoProcessor class
-processor = VideoProcessor()
-
-# Extract PNG frames from videos
-processor.extract_png_from_videos()
-
-# Create a video from PNG frames (uses GPU if available)
-processor.create_video_from_png()
-
-Version: 2.1 Last Updated: September 29, 2024 Author: Prof. Paulo Santiago
-
-Changelog:
-
-Version 2.1 (2024-09-29): Added NVIDIA GPU detection for hardware-accelerated video creation using h264_nvenc. Fallback to libx264 for CPU encoding if no GPU is found.
-Version 2.0 (2024-08-25): Added customizable PNG filename pattern and video codec selection. Improved error handling and user interface for batch processing multiple videos and directories.
-Version 1.0 (2023-12-15): Initial release with basic functionality for extracting PNG frames from videos and creating videos from PNG sequences.
+- OpenCV (cv2)
+- Tkinter
+- NumPy
 
 References:
-
+-----------
 FFmpeg Documentation: https://ffmpeg.org/documentation.html
+
+Changelog:
+---------
+Version 2.1.0 (2025-01-27):
+- Added hardware acceleration support
+- Improved PNG extraction compatibility
+- Added detailed video information logging
+
+Version 2.0.0 (2024-08-25):
+- Added customizable PNG filename pattern
+- Improved error handling
+- Added batch processing support
+
+Version 1.0.0 (2023-12-15):
+- Initial release
+================================================================================
 """
 
 import os
@@ -56,6 +63,8 @@ import time
 from tkinter import filedialog, messagebox, simpledialog, Tk, Toplevel, Label, Button
 from rich import print
 import shutil
+import numpy as np
+import cv2
 
 
 class VideoProcessor:
@@ -102,24 +111,88 @@ class VideoProcessor:
                 os.makedirs(output_dir, exist_ok=True)
                 output_pattern = os.path.join(output_dir, self.pattern)
 
-                fps = self.get_fps(video_path)
+                # Obtém dimensões e informações do vídeo
+                width, height, fps = self.get_video_info(video_path)
 
+                # Comando atualizado para melhor decodificação HEVC e PNG compatível
                 command = [
                     "ffmpeg",
                     "-i",
                     video_path,
                     "-vf",
-                    "scale=in_range=pc:out_range=pc,format=rgb24",
+                    f"scale={width}:{height}:flags=lanczos",  # Removido format=rgb24
                     "-q:v",
                     "1",
+                    "-vsync",
+                    "passthrough",
+                    "-hwaccel",
+                    "auto",
+                    "-c:v",
+                    "hevc_cuvid",
+                    "-drop_second_field",
+                    "1",
+                    "-sws_flags",
+                    "bicubic",
+                    "-pix_fmt",
+                    "rgb24",        # Mantido para cor correta
+                    "-f",
+                    "image2",       # Força formato de imagem
+                    "-compression_level", 
+                    "6",           # Nível de compressão PNG (0-9)
                     output_pattern,
                 ]
-                subprocess.run(command, check=True)
 
-                with open(os.path.join(output_dir, "info.txt"), "w") as f:
-                    f.write(f"FPS: {fps}\n")
+                try:
+                    # Tenta primeiro com aceleração de hardware
+                    try:
+                        print(f"\nProcessing {item} with hardware acceleration...")
+                        subprocess.run(command, check=True)
+                            
+                    except subprocess.CalledProcessError:
+                        print("\nHardware acceleration failed, trying software decoder...")
+                        
+                        # Remove aceleração de hardware para tentar decoder de software
+                        command = [
+                            "ffmpeg",
+                            "-i",
+                            video_path,
+                            "-vf",
+                            f"scale={width}:{height}:flags=lanczos",
+                            "-q:v",
+                            "1",
+                            "-vsync",
+                            "passthrough",
+                            "-sws_flags",
+                            "bicubic",
+                            "-pix_fmt",
+                            "rgb24",
+                            "-f",
+                            "image2",
+                            "-compression_level",
+                            "6",
+                            output_pattern,
+                        ]
+                        
+                        subprocess.run(command, check=True)
 
-                print(f"Extraction completed for {item}")
+                    print(f"\n\nChecking frames in {output_dir}...")
+                    total_frames = len([f for f in os.listdir(output_dir) if f.endswith('.png')])
+                    print(f"Total frames extracted: {total_frames}")
+
+                    # Salva informações básicas do vídeo
+                    with open(os.path.join(output_dir, "video_info.txt"), "w") as f:
+                        f.write(f"Original video: {item}\n")
+                        f.write(f"FPS: {fps}\n")
+                        f.write(f"Resolution: {width}x{height}\n")
+                        f.write(f"Total frames: {total_frames}\n")
+                        f.write(f"Extraction timestamp: {timestamp}\n")
+                    
+                    print(f"Successfully extracted frames from {item}")
+                    print(f"Resolution: {width}x{height}, FPS: {fps}")
+                
+                except Exception as e:
+                    print(f"Error processing {item}: {str(e)}")
+                    raise
 
             self.show_completion_message("PNG extraction completed successfully.")
         except Exception as e:
@@ -268,12 +341,40 @@ class VideoProcessor:
             return False
 
     def get_fps(self, video_path):
-        import cv2
-
         cap = cv2.VideoCapture(video_path)
         fps = cap.get(cv2.CAP_PROP_FPS)
         cap.release()
         return fps
+
+    def get_video_info(self, video_path):
+        """Get video dimensions and FPS using ffprobe."""
+        try:
+            width = int(subprocess.check_output([
+                "ffprobe", "-v", "error", "-select_streams", "v:0",
+                "-show_entries", "stream=width", "-of", "csv=p=0",
+                video_path
+            ]).decode().strip())
+            
+            height = int(subprocess.check_output([
+                "ffprobe", "-v", "error", "-select_streams", "v:0",
+                "-show_entries", "stream=height", "-of", "csv=p=0",
+                video_path
+            ]).decode().strip())
+            
+            fps = float(subprocess.check_output([
+                "ffprobe", "-v", "error", "-select_streams", "v:0",
+                "-show_entries", "stream=r_frame_rate", "-of", "csv=p=0",
+                video_path
+            ]).decode().strip().split('/')[0])
+            
+            return width, height, fps
+            
+        except subprocess.CalledProcessError as e:
+            print(f"Error getting video info: {e.stderr}")
+            raise
+        except Exception as e:
+            print(f"Unexpected error getting video info: {str(e)}")
+            raise
 
     def show_completion_message(self, message):
         root = Tk()

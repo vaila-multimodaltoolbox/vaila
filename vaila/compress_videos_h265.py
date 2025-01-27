@@ -298,6 +298,8 @@ def compress_videos_h265_gui():
     # Print the directory and name of the script being executed
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    print("Starting compress_videos_h265_gui...")
+
     global success_count, failure_count
     success_count = 0  # Reset counters at the beginning
     failure_count = 0
