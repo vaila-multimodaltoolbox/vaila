@@ -4,7 +4,7 @@ vaila.py
 ===============================================================================
 Author: Paulo R. P. Santiago
 Date: 22 January 2025
-Version updated: 22.Jan.2025
+Version updated: 27.Jan.2025
 Python Version: 3.12.8
 
 Description:
@@ -137,6 +137,7 @@ from vaila import (
     cube2d_kinematics,
     markerless2d_mpyolo,
     yolov11track,
+    cutvideo,
 )
 
 
@@ -185,7 +186,7 @@ C_B: Video and Image
 C_B_r1_c1 - Video<-->PNG  C_B_r1_c2 - Cut Videos    C_B_r1_c3 - Draw Box
 C_B_r2_c1 - CompressH264  C_B_r2_c2 - Compress H265 C_B_r2_c3 - Make Sync file
 C_B_r3_c1 - GetPixelCoord C_B_r3_c2 - Metadata info C_B_r3_c3 - Merge Videos
-C_B_r4_c1 - Distort video C_B_r4_c2 - vailá         C_B_r4_c3 - vailá
+C_B_r4_c1 - Distort video C_B_r4_c2 - Cut Video     C_B_r4_c3 - vailá
 
 C_C: Visualization
 C_C_r1_c1 - Show C3D      C_C_r1_c2 - Show CSV       C_C_r2_c1 - Plot 2D
@@ -212,7 +213,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 23.Jan.2025")
+        self.title("vailá - 27.Jan.2025")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -870,7 +871,7 @@ class Vaila(tk.Tk):
         # C_B_r1_c2 - Video: Cut Videos
         cut_videos_btn = tk.Button(
             tools_col2,
-            text="Cut|Sync Video",
+            text="Sync Video",
             command=self.cut_videos,
             width=button_width,
         )
@@ -936,11 +937,11 @@ class Vaila(tk.Tk):
             width=button_width,
         )
 
-        # C_B_r4_c2 - Video: vailá
-        vaila_btn14 = tk.Button(
+        # C_B_r4_c2 - Video: Cut Video
+        cut_video_btn = tk.Button(
             tools_col2,
-            text="vailá",
-            command=self.show_vaila_message,
+            text="Cut Video",
+            command=self.cut_video,
             width=button_width,
         )
 
@@ -963,7 +964,7 @@ class Vaila(tk.Tk):
         count_frames_btn.grid(row=2, column=1, padx=2, pady=2)
         video_processing_btn.grid(row=2, column=2, padx=2, pady=2)
         vaila_distortvideo_btn.grid(row=3, column=0, padx=2, pady=2)
-        vaila_btn14.grid(row=3, column=1, padx=2, pady=2)
+        cut_video_btn.grid(row=3, column=1, padx=2, pady=2)
         vaila_btn15.grid(row=3, column=2, padx=2, pady=2)
 
         tools_col2.pack(side="left", fill="both", expand=True, padx=5, pady=5)
@@ -1575,11 +1576,9 @@ class Vaila(tk.Tk):
 
     # C_A_r4_c2
     # def vaila(self):
-    #     vaila()
 
     # C_A_r4_c3
     # def vaila(self):
-    #     vaila()
 
     # C_B_r1_c1
     def extract_png_from_videos(self):
@@ -1698,6 +1697,23 @@ class Vaila(tk.Tk):
         The lens distortion correction is performed using intrinsic camera parameters (focal length, optical center) and distortion coefficients (radial and tangential). These parameters, typically derived from camera calibration, are loaded from a user-selected CSV file.
         """
         vaila_lensdistortvideo.run_distortvideo()
+
+    # C_B_r4_c2
+    def cut_video(self):
+        """Runs the video cutting module.
+
+        This function runs the video cutting module, which allows users to mark 
+        start and end frames for cutting/trimming videos. The module provides 
+        frame-by-frame navigation and saves each cut segment as a new video file.
+
+        Controls:
+        - Space: Play/Pause
+        - Right/Left Arrow: Navigate frames
+        - S: Mark start frame
+        - E: Mark end frame
+        - ESC: Save and exit
+        """
+        cutvideo.main()
 
     # C_C_r1_c1
     def show_c3d_data(self):
