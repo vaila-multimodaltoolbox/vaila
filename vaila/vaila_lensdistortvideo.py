@@ -106,6 +106,10 @@ from rich import print
 import tkinter as tk
 from tkinter import filedialog
 from datetime import datetime
+from rich.progress import Progress, SpinnerColumn, TimeElapsedColumn, BarColumn, TextColumn
+from rich.console import Console
+from rich import print as rprint
+import subprocess
 
 
 def load_distortion_parameters(csv_path):
@@ -116,59 +120,124 @@ def load_distortion_parameters(csv_path):
     return df.iloc[0].to_dict()
 
 
-def process_video(video_path, output_path, parameters):
-    """
-    Process a single video to apply lens distortion correction.
-    """
-    cap = cv2.VideoCapture(video_path)
+def process_video(input_path, output_path, parameters):
+    """Process video applying lens distortion correction."""
+    console = Console()
+    
+    # Open video capture
+    cap = cv2.VideoCapture(input_path)
     if not cap.isOpened():
-        print(f"Error opening video file: {video_path}")
-        return
-
-    frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    fps = int(cap.get(cv2.CAP_PROP_FPS))
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-
-    out = cv2.VideoWriter(output_path, fourcc, fps, (frame_width, frame_height))
-
-    camera_matrix = np.array(
-        [
-            [parameters["fx"], 0, parameters["cx"]],
-            [0, parameters["fy"], parameters["cy"]],
-            [0, 0, 1],
+        raise ValueError("Error opening video file")
+    
+    # Get video properties
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    
+    # Create camera matrix and distortion coefficients
+    camera_matrix = np.array([
+        [parameters["fx"], 0, parameters["cx"]],
+        [0, parameters["fy"], parameters["cy"]],
+        [0, 0, 1]
+    ])
+    
+    dist_coeffs = np.array([
+        parameters["k1"],
+        parameters["k2"],
+        parameters["p1"],
+        parameters["p2"],
+        parameters["k3"]
+    ])
+    
+    # Get optimal new camera matrix
+    new_camera_matrix, roi = cv2.getOptimalNewCameraMatrix(
+        camera_matrix, dist_coeffs, (width, height), 1, (width, height)
+    )
+    
+    # Create temporary directory for frames
+    temp_dir = os.path.join(os.path.dirname(output_path), "temp_frames")
+    os.makedirs(temp_dir, exist_ok=True)
+    
+    try:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            TimeElapsedColumn(),
+            console=console,
+        ) as progress:
+            
+            # Add tasks
+            process_task = progress.add_task(
+                "[cyan]Processing frames...", 
+                total=total_frames
+            )
+            
+            frame_count = 0
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                
+                # Undistort frame
+                undistorted = cv2.undistort(
+                    frame, 
+                    camera_matrix, 
+                    dist_coeffs, 
+                    None, 
+                    new_camera_matrix
+                )
+                
+                # Save frame as PNG (lossless)
+                frame_path = os.path.join(temp_dir, f"frame_{frame_count:06d}.png")
+                cv2.imwrite(frame_path, undistorted)
+                
+                # Update progress
+                frame_count += 1
+                progress.update(process_task, advance=1)
+                
+                # Show additional info every 100 frames
+                if frame_count % 100 == 0:
+                    elapsed = progress.tasks[0].elapsed
+                    if elapsed:
+                        fps_processing = frame_count / elapsed
+                        remaining = (total_frames - frame_count) / fps_processing
+                        progress.console.print(
+                            f"[dim]Processing speed: {fps_processing:.1f} fps | "
+                            f"Estimated time remaining: {remaining:.1f}s[/dim]"
+                        )
+        
+        # Use FFmpeg to create high-quality video
+        rprint("\n[yellow]Creating final video with FFmpeg...[/yellow]")
+        input_pattern = os.path.join(temp_dir, "frame_%06d.png")
+        ffmpeg_cmd = [
+            "ffmpeg",
+            "-y",  # Overwrite output file if it exists
+            "-framerate", str(fps),
+            "-i", input_pattern,
+            "-c:v", "libx264",  # Use H.264 codec
+            "-preset", "slow",  # Higher quality encoding
+            "-crf", "18",  # High quality (0-51, lower is better)
+            "-pix_fmt", "yuv420p",  # Standard pixel format
+            output_path
         ]
-    )
-    dist_coeffs = np.array(
-        [
-            parameters["k1"],
-            parameters["k2"],
-            parameters["p1"],
-            parameters["p2"],
-            parameters["k3"],
-        ]
-    )
-
-    new_camera_matrix, _ = cv2.getOptimalNewCameraMatrix(
-        camera_matrix,
-        dist_coeffs,
-        (frame_width, frame_height),
-        1,
-        (frame_width, frame_height),
-    )
-
-    while cap.isOpened():
-        ret, frame = cap.read()
-        if not ret:
-            break
-
-        undistorted_frame = cv2.undistort(
-            frame, camera_matrix, dist_coeffs, None, new_camera_matrix
-        )
-        out.write(undistorted_frame)
-
-    cap.release()
-    out.release()
+        
+        subprocess.run(ffmpeg_cmd, check=True)
+        
+    finally:
+        # Release video capture
+        cap.release()
+        
+        # Clean up temporary files
+        if os.path.exists(temp_dir):
+            for file in os.listdir(temp_dir):
+                os.remove(os.path.join(temp_dir, file))
+            os.rmdir(temp_dir)
+    
+    rprint(f"\n[green]Video processing complete![/green]")
+    rprint(f"[blue]Output saved as: {output_path}[/blue]")
 
 
 def select_directory(title="Select a directory"):
@@ -192,43 +261,61 @@ def select_file(title="Select a file", filetypes=(("CSV Files", "*.csv"),)):
 
 
 def run_distortvideo():
-    """
-    Main function to process videos in a directory using distortion parameters.
-    """
-    # Print the directory and name of the script being executed
-    print(f"Running script: {os.path.basename(__file__)}")
-    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
-
-    print("Select the video directory:")
-    video_directory = select_directory()
-    if not video_directory:
-        print("No directory selected. Exiting.")
+    """Main function to run the video distortion correction."""
+    rprint("[yellow]Running lens distortion correction...[/yellow]")
+    
+    # Select input video
+    rprint("\nSelect the input video file:")
+    input_path = select_file(
+        title="Select Video File",
+        filetypes=(
+            ("Video files", "*.mp4;*.avi;*.mov"),
+            ("All files", "*.*")
+        )
+    )
+    if not input_path:
+        rprint("[red]No video file selected. Exiting.[/red]")
         return
-
-    print("Select the distortion parameters CSV file:")
-    parameters_path = select_file()
+    
+    # Select parameters file
+    rprint("\nSelect the camera calibration parameters file:")
+    parameters_path = select_file(
+        title="Select Parameters File",
+        filetypes=(("CSV Files", "*.csv"), ("All Files", "*.*"))
+    )
     if not parameters_path:
-        print("No parameters file selected. Exiting.")
+        rprint("[red]No parameters file selected. Exiting.[/red]")
         return
-
-    parameters = load_distortion_parameters(parameters_path)
-
-    # Generate output directory with timestamp
-    timestamp = datetime.now().strftime("%Y%m%d")
-    output_directory = os.path.join(video_directory, f"vaila_distort_{timestamp}")
-    if not os.path.exists(output_directory):
-        os.makedirs(output_directory)
-
-    for file in os.listdir(video_directory):
-        file_path = os.path.join(video_directory, file)
-        if os.path.isfile(file_path) and file.lower().endswith(
-            (".mp4", ".avi", ".mov", ".mkv")
-        ):
-            output_path = os.path.join(output_directory, f"distorted_{file}")
-            print(f"Processing: {file_path}")
-            process_video(file_path, output_path, parameters)
-
-    print(f"Processed videos saved in: {output_directory}")
+    
+    # Load parameters
+    try:
+        parameters = load_distortion_parameters(parameters_path)
+    except Exception as e:
+        rprint(f"[red]Error loading parameters: {e}[/red]")
+        return
+    
+    # Generate output path
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_dir = os.path.dirname(input_path)
+    base_name = os.path.splitext(os.path.basename(input_path))[0]
+    output_path = os.path.join(output_dir, f"{base_name}_undistorted_{timestamp}.mp4")
+    
+    # Process video
+    try:
+        rprint(f"\n[cyan]Processing video: {os.path.basename(input_path)}[/cyan]")
+        process_video(input_path, output_path, parameters)
+        
+        # Try to open output folder
+        try:
+            if os.name == 'nt':  # Windows
+                os.startfile(os.path.dirname(output_path))
+            elif os.name == 'posix':  # macOS and Linux
+                subprocess.run(['xdg-open', os.path.dirname(output_path)])
+        except:
+            pass
+            
+    except Exception as e:
+        rprint(f"[red]Error processing video: {e}[/red]")
 
 
 if __name__ == "__main__":
