@@ -134,6 +134,7 @@ from vaila import (
     vaila_and_jump,
     animal_open_field,
     vaila_lensdistortvideo,
+    vaila_datdistort,
     cube2d_kinematics,
     markerless2d_mpyolo,
     yolov11track,
@@ -932,7 +933,7 @@ class Vaila(tk.Tk):
         # C_B_r4_c1 - Video: vailá
         vaila_distortvideo_btn = tk.Button(
             tools_col2,
-            text="Distort video",
+            text="Distort Video/data",
             command=self.run_distortvideo,
             width=button_width,
         )
@@ -1692,11 +1693,63 @@ class Vaila(tk.Tk):
     def run_distortvideo(self):
         """Runs the Lens Distortion Correction Module.
 
-        This method integrates with the `vaila_lensdistortvideo` module to process videos by applying lens distortion correction.
+        This method provides options to correct lens distortion in either videos or CSV coordinate files.
+        It opens a dialog for the user to choose between:
+        1. Video distortion correction (vaila_lensdistortvideo)
+        2. CSV/DAT coordinate distortion correction (vaila_datdistort)
 
-        The lens distortion correction is performed using intrinsic camera parameters (focal length, optical center) and distortion coefficients (radial and tangential). These parameters, typically derived from camera calibration, are loaded from a user-selected CSV file.
+        Both options use the same camera calibration parameters loaded from a CSV file to perform
+        the corrections.
         """
-        vaila_lensdistortvideo.run_distortvideo()
+        # Create dialog window
+        dialog = Toplevel(self)
+        dialog.title("Choose Distortion Correction Type")
+        dialog.geometry("300x150")
+        
+        # Add descriptive label
+        Label(dialog, text="Select the type of distortion correction:", pady=10).pack()
+        
+        # Add buttons for each option
+        Button(
+            dialog, 
+            text="Video Correction",
+            command=lambda: [vaila_lensdistortvideo.run_distortvideo(), dialog.destroy()]
+        ).pack(pady=5)
+        
+        Button(
+            dialog,
+            text="CSV Coordinates Distortion Correction", 
+            command=lambda: [vaila_datdistort.run_datdistort(), dialog.destroy()]
+        ).pack(pady=5)
+        
+        # Add cancel button
+        Button(
+            dialog,
+            text="Cancel",
+            command=dialog.destroy
+        ).pack(pady=10)
+        
+        # Make dialog modal
+        dialog.transient(self)
+        dialog.grab_set()
+        self.wait_window(dialog)
+
+    # C_B_r4_c2
+    def cut_video(self):
+        """Runs the video cutting module.
+
+        This function runs the video cutting module, which allows users to mark 
+        start and end frames for cutting/trimming videos. The module provides 
+        frame-by-frame navigation and saves each cut segment as a new video file.
+
+        Controls:
+        - Space: Play/Pause
+        - Right/Left Arrow: Navigate frames
+        - S: Mark start frame
+        - E: Mark end frame
+        - ESC: Save and exit
+        """
+        cutvideo.main()
 
     # C_B_r4_c2
     def cut_video(self):
