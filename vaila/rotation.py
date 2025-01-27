@@ -69,7 +69,7 @@ from scipy.spatial.transform import Rotation as R
 
 # Define default configuration in def createortbase type 'C'
 def createortbase(p1, p2, p3, configuration="C"):
-    """
+    r"""
     Create orthonormal bases from arrays of points in space based on the specified configuration.
 
     Parameters:
