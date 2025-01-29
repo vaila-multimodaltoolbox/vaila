@@ -4,7 +4,7 @@ vaila.py
 ===============================================================================
 Author: Paulo R. P. Santiago
 Date: 22 January 2025
-Version updated: 27.Jan.2025
+Version updated: 29.Jan.2025
 Python Version: 3.12.8
 
 Description:
@@ -214,7 +214,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 27.Jan.2025")
+        self.title("vailá - 29.Jan.2025")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -1733,23 +1733,6 @@ class Vaila(tk.Tk):
         dialog.transient(self)
         dialog.grab_set()
         self.wait_window(dialog)
-
-    # C_B_r4_c2
-    def cut_video(self):
-        """Runs the video cutting module.
-
-        This function runs the video cutting module, which allows users to mark 
-        start and end frames for cutting/trimming videos. The module provides 
-        frame-by-frame navigation and saves each cut segment as a new video file.
-
-        Controls:
-        - Space: Play/Pause
-        - Right/Left Arrow: Navigate frames
-        - S: Mark start frame
-        - E: Mark end frame
-        - ESC: Save and exit
-        """
-        cutvideo.main()
 
     # C_B_r4_c2
     def cut_video(self):
