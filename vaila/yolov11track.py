@@ -44,32 +44,98 @@ def update_csv(csv_file, frame_idx, tracker_id, label, x_min, y_min, x_max, y_ma
         writer.writerows(rows)
 
 class TrackerConfigDialog(tk.simpledialog.Dialog):
+    def __init__(self, parent, title=None):
+        self.tooltip = None  # Initialize tooltip as None
+        super().__init__(parent, title)
+
     def body(self, master):
         # Confidence
         tk.Label(master, text="Confidence threshold:").grid(row=0, column=0, padx=5, pady=5)
         self.conf = tk.Entry(master)
         self.conf.insert(0, "0.25")
         self.conf.grid(row=0, column=1, padx=5, pady=5)
+        help_text = tk.Label(master, text="?", cursor="hand2", fg="blue")
+        help_text.grid(row=0, column=2, padx=5, pady=5)
+        conf_tooltip = ("Confidence threshold (0-1):\n"
+                       "Controls how confident the model must be to detect an object.\n"
+                       "Higher values (e.g., 0.7): Fewer but more accurate detections\n"
+                       "Lower values (e.g., 0.25): More detections but may include false positives\n"
+                       "Recommended: 0.25-0.5 for tracking")
+        help_text.bind("<Enter>", lambda e: self.show_help(e, conf_tooltip))
+        help_text.bind("<Leave>", self.hide_help)
 
         # IoU
         tk.Label(master, text="IoU threshold:").grid(row=1, column=0, padx=5, pady=5)
         self.iou = tk.Entry(master)
         self.iou.insert(0, "0.7")
         self.iou.grid(row=1, column=1, padx=5, pady=5)
+        help_text = tk.Label(master, text="?", cursor="hand2", fg="blue")
+        help_text.grid(row=1, column=2, padx=5, pady=5)
+        iou_tooltip = ("Intersection over Union threshold (0-1):\n"
+                      "Controls how much overlap is needed to merge multiple detections.\n"
+                      "Higher values (e.g., 0.9): Very strict matching\n"
+                      "Lower values (e.g., 0.5): More lenient matching\n"
+                      "Recommended: 0.7 for most cases")
+        help_text.bind("<Enter>", lambda e: self.show_help(e, iou_tooltip))
+        help_text.bind("<Leave>", self.hide_help)
 
         # Device
         tk.Label(master, text="Device (cuda/cpu):").grid(row=2, column=0, padx=5, pady=5)
         self.device = tk.Entry(master)
         self.device.insert(0, "cpu")
         self.device.grid(row=2, column=1, padx=5, pady=5)
+        help_text = tk.Label(master, text="?", cursor="hand2", fg="blue")
+        help_text.grid(row=2, column=2, padx=5, pady=5)
+        device_tooltip = ("Processing device options:\n"
+                         "'cuda' - Use GPU (NVIDIA only)\n"
+                         "        Much faster processing (10-20x)\n"
+                         "        Requires NVIDIA GPU and CUDA\n\n"
+                         "'cpu'  - Use CPU\n"
+                         "        Works on all computers\n"
+                         "        Slower but universally compatible")
+        help_text.bind("<Enter>", lambda e: self.show_help(e, device_tooltip))
+        help_text.bind("<Leave>", self.hide_help)
 
         # Video stride
         tk.Label(master, text="Video stride:").grid(row=3, column=0, padx=5, pady=5)
         self.vid_stride = tk.Entry(master)
         self.vid_stride.insert(0, "1")
         self.vid_stride.grid(row=3, column=1, padx=5, pady=5)
+        help_text = tk.Label(master, text="?", cursor="hand2", fg="blue")
+        help_text.grid(row=3, column=2, padx=5, pady=5)
+        stride_tooltip = ("Video stride (frames to skip):\n"
+                         "1 = Process every frame\n"
+                         "2 = Process every other frame\n"
+                         "3 = Process every third frame\n\n"
+                         "Higher values = Faster processing\n"
+                         "Lower values = Better tracking accuracy\n"
+                         "Recommended: 1 for accurate tracking\n"
+                         "            2-3 for faster processing")
+        help_text.bind("<Enter>", lambda e: self.show_help(e, stride_tooltip))
+        help_text.bind("<Leave>", self.hide_help)
 
-        return self.conf  # Initial focus
+        return self.conf
+
+    def show_help(self, event, text):
+        # Hide any existing tooltip first
+        self.hide_help()
+
+        x = event.widget.winfo_rootx() + event.widget.winfo_width()
+        y = event.widget.winfo_rooty()
+
+        self.tooltip = tk.Toplevel()
+        self.tooltip.wm_overrideredirect(True)
+        self.tooltip.wm_geometry(f"+{x}+{y}")
+
+        label = tk.Label(self.tooltip, text=text, justify='left',
+                        background="#ffffe0", relief='solid', borderwidth=1,
+                        padx=5, pady=5)
+        label.pack()
+
+    def hide_help(self, event=None):
+        if self.tooltip is not None:
+            self.tooltip.destroy()
+            self.tooltip = None
 
     def validate(self):
         try:
@@ -202,10 +268,26 @@ def run_yolov11track():
     model_name = model_dialog.result
     
     # Construir o caminho completo para o modelo
-    model_path = os.path.join(os.path.dirname(__file__), 'models', model_name)
+    models_dir = os.path.join(os.path.dirname(__file__), 'models')
+    os.makedirs(models_dir, exist_ok=True)  # Create models directory if it doesn't exist
+    model_path = os.path.join(models_dir, model_name)
+
+    # Download the model if it doesn't exist
     if not os.path.exists(model_path):
-        messagebox.showerror("Error", f"Model file not found: {model_path}")
-        return
+        try:
+            print(f"Downloading model {model_name}...")
+            # Salva o diretório atual
+            current_dir = os.getcwd()
+            # Muda para o diretório models
+            os.chdir(models_dir)
+            # Faz o download do modelo
+            YOLO(model_name)
+            # Volta para o diretório original
+            os.chdir(current_dir)
+            print(f"Model downloaded successfully to {model_path}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to download model: {str(e)}")
+            return
 
     # Get configuration using TrackerConfigDialog
     config_dialog = TrackerConfigDialog(root, title="Tracker Configuration")
@@ -216,6 +298,7 @@ def run_yolov11track():
     
     # Inicialização do modelo YOLO
     model = YOLO(model_path)
+
 
     # Processa cada vídeo no diretório
     for video_file in os.listdir(video_dir):
