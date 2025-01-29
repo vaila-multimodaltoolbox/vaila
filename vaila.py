@@ -4,7 +4,7 @@ vaila.py
 ===============================================================================
 Author: Paulo R. P. Santiago
 Date: 22 January 2025
-Version updated: 27.Jan.2025
+Version updated: 29.Jan.2025
 Python Version: 3.12.8
 
 Description:
@@ -214,7 +214,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 27.Jan.2025")
+        self.title("vailá - 29.Jan.2025")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
