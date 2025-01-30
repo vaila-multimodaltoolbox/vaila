@@ -261,20 +261,14 @@ def select_file(title="Select a file", filetypes=(("CSV Files", "*.csv"),)):
 
 
 def run_distortvideo():
-    """Main function to run the video distortion correction."""
-    rprint("[yellow]Running lens distortion correction...[/yellow]")
+    """Main function to run batch lens distortion correction."""
+    rprint("[yellow]Running batch lens distortion correction...[/yellow]")
     
-    # Select input video
-    rprint("\nSelect the input video file:")
-    input_path = select_file(
-        title="Select Video File",
-        filetypes=(
-            ("Video files", "*.mp4;*.avi;*.mov"),
-            ("All files", "*.*")
-        )
-    )
-    if not input_path:
-        rprint("[red]No video file selected. Exiting.[/red]")
+    # Select input directory
+    rprint("\nSelect the directory containing videos:")
+    input_dir = select_directory(title="Select Directory with Videos")
+    if not input_dir:
+        rprint("[red]No directory selected. Exiting.[/red]")
         return
     
     # Select parameters file
@@ -294,28 +288,42 @@ def run_distortvideo():
         rprint(f"[red]Error loading parameters: {e}[/red]")
         return
     
-    # Generate output path
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_dir = os.path.dirname(input_path)
-    base_name = os.path.splitext(os.path.basename(input_path))[0]
-    output_path = os.path.join(output_dir, f"{base_name}_undistorted_{timestamp}.mp4")
+    # Get all video files in the directory
+    video_extensions = ('.mp4', '.avi', '.mov')
+    video_files = [f for f in os.listdir(input_dir) 
+                  if os.path.isfile(os.path.join(input_dir, f)) 
+                  and f.lower().endswith(video_extensions)]
     
-    # Process video
-    try:
-        rprint(f"\n[cyan]Processing video: {os.path.basename(input_path)}[/cyan]")
-        process_video(input_path, output_path, parameters)
+    if not video_files:
+        rprint("[red]No video files found in the selected directory.[/red]")
+        return
+    
+    rprint(f"\n[cyan]Found {len(video_files)} video files to process.[/cyan]")
+    
+    # Process each video
+    for video_file in video_files:
+        input_path = os.path.join(input_dir, video_file)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        base_name = os.path.splitext(video_file)[0]
+        output_path = os.path.join(input_dir, f"{base_name}_undistorted_{timestamp}.mp4")
         
-        # Try to open output folder
         try:
-            if os.name == 'nt':  # Windows
-                os.startfile(os.path.dirname(output_path))
-            elif os.name == 'posix':  # macOS and Linux
-                subprocess.run(['xdg-open', os.path.dirname(output_path)])
-        except:
-            pass
-            
-    except Exception as e:
-        rprint(f"[red]Error processing video: {e}[/red]")
+            rprint(f"\n[cyan]Processing video: {video_file}[/cyan]")
+            process_video(input_path, output_path, parameters)
+        except Exception as e:
+            rprint(f"[red]Error processing video {video_file}: {e}[/red]")
+            continue
+    
+    # Try to open output folder
+    try:
+        if os.name == 'nt':  # Windows
+            os.startfile(input_dir)
+        elif os.name == 'posix':  # macOS and Linux
+            subprocess.run(['xdg-open', input_dir])
+    except:
+        pass
+    
+    rprint("\n[green]Batch processing complete![/green]")
 
 
 if __name__ == "__main__":
