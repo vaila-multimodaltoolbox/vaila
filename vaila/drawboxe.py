@@ -94,15 +94,24 @@ def apply_boxes_directly_to_video(input_path, output_path, coordinates, selectio
 
         for coords, (mode, shape_type) in zip(coordinates, selections):
             if shape_type == "rectangle":
-                x1, y1 = coords[0]
-                x2, y2 = coords[1]
+                # Usar apenas os pontos inicial e final para o retângulo
+                x1, y1 = int(coords[0][0]), int(coords[0][1])
+                x2, y2 = int(coords[2][0]), int(coords[2][1])
+                
+                # Garantir que x1,y1 seja o ponto superior esquerdo
+                x1, x2 = min(x1, x2), max(x1, x2)
+                y1, y2 = min(y1, y2), max(y1, y2)
+                
                 if mode == "outside":
-                    frame[:y1, :] = (0, 0, 0)
-                    frame[y2:, :] = (0, 0, 0)
-                    frame[y1:y2, :x1] = (0, 0, 0)
-                    frame[y1:y2, x2:] = (0, 0, 0)
-                else:
-                    frame = cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 0), -1)
+                    # Criar uma cópia do frame preenchida com preto
+                    black_frame = np.zeros_like(frame)
+                    # Copiar apenas a região do retângulo do frame original
+                    black_frame[y1:y2, x1:x2] = frame[y1:y2, x1:x2]
+                    frame = black_frame
+                else:  # inside mode
+                    # Desenhar retângulo preto diretamente no frame
+                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 0), -1)
+            
             elif shape_type == "trapezoid":
                 pts = np.array(coords, np.int32)
                 if mode == "inside":
@@ -221,24 +230,31 @@ def get_box_coordinates(image_path):
                 shapes[-1].remove()
                 shapes.pop()
                 selections.pop()
-                if len(points) >= 4:
-                    points = points[:-4]
+                points = points[:-4] if points else []
                 temp_points.clear()
                 plt.draw()
             return
 
         if event.button == 1:  # Left mouse button to add a point
             if selection_mode["shape"] == "rectangle":
-                # Original rectangle logic
-                if len(points) % 2 == 0:
-                    points.append((event.xdata, event.ydata))
-                else:
-                    points.append((event.xdata, event.ydata))
+                temp_points.append((event.xdata, event.ydata))
+                if len(temp_points) == 2:
+                    # Calculate all 4 corners of rectangle
+                    x1, y1 = temp_points[0]
+                    x2, y2 = temp_points[1]
+                    rect_points = [
+                        (x1, y1),  # Top-left
+                        (x2, y1),  # Top-right
+                        (x2, y2),  # Bottom-right
+                        (x1, y2),  # Bottom-left
+                    ]
+                    points.extend(rect_points)
+                    
                     color = "b" if selection_mode["mode"] == "outside" else "r"
                     rect = patches.Rectangle(
-                        (points[-2][0], points[-2][1]),
-                        points[-1][0] - points[-2][0],
-                        points[-1][1] - points[-2][1],
+                        (x1, y1),
+                        x2 - x1,
+                        y2 - y1,
                         linewidth=1,
                         edgecolor=color,
                         facecolor="none",
@@ -246,6 +262,7 @@ def get_box_coordinates(image_path):
                     ax.add_patch(rect)
                     shapes.append(rect)
                     selections.append((selection_mode["mode"], "rectangle"))
+                    temp_points.clear()
                     plt.draw()
             else:
                 # Trapezoid logic
