@@ -2,7 +2,7 @@
 Script: dlt3d.py
 Author: vailá
 Version: 0.01
-Last Updated: January 16, 2025
+Last Updated: January 30, 2025
 
 Description:
     This script calculates the Direct Linear Transformation (DLT) parameters for 3D coordinate transformations.
