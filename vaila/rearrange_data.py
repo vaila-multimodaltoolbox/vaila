@@ -352,34 +352,23 @@ class ColumnReorderGUI(tk.Tk):
             self.scientific_notation = False
         else:
             base_file_name = file_names[0]
+            full_path = os.path.join(directory_path, base_file_name)
+            
             try:
-                self.max_decimal_places, self.scientific_notation = (
-                    detect_precision_and_notation(
-                        os.path.join(directory_path, base_file_name)
-                    )
-                )
-                self.df = pd.read_csv(os.path.join(directory_path, base_file_name))
+                # Primeira tentativa de ler o arquivo
+                self.df = pd.read_csv(full_path)
+                self.max_decimal_places, self.scientific_notation = detect_precision_and_notation(full_path)
             except pd.errors.ParserError:
-                self.withdraw()  # Hide the main Tkinter window
+                # Se houver erro de parsing, standardize o header e encerre a GUI
+                print("Parser error detected. Standardizing header...")
+                self.withdraw()
                 standardize_header()
-                self.deiconify()  # Show the Tkinter window again after standardization
+                self.quit()  # Encerra a GUI atual
                 return
-
-            # Detectar precisão e notação científica no primeiro arquivo
-            self.max_decimal_places, self.scientific_notation = (
-                detect_precision_and_notation(
-                    os.path.join(directory_path, base_file_name)
-                )
-            )
-
-            # Ler CSV com Pandas
-            self.df = pd.read_csv(os.path.join(directory_path, base_file_name))
 
         # Continue carregando a GUI original
         self.title(f"Reorder CSV Columns - {self.file_names[0]}")
         self.geometry("1024x960")
-
-        # Continuação da inicialização da interface gráfica
         self.setup_gui()
 
     def setup_gui(self):
@@ -1130,22 +1119,30 @@ def rearrange_data_in_directory():
     # Caso não existam arquivos CSV, continuar e abrir a GUI
     if not file_names:
         print("No CSV files found in the directory.")
-        file_names = ["Empty"]  # Marcar como 'Empty' quando não há arquivos
-        original_headers = []  # Lista vazia de headers
+        file_names = ["Empty"]
+        original_headers = []
     else:
         # Pega headers do primeiro arquivo CSV se existir
         example_file = os.path.join(selected_directory, file_names[0])
-        original_headers = get_headers(example_file)
-
-        print("-" * 80)
-        print("Original Headers:")
-        print(original_headers)
-        print("-" * 80)
-        print("")
-
-    # Abre a GUI sem arquivos CSV carregados
-    app = ColumnReorderGUI(original_headers, file_names, selected_directory)
-    app.mainloop()
+        try:
+            original_headers = get_headers(example_file)
+            print("-" * 80)
+            print("Original Headers:")
+            print(original_headers)
+            print("-" * 80)
+            print("")
+            
+            # Tenta criar a GUI
+            app = ColumnReorderGUI(original_headers, file_names, selected_directory)
+            app.mainloop()
+        except pd.errors.ParserError:
+            print("Parser error detected. Running header standardization...")
+            standardize_header()
+            # Após standardize_header, reinicie o processo
+            rearrange_data_in_directory()
+        except Exception as e:
+            print(f"Unexpected error: {e}")
+            return
 
 
 if __name__ == "__main__":
