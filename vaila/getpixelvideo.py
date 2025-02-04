@@ -51,104 +51,125 @@ def play_video_with_controls(video_path, coordinates=None):
     )
     window_width = min(original_width, screen_width - 100)
     window_height = min(original_height, screen_height - 150)
-    screen = pygame.display.set_mode(
-        (window_width, window_height + 80), pygame.RESIZABLE
-    )
+    screen = pygame.display.set_mode((window_width, window_height + 80), pygame.RESIZABLE)
     pygame.display.set_caption("Video Player with Controls")
     clock = pygame.time.Clock()
 
-    # Initialize variables
+    # Control variables
     zoom_level = 1.0
     offset_x, offset_y = 0, 0
     frame_count = 0
     paused = True
     scrolling = False
+    dragging_slider = False
 
-    # Initialize fresh coordinates if not loaded
+    # Variables for the "1 line" mode (one-line marker mode)
+    one_line_mode = False
+    one_line_markers = []  # Each item: (frame_number, x, y)
+
+    # If no coordinates were loaded, initialize a dictionary with an empty list per frame.
     if coordinates is None:
         coordinates = {i: [] for i in range(total_frames)}
 
     def draw_controls():
-        slider_surface = pygame.Surface((window_width, 80))
-        slider_surface.fill((30, 30, 30))
+        """
+        Draw the control area on a separate surface.
+        The frame slider is drawn across the bottom of the control area.
+        In the lower-right corner (a bit above the slider) a compact cluster of three buttons is drawn:
+          - Save
+          - Help
+          - "1 line" (toggle one-line marker mode)
+        """
+        control_surface_height = 80
+        control_surface = pygame.Surface((window_width, control_surface_height))
+        control_surface.fill((30, 30, 30))
+        font = pygame.font.Font(None, 20)
 
-        # Draw slider bar
-        slider_width = int(window_width * 0.8)
-        slider_x = (window_width - slider_width) // 2
-        slider_y = 30
+        # Draw slider for frames along the bottom.
+        # We'll leave a left and right margin.
+        slider_margin_left = 10
+        slider_margin_right = 10
+        slider_width = window_width - slider_margin_left - slider_margin_right
         slider_height = 10
-        pygame.draw.rect(
-            slider_surface,
-            (60, 60, 60),
-            (slider_x, slider_y, slider_width, slider_height),
-        )
+        # Position the slider near the bottom; e.g., with a 5px margin from the bottom.
+        slider_y = control_surface_height - slider_height - 5
+        pygame.draw.rect(control_surface, (60, 60, 60), (slider_margin_left, slider_y, slider_width, slider_height))
+        slider_pos = slider_margin_left + int((frame_count / total_frames) * slider_width)
+        pygame.draw.circle(control_surface, (255, 255, 255), (slider_pos, slider_y + slider_height // 2), 8)
 
-        # Draw slider handle
-        slider_pos = slider_x + int((frame_count / total_frames) * slider_width)
-        pygame.draw.circle(
-            slider_surface,
-            (255, 255, 255),
-            (slider_pos, slider_y + slider_height // 2),
-            8,
-        )
+        # Draw frame info above the slider (on the left)
+        frame_info = font.render(f"Frame: {frame_count + 1}/{total_frames}", True, (255, 255, 255))
+        control_surface.blit(frame_info, (slider_margin_left, slider_y - 25))
 
-        # Draw frame information
-        font = pygame.font.Font(None, 24)
-        frame_text = font.render(
-            f"Frame: {frame_count + 1}/{total_frames}", True, (255, 255, 255)
-        )
-        slider_surface.blit(frame_text, (10, 10))
+        # Draw button cluster in the lower-right corner, a bit above the slider.
+        button_width = 50
+        button_height = 20
+        button_gap = 5
+        total_buttons_width = button_width * 3 + button_gap * 2  # For 3 buttons.
+        margin_right = 10
+        # The cluster's left-most x
+        cluster_x = window_width - total_buttons_width - margin_right
+        # Place the cluster a bit above the slider.
+        cluster_y = slider_y - button_height - 5
 
-        # Draw help and save buttons (smaller size and better aligned)
-        button_width = 60  # Reduced from 80
-        button_height = 25  # Reduced from 30
-        button_y = 10
-
-        # Save button
-        save_button_rect = pygame.Rect(
-            window_width - 140, button_y, button_width, button_height
-        )
-        pygame.draw.rect(slider_surface, (100, 100, 100), save_button_rect)
+        # Save button (left-most in the cluster)
+        save_button_rect = pygame.Rect(cluster_x, cluster_y, button_width, button_height)
+        pygame.draw.rect(control_surface, (100, 100, 100), save_button_rect)
         save_text = font.render("Save", True, (255, 255, 255))
-        text_rect = save_text.get_rect(center=save_button_rect.center)
-        slider_surface.blit(save_text, text_rect)
+        control_surface.blit(save_text, save_text.get_rect(center=save_button_rect.center))
 
-        # Help button
-        help_button_rect = pygame.Rect(
-            window_width - 70, button_y, button_width, button_height
-        )
-        pygame.draw.rect(slider_surface, (100, 100, 100), help_button_rect)
+        # Help button (middle)
+        help_button_rect = pygame.Rect(cluster_x + button_width + button_gap, cluster_y, button_width, button_height)
+        pygame.draw.rect(control_surface, (100, 100, 100), help_button_rect)
         help_text = font.render("Help", True, (255, 255, 255))
-        text_rect = help_text.get_rect(center=help_button_rect.center)
-        slider_surface.blit(help_text, text_rect)
+        control_surface.blit(help_text, help_text.get_rect(center=help_button_rect.center))
 
-        # Blit the slider surface at the bottom of the window area
-        screen.blit(slider_surface, (0, window_height))
+        # "1 line" mode toggle button (right-most)
+        one_line_button_rect = pygame.Rect(cluster_x + 2 * (button_width + button_gap), cluster_y, button_width, button_height)
+        btn_color = (150, 50, 50) if one_line_mode else (100, 100, 100)
+        pygame.draw.rect(control_surface, btn_color, one_line_button_rect)
+        one_line_text = font.render("1 line", True, (255, 255, 255))
+        control_surface.blit(one_line_text, one_line_text.get_rect(center=one_line_button_rect.center))
 
-        return (
-            slider_x,
-            slider_width,
-            slider_y,
-            slider_height,
-            help_button_rect,
-            save_button_rect,
-        )
+        # Display the control surface at the bottom of the window.
+        screen.blit(control_surface, (0, window_height))
+        # Return the button rectangles and slider parameters (note: y coordinates relative to the control surface).
+        return one_line_button_rect, save_button_rect, help_button_rect, slider_margin_left, slider_y, slider_width, slider_height
 
     def show_help_dialog():
         help_message = (
             "Video Player Controls:\n"
             "- Space: Play/Pause\n"
-            "- Right Arrow: Next Frame\n"
-            "- Left Arrow: Previous Frame\n"
-            "- Up Arrow: Fast Forward\n"
-            "- Down Arrow: Rewind\n"
+            "- Right Arrow: Next Frame (when paused)\n"
+            "- Left Arrow: Previous Frame (when paused)\n"
+            "- Up Arrow: Fast Forward (when paused)\n"
+            "- Down Arrow: Rewind (when paused)\n"
             "- +: Zoom In\n"
             "- -: Zoom Out\n"
-            "- Left Click: Add Marker\n"
-            "- Right Click: Remove Last Marker\n"
+            "- Left Click on video: Add Marker\n"
+            "- Right Click on video: Remove Last Marker\n"
             "- Drag Slider: Jump to Frame\n"
+            "- C: Toggle 1 line marker mode\n"
+            "     (When enabled, all markers are appended sequentially in one line.)"
         )
         messagebox.showinfo("Help", help_message)
+
+    def save_1_line_coordinates(video_path, one_line_markers):
+        base_name = os.path.splitext(os.path.basename(video_path))[0]
+        video_dir = os.path.dirname(video_path)
+        output_file = os.path.join(video_dir, f"{base_name}_markers_1_line.csv")
+
+        # Create header dynamically for each marker: p{i}_frame, p{i}_x, p{i}_y
+        columns = []
+        for i in range(1, len(one_line_markers) + 1):
+            columns.extend([f"p{i}_frame", f"p{i}_x", f"p{i}_y"])
+        values = []
+        for marker in one_line_markers:
+            frame_num, x, y = marker
+            values.extend([int(frame_num), int(x), int(y)])
+        df = pd.DataFrame([values], columns=columns)
+        df.to_csv(output_file, index=False)
+        print(f"1 line coordinates saved to: {output_file}")
 
     running = True
     saved = False
@@ -164,9 +185,7 @@ def play_video_with_controls(video_path, coordinates=None):
         zoomed_frame = cv2.resize(frame, (zoomed_width, zoomed_height))
         crop_x = max(0, min(zoomed_width - window_width, offset_x))
         crop_y = max(0, min(zoomed_height - window_height, offset_y))
-        cropped_frame = zoomed_frame[
-            crop_y : crop_y + window_height, crop_x : crop_x + window_width
-        ]
+        cropped_frame = zoomed_frame[crop_y: crop_y + window_height, crop_x: crop_x + window_width]
 
         frame_surface = pygame.surfarray.make_surface(
             cv2.cvtColor(cropped_frame, cv2.COLOR_BGR2RGB).swapaxes(0, 1)
@@ -174,23 +193,27 @@ def play_video_with_controls(video_path, coordinates=None):
         screen.blit(frame_surface, (0, 0))
 
         # Draw markers
-        for i, (x, y) in enumerate(coordinates[frame_count]):
-            screen_x, screen_y = int((x * zoom_level) - crop_x), int(
-                (y * zoom_level) - crop_y
-            )
-            pygame.draw.circle(screen, (0, 255, 0), (screen_x, screen_y), 3)
-            font = pygame.font.Font(None, 24)
-            text_surface = font.render(str(i + 1), True, (255, 255, 255))
-            screen.blit(text_surface, (screen_x + 5, screen_y - 15))
+        font = pygame.font.Font(None, 24)
+        if one_line_mode:
+            # In 1 line mode, draw only markers belonging to the current frame for visualization.
+            for idx, (f_num, x, y) in enumerate(one_line_markers):
+                if f_num == frame_count:
+                    screen_x = int((x * zoom_level) - crop_x)
+                    screen_y = int((y * zoom_level) - crop_y)
+                    pygame.draw.circle(screen, (0, 255, 0), (screen_x, screen_y), 3)
+                    text_surface = font.render(str(idx + 1), True, (255, 255, 255))
+                    screen.blit(text_surface, (screen_x + 5, screen_y - 15))
+        else:
+            for i, (x, y) in enumerate(coordinates[frame_count]):
+                screen_x = int((x * zoom_level) - crop_x)
+                screen_y = int((y * zoom_level) - crop_y)
+                pygame.draw.circle(screen, (0, 255, 0), (screen_x, screen_y), 3)
+                text_surface = font.render(str(i + 1), True, (255, 255, 255))
+                screen.blit(text_surface, (screen_x + 5, screen_y - 15))
 
-        (
-            slider_x,
-            slider_width,
-            slider_y,
-            slider_height,
-            help_button_rect,
-            save_button_rect,
-        ) = draw_controls()
+        # Draw the control area and retrieve UI elements for click detection.
+        (one_line_button_rect, save_button_rect, help_button_rect,
+         slider_x, slider_y, slider_width, slider_height) = draw_controls()
         pygame.display.flip()
 
         for event in pygame.event.get():
@@ -205,7 +228,11 @@ def play_video_with_controls(video_path, coordinates=None):
 
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
-                    save_coordinates(video_path, coordinates, total_frames)
+                    if one_line_mode:
+                        save_1_line_coordinates(video_path, one_line_markers)
+                    else:
+                        # The existing save_coordinates function is assumed to be available.
+                        save_coordinates(video_path, coordinates, total_frames)
                     saved = True
                     messagebox.showinfo("Success", "Coordinates saved successfully!")
                     running = False
@@ -223,51 +250,100 @@ def play_video_with_controls(video_path, coordinates=None):
                     zoom_level *= 1.2
                 elif event.key == pygame.K_MINUS:
                     zoom_level = max(0.2, zoom_level / 1.2)
+                elif event.key == pygame.K_c:
+                    one_line_mode = not one_line_mode
+                    if one_line_mode:
+                        messagebox.showinfo(
+                            "1 Line Mode",
+                            "1 line marker mode activated. Markers will be appended sequentially in one line.",
+                        )
+                    else:
+                        messagebox.showinfo(
+                            "1 Line Mode",
+                            "1 line marker mode deactivated. Markers will be saved per frame.",
+                        )
 
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 x, y = event.pos
-
-                if event.button == 2:  # Botão do meio do mouse
-                    pygame.mouse.get_rel()  # Resetar o movimento relativo
-                    scrolling = True
-                elif help_button_rect.collidepoint(x, y - window_height):  # Corrigido
-                    show_help_dialog()
-                elif slider_y <= y <= slider_y + slider_height:
-                    rel_x = x - slider_x
-                    frame_count = int((rel_x / slider_width) * total_frames)
-                    frame_count = max(0, min(frame_count, total_frames - 1))
-                    paused = True
-                else:
-                    if event.button == 1:
-                        if y < window_height:
-                            video_x = (x + crop_x) / zoom_level
-                            video_y = (y + crop_y) / zoom_level
-                            coordinates[frame_count].append((video_x, video_y))
-                    elif event.button == 3:
-                        if coordinates[frame_count]:
-                            coordinates[frame_count].pop()
-
-                if save_button_rect.collidepoint(x, y - window_height):
-                    save_coordinates(video_path, coordinates, total_frames)
-                    saved = True
-                    messagebox.showinfo("Success", "Coordinates saved successfully!")
+                # If the click is in the control area (below the video)
+                if y >= window_height:
+                    rel_y = y - window_height
+                    # Check for button clicks in the bottom right cluster.
+                    if one_line_button_rect.collidepoint(x, rel_y):
+                        one_line_mode = not one_line_mode
+                        if one_line_mode:
+                            messagebox.showinfo(
+                                "1 Line Mode",
+                                "1 line marker mode activated. Markers will be appended sequentially in one line.",
+                            )
+                        else:
+                            messagebox.showinfo(
+                                "1 Line Mode",
+                                "1 line marker mode deactivated. Markers will be saved per frame.",
+                            )
+                    elif help_button_rect.collidepoint(x, rel_y):
+                        show_help_dialog()
+                    elif save_button_rect.collidepoint(x, rel_y):
+                        if one_line_mode:
+                            save_1_line_coordinates(video_path, one_line_markers)
+                        else:
+                            save_coordinates(video_path, coordinates, total_frames)
+                        saved = True
+                        messagebox.showinfo("Success", "Coordinates saved successfully!")
+                    # Check for slider click.
+                    elif slider_y <= rel_y <= slider_y + slider_height:
+                        dragging_slider = True
+                        rel_x = x - slider_x
+                        if rel_x < 0:
+                            rel_x = 0
+                        elif rel_x > slider_width:
+                            rel_x = slider_width
+                        frame_count = int((rel_x / slider_width) * total_frames)
+                        frame_count = max(0, min(frame_count, total_frames - 1))
+                        paused = True
+                # Click in the video area to add marker.
+                elif y < window_height:
+                    video_x = (x + crop_x) / zoom_level
+                    video_y = (y + crop_y) / zoom_level
+                    if one_line_mode:
+                        one_line_markers.append((frame_count, video_x, video_y))
+                    else:
+                        coordinates[frame_count].append((video_x, video_y))
+                elif event.button == 3:
+                    # Right-click to remove the last marker.
+                    if y < window_height:
+                        if one_line_mode:
+                            for i in range(len(one_line_markers) - 1, -1, -1):
+                                if one_line_markers[i][0] == frame_count:
+                                    del one_line_markers[i]
+                                    break
+                        else:
+                            if coordinates[frame_count]:
+                                coordinates[frame_count].pop()
 
             elif event.type == pygame.MOUSEBUTTONUP:
-                if event.button == 2:  # Botão do meio do mouse
+                if event.button == 2:
                     scrolling = False
+                elif event.button == 1:
+                    dragging_slider = False
 
             elif event.type == pygame.MOUSEMOTION:
                 if scrolling:
                     rel_x, rel_y = pygame.mouse.get_rel()
-                    offset_x = max(
-                        0, min(zoomed_width - window_width, offset_x - rel_x)
-                    )
-                    offset_y = max(
-                        0, min(zoomed_height - window_height, offset_y - rel_y)
-                    )
+                    offset_x = max(0, min(zoomed_width - window_width, offset_x - rel_x))
+                    offset_y = max(0, min(zoomed_height - window_height, offset_y - rel_y))
+                if dragging_slider:
+                    rel_x = event.pos[0] - slider_x
+                    if rel_x < 0:
+                        rel_x = 0
+                    elif rel_x > slider_width:
+                        rel_x = slider_width
+                    frame_count = int((rel_x / slider_width) * total_frames)
+                    frame_count = max(0, min(frame_count, total_frames - 1))
+                    paused = True
 
-        if not paused:
-            frame_count = (frame_count + 1) % total_frames
+            if not paused:
+                frame_count = (frame_count + 1) % total_frames
 
         clock.tick(fps)
 
@@ -313,14 +389,28 @@ def save_coordinates(video_path, coordinates, total_frames):
     video_dir = os.path.dirname(video_path)
     output_file = os.path.join(video_dir, f"{base_name}_markers.csv")
 
-    columns = ["frame"] + [f"p{i}_{c}" for i in range(1, 101) for c in ["x", "y"]]
+    # Determina o número máximo de pontos marcados em qualquer frame.
+    max_points = max((len(points) for points in coordinates.values()), default=0)
+
+    # Cria o cabeçalho: a primeira coluna é 'frame' e para cada ponto, 
+    # adiciona as colunas 'p{i}_x' e 'p{i}_y'
+    columns = ["frame"]
+    for i in range(1, max_points + 1):
+        columns.append(f"p{i}_x")
+        columns.append(f"p{i}_y")
+
+    # Cria o DataFrame inicializado com NaN para todos os frames.
     df = pd.DataFrame(np.nan, index=range(total_frames), columns=columns)
     df["frame"] = df.index
 
+    # Preenche o DataFrame com os pontos marcados, convertendo pra int.
     for frame_num, points in coordinates.items():
         for i, (x, y) in enumerate(points):
             df.at[frame_num, f"p{i+1}_x"] = int(x)
             df.at[frame_num, f"p{i+1}_y"] = int(y)
+
+    # Substitui os valores NaN por strings vazias.
+    df.fillna("", inplace=True)
 
     df.to_csv(output_file, index=False)
     print(f"Coordinates saved to: {output_file}")
