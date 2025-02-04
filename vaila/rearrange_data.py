@@ -40,7 +40,6 @@ Requirements:
 - pandas
 - numpy
 - tkinter
-
 """
 
 import os
@@ -366,9 +365,14 @@ class ColumnReorderGUI(tk.Tk):
                 self.quit()  # Encerra a GUI atual
                 return
 
-        # Continue carregando a GUI original
+        # Em vez de um tamanho fixo, define o tamanho relativo à tela
         self.title(f"Reorder CSV Columns - {self.file_names[0]}")
-        self.geometry("1024x960")
+        screen_width = self.winfo_screenwidth()
+        screen_height = self.winfo_screenheight()
+        window_width = int(screen_width * 0.8)
+        window_height = int(screen_height * 0.8)
+        self.geometry(f"{window_width}x{window_height}")
+
         self.setup_gui()
 
     def setup_gui(self):
@@ -595,16 +599,19 @@ class ColumnReorderGUI(tk.Tk):
         if row_range:
             try:
                 start, end = map(int, row_range.split(":"))
-                start -= 1  # Adjust for 0-based indexing
-                end -= 1  # Adjust for 0-based indexing
-                row_shape = (
-                    end - start + 1,
-                    len(self.current_order),
-                )  # Assuming all rows are equal length
+                start -= 1  # Ajusta para índices 0-based
+                end -= 1
+                row_shape = (end - start + 1, len(self.current_order))
 
                 row_edit_window = tk.Toplevel(self)
                 row_edit_window.title("Edit Rows")
-                row_edit_window.geometry("600x400")
+                # Calcula o tamanho ideal baseado na resolução da tela
+                screen_width = row_edit_window.winfo_screenwidth()
+                screen_height = row_edit_window.winfo_screenheight()
+                # Define 80% do tamanho da tela, mas não excede 600x400 se a tela permitir
+                window_width = min(600, int(screen_width * 0.8))
+                window_height = min(400, int(screen_height * 0.8))
+                row_edit_window.geometry(f"{window_width}x{window_height}")
 
                 shape_label = tk.Label(
                     row_edit_window, text=f"Shape: {row_shape}", font=("default", 12)
@@ -1103,6 +1110,10 @@ def batch_convert_dvideo(directory_path):
 def rearrange_data_in_directory():
     root = tk.Tk()
     root.withdraw()
+
+    # Print the directory and name of the script being executed
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
 
     selected_directory = filedialog.askdirectory(
         title="Select Directory Containing CSV Files"
