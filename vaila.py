@@ -4,8 +4,9 @@ vaila.py
 ===============================================================================
 Author: Paulo R. P. Santiago
 Date: 22 January 2025
-Version updated: 29.Jan.2025
+Version updated: 03.Feb.2025
 Python Version: 3.12.8
+
 
 Description:
 ------------
@@ -81,6 +82,7 @@ import tkinter as tk
 from tkinter import messagebox, filedialog, ttk, Toplevel, Label, Button
 from PIL import Image, ImageTk
 import webbrowser
+import sys
 
 # Conditionally import AppKit only for macOS
 if platform.system() == "Darwin":
@@ -154,7 +156,7 @@ Mocap fullbody_c3d           Markerless_3D       Markerless_2D_MP
    CUBE2D  --> +---------------------------------------+ <-- Vector Coding
    IMU_csv --> |       vailá - multimodal toolbox      | <-- Cluster_csv
 Open Field --> +---------------------------------------+ <-- Force Plate
-              ^                   |                    ^
+              ^                   |                    ^ <-- YOLOv11 and MediaPipe
         EMG__/                    v                     \__Tracker YOLOv11
                     +--------------------------+
                     | Results: Data and Figure | 
@@ -214,7 +216,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 29.Jan.2025")
+        self.title("vailá - 03.Feb.2025")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -803,7 +805,7 @@ class Vaila(tk.Tk):
         )
         # C_A_r3_c1 - Data Files: Make DLT3D
         dlt3d_btn = tk.Button(
-            tools_col1, text="Make DLT3D", command=self.dlt3d, width=button_width
+            tools_col1, text="Make DLT3D", command=self.run_dlt3d, width=button_width
         )
 
         # C_A_r3_c2 - Data Files: Rec3D 1DLT
@@ -1533,18 +1535,19 @@ class Vaila(tk.Tk):
         rec2d()
 
     # C_A_r3_c1
-    def dlt3d(self):
-        """Runs the DLT3D module.
-
-        This function runs the DLT3D module, which can be used to perform 3D direct linear
-        transformation (DLT) calibration of a camera. The module will then generate a
-        calibration file that can be used for 3D reconstruction.
-
-        The user will be prompted to select the directory containing the CSV files and
-        input the sample rate and start and end indices for analysis.
-
+    def run_dlt3d(self):
         """
-        pass  # Aqui você deve adicionar a lógica para o DLT3D
+        Método para executar o script dlt3d.py.
+        Essa função utiliza o interpretador Python (sys.executable) para chamar o script,
+        que se encontra na pasta "vaila".
+        """
+        try:
+            # Constrói o caminho para o script dlt3d.py (ajuste se necessário)
+            script_path = os.path.join("vaila", "dlt3d.py")
+            # Executa o script em um novo processo
+            subprocess.Popen([sys.executable, script_path])
+        except Exception as e:
+            messagebox.showerror("Error", f"Error running dlt3d.py: {e}")
 
     # C_A_r3_c2 - for multi dlts in rows
     def rec3d_one_dlt3d(self):
