@@ -291,8 +291,8 @@ def run_distortvideo():
     # Get all video files in the directory
     video_extensions = ('.mp4', '.avi', '.mov')
     video_files = [f for f in os.listdir(input_dir) 
-                  if os.path.isfile(os.path.join(input_dir, f)) 
-                  and f.lower().endswith(video_extensions)]
+                   if os.path.isfile(os.path.join(input_dir, f)) 
+                   and f.lower().endswith(video_extensions)]
     
     if not video_files:
         rprint("[red]No video files found in the selected directory.[/red]")
@@ -300,12 +300,16 @@ def run_distortvideo():
     
     rprint(f"\n[cyan]Found {len(video_files)} video files to process.[/cyan]")
     
+    # Create output directory with a timestamp in the name: vaila_lensdistort_timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_dir = os.path.join(input_dir, f"vaila_lensdistort_{timestamp}")
+    os.makedirs(output_dir, exist_ok=True)
+    
     # Process each video
     for video_file in video_files:
         input_path = os.path.join(input_dir, video_file)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         base_name = os.path.splitext(video_file)[0]
-        output_path = os.path.join(input_dir, f"{base_name}_undistorted_{timestamp}.mp4")
+        output_path = os.path.join(output_dir, f"{base_name}_undistorted.mp4")
         
         try:
             rprint(f"\n[cyan]Processing video: {video_file}[/cyan]")
@@ -314,14 +318,14 @@ def run_distortvideo():
             rprint(f"[red]Error processing video {video_file}: {e}[/red]")
             continue
     
-    # Try to open output folder
+    # Try to open the output folder
     try:
         if os.name == 'nt':  # Windows
-            os.startfile(input_dir)
+            os.startfile(output_dir)
         elif os.name == 'posix':  # macOS and Linux
-            subprocess.run(['xdg-open', input_dir])
-    except:
-        pass
+            subprocess.run(['xdg-open', output_dir])
+    except Exception as e:
+        rprint(f"[red]Could not open output directory: {e}[/red]")
     
     rprint("\n[green]Batch processing complete![/green]")
 
