@@ -141,6 +141,7 @@ from vaila import (
     markerless2d_mpyolo,
     yolov11track,
     cutvideo,
+    vaila_distortvideo_gui,
 )
 
 
@@ -1695,30 +1696,39 @@ class Vaila(tk.Tk):
     # C_B_r4_c1
     def run_distortvideo(self):
         """Runs the Lens Distortion Correction Module.
-
+ 
         This method provides options to correct lens distortion in either videos or CSV coordinate files.
         It opens a dialog for the user to choose between:
         1. Video distortion correction (vaila_lensdistortvideo)
         2. CSV/DAT coordinate distortion correction (vaila_datdistort)
-
+        3. Interactive Distortion Correction (vaila_distortvideo_gui)
+ 
         Both options use the same camera calibration parameters loaded from a CSV file to perform
         the corrections.
         """
         # Create dialog window
         dialog = Toplevel(self)
         dialog.title("Choose Distortion Correction Type")
-        dialog.geometry("300x150")
+        dialog.geometry("300x300")  # Aumentado para acomodar a nova opção
         
         # Add descriptive label
         Label(dialog, text="Select the type of distortion correction:", pady=10).pack()
         
-        # Add buttons for each option
+        # Add button for Video Correction
         Button(
             dialog, 
             text="Video Correction",
             command=lambda: [vaila_lensdistortvideo.run_distortvideo(), dialog.destroy()]
         ).pack(pady=5)
         
+        # Add button for Interactive Distortion Correction
+        Button(
+            dialog,
+            text="Interactive Distortion Correction", 
+            command=lambda: [vaila_distortvideo_gui.run_distortvideo_gui(), dialog.destroy()]
+        ).pack(pady=5)
+        
+        # Add button for CSV Coordinates Distortion Correction
         Button(
             dialog,
             text="CSV Coordinates Distortion Correction", 
