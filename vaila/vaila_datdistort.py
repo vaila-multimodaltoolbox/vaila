@@ -19,6 +19,7 @@ import tkinter as tk
 from tkinter import filedialog
 from datetime import datetime
 import subprocess
+import sys
 
 
 def load_distortion_parameters(csv_path):
