@@ -88,3 +88,5 @@ dependencies:
       - ultralytics
       - boxmot
       - intel-openmp
+      - open3d
+      - glfw
