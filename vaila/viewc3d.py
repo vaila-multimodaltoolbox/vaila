@@ -83,7 +83,7 @@ def create_coordinate_lines(axis_length=0.5):
 
 def create_ground_plane(width=5.0, height=5.0):
     """
-    Cria um plano no eixo XY (chão) com dimensões width x height e cor preta.
+    Cria um plano no eixo XY (chão) com dimensões width x height e cor cinza escuro.
     O plano é definido na altura z = 0.
     """
     half_w = width / 2.0
@@ -101,7 +101,8 @@ def create_ground_plane(width=5.0, height=5.0):
     ground = o3d.geometry.TriangleMesh()
     ground.vertices = o3d.utility.Vector3dVector(np.array(vertices))
     ground.triangles = o3d.utility.Vector3iVector(np.array(triangles))
-    ground.paint_uniform_color([0, 0, 0])  # Preto
+    # Pintamos o ground de cinza escuro ([0.2, 0.2, 0.2])
+    ground.paint_uniform_color([0.2, 0.2, 0.2])
     ground.compute_vertex_normals()
     return ground
 
@@ -140,17 +141,16 @@ def main():
     points, filepath = load_c3d_file()
     num_frames, num_markers, _ = points.shape
 
-    # Em vez de uma point cloud, cria uma esfera para cada marker.
-    # A esfera é criada com centro na origem (base) e deslocada para a posição do marker.
-    marker_radius = 0.02
+    # Diminuímos um pouco o tamanho dos markers e os pintamos de azul
+    marker_radius = 0.015  # Tamanho reduzido em comparação ao valor anterior de 0.02
     spheres = []
     spheres_bases = []
     for i in range(num_markers):
         sphere = o3d.geometry.TriangleMesh.create_sphere(radius=marker_radius, resolution=8)
-        base_vertices = np.asarray(sphere.vertices).copy()  # base centrada na origem
+        base_vertices = np.asarray(sphere.vertices).copy()  # Base centrada na origem
         initial_pos = points[0][i]
         sphere.vertices = o3d.utility.Vector3dVector(base_vertices + initial_pos)
-        sphere.paint_uniform_color([1.0, 0.0, 0.0])
+        sphere.paint_uniform_color([0.0, 0.0, 1.0])  # Pintado de azul
         spheres.append(sphere)
         spheres_bases.append(base_vertices)
 
@@ -161,33 +161,56 @@ def main():
     # Adiciona as esferas (markers) à cena
     for sphere in spheres:
         vis.add_geometry(sphere)
-
-    # Cria e adiciona o ground com dimensão ampliada.
-    # Queremos que o ground cubra de X: -1 a 7 e Y: -1 a 4.
-    # Para isso, o width = 8 e height = 5, e depois transladamos o ground para o centro (3, 1.5, 0)
-    ground = create_ground_plane(width=8.0, height=5.0)
-    ground.translate(np.array([3.0, 1.5, 0.0]))  # Ajusta para que os cantos fiquem em (-1,-1), (7,-1), (7,4), (-1,4)
+    
+    # Adiciona os eixos cartesianos X, Y, Z como antes
+    axes = create_coordinate_lines(axis_length=0.5)
+    vis.add_geometry(axes)
+    
+    # --- Atualiza o ground para novos limites ---
+    ground = create_ground_plane(width=6.0, height=7.0)
+    # Translada o ground para que os cantos fiquem em (-1,-1), (5,-1), (5,6) e (-1,6)
+    ground.translate(np.array([2.0, 2.5, 0.0]))
     vis.add_geometry(ground)
 
-    # Adiciona as linhas dos eixos cartesianos
-    axes = create_coordinate_lines(0.5)
-    vis.add_geometry(axes)
+    # --- Atualiza os parâmetros da câmera para o novo ground ---
+    ctr = vis.get_view_control()
+    # O centro do ground agora é ((-1+5)/2, (-1+6)/2) = (2, 2.5, 0)
+    bbox_center = np.array([2.0, 2.5, 0.0])
+    ctr.set_lookat(bbox_center)
+    ctr.set_front(np.array([-1, 0, 0]))  # Vista lateral: câmera posicionada a partir do lado positivo de X
+    ctr.set_up(np.array([0, 0, 1]))
+    ctr.set_zoom(0.8)  # Ajuste conforme necessário
 
     # Adiciona os marcadores "X" nos 4 cantos do ground
     corners = [np.array([-1, -1, 0]),
-               np.array([7, -1, 0]),
-               np.array([7, 4, 0]),
-               np.array([-1, 4, 0])]
-    x_markers = []
+               np.array([5, -1, 0]),
+               np.array([5, 6, 0]),
+               np.array([-1, 6, 0])]
     for corner in corners:
         x_marker = create_x_marker(corner, size=0.2)
         vis.add_geometry(x_marker)
-        x_markers.append(x_marker)
 
     # Configura as opções de renderização
     render_option = vis.get_render_option()
     render_option.point_size = 5.0
     render_option.background_color = np.array([0.8, 0.8, 0.8])
+    # Desabilita a iluminação para remover o reflexo de ponto de luz
+    render_option.light_on = False
+
+    # Função para atualizar o título do console com o número do frame atual
+    def update_window_title():
+        new_title = f"Visualizador C3D - Frame {current_frame+1}/{num_frames}"
+        print(new_title)
+
+    # Callback para imprimir os parâmetros atuais do viewpoint (para feedback)
+    def show_camera_params(vis_obj):
+        ctr = vis.get_view_control()
+        cam_params = ctr.convert_to_pinhole_camera_parameters()
+        print("Extrinsics (viewpoint atual):")
+        print(cam_params.extrinsic)
+        return False
+
+    vis.register_key_callback(ord("O"), show_camera_params)
 
     # Função auxiliar para atualizar as posições das esferas (markers) no frame atual
     def update_spheres(frame_data):
@@ -196,10 +219,11 @@ def main():
             new_vertices = spheres_bases[i] + new_pos
             sphere.vertices = o3d.utility.Vector3dVector(new_vertices)
             vis.update_geometry(sphere)
+        update_window_title()  # Atualiza o título com o frame atual
         vis.poll_events()
         vis.update_renderer()
 
-    # Callbacks para controle dos frames
+    # Variáveis de controle dos frames
     current_frame = 0
     is_playing = False
 
@@ -232,47 +256,12 @@ def main():
         is_playing = not is_playing
         return False
 
-    def print_camera_params(vis_obj):
-        ctr = vis.get_view_control()
-        cam_params = ctr.convert_to_pinhole_camera_parameters()
-        print("Parâmetros da Câmera (Extrinsic):")
-        print(cam_params.extrinsic)
-        return False
-
-    def capture_viewpoint_callback(vis_obj):
-        # Captura os parâmetros atuais da câmera
-        ctr = vis.get_view_control()
-        cam_params = ctr.convert_to_pinhole_camera_parameters()
-        extrinsics = cam_params.extrinsic
-        # Converte a matriz para string para facilitar a visualização
-        extrinsics_str = np.array2string(extrinsics, precision=5, separator=', ')
-        
-        # Imprime no console (para registro)
-        print("Viewpoint atual (Extrinsics):")
-        print(extrinsics_str)
-        
-        # Salva os parâmetros em um arquivo para posterior reprodução
-        with open("viewpoint.txt", "w") as f:
-            f.write("Extrinsics:\n")
-            f.write(extrinsics_str)
-        
-        # Utiliza Tkinter para exibir uma janela pop-up com os valores
-        from tkinter import messagebox
-        root = tk.Tk()
-        root.withdraw()  # Oculta a janela principal do Tkinter
-        messagebox.showinfo("Viewpoint Atual", 
-                            f"Extrinsics:\n{extrinsics_str}\n\n(Viewpoint salvo em viewpoint.txt)")
-        root.destroy()
-        return False
-
     # Registra os callbacks para as teclas
     vis.register_key_callback(ord("N"), next_frame)
     vis.register_key_callback(ord("P"), previous_frame)
     vis.register_key_callback(ord("F"), forward_10_frames)
     vis.register_key_callback(ord("B"), backward_10_frames)
     vis.register_key_callback(ord(" "), toggle_play)
-    vis.register_key_callback(ord("O"), print_camera_params)
-    vis.register_key_callback(ord("V"), capture_viewpoint_callback)
 
     # Loop principal para reprodução automática
     while True:

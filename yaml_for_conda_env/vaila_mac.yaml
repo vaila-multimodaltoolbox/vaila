@@ -610,4 +610,4 @@ dependencies:
       - ultralytics
       - boxmot
       - open3d
-
+      - glfw
