@@ -237,14 +237,14 @@ def update_figure(selected_frame, n_intervals, relayoutData):
     fig.update_layout(
         scene=dict(
             xaxis=dict(
-                range=[-1, 1],
+                range=[-1, 5],
                 autorange=False,
                 showgrid=True,
                 zeroline=True,
                 showline=True,
             ),
             yaxis=dict(
-                range=[-1, 1],
+                range=[-1, 5],
                 autorange=False,
                 showgrid=True,
                 zeroline=True,
