@@ -1,23 +1,43 @@
 """
-viewc3d.py
+Script: viewc3d.py
+Author: Prof. Dr. Paulo Santiago
+Version: 0.0.1
+Created: April 5, 2025
+Last Updated: April 6, 2025
 
-Descrição:
------------
-Novo visualizador 3D para arquivos C3D, rápido e eficiente, que respeita as dimensões 
-dos dados (convertendo de milímetros para metros). O usuário pode navegar pelos frames 
-usando as teclas 'N' (próximo frame) e 'P' (frame anterior), além de pular 10 frames 
-com 'F' e 'B' e reproduzir automaticamente com a barra de espaço.
+Description:
+------------
+This script launches a 3D viewer for C3D files, providing efficient visualization of marker data.
+Marker positions are converted from millimeters to meters and displayed using Open3D.
+The viewer features:
+  - Display of markers, Cartesian coordinate axes, a ground plane with a 1x1 grid, and boundary markers.
+  - Customizable camera view parameters (with an initial view rotated by 90°).
+  - Keyboard shortcuts for navigation:
+       'N': Next frame
+       'P': Previous frame
+       'F': Advance 10 frames
+       'B': Go back 10 frames
+       'Space': Toggle automatic playback
+       'O': Display current camera parameters
+  - A black background with thicker rendering lines for enhanced visibility.
 
-Referências:
-- Mokka: https://github.com/Biomechanical-ToolKit/Mokka
-- BTKPython: https://github.com/Biomechanical-ToolKit/BTKPython
+Usage:
+------
+1. Ensure the required dependencies are installed:
+   - open3d (pip install open3d)
+   - ezc3d (pip install ezc3d)
+   - numpy
+   - tkinter (typically included with Python)
+2. Run the script.
+3. When prompted, choose a C3D file via the file selection dialog.
+4. Use the specified keyboard commands to navigate through the frames in the 3D viewer.
 
-Requisitos:
------------
-- open3d (pip install open3d)
-- ezc3d (pip install ezc3d)
-- numpy
-- tkinter (para seleção do arquivo)
+License:
+--------
+This program is free software: you can redistribute it and/or modify it under the terms of
+the GNU General Public License as published by the Free Software Foundation, either version 3 of
+the License, or (at your option) any later version. This program is distributed in the hope that
+it will be useful, but WITHOUT ANY WARRANTY.
 """
 
 import open3d as o3d
@@ -29,50 +49,53 @@ import time
 
 def load_c3d_file():
     """
-    Abre um diálogo para selecionar um arquivo C3D e carrega os dados dos marcadores.
+    Opens a dialog to select a C3D file and loads the marker data along with the file's frame rate.
     
-    Retorna:
-        pts: np.ndarray com shape (num_frames, num_markers, 3) – os pontos convertidos (em metros)
-        filepath: caminho do arquivo selecionado.
+    Returns:
+        pts: np.ndarray with shape (num_frames, num_markers, 3) – the points converted (in meters)
+        filepath: path of the selected file.
+        fps: frames per second (Hz) extracted from the C3D header.
     """
     root = tk.Tk()
     root.withdraw()
-    filepath = filedialog.askopenfilename(title="Selecione um arquivo C3D",
-                                          filetypes=[("Arquivos C3D", "*.c3d")])
+    filepath = filedialog.askopenfilename(title="Select a C3D file",
+                                          filetypes=[("C3D Files", "*.c3d")])
     root.destroy()
     if not filepath:
-        print("Nenhum arquivo foi selecionado. Encerrando.")
+        print("No file was selected. Exiting.")
         exit(0)
     
     c3d = ezc3d.c3d(filepath)
+    # Extract the frame rate (fps) from the header
+    fps = c3d["header"]["points"]["frame_rate"]
     pts = c3d["data"]["points"]
-    pts = pts[:3, :, :]   # pega somente x, y, z
-    pts = np.transpose(pts, (2, 1, 0))  # (num_frames, num_markers, 3)
-    pts = pts * 0.001  # Converte de milímetros para metros
-    return pts, filepath
+    pts = pts[:3, :, :]  # use only x, y, z coordinates
+    pts = np.transpose(pts, (2, 1, 0))  # shape (num_frames, num_markers, 3)
+    pts = pts * 0.001  # convert from millimeters to meters
+    return pts, filepath, fps
 
 def create_coordinate_lines(axis_length=0.5):
     """
-    Cria linhas representando os eixos cartesianos:
-      - Eixo X em vermelho
-      - Eixo Y em verde
-      - Eixo Z em azul
+    Creates lines representing the Cartesian coordinate axes:
+      - X axis in red
+      - Y axis in green
+      - Z axis in blue
     """
     points = np.array([
-        [0, 0, 0],                   # Origem
-        [axis_length, 0, 0],         # Eixo X
-        [0, axis_length, 0],         # Eixo Y
-        [0, 0, axis_length]          # Eixo Z
+        [0, 0, 0],                # origin
+        [axis_length, 0, 0],       # X axis
+        [0, axis_length, 0],       # Y axis
+        [0, 0, axis_length]        # Z axis
     ])
     lines = np.array([
-        [0, 1],  # Linha para o eixo X
-        [0, 2],  # Linha para o eixo Y
-        [0, 3]   # Linha para o eixo Z
+        [0, 1],  # line for X
+        [0, 2],  # line for Y
+        [0, 3]   # line for Z
     ])
     colors = np.array([
-        [1, 0, 0],    # Vermelho para X
-        [0, 1, 0],    # Verde para Y
-        [0, 0, 1]     # Azul para Z
+        [1, 0, 0],    # red for X
+        [0, 1, 0],    # green for Y
+        [0, 0, 1]     # blue for Z
     ])
     line_set = o3d.geometry.LineSet(
         points=o3d.utility.Vector3dVector(points),
@@ -83,8 +106,8 @@ def create_coordinate_lines(axis_length=0.5):
 
 def create_ground_plane(width=5.0, height=5.0):
     """
-    Cria um plano no eixo XY (chão) com dimensões width x height e cor cinza escuro.
-    O plano é definido na altura z = 0.
+    Creates a plane on the XY axis (ground) with dimensions width x height and dark gray color.
+    The plane is defined at z = 0.
     """
     half_w = width / 2.0
     half_h = height / 2.0
@@ -101,21 +124,20 @@ def create_ground_plane(width=5.0, height=5.0):
     ground = o3d.geometry.TriangleMesh()
     ground.vertices = o3d.utility.Vector3dVector(np.array(vertices))
     ground.triangles = o3d.utility.Vector3iVector(np.array(triangles))
-    # Pintamos o ground de cinza escuro ([0.2, 0.2, 0.2])
-    ground.paint_uniform_color([0.2, 0.2, 0.2])
+    ground.paint_uniform_color([0.2, 0.2, 0.2])  # ground in dark gray
     ground.compute_vertex_normals()
     return ground
 
 def create_x_marker(position, size=0.2):
     """
-    Cria um marcador em forma de "X" no plano XY para indicar os limites.
+    Creates an "X" marker on the XY plane to indicate boundaries.
     
     Args:
-        position (np.ndarray): Coordenada (x, y, z) onde o "X" será colocado.
-        size (float): Comprimento das linhas que formam o "X".
+        position (np.ndarray): (x, y, z) coordinate where the "X" is placed.
+        size (float): Size of the lines forming the "X".
     
-    Retorna:
-        Um LineSet representando o "X".
+    Returns:
+        A LineSet representing the "X".
     """
     half = size / 2.0
     x, y, z = position
@@ -133,99 +155,129 @@ def create_x_marker(position, size=0.2):
         points=o3d.utility.Vector3dVector(points),
         lines=o3d.utility.Vector2iVector(lines)
     )
-    x_marker.paint_uniform_color([1, 0, 0])  # Vermelho para destaque
+    x_marker.paint_uniform_color([1, 0, 0])  # red for emphasis
     return x_marker
 
+def create_ground_grid(x_min=-1, x_max=5, y_min=-1, y_max=6, spacing=1.0):
+    """
+    Creates a grid of lines with a spacing of 1 meter for the ground.
+    
+    For the ground corners:
+      Bottom left: (x_min, y_min, 0)
+      Bottom right: (x_max, y_min, 0)
+      Top right: (x_max, y_max, 0)
+      Top left: (x_min, y_max, 0)
+    """
+    points = []
+    lines = []
+    # Horizontal lines (iterating over y)
+    for y in np.arange(y_min, y_max + spacing, spacing):
+        idx = len(points)
+        points.append([x_min, y, 0])
+        points.append([x_max, y, 0])
+        lines.append([idx, idx + 1])
+    # Vertical lines (iterating over x)
+    for x in np.arange(x_min, x_max + spacing, spacing):
+        idx = len(points)
+        points.append([x, y_min, 0])
+        points.append([x, y_max, 0])
+        lines.append([idx, idx + 1])
+    grid = o3d.geometry.LineSet(
+        points=o3d.utility.Vector3dVector(np.array(points)),
+        lines=o3d.utility.Vector2iVector(np.array(lines))
+    )
+    grid.paint_uniform_color([1.0, 1.0, 1.0])  # grid in white for visualization
+    return grid
+
 def main():
-    # Carrega os dados do arquivo C3D
-    points, filepath = load_c3d_file()
+    # Load data from the C3D file, including the fps information
+    points, filepath, fps = load_c3d_file()
     num_frames, num_markers, _ = points.shape
 
-    # Diminuímos um pouco o tamanho dos markers e os pintamos de azul
-    marker_radius = 0.015  # Tamanho reduzido em comparação ao valor anterior de 0.02
+    # Extract file name from full path
+    file_name = filepath.split("/")[-1]
+
+    # Build a detailed window title with file info, fps and control instructions
+    window_title = (
+        f"C3D Viewer | File: {file_name} | Markers: {num_markers} | Frames: {num_frames} | FPS: {fps} | "
+        "Keys: [N: Next, P: Prev, F: +10, B: -10, Space: Play/Pause, O: Cam Params] | "
+        "Mouse: [Left Drag: Rotate, Middle/Right Drag: Pan, Mouse Wheel: Zoom]"
+    )
+    
+    vis = o3d.visualization.VisualizerWithKeyCallback()
+    vis.create_window(window_name=window_title)
+
+    # Create a sphere for each marker (with reduced size) and paint them in orange
+    marker_radius = 0.015  # reduced marker size
     spheres = []
     spheres_bases = []
     for i in range(num_markers):
         sphere = o3d.geometry.TriangleMesh.create_sphere(radius=marker_radius, resolution=8)
-        base_vertices = np.asarray(sphere.vertices).copy()  # Base centrada na origem
+        base_vertices = np.asarray(sphere.vertices).copy()  # base centered at the origin
         initial_pos = points[0][i]
         sphere.vertices = o3d.utility.Vector3dVector(base_vertices + initial_pos)
-        sphere.paint_uniform_color([0.0, 0.0, 1.0])  # Pintado de azul
+        sphere.paint_uniform_color([1.0, 0.65, 0.0])  # orange color
         spheres.append(sphere)
         spheres_bases.append(base_vertices)
-
-    # Cria o visualizador
-    vis = o3d.visualization.VisualizerWithKeyCallback()
-    vis.create_window(window_name=f"Visualizador C3D - Frame 1/{num_frames}")
-
-    # Adiciona as esferas (markers) à cena
+    
+    # Add the markers (spheres) to the scene
     for sphere in spheres:
         vis.add_geometry(sphere)
-    
-    # Adiciona os eixos cartesianos X, Y, Z como antes
+
+    # Add Cartesian axes (X, Y, Z)
     axes = create_coordinate_lines(axis_length=0.5)
     vis.add_geometry(axes)
-    
-    # --- Atualiza o ground para novos limites ---
+
+    # Create the ground (black) and add the grid
     ground = create_ground_plane(width=6.0, height=7.0)
-    # Translada o ground para que os cantos fiquem em (-1,-1), (5,-1), (5,6) e (-1,6)
+    # Translate the ground so that the corners are at (-1,-1), (5,-1), (5,6), (-1,6)
     ground.translate(np.array([2.0, 2.5, 0.0]))
     vis.add_geometry(ground)
 
-    # --- Atualiza os parâmetros da câmera para o novo ground ---
+    grid = create_ground_grid(x_min=-1, x_max=5, y_min=-1, y_max=6, spacing=1.0)
+    vis.add_geometry(grid)
+
+    # Set up view control parameters:
     ctr = vis.get_view_control()
-    # O centro do ground agora é ((-1+5)/2, (-1+6)/2) = (2, 2.5, 0)
     bbox_center = np.array([2.0, 2.5, 0.0])
     ctr.set_lookat(bbox_center)
-    ctr.set_front(np.array([-1, 0, 0]))  # Vista lateral: câmera posicionada a partir do lado positivo de X
+    ctr.set_front(np.array([0, -1, 0]))  # rotated view by 90 degrees
     ctr.set_up(np.array([0, 0, 1]))
-    ctr.set_zoom(0.8)  # Ajuste conforme necessário
+    ctr.set_zoom(0.6)  # set the camera further away from the center
 
-    # Adiciona os marcadores "X" nos 4 cantos do ground
-    corners = [np.array([-1, -1, 0]),
-               np.array([5, -1, 0]),
-               np.array([5, 6, 0]),
-               np.array([-1, 6, 0])]
+    # Add "X" markers at the four corners of the ground
+    corners = [
+        np.array([-1, -1, 0]),
+        np.array([5, -1, 0]),
+        np.array([5, 6, 0]),
+        np.array([-1, 6, 0])
+    ]
     for corner in corners:
         x_marker = create_x_marker(corner, size=0.2)
         vis.add_geometry(x_marker)
 
-    # Configura as opções de renderização
+    # Configure rendering options
     render_option = vis.get_render_option()
     render_option.point_size = 5.0
-    render_option.background_color = np.array([0.8, 0.8, 0.8])
-    # Desabilita a iluminação para remover o reflexo de ponto de luz
+    render_option.line_width = 3.0  # thicker lines for the axes and grid
+    render_option.background_color = np.array([0, 0, 0])  # background in black
     render_option.light_on = False
 
-    # Função para atualizar o título do console com o número do frame atual
-    def update_window_title():
-        new_title = f"Visualizador C3D - Frame {current_frame+1}/{num_frames}"
-        print(new_title)
+    # Frame control variables
+    current_frame = 0
+    is_playing = False
 
-    # Callback para imprimir os parâmetros atuais do viewpoint (para feedback)
-    def show_camera_params(vis_obj):
-        ctr = vis.get_view_control()
-        cam_params = ctr.convert_to_pinhole_camera_parameters()
-        print("Extrinsics (viewpoint atual):")
-        print(cam_params.extrinsic)
-        return False
-
-    vis.register_key_callback(ord("O"), show_camera_params)
-
-    # Função auxiliar para atualizar as posições das esferas (markers) no frame atual
+    # Helper function to update markers' positions:
     def update_spheres(frame_data):
         for i, sphere in enumerate(spheres):
             new_pos = frame_data[i]
             new_vertices = spheres_bases[i] + new_pos
             sphere.vertices = o3d.utility.Vector3dVector(new_vertices)
             vis.update_geometry(sphere)
-        update_window_title()  # Atualiza o título com o frame atual
+        new_title = f"C3D Viewer - Frame {current_frame+1}/{num_frames}"
+        print(new_title)
         vis.poll_events()
         vis.update_renderer()
-
-    # Variáveis de controle dos frames
-    current_frame = 0
-    is_playing = False
 
     def next_frame(vis_obj):
         nonlocal current_frame
@@ -256,20 +308,21 @@ def main():
         is_playing = not is_playing
         return False
 
-    # Registra os callbacks para as teclas
+    # Register key callbacks
     vis.register_key_callback(ord("N"), next_frame)
     vis.register_key_callback(ord("P"), previous_frame)
     vis.register_key_callback(ord("F"), forward_10_frames)
     vis.register_key_callback(ord("B"), backward_10_frames)
     vis.register_key_callback(ord(" "), toggle_play)
+    vis.register_key_callback(ord("O"), lambda vis_obj: print(vis.get_view_control().convert_to_pinhole_camera_parameters().extrinsic))
 
-    # Loop principal para reprodução automática
+    # Main loop with playback speed determined by the file's fps (1/fps seconds per frame)
     while True:
         if not vis.poll_events():
             break
         if is_playing:
             next_frame(vis)
-            time.sleep(0.03)
+            time.sleep(1.0 / fps)
     vis.destroy_window()
 
 if __name__ == "__main__":
