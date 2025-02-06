@@ -55,6 +55,7 @@ from sklearn.metrics import (
 )
 from tkinter import Tk, filedialog, messagebox
 from tqdm import tqdm  # For progress bar
+import argparse
 
 # Function to calculate metrics
 def calculate_metrics(y_true, y_pred):
@@ -193,3 +194,10 @@ root = Tk()
 root.withdraw()
 messagebox.showinfo("Validation Complete", completion_message)
 root.destroy()
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--models_dir", required=True, help="Directory containing ML models")
+    args = parser.parse_args()
+    
+    # Usar args.models_dir para acessar o diretório dos modelos
