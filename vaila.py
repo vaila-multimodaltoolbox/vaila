@@ -1769,19 +1769,20 @@ class Vaila(tk.Tk):
         """Runs the C3D visualizer.
         
         Opens a dialog for the user to choose between:
-          1. Dash/Plotly based visualizer (showc3d.py)
+          1. Matplotlib based visualizer (showc3d.py)
           2. Open3D based visualizer (viewc3d.py)
         """
         # Create a dialog window to choose the visualizer
         dialog = Toplevel(self)
         dialog.title("Selecione o Visualizador C3D")
         dialog.geometry("300x150")
+
         
         Label(dialog, text="Escolha o visualizador C3D:", pady=10).pack()
         
         Button(
             dialog,
-            text="Dash/Plotly Visualizer",
+            text="Matplotlib Visualizer",
             command=lambda: [show_c3d(), dialog.destroy()]
         ).pack(pady=5)
         
