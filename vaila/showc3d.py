@@ -1,404 +1,231 @@
 """
-showc3d.py
-
-Name: Your Name
+Script: showc3d.py
+Author: Prof. Paulo Roberto Pereira Santiago
 Date: 29/07/2024
+Updated: 07/02/2025
 
 Description:
-Script to visualize data from .c3d files using Dash and Plotly,
-with marker selection interface and frame animation.
+------------
+This script visualizes marker data from a C3D file using Matplotlib.
+Marker positions are converted from millimeters to meters.
+The user is prompted to select which markers to display.
+A Matplotlib 3D scatter plot is used to animate the data,
+complete with a slider to choose frames and a play/pause button.
+The FPS from the C3D file is used to ensure correct playback speed.
 
-Version: 0.1
+Usage:
+------
+1. Ensure you have installed:
+   - ezc3d (pip install ezc3d)
+   - numpy
+   - matplotlib (pip install matplotlib)
+   - tkinter (usually included with Python)
+2. Run the script and select a C3D file and markers to display.
+3. Use the slider or Play/Pause button to control the animation.
 """
 
 import os
 import numpy as np
-from ezc3d import c3d
-import dash
-from dash import dcc, html
-from dash.dependencies import Input, Output, State
-import plotly.graph_objs as go
+import ezc3d
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 import tkinter as tk
-from tkinter import (
-    filedialog,
-    Toplevel,
-    Checkbutton,
-    BooleanVar,
-    Button,
-    Scrollbar,
-    Canvas,
-    Frame,
-)
-from flask import request
-import threading
-import webbrowser
+from tkinter import filedialog
+from matplotlib.widgets import Slider, Button
 
+def load_c3d_file():
+    """
+    Opens a dialog to select a C3D file and loads the marker data,
+    the file's frame rate, and marker labels.
+    
+    Returns:
+        pts: np.ndarray with shape (num_frames, num_markers, 3) – points converted to meters
+        filepath: path of the selected file.
+        fps: frames per second from the C3D file.
+        marker_labels: list of marker labels.
+    """
+    root = tk.Tk()
+    root.withdraw()
+    filepath = filedialog.askopenfilename(title="Select a C3D file",
+                                          filetypes=[("C3D Files", "*.c3d")])
+    root.destroy()
+    if not filepath:
+        print("No file selected. Exiting.")
+        exit(0)
+    
+    c3d = ezc3d.c3d(filepath)
+    fps = c3d["header"]["points"]["frame_rate"]
+    pts = c3d["data"]["points"]
+    pts = pts[:3, :, :]   # use only x, y, z coordinates
+    pts = np.transpose(pts, (2, 1, 0))  # shape becomes (num_frames, num_markers, 3)
+    pts = pts * 0.001  # convert from millimeters to meters
+    
+    # Extract marker labels (assumed stored in PARAMETERs)
+    marker_labels = c3d["parameters"]["POINT"]["LABELS"]["value"]
+    if isinstance(marker_labels[0], list):
+        marker_labels = marker_labels[0]
+        
+    return pts, filepath, fps, marker_labels
 
-# Function to read marker labels from .c3d file
-def get_marker_labels(dat):
-    datac3d = c3d(dat)
-    marker_labels = datac3d["parameters"]["POINT"]["LABELS"]["value"]
-    return marker_labels
-
-
-# Function to read data of selected markers from .c3d file
-def get_selected_marker_data(dat, selected_marker_indices):
-    datac3d = c3d(dat)
-    point_data = datac3d["data"]["points"] / 1000  # Convert to meters
-    marker_labels = datac3d["parameters"]["POINT"]["LABELS"]["value"]
-    marker_freq = datac3d["header"]["points"]["frame_rate"]
-
-    # Filter only selected markers
-    selected_markers = point_data[:, selected_marker_indices, :]
-    markers = selected_markers[:3, :, :].transpose((2, 1, 0))
-    num_frames = markers.shape[0]
-    num_markers = markers.shape[1]
-
-    return (
-        markers,
-        [marker_labels[i] for i in selected_marker_indices],
-        marker_freq,
-        num_frames,
-        num_markers,
-    )
-
-
-# Function to open file dialog and choose .c3d file
-def select_file():
-    file_path = filedialog.askopenfilename(filetypes=[("C3D files", "*.c3d")])
-    return file_path
-
-
-# Function to show marker selection interface
-def select_markers_gui(marker_labels):
-    selected_markers = []
-
-    def on_select():
-        nonlocal selected_markers
-        selected_markers = [i for i, var in enumerate(marker_vars) if var.get()]
-        selection_window.quit()  # End the main Tkinter loop
-        selection_window.destroy()  # Destroy the marker selection window
-
-    def select_all():
-        for var in marker_vars:
-            var.set(True)
-
-    def deselect_all():
-        for var in marker_vars:
-            var.set(False)
-
-    selection_window = Toplevel()
-    selection_window.title("Select Markers")
-    selection_window.geometry(
-        f"{selection_window.winfo_screenwidth()}x{int(selection_window.winfo_screenheight()*0.9)}"
-    )
-
-    canvas = Canvas(selection_window)
-    scrollbar = Scrollbar(selection_window, orient="vertical", command=canvas.yview)
-    scrollable_frame = Frame(canvas)
-
-    scrollable_frame.bind(
-        "<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-    )
-
-    canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-    canvas.configure(yscrollcommand=scrollbar.set)
-
-    marker_vars = [BooleanVar() for _ in marker_labels]
-
-    num_columns = 10  # Number of columns for the labels
-
+def select_markers(marker_labels):
+    """
+    Displays a Tkinter window with a list of marker labels so the user can select which markers to display.
+    
+    Args:
+        marker_labels (list): list of marker labels.
+    
+    Returns:
+        List of selected marker indices.
+    """
+    root = tk.Tk()
+    root.title("Select Markers to Display")
+    
+    listbox = tk.Listbox(root, selectmode="multiple", width=50, height=15)
     for i, label in enumerate(marker_labels):
-        chk = Checkbutton(scrollable_frame, text=label, variable=marker_vars[i])
-        chk.grid(row=i // num_columns, column=i % num_columns, sticky="w")
+        listbox.insert(tk.END, f"{i}: {label}")
+    listbox.pack(padx=10, pady=10)
+    
+    # Create a frame for extra control buttons
+    button_frame = tk.Frame(root)
+    button_frame.pack(pady=5)
+    
+    def select_all():
+        listbox.select_set(0, tk.END)
+    
+    def unselect_all():
+        listbox.selection_clear(0, tk.END)
+    
+    # Add Select All and Unselect All buttons.
+    btn_select_all = tk.Button(button_frame, text="Select All", command=select_all)
+    btn_unselect_all = tk.Button(button_frame, text="Unselect All", command=unselect_all)
+    btn_select_all.pack(side=tk.LEFT, padx=5)
+    btn_unselect_all.pack(side=tk.LEFT, padx=5)
+    
+    def on_select():
+        root.quit()
+    btn_select = tk.Button(root, text="Select", command=on_select)
+    btn_select.pack(pady=(0, 10))
+    
+    root.mainloop()
+    selected_indices = listbox.curselection()
+    root.destroy()
+    return [int(i) for i in selected_indices]
 
-    canvas.pack(side="left", fill="both", expand=True)
-    scrollbar.pack(side="right", fill="y")
+def draw_cartesian_axes(ax, axis_length=0.25):
+    """
+    Draws the Cartesian axes on the given Matplotlib 3D axes.
+      - X axis: red
+      - Y axis: green
+      - Z axis: blue
+    """
+    # X axis (red)
+    ax.plot([0, axis_length], [0, 0], [0, 0], color='red', linewidth=2)
+    # Y axis (green)
+    ax.plot([0, 0], [0, axis_length], [0, 0], color='green', linewidth=2)
+    # Z axis (blue)
+    ax.plot([0, 0], [0, 0], [0, axis_length], color='blue', linewidth=2)
 
-    btn_frame = Frame(selection_window)
-    btn_frame.pack(side="right", padx=10, pady=10, fill="y", anchor="center")
+def main():
+    # Load data from the C3D file
+    pts, filepath, fps, marker_labels = load_c3d_file()
+    num_frames, total_markers, _ = pts.shape
+    
+    # Let the user select which markers to display
+    selected_indices = select_markers(marker_labels)
+    if not selected_indices:
+        print("No markers selected, exiting.")
+        exit(0)
+    pts = pts[:, selected_indices, :]
+    num_markers = len(selected_indices)
+    
+    file_name = os.path.basename(filepath)
+    
+    # Create a figure that fills most of the window and a main 3D axes that occupies nearly the entire figure.
+    fig = plt.figure(figsize=(10, 8))
+    # Ensure the axes are 3D by setting projection='3d'
+    ax = fig.add_axes([0.0, 0.12, 1.0, 0.88], projection='3d')
+    
+    # Plot initial marker positions (frame 0) using a scatter plot with smaller blue markers.
+    scat = ax.scatter(pts[0, :, 0], pts[0, :, 1], pts[0, :, 2],
+                      c='blue', s=20)
+    
+    ax.set_xlabel("X")
+    ax.set_ylabel("Y")
+    ax.set_zlabel("Z")
+    ax.set_title(f"C3D Viewer | File: {file_name} | Markers: {num_markers}/{total_markers} | Frames: {num_frames} | FPS: {fps}\n"
+                 "Controls: [Slider] | [Play/Pause]")
+    
+    # Compute global limits from all frames and markers
+    x_min, x_max = pts[:,:,0].min(), pts[:,:,0].max()
+    y_min, y_max = pts[:,:,1].min(), pts[:,:,1].max()
+    z_min, z_max = pts[:,:,2].min(), pts[:,:,2].max()
+    margin_x = 0.1 * (x_max - x_min) if x_max != x_min else 0.5
+    margin_y = 0.1 * (y_max - y_min) if y_max != y_min else 0.5
+    margin_z = 0.1 * (z_max - z_min) if z_max != z_min else 0.5
+    ax.set_xlim(x_min - margin_x, x_max + margin_x)
+    ax.set_ylim(y_min - margin_y, y_max + margin_y)
+    ax.set_zlim(z_min - margin_z, z_max + margin_z)
+    
+    # Standard Matplotlib rotation and set aspect ratio equal.
+    ax.set_aspect('equal')
+    
+    # Draw Cartesian axes on the plot
+    draw_cartesian_axes(ax, axis_length=0.25)
+    
+    # Create a slider for frame selection; note the axes for the slider now lie at the very bottom.
+    ax_frame = fig.add_axes([0.25, 0.02, 0.5, 0.04])
+    slider_frame = Slider(ax_frame, 'Frame', 0, num_frames - 1, valinit=0, valfmt='%d')
+    
+    # Global variable for current frame (mutable via a list)
+    current_frame = [0]
 
-    btn_select_all = Button(btn_frame, text="Select All", command=select_all)
-    btn_select_all.pack(side="top", pady=5)
+    def update_frame(val):
+        frame = int(slider_frame.val) if isinstance(val, float) else int(val)
+        current_frame[0] = frame
+        new_positions = pts[frame]
+        # Update scatter plot data using internal _offsets3d
+        scat._offsets3d = (new_positions[:, 0], new_positions[:, 1], new_positions[:, 2])
+        fig.canvas.draw_idle()
+        
+    slider_frame.on_changed(update_frame)
+    
+    # Use a Matplotlib timer to advance frames
+    playing = [False]  # mutable flag for play state
+    timer = [None]     # mutable container for the timer instance
 
-    btn_deselect_all = Button(btn_frame, text="Deselect All", command=deselect_all)
-    btn_deselect_all.pack(side="top", pady=5)
-
-    btn_select = Button(btn_frame, text="Confirm", command=on_select)
-    btn_select.pack(side="top", pady=5)
-
-    selection_window.mainloop()
-
-    return selected_markers
-
-
-# Initialize Dash app
-app = dash.Dash(__name__)
-server = app.server
-app.layout = html.Div(
-    [
-        dcc.Graph(
-            id="scatter-plot", style={"height": "90vh"}, config={"scrollZoom": True}
-        ),
-        dcc.Slider(
-            id="frame-slider",
-            min=0,
-            max=0,
-            step=1,
-            value=0,
-            marks={i: str(i) for i in range(0, 1)},  # Dynamic marks
-        ),
-        html.Div(
-            id="frame-display", style={"textAlign": "center", "marginTop": "10px"}
-        ),
-        dcc.Store(id="camera-store"),  # Use dcc.Store to store camera state
-        dcc.Store(
-            id="annotations-store", data=[]
-        ),  # Store to keep track of annotations
-        html.Div(
-            id="keypress", style={"display": "none"}
-        ),  # Hidden div to capture keypress
-        dcc.Interval(
-            id="interval", interval=50, n_intervals=0, disabled=True
-        ),  # Interval for animation
-        html.Div(
-            [
-                html.Button(
-                    "Play", id="play-button", n_clicks=0, style={"marginRight": "10px"}
-                ),  # Play button with margin
-                html.Button(
-                    "Stop Server", id="stop-button", n_clicks=0
-                ),  # Stop Server button
-            ],
-            style={"textAlign": "center"},
-        ),  # Center the buttons
-    ]
-)
-
-
-# Function to convert camera state to JSON-serializable format
-def camera_to_dict(camera):
-    if camera is None:
-        return None
-    return {
-        "center": camera["center"],
-        "eye": camera["eye"],
-        "up": camera["up"],
-        "projection": camera["projection"],
-    }
-
-
-# Define the callback to update the plot
-@app.callback(
-    [
-        Output("scatter-plot", "figure"),
-        Output("camera-store", "data"),
-        Output("frame-display", "children"),
-    ],
-    [Input("frame-slider", "value"), Input("interval", "n_intervals")],
-    [State("scatter-plot", "relayoutData")],
-)
-def update_figure(selected_frame, n_intervals, relayoutData):
-    frame = selected_frame % num_frames  # Ensure the frame index is within bounds
-
-    fig = go.Figure()
-
-    if markers is not None:
-        for marker in range(num_markers):
-            x = markers[frame, marker, 0]
-            y = markers[frame, marker, 1]
-            z = markers[frame, marker, 2]
-            fig.add_trace(
-                go.Scatter3d(
-                    x=[x],
-                    y=[y],
-                    z=[z],
-                    mode="markers",
-                    marker=dict(size=4),
-                    name=selected_marker_labels[
-                        marker
-                    ],  # Use selected_marker_labels here
-                )
-            )
-
-        # Add the global coordinate system
-        for axis, color in zip(global_coordinate_system, ["red", "green", "blue"]):
-            fig.add_trace(
-                go.Scatter3d(
-                    x=[0, axis[0] * axis_length],
-                    y=[0, axis[1] * axis_length],
-                    z=[0, axis[2] * axis_length],
-                    mode="lines",
-                    line=dict(color=color, width=5),
-                    showlegend=False,  # Hide legend for global coordinate system
-                )
-            )
-
-    fig.update_layout(
-        scene=dict(
-            xaxis=dict(
-                range=[-1, 5],
-                autorange=False,
-                showgrid=True,
-                zeroline=True,
-                showline=True,
-            ),
-            yaxis=dict(
-                range=[-1, 5],
-                autorange=False,
-                showgrid=True,
-                zeroline=True,
-                showline=True,
-            ),
-            zaxis=dict(
-                range=[0, 2],
-                autorange=False,
-                showgrid=True,
-                zeroline=True,
-                showline=True,
-                backgroundcolor="#A7A8A9",
-            ),
-            aspectratio=dict(x=2, y=2, z=4),
-            aspectmode="cube",
-        ),
-        margin=dict(l=0, r=0, b=0, t=40),
-        title={"text": f"{file_name}", "x": 0.5, "xanchor": "center"},
-    )
-    # Restore the camera view if available
-    if relayoutData and "scene.camera" in relayoutData:
-        fig["layout"]["scene"]["camera"] = relayoutData["scene.camera"]
-
-    # Convert camera to dict for JSON serialization
-    camera_state = (
-        fig["layout"]["scene"]["camera"] if "scene.camera" in fig["layout"] else None
-    )
-
-    # Display the current frame number
-    frame_display = f"Current frame: {frame}"
-
-    return fig, camera_to_dict(camera_state), frame_display
-
-
-# Callback to update slider position during playback
-@app.callback(
-    Output("frame-slider", "value"),
-    [Input("interval", "n_intervals")],
-    [State("frame-slider", "value")],
-)
-def update_slider(n_intervals, current_value):
-    new_value = (current_value + 1) % num_frames
-    return new_value
-
-
-# Callback to handle keypress events
-@app.callback(
-    Output("annotations-store", "data"),
-    [Input("frame-slider", "value")],
-    [State("annotations-store", "data"), State("keypress", "n_clicks")],
-)
-def handle_keypress(selected_frame, annotations, n_clicks):
-    if not annotations:
-        annotations = []
-
-    # This is a placeholder for keypress detection
-    # You can implement actual keypress detection using JavaScript and sending events to Dash
-    key = None  # Placeholder for actual keypress value
-
-    if key == "p":
-        annotations.append(selected_frame)
-        with open(f"{file_name}.txt", "a") as f:
-            f.write(f"{len(annotations)},{selected_frame}\n")
-    elif key == "d" and annotations:
-        annotations.pop()
-        with open(f"{file_name}.txt", "w") as f:
-            for i, frame in enumerate(annotations):
-                f.write(f"{i+1},{frame}\n")
-
-    return annotations
-
-
-# Callback to handle play button
-@app.callback(
-    Output("interval", "disabled"),
-    [Input("play-button", "n_clicks")],
-    [State("interval", "disabled")],
-)
-def toggle_interval(n_clicks, interval_disabled):
-    if n_clicks % 2 == 1:
-        return False  # Enable interval
-    else:
-        return True  # Disable interval
-
-
-# Callback to handle stop button
-@app.callback(Output("stop-button", "n_clicks"), [Input("stop-button", "n_clicks")])
-def stop_server(n_clicks):
-    if n_clicks > 0:
-        # Stop the Dash server by closing the Flask server
-        func = request.environ.get("werkzeug.server.shutdown")
-        if func is not None:
-            func()
-    return n_clicks
-
-
-# Function to run the Dash app in a separate thread
-def run_dash():
-    app.run_server(debug=True, use_reloader=False)
-
-
-# Main function to show data from .c3d file
-def show_c3d():
-    global markers, selected_marker_labels, num_markers, num_frames, global_coordinate_system, axis_length, file_name
-    try:
-        root = tk.Tk()
-        root.withdraw()  # Hide the main Tkinter window
-
-        file_path = select_file()
-        if file_path:
-            marker_labels = get_marker_labels(file_path)
-            file_name = os.path.basename(file_path)
-
-            selected_marker_indices = select_markers_gui(marker_labels)
-
-            if selected_marker_indices:
-                (
-                    markers,
-                    selected_marker_labels,
-                    marker_freq,
-                    num_frames,
-                    num_markers,
-                ) = get_selected_marker_data(file_path, selected_marker_indices)
-                global_coordinate_system = np.eye(3)
-                axis_length = 0.2
-
-                # Update slider max value and marks dynamically
-                app.layout.children[1].max = num_frames - 1
-                app.layout.children[1].marks = {
-                    i: str(i) for i in range(0, num_frames, max(1, num_frames // 10))
-                }
-
-                # Ensure all Tkinter windows are destroyed
-                root.update()
-                root.destroy()
-
-                # Launch the browser
-                threading.Thread(target=run_dash).start()
-                webbrowser.open("http://127.0.0.1:8050")
-
-            else:
-                print("No marker was selected.")
-        else:
-            print("No file was selected.")
-    except Exception as e:
-        print(f"An error occurred: {e}")
-    finally:
-        if "root" in locals():
+    def timer_callback():
+        current_frame[0] = (current_frame[0] + 1) % num_frames
+        slider_frame.set_val(current_frame[0])
+        update_frame(current_frame[0])
+    
+    def play_pause(event):
+        if not playing[0]:
+            playing[0] = True
+            btn_play.label.set_text("Pause")
+            timer[0] = fig.canvas.new_timer(interval=1000/fps)
             try:
-                root.update()
-                root.destroy()
-            except tk.TclError:
+                timer[0].single_shot = False
+            except AttributeError:
                 pass
+            timer[0].add_callback(timer_callback)
+            timer[0].start()
+        else:
+            playing[0] = False
+            btn_play.label.set_text("Play")
+            if timer[0] is not None:
+                timer[0].stop()
+                timer[0] = None
 
+    # Add a play/pause button for animation; its axes are defined near the bottom.
+    ax_play = fig.add_axes([0.82, 0.02, 0.1, 0.05])
+    btn_play = Button(ax_play, 'Play')
+    btn_play.on_clicked(play_pause)
+    
+    plt.show()
+
+def show_c3d():
+    main()
 
 if __name__ == "__main__":
-    show_c3d()
+    main()
