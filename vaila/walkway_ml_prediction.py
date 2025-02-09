@@ -16,6 +16,7 @@
 # Key Features:
 # --------------
 # - Loads pre-trained models (joblib format) for various gait metrics.
+# - Offers option to use default models or custom trained models.
 # - Scales input features using pre-calculated scaling parameters (JSON format).
 # - Handles missing scaler parameters gracefully.
 # - Preserves subject name and trial number in the output CSV file.
@@ -24,15 +25,27 @@
 
 # Execution:
 # ----------
-# - Ensure that the pre-trained models and scaler parameter files are present
-#   in the 'models' directory.  These should have been created by a training
-#   script (e.g., ML_models_training.py).
 # - Run the script:
 #   $ python walkway_ml_prediction.py
 # - Select the input CSV file containing the features.
+# - Choose whether to use default models or custom models:
+#   * Default models: Uses pre-trained models from vaila/models directory
+#   * Custom models: Allows selection of a directory containing user-trained models
 # - Choose the metrics to predict using the GUI.
 # - The results will be saved in a timestamped directory within the current
 #   working directory.
+
+# Model Directory Structure:
+# -------------------------
+# Whether using default or custom models, the directory should contain:
+# /models
+#   /step_length
+#     - step_length_model.pkl
+#     - scaler_params.json
+#   /step_time
+#     - step_time_model.pkl
+#     - scaler_params.json
+#   ... (and so on for other metrics)
 
 # Input Data Format:
 # ------------------
@@ -68,11 +81,26 @@ from datetime import datetime
 
 # Function to load models and make predictions
 def predict_metrics(selected_metrics, valid_features, output_dir):
-    # Permitir seleção do diretório dos modelos
-    models_path = filedialog.askdirectory(title="Select Models Directory")
-    if not models_path:
-        messagebox.showwarning("Warning", "No models directory selected.")
-        return
+    # Perguntar ao usuário se deseja usar os modelos padrão
+    use_default = messagebox.askyesno(
+        "Model Selection",
+        "Would you like to use the default pre-trained models?\n\n" +
+        "Click 'Yes' to use default models from vaila/models\n" +
+        "Click 'No' to select your own models directory"
+    )
+
+    if use_default:
+        # Usar modelos da pasta padrão dentro do diretório vaila
+        models_path = os.path.join(os.path.dirname(__file__), "models")
+        if not os.path.exists(models_path):
+            messagebox.showerror("Error", "Default models directory not found.")
+            return
+    else:
+        # Permitir seleção do diretório dos modelos pelo usuário
+        models_path = filedialog.askdirectory(title="Select Models Directory")
+        if not models_path:
+            messagebox.showwarning("Warning", "No models directory selected.")
+            return
 
     results = {}
 
