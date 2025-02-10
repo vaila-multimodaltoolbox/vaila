@@ -1897,14 +1897,41 @@ class Vaila(tk.Tk):
 
     # C_C_r1_c1
     def show_c3d_data(self):
-        """Runs the show_c3d_data module.
-
-        This function runs the show_c3d_data module, which can be used to
-        visualize data from .c3d files using Dash and Plotly, with marker
-        selection interface and frame animation.
-
+        """Runs the C3D visualizer.
+        
+        Opens a dialog for the user to choose between:
+          1. Matplotlib based visualizer (showc3d.py)
+          2. Open3D based visualizer (viewc3d.py)
         """
-        show_c3d()
+        # Create a dialog window to choose the visualizer
+        dialog = Toplevel(self)
+        dialog.title("Selecione o Visualizador C3D")
+        dialog.geometry("300x150")
+
+        
+        Label(dialog, text="Escolha o visualizador C3D:", pady=10).pack()
+        
+        Button(
+            dialog,
+            text="Matplotlib Visualizer",
+            command=lambda: [show_c3d(), dialog.destroy()]
+        ).pack(pady=5)
+        
+        Button(
+            dialog,
+            text="Open3D Visualizer",
+            command=lambda: [viewc3d.main(), dialog.destroy()]
+        ).pack(pady=5)
+        
+        Button(
+            dialog,
+            text="Cancelar",
+            command=dialog.destroy
+        ).pack(pady=10)
+        
+        dialog.transient(self)
+        dialog.grab_set()
+        self.wait_window(dialog)
 
     # C_C_r1_c2
     def show_csv_file(self):
