@@ -142,6 +142,7 @@ from vaila import (
     yolov11track,
     cutvideo,
     vaila_distortvideo_gui,
+    viewc3d,
 )
 
 
