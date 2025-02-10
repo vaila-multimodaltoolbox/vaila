@@ -4,7 +4,7 @@ vaila.py
 ===============================================================================
 Author: Paulo R. P. Santiago
 Date: 22 January 2025
-Version updated: 03.Feb.2025
+Version updated: 10.Feb.2025
 Python Version: 3.12.8
 
 
@@ -101,7 +101,7 @@ from vaila import (
     markerless_3D_analysis,
     mocap_analysis,
     forceplate_analysis,
-    gnss_analysis,
+    analysis_gui,
     convert_c3d_to_csv,
     convert_csv_to_c3d,
     rearrange_data_in_directory,
@@ -219,7 +219,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 03.Feb.2025")
+        self.title("vailá - 10.Feb.2025")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -1334,18 +1334,12 @@ class Vaila(tk.Tk):
     # B_r2_c4
     def gnss_analysis(self):
         """Runs the GNSS Analysis module.
-
-        This function runs the GNSS Analysis module, which can be used to analyze
-        GNSS data from CSV files. It processes the GNSS data to extract relevant
-        metrics such as speed, distance, and time. The module will then generate CSV
-        files with the processed results and plots of the GNSS signals.
-
-        The user will be prompted to select the directory containing the GNSS CSV
-        files and input the sampling rate and start and end indices for analysis.
-
+        
+        This function runs the GNSS Analysis module...
         """
-        show_vaila_message()
-        # gnss_analysis.run_gnss_analysis()
+        analysis_gui()
+
+
 
     # B_r2_c5
     def eeg_analysis(self):

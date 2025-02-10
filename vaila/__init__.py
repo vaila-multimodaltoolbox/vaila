@@ -39,7 +39,6 @@ from . import markerless_2D_analysis
 from . import markerless_3D_analysis
 from . import mocap_analysis
 from . import forceplate_analysis
-from . import gnss_analysis
 from .filemanager import (
     import_file,
     export_file,
@@ -83,6 +82,7 @@ from .spectral_features import (
 )
 from .interpolation_split import run_fill_split_dialog
 from .vaila_and_jump import vaila_and_jump
+from .gnss_analysis import analysis_gui
 
 __all__ = [
     "plot_ellipse_pca",

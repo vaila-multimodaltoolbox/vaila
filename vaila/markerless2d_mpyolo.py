@@ -22,6 +22,8 @@ import subprocess
 from rich import print as rprint
 import time
 from tkinter import ttk
+from urllib.request import urlretrieve  # New import for downloading models
+import threading
 
 # Configurações para evitar conflitos
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
@@ -47,6 +49,38 @@ COCO_CLASSES = {
     74: 'clock', 75: 'vase', 76: 'scissors', 77: 'teddy bear', 78: 'hair drier',
     79: 'toothbrush'
 }
+
+def download_all_models(models_dir):
+    """Download all Ultralytics models if they are not already present."""
+    if not os.path.exists(models_dir):
+        os.makedirs(models_dir)
+    
+    # Dictionary where keys are the model filenames and values are the URLs.
+    # The URLs are from the Ultralytics assets releases.
+    models = {
+        'yolo11n.pt': 'https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11n.pt',
+        'yolo11s.pt': 'https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11s.pt',
+        'yolo11m.pt': 'https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11m.pt',
+        'yolo11l.pt': 'https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11l.pt',
+        'yolo11x.pt': 'https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11x.pt',
+        'yolo11n-pose.pt': 'https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11n-pose.pt',
+        'yolo11s-pose.pt': 'https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11s-pose.pt',
+        'yolo11m-pose.pt': 'https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11m-pose.pt',
+        'yolo11l-pose.pt': 'https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11l-pose.pt',
+        'yolo11x-pose.pt': 'https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11x-pose.pt'
+    }
+    
+    for model_name, url in models.items():
+        model_path = os.path.join(models_dir, model_name)
+        if os.path.exists(model_path):
+            print(f"{model_name} already exists, skipping download.")
+        else:
+            print(f"Downloading {model_name} from {url} ...")
+            try:
+                urlretrieve(url, model_path)
+                print(f"Downloaded {model_name} to {model_path}")
+            except Exception as e:
+                print(f"Error downloading {model_name}: {e}")
 
 def initialize_csv(output_dir, class_name, object_id, is_person=False):
     """Initialize a CSV file for a specific class."""
@@ -775,7 +809,79 @@ def save_pose_to_csv(csv_path, frame_idx, person_id, landmarks_px):
     else:
         df.to_csv(csv_path, mode='a', header=False, index=False)
 
+def run_tracker_in_thread(model_path, video_source, tracker_config, save_output):
+    """
+    Run YOLO tracker in its own thread for concurrent processing.
+    Args:
+        model_path (str): Local path of the model (or model name for auto-download).
+        video_source (str): Path to the video file.
+        tracker_config (str): Tracker configuration file (e.g. 'bytetrack.yaml').
+        save_output (bool): If True, outputs will be saved.
+    """
+    # Each thread uses its own model instance
+    model = YOLO(model_path)
+    print(f"Started tracking for: {video_source}")
+    results = model.track(source=video_source, tracker=tracker_config, save=save_output, stream=True)
+    for _ in results:
+        pass
+    print(f"Finished tracking for: {video_source}")
+
+def run_multithreaded_tracking():
+    """
+    Spawns a separate thread for each video in a chosen directory to run YOLO tracking concurrently.
+    Inspired by the multithreaded tracking example at:
+    https://docs.ultralytics.com/modes/track/#multithreaded-tracking
+    """
+    root = tk.Tk()
+    root.withdraw()
+    video_dir = filedialog.askdirectory(title="Select Directory with Videos for Tracking")
+    if not video_dir:
+        print("No directory selected for tracking. Exiting.")
+        return
+
+    video_extensions = ('.mp4', '.avi', '.mov', '.mkv', '.MP4', '.AVI', '.MOV', '.MKV')
+    video_files = [os.path.join(video_dir, f) for f in os.listdir(video_dir)
+                   if os.path.isfile(os.path.join(video_dir, f)) and f.endswith(video_extensions)]
+    if not video_files:
+        print("No video files found in the selected directory.")
+        return
+
+    # Default tracker configuration (change as needed: e.g. "botsort.yaml" or "bytetrack.yaml")
+    tracker_config = "bytetrack.yaml"
+    save_output = True
+
+    models_dir = os.path.join(os.path.dirname(__file__), 'models')
+    download_all_models(models_dir)
+    
+    # Use the local model if available; otherwise, rely on YOLO auto-download.
+    model_path = os.path.join(models_dir, 'yolo11x.pt')
+    if os.path.exists(model_path):
+        print(f"Found local model for tracking: {model_path}")
+    else:
+        print("Local model not found, using automatic download.")
+        model_path = "yolo11x.pt"
+
+    threads = []
+    for video_file in video_files:
+        t = threading.Thread(
+            target=run_tracker_in_thread,
+            args=(model_path, video_file, tracker_config, save_output),
+            daemon=True
+        )
+        threads.append(t)
+        t.start()
+
+    for t in threads:
+        t.join()
+
+    print("Multithreaded tracking complete.")
+    root.destroy()
+
 def run_markerless2d_mpyolo():
+    # On the first run, download all models to the local "models" directory.
+    models_dir = os.path.join(os.path.dirname(__file__), 'models')
+    download_all_models(models_dir)
+    
     root = tk.Tk()
     root.withdraw()
 
@@ -796,16 +902,17 @@ def run_markerless2d_mpyolo():
     main_output_dir = os.path.join(video_dir, f"markerless2d_processed_{timestamp}")
     os.makedirs(main_output_dir, exist_ok=True)
 
-    # Initialize models
-    model_path = os.path.join(os.path.dirname(__file__), 'models', 'yolo11x.pt')
-    print(f"Looking for YOLO model at: {model_path}")
-    if not os.path.exists(model_path):
-        print(f"Error: YOLO model not found at {model_path}")
-        return
-        
-    model = YOLO(model_path)
-    mp_pose = mp.solutions.pose  # Módulo pose
-    mp_drawing = mp.solutions.drawing_utils  # Módulo drawing
+    # Build the full model path for detection
+    model_path = os.path.join(models_dir, 'yolo11x.pt')
+    if os.path.exists(model_path):
+        print(f"Found model at: {model_path}. Using the local file.")
+        model = YOLO(model_path)
+    else:
+        print("Model not found, downloading automatically...")
+        model = YOLO("yolo11x.pt")
+    
+    mp_pose = mp.solutions.pose  # MediaPipe Pose module
+    mp_drawing = mp.solutions.drawing_utils  # MediaPipe Drawing module
 
     # Get list of video files in directory (not in subdirectories)
     video_extensions = ('.mp4', '.avi', '.mov', '.mkv', '.MP4', '.AVI', '.MOV', '.MKV')
@@ -819,7 +926,7 @@ def run_markerless2d_mpyolo():
 
     print(f"\nFound {len(video_files)} video files to process.")
     
-    # Process each video
+    # Process each video (sequentially in this mode)
     for video_idx, video_file in enumerate(video_files, 1):
         print(f"\n[{video_idx}/{len(video_files)}] Processing {video_file}")
         video_path = os.path.join(video_dir, video_file)
@@ -844,10 +951,16 @@ def run_markerless2d_mpyolo():
             os.startfile(main_output_dir)
         elif os.name == 'posix':  # macOS and Linux
             subprocess.run(['xdg-open', main_output_dir])
-    except:
-        pass
+    except Exception as e:
+        print(f"Could not open the output directory: {e}")
 
     root.destroy()
 
 if __name__ == "__main__":
+    # Uncomment the function you wish to run:
+    
+    # Sequential processing with detection, pose estimation, and visualization:
     run_markerless2d_mpyolo()
+    
+    # Multithreaded tracking using Ultralytics YOLO's track mode:
+    # run_multithreaded_tracking()

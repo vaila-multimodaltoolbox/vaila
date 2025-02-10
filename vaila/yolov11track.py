@@ -189,13 +189,7 @@ class ModelSelectorDialog(tk.simpledialog.Dialog):
             ("yolo11s-obb.pt", "OBB - Small"),
             ("yolo11m-obb.pt", "OBB - Medium"),
             ("yolo11l-obb.pt", "OBB - Large"),
-            ("yolo11x-obb.pt", "OBB - XLarge"),
-            # Tracking
-            ("yolo11n-track.pt", "Tracking - Nano"),
-            ("yolo11s-track.pt", "Tracking - Small"),
-            ("yolo11m-track.pt", "Tracking - Medium"),
-            ("yolo11l-track.pt", "Tracking - Large"),
-            ("yolo11x-track.pt", "Tracking - XLarge")
+            ("yolo11x-obb.pt", "OBB - XLarge")
         ]
 
         self.listbox = tk.Listbox(master, width=50, height=15)

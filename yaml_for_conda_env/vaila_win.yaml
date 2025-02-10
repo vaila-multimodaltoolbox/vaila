@@ -92,3 +92,6 @@ dependencies:
       - open3d
       - glfw
       - xgboost
+      - gpxpy
+      - simplekml
+      - folium
