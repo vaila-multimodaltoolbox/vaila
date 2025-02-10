@@ -91,3 +91,4 @@ dependencies:
       - intel-openmp
       - open3d
       - glfw
+      - xgboost
