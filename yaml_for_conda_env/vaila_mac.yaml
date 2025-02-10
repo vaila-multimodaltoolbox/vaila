@@ -611,3 +611,4 @@ dependencies:
       - boxmot
       - open3d
       - glfw
+      - xgboost
