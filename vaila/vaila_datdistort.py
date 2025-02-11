@@ -31,13 +31,13 @@ def load_distortion_parameters(csv_path):
 def undistort_points(points, camera_matrix, dist_coeffs, image_size):
     """
     Undistort 2D points using camera calibration parameters.
-    
+
     Args:
         points: Nx2 array of (x,y) coordinates
         camera_matrix: 3x3 camera intrinsic matrix
         dist_coeffs: Distortion coefficients [k1, k2, p1, p2, k3]
         image_size: (width, height) of the original image
-    
+
     Returns:
         Nx2 array of undistorted (x,y) coordinates
     """
@@ -45,22 +45,24 @@ def undistort_points(points, camera_matrix, dist_coeffs, image_size):
     points = np.array(points, dtype=np.float32)
     if points.size == 0:  # Check if points array is empty
         return points
-        
+
     # Ensure camera matrix and dist_coeffs are float32
     camera_matrix = np.array(camera_matrix, dtype=np.float32)
     dist_coeffs = np.array(dist_coeffs, dtype=np.float32)
-    
+
     # Reshape points to Nx1x2 format required by cv2.undistortPoints
     points = points.reshape(-1, 1, 2)
-    
+
     # Get optimal new camera matrix
     new_camera_matrix, _ = cv2.getOptimalNewCameraMatrix(
         camera_matrix, dist_coeffs, image_size, 1, image_size
     )
-    
+
     try:
         # Undistort points
-        undistorted = cv2.undistortPoints(points, camera_matrix, dist_coeffs, None, new_camera_matrix)
+        undistorted = cv2.undistortPoints(
+            points, camera_matrix, dist_coeffs, None, new_camera_matrix
+        )
         # Reshape back to Nx2
         return undistorted.reshape(-1, 2)
     except cv2.error as e:
@@ -80,39 +82,43 @@ def process_dat_file(input_path, output_path, parameters, image_size=(1920, 1080
     try:
         df = pd.read_csv(input_path)
     except:
-        df = pd.read_csv(input_path, sep=';')
-    
+        df = pd.read_csv(input_path, sep=";")
+
     # Create camera matrix
-    camera_matrix = np.array([
-        [parameters["fx"], 0, parameters["cx"]],
-        [0, parameters["fy"], parameters["cy"]],
-        [0, 0, 1]
-    ])
-    
+    camera_matrix = np.array(
+        [
+            [parameters["fx"], 0, parameters["cx"]],
+            [0, parameters["fy"], parameters["cy"]],
+            [0, 0, 1],
+        ]
+    )
+
     # Create distortion coefficients array
-    dist_coeffs = np.array([
-        parameters["k1"],
-        parameters["k2"],
-        parameters["p1"],
-        parameters["p2"],
-        parameters["k3"]
-    ])
-    
+    dist_coeffs = np.array(
+        [
+            parameters["k1"],
+            parameters["k2"],
+            parameters["p1"],
+            parameters["p2"],
+            parameters["k3"],
+        ]
+    )
+
     # Get all x,y column pairs (assuming format p1_x, p1_y, p2_x, p2_y, etc)
     columns = df.columns.tolist()
-    x_columns = [col for col in columns if col.endswith('_x')]
-    y_columns = [col for col in columns if col.endswith('_y')]
-    
+    x_columns = [col for col in columns if col.endswith("_x")]
+    y_columns = [col for col in columns if col.endswith("_y")]
+
     # Sort columns to ensure matching pairs
     x_columns.sort()
     y_columns.sort()
-    
+
     result_frames = []
-    
+
     # Process each frame
     for _, row in df.iterrows():
-        frame_num = row['frame']
-        
+        frame_num = row["frame"]
+
         # Collect valid points for this frame
         points = []
         for x_col, y_col in zip(x_columns, y_columns):
@@ -124,31 +130,37 @@ def process_dat_file(input_path, output_path, parameters, image_size=(1920, 1080
                     points.append([x, y])
             except (ValueError, TypeError):
                 continue
-        
+
         points = np.array(points)
-        
+
         # Skip if no valid points
         if len(points) == 0:
             result_frames.append(row.to_dict())
             continue
-            
+
         # Undistort valid points
         try:
-            undistorted_points = undistort_points(points, camera_matrix, dist_coeffs, image_size)
-            
+            undistorted_points = undistort_points(
+                points, camera_matrix, dist_coeffs, image_size
+            )
+
             # Create new row with undistorted coordinates
-            new_row = {'frame': frame_num}
+            new_row = {"frame": frame_num}
             point_idx = 0
-            
+
             # Reconstruct all columns, replacing coordinates with undistorted ones
             for x_col, y_col in zip(x_columns, y_columns):
                 if point_idx < len(undistorted_points):
                     # Get original values
                     orig_x = row[x_col]
                     orig_y = row[y_col]
-                    
+
                     # Only update if original point was valid
-                    if pd.notna(orig_x) and pd.notna(orig_y) and not (orig_x == 0 and orig_y == 0):
+                    if (
+                        pd.notna(orig_x)
+                        and pd.notna(orig_y)
+                        and not (orig_x == 0 and orig_y == 0)
+                    ):
                         new_row[x_col] = undistorted_points[point_idx][0]
                         new_row[y_col] = undistorted_points[point_idx][1]
                         point_idx += 1
@@ -160,12 +172,12 @@ def process_dat_file(input_path, output_path, parameters, image_size=(1920, 1080
                     # Keep original values for any remaining columns
                     new_row[x_col] = row[x_col]
                     new_row[y_col] = row[y_col]
-                
+
             result_frames.append(new_row)
         except Exception as e:
             print(f"Error processing frame {frame_num}: {e}")
             result_frames.append(row.to_dict())
-    
+
     # Create output DataFrame and save
     result_df = pd.DataFrame(result_frames)
     result_df.to_csv(output_path, index=False)
@@ -195,7 +207,7 @@ def run_datdistort():
     print("Select the distortion parameters CSV file:")
     parameters_path = select_file(
         title="Select Calibration Parameters File",
-        filetypes=(("CSV Files", "*.csv"), ("All Files", "*.*"))
+        filetypes=(("CSV Files", "*.csv"), ("All Files", "*.*")),
     )
     if not parameters_path:
         print("No parameters file selected. Exiting.")
@@ -213,13 +225,13 @@ def run_datdistort():
     # Process all CSV and DAT files in the directory
     processed_count = 0
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    
+
     # Create output directory
     output_dir = os.path.join(input_dir, f"distorted_{timestamp}")
     os.makedirs(output_dir, exist_ok=True)
 
     for filename in os.listdir(input_dir):
-        if filename.lower().endswith(('.csv', '.dat')):
+        if filename.lower().endswith((".csv", ".dat")):
             input_path = os.path.join(input_dir, filename)
             base_name = os.path.splitext(filename)[0]
             output_path = os.path.join(output_dir, f"{base_name}_distorted.csv")
@@ -240,10 +252,10 @@ def run_datdistort():
     # Open output directory in file explorer
     if processed_count > 0:
         try:
-            if os.name == 'nt':  # Windows
+            if os.name == "nt":  # Windows
                 os.startfile(output_dir)
-            elif os.name == 'posix':  # macOS and Linux
-                subprocess.run(['xdg-open', output_dir])
+            elif os.name == "posix":  # macOS and Linux
+                subprocess.run(["xdg-open", output_dir])
         except:
             pass  # Ignore if can't open file explorer
 

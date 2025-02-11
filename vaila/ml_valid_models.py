@@ -50,38 +50,50 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import (
-    mean_squared_error, mean_absolute_error, r2_score, explained_variance_score,
-    max_error, median_absolute_error
+    mean_squared_error,
+    mean_absolute_error,
+    r2_score,
+    explained_variance_score,
+    max_error,
+    median_absolute_error,
 )
 from tkinter import Tk, filedialog, messagebox
 from tqdm import tqdm  # For progress bar
 import argparse
 
+
 # Function to calculate metrics
 def calculate_metrics(y_true, y_pred):
     epsilon = 1e-10  # To avoid division by zero
     interval_tolerance = 0.1  # 10% tolerance
-    within_tolerance = np.abs(y_true - y_pred) <= interval_tolerance * np.abs(y_true + epsilon)
+    within_tolerance = np.abs(y_true - y_pred) <= interval_tolerance * np.abs(
+        y_true + epsilon
+    )
     accuracy_within_tolerance = np.mean(within_tolerance) * 100  # Accuracy percentage
     return {
-        'MSE': mean_squared_error(y_true, y_pred),
-        'RMSE': np.sqrt(mean_squared_error(y_true, y_pred)),
-        'MAE': mean_absolute_error(y_true, y_pred),
-        'MedAE': median_absolute_error(y_true, y_pred),
-        'Max_Error': max_error(y_true, y_pred),
-        'RAE': np.sum(np.abs(y_true - y_pred)) / np.sum(np.abs(y_true - np.mean(y_true))),
-        'Accuracy(%)': accuracy_within_tolerance,
-        'R²': r2_score(y_true, y_pred),
-        'Explained_Variance': explained_variance_score(y_true, y_pred)
+        "MSE": mean_squared_error(y_true, y_pred),
+        "RMSE": np.sqrt(mean_squared_error(y_true, y_pred)),
+        "MAE": mean_absolute_error(y_true, y_pred),
+        "MedAE": median_absolute_error(y_true, y_pred),
+        "Max_Error": max_error(y_true, y_pred),
+        "RAE": np.sum(np.abs(y_true - y_pred))
+        / np.sum(np.abs(y_true - np.mean(y_true))),
+        "Accuracy(%)": accuracy_within_tolerance,
+        "R²": r2_score(y_true, y_pred),
+        "Explained_Variance": explained_variance_score(y_true, y_pred),
     }
 
+
 # Function to open a file dialog and select a file
-def select_file(title="Select a File", filetypes=(("CSV Files", "*.csv"), ("All Files", "*.*"))):
+def select_file(
+    title="Select a File", filetypes=(("CSV Files", "*.csv"), ("All Files", "*.*"))
+):
     root = Tk()
     root.withdraw()  # Hide the main window
     file_path = filedialog.askopenfilename(title=title, filetypes=filetypes)
     root.destroy()
     return file_path
+
 
 # Function to open a directory dialog and select a directory
 def select_directory(title="Select a Directory"):
@@ -91,113 +103,141 @@ def select_directory(title="Select a Directory"):
     root.destroy()
     return directory_path
 
-# Get file paths using Tkinter
-print("Please select the feature dataset file for validation...")
-features_path = select_file(title="Select Feature Dataset (CSV)")
 
-print("Please select the target dataset file for validation...")
-targets_path = select_file(title="Select Target Dataset (CSV)")
+def run_ml_valid_models():
+    """
+    Main function to validate machine learning models
+    """
+    # Get file paths using Tkinter
+    print("Please select the feature dataset file for validation...")
+    features_path = select_file(title="Select Feature Dataset (CSV)")
 
-if not features_path or not targets_path:
-    print("File selection canceled. Exiting...")
-    exit()
+    print("Please select the target dataset file for validation...")
+    targets_path = select_file(title="Select Target Dataset (CSV)")
 
-# Load datasets
-valid_features = pd.read_csv(features_path)
-valid_targets = pd.read_csv(targets_path)
+    if not features_path or not targets_path:
+        print("File selection canceled. Exiting...")
+        exit()
 
-# Replace values 0.0 with 0.00005 in all columns of the targets DataFrame
-valid_targets.replace(0.0, 0.00005, inplace=True)
+    # Load datasets
+    valid_features = pd.read_csv(features_path)
+    valid_targets = pd.read_csv(targets_path)
 
-columns_features = [
-    'left_heel_x_mean', 'left_heel_y_mean', 'left_foot_index_x_mean', 'left_foot_index_y_mean',
-    'right_heel_x_mean', 'right_heel_y_mean', 'right_foot_index_x_mean', 'right_foot_index_y_mean',
-    'left_heel_x_var', 'left_heel_y_var', 'left_foot_index_x_var', 'left_foot_index_y_var',
-    'right_heel_x_var', 'right_heel_y_var', 'right_foot_index_x_var', 'right_foot_index_y_var',
-    'left_heel_x_speed', 'left_heel_y_speed', 'left_foot_index_x_speed', 'left_foot_index_y_speed',
-    'right_heel_x_speed', 'right_heel_y_speed', 'right_foot_index_x_speed', 'right_foot_index_y_speed',
-    'left_step_length', 'right_step_length', 'left_heel_x_range', 'left_heel_y_range',
-    'left_foot_index_x_range', 'left_foot_index_y_range', 'right_heel_x_range', 'right_heel_y_range',
-    'right_foot_index_x_range', 'right_foot_index_y_range'
-]
+    # Replace values 0.0 with 0.00005 in all columns of the targets DataFrame
+    valid_targets.replace(0.0, 0.00005, inplace=True)
 
-columns_targets = [
-    'step_length', 'stride_length', 'supp_base', 'supp_time_single', 'supp_time_double',
-    'step_width', 'stride_width', 'stride_velocity', 'step_time', 'stride_time'
-]
+    columns_features = [
+        "left_heel_x_mean",
+        "left_heel_y_mean",
+        "left_foot_index_x_mean",
+        "left_foot_index_y_mean",
+        "right_heel_x_mean",
+        "right_heel_y_mean",
+        "right_foot_index_x_mean",
+        "right_foot_index_y_mean",
+        "left_heel_x_var",
+        "left_heel_y_var",
+        "left_foot_index_x_var",
+        "left_foot_index_y_var",
+        "right_heel_x_var",
+        "right_heel_y_var",
+        "right_foot_index_x_var",
+        "right_foot_index_y_var",
+        "left_heel_x_speed",
+        "left_heel_y_speed",
+        "left_foot_index_x_speed",
+        "left_foot_index_y_speed",
+        "right_heel_x_speed",
+        "right_heel_y_speed",
+        "right_foot_index_x_speed",
+        "right_foot_index_y_speed",
+        "left_step_length",
+        "right_step_length",
+        "left_heel_x_range",
+        "left_heel_y_range",
+        "left_foot_index_x_range",
+        "left_foot_index_y_range",
+        "right_heel_x_range",
+        "right_heel_y_range",
+        "right_foot_index_x_range",
+        "right_foot_index_y_range",
+    ]
 
-valid_features = valid_features[columns_features]
-valid_targets = valid_targets[columns_targets]
+    columns_targets = [
+        "step_length",
+        "stride_length",
+        "supp_base",
+        "supp_time_single",
+        "supp_time_double",
+        "step_width",
+        "stride_width",
+        "stride_velocity",
+        "step_time",
+        "stride_time",
+    ]
 
-# Modificar esta parte para permitir seleção do diretório dos modelos
-print("Please select the models directory...")
-models_path = select_directory(title="Select Models Directory")
+    valid_features = valid_features[columns_features]
+    valid_targets = valid_targets[columns_targets]
 
-if not models_path:
-    print("Models directory selection canceled. Exiting...")
-    exit()
+    # Modificar esta parte para permitir seleção do diretório dos modelos
+    print("Please select the models directory...")
+    models_path = select_directory(title="Select Models Directory")
 
-# Process each target
-for target in tqdm(columns_targets, desc="Processing targets"):
-    print(f"\nProcessing target: {target}")
-    target_path = os.path.join(models_path, target)
-    
-    if not os.path.exists(target_path):
-        print(f"No models found for target: {target}")
-        continue
+    if not models_path:
+        print("Models directory selection canceled. Exiting...")
+        exit()
 
-    target_metrics = []
+    # Process each target
+    for target in tqdm(columns_targets, desc="Processing targets"):
+        print(f"\nProcessing target: {target}")
+        target_path = os.path.join(models_path, target)
 
-    # Load scaler parameters
-    scaler_path = os.path.join(target_path, "scaler_params.json")
-    if os.path.exists(scaler_path):
-        with open(scaler_path, 'r') as f:
-            scaler_params = json.load(f)
-            scaler = StandardScaler()
-            scaler.mean_ = np.array(scaler_params['mean'])
-            scaler.scale_ = np.array(scaler_params['scale'])
-            valid_features_scaled = scaler.transform(valid_features)
-        print(f"Loaded scaler parameters from: {scaler_path}")
+        if not os.path.exists(target_path):
+            print(f"No models found for target: {target}")
+            continue
 
-    # Process each model
-    model_files = [f for f in os.scandir(target_path) if f.name.endswith('_model.pkl')]
-    for model_file in tqdm(model_files, desc=f"Validating models for {target}", unit="model"):
-        model_name = model_file.name.replace('_model.pkl', '')
-        print(f"\nValidating model: {model_name}")
-        
-        # Load and validate model
-        with open(model_file.path, 'rb') as f:
-            model = pickle.load(f)
-        print(f"Loaded model from: {model_file.path}")
-            
-        y_pred = model.predict(valid_features_scaled)
-        metrics = calculate_metrics(valid_targets[target], y_pred)
-        metrics['Model'] = model_name
-        target_metrics.append(metrics)
+        target_metrics = []
 
-    # Save metrics
-    if target_metrics:
-        metrics_df = pd.DataFrame(target_metrics)
-        metrics_file = os.path.join(target_path, f"validation_metrics.csv")
-        metrics_df.to_csv(metrics_file, index=False)
-        print(f"Validation metrics saved to: {metrics_file}")
+        # Load scaler parameters
+        scaler_path = os.path.join(target_path, "scaler_params.json")
+        if os.path.exists(scaler_path):
+            with open(scaler_path, "r") as f:
+                scaler_params = json.load(f)
+                scaler = StandardScaler()
+                scaler.mean_ = np.array(scaler_params["mean"])
+                scaler.scale_ = np.array(scaler_params["scale"])
+                valid_features_scaled = scaler.transform(valid_features)
+            print(f"Loaded scaler parameters from: {scaler_path}")
 
-print("\nValidation completed.")
+        # Process each model
+        model_files = [
+            f for f in os.scandir(target_path) if f.name.endswith("_model.pkl")
+        ]
+        for model_file in tqdm(
+            model_files, desc=f"Validating models for {target}", unit="model"
+        ):
+            model_name = model_file.name.replace("_model.pkl", "")
+            print(f"\nValidating model: {model_name}")
 
-# Show completion message with save locations
-completion_message = (
-    "The model validation process has been completed successfully!\n\n"
-    f"Validation metrics have been saved to the respective model directories in:\n{models_path}"
-)
+            # Load and validate model
+            with open(model_file.path, "rb") as f:
+                model = pickle.load(f)
+            print(f"Loaded model from: {model_file.path}")
 
-root = Tk()
-root.withdraw()
-messagebox.showinfo("Validation Complete", completion_message)
-root.destroy()
+            y_pred = model.predict(valid_features_scaled)
+            metrics = calculate_metrics(valid_targets[target], y_pred)
+            metrics["Model"] = model_name
+            target_metrics.append(metrics)
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--models_dir", required=True, help="Directory containing ML models")
-    args = parser.parse_args()
-    
-    # Usar args.models_dir para acessar o diretório dos modelos
+        # Save metrics
+        if target_metrics:
+            metrics_df = pd.DataFrame(target_metrics)
+            metrics_file = os.path.join(target_path, f"validation_metrics.csv")
+            metrics_df.to_csv(metrics_file, index=False)
+            print(f"Validation metrics saved to: {metrics_file}")
+
+    print("\nValidation completed.")
+
+
+if __name__ == "__main__":
+    run_ml_valid_models()
