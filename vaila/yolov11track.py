@@ -10,6 +10,8 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog
 from boxmot import StrongSort, ByteTrack, OcSort, DeepOcSort, HybridSort
 from pathlib import Path
+import subprocess
+import re
 
 # Configuração para evitar conflitos de biblioteca
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
@@ -237,6 +239,52 @@ class TrackerSelectorDialog(tk.simpledialog.Dialog):
         selection = self.listbox.get(self.listbox.curselection())
         self.result = selection.split(" - ")[0]
 
+def standardize_filename(filename: str) -> str:
+    """
+    Remove unwanted characters and replace spaces with underscores.
+    This function ensures that the file name follows a safe pattern for processing.
+    """
+    # Replace spaces and colons, for example:
+    new_name = filename.replace(" ", "_").replace(":", "-")
+    # Alternatively, for a more general cleanup, uncomment the line below:
+    # new_name = re.sub(r'[^A-Za-z0-9_.-]', '_', filename)
+    return new_name
+
+def process_video(input_file: str):
+    # Normalize the file path (resolves slashes and separators appropriately)
+    input_file = os.path.normpath(input_file)
+
+    # Check if the file actually exists
+    if not os.path.exists(input_file):
+        raise FileNotFoundError(f"File not found: {input_file}")
+
+    # Separate directory and base file name, and standardize the base name if necessary
+    dir_name = os.path.dirname(input_file)
+    base_name = os.path.basename(input_file)
+    standardized_name = standardize_filename(base_name)
+    
+    # If the name has been altered, rename the file temporarily
+    if base_name != standardized_name:
+        new_file_path = os.path.join(dir_name, standardized_name)
+        os.rename(input_file, new_file_path)
+        input_file = new_file_path
+        print(f"Standardized file name: {input_file}")
+
+    # On Windows, ffmpeg may misinterpret backslashes. Replace them with forward slashes.
+    ffmpeg_input = input_file.replace('\\', '/')
+
+    # Build the command as a list of arguments so that spaces don't break the command.
+    cmd = [
+        'ffmpeg',
+        '-i', ffmpeg_input,
+        '-filter_complex', 'your_filter_here',
+        'output.mp4'
+    ]
+    
+    print("Executing command:", " ".join(cmd))
+    # Run the command without using the shell
+    subprocess.run(cmd)
+
 def run_yolov11track():
     root = tk.Tk()
     root.withdraw()
@@ -386,4 +434,13 @@ def run_yolov11track():
     root.destroy()
 
 if __name__ == "__main__":
-    run_yolov11track()
+    if len(sys.argv) < 2:
+        print("Usage: python olov11track.py [video_file]")
+        sys.exit(1)
+
+    video_file = sys.argv[1]
+    try:
+        process_video(video_file)
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        sys.exit(1)

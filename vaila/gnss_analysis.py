@@ -682,7 +682,7 @@ def convert_kmz_to_kml():
     except Exception as e:
         messagebox.showerror("Error", f"An error occurred: {e}")
 
-def analysis_gui():
+def run_gnss_analysis_gui():
     root = tk.Tk()
     root.title("Select Analysis Option")
     root.geometry("600x400")
@@ -721,4 +721,4 @@ def analysis_gui():
     root.mainloop()
 
 if __name__ == "__main__":
-    analysis_gui()
+    run_gnss_analysis_gui()

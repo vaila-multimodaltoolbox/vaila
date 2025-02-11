@@ -82,7 +82,6 @@ from .spectral_features import (
 )
 from .interpolation_split import run_fill_split_dialog
 from .vaila_and_jump import vaila_and_jump
-from .gnss_analysis import analysis_gui
 
 __all__ = [
     "plot_ellipse_pca",

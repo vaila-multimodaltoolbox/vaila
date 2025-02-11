@@ -40,7 +40,10 @@
 import os
 import pandas as pd
 import numpy as np
+from rich import print
 from tkinter import Tk, filedialog, simpledialog
+from datetime import datetime
+
 
 def calculate_features(data_block):
     """
@@ -90,13 +93,6 @@ def process_files_and_save(input_dir, output_dir):
     """
     Process all .csv files in the input directory and save extracted features to output.
     """
-    root = Tk()
-    root.withdraw()  # Hide the root window
-
-    participant_name = simpledialog.askstring("Participant Name", "Enter the participant's name:")
-    if not participant_name:
-        print("No participant name provided. Exiting...")
-        return
 
     csv_files = [os.path.join(input_dir, f) for f in os.listdir(input_dir) if f.endswith(".csv")]
     all_features = []
@@ -113,26 +109,32 @@ def process_files_and_save(input_dir, output_dir):
         blocks = divide_into_blocks(data, num_steps)
         for i, block in enumerate(blocks):
             features = calculate_features(block)
-            features['Participant'] = participant_name
+            features['Participant'] = os.path.splitext(os.path.basename(file))[0]
             features['Trial'] = os.path.basename(file)
             features['Step_Block'] = i + 1
             all_features.append(features)
 
     if all_features:
         result_df = pd.DataFrame(all_features)
-        output_file = os.path.join(output_dir, f"{participant_name}_gait_features.csv")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        if len(csv_files) == 1:
+            base_name = os.path.splitext(os.path.basename(csv_files[0]))[0]
+            output_file = os.path.join(output_dir, f"{base_name}_gaitfeatures_{timestamp}.csv")
+        else:
+            output_file = os.path.join(output_dir, f"gaitfeatures_{timestamp}.csv")
         result_df.to_csv(output_file, index=False)
         print(f"Feature extraction complete. Results saved to {output_file}.")
     else:
         print("No features were extracted. No output file created.")
 
-def main():
+def run_process_gait_features():
     """
     Main function to select directories and process gait data.
     """
-    root = Tk()
-    root.withdraw()  # Hide the root window
-
+    # Print the directory and name of the script being executed
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    
     input_dir = filedialog.askdirectory(title="Select Input Directory with .csv Files")
     if not input_dir:
         print("No input directory selected. Exiting...")
@@ -146,6 +148,6 @@ def main():
     process_files_and_save(input_dir, output_dir)
 
 if __name__ == "__main__":
-    main()
+    run_process_gait_features()
 
 

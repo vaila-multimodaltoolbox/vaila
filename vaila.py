@@ -101,7 +101,6 @@ from vaila import (
     markerless_3D_analysis,
     mocap_analysis,
     forceplate_analysis,
-    analysis_gui,
     convert_c3d_to_csv,
     convert_csv_to_c3d,
     rearrange_data_in_directory,
@@ -143,6 +142,7 @@ from vaila import (
     cutvideo,
     vaila_distortvideo_gui,
     viewc3d,
+    mphands,
 )
 
 
@@ -178,7 +178,7 @@ B2_r2_c4 - GNSS/GPS       B2_r2_c5 - MEG/EEG
 
 B3_r3_c1 - HR/ECG         B3_r3_c2 - Markerless_MP_Yolo  B3_r3_c3 - vailá_and_jump
 B3_r3_c4 - Cube2D         B3_r3_c5 - Animal Open Field 
-B3_r4_c1 - Tracker        B3_r4_c2 - ML Walkway       B3_r4_c3 - vailá
+B3_r4_c1 - Tracker        B3_r4_c2 - ML Walkway       B3_r4_c3 - Markerless Hands
 B3_r4_c4 - vailá          B3_r4_c5 - vailá
 ============================== Tools Available (Frame C) ===================
 C_A: Data Files
@@ -497,7 +497,7 @@ class Vaila(tk.Tk):
             B4:
             - Tracker
             - ML Walkway
-            - vailá
+            - Markerless Hands
             - vailá
             - vailá
         """
@@ -687,7 +687,7 @@ class Vaila(tk.Tk):
         )
 
         # B4_r4_c2 - ML Walkway
-        vaila_btn4 = tk.Button(
+        mlwalkway_btn = tk.Button(
             row4_frame,
             text="ML Walkway",
             width=button_width,
@@ -695,13 +695,15 @@ class Vaila(tk.Tk):
         )
 
 
+
         # B4_r4_c3 - vailá
-        vaila_btn5 = tk.Button(
+        mphands_btn = tk.Button(
             row4_frame,
-            text="vailá",
+            text="Markerless Hands",
             width=button_width,
-            command=self.show_vaila_message,
+            command=self.markerless_hands,
         )
+
 
         # B4_r4_c4 - vailá
         vaila_btn6 = tk.Button(
@@ -721,8 +723,8 @@ class Vaila(tk.Tk):
 
         # Pack row4 buttons
         tracker_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
-        vaila_btn4.pack(side="left", expand=True, fill="x", padx=2, pady=2)
-        vaila_btn5.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        mlwalkway_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        mphands_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         vaila_btn6.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         vaila_btn7.pack(side="left", expand=True, fill="x", padx=2, pady=2)
 
@@ -1337,8 +1339,8 @@ class Vaila(tk.Tk):
         
         This function runs the GNSS Analysis module...
         """
-        analysis_gui()
-
+        from vaila.gnss_analysis import run_gnss_analysis_gui
+        run_gnss_analysis_gui()
 
 
     # B_r2_c5
@@ -1432,134 +1434,18 @@ class Vaila(tk.Tk):
     
     # B_r4_c2 - ML Walkway
     def ml_walkway(self):
-        """Opens a submenu for ML Walkway operations.
-        
-        This function creates a new window with buttons for:
-        1. Training new ML models
-        2. Validating trained models
-        3. Processing MediaPipe data for features
-        4. Running predictions with pre-trained models
-        """
-        # Create new window
-        ml_window = Toplevel(self)
-        ml_window.title("ML Walkway Operations")
-        ml_window.geometry("400x300")
+        """Invokes the vaila_mlwalkway module."""
+        from vaila import vaila_mlwalkway
+        vaila_mlwalkway()
 
-        # Center the window
-        ml_window.update_idletasks()
-        width = ml_window.winfo_width()
-        height = ml_window.winfo_height()
-        x = (ml_window.winfo_screenwidth() // 2) - (width // 2)
-        y = (ml_window.winfo_screenheight() // 2) - (height // 2)
-        ml_window.geometry(f'{width}x{height}+{x}+{y}')
-
-        # Create frame for buttons
-        button_frame = ttk.Frame(ml_window, padding="20")
-        button_frame.pack(expand=True, fill="both")
-
-        # Add description label
-        description = ttk.Label(
-            button_frame,
-            text="Select ML Walkway Operation:",
-            font=("default", 12)
-        )
-        description.pack(pady=10)
-
-        # Add buttons for each operation
-        ttk.Button(
-            button_frame,
-            text="Train New Models",
-            command=lambda: self.run_ml_script("ML_models_training.py"),
-            width=30
-        ).pack(pady=5)
-
-        ttk.Button(
-            button_frame,
-            text="Validate Trained Models",
-            command=lambda: self.run_ml_script("ML_valid_models.py"),
-            width=30
-        ).pack(pady=5)
-
-        ttk.Button(
-            button_frame,
-            text="Process MediaPipe Data",
-            command=lambda: self.run_ml_script("process_gait_features.py"),
-            width=30
-        ).pack(pady=5)
-
-        ttk.Button(
-            button_frame,
-            text="Run Predictions",
-            command=lambda: self.run_ml_script("walkway_ml_prediction.py"),
-            width=30
-        ).pack(pady=5)
-
-        # Add help button
-        help_button = ttk.Button(
-            button_frame,
-            text="Help",
-            command=self.show_ml_help,
-            width=30
-        )
-        help_button.pack(pady=20)
-
-    def run_ml_script(self, script_name):
-        """Runs the specified ML script.
-        
-        Args:
-            script_name (str): Name of the script file to run
-        """
-        script_path = os.path.join(os.path.dirname(__file__), "vaila", script_name)
-        try:
-            if platform.system() == "Windows":
-                subprocess.Popen([sys.executable, script_path], creationflags=subprocess.CREATE_NEW_CONSOLE)
-            else:
-                subprocess.Popen([sys.executable, script_path])
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to run {script_name}: {str(e)}")
-
-    def show_ml_help(self):
-        """Shows help information for ML Walkway operations."""
-        help_text = """ML Walkway Operations:
-
-    1. Train New Models
-    - Trains machine learning models using your dataset
-    - Requires feature and target CSV files
-    - Saves models in the 'models' directory
-
-    2. Validate Trained Models
-    - Tests previously trained models on validation data
-    - Requires feature and target CSV files
-    - Generates validation metrics
-
-    3. Process MediaPipe Data
-    - Processes raw MediaPipe data into features
-    - Requires CSV files with pose data
-    - Generates feature files for training/prediction
-
-    4. Run Predictions
-    - Uses trained models to make predictions
-    - Requires feature CSV file
-    - Outputs predictions in CSV format"""
-
-        help_window = Toplevel()
-        help_window.title("ML Walkway Help")
-        help_window.geometry("500x400")
-
-        # Center the window
-        help_window.update_idletasks()
-        width = help_window.winfo_width()
-        height = help_window.winfo_height()
-        x = (help_window.winfo_screenwidth() // 2) - (width // 2)
-        y = (help_window.winfo_screenheight() // 2) - (height // 2)
-        help_window.geometry(f'{width}x{height}+{x}+{y}')
-
-        text_widget = tk.Text(help_window, wrap=tk.WORD, padx=20, pady=20)
-        text_widget.pack(expand=True, fill="both")
-        text_widget.insert("1.0", help_text)
-        text_widget.config(state="disabled")
+    # B_r4_c3 - Markerless Hands
+    def markerless_hands(self):
+        """Invokes the vaila_mphands module."""
+        from vaila import mphands
+        mphands.run_mphands() 
 
     # C_A_r1_c1
+
     def reorder_csv_data(self):
         """Runs the Reorder CSV Data module.
 
