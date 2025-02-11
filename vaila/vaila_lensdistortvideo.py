@@ -106,7 +106,13 @@ from rich import print
 import tkinter as tk
 from tkinter import filedialog
 from datetime import datetime
-from rich.progress import Progress, SpinnerColumn, TimeElapsedColumn, BarColumn, TextColumn
+from rich.progress import (
+    Progress,
+    SpinnerColumn,
+    TimeElapsedColumn,
+    BarColumn,
+    TextColumn,
+)
 from rich.console import Console
 from rich import print as rprint
 import subprocess
@@ -123,42 +129,46 @@ def load_distortion_parameters(csv_path):
 def process_video(input_path, output_path, parameters):
     """Process video applying lens distortion correction."""
     console = Console()
-    
+
     # Open video capture
     cap = cv2.VideoCapture(input_path)
     if not cap.isOpened():
         raise ValueError("Error opening video file")
-    
+
     # Get video properties
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     fps = cap.get(cv2.CAP_PROP_FPS)
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    
+
     # Create camera matrix and distortion coefficients
-    camera_matrix = np.array([
-        [parameters["fx"], 0, parameters["cx"]],
-        [0, parameters["fy"], parameters["cy"]],
-        [0, 0, 1]
-    ])
-    
-    dist_coeffs = np.array([
-        parameters["k1"],
-        parameters["k2"],
-        parameters["p1"],
-        parameters["p2"],
-        parameters["k3"]
-    ])
-    
+    camera_matrix = np.array(
+        [
+            [parameters["fx"], 0, parameters["cx"]],
+            [0, parameters["fy"], parameters["cy"]],
+            [0, 0, 1],
+        ]
+    )
+
+    dist_coeffs = np.array(
+        [
+            parameters["k1"],
+            parameters["k2"],
+            parameters["p1"],
+            parameters["p2"],
+            parameters["k3"],
+        ]
+    )
+
     # Get optimal new camera matrix
     new_camera_matrix, roi = cv2.getOptimalNewCameraMatrix(
         camera_matrix, dist_coeffs, (width, height), 1, (width, height)
     )
-    
+
     # Create temporary directory for frames
     temp_dir = os.path.join(os.path.dirname(output_path), "temp_frames")
     os.makedirs(temp_dir, exist_ok=True)
-    
+
     try:
         with Progress(
             SpinnerColumn(),
@@ -168,36 +178,31 @@ def process_video(input_path, output_path, parameters):
             TimeElapsedColumn(),
             console=console,
         ) as progress:
-            
+
             # Add tasks
             process_task = progress.add_task(
-                "[cyan]Processing frames...", 
-                total=total_frames
+                "[cyan]Processing frames...", total=total_frames
             )
-            
+
             frame_count = 0
             while True:
                 ret, frame = cap.read()
                 if not ret:
                     break
-                
+
                 # Undistort frame
                 undistorted = cv2.undistort(
-                    frame, 
-                    camera_matrix, 
-                    dist_coeffs, 
-                    None, 
-                    new_camera_matrix
+                    frame, camera_matrix, dist_coeffs, None, new_camera_matrix
                 )
-                
+
                 # Save frame as PNG (lossless)
                 frame_path = os.path.join(temp_dir, f"frame_{frame_count:06d}.png")
                 cv2.imwrite(frame_path, undistorted)
-                
+
                 # Update progress
                 frame_count += 1
                 progress.update(process_task, advance=1)
-                
+
                 # Show additional info every 100 frames
                 if frame_count % 100 == 0:
                     elapsed = progress.tasks[0].elapsed
@@ -208,34 +213,40 @@ def process_video(input_path, output_path, parameters):
                             f"[dim]Processing speed: {fps_processing:.1f} fps | "
                             f"Estimated time remaining: {remaining:.1f}s[/dim]"
                         )
-        
+
         # Use FFmpeg to create high-quality video
         rprint("\n[yellow]Creating final video with FFmpeg...[/yellow]")
         input_pattern = os.path.join(temp_dir, "frame_%06d.png")
         ffmpeg_cmd = [
             "ffmpeg",
             "-y",  # Overwrite output file if it exists
-            "-framerate", str(fps),
-            "-i", input_pattern,
-            "-c:v", "libx264",  # Use H.264 codec
-            "-preset", "slow",  # Higher quality encoding
-            "-crf", "18",  # High quality (0-51, lower is better)
-            "-pix_fmt", "yuv420p",  # Standard pixel format
-            output_path
+            "-framerate",
+            str(fps),
+            "-i",
+            input_pattern,
+            "-c:v",
+            "libx264",  # Use H.264 codec
+            "-preset",
+            "slow",  # Higher quality encoding
+            "-crf",
+            "18",  # High quality (0-51, lower is better)
+            "-pix_fmt",
+            "yuv420p",  # Standard pixel format
+            output_path,
         ]
-        
+
         subprocess.run(ffmpeg_cmd, check=True)
-        
+
     finally:
         # Release video capture
         cap.release()
-        
+
         # Clean up temporary files
         if os.path.exists(temp_dir):
             for file in os.listdir(temp_dir):
                 os.remove(os.path.join(temp_dir, file))
             os.rmdir(temp_dir)
-    
+
     rprint(f"\n[green]Video processing complete![/green]")
     rprint(f"[blue]Output saved as: {output_path}[/blue]")
 
@@ -263,70 +274,73 @@ def select_file(title="Select a file", filetypes=(("CSV Files", "*.csv"),)):
 def run_distortvideo():
     """Main function to run batch lens distortion correction."""
     rprint("[yellow]Running batch lens distortion correction...[/yellow]")
-    
+
     # Select input directory
     rprint("\nSelect the directory containing videos:")
     input_dir = select_directory(title="Select Directory with Videos")
     if not input_dir:
         rprint("[red]No directory selected. Exiting.[/red]")
         return
-    
+
     # Select parameters file
     rprint("\nSelect the camera calibration parameters file:")
     parameters_path = select_file(
         title="Select Parameters File",
-        filetypes=(("CSV Files", "*.csv"), ("All Files", "*.*"))
+        filetypes=(("CSV Files", "*.csv"), ("All Files", "*.*")),
     )
     if not parameters_path:
         rprint("[red]No parameters file selected. Exiting.[/red]")
         return
-    
+
     # Load parameters
     try:
         parameters = load_distortion_parameters(parameters_path)
     except Exception as e:
         rprint(f"[red]Error loading parameters: {e}[/red]")
         return
-    
+
     # Get all video files in the directory
-    video_extensions = ('.mp4', '.avi', '.mov')
-    video_files = [f for f in os.listdir(input_dir) 
-                   if os.path.isfile(os.path.join(input_dir, f)) 
-                   and f.lower().endswith(video_extensions)]
-    
+    video_extensions = (".mp4", ".avi", ".mov")
+    video_files = [
+        f
+        for f in os.listdir(input_dir)
+        if os.path.isfile(os.path.join(input_dir, f))
+        and f.lower().endswith(video_extensions)
+    ]
+
     if not video_files:
         rprint("[red]No video files found in the selected directory.[/red]")
         return
-    
+
     rprint(f"\n[cyan]Found {len(video_files)} video files to process.[/cyan]")
-    
+
     # Create output directory with a timestamp in the name: vaila_lensdistort_timestamp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_dir = os.path.join(input_dir, f"vaila_lensdistort_{timestamp}")
     os.makedirs(output_dir, exist_ok=True)
-    
+
     # Process each video
     for video_file in video_files:
         input_path = os.path.join(input_dir, video_file)
         base_name = os.path.splitext(video_file)[0]
         output_path = os.path.join(output_dir, f"{base_name}_undistorted.mp4")
-        
+
         try:
             rprint(f"\n[cyan]Processing video: {video_file}[/cyan]")
             process_video(input_path, output_path, parameters)
         except Exception as e:
             rprint(f"[red]Error processing video {video_file}: {e}[/red]")
             continue
-    
+
     # Try to open the output folder
     try:
-        if os.name == 'nt':  # Windows
+        if os.name == "nt":  # Windows
             os.startfile(output_dir)
-        elif os.name == 'posix':  # macOS and Linux
-            subprocess.run(['xdg-open', output_dir])
+        elif os.name == "posix":  # macOS and Linux
+            subprocess.run(["xdg-open", output_dir])
     except Exception as e:
         rprint(f"[red]Could not open output directory: {e}[/red]")
-    
+
     rprint("\n[green]Batch processing complete![/green]")
 
 

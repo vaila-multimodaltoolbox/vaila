@@ -204,13 +204,13 @@ def run_compress_videos_h265(
                 "-preset",
                 preset,
                 "-b:v",
-                "5M",          # Add bitrate control
+                "5M",  # Add bitrate control
                 "-maxrate",
                 "5M",
                 "-bufsize",
                 "10M",
                 "-c:a",
-                "copy",        # Preserve audio
+                "copy",  # Preserve audio
                 output_path,
             ]
         else:
@@ -227,7 +227,7 @@ def run_compress_videos_h265(
                 "-crf",
                 str(crf),
                 "-c:a",
-                "copy",        # Preserve audio
+                "copy",  # Preserve audio
                 output_path,
             ]
 
@@ -236,7 +236,7 @@ def run_compress_videos_h265(
             subprocess.run(command, check=True, stderr=subprocess.PIPE)
             success_count += 1
             print(f"Successfully compressed: {os.path.basename(input_path)}")
-            
+
         except subprocess.CalledProcessError as e:
             print(f"Failed to compress: {os.path.basename(input_path)}")
             print(f"Error: {e.stderr.decode()}")
@@ -342,7 +342,7 @@ def compress_videos_h265_gui():
 
     # Replace the recursive search with direct directory search
     video_files = find_videos(video_directory)
-    
+
     if not video_files:
         messagebox.showerror("Error", "No video files found.")
         return

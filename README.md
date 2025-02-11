@@ -409,89 +409,207 @@ Remove directory `vaila` inside `C:\Users\your_user_name_here\AppData\Local\vail
   <img src="docs/images/vaila_start_gui.png" alt="vailá Start GUI" width="600"/>
 </p>
 
+````bash
+                                             o
+                                _,  o |\  _,/
+                          |  |_/ |  | |/ / |
+                           \/  \/|_/|/|_/\/|_/                    
+##########################################################################
+Mocap fullbody_c3d           Markerless_3D       Markerless_2D_MP
+                  \                |                /
+                   v               v               v        
+   CUBE2D  --> +---------------------------------------+ <-- Vector Coding
+   IMU_csv --> |       vailá - multimodal toolbox      | <-- Cluster_csv
+Open Field --> +---------------------------------------+ <-- Force Plate
+              ^                   |                    ^ <-- YOLOv11 and MediaPipe
+        EMG__/                    v                     \__Tracker YOLOv11
+                    +--------------------------+
+                    | Results: Data and Figure | 
+                    +--------------------------+
 
-An overview of the project structure:
+============================ File Manager (Frame A) ========================
+A_r1_c1 - Rename          A_r1_c2 - Import           A_r1_c3 - Export
+A_r1_c4 - Copy            A_r1_c5 - Move             A_r1_c6 - Remove
+A_r1_c7 - Tree            A_r1_c8 - Find             A_r1_c9 - Transfer
+
+========================== Multimodal Analysis (Frame B) ===================
+B1_r1_c1 - IMU            B1_r1_c2 - MoCapCluster    B1_r1_c3 - MoCapFullBody
+B1_r1_c4 - Markerless2D   B1_r1_c5 - Markerless3D
+
+B2_r2_c1 - Vector Coding  B2_r2_c2 - EMG             B2_r2_c3 - Force Plate
+B2_r2_c4 - GNSS/GPS       B2_r2_c5 - MEG/EEG
+
+B3_r3_c1 - HR/ECG         B3_r3_c2 - Markerless_MP_Yolo  B3_r3_c3 - vailá_and_jump
+B3_r3_c4 - Cube2D         B3_r3_c5 - Animal Open Field 
+B3_r4_c1 - Tracker        B3_r4_c2 - ML Walkway       B3_r4_c3 - vailá
+B3_r4_c4 - vailá          B3_r4_c5 - vailá
+============================== Tools Available (Frame C) ===================
+C_A: Data Files
+
+C_A_r1_c1 - Edit CSV      C_A_r1_c2 - C3D <--> CSV   C_A_r1_c3 - Gapfill | split
+C_A_r2_c1 - Make DLT2D    C_A_r2_c2 - Rec2D 1DLT     C_A_r2_c3 - Rec2D MultiDLT
+C_A_r3_c1 - Make DLT3D    C_A_r3_c2 - Rec3D 1DLT     C_A_r3_c3 - Rec3D MultiDLT
+C_A_r4_c1 - vailá         C_A_r4_c2 - vailá          C_A_r4_c3 - vailá
+
+C_B: Video and Image
+C_B_r1_c1 - Video<-->PNG  C_B_r1_c2 - Cut Videos    C_B_r1_c3 - Draw Box
+C_B_r2_c1 - CompressH264  C_B_r2_c2 - Compress H265 C_B_r2_c3 - Make Sync file
+C_B_r3_c1 - GetPixelCoord C_B_r3_c2 - Metadata info C_B_r3_c3 - Merge Videos
+C_B_r4_c1 - Distort video C_B_r4_c2 - Cut Video     C_B_r4_c3 - vailá
+
+C_C: Visualization
+C_C_r1_c1 - Show C3D      C_C_r1_c2 - Show CSV       C_C_r2_c1 - Plot 2D
+C_C_r2_c2 - Plot 3D       C_C_r3_c1 - vailá          C_C_r3_c2 - vailá
+C_C_r4_c1 - vailá         C_C_r4_c2 - vailá          C_C_r4_c3 - vailá
+
+Type 'h' for help or 'exit' to quit.
+
+Use the button 'imagination!' to access command-line (xonsh) tools for advanced multimodal analysis!
+```
 
 ```bash
 vaila
-├── vaila.py              # Main script
-├── animal_open_field.py  # Animal Open Field analysis
-├── batchcut.py           # Batch video cutting tools
-├── cluster_analysis.py   # Cluster analysis for motion capture
-├── common_utils.py       # Common utility functions
-├── compress_videos_h264.py # H.264 video compression
-├── compress_videos_h265.py # H.265 (HEVC) video compression
-├── cop_analysis.py       # Center of Pressure (CoP) analysis
-├── cop_calculate.py      # CoP calculations
-├── data_processing.py    # General data processing tools
-├── dialogsuser.py        # User interaction dialogs
-├── dialogsuser_cluster.py # Dialog tools for cluster analysis
-├── dlc2vaila.py          # Convert DeepLabCut to vailá format
-├── dlt2d.py              # 2D Direct Linear Transformation (DLT)
-├── dlt3d.py              # 3D Direct Linear Transformation (DLT)
-├── drawboxe.py           # Draw box in video frames
-├── ellipse.py            # Ellipse fitting tools
-├── emg_labiocom.py       # EMG signal analysis tools
-├── extractpng.py         # Extract PNG frames from videos
-├── filemanager.py        # File management utilities
-├── filtering.py          # Data filtering methods
-├── filter_utils.py       # Additional filter utility tools
-├── fixnoise.py           # Noise reduction tools
-├── fonts/                # Custom fonts
-│   └── mrrobot.ttf       # Font example
-├── forceplate_analysis.py # Force plate analysis tools
-├── force_cmj.py          # Countermovement jump analysis
-├── force_cube_fig.py     # 3D force data visualization
-├── getpixelvideo.py      # Extract pixel coordinates from video
-├── gnss_analysis.py      # GNSS/GPS data analysis tools
-├── grf_gait.py           # Ground Reaction Force (GRF) gait analysis
-├── images/               # GUI assets and images
+├── __init__.py                     # Package initializer
+├── __pycache__                     # Compiled Python files cache
+│   └── all .pyc files
+├── animal_open_field.py            # Animal Open Field analysis
+├── batchcut.py                     # Batch video cutting tools
+├── cluster_analysis.py             # Cluster analysis for motion capture
+├── common_utils.py                 # Common utility functions
+├── compress_videos_h264.py         # H.264 video compression
+├── compress_videos_h265.py         # H.265 (HEVC) video compression
+├── compressvideo.py                # Video compression utilities (legacy or alternative)
+├── cop_analysis.py                 # Center of Pressure (CoP) analysis
+├── cop_calculate.py                # CoP calculations
+├── cube2d_kinematics.py            # 2D kinematics analysis tools
+├── cutvideo.py                     # Video cutting tools
+├── data_processing.py              # General data processing tools
+├── dialogsuser.py                  # User interaction dialogs
+├── dialogsuser_cluster.py          # Dialog tools for cluster analysis
+├── dlc2vaila.py                   # Convert DeepLabCut to vailá format
+├── dlt2d.py                        # 2D Direct Linear Transformation (DLT)
+├── dlt3d.py                        # 3D Direct Linear Transformation (DLT)
+├── drawboxe.py                     # Draw box in video frames
+├── ellipse.py                      # Ellipse fitting tools
+├── emg_labiocom.py                 # EMG signal analysis tools
+├── extractpng.py                   # Extract PNG frames from videos
+├── filemanager.py                  # File management utilities
+├── filter_utils.py                 # Additional filter utility tools
+├── filtering.py                    # Data filtering methods
+├── fixnoise.py                     # Noise reduction tools
+├── fonts                           # Custom fonts
+│   └── mrrobot.ttf                 # Font example
+├── force_cmj.py                    # Countermovement jump analysis
+├── force_cube_fig.py               # 3D force data visualization
+├── forceplate_analysis.py          # Force plate analysis tools
+├── getpixelvideo.py                # Extract pixel coordinates from video
+├── gnss_analysis.py                # GNSS/GPS data analysis tools
+├── grf_gait.py                     # Ground Reaction Force (GRF) gait analysis
+├── images                          # GUI assets and images
 │   ├── cluster_config.png
+│   ├── eeferp.png
 │   ├── gui.png
+│   ├── preto.png
+│   ├── unf.png
+│   ├── usp.png
+│   ├── vaila.ico
+│   ├── vaila_edge_w.png
+│   ├── vaila_ico.png
+│   ├── vaila_ico_mac.png
+│   ├── vaila_ico_mac_original.png
+│   ├── vaila_ico_trans.ico
+│   ├── vaila_icon_win_original.ico
 │   ├── vaila_logo.png
-│   └── ...
-├── imu_analysis.py       # IMU sensor data analysis
-├── interpolation_split.py # Interpolation and split data tool
-├── join2dataset.py       # Join multiple datasets
-├── linear_interpolation_split.py # Linear interpolation split tool
-├── listjointsnames.py    # List joint names from datasets
-├── load_vicon_csv_split_batch.py # Load Vicon data in batch
-├── maintools.py          # Core tools for analysis
-├── markerless_2D_analysis.py # Markerless 2D tracking analysis
-├── markerless_3D_analysis.py # Markerless 3D tracking analysis
-├── mergestack.py         # Merge datasets into stacks
-├── mocap_analysis.py     # Motion capture full body analysis
-├── modifylabref.py       # Modify laboratory references
-├── modifylabref_cli.py   # Command-line interface for modify lab ref
-├── numberframes.py       # Frame numbering tools
-├── plotting.py           # Data plotting tools
-├── readc3d_export.py     # Read and export C3D files
-├── readcsv.py            # Read CSV data
-├── readcsv_export.py     # Export CSV data
-├── rearrange_data.py     # Rearrange and clean datasets
-├── rec2d.py              # 2D Reconstruction
-├── rec2d_one_dlt2d.py    # 2D reconstruction with single DLT
-├── rotation.py           # Rotation analysis tools
-├── run_vector_coding.py  # Run vector coding analysis
-├── run_vector_coding_GUI.py # GUI for vector coding analysis
-├── showc3d.py            # Visualize C3D data
-├── showc3d_nodash.py     # Non-Dash C3D visualization
-├── spectral_features.py  # Spectral feature extraction
-├── stabilogram_analysis.py # Stabilogram analysis tools
-├── standardize_header.py # Standardize data headers
-├── syncvid.py            # Synchronize video files
-├── sync_flash.py         # Synchronize flash-based data
-├── utils.py              # General utility scripts
-├── vailaplot2d.py        # Plot 2D biomechanical data
-├── vailaplot3d.py        # Plot 3D biomechanical data
-├── vaila_and_jump.py     # Vertical jump analysis tool
-├── vaila_manifest.py     # Manifest file for vailá
-├── vaila_upscaler.py     # Data upscaling tools
-├── vector_coding.py      # Joint vector coding analysis
-├── videoprocessor.py     # Video processing tools
-├── __init__.py           # Package initializer
-└── __pycache__/          # Compiled Python files cache
+│   ├── vaila_trans_square.png
+│   ├── vaila_transp.ico
+│   └── vaila_white_square.png
+├── imu_analysis.py                 # IMU sensor data analysis
+├── interpolation_split.py          # Interpolation and split data tool
+├── join2dataset.py                 # Join multiple datasets
+├── linear_interpolation_split.py   # Linear interpolation split tool
+├── listjointsnames.py              # List joint names from datasets
+├── load_vicon_csv_split_batch.py   # Load Vicon data in batch
+├── maintools.py                    # Core tools for analysis
+├── markerless2d_mpyolo.py          # Markerless 2D tracking using MP-YOLO
+├── markerless_2D_analysis.py       # Markerless 2D tracking analysis
+├── markerless_3D_analysis.py       # Markerless 3D tracking analysis
+├── mergestack.py                   # Merge datasets into stacks
+├── ml_models_training.py           # Machine learning models training
+├── ml_valid_models.py              # Validate machine learning models
+├── mocap_analysis.py               # Motion capture full body analysis
+├── models                          # Trained models and associated parameters
+│   ├── README.txt
+│   ├── step_length.pkl
+│   ├── step_length_scaler_params.json
+│   ├── step_time.pkl
+│   ├── step_time_scaler_params.json
+│   ├── step_width.pkl
+│   ├── step_width_scaler_params.json
+│   ├── stride_length.pkl
+│   ├── stride_length_scaler_params.json
+│   ├── stride_time.pkl
+│   ├── stride_time_scaler_params.json
+│   ├── stride_velocity.pkl
+│   ├── stride_velocity_scaler_params.json
+│   ├── stride_width.pkl
+│   ├── stride_width_scaler_params.json
+│   ├── support_base.pkl
+│   ├── support_base_scaler_params.json
+│   ├── support_time_doubled.pkl
+│   ├── support_time_doubled_scaler_params.json
+│   ├── support_time_single.pkl
+│   ├── support_time_single_scaler_params.json
+│   ├── yolo11l-pose.pt
+│   ├── yolo11l.pt
+│   ├── yolo11m-pose.pt
+│   ├── yolo11m.pt
+│   ├── yolo11n-pose.pt
+│   ├── yolo11n.pt
+│   ├── yolo11s-pose.pt
+│   ├── yolo11s.pt
+│   ├── yolo11x-pose.pt
+│   ├── yolo11x-seg.pt
+│   └── yolo11x.pt
+├── modifylabref.py                # Modify laboratory references
+├── modifylabref_cli.py            # CLI for modifying lab references
+├── numberframes.py                # Frame numbering tools
+├── plotting.py                    # Data plotting tools
+├── process_gait_features.py       # Gait feature extraction and processing
+├── readc3d_export.py              # Read and export C3D files
+├── readcsv.py                     # Read CSV data
+├── readcsv_export.py              # Export CSV data
+├── rearrange_data.py              # Rearrange and clean datasets
+├── rec2d.py                       # 2D Reconstruction
+├── rec2d_one_dlt2d.py             # 2D reconstruction with single DLT
+├── rec3d_one_dlt3d.py             # 3D reconstruction with single DLT
+├── rotation.py                    # Rotation analysis tools
+├── run_vector_coding.py           # Run vector coding analysis
+├── run_vector_coding_GUI.py       # GUI for vector coding analysis
+├── showc3d.py                    # Visualize C3D data
+├── spectral_features.py           # Spectral feature extraction
+├── stabilogram_analysis.py        # Stabilogram analysis tools
+├── standardize_header.py          # Standardize data headers
+├── sync_flash.py                  # Synchronize flash-based data
+├── syncvid.py                     # Synchronize video files
+├── utils.py                       # General utility scripts
+├── vaila_and_jump.py             # Vertical jump analysis tool
+├── vaila_datdistort.py            # Data distortion utilities
+├── vaila_distortvideo_gui.py      # GUI for video distortion
+├── vaila_lensdistortvideo.py      # Video lens distortion correction
+├── vaila_manifest.py             # Manifest file for vailá
+├── vaila_mlwalkway.py            # Machine learning analysis for walkways
+├── vaila_upscaler.py              # Data upscaling tools
+├── vailaplot2d.py                # Plot 2D biomechanical data
+├── vailaplot3d.py                # Plot 3D biomechanical data
+├── vector_coding.py              # Joint vector coding analysis
+├── videoprocessor.py             # Video processing tools
+├── viewc3d.py                    # Visualize C3D files
+├── vpython_c3d.py                # 3D visualization using VPython
+├── walkway_ml_prediction.py      # Machine learning prediction for walkway analysis
+└── yolov11track.py               # YOLOv11 based tracking
 ```
+
+Essa versão da árvore reflete exatamente o que você possui atualmente.
 
 ## Citing *vailá*
 
