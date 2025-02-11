@@ -4,8 +4,9 @@ vaila.py
 ===============================================================================
 Author: Paulo R. P. Santiago
 Date: 22 January 2025
-Version updated: 03.Feb.2025
-Python Version: 3.12.8
+Version updated: 10.Feb.2025
+Python Version: 3.12.9
+
 
 
 Description:
@@ -101,7 +102,6 @@ from vaila import (
     markerless_3D_analysis,
     mocap_analysis,
     forceplate_analysis,
-    gnss_analysis,
     convert_c3d_to_csv,
     convert_csv_to_c3d,
     rearrange_data_in_directory,
@@ -142,6 +142,8 @@ from vaila import (
     yolov11track,
     cutvideo,
     vaila_distortvideo_gui,
+    viewc3d,
+    mphands,
 )
 
 
@@ -177,7 +179,7 @@ B2_r2_c4 - GNSS/GPS       B2_r2_c5 - MEG/EEG
 
 B3_r3_c1 - HR/ECG         B3_r3_c2 - Markerless_MP_Yolo  B3_r3_c3 - vailá_and_jump
 B3_r3_c4 - Cube2D         B3_r3_c5 - Animal Open Field 
-B3_r4_c1 - Tracker        B3_r4_c2 - ML Walkway       B3_r4_c3 - vailá
+B3_r4_c1 - Tracker        B3_r4_c2 - ML Walkway       B3_r4_c3 - Markerless Hands
 B3_r4_c4 - vailá          B3_r4_c5 - vailá
 ============================== Tools Available (Frame C) ===================
 C_A: Data Files
@@ -218,7 +220,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 03.Feb.2025")
+        self.title("vailá - 11.Feb.2025 (Python 3.12.9)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -496,7 +498,7 @@ class Vaila(tk.Tk):
             B4:
             - Tracker
             - ML Walkway
-            - vailá
+            - Markerless Hands
             - vailá
             - vailá
         """
@@ -686,7 +688,7 @@ class Vaila(tk.Tk):
         )
 
         # B4_r4_c2 - ML Walkway
-        vaila_btn4 = tk.Button(
+        mlwalkway_btn = tk.Button(
             row4_frame,
             text="ML Walkway",
             width=button_width,
@@ -695,11 +697,11 @@ class Vaila(tk.Tk):
 
 
         # B4_r4_c3 - vailá
-        vaila_btn5 = tk.Button(
+        mphands_btn = tk.Button(
             row4_frame,
-            text="vailá",
+            text="Markerless Hands",
             width=button_width,
-            command=self.show_vaila_message,
+            command=self.markerless_hands,
         )
 
         # B4_r4_c4 - vailá
@@ -720,8 +722,8 @@ class Vaila(tk.Tk):
 
         # Pack row4 buttons
         tracker_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
-        vaila_btn4.pack(side="left", expand=True, fill="x", padx=2, pady=2)
-        vaila_btn5.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        mlwalkway_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        mphands_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         vaila_btn6.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         vaila_btn7.pack(side="left", expand=True, fill="x", padx=2, pady=2)
 
@@ -1334,17 +1336,11 @@ class Vaila(tk.Tk):
     def gnss_analysis(self):
         """Runs the GNSS Analysis module.
 
-        This function runs the GNSS Analysis module, which can be used to analyze
-        GNSS data from CSV files. It processes the GNSS data to extract relevant
-        metrics such as speed, distance, and time. The module will then generate CSV
-        files with the processed results and plots of the GNSS signals.
-
-        The user will be prompted to select the directory containing the GNSS CSV
-        files and input the sampling rate and start and end indices for analysis.
-
+        This function runs the GNSS Analysis module...
         """
-        show_vaila_message()
-        # gnss_analysis.run_gnss_analysis()
+        from vaila.gnss_analysis import run_gnss_analysis_gui
+
+        run_gnss_analysis_gui()
 
     # B_r2_c5
     def eeg_analysis(self):
@@ -1564,7 +1560,22 @@ class Vaila(tk.Tk):
         text_widget.insert("1.0", help_text)
         text_widget.config(state="disabled")
 
+    # B_r4_c2 - ML Walkway
+    def ml_walkway(self):
+        """Invokes the vaila_mlwalkway module."""
+        from vaila import vaila_mlwalkway
+
+        vaila_mlwalkway.run_vaila_mlwalkway_gui()
+
+    # B_r4_c3 - Markerless Hands
+    def markerless_hands(self):
+        """Invokes the vaila_mphands module."""
+        from vaila import mphands
+
+        mphands.run_mphands()
+
     # C_A_r1_c1
+
     def reorder_csv_data(self):
         """Runs the Reorder CSV Data module.
 
@@ -1827,13 +1838,13 @@ class Vaila(tk.Tk):
     # C_B_r4_c1
     def run_distortvideo(self):
         """Runs the Lens Distortion Correction Module.
- 
+
         This method provides options to correct lens distortion in either videos or CSV coordinate files.
         It opens a dialog for the user to choose between:
         1. Video distortion correction (vaila_lensdistortvideo)
         2. CSV/DAT coordinate distortion correction (vaila_datdistort)
         3. Interactive Distortion Correction (vaila_distortvideo_gui)
- 
+
         Both options use the same camera calibration parameters loaded from a CSV file to perform
         the corrections.
         """
@@ -1841,38 +1852,40 @@ class Vaila(tk.Tk):
         dialog = Toplevel(self)
         dialog.title("Choose Distortion Correction Type")
         dialog.geometry("300x300")  # Aumentado para acomodar a nova opção
-        
+
         # Add descriptive label
         Label(dialog, text="Select the type of distortion correction:", pady=10).pack()
-        
+
         # Add button for Video Correction
         Button(
-            dialog, 
+            dialog,
             text="Video Correction",
-            command=lambda: [vaila_lensdistortvideo.run_distortvideo(), dialog.destroy()]
+            command=lambda: [
+                vaila_lensdistortvideo.run_distortvideo(),
+                dialog.destroy(),
+            ],
         ).pack(pady=5)
-        
+
         # Add button for Interactive Distortion Correction
         Button(
             dialog,
-            text="Interactive Distortion Correction", 
-            command=lambda: [vaila_distortvideo_gui.run_distortvideo_gui(), dialog.destroy()]
+            text="Interactive Distortion Correction",
+            command=lambda: [
+                vaila_distortvideo_gui.run_distortvideo_gui(),
+                dialog.destroy(),
+            ],
         ).pack(pady=5)
-        
+
         # Add button for CSV Coordinates Distortion Correction
         Button(
             dialog,
-            text="CSV Coordinates Distortion Correction", 
-            command=lambda: [vaila_datdistort.run_datdistort(), dialog.destroy()]
+            text="CSV Coordinates Distortion Correction",
+            command=lambda: [vaila_datdistort.run_datdistort(), dialog.destroy()],
         ).pack(pady=5)
-        
+
         # Add cancel button
-        Button(
-            dialog,
-            text="Cancel",
-            command=dialog.destroy
-        ).pack(pady=10)
-        
+        Button(dialog, text="Cancel", command=dialog.destroy).pack(pady=10)
+
         # Make dialog modal
         dialog.transient(self)
         dialog.grab_set()
@@ -1882,8 +1895,8 @@ class Vaila(tk.Tk):
     def cut_video(self):
         """Runs the video cutting module.
 
-        This function runs the video cutting module, which allows users to mark 
-        start and end frames for cutting/trimming videos. The module provides 
+        This function runs the video cutting module, which allows users to mark
+        start and end frames for cutting/trimming videos. The module provides
         frame-by-frame navigation and saves each cut segment as a new video file.
 
         Controls:
@@ -1897,14 +1910,36 @@ class Vaila(tk.Tk):
 
     # C_C_r1_c1
     def show_c3d_data(self):
-        """Runs the show_c3d_data module.
+        """Runs the C3D visualizer.
 
-        This function runs the show_c3d_data module, which can be used to
-        visualize data from .c3d files using Dash and Plotly, with marker
-        selection interface and frame animation.
-
+        Opens a dialog for the user to choose between:
+          1. Matplotlib based visualizer (showc3d.py)
+          2. Open3D based visualizer (viewc3d.py)
         """
-        show_c3d()
+        # Create a dialog window to choose the visualizer
+        dialog = Toplevel(self)
+        dialog.title("Selecione o Visualizador C3D")
+        dialog.geometry("300x150")
+
+        Label(dialog, text="Escolha o visualizador C3D:", pady=10).pack()
+
+        Button(
+            dialog,
+            text="Matplotlib Visualizer",
+            command=lambda: [show_c3d(), dialog.destroy()],
+        ).pack(pady=5)
+
+        Button(
+            dialog,
+            text="Open3D Visualizer",
+            command=lambda: [viewc3d.main(), dialog.destroy()],
+        ).pack(pady=5)
+
+        Button(dialog, text="Cancelar", command=dialog.destroy).pack(pady=10)
+
+        dialog.transient(self)
+        dialog.grab_set()
+        self.wait_window(dialog)
 
     # C_C_r1_c2
     def show_csv_file(self):

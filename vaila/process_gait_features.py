@@ -10,8 +10,8 @@
 # Description:
 # ------------
 # This script extracts spatial and temporal features from gait analysis data
-# stored in .csv files. It computes metrics such as mean, variance, range, speed, 
-# and step length for each individual and trial, organizing the results in a final 
+# stored in .csv files. It computes metrics such as mean, variance, range, speed,
+# and step length for each individual and trial, organizing the results in a final
 # .csv file for further analysis.
 #
 # Key Features:
@@ -40,7 +40,10 @@
 import os
 import pandas as pd
 import numpy as np
+from rich import print
 from tkinter import Tk, filedialog, simpledialog
+from datetime import datetime
+
 
 def calculate_features(data_block):
     """
@@ -48,64 +51,120 @@ def calculate_features(data_block):
     """
     features = {}
     # Spatial statistics
-    features['left_heel_x_mean'] = data_block['left_heel_x'].mean()
-    features['left_heel_y_mean'] = data_block['left_heel_y'].mean()
-    features['left_foot_index_x_mean'] = data_block['left_foot_index_x'].mean()
-    features['left_foot_index_y_mean'] = data_block['left_foot_index_y'].mean()
+    features["left_heel_x_mean"] = data_block["left_heel_x"].mean()
+    features["left_heel_y_mean"] = data_block["left_heel_y"].mean()
+    features["left_foot_index_x_mean"] = data_block["left_foot_index_x"].mean()
+    features["left_foot_index_y_mean"] = data_block["left_foot_index_y"].mean()
 
-    features['right_heel_x_mean'] = data_block['right_heel_x'].mean()
-    features['right_heel_y_mean'] = data_block['right_heel_y'].mean()
-    features['right_foot_index_x_mean'] = data_block['right_foot_index_x'].mean()
-    features['right_foot_index_y_mean'] = data_block['right_foot_index_y'].mean()
+    features["right_heel_x_mean"] = data_block["right_heel_x"].mean()
+    features["right_heel_y_mean"] = data_block["right_heel_y"].mean()
+    features["right_foot_index_x_mean"] = data_block["right_foot_index_x"].mean()
+    features["right_foot_index_y_mean"] = data_block["right_foot_index_y"].mean()
 
     # Variance
-    features['left_heel_x_var'] = data_block['left_heel_x'].var()
-    features['left_heel_y_var'] = data_block['left_heel_y'].var()
-    features['left_foot_index_x_var'] = data_block['left_foot_index_x'].var()
-    features['left_foot_index_y_var'] = data_block['left_foot_index_y'].var()
+    features["left_heel_x_var"] = data_block["left_heel_x"].var()
+    features["left_heel_y_var"] = data_block["left_heel_y"].var()
+    features["left_foot_index_x_var"] = data_block["left_foot_index_x"].var()
+    features["left_foot_index_y_var"] = data_block["left_foot_index_y"].var()
 
-    features['right_heel_x_var'] = data_block['right_heel_x'].var()
-    features['right_heel_y_var'] = data_block['right_heel_y'].var()
-    features['right_foot_index_x_var'] = data_block['right_foot_index_x'].var()
-    features['right_foot_index_y_var'] = data_block['right_foot_index_y'].var()
+    features["right_heel_x_var"] = data_block["right_heel_x"].var()
+    features["right_heel_y_var"] = data_block["right_heel_y"].var()
+    features["right_foot_index_x_var"] = data_block["right_foot_index_x"].var()
+    features["right_foot_index_y_var"] = data_block["right_foot_index_y"].var()
 
     # Range of motion
-    features['left_heel_x_range'] = data_block['left_heel_x'].max() - data_block['left_heel_x'].min()
-    features['left_heel_y_range'] = data_block['left_heel_y'].max() - data_block['left_heel_y'].min()
+    features["left_heel_x_range"] = (
+        data_block["left_heel_x"].max() - data_block["left_heel_x"].min()
+    )
+    features["left_heel_y_range"] = (
+        data_block["left_heel_y"].max() - data_block["left_heel_y"].min()
+    )
 
-    features['right_heel_x_range'] = data_block['right_heel_x'].max() - data_block['right_heel_x'].min()
-    features['right_heel_y_range'] = data_block['right_heel_y'].max() - data_block['right_heel_y'].min()
+    features["right_heel_x_range"] = (
+        data_block["right_heel_x"].max() - data_block["right_heel_x"].min()
+    )
+    features["right_heel_y_range"] = (
+        data_block["right_heel_y"].max() - data_block["right_heel_y"].min()
+    )
+
+    # Adicionando range para foot_index
+    features["left_foot_index_x_range"] = (
+        data_block["left_foot_index_x"].max() - data_block["left_foot_index_x"].min()
+    )
+    features["left_foot_index_y_range"] = (
+        data_block["left_foot_index_y"].max() - data_block["left_foot_index_y"].min()
+    )
+
+    features["right_foot_index_x_range"] = (
+        data_block["right_foot_index_x"].max() - data_block["right_foot_index_x"].min()
+    )
+    features["right_foot_index_y_range"] = (
+        data_block["right_foot_index_y"].max() - data_block["right_foot_index_y"].min()
+    )
+
+    # Calcular velocidades (diferença entre frames consecutivos)
+    time_diff = 1  # assumindo tempo constante entre frames
+    
+    # Velocidades do calcanhar esquerdo
+    features["left_heel_x_speed"] = np.mean(np.diff(data_block["left_heel_x"]) / time_diff)
+    features["left_heel_y_speed"] = np.mean(np.diff(data_block["left_heel_y"]) / time_diff)
+    
+    # Velocidades do índice do pé esquerdo
+    features["left_foot_index_x_speed"] = np.mean(np.diff(data_block["left_foot_index_x"]) / time_diff)
+    features["left_foot_index_y_speed"] = np.mean(np.diff(data_block["left_foot_index_y"]) / time_diff)
+    
+    # Velocidades do calcanhar direito
+    features["right_heel_x_speed"] = np.mean(np.diff(data_block["right_heel_x"]) / time_diff)
+    features["right_heel_y_speed"] = np.mean(np.diff(data_block["right_heel_y"]) / time_diff)
+    
+    # Velocidades do índice do pé direito
+    features["right_foot_index_x_speed"] = np.mean(np.diff(data_block["right_foot_index_x"]) / time_diff)
+    features["right_foot_index_y_speed"] = np.mean(np.diff(data_block["right_foot_index_y"]) / time_diff)
+    
+    # Calcular comprimento dos passos
+    # Distância euclidiana entre os calcanhares
+    features["left_step_length"] = np.mean(np.sqrt(
+        (data_block["left_heel_x"] - data_block["right_heel_x"])**2 +
+        (data_block["left_heel_y"] - data_block["right_heel_y"])**2
+    ))
+    
+    features["right_step_length"] = np.mean(np.sqrt(
+        (data_block["right_heel_x"] - data_block["left_heel_x"])**2 +
+        (data_block["right_heel_y"] - data_block["left_heel_y"])**2
+    ))
 
     return features
+
 
 def divide_into_blocks(data, num_steps):
     """
     Divide the data into blocks based on the number of steps provided.
     """
     block_size = len(data) // num_steps
-    blocks = [data.iloc[i * block_size:(i + 1) * block_size] for i in range(num_steps)]
+    blocks = [
+        data.iloc[i * block_size : (i + 1) * block_size] for i in range(num_steps)
+    ]
     return blocks
+
 
 def process_files_and_save(input_dir, output_dir):
     """
     Process all .csv files in the input directory and save extracted features to output.
     """
-    root = Tk()
-    root.withdraw()  # Hide the root window
 
-    participant_name = simpledialog.askstring("Participant Name", "Enter the participant's name:")
-    if not participant_name:
-        print("No participant name provided. Exiting...")
-        return
-
-    csv_files = [os.path.join(input_dir, f) for f in os.listdir(input_dir) if f.endswith(".csv")]
+    csv_files = [
+        os.path.join(input_dir, f) for f in os.listdir(input_dir) if f.endswith(".csv")
+    ]
     all_features = []
 
     for file in csv_files:
         print(f"Processing file: {os.path.basename(file)}")
         data = pd.read_csv(file)
 
-        num_steps = simpledialog.askinteger("Number of Steps", f"Enter the number of steps for {os.path.basename(file)}:")
+        num_steps = simpledialog.askinteger(
+            "Number of Steps",
+            f"Enter the number of steps for {os.path.basename(file)}:",
+        )
         if not num_steps or num_steps <= 0:
             print("Invalid number of steps. Skipping file...")
             continue
@@ -113,25 +172,34 @@ def process_files_and_save(input_dir, output_dir):
         blocks = divide_into_blocks(data, num_steps)
         for i, block in enumerate(blocks):
             features = calculate_features(block)
-            features['Participant'] = participant_name
-            features['Trial'] = os.path.basename(file)
-            features['Step_Block'] = i + 1
+            features["Participant"] = os.path.splitext(os.path.basename(file))[0]
+            features["Trial"] = os.path.basename(file)
+            features["Step_Block"] = i + 1
             all_features.append(features)
 
     if all_features:
         result_df = pd.DataFrame(all_features)
-        output_file = os.path.join(output_dir, f"{participant_name}_gait_features.csv")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        if len(csv_files) == 1:
+            base_name = os.path.splitext(os.path.basename(csv_files[0]))[0]
+            output_file = os.path.join(
+                output_dir, f"{base_name}_gaitfeatures_{timestamp}.csv"
+            )
+        else:
+            output_file = os.path.join(output_dir, f"gaitfeatures_{timestamp}.csv")
         result_df.to_csv(output_file, index=False)
         print(f"Feature extraction complete. Results saved to {output_file}.")
     else:
         print("No features were extracted. No output file created.")
 
-def main():
+
+def run_process_gait_features():
     """
     Main function to select directories and process gait data.
     """
-    root = Tk()
-    root.withdraw()  # Hide the root window
+    # Print the directory and name of the script being executed
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
 
     input_dir = filedialog.askdirectory(title="Select Input Directory with .csv Files")
     if not input_dir:
@@ -145,7 +213,6 @@ def main():
 
     process_files_and_save(input_dir, output_dir)
 
+
 if __name__ == "__main__":
-    main()
-
-
+    run_process_gait_features()

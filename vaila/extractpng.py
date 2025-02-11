@@ -134,11 +134,11 @@ class VideoProcessor:
                     "-sws_flags",
                     "bicubic",
                     "-pix_fmt",
-                    "rgb24",        # Mantido para cor correta
+                    "rgb24",  # Mantido para cor correta
                     "-f",
-                    "image2",       # Força formato de imagem
-                    "-compression_level", 
-                    "6",           # Nível de compressão PNG (0-9)
+                    "image2",  # Força formato de imagem
+                    "-compression_level",
+                    "6",  # Nível de compressão PNG (0-9)
                     output_pattern,
                 ]
 
@@ -147,10 +147,12 @@ class VideoProcessor:
                     try:
                         print(f"\nProcessing {item} with hardware acceleration...")
                         subprocess.run(command, check=True)
-                            
+
                     except subprocess.CalledProcessError:
-                        print("\nHardware acceleration failed, trying software decoder...")
-                        
+                        print(
+                            "\nHardware acceleration failed, trying software decoder..."
+                        )
+
                         # Remove aceleração de hardware para tentar decoder de software
                         command = [
                             "ffmpeg",
@@ -172,11 +174,13 @@ class VideoProcessor:
                             "6",
                             output_pattern,
                         ]
-                        
+
                         subprocess.run(command, check=True)
 
                     print(f"\n\nChecking frames in {output_dir}...")
-                    total_frames = len([f for f in os.listdir(output_dir) if f.endswith('.png')])
+                    total_frames = len(
+                        [f for f in os.listdir(output_dir) if f.endswith(".png")]
+                    )
                     print(f"Total frames extracted: {total_frames}")
 
                     # Salva informações básicas do vídeo
@@ -186,10 +190,10 @@ class VideoProcessor:
                         f.write(f"Resolution: {width}x{height}\n")
                         f.write(f"Total frames: {total_frames}\n")
                         f.write(f"Extraction timestamp: {timestamp}\n")
-                    
+
                     print(f"Successfully extracted frames from {item}")
                     print(f"Resolution: {width}x{height}, FPS: {fps}")
-                
+
                 except Exception as e:
                     print(f"Error processing {item}: {str(e)}")
                     raise
@@ -287,9 +291,9 @@ class VideoProcessor:
         codec_choice = simpledialog.askstring(
             "Codec Selection",
             "Choose codec (type '264' for H.264 or '265' for H.265):",
-            initialvalue="264"
+            initialvalue="264",
         )
-        
+
         # Set codec and preset based on user choice
         if codec_choice == "265":
             codec = "libx265"
@@ -325,16 +329,16 @@ class VideoProcessor:
                         "-preset",
                         preset,
                         "-pix_fmt",
-                        "yuv420p"
+                        "yuv420p",
                     ]
-                    
+
                     # Add extra parameters if any
                     if extra_params:
                         command.extend(extra_params)
-                    
+
                     # Add output path
                     command.append(output_video_path)
-                    
+
                     subprocess.run(command, check=True)
                     print(f"Video created: {output_video_path}")
                     print(f"Using codec: {codec}")
@@ -375,26 +379,66 @@ class VideoProcessor:
     def get_video_info(self, video_path):
         """Get video dimensions and FPS using ffprobe."""
         try:
-            width = int(subprocess.check_output([
-                "ffprobe", "-v", "error", "-select_streams", "v:0",
-                "-show_entries", "stream=width", "-of", "csv=p=0",
-                video_path
-            ]).decode().strip())
-            
-            height = int(subprocess.check_output([
-                "ffprobe", "-v", "error", "-select_streams", "v:0",
-                "-show_entries", "stream=height", "-of", "csv=p=0",
-                video_path
-            ]).decode().strip())
-            
-            fps = float(subprocess.check_output([
-                "ffprobe", "-v", "error", "-select_streams", "v:0",
-                "-show_entries", "stream=r_frame_rate", "-of", "csv=p=0",
-                video_path
-            ]).decode().strip().split('/')[0])
-            
+            width = int(
+                subprocess.check_output(
+                    [
+                        "ffprobe",
+                        "-v",
+                        "error",
+                        "-select_streams",
+                        "v:0",
+                        "-show_entries",
+                        "stream=width",
+                        "-of",
+                        "csv=p=0",
+                        video_path,
+                    ]
+                )
+                .decode()
+                .strip()
+            )
+
+            height = int(
+                subprocess.check_output(
+                    [
+                        "ffprobe",
+                        "-v",
+                        "error",
+                        "-select_streams",
+                        "v:0",
+                        "-show_entries",
+                        "stream=height",
+                        "-of",
+                        "csv=p=0",
+                        video_path,
+                    ]
+                )
+                .decode()
+                .strip()
+            )
+
+            fps = float(
+                subprocess.check_output(
+                    [
+                        "ffprobe",
+                        "-v",
+                        "error",
+                        "-select_streams",
+                        "v:0",
+                        "-show_entries",
+                        "stream=r_frame_rate",
+                        "-of",
+                        "csv=p=0",
+                        video_path,
+                    ]
+                )
+                .decode()
+                .strip()
+                .split("/")[0]
+            )
+
             return width, height, fps
-            
+
         except subprocess.CalledProcessError as e:
             print(f"Error getting video info: {e.stderr}")
             raise
