@@ -25,7 +25,7 @@ channels:
   - defaults
   - conda-forge
 dependencies:
-  - python=3.12.8
+  - python=3.12.9
   - numpy
   - pandas
   - matplotlib
@@ -91,3 +91,6 @@ dependencies:
       - open3d
       - glfw
       - xgboost
+      - gpxpy
+      - simplekml
+      - folium

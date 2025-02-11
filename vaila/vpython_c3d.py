@@ -4,6 +4,7 @@ import numpy as np
 import tkinter as tk
 from tkinter import filedialog
 
+
 def load_c3d_file():
     """
     Abre um diálogo para selecionar um arquivo C3D e carrega os dados dos marcadores.
@@ -14,20 +15,22 @@ def load_c3d_file():
     # Cria uma janela de seleção de arquivo
     root = tk.Tk()
     root.withdraw()
-    filepath = filedialog.askopenfilename(title="Selecione um arquivo C3D",
-                                          filetypes=[("Arquivos C3D", "*.c3d")])
+    filepath = filedialog.askopenfilename(
+        title="Selecione um arquivo C3D", filetypes=[("Arquivos C3D", "*.c3d")]
+    )
     root.destroy()
     if not filepath:
         print("Nenhum arquivo foi selecionado. Encerrando.")
         exit(0)
-    
+
     # Carrega o arquivo C3D
     c3d = ezc3d.c3d(filepath)
-    pts = c3d["data"]["points"]   # shape: (4, num_markers, num_frames)
-    pts = pts[:3, :, :]            # pega somente x, y, z
+    pts = c3d["data"]["points"]  # shape: (4, num_markers, num_frames)
+    pts = pts[:3, :, :]  # pega somente x, y, z
     pts = np.transpose(pts, (2, 1, 0))  # reorganiza para (num_frames, num_markers, 3)
-    pts = pts * 0.001              # converte de mm para m
+    pts = pts * 0.001  # converte de mm para m
     return pts, filepath
+
 
 def create_spheres(points_frame, radius=0.01):
     """
@@ -40,9 +43,12 @@ def create_spheres(points_frame, radius=0.01):
     """
     spheres_list = []
     for pt in points_frame:
-        s = sphere(pos=vector(pt[0], pt[1], pt[2]), radius=radius, color=vector(1, 0, 0))
+        s = sphere(
+            pos=vector(pt[0], pt[1], pt[2]), radius=radius, color=vector(1, 0, 0)
+        )
         spheres_list.append(s)
     return spheres_list
+
 
 def update_spheres(spheres_list, points_frame):
     """
@@ -50,6 +56,7 @@ def update_spheres(spheres_list, points_frame):
     """
     for s, pt in zip(spheres_list, points_frame):
         s.pos = vector(pt[0], pt[1], pt[2])
+
 
 def main():
     # Carrega os dados do arquivo C3D
@@ -63,7 +70,7 @@ def main():
     scene.width = 800
     scene.height = 600
     scene.background = vector(0.8, 0.8, 0.8)
-    
+
     # Cria as esferas para o primeiro frame
     spheres_list = create_spheres(points[0])
     current_frame = 0
@@ -71,23 +78,26 @@ def main():
     def keydown(evt):
         nonlocal current_frame, spheres_list
         key = evt.key
-        if key == "n":   # Próximo frame
+        if key == "n":  # Próximo frame
             current_frame = (current_frame + 1) % num_frames
-        elif key == "p": # Frame anterior
+        elif key == "p":  # Frame anterior
             current_frame = (current_frame - 1) % num_frames
         else:
             return  # Ignora outras teclas
-        
+
         update_spheres(spheres_list, points[current_frame])
-        scene.title = f"Visualizador C3D com VPython - Frame {current_frame+1}/{num_frames}"
+        scene.title = (
+            f"Visualizador C3D com VPython - Frame {current_frame+1}/{num_frames}"
+        )
         print(f"Frame: {current_frame+1}/{num_frames}")
 
     # Associa a função de evento de tecla à cena
-    scene.bind('keydown', keydown)
-    
+    scene.bind("keydown", keydown)
+
     # Loop principal para manter a janela atualizada
     while True:
         rate(60)  # 60 atualizações por segundo
+
 
 if __name__ == "__main__":
     main()

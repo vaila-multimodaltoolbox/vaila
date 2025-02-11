@@ -97,11 +97,11 @@ def apply_boxes_directly_to_video(input_path, output_path, coordinates, selectio
                 # Usar apenas os pontos inicial e final para o retângulo
                 x1, y1 = int(coords[0][0]), int(coords[0][1])
                 x2, y2 = int(coords[2][0]), int(coords[2][1])
-                
+
                 # Garantir que x1,y1 seja o ponto superior esquerdo
                 x1, x2 = min(x1, x2), max(x1, x2)
                 y1, y2 = min(y1, y2), max(y1, y2)
-                
+
                 if mode == "outside":
                     # Criar uma cópia do frame preenchida com preto
                     black_frame = np.zeros_like(frame)
@@ -111,7 +111,7 @@ def apply_boxes_directly_to_video(input_path, output_path, coordinates, selectio
                 else:  # inside mode
                     # Desenhar retângulo preto diretamente no frame
                     cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 0), -1)
-            
+
             elif shape_type == "trapezoid":
                 pts = np.array(coords, np.int32)
                 if mode == "inside":
@@ -142,11 +142,11 @@ def apply_boxes_to_frames(frames_dir, coordinates, selections, frame_intervals):
                         # Usar apenas os pontos inicial e final para o retângulo
                         x1, y1 = int(coords[0][0]), int(coords[0][1])
                         x2, y2 = int(coords[2][0]), int(coords[2][1])
-                        
+
                         # Garantir que x1,y1 seja o ponto superior esquerdo
                         x1, x2 = min(x1, x2), max(x1, x2)
                         y1, y2 = min(y1, y2), max(y1, y2)
-                        
+
                         if mode == "outside":
                             mask = np.zeros_like(img)
                             cv2.rectangle(mask, (x1, y1), (x2, y2), (255, 255, 255), -1)
@@ -159,7 +159,7 @@ def apply_boxes_to_frames(frames_dir, coordinates, selections, frame_intervals):
                         pts = np.array(coords, np.int32)
                         if mode == "inside":
                             cv2.fillPoly(img, [pts], (0, 0, 0))
-                
+
                 cv2.imwrite(frame_path, img)
 
 
@@ -249,7 +249,7 @@ def get_box_coordinates(image_path):
                         (x1, y2),  # Bottom-left
                     ]
                     points.extend(rect_points)
-                    
+
                     color = "b" if selection_mode["mode"] == "outside" else "r"
                     rect = patches.Rectangle(
                         (x1, y1),
