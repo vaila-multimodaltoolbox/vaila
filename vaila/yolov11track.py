@@ -10,26 +10,54 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog
 from boxmot import StrongSort, ByteTrack, OcSort, DeepOcSort, HybridSort
 from pathlib import Path
+import subprocess
+import re
 
 # Configuração para evitar conflitos de biblioteca
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 torch.set_num_threads(1)  # Limita o número de threads para evitar conflitos
 
+
 def initialize_csv(output_dir, label, tracker_id, total_frames):
     """Inicializa um arquivo CSV para um ID de rastreador e rótulo específicos."""
     csv_file = os.path.join(output_dir, f"{label}_id{tracker_id}.csv")
     if not os.path.exists(csv_file):
-        with open(csv_file, mode='w', newline='') as file:
+        with open(csv_file, mode="w", newline="") as file:
             writer = csv.writer(file)
-            writer.writerow(["Frame", "Tracker ID", "Label", "X_min", "Y_min", "X_max", "Y_max", "Confidence"])
+            writer.writerow(
+                [
+                    "Frame",
+                    "Tracker ID",
+                    "Label",
+                    "X_min",
+                    "Y_min",
+                    "X_max",
+                    "Y_max",
+                    "Confidence",
+                ]
+            )
             for frame_idx in range(total_frames):
-                writer.writerow([frame_idx, tracker_id, label, np.nan, np.nan, np.nan, np.nan, np.nan])
+                writer.writerow(
+                    [
+                        frame_idx,
+                        tracker_id,
+                        label,
+                        np.nan,
+                        np.nan,
+                        np.nan,
+                        np.nan,
+                        np.nan,
+                    ]
+                )
     return csv_file
 
-def update_csv(csv_file, frame_idx, tracker_id, label, x_min, y_min, x_max, y_max, conf):
+
+def update_csv(
+    csv_file, frame_idx, tracker_id, label, x_min, y_min, x_max, y_max, conf
+):
     """Atualiza o arquivo CSV com dados de detecção para o frame específico."""
     rows = []
-    with open(csv_file, mode='r', newline='') as file:
+    with open(csv_file, mode="r", newline="") as file:
         reader = csv.reader(file)
         rows = list(reader)
 
@@ -39,9 +67,10 @@ def update_csv(csv_file, frame_idx, tracker_id, label, x_min, y_min, x_max, y_ma
             rows[i] = [frame_idx, tracker_id, label, x_min, y_min, x_max, y_max, conf]
             break
 
-    with open(csv_file, mode='w', newline='') as file:
+    with open(csv_file, mode="w", newline="") as file:
         writer = csv.writer(file)
         writer.writerows(rows)
+
 
 class TrackerConfigDialog(tk.simpledialog.Dialog):
     def __init__(self, parent, title=None):
@@ -50,17 +79,21 @@ class TrackerConfigDialog(tk.simpledialog.Dialog):
 
     def body(self, master):
         # Confidence
-        tk.Label(master, text="Confidence threshold:").grid(row=0, column=0, padx=5, pady=5)
+        tk.Label(master, text="Confidence threshold:").grid(
+            row=0, column=0, padx=5, pady=5
+        )
         self.conf = tk.Entry(master)
         self.conf.insert(0, "0.25")
         self.conf.grid(row=0, column=1, padx=5, pady=5)
         help_text = tk.Label(master, text="?", cursor="hand2", fg="blue")
         help_text.grid(row=0, column=2, padx=5, pady=5)
-        conf_tooltip = ("Confidence threshold (0-1):\n"
-                       "Controls how confident the model must be to detect an object.\n"
-                       "Higher values (e.g., 0.7): Fewer but more accurate detections\n"
-                       "Lower values (e.g., 0.25): More detections but may include false positives\n"
-                       "Recommended: 0.25-0.5 for tracking")
+        conf_tooltip = (
+            "Confidence threshold (0-1):\n"
+            "Controls how confident the model must be to detect an object.\n"
+            "Higher values (e.g., 0.7): Fewer but more accurate detections\n"
+            "Lower values (e.g., 0.25): More detections but may include false positives\n"
+            "Recommended: 0.25-0.5 for tracking"
+        )
         help_text.bind("<Enter>", lambda e: self.show_help(e, conf_tooltip))
         help_text.bind("<Leave>", self.hide_help)
 
@@ -71,28 +104,34 @@ class TrackerConfigDialog(tk.simpledialog.Dialog):
         self.iou.grid(row=1, column=1, padx=5, pady=5)
         help_text = tk.Label(master, text="?", cursor="hand2", fg="blue")
         help_text.grid(row=1, column=2, padx=5, pady=5)
-        iou_tooltip = ("Intersection over Union threshold (0-1):\n"
-                      "Controls how much overlap is needed to merge multiple detections.\n"
-                      "Higher values (e.g., 0.9): Very strict matching\n"
-                      "Lower values (e.g., 0.5): More lenient matching\n"
-                      "Recommended: 0.7 for most cases")
+        iou_tooltip = (
+            "Intersection over Union threshold (0-1):\n"
+            "Controls how much overlap is needed to merge multiple detections.\n"
+            "Higher values (e.g., 0.9): Very strict matching\n"
+            "Lower values (e.g., 0.5): More lenient matching\n"
+            "Recommended: 0.7 for most cases"
+        )
         help_text.bind("<Enter>", lambda e: self.show_help(e, iou_tooltip))
         help_text.bind("<Leave>", self.hide_help)
 
         # Device
-        tk.Label(master, text="Device (cuda/cpu):").grid(row=2, column=0, padx=5, pady=5)
+        tk.Label(master, text="Device (cuda/cpu):").grid(
+            row=2, column=0, padx=5, pady=5
+        )
         self.device = tk.Entry(master)
         self.device.insert(0, "cpu")
         self.device.grid(row=2, column=1, padx=5, pady=5)
         help_text = tk.Label(master, text="?", cursor="hand2", fg="blue")
         help_text.grid(row=2, column=2, padx=5, pady=5)
-        device_tooltip = ("Processing device options:\n"
-                         "'cuda' - Use GPU (NVIDIA only)\n"
-                         "        Much faster processing (10-20x)\n"
-                         "        Requires NVIDIA GPU and CUDA\n\n"
-                         "'cpu'  - Use CPU\n"
-                         "        Works on all computers\n"
-                         "        Slower but universally compatible")
+        device_tooltip = (
+            "Processing device options:\n"
+            "'cuda' - Use GPU (NVIDIA only)\n"
+            "        Much faster processing (10-20x)\n"
+            "        Requires NVIDIA GPU and CUDA\n\n"
+            "'cpu'  - Use CPU\n"
+            "        Works on all computers\n"
+            "        Slower but universally compatible"
+        )
         help_text.bind("<Enter>", lambda e: self.show_help(e, device_tooltip))
         help_text.bind("<Leave>", self.hide_help)
 
@@ -103,14 +142,16 @@ class TrackerConfigDialog(tk.simpledialog.Dialog):
         self.vid_stride.grid(row=3, column=1, padx=5, pady=5)
         help_text = tk.Label(master, text="?", cursor="hand2", fg="blue")
         help_text.grid(row=3, column=2, padx=5, pady=5)
-        stride_tooltip = ("Video stride (frames to skip):\n"
-                         "1 = Process every frame\n"
-                         "2 = Process every other frame\n"
-                         "3 = Process every third frame\n\n"
-                         "Higher values = Faster processing\n"
-                         "Lower values = Better tracking accuracy\n"
-                         "Recommended: 1 for accurate tracking\n"
-                         "            2-3 for faster processing")
+        stride_tooltip = (
+            "Video stride (frames to skip):\n"
+            "1 = Process every frame\n"
+            "2 = Process every other frame\n"
+            "3 = Process every third frame\n\n"
+            "Higher values = Faster processing\n"
+            "Lower values = Better tracking accuracy\n"
+            "Recommended: 1 for accurate tracking\n"
+            "            2-3 for faster processing"
+        )
         help_text.bind("<Enter>", lambda e: self.show_help(e, stride_tooltip))
         help_text.bind("<Leave>", self.hide_help)
 
@@ -127,9 +168,16 @@ class TrackerConfigDialog(tk.simpledialog.Dialog):
         self.tooltip.wm_overrideredirect(True)
         self.tooltip.wm_geometry(f"+{x}+{y}")
 
-        label = tk.Label(self.tooltip, text=text, justify='left',
-                        background="#ffffe0", relief='solid', borderwidth=1,
-                        padx=5, pady=5)
+        label = tk.Label(
+            self.tooltip,
+            text=text,
+            justify="left",
+            background="#ffffe0",
+            relief="solid",
+            borderwidth=1,
+            padx=5,
+            pady=5,
+        )
         label.pack()
 
     def hide_help(self, event=None):
@@ -147,7 +195,7 @@ class TrackerConfigDialog(tk.simpledialog.Dialog):
                 "half": True,
                 "persist": True,
                 "verbose": False,
-                "stream": True
+                "stream": True,
             }
             return True
         except ValueError:
@@ -156,6 +204,7 @@ class TrackerConfigDialog(tk.simpledialog.Dialog):
 
     def apply(self):
         self.result = self.result
+
 
 class ModelSelectorDialog(tk.simpledialog.Dialog):
     def body(self, master):
@@ -190,19 +239,13 @@ class ModelSelectorDialog(tk.simpledialog.Dialog):
             ("yolo11m-obb.pt", "OBB - Medium"),
             ("yolo11l-obb.pt", "OBB - Large"),
             ("yolo11x-obb.pt", "OBB - XLarge"),
-            # Tracking
-            ("yolo11n-track.pt", "Tracking - Nano"),
-            ("yolo11s-track.pt", "Tracking - Small"),
-            ("yolo11m-track.pt", "Tracking - Medium"),
-            ("yolo11l-track.pt", "Tracking - Large"),
-            ("yolo11x-track.pt", "Tracking - XLarge")
         ]
 
         self.listbox = tk.Listbox(master, width=50, height=15)
         for model, desc in models:
             self.listbox.insert(tk.END, f"{model} - {desc}")
         self.listbox.pack(padx=5, pady=5)
-        
+
         return self.listbox
 
     def validate(self):
@@ -215,6 +258,7 @@ class ModelSelectorDialog(tk.simpledialog.Dialog):
         selection = self.listbox.get(self.listbox.curselection())
         self.result = selection.split(" - ")[0]
 
+
 class TrackerSelectorDialog(tk.simpledialog.Dialog):
     def body(self, master):
         trackers = [
@@ -223,14 +267,14 @@ class TrackerSelectorDialog(tk.simpledialog.Dialog):
             ("strongsort", "StrongSort - Best precision with ReID"),
             ("ocsort", "OCSORT - Simple and efficient"),
             ("deepocsort", "DeepOCSORT - Enhanced OCSORT"),
-            ("hybridsort", "HybridSORT - Hybrid method")
+            ("hybridsort", "HybridSORT - Hybrid method"),
         ]
 
         self.listbox = tk.Listbox(master, width=50, height=10)
         for tracker, desc in trackers:
             self.listbox.insert(tk.END, f"{tracker} - {desc}")
         self.listbox.pack(padx=5, pady=5)
-        
+
         return self.listbox
 
     def validate(self):
@@ -243,6 +287,57 @@ class TrackerSelectorDialog(tk.simpledialog.Dialog):
         selection = self.listbox.get(self.listbox.curselection())
         self.result = selection.split(" - ")[0]
 
+
+def standardize_filename(filename: str) -> str:
+    """
+    Remove unwanted characters and replace spaces with underscores.
+    This function ensures that the file name follows a safe pattern for processing.
+    """
+    # Replace spaces and colons, for example:
+    new_name = filename.replace(" ", "_").replace(":", "-")
+    # Alternatively, for a more general cleanup, uncomment the line below:
+    # new_name = re.sub(r'[^A-Za-z0-9_.-]', '_', filename)
+    return new_name
+
+
+def process_video(input_file: str):
+    # Normalize the file path (resolves slashes and separators appropriately)
+    input_file = os.path.normpath(input_file)
+
+    # Check if the file actually exists
+    if not os.path.exists(input_file):
+        raise FileNotFoundError(f"File not found: {input_file}")
+
+    # Separate directory and base file name, and standardize the base name if necessary
+    dir_name = os.path.dirname(input_file)
+    base_name = os.path.basename(input_file)
+    standardized_name = standardize_filename(base_name)
+
+    # If the name has been altered, rename the file temporarily
+    if base_name != standardized_name:
+        new_file_path = os.path.join(dir_name, standardized_name)
+        os.rename(input_file, new_file_path)
+        input_file = new_file_path
+        print(f"Standardized file name: {input_file}")
+
+    # On Windows, ffmpeg may misinterpret backslashes. Replace them with forward slashes.
+    ffmpeg_input = input_file.replace("\\", "/")
+
+    # Build the command as a list of arguments so that spaces don't break the command.
+    cmd = [
+        "ffmpeg",
+        "-i",
+        ffmpeg_input,
+        "-filter_complex",
+        "your_filter_here",
+        "output.mp4",
+    ]
+
+    print("Executing command:", " ".join(cmd))
+    # Run the command without using the shell
+    subprocess.run(cmd)
+
+
 def run_yolov11track():
     root = tk.Tk()
     root.withdraw()
@@ -251,7 +346,7 @@ def run_yolov11track():
     video_dir = filedialog.askdirectory(title="Select Input Directory")
     if not video_dir:
         return
-    
+
     output_base_dir = filedialog.askdirectory(title="Select Output Directory")
     if not output_base_dir:
         return
@@ -266,10 +361,12 @@ def run_yolov11track():
     if not model_dialog.result:
         return
     model_name = model_dialog.result
-    
+
     # Construir o caminho completo para o modelo
-    models_dir = os.path.join(os.path.dirname(__file__), 'models')
-    os.makedirs(models_dir, exist_ok=True)  # Create models directory if it doesn't exist
+    models_dir = os.path.join(os.path.dirname(__file__), "models")
+    os.makedirs(
+        models_dir, exist_ok=True
+    )  # Create models directory if it doesn't exist
     model_path = os.path.join(models_dir, model_name)
 
     # Download the model if it doesn't exist
@@ -291,21 +388,20 @@ def run_yolov11track():
 
     # Get configuration using TrackerConfigDialog
     config_dialog = TrackerConfigDialog(root, title="Tracker Configuration")
-    if not hasattr(config_dialog, 'result'):
+    if not hasattr(config_dialog, "result"):
         return
-    
+
     config = config_dialog.result
-    
+
     # Inicialização do modelo YOLO
     model = YOLO(model_path)
 
-
     # Processa cada vídeo no diretório
     for video_file in os.listdir(video_dir):
-        if video_file.endswith(('.mp4', '.avi', '.mov')):
+        if video_file.endswith((".mp4", ".avi", ".mov")):
             video_path = os.path.join(video_dir, video_file)
             video_name = os.path.splitext(os.path.basename(video_path))[0]
-            
+
             # Cria um subdiretório para este vídeo específico
             output_dir = os.path.join(main_output_dir, video_name)
             os.makedirs(output_dir, exist_ok=True)
@@ -319,13 +415,10 @@ def run_yolov11track():
 
             # Especifica o caminho de saída para o vídeo processado
             out_video_path = os.path.join(output_dir, f"processed_{video_name}.mp4")
-            
+
             # Usa o codec 'mp4v' que é mais estável
             writer = cv2.VideoWriter(
-                out_video_path,
-                cv2.VideoWriter_fourcc(*'mp4v'),
-                fps,
-                (width, height)
+                out_video_path, cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height)
             )
 
             if not writer.isOpened():
@@ -337,13 +430,13 @@ def run_yolov11track():
             frame_idx = 0
             results = model.track(
                 source=video_path,
-                conf=config['conf'],
-                iou=config['iou'],
-                device=config['device'],
-                vid_stride=config['vid_stride'],
+                conf=config["conf"],
+                iou=config["iou"],
+                device=config["device"],
+                vid_stride=config["vid_stride"],
                 save=False,
                 stream=True,
-                persist=True
+                persist=True,
             )
 
             tracker_csv_files = {}
@@ -355,20 +448,42 @@ def run_yolov11track():
                     conf = box.conf[0].item()
                     tracker_id = int(box.id[0]) if box.id is not None else -1
                     class_id = int(box.cls[0].item()) if box.cls is not None else -1
-                    label = model.names[class_id] if class_id in model.names else "unknown"
+                    label = (
+                        model.names[class_id] if class_id in model.names else "unknown"
+                    )
 
                     # Desenha os bounding boxes no frame
                     label_text = f"{label}_id{tracker_id}, Conf: {conf:.2f}"
                     cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
-                    cv2.putText(frame, label_text, (x_min, y_min - 10), 
-                              cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                    cv2.putText(
+                        frame,
+                        label_text,
+                        (x_min, y_min - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.5,
+                        (0, 255, 0),
+                        2,
+                    )
 
                     # Inicializa e atualiza o CSV
                     if tracker_id not in tracker_csv_files:
-                        tracker_csv_files[tracker_id] = initialize_csv(output_dir, label, 
-                                                                     tracker_id, int(cap.get(cv2.CAP_PROP_FRAME_COUNT)))
-                    update_csv(tracker_csv_files[tracker_id], frame_idx, tracker_id, 
-                             label, x_min, y_min, x_max, y_max, conf)
+                        tracker_csv_files[tracker_id] = initialize_csv(
+                            output_dir,
+                            label,
+                            tracker_id,
+                            int(cap.get(cv2.CAP_PROP_FRAME_COUNT)),
+                        )
+                    update_csv(
+                        tracker_csv_files[tracker_id],
+                        frame_idx,
+                        tracker_id,
+                        label,
+                        x_min,
+                        y_min,
+                        x_max,
+                        y_max,
+                        conf,
+                    )
 
                 # Escreve o frame processado no vídeo de saída
                 writer.write(frame)
@@ -380,16 +495,30 @@ def run_yolov11track():
 
             # Converte o vídeo para um formato mais compatível usando ffmpeg
             try:
-                temp_path = out_video_path.replace('.mp4', '_temp.mp4')
+                temp_path = out_video_path.replace(".mp4", "_temp.mp4")
                 os.rename(out_video_path, temp_path)
-                os.system(f'ffmpeg -i {temp_path} -c:v libx264 -preset medium -crf 23 {out_video_path}')
+                os.system(
+                    f"ffmpeg -i {temp_path} -c:v libx264 -preset medium -crf 23 {out_video_path}"
+                )
                 os.remove(temp_path)
             except Exception as e:
                 print(f"Erro na conversão do vídeo: {str(e)}")
 
-            print(f"Processamento concluído para {video_file}. Resultados salvos em '{output_dir}'.")
+            print(
+                f"Processamento concluído para {video_file}. Resultados salvos em '{output_dir}'."
+            )
 
     root.destroy()
 
+
 if __name__ == "__main__":
-    run_yolov11track()
+    if len(sys.argv) < 2:
+        print("Usage: python olov11track.py [video_file]")
+        sys.exit(1)
+
+    video_file = sys.argv[1]
+    try:
+        process_video(video_file)
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        sys.exit(1)
