@@ -352,11 +352,13 @@ class ColumnReorderGUI(tk.Tk):
         else:
             base_file_name = file_names[0]
             full_path = os.path.join(directory_path, base_file_name)
-            
+
             try:
                 # Primeira tentativa de ler o arquivo
                 self.df = pd.read_csv(full_path)
-                self.max_decimal_places, self.scientific_notation = detect_precision_and_notation(full_path)
+                self.max_decimal_places, self.scientific_notation = (
+                    detect_precision_and_notation(full_path)
+                )
             except pd.errors.ParserError:
                 # Se houver erro de parsing, standardize o header e encerre a GUI
                 print("Parser error detected. Standardizing header...")
@@ -1142,7 +1144,7 @@ def rearrange_data_in_directory():
             print(original_headers)
             print("-" * 80)
             print("")
-            
+
             # Tenta criar a GUI
             app = ColumnReorderGUI(original_headers, file_names, selected_directory)
             app.mainloop()

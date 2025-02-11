@@ -694,8 +694,6 @@ class Vaila(tk.Tk):
             command=self.ml_walkway,
         )
 
-
-
         # B4_r4_c3 - vailá
         mphands_btn = tk.Button(
             row4_frame,
@@ -703,7 +701,6 @@ class Vaila(tk.Tk):
             width=button_width,
             command=self.markerless_hands,
         )
-
 
         # B4_r4_c4 - vailá
         vaila_btn6 = tk.Button(
@@ -1336,12 +1333,12 @@ class Vaila(tk.Tk):
     # B_r2_c4
     def gnss_analysis(self):
         """Runs the GNSS Analysis module.
-        
+
         This function runs the GNSS Analysis module...
         """
         from vaila.gnss_analysis import run_gnss_analysis_gui
-        run_gnss_analysis_gui()
 
+        run_gnss_analysis_gui()
 
     # B_r2_c5
     def eeg_analysis(self):
@@ -1431,18 +1428,20 @@ class Vaila(tk.Tk):
         """Runs the yolov11track analysis."""
         print("Running tracker analysis...")
         yolov11track.run_yolov11track()
-    
+
     # B_r4_c2 - ML Walkway
     def ml_walkway(self):
         """Invokes the vaila_mlwalkway module."""
         from vaila import vaila_mlwalkway
-        vaila_mlwalkway()
+
+        vaila_mlwalkway.run_vaila_mlwalkway_gui()
 
     # B_r4_c3 - Markerless Hands
     def markerless_hands(self):
         """Invokes the vaila_mphands module."""
         from vaila import mphands
-        mphands.run_mphands() 
+
+        mphands.run_mphands()
 
     # C_A_r1_c1
 
@@ -1708,13 +1707,13 @@ class Vaila(tk.Tk):
     # C_B_r4_c1
     def run_distortvideo(self):
         """Runs the Lens Distortion Correction Module.
- 
+
         This method provides options to correct lens distortion in either videos or CSV coordinate files.
         It opens a dialog for the user to choose between:
         1. Video distortion correction (vaila_lensdistortvideo)
         2. CSV/DAT coordinate distortion correction (vaila_datdistort)
         3. Interactive Distortion Correction (vaila_distortvideo_gui)
- 
+
         Both options use the same camera calibration parameters loaded from a CSV file to perform
         the corrections.
         """
@@ -1722,38 +1721,40 @@ class Vaila(tk.Tk):
         dialog = Toplevel(self)
         dialog.title("Choose Distortion Correction Type")
         dialog.geometry("300x300")  # Aumentado para acomodar a nova opção
-        
+
         # Add descriptive label
         Label(dialog, text="Select the type of distortion correction:", pady=10).pack()
-        
+
         # Add button for Video Correction
         Button(
-            dialog, 
+            dialog,
             text="Video Correction",
-            command=lambda: [vaila_lensdistortvideo.run_distortvideo(), dialog.destroy()]
+            command=lambda: [
+                vaila_lensdistortvideo.run_distortvideo(),
+                dialog.destroy(),
+            ],
         ).pack(pady=5)
-        
+
         # Add button for Interactive Distortion Correction
         Button(
             dialog,
-            text="Interactive Distortion Correction", 
-            command=lambda: [vaila_distortvideo_gui.run_distortvideo_gui(), dialog.destroy()]
+            text="Interactive Distortion Correction",
+            command=lambda: [
+                vaila_distortvideo_gui.run_distortvideo_gui(),
+                dialog.destroy(),
+            ],
         ).pack(pady=5)
-        
+
         # Add button for CSV Coordinates Distortion Correction
         Button(
             dialog,
-            text="CSV Coordinates Distortion Correction", 
-            command=lambda: [vaila_datdistort.run_datdistort(), dialog.destroy()]
+            text="CSV Coordinates Distortion Correction",
+            command=lambda: [vaila_datdistort.run_datdistort(), dialog.destroy()],
         ).pack(pady=5)
-        
+
         # Add cancel button
-        Button(
-            dialog,
-            text="Cancel",
-            command=dialog.destroy
-        ).pack(pady=10)
-        
+        Button(dialog, text="Cancel", command=dialog.destroy).pack(pady=10)
+
         # Make dialog modal
         dialog.transient(self)
         dialog.grab_set()
@@ -1763,8 +1764,8 @@ class Vaila(tk.Tk):
     def cut_video(self):
         """Runs the video cutting module.
 
-        This function runs the video cutting module, which allows users to mark 
-        start and end frames for cutting/trimming videos. The module provides 
+        This function runs the video cutting module, which allows users to mark
+        start and end frames for cutting/trimming videos. The module provides
         frame-by-frame navigation and saves each cut segment as a new video file.
 
         Controls:
@@ -1779,7 +1780,7 @@ class Vaila(tk.Tk):
     # C_C_r1_c1
     def show_c3d_data(self):
         """Runs the C3D visualizer.
-        
+
         Opens a dialog for the user to choose between:
           1. Matplotlib based visualizer (showc3d.py)
           2. Open3D based visualizer (viewc3d.py)
@@ -1789,27 +1790,22 @@ class Vaila(tk.Tk):
         dialog.title("Selecione o Visualizador C3D")
         dialog.geometry("300x150")
 
-        
         Label(dialog, text="Escolha o visualizador C3D:", pady=10).pack()
-        
+
         Button(
             dialog,
             text="Matplotlib Visualizer",
-            command=lambda: [show_c3d(), dialog.destroy()]
+            command=lambda: [show_c3d(), dialog.destroy()],
         ).pack(pady=5)
-        
+
         Button(
             dialog,
             text="Open3D Visualizer",
-            command=lambda: [viewc3d.main(), dialog.destroy()]
+            command=lambda: [viewc3d.main(), dialog.destroy()],
         ).pack(pady=5)
-        
-        Button(
-            dialog,
-            text="Cancelar",
-            command=dialog.destroy
-        ).pack(pady=10)
-        
+
+        Button(dialog, text="Cancelar", command=dialog.destroy).pack(pady=10)
+
         dialog.transient(self)
         dialog.grab_set()
         self.wait_window(dialog)
