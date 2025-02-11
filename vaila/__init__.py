@@ -39,7 +39,6 @@ from . import markerless_2D_analysis
 from . import markerless_3D_analysis
 from . import mocap_analysis
 from . import forceplate_analysis
-from . import gnss_analysis
 from .filemanager import (
     import_file,
     export_file,

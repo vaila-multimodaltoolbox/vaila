@@ -34,6 +34,7 @@ from numpy.linalg import lstsq
 from tkinter import filedialog, Tk, messagebox
 from datetime import datetime
 
+
 def rec3d(A, pixel):
     """
     Reconstructs a 3D point in a least-squares sense given DLT3D parameters and the observed pixel coordinates.
@@ -51,13 +52,16 @@ def rec3d(A, pixel):
     # Form the linear system derived from:
     # (a1 - x*a9)*X + (a2 - x*a10)*Y + (a3 - x*a11)*Z = x - a4
     # (a5 - y*a9)*X + (a6 - y*a10)*Y + (a7 - y*a11)*Z = y - a8
-    M = np.array([
-        [a1 - x * a9, a2 - x * a10, a3 - x * a11],
-        [a5 - y * a9, a6 - y * a10, a7 - y * a11]
-    ])
+    M = np.array(
+        [
+            [a1 - x * a9, a2 - x * a10, a3 - x * a11],
+            [a5 - y * a9, a6 - y * a10, a7 - y * a11],
+        ]
+    )
     b = np.array([x - a4, y - a8])
     sol, residuals, rank, s = lstsq(M, b, rcond=None)
     return sol  # Returns [X, Y, Z]
+
 
 def process_reconstruction(dlt_file, pixel_file):
     """
@@ -81,7 +85,9 @@ def process_reconstruction(dlt_file, pixel_file):
     pixel_df = pd.read_csv(pixel_file)
     required_cols = {"frame", "x", "y"}
     if not required_cols.issubset(pixel_df.columns):
-        raise ValueError("Pixel coordinate file must contain columns 'frame', 'x', and 'y'.")
+        raise ValueError(
+            "Pixel coordinate file must contain columns 'frame', 'x', and 'y'."
+        )
 
     reconstructed_points = []
     for i, row in pixel_df.iterrows():
@@ -100,23 +106,26 @@ def process_reconstruction(dlt_file, pixel_file):
     rec_df = pd.DataFrame(reconstructed_points, columns=["frame", "X", "Y", "Z"])
     return rec_df
 
+
 def main():
     root = Tk()
     root.withdraw()
-    
+
     messagebox.showinfo("Instructions", "Select the DLT3D parameters file (.dlt3d)")
     dlt_file = filedialog.askopenfilename(
-        title="Select DLT3D parameters file", 
-        filetypes=[("DLT3D files", "*.dlt3d"), ("CSV files", "*.csv")]
+        title="Select DLT3D parameters file",
+        filetypes=[("DLT3D files", "*.dlt3d"), ("CSV files", "*.csv")],
     )
     if not dlt_file:
         messagebox.showerror("Error", "No DLT3D file selected!")
         return
 
-    messagebox.showinfo("Instructions", "Select the pixel coordinate CSV file.\nThe file must contain columns: frame, x, y")
+    messagebox.showinfo(
+        "Instructions",
+        "Select the pixel coordinate CSV file.\nThe file must contain columns: frame, x, y",
+    )
     pixel_file = filedialog.askopenfilename(
-        title="Select pixel coordinate CSV file", 
-        filetypes=[("CSV files", "*.csv")]
+        title="Select pixel coordinate CSV file", filetypes=[("CSV files", "*.csv")]
     )
     if not pixel_file:
         messagebox.showerror("Error", "No pixel coordinate file selected!")
@@ -131,8 +140,11 @@ def main():
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_file = os.path.join(os.path.dirname(pixel_file), f"rec3d_{timestamp}.csv")
     rec_df.to_csv(output_file, index=False, float_format="%.6f")
-    messagebox.showinfo("Success", f"3D Reconstruction completed.\nOutput saved to:\n{output_file}")
+    messagebox.showinfo(
+        "Success", f"3D Reconstruction completed.\nOutput saved to:\n{output_file}"
+    )
     root.destroy()
+
 
 if __name__ == "__main__":
     main()
