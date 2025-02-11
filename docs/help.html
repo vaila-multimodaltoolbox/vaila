@@ -1,94 +1,224 @@
-<h1 id="vailá---versatile-anarcho-integrated-multimodal-toolbox">vailá - Versatile Anarcho-Integrated Multimodal Toolbox</h1>
-<h2 id="overview">Overview</h2>
-<p>vailá is a toolbox designed to enhance biomechanics analysis by leveraging multiple motion capture systems. “vailá” is an expression that blends the sound of the French word “voilà” with the direct encouragement in Portuguese “vai lá,” meaning “go there and do it!” This toolbox empowers you to explore, experiment, and create without the constraints of expensive commercial software.</p>
-<center>
-<img src="images/vaila.png" alt="vailá Logo" width="300"/>
-</center>
-<h2 id="vailá-manifest">vailá manifest!</h2>
-<p>If you have new ideas or suggestions, please send them to us. Join us in the liberation from paid software with the “vailá: Versatile Anarcho Integrated Liberation Ánalysis in Multimodal Toolbox.”</p>
-<p>In front of you stands a versatile and anarcho-integrated tool, designed to challenge the boundaries of commercial systems. This software, not a mere substitute, is a symbol of innovation and freedom, now available and accessible. However, this brave visitation of an old problem is alive and determined to eliminate these venal and virulent barriers that protect the monopoly of expensive software, ensuring the dissemination of knowledge and accessibility. We have left the box open with vailá to insert your ideas and processing in a liberated manner. The only verdict is versatility; a vendetta against exorbitant costs, held as a vow, not in vain, for the value and veracity of which shall one day vindicate the vigilant and the virtuous in the field of motion analysis. Surely, this torrent of technology tends to be very innovative, so let me simply add that it is a great honor to have you with us and you may call this tool vailá.</p>
-<p>― The vailá idea!</p>
-<p>“vailá” é uma expressão que mistura a sonoridade da palavra francesa “voilà” com o incentivo direto em português “vai lá”. É uma chamada à ação, um convite à iniciativa e à liberdade de explorar, experimentar e criar sem as limitações impostas por softwares comerciais caros. “vailá” significa “vai lá e faça!”, encorajando todos a aproveitar o poder das ferramentas versáteis e integradas do “vailá: Análise versátil da libertação anarquista integrada na caixa de ferramentas multimodal” para realizar análises com dados de múltiplos sistemas.</p>
-<h2 id="available-multimodal-analysis">Available Multimodal Analysis</h2>
-<h3 id="imu-analysis">1. IMU Analysis</h3>
-<p><strong>Description:</strong> Analyze Inertial Measurement Unit (IMU) data stored in CSV or C3D format. It processes and interprets motion data from wearable IMU sensors.</p>
-<p><strong>Instructions:</strong> Use the GUI or CLI to select your IMU CSV or C3D files. The analysis will process these files to extract and visualize the motion data.</p>
-<h3 id="kinematic-cluster-analysis">2. Kinematic Cluster Analysis</h3>
-<p><strong>Description:</strong> Analyze cluster marker data stored in CSV format. It helps in interpreting the motion data collected from marker-based motion capture systems.</p>
-<p><strong>Instructions:</strong> Use the GUI or CLI to select your cluster CSV files. You will be prompted to enter the sample rate and the configuration for the trunk and pelvis. Optionally, provide anatomical position data.</p>
-<h3 id="kinematic-mocap-full-body-analysis">3. Kinematic Mocap Full Body Analysis</h3>
-<p><strong>Description:</strong> Analyze full-body motion capture data in C3D format. It processes the data captured by motion capture systems that track full-body movements.</p>
-<p><strong>Instructions:</strong> Use the GUI or CLI to select your C3D files. The analysis will convert these files and process the motion capture data.</p>
-<h3 id="markerless-2d-with-video">4. Markerless 2D with video</h3>
-<p><strong>Description:</strong> Analyze 2D video data without using markers. It processes the motion data from 2D video recordings to extract relevant motion parameters.</p>
-<p><strong>Instructions:</strong> Use the GUI or CLI to select your 2D video files. The analysis will process these videos to extract motion data.</p>
-<h3 id="markerless-3d-with-multiple-videos">5. Markerless 3D with multiple videos</h3>
-<p><strong>Description:</strong> Process 3D video data without markers. It analyzes 3D video recordings to extract motion data and parameters.</p>
-<p><strong>Instructions:</strong> Use the GUI or CLI to select your 3D video files. The analysis will process these videos to extract 3D motion data.</p>
-<h2 id="available-tools">Available Tools</h2>
-<h3 id="edit-csv">6. Edit CSV</h3>
-<p><strong>Description:</strong> Organize and rearrange data files within a specified directory. This tool allows you to reorder columns, cut and select rows, and modify the global reference system of the data. It also allows for unit conversion and data reshaping, ensuring alignment with the desired coordinate system and consistent data formatting.</p>
-<p><strong>Instructions:</strong> Use the GUI or CLI to select your CSV files. The tool will guide you through the process of editing the files as needed, including reordering columns, cutting and selecting rows, modifying the laboratory coordinate system, and converting units.</p>
-<h3 id="convert-c3d-data-to-csv">7. Convert C3D data to CSV</h3>
-<p><strong>Description:</strong> Convert motion capture data files from C3D format to CSV format. This makes it easier to analyze and manipulate the data using standard data analysis tools.</p>
-<p><strong>Instructions:</strong> Use the GUI or CLI to select your C3D files. The tool will convert these files to CSV format.</p>
-<h3 id="metadata-info">8. Metadata info</h3>
-<p><strong>Description:</strong> Extract metadata information from video files. This is useful for synchronizing video data with other motion capture data.</p>
-<p><strong>Instructions:</strong> Use the GUI or CLI to select your video files. The tool will extract and display metadata information for each video file.</p>
-<h3 id="cut-videos-based-on-list">9. Cut videos based on list</h3>
-<p><strong>Description:</strong> Cut video files based on a list of specified time intervals. This is useful for segmenting videos into relevant portions for analysis.</p>
-<p><strong>Instructions:</strong> Use the GUI or CLI to select your video files and the list of time intervals. The tool will process these files to cut the videos accordingly.</p>
-<h3 id="draw-a-black-box-around-videos">10. Draw a black box around videos</h3>
-<p><strong>Description:</strong> Overlay a black box around video frames to highlight specific areas of interest. This can help in focusing on particular regions during analysis.</p>
-<p><strong>Instructions:</strong> Use the GUI or CLI to select your video files. The tool will overlay a black box around the specified area in the videos.</p>
-<h3 id="compress-videos-to-hevc-h.265">11. Compress videos to HEVC (H.265)</h3>
-<p><strong>Description:</strong> Compress video files using the HEVC (H.265) codec. This helps in reducing the file size while maintaining video quality.</p>
-<p><strong>Instructions:</strong> Use the GUI or CLI to select your video files. The tool will compress these videos using the HEVC codec.</p>
-<h3 id="compress-videos-to-h.264">12. Compress videos to H.264</h3>
-<p><strong>Description:</strong> Compress video files using the H.264 codec. This helps in reducing the file size while maintaining video quality.</p>
-<p><strong>Instructions:</strong> Use the GUI or CLI to select your video files. The tool will compress these videos using the H.264 codec.</p>
-<h3 id="plot-2d">13. Plot 2D</h3>
-<p><strong>Description:</strong> Generate 2D plots from CSV or C3D files using Matplotlib. This tool helps in visualizing the data in a 2D graph format.</p>
-<p><strong>Instructions:</strong> Use the GUI or CLI to select your data files. The tool will create a 2D plot of the data.</p>
-<h2 id="additional-commands">Additional Commands</h2>
-<p><strong>h</strong> - Display this help message.</p>
-<p><strong>exit</strong> - Exit the program.</p>
-<p>To use this toolbox, simply select the desired option by typing the corresponding number and pressing Enter. You can also type ‘h’ to view this help message or ‘exit’ to quit the program.</p>
-<h2 id="environment-setupinstall">Environment Setup/Install</h2>
-<ul>
-<li>Install the complete <a href="https://www.anaconda.com/download/success">Anaconda</a> virtual environment for your operating system. Remember to add the path and possible dependencies.</li>
-</ul>
-<ol type="1">
-<li><p>Clone the repository:</p>
-<div class="sourceCode" id="cb1"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> clone https://github.com/vaila-multimodaltoolbox/vaila</span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> vaila</span></code></pre></div></li>
-<li><p>Install the required environment and dependencies using the provided installation scripts:</p></li>
-</ol>
-<ul>
-<li><p>For <strong>Linux</strong>:</p>
-<div class="sourceCode" id="cb2"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="ex">./install_vaila_linux.sh</span></span></code></pre></div></li>
-<li><p>For <strong>macOS</strong>:</p>
-<div class="sourceCode" id="cb3"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="ex">./install_vaila_mac.sh</span></span></code></pre></div></li>
-<li><p>For <strong>Windows</strong>:</p>
-<p>Run the batch script:</p>
-<pre class="bat"><code>install_vaila_win.bat</code></pre></li>
-</ul>
-<ol start="3" type="1">
-<li>Running the Application:</li>
-</ol>
-<p>To run the vailá toolbox, activate the environment and start the application using the provided scripts.</p>
-<ul>
-<li><p><strong>macOS</strong>:</p>
-<div class="sourceCode" id="cb5"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="ex">./mac_launch_vaila.sh</span></span></code></pre></div></li>
-<li><p><strong>Linux</strong>:</p>
-<div class="sourceCode" id="cb6"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="ex">./linux_launch_vaila.sh</span></span></code></pre></div></li>
-<li><p><strong>Windows</strong>:</p>
-<p>Run from the Windows Terminal profile created, or activate the environment manually:</p>
-<div class="sourceCode" id="cb7"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="ex">conda</span> activate vaila</span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="ex">python</span> vaila.py</span></code></pre></div></li>
-</ul>
-<ol start="4" type="1">
-<li>Follow the multimodal menu instructions in the GUI or CLI.</li>
-</ol>
-<hr />
-<p>© 2024 vailá - Multimodal Toolbox. All rights reserved.</p>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>vailá - Versatile Anarcho Integrated Multimodal Toolbox Help</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
+    h1, h2, h3 { color: #2c3e50; }
+    pre { background-color: #f4f4f4; padding: 10px; overflow: auto; }
+    code { background-color: #f4f4f4; padding: 3px 6px; }
+    .section { margin-bottom: 40px; }
+  </style>
+</head>
+<body>
+  <h1>vailá - Versatile Anarcho Integrated Multimodal Toolbox Help</h1>
+  
+  <div class="section" id="english">
+    <h2>English Version</h2>
+  
+    <h3>Overview</h3>
+    <p>
+      vailá is an open-source multimodal toolbox for human movement analysis. It integrates data from various sources – including IMU, MoCap, markerless tracking, GNSS/GPS, EMG, and more – enabling advanced and customizable analysis.
+    </p>
+  
+    <h3>Key Features</h3>
+    <ul>
+      <li><strong>Data Integration:</strong> Supports multiple data types (IMU, MoCap, markerless, GNSS, EMG).</li>
+      <li><strong>Data Processing & Analysis:</strong> Feature extraction, advanced analysis, and 2D/3D visualization.</li>
+      <li><strong>Machine Learning:</strong> Modules for training, validation, and prediction using ML models.</li>
+      <li><strong>File Management:</strong> Organization, renaming, copying, and file movement.</li>
+      <li><strong>Video Processing:</strong> Extraction of frames, compression (H.264 and H.265), and video trimming.</li>
+    </ul>
+  
+    <h3>Installation Instructions</h3>
+    <h4>Prerequisites</h4>
+    <ul>
+      <li><strong>Anaconda:</strong> Ensure that Anaconda is installed and configured.</li>
+      <li><strong>FFmpeg:</strong> Required for video processing functionalities.</li>
+    </ul>
+    <h4>Steps</h4>
+    <ol>
+      <li>
+        <strong>Clone the repository:</strong>
+        <pre><code>git clone https://github.com/vaila-multimodaltoolbox/vaila.git
+cd vaila</code></pre>
+      </li>
+      <li>
+        <strong>Set up the environment:</strong>
+        <ul>
+          <li><strong>Linux:</strong> Run <code>./install_vaila_linux.sh</code></li>
+          <li><strong>macOS:</strong> Run <code>./install_vaila_mac.sh</code></li>
+          <li><strong>Windows:</strong> Run the PowerShell script: <code>.\install_vaila_win.ps1</code></li>
+        </ul>
+      </li>
+      <li>
+        <strong>Run vailá:</strong>
+        <pre><code>conda activate vaila
+python vaila.py</code></pre>
+      </li>
+    </ol>
+  
+    <h3>Modules and Tools</h3>
+    <p>
+      The vailá toolbox comprises the following modules:
+    </p>
+    <ul>
+      <li><strong>IMU Analysis</strong></li>
+      <li><strong>MoCap Analysis</strong> (Cluster, Full Body)</li>
+      <li><strong>Markerless Analysis</strong> (2D/3D)</li>
+      <li><strong>Force Plate Analysis</strong></li>
+      <li><strong>GNSS/GPS Analysis</strong></li>
+      <li><strong>EEG/EMG Analysis</strong></li>
+      <li>
+        <strong>ML Walkway:</strong> 
+        <ul>
+          <li>Model Training</li>
+          <li>Model Validation</li>
+          <li>Prediction with Pre-trained Models</li>
+        </ul>
+      </li>
+      <li><strong>File Management</strong></li>
+      <li><strong>Video Processing</strong></li>
+      <li><strong>Visualization</strong></li>
+    </ul>
+  
+    <h3>How to Use</h3>
+    <p>
+      After setting up the environment, run vailá using:
+    </p>
+    <pre><code>conda activate vaila
+python vaila.py</code></pre>
+    <p>
+      The graphical interface allows you to select the desired module. For example, when selecting "ML Walkway," a window with options for model training, validation, or prediction will open.
+    </p>
+  
+    <h3>Contributing</h3>
+    <p>
+      Contributions are welcome! If you encounter issues or have suggestions, please submit a pull request or open an issue on GitHub.
+    </p>
+  
+    <h3>License</h3>
+    <p>
+      This project is licensed under the <strong>GNU Lesser General Public License v3.0</strong>. See the <code>LICENSE</code> file for more details.
+    </p>
+  
+    <h3>How to Cite</h3>
+    <p>
+      If vailá is useful for your research, please cite:
+    </p>
+    <pre><code>@misc{vaila2024,
+  title={vailá - Versatile Anarcho Integrated Liberation Ánalysis in Multimodal Toolbox},
+  author={Paulo R. P. Santiago and Abel G. Chinaglia and others},
+  year={2024},
+  url={https://github.com/vaila-multimodaltoolbox/vaila}
+}</code></pre>
+  </div>
+  
+  <hr>
+  
+  <div class="section" id="portuguese">
+    <h2>Versão em Português</h2>
+  
+    <h3>Visão Geral</h3>
+    <p>
+      vailá é uma ferramenta multimodal de código aberto para análise do movimento humano. Ela integra dados de diversas fontes – como IMU, MoCap, rastreamento markerless, GNSS/GPS, EMG e mais – permitindo uma análise avançada e customizável.
+    </p>
+  
+    <h3>Principais Funcionalidades</h3>
+    <ul>
+      <li><strong>Integração de Dados:</strong> Suporte a múltiplos tipos de dados (IMU, MoCap, markerless, GNSS, EMG).</li>
+      <li><strong>Processamento & Análise de Dados:</strong> Extração de características, análise avançada e visualização em 2D/3D.</li>
+      <li><strong>Machine Learning:</strong> Módulos para treinamento, validação e predição utilizando modelos de ML.</li>
+      <li><strong>Gerenciamento de Arquivos:</strong> Organização, renomeação, cópia e movimentação de arquivos.</li>
+      <li><strong>Processamento de Vídeo:</strong> Extração de frames, compressão (H.264 e H.265) e corte de vídeos.</li>
+    </ul>
+  
+    <h3>Instruções de Instalação</h3>
+    <h4>Pré-requisitos</h4>
+    <ul>
+      <li><strong>Anaconda:</strong> Certifique-se de que o Anaconda está instalado e configurado.</li>
+      <li><strong>FFmpeg:</strong> Necessário para funcionalidades de processamento de vídeo.</li>
+    </ul>
+    <h4>Passos</h4>
+    <ol>
+      <li>
+        <strong>Clone o repositório:</strong>
+        <pre><code>git clone https://github.com/vaila-multimodaltoolbox/vaila.git
+cd vaila</code></pre>
+      </li>
+      <li>
+        <strong>Configurar o ambiente:</strong>
+        <ul>
+          <li><strong>Linux:</strong> Execute <code>./install_vaila_linux.sh</code></li>
+          <li><strong>macOS:</strong> Execute <code>./install_vaila_mac.sh</code></li>
+          <li><strong>Windows:</strong> Execute o script PowerShell: <code>.\install_vaila_win.ps1</code></li>
+        </ul>
+      </li>
+      <li>
+        <strong>Inicie o vailá:</strong>
+        <pre><code>conda activate vaila
+python vaila.py</code></pre>
+      </li>
+    </ol>
+  
+    <h3>Módulos e Ferramentas</h3>
+    <p>
+      O toolbox vailá é composto pelos seguintes módulos:
+    </p>
+    <ul>
+      <li><strong>Análise IMU</strong></li>
+      <li><strong>Análise MoCap</strong> (Cluster, Full Body)</li>
+      <li><strong>Análise Markerless</strong> (2D/3D)</li>
+      <li><strong>Análise de Force Plate</strong></li>
+      <li><strong>Análise GNSS/GPS</strong></li>
+      <li><strong>Análise EEG/EMG</strong></li>
+      <li>
+        <strong>ML Walkway:</strong> 
+        <ul>
+          <li>Treinamento de Modelos</li>
+          <li>Validação de Modelos</li>
+          <li>Predição com Modelos Pré-treinados</li>
+        </ul>
+      </li>
+      <li><strong>Gerenciamento de Arquivos</strong></li>
+      <li><strong>Processamento de Vídeo</strong></li>
+      <li><strong>Visualização</strong></li>
+    </ul>
+  
+    <h3>Como Utilizar</h3>
+    <p>
+      Após configurar o ambiente, inicie o vailá com o comando:
+    </p>
+    <pre><code>conda activate vaila
+python vaila.py</code></pre>
+    <p>
+      A interface gráfica permitirá que você selecione o módulo desejado. Por exemplo, ao selecionar "ML Walkway", uma janela com opções para treinamento, validação ou predição de modelos será aberta.
+    </p>
+  
+    <h3>Contribuição</h3>
+    <p>
+      Suas contribuições são bem-vindas! Caso encontre problemas ou tenha sugestões, por favor, envie um pull request ou abra uma issue no GitHub.
+    </p>
+  
+    <h3>Licença</h3>
+    <p>
+      Este projeto está licenciado sob a <strong>GNU Lesser General Public License v3.0</strong>. Consulte o arquivo <code>LICENSE</code> para mais detalhes.
+    </p>
+  
+    <h3>Como Citar</h3>
+    <p>
+      Se o vailá for útil na sua pesquisa, por favor, cite:
+    </p>
+    <pre><code>@misc{vaila2024,
+  title={vailá - Versatile Anarcho Integrated Liberation Ánalysis in Multimodal Toolbox},
+  author={Paulo R. P. Santiago and Abel G. Chinaglia and outros},
+  year={2024},
+  url={https://github.com/vaila-multimodaltoolbox/vaila}
+}</code></pre>
+  </div>
+  
+  <hr>
+  <p>&copy; 2024 vailá. Todos os direitos reservados.</p>
+</body>
+</html>

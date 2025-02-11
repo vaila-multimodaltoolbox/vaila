@@ -41,12 +41,14 @@ from numpy.linalg import inv
 from tkinter import filedialog, Tk, messagebox
 from rich import print
 
+
 def read_coordinates(file_path, usecols):
     """
     Reads coordinates from a CSV file using the specified columns.
     """
     df = pd.read_csv(file_path, usecols=usecols)
     return df.to_numpy()
+
 
 def dlt_calib(cp3d, cp2d):
     """
@@ -64,28 +66,29 @@ def dlt_calib(cp3d, cp2d):
     # If there is an extra column (e.g., frame numbers), ignore the first column.
     if cp3d.shape[1] > 3:
         cp3d = cp3d[:, 1:]
-    
+
     cp2d = np.asarray(cp2d)
     m = cp3d.shape[0]
     M = np.zeros((2 * m, 11))
     N = np.zeros((2 * m, 1))
-    
+
     for i in range(m):
         X, Y, Z = cp3d[i, :]
         x, y = cp2d[i, :]
-        M[2 * i, :]     = [X, Y, Z, 1, 0, 0, 0, 0, -x * X, -x * Y, -x * Z]
+        M[2 * i, :] = [X, Y, Z, 1, 0, 0, 0, 0, -x * X, -x * Y, -x * Z]
         M[2 * i + 1, :] = [0, 0, 0, 0, X, Y, Z, 1, -y * X, -y * Y, -y * Z]
-        N[2 * i, 0]     = x
+        N[2 * i, 0] = x
         N[2 * i + 1, 0] = y
 
     DLT = inv(M.T.dot(M)).dot(M.T).dot(N)
     return DLT.flatten()
 
+
 def create_ref3d_template(pixel_file):
     """
-    Creates a REF3D template file from the pixel coordinate file by clearing all coordinate data 
+    Creates a REF3D template file from the pixel coordinate file by clearing all coordinate data
     (except, for example, the frame number).
-    
+
     Returns:
         str: Path to the generated REF3D file.
     """
@@ -96,6 +99,7 @@ def create_ref3d_template(pixel_file):
     template_file = os.path.splitext(pixel_file)[0] + ".ref3d"
     template.to_csv(template_file, index=False)
     return template_file
+
 
 def process_files(pixel_file, real_file):
     """
@@ -112,12 +116,15 @@ def process_files(pixel_file, real_file):
     cp2d = read_coordinates(pixel_file, usecols=lambda c: c != "frame")
     # Read real-world coordinates from the REF3D file (ignore the 'frame' column)
     cp3d = read_coordinates(real_file, usecols=lambda c: c != "frame")
-    
+
     if cp2d.shape[0] != cp3d.shape[0]:
-        print("The number of calibration points in the pixel file and the REF3D file do not match!")
+        print(
+            "The number of calibration points in the pixel file and the REF3D file do not match!"
+        )
         return None
-    
+
     return dlt_calib(cp3d, cp2d)
+
 
 def save_dlt_parameters(output_file, dlt_params):
     """
@@ -132,49 +139,53 @@ def save_dlt_parameters(output_file, dlt_params):
     messagebox.showinfo("Success", f"DLT parameters saved to {output_file}")
     print(f"DLT parameters saved to {output_file}")
 
+
 def main():
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
     print("Starting DLT3D calibration...")
-    
+
     root = Tk()
     root.withdraw()
-    
+
     pixel_file = filedialog.askopenfilename(
         title="Select the PIXEL coordinate file for calibration.",
-        filetypes=[("CSV files", "*.csv")]
+        filetypes=[("CSV files", "*.csv")],
     )
     if not pixel_file:
         print("Pixel file selection cancelled.")
         return
-    
+
     create_ref = messagebox.askyesno(
         "Create REF3D File",
-        "Do you want to create a REF3D template based on the pixel file?"
+        "Do you want to create a REF3D template based on the pixel file?",
     )
     if create_ref:
         real_file = create_ref3d_template(pixel_file)
-        messagebox.showinfo("Template Created", 
-            f"Template REF3D file created:\n{real_file}\nPlease edit it with the real-world coordinates and run the process again.")
+        messagebox.showinfo(
+            "Template Created",
+            f"Template REF3D file created:\n{real_file}\nPlease edit it with the real-world coordinates and run the process again.",
+        )
         print(f"Template REF3D file created: {real_file}")
         return
     else:
         real_file = filedialog.askopenfilename(
             title="Select the REF3D file with real-world coordinates.",
-            filetypes=[("REF3D files", "*.ref3d")]
+            filetypes=[("REF3D files", "*.ref3d")],
         )
         if not real_file:
             print("Real-world coordinates file selection cancelled.")
             return
-    
+
     dlt_params = process_files(pixel_file, real_file)
     if dlt_params is None:
         messagebox.showerror("Error", "Calibration failed due to mismatched data.")
         return
-    
+
     output_file = os.path.splitext(pixel_file)[0] + ".dlt3d"
     save_dlt_parameters(output_file, dlt_params)
     root.destroy()
+
 
 if __name__ == "__main__":
     main()
