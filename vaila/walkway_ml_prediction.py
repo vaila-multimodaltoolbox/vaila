@@ -79,104 +79,103 @@ from tkinter import filedialog, messagebox, ttk
 from datetime import datetime
 
 
-# Function to load models and make predictions
 def predict_metrics(selected_metrics, valid_features, output_dir):
+    if not selected_metrics:
+        messagebox.showerror("Error", "No metrics selected for prediction.")
+        return
+
+    """Função para carregar modelos e realizar previsões"""
     # Perguntar ao usuário se deseja usar os modelos padrão
     use_default = messagebox.askyesno(
         "Model Selection",
         "Would you like to use the default pre-trained models?\n\n"
         + "Click 'Yes' to use default models from vaila/vaila/models\n"
-        + "Click 'No' to select your own models directory",
+        + "Click 'No' to select each model and scaler manually",
     )
-
+    models_info = {}
     if use_default:
-        models_path = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "models"))
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        models_path = os.path.join(script_dir, "models")
         print(f"Using default models directory: {models_path}")
         if not os.path.exists(models_path):
             messagebox.showerror("Error", "Default models directory not found.")
             return
+        for metric in selected_metrics:
+            models_info[metric] = {
+                "model": os.path.join(models_path, f"{metric}.pkl"),
+                "scaler": os.path.join(models_path, f"{metric}_scaler_params.json")
+            }
     else:
-        # Permitir seleção do diretório dos modelos pelo usuário
-        models_path = filedialog.askdirectory(title="Select Models Directory")
-        if not models_path:
-            messagebox.showwarning("Warning", "No models directory selected.")
-            return
+        for metric in selected_metrics:
+            model_path = filedialog.askopenfilename(
+                title=f"Select Model File for {metric}", filetypes=[("Pickle Files", "*.pkl")]
+            )
+            if not model_path:
+                messagebox.showwarning("Warning", f"No model selected for {metric}. Skipping.")
+                continue
+            scaler_path = filedialog.askopenfilename(
+                title=f"Select Scaler File for {metric}", filetypes=[("JSON Files", "*.json")]
+            )
+            if not scaler_path:
+                messagebox.showwarning("Warning", f"No scaler selected for {metric}. Skipping.")
+                continue
+            models_info[metric] = {"model": model_path, "scaler": scaler_path}
 
-    # Solicitar diretório de saída
-    output_dir = filedialog.askdirectory(title="Select Output Directory for Results")
-    if not output_dir:
-        messagebox.showwarning("Warning", "No output directory selected.")
-        return
+    # Lista de colunas ignoradas (potenciais)
+    columns_to_ignore = [
+        "subject_name", "trial_number",  # colunas originais
+        "Participant", "Trial", "Step_Block"  # colunas adicionais para ignorar
+    ]
+
+    # Filtrar apenas as colunas ignoradas que existem no DataFrame
+    existing_ignored_columns = [col for col in columns_to_ignore if col in valid_features.columns]
+    ignored_columns = valid_features[existing_ignored_columns].copy()
 
     results = {}
-    
-    for metric in selected_metrics:
-        # Modificar o caminho para corresponder à estrutura atual
-        model_path = os.path.join(models_path, f"{metric}.pkl")
-        scaler_path = os.path.join(models_path, f"{metric}_scaler_params.json")
-
+    for metric, paths in models_info.items():
+        model_path = paths["model"]
+        scaler_path = paths["scaler"]
         if not os.path.exists(model_path):
             print(f"No model found for {metric}. Skipping.")
-            print(f"Looked for model at: {model_path}")
             continue
-
-        print(f"Using model {metric}.pkl for {metric}")
+        print(f"Using model {model_path} for {metric}")
         model = joblib.load(model_path)
-
         valid_features_scaled = valid_features.copy()
-        
-        # Lista de colunas para ignorar
-        columns_to_ignore = [
-            "subject_name", "trial_number",  # colunas originais
-            "Participant", "Trial", "Step_Block"  # colunas adicionais para ignorar
-        ]
-        
-        # Remover todas as colunas não numéricas e as colunas especificadas
-        numeric_columns = valid_features_scaled.select_dtypes(include=['float64', 'int64']).columns
-        columns_to_keep = [col for col in numeric_columns if col not in columns_to_ignore]
-        valid_features_numeric = valid_features_scaled[columns_to_keep]
-
+        numeric_columns = [col for col in valid_features.select_dtypes(include=['float64', 'int64']).columns if col not in columns_to_ignore]
+        valid_features_numeric = valid_features[numeric_columns]
         if os.path.exists(scaler_path):
-            with open(scaler_path, "r") as f:
-                scaler_params = json.load(f)
-
-            mean = np.array(scaler_params.get("mean", []))
-            std = np.array(scaler_params.get("std", []))
-
-            if len(mean) > 0 and len(std) > 0:
-                valid_features_scaled = (valid_features_numeric - mean) / std
-            else:
-                print(f"Invalid scaler parameters for {metric}. Using unscaled features.")
-                valid_features_scaled = valid_features_numeric
+            try:
+                with open(scaler_path, "r") as f:
+                    scaler_params = json.load(f)
+                mean = np.array(scaler_params.get("mean", []))
+                scale = np.array(scaler_params.get("scale", []))
+                if len(mean) == valid_features_numeric.shape[1] and len(scale) == valid_features_numeric.shape[1]:
+                    valid_features_scaled = (valid_features_numeric - mean) / scale
+                else:
+                    print(f"Mismatch in scaler parameters for {metric}. Using unscaled features.")
+            except json.JSONDecodeError:
+                print(f"Error reading scaler parameters for {metric}. Using unscaled features.")
         else:
             print(f"Scaler parameters for {metric} not found. Using unscaled features.")
-            valid_features_scaled = valid_features_numeric
 
+        # Converter DataFrame para array NumPy antes de passar para o modelo
+        X_input = valid_features_scaled.to_numpy()
         if hasattr(model, "predict"):
-            y_pred = model.predict(valid_features_scaled)
+            y_pred = model.predict(X_input)
             results[metric] = y_pred
         else:
             print(f"The model {metric}.pkl does not support the 'predict' function. Skipping.")
 
     if results:
         results_df = pd.DataFrame(results)
-        if "subject_name" in valid_features.columns and "trial_number" in valid_features.columns:
-            results_df.insert(0, "trial_number", valid_features["trial_number"])
-            results_df.insert(0, "subject_name", valid_features["subject_name"])
-        elif "Participant" in valid_features.columns and "Trial" in valid_features.columns:
-            results_df.insert(0, "trial_number", valid_features["Trial"])
-            results_df.insert(0, "subject_name", valid_features["Participant"])
 
-        # Criar timestamp
+        # Adicionar as colunas ignoradas existentes ao DataFrame de resultados
+        if not ignored_columns.empty:
+            results_df = pd.concat([ignored_columns.reset_index(drop=True), results_df], axis=1)
+
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        
-        # Criar nome do arquivo com timestamp
         result_filename = f"result_ml_walkway_{timestamp}.csv"
-        
-        # Juntar o caminho completo
         result_file = os.path.join(output_dir, result_filename)
-        
-        # Salvar o arquivo
         results_df.to_csv(result_file, index=False)
         print(f"Results saved to {result_file}")
     else:
@@ -202,7 +201,12 @@ def run_prediction(selected_metrics=None):
     print("Metrics selected for prediction:", selected_metrics)  # Print para depuração
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_dir = os.path.join(os.getcwd(), f"walkway_ml_result_{timestamp}")
+        # Perguntar ao usuário onde salvar os resultados
+    output_dir = filedialog.askdirectory(title="Select Output Directory for Results")
+    if not output_dir:
+        messagebox.showwarning("Warning", "No output directory selected.")
+        return
+    #output_dir = os.path.join(os.getcwd(), f"walkway_ml_result_{timestamp}")
     os.makedirs(output_dir, exist_ok=True)
 
     predict_metrics(selected_metrics, valid_features, output_dir)

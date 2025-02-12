@@ -15,7 +15,6 @@ This module provides a graphical user interface (GUI) for executing various mach
 Each button triggers the respective function that executes the corresponding ML pipeline.
 
 """
-
 import os
 import platform
 import subprocess
@@ -31,30 +30,22 @@ This module creates a new window with buttons for:
 4. Running predictions with pre-trained models
 """
 
-
 def run_process_gait_features():
     from vaila.process_gait_features import run_process_gait_features
-
     run_process_gait_features()
-
 
 def run_ml_models_training():
     from vaila.ml_models_training import run_ml_models_training
-
     run_ml_models_training()
-
 
 def run_ml_valid_models():
     from vaila.ml_valid_models import run_ml_valid_models
-
     run_ml_valid_models()
 
-
-def run_walkway_ml_prediction():
+def run_walkway_ml_prediction(root):
+    # Passa a instância de Tk para o módulo walkway_ml_prediction
     from vaila.walkway_ml_prediction import run_prediction
-
-    run_prediction()
-
+    run_prediction(root)
 
 # GUI tk window
 def run_vaila_mlwalkway_gui():
@@ -75,24 +66,27 @@ def run_vaila_mlwalkway_gui():
     process_btn.pack(fill="x", pady=5)
 
     train_btn = ttk.Button(
-        button_frame, text="Train ML Models", command=lambda: run_ml_models_training()
+        button_frame,
+        text="Train ML Models",
+        command=lambda: run_ml_models_training()
     )
     train_btn.pack(fill="x", pady=5)
 
     validate_btn = ttk.Button(
-        button_frame, text="Validate ML Models", command=lambda: run_ml_valid_models()
+        button_frame,
+        text="Validate ML Models",
+        command=lambda: run_ml_valid_models()
     )
     validate_btn.pack(fill="x", pady=5)
 
     predict_btn = ttk.Button(
         button_frame,
         text="Run ML Predictions",
-        command=lambda: run_walkway_ml_prediction(),
+        command=lambda: run_walkway_ml_prediction(root),  # Passa a instância de Tk
     )
     predict_btn.pack(fill="x", pady=5)
 
     root.mainloop()
-
 
 if __name__ == "__main__":
     run_vaila_mlwalkway_gui()
