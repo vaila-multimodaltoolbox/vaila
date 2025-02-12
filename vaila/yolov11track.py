@@ -221,7 +221,7 @@ class ModelSelectorDialog(tk.simpledialog.Dialog):
             ("yolo11m-pose.pt", "Pose - Medium"),
             ("yolo11l-pose.pt", "Pose - Large"),
             ("yolo11x-pose.pt", "Pose - XLarge (most accurate)"),
-            # Segmentation explanation: https://docs.ultralytics.com/tasks/segment/ 
+            # Segmentation explanation: https://docs.ultralytics.com/tasks/segment/
             ("yolo11n-seg.pt", "Segmentation - Nano"),
             ("yolo11s-seg.pt", "Segmentation - Small"),
             ("yolo11m-seg.pt", "Segmentation - Medium"),
@@ -356,7 +356,6 @@ def run_yolov11track():
         return
     model_name = model_dialog.result
 
-
     # Build the full path for the model
     models_dir = os.path.join(os.path.dirname(__file__), "models")
     os.makedirs(
@@ -388,7 +387,6 @@ def run_yolov11track():
 
     config = config_dialog.result
 
-
     # Initialize the YOLO model
     model = YOLO(model_path)
 
@@ -398,7 +396,6 @@ def run_yolov11track():
         if video_file.endswith((".mp4", ".avi", ".mov")):
             video_path = os.path.join(video_dir, video_file)
             video_name = os.path.splitext(os.path.basename(video_path))[0]
-
 
             # Create a subdirectory for this specific video
 
@@ -414,7 +411,6 @@ def run_yolov11track():
 
             # Specify the output path for the processed video
             out_video_path = os.path.join(output_dir, f"processed_{video_name}.mp4")
-
 
             # Use the 'mp4v' codec which is more stable
 
@@ -444,11 +440,15 @@ def run_yolov11track():
 
             for result in results:
                 frame = result.orig_img
-                
+
                 # For OBB models result.boxes might be None.
                 # Try to use result.obbs if available:
-                boxes = result.boxes if result.boxes is not None else getattr(result, "obbs", None)
-                
+                boxes = (
+                    result.boxes
+                    if result.boxes is not None
+                    else getattr(result, "obbs", None)
+                )
+
                 if boxes is None:
                     print("No bounding boxes found in this frame.")
                     writer.write(frame)
@@ -517,9 +517,7 @@ def run_yolov11track():
                 print(f"Error in video conversion: {str(e)}")
 
             print(
-
                 f"Processing completed for {video_file}. Results saved in '{output_dir}'."
-
             )
 
     root.destroy()

@@ -79,9 +79,8 @@ from tkinter import filedialog, messagebox, ttk
 from datetime import datetime
 
 
-
-
 # Function to load models and make predictions
+
 
 def predict_metrics(selected_metrics, valid_features, output_dir):
     if not selected_metrics:
@@ -95,7 +94,6 @@ def predict_metrics(selected_metrics, valid_features, output_dir):
         "Would you like to use the default pre-trained models?\n\n"
         + "Click 'Yes' to use default models from vaila/vaila/models\n"
         + "Click 'No' to select each model and scaler manually",
-
     )
     models_info = {}
     if use_default:
@@ -110,32 +108,43 @@ def predict_metrics(selected_metrics, valid_features, output_dir):
         for metric in selected_metrics:
             models_info[metric] = {
                 "model": os.path.join(models_path, f"{metric}.pkl"),
-                "scaler": os.path.join(models_path, f"{metric}_scaler_params.json")
+                "scaler": os.path.join(models_path, f"{metric}_scaler_params.json"),
             }
     else:
         for metric in selected_metrics:
             model_path = filedialog.askopenfilename(
-                title=f"Select Model File for {metric}", filetypes=[("Pickle Files", "*.pkl")]
+                title=f"Select Model File for {metric}",
+                filetypes=[("Pickle Files", "*.pkl")],
             )
             if not model_path:
-                messagebox.showwarning("Warning", f"No model selected for {metric}. Skipping.")
+                messagebox.showwarning(
+                    "Warning", f"No model selected for {metric}. Skipping."
+                )
                 continue
             scaler_path = filedialog.askopenfilename(
-                title=f"Select Scaler File for {metric}", filetypes=[("JSON Files", "*.json")]
+                title=f"Select Scaler File for {metric}",
+                filetypes=[("JSON Files", "*.json")],
             )
             if not scaler_path:
-                messagebox.showwarning("Warning", f"No scaler selected for {metric}. Skipping.")
+                messagebox.showwarning(
+                    "Warning", f"No scaler selected for {metric}. Skipping."
+                )
                 continue
             models_info[metric] = {"model": model_path, "scaler": scaler_path}
 
     # Lista de colunas ignoradas (potenciais)
     columns_to_ignore = [
-        "subject_name", "trial_number",  # colunas originais
-        "Participant", "Trial", "Step_Block"  # colunas adicionais para ignorar
+        "subject_name",
+        "trial_number",  # colunas originais
+        "Participant",
+        "Trial",
+        "Step_Block",  # colunas adicionais para ignorar
     ]
 
     # Filtrar apenas as colunas ignoradas que existem no DataFrame
-    existing_ignored_columns = [col for col in columns_to_ignore if col in valid_features.columns]
+    existing_ignored_columns = [
+        col for col in columns_to_ignore if col in valid_features.columns
+    ]
     ignored_columns = valid_features[existing_ignored_columns].copy()
 
     results = {}
@@ -151,7 +160,20 @@ def predict_metrics(selected_metrics, valid_features, output_dir):
         model = joblib.load(model_path)
         valid_features_scaled = valid_features.copy()
 
-        numeric_columns = [col for col in valid_features.select_dtypes(include=['float64', 'int64']).columns if col not in columns_to_ignore]
+        # Filtrar apenas as colunas numéricas
+        numeric_columns = [
+            col
+            for col in valid_features.select_dtypes(
+                include=["float64", "int64"]
+            ).columns
+            if col not in columns_to_ignore
+        ]
+        
+        # Adicionar verificação para garantir que não haja colunas não numéricas
+        if len(numeric_columns) == 0:
+            print(f"No valid numeric features found for {metric}. Skipping.")
+            continue
+        
         valid_features_numeric = valid_features[numeric_columns]
         if os.path.exists(scaler_path):
             try:
@@ -159,12 +181,19 @@ def predict_metrics(selected_metrics, valid_features, output_dir):
                     scaler_params = json.load(f)
                 mean = np.array(scaler_params.get("mean", []))
                 scale = np.array(scaler_params.get("scale", []))
-                if len(mean) == valid_features_numeric.shape[1] and len(scale) == valid_features_numeric.shape[1]:
+                if (
+                    len(mean) == valid_features_numeric.shape[1]
+                    and len(scale) == valid_features_numeric.shape[1]
+                ):
                     valid_features_scaled = (valid_features_numeric - mean) / scale
                 else:
-                    print(f"Mismatch in scaler parameters for {metric}. Using unscaled features.")
+                    print(
+                        f"Mismatch in scaler parameters for {metric}. Using unscaled features."
+                    )
             except json.JSONDecodeError:
-                print(f"Error reading scaler parameters for {metric}. Using unscaled features.")
+                print(
+                    f"Error reading scaler parameters for {metric}. Using unscaled features."
+                )
         else:
             print(f"Scaler parameters for {metric} not found. Using unscaled features.")
 
@@ -175,15 +204,18 @@ def predict_metrics(selected_metrics, valid_features, output_dir):
 
             results[metric] = y_pred
         else:
-            print(f"The model {metric}.pkl does not support the 'predict' function. Skipping.")
+            print(
+                f"The model {metric}.pkl does not support the 'predict' function. Skipping."
+            )
 
     if results:
         results_df = pd.DataFrame(results)
 
-
         # Adicionar as colunas ignoradas existentes ao DataFrame de resultados
         if not ignored_columns.empty:
-            results_df = pd.concat([ignored_columns.reset_index(drop=True), results_df], axis=1)
+            results_df = pd.concat(
+                [ignored_columns.reset_index(drop=True), results_df], axis=1
+            )
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         result_filename = f"result_ml_walkway_{timestamp}.csv"
@@ -197,8 +229,8 @@ def predict_metrics(selected_metrics, valid_features, output_dir):
 
 # Function to select files and run prediction
 
-def run_prediction(selected_metrics=None):
 
+def run_prediction(selected_metrics=None):
     """
     Main function to run prediction with pre-selected metrics.
     """
@@ -212,19 +244,23 @@ def run_prediction(selected_metrics=None):
     if not feature_file:
         return
 
-    valid_features = pd.read_csv(feature_file)
+    # Usando genfromtxt para carregar os dados e ignorar colunas não numéricas
+    valid_features = np.genfromtxt(feature_file, delimiter=',', names=True, dtype=None, encoding=None)
+    
+    # Convertendo para DataFrame e filtrando apenas colunas numéricas
+    valid_features_df = pd.DataFrame(valid_features)
+    valid_features_df = valid_features_df.select_dtypes(include=[np.number])
+
     print("Metrics selected for prediction:", selected_metrics)  # Print para depuração
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        # Perguntar ao usuário onde salvar os resultados
     output_dir = filedialog.askdirectory(title="Select Output Directory for Results")
     if not output_dir:
         messagebox.showwarning("Warning", "No output directory selected.")
         return
-    #output_dir = os.path.join(os.getcwd(), f"walkway_ml_result_{timestamp}")
     os.makedirs(output_dir, exist_ok=True)
 
-    predict_metrics(selected_metrics, valid_features, output_dir)
+    predict_metrics(selected_metrics, valid_features_df, output_dir)
     messagebox.showinfo("Success", f"Results saved in {output_dir}")
     root.destroy()  # Fecha a janela principal
 
@@ -243,8 +279,16 @@ label = ttk.Label(
 label.grid(row=0, column=0, sticky=tk.W, pady=5)
 
 metrics = [
-    "step_length", "step_time", "step_width", "stride_length", "stride_time",
-    "stride_velocity", "stride_width", "support_base", "support_time_doubled", "support_time_single"
+    "step_length",
+    "step_time",
+    "step_width",
+    "stride_length",
+    "stride_time",
+    "stride_velocity",
+    "stride_width",
+    "support_base",
+    "support_time_doubled",
+    "support_time_single",
 ]
 
 # Cria o Listbox com seleção múltipla e insere todas as métricas
@@ -259,17 +303,25 @@ listbox.grid(row=1, column=0, sticky=tk.W, pady=5)
 button_frame = ttk.Frame(frame)
 button_frame.grid(row=2, column=0, pady=10)
 
+
 def select_all_metrics():
     listbox.select_set(0, tk.END)
+
 
 def unselect_all_metrics():
     listbox.selection_clear(0, tk.END)
 
-select_all_button = ttk.Button(button_frame, text="Select All", command=select_all_metrics)
+
+select_all_button = ttk.Button(
+    button_frame, text="Select All", command=select_all_metrics
+)
 select_all_button.grid(row=0, column=0, padx=5)
 
-unselect_all_button = ttk.Button(button_frame, text="Unselect All", command=unselect_all_metrics)
+unselect_all_button = ttk.Button(
+    button_frame, text="Unselect All", command=unselect_all_metrics
+)
 unselect_all_button.grid(row=0, column=1, padx=5)
+
 
 def confirm_and_run_prediction():
     # Obtém as métricas selecionadas a partir do Listbox
@@ -281,7 +333,10 @@ def confirm_and_run_prediction():
         return
     run_prediction(selected_metrics)
 
-confirm_button = ttk.Button(button_frame, text="Confirm", command=confirm_and_run_prediction)
+
+confirm_button = ttk.Button(
+    button_frame, text="Confirm", command=confirm_and_run_prediction
+)
 confirm_button.grid(row=0, column=2, padx=5)
 
 root.mainloop()

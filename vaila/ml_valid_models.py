@@ -103,16 +103,19 @@ def select_directory(title="Select a Directory"):
     root.destroy()
     return directory_path
 
+
 def plot_metrics(metrics_df, target_name, save_dir):
     """Plots the metrics for each model in a bar chart with different colors and similar scales, and saves them as PNG files."""
 
-    metrics = metrics_df.columns.drop('Model')
+    metrics = metrics_df.columns.drop("Model")
     num_metrics = len(metrics)
-    model_names = metrics_df['Model'].unique()
+    model_names = metrics_df["Model"].unique()
     num_models = len(model_names)
 
     # Generate a color palette with enough colors for all models
-    palette = sns.color_palette("husl", num_models)  # You can change "husl" to other palettes
+    palette = sns.color_palette(
+        "husl", num_models
+    )  # You can change "husl" to other palettes
 
     for metric in metrics:
         plt.figure(figsize=(10, 6))
@@ -122,17 +125,21 @@ def plot_metrics(metrics_df, target_name, save_dir):
         max_val = metrics_df[metric].max()
 
         for i, model in enumerate(model_names):
-            values = metrics_df[metrics_df['Model'] == model][metric].values
-            plt.bar(model, values, color=palette[i], label=model)  # Use color from palette
+            values = metrics_df[metrics_df["Model"] == model][metric].values
+            plt.bar(
+                model, values, color=palette[i], label=model
+            )  # Use color from palette
 
-        plt.title(f'{metric} for {target_name}')
+        plt.title(f"{metric} for {target_name}")
         plt.ylabel(metric)
-        plt.ylim(min_val - (max_val - min_val) * 0.1, max_val + (max_val - min_val) * 0.1)  # Set y-axis limits with some padding
-        plt.xticks(rotation=45, ha='right')
+        plt.ylim(
+            min_val - (max_val - min_val) * 0.1, max_val + (max_val - min_val) * 0.1
+        )  # Set y-axis limits with some padding
+        plt.xticks(rotation=45, ha="right")
         plt.legend()  # Show legend
         plt.tight_layout()
 
-        filename = os.path.join(save_dir, f'{target_name}_{metric}.png')
+        filename = os.path.join(save_dir, f"{target_name}_{metric}.png")
         plt.savefig(filename)
         plt.close()
 
@@ -262,7 +269,6 @@ def run_ml_valid_models():
             metrics["Model"] = model_name
             target_metrics.append(metrics)
 
-
         # Save metrics
         if target_metrics:
             metrics_df = pd.DataFrame(target_metrics)
@@ -276,7 +282,6 @@ def run_ml_valid_models():
             # Plot the metrics and save them as PNGs
             metrics_df = pd.read_csv(metrics_file)
             plot_metrics(metrics_df, target, plots_dir)
-
 
     print("\nValidation completed.")
 
