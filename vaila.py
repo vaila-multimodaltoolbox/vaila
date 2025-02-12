@@ -1443,6 +1443,20 @@ class Vaila(tk.Tk):
 
         mphands.run_mphands()
 
+    # B_r4_c2 - ML Walkway
+    def ml_walkway(self):
+        """Invokes the vaila_mlwalkway module."""
+        from vaila import vaila_mlwalkway
+
+        vaila_mlwalkway.run_vaila_mlwalkway_gui()
+
+    # B_r4_c3 - Markerless Hands
+    def markerless_hands(self):
+        """Invokes the vaila_mphands module."""
+        from vaila import mphands
+
+        mphands.run_mphands()
+
     # C_A_r1_c1
 
     def reorder_csv_data(self):
