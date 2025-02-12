@@ -262,6 +262,7 @@ def run_ml_valid_models():
             metrics["Model"] = model_name
             target_metrics.append(metrics)
 
+
         # Save metrics
         if target_metrics:
             metrics_df = pd.DataFrame(target_metrics)
@@ -275,6 +276,7 @@ def run_ml_valid_models():
             # Plot the metrics and save them as PNGs
             metrics_df = pd.read_csv(metrics_file)
             plot_metrics(metrics_df, target, plots_dir)
+
 
     print("\nValidation completed.")
 

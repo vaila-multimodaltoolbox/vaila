@@ -79,6 +79,10 @@ from tkinter import filedialog, messagebox, ttk
 from datetime import datetime
 
 
+
+
+# Function to load models and make predictions
+
 def predict_metrics(selected_metrics, valid_features, output_dir):
     if not selected_metrics:
         messagebox.showerror("Error", "No metrics selected for prediction.")
@@ -91,11 +95,14 @@ def predict_metrics(selected_metrics, valid_features, output_dir):
         "Would you like to use the default pre-trained models?\n\n"
         + "Click 'Yes' to use default models from vaila/vaila/models\n"
         + "Click 'No' to select each model and scaler manually",
+
     )
     models_info = {}
     if use_default:
+
         script_dir = os.path.dirname(os.path.abspath(__file__))
         models_path = os.path.join(script_dir, "models")
+
         print(f"Using default models directory: {models_path}")
         if not os.path.exists(models_path):
             messagebox.showerror("Error", "Default models directory not found.")
@@ -132,15 +139,18 @@ def predict_metrics(selected_metrics, valid_features, output_dir):
     ignored_columns = valid_features[existing_ignored_columns].copy()
 
     results = {}
+
     for metric, paths in models_info.items():
         model_path = paths["model"]
         scaler_path = paths["scaler"]
+
         if not os.path.exists(model_path):
             print(f"No model found for {metric}. Skipping.")
             continue
         print(f"Using model {model_path} for {metric}")
         model = joblib.load(model_path)
         valid_features_scaled = valid_features.copy()
+
         numeric_columns = [col for col in valid_features.select_dtypes(include=['float64', 'int64']).columns if col not in columns_to_ignore]
         valid_features_numeric = valid_features[numeric_columns]
         if os.path.exists(scaler_path):
@@ -162,12 +172,14 @@ def predict_metrics(selected_metrics, valid_features, output_dir):
         X_input = valid_features_scaled.to_numpy()
         if hasattr(model, "predict"):
             y_pred = model.predict(X_input)
+
             results[metric] = y_pred
         else:
             print(f"The model {metric}.pkl does not support the 'predict' function. Skipping.")
 
     if results:
         results_df = pd.DataFrame(results)
+
 
         # Adicionar as colunas ignoradas existentes ao DataFrame de resultados
         if not ignored_columns.empty:
@@ -176,6 +188,7 @@ def predict_metrics(selected_metrics, valid_features, output_dir):
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         result_filename = f"result_ml_walkway_{timestamp}.csv"
         result_file = os.path.join(output_dir, result_filename)
+
         results_df.to_csv(result_file, index=False)
         print(f"Results saved to {result_file}")
     else:
@@ -183,7 +196,9 @@ def predict_metrics(selected_metrics, valid_features, output_dir):
 
 
 # Function to select files and run prediction
+
 def run_prediction(selected_metrics=None):
+
     """
     Main function to run prediction with pre-selected metrics.
     """

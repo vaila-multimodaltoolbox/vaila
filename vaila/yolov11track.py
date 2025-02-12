@@ -209,31 +209,25 @@ class TrackerConfigDialog(tk.simpledialog.Dialog):
 class ModelSelectorDialog(tk.simpledialog.Dialog):
     def body(self, master):
         models = [
-            # Object Detection
+            # Object Detection explanation: https://docs.ultralytics.com/tasks/detect/
             ("yolo11n.pt", "Detection - Nano (fastest)"),
             ("yolo11s.pt", "Detection - Small"),
             ("yolo11m.pt", "Detection - Medium"),
             ("yolo11l.pt", "Detection - Large"),
             ("yolo11x.pt", "Detection - XLarge (most accurate)"),
-            # Pose Estimation
+            # Pose Estimation explanation: https://docs.ultralytics.com/tasks/pose/
             ("yolo11n-pose.pt", "Pose - Nano (fastest)"),
             ("yolo11s-pose.pt", "Pose - Small"),
             ("yolo11m-pose.pt", "Pose - Medium"),
             ("yolo11l-pose.pt", "Pose - Large"),
             ("yolo11x-pose.pt", "Pose - XLarge (most accurate)"),
-            # Segmentation
+            # Segmentation explanation: https://docs.ultralytics.com/tasks/segment/ 
             ("yolo11n-seg.pt", "Segmentation - Nano"),
             ("yolo11s-seg.pt", "Segmentation - Small"),
             ("yolo11m-seg.pt", "Segmentation - Medium"),
             ("yolo11l-seg.pt", "Segmentation - Large"),
             ("yolo11x-seg.pt", "Segmentation - XLarge"),
-            # Classification
-            ("yolo11n-cls.pt", "Classification - Nano"),
-            ("yolo11s-cls.pt", "Classification - Small"),
-            ("yolo11m-cls.pt", "Classification - Medium"),
-            ("yolo11l-cls.pt", "Classification - Large"),
-            ("yolo11x-cls.pt", "Classification - XLarge"),
-            # OBB (Oriented Bounding Box)
+            # OBB (Oriented Bounding Box) explanation: https://docs.ultralytics.com/tasks/obb/
             ("yolo11n-obb.pt", "OBB - Nano"),
             ("yolo11s-obb.pt", "OBB - Small"),
             ("yolo11m-obb.pt", "OBB - Medium"),
@@ -351,7 +345,7 @@ def run_yolov11track():
     if not output_base_dir:
         return
 
-    # Cria um único diretório mãe para todos os resultados
+    # Create a single parent directory for all results
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     main_output_dir = os.path.join(output_base_dir, f"vailatracker_{timestamp}")
     os.makedirs(main_output_dir, exist_ok=True)
@@ -362,7 +356,8 @@ def run_yolov11track():
         return
     model_name = model_dialog.result
 
-    # Construir o caminho completo para o modelo
+
+    # Build the full path for the model
     models_dir = os.path.join(os.path.dirname(__file__), "models")
     os.makedirs(
         models_dir, exist_ok=True
@@ -373,13 +368,13 @@ def run_yolov11track():
     if not os.path.exists(model_path):
         try:
             print(f"Downloading model {model_name}...")
-            # Salva o diretório atual
+            # Save the current directory
             current_dir = os.getcwd()
-            # Muda para o diretório models
+            # Change to the models directory
             os.chdir(models_dir)
-            # Faz o download do modelo
+            # Download the model
             YOLO(model_name)
-            # Volta para o diretório original
+            # Return to the original directory
             os.chdir(current_dir)
             print(f"Model downloaded successfully to {model_path}")
         except Exception as e:
@@ -393,39 +388,45 @@ def run_yolov11track():
 
     config = config_dialog.result
 
-    # Inicialização do modelo YOLO
+
+    # Initialize the YOLO model
     model = YOLO(model_path)
 
-    # Processa cada vídeo no diretório
+    # Process each video in the directory
+
     for video_file in os.listdir(video_dir):
         if video_file.endswith((".mp4", ".avi", ".mov")):
             video_path = os.path.join(video_dir, video_file)
             video_name = os.path.splitext(os.path.basename(video_path))[0]
 
-            # Cria um subdiretório para este vídeo específico
+
+            # Create a subdirectory for this specific video
+
             output_dir = os.path.join(main_output_dir, video_name)
             os.makedirs(output_dir, exist_ok=True)
 
-            # Lê as dimensões do vídeo original
+            # Read the dimensions of the original video
             cap = cv2.VideoCapture(video_path)
             width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
             fps = int(cap.get(cv2.CAP_PROP_FPS))
             cap.release()
 
-            # Especifica o caminho de saída para o vídeo processado
+            # Specify the output path for the processed video
             out_video_path = os.path.join(output_dir, f"processed_{video_name}.mp4")
 
-            # Usa o codec 'mp4v' que é mais estável
+
+            # Use the 'mp4v' codec which is more stable
+
             writer = cv2.VideoWriter(
                 out_video_path, cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height)
             )
 
             if not writer.isOpened():
-                print(f"Erro ao criar o arquivo de vídeo: {out_video_path}")
+                print(f"Error creating video file: {out_video_path}")
                 continue
 
-            # Processa os frames
+            # Process the frames
             cap = cv2.VideoCapture(video_path)
             frame_idx = 0
             results = model.track(
@@ -443,7 +444,19 @@ def run_yolov11track():
 
             for result in results:
                 frame = result.orig_img
-                for box in result.boxes:
+                
+                # For OBB models result.boxes might be None.
+                # Try to use result.obbs if available:
+                boxes = result.boxes if result.boxes is not None else getattr(result, "obbs", None)
+                
+                if boxes is None:
+                    print("No bounding boxes found in this frame.")
+                    writer.write(frame)
+                    frame_idx += 1
+                    continue
+
+                for box in boxes:
+                    # Extract coordinates (this assumes the obb objects have a similar `xyxy` property)
                     x_min, y_min, x_max, y_max = map(int, box.xyxy[0].tolist())
                     conf = box.conf[0].item()
                     tracker_id = int(box.id[0]) if box.id is not None else -1
@@ -452,7 +465,6 @@ def run_yolov11track():
                         model.names[class_id] if class_id in model.names else "unknown"
                     )
 
-                    # Desenha os bounding boxes no frame
                     label_text = f"{label}_id{tracker_id}, Conf: {conf:.2f}"
                     cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
                     cv2.putText(
@@ -465,7 +477,7 @@ def run_yolov11track():
                         2,
                     )
 
-                    # Inicializa e atualiza o CSV
+                    # Initialize and update the CSV for each tracker id
                     if tracker_id not in tracker_csv_files:
                         tracker_csv_files[tracker_id] = initialize_csv(
                             output_dir,
@@ -485,15 +497,15 @@ def run_yolov11track():
                         conf,
                     )
 
-                # Escreve o frame processado no vídeo de saída
+                # Write the processed frame to the output video
                 writer.write(frame)
                 frame_idx += 1
 
-            # Libera os recursos
+            # Release resources
             cap.release()
             writer.release()
 
-            # Converte o vídeo para um formato mais compatível usando ffmpeg
+            # Convert the video to a more compatible format using ffmpeg
             try:
                 temp_path = out_video_path.replace(".mp4", "_temp.mp4")
                 os.rename(out_video_path, temp_path)
@@ -502,10 +514,12 @@ def run_yolov11track():
                 )
                 os.remove(temp_path)
             except Exception as e:
-                print(f"Erro na conversão do vídeo: {str(e)}")
+                print(f"Error in video conversion: {str(e)}")
 
             print(
-                f"Processamento concluído para {video_file}. Resultados salvos em '{output_dir}'."
+
+                f"Processing completed for {video_file}. Results saved in '{output_dir}'."
+
             )
 
     root.destroy()
@@ -513,7 +527,9 @@ def run_yolov11track():
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python olov11track.py [video_file]")
+
+        print("Usage: python yolov11track.py [video_file]")
+
         sys.exit(1)
 
     video_file = sys.argv[1]

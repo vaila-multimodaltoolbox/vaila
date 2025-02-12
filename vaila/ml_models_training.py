@@ -125,6 +125,7 @@ def select_directory(title="Select Directory to Save Models"):
 def plot_metrics(metrics_df, target_name, save_dir):
     """Plots the metrics for each model in a bar chart with different colors and similar scales, and saves them as PNG files."""
 
+
     metrics = metrics_df.columns.drop('Model')
     num_metrics = len(metrics)
     model_names = metrics_df['Model'].unique()

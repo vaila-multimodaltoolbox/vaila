@@ -87,6 +87,7 @@ def calculate_features(data_block):
         data_block["right_heel_y"].max() - data_block["right_heel_y"].min()
     )
 
+
     # Adicionando range para foot_index
     features["left_foot_index_x_range"] = (
         data_block["left_foot_index_x"].max() - data_block["left_foot_index_x"].min()
@@ -132,6 +133,7 @@ def calculate_features(data_block):
         (data_block["right_heel_x"] - data_block["left_heel_x"])**2 +
         (data_block["right_heel_y"] - data_block["left_heel_y"])**2
     ))
+
 
     return features
 
