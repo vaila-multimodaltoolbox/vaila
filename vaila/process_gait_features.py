@@ -87,6 +87,72 @@ def calculate_features(data_block):
         data_block["right_heel_y"].max() - data_block["right_heel_y"].min()
     )
 
+    # Adicionando range para foot_index
+    features["left_foot_index_x_range"] = (
+        data_block["left_foot_index_x"].max() - data_block["left_foot_index_x"].min()
+    )
+    features["left_foot_index_y_range"] = (
+        data_block["left_foot_index_y"].max() - data_block["left_foot_index_y"].min()
+    )
+
+    features["right_foot_index_x_range"] = (
+        data_block["right_foot_index_x"].max() - data_block["right_foot_index_x"].min()
+    )
+    features["right_foot_index_y_range"] = (
+        data_block["right_foot_index_y"].max() - data_block["right_foot_index_y"].min()
+    )
+
+    # Calcular velocidades (diferença entre frames consecutivos)
+    time_diff = 1  # assumindo tempo constante entre frames
+
+    # Velocidades do calcanhar esquerdo
+    features["left_heel_x_speed"] = np.mean(
+        np.diff(data_block["left_heel_x"]) / time_diff
+    )
+    features["left_heel_y_speed"] = np.mean(
+        np.diff(data_block["left_heel_y"]) / time_diff
+    )
+
+    # Velocidades do índice do pé esquerdo
+    features["left_foot_index_x_speed"] = np.mean(
+        np.diff(data_block["left_foot_index_x"]) / time_diff
+    )
+    features["left_foot_index_y_speed"] = np.mean(
+        np.diff(data_block["left_foot_index_y"]) / time_diff
+    )
+
+    # Velocidades do calcanhar direito
+    features["right_heel_x_speed"] = np.mean(
+        np.diff(data_block["right_heel_x"]) / time_diff
+    )
+    features["right_heel_y_speed"] = np.mean(
+        np.diff(data_block["right_heel_y"]) / time_diff
+    )
+
+    # Velocidades do índice do pé direito
+    features["right_foot_index_x_speed"] = np.mean(
+        np.diff(data_block["right_foot_index_x"]) / time_diff
+    )
+    features["right_foot_index_y_speed"] = np.mean(
+        np.diff(data_block["right_foot_index_y"]) / time_diff
+    )
+
+    # Calcular comprimento dos passos
+    # Distância euclidiana entre os calcanhares
+    features["left_step_length"] = np.mean(
+        np.sqrt(
+            (data_block["left_heel_x"] - data_block["right_heel_x"]) ** 2
+            + (data_block["left_heel_y"] - data_block["right_heel_y"]) ** 2
+        )
+    )
+
+    features["right_step_length"] = np.mean(
+        np.sqrt(
+            (data_block["right_heel_x"] - data_block["left_heel_x"]) ** 2
+            + (data_block["right_heel_y"] - data_block["left_heel_y"]) ** 2
+        )
+    )
+
     return features
 
 
