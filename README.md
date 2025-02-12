@@ -465,7 +465,7 @@ C_C_r4_c1 - vailá         C_C_r4_c2 - vailá          C_C_r4_c3 - vailá
 Type 'h' for help or 'exit' to quit.
 
 Use the button 'imagination!' to access command-line (xonsh) tools for advanced multimodal analysis!
-```
+````
 
 ```bash
 vaila
@@ -608,8 +608,6 @@ vaila
 ├── walkway_ml_prediction.py      # Machine learning prediction for walkway analysis
 └── yolov11track.py               # YOLOv11 based tracking
 ```
-
-Essa versão da árvore reflete exatamente o que você possui atualmente.
 
 ## Citing *vailá*
 
