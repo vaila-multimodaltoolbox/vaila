@@ -29,7 +29,7 @@ The analysis of human movement is fundamental in both health and sports biomecha
 
 ## Table of Contents
 - [Introduction](#introduction)
-- [New Key Features in v17.Dec.2024](#new-key-features-in-v17dec2024)
+- [New Key Features in v12.Feb.2025](#new-key-features-in-v12feb2025)
 - [Description](#description)
 - [Installation and Setup](#installation-and-setup)
 - [Running the Application](#running-the-application)
@@ -54,7 +54,7 @@ The analysis of human movement is fundamental in both health and sports biomecha
 - **MEG/EEG**
 - **Video Analysis**
 
-## New Key Features in v17.Dec.2024
+## New Key Features in v12.Feb.2025
 
 ### 🚀 **1. Multimodal Analysis**
 - 🐭 **Animal Open Field Test**: Analyze rodent open field test data to calculate:
@@ -62,9 +62,14 @@ The analysis of human movement is fundamental in both health and sports biomecha
   - ⏱️ Time spent in zones
   - 📊 Movement speed distribution
 - 🎥 **Markerless 2D/3D Tracking**: Enhanced support for markerless tracking videos.
+  - **MediaPipe**: Support for MediaPipe models.
+  - **YOLOv11**: Support for YOLOv11 models tracking.
 - 🦾 **Force Analysis**: Expanded tools for kinetic data analysis (e.g., force plate).
-
-### **2. File Management**
+  - **Jump Analysis**: Analyze jump data to calculate:
+    - 📏 Jump height
+    - 📏 Ground Reaction Force (GRF)
+    - 📏 Center of Pressure (COP)
+    ### **2. File Management**
 - Batch tools for renaming, copying, importing, exporting, and organizing files.
 - Tree generation and advanced file search based on patterns or extensions.
 
@@ -73,6 +78,8 @@ The analysis of human movement is fundamental in both health and sports biomecha
 - **Compression**: Support for H.264 and H.265 (HEVC) video compression.
 - **Synchronization**: Align videos based on timestamps or flashes.
 - **Pixel Coordinates Extraction**: Retrieve pixel data for video-based analysis.
+- **Cut Videos**: Cut videos based on timestamps or flashes.
+- **Draw Box**: Draw a box on the video to mark the area of interest.
 
 ### **4. Visualization Tools**
 - **2D/3D Plotting**: Enhanced visualization for biomechanical data.
@@ -409,63 +416,8 @@ Remove directory `vaila` inside `C:\Users\your_user_name_here\AppData\Local\vail
   <img src="docs/images/vaila_start_gui.png" alt="vailá Start GUI" width="600"/>
 </p>
 
-````bash
-                                             o
-                                _,  o |\  _,/
-                          |  |_/ |  | |/ / |
-                           \/  \/|_/|/|_/\/|_/                    
-##########################################################################
-Mocap fullbody_c3d           Markerless_3D       Markerless_2D_MP
-                  \                |                /
-                   v               v               v        
-   CUBE2D  --> +---------------------------------------+ <-- Vector Coding
-   IMU_csv --> |       vailá - multimodal toolbox      | <-- Cluster_csv
-Open Field --> +---------------------------------------+ <-- Force Plate
-              ^                   |                    ^ <-- YOLOv11 and MediaPipe
-        EMG__/                    v                     \__Tracker YOLOv11
-                    +--------------------------+
-                    | Results: Data and Figure | 
-                    +--------------------------+
 
-============================ File Manager (Frame A) ========================
-A_r1_c1 - Rename          A_r1_c2 - Import           A_r1_c3 - Export
-A_r1_c4 - Copy            A_r1_c5 - Move             A_r1_c6 - Remove
-A_r1_c7 - Tree            A_r1_c8 - Find             A_r1_c9 - Transfer
-
-========================== Multimodal Analysis (Frame B) ===================
-B1_r1_c1 - IMU            B1_r1_c2 - MoCapCluster    B1_r1_c3 - MoCapFullBody
-B1_r1_c4 - Markerless2D   B1_r1_c5 - Markerless3D
-
-B2_r2_c1 - Vector Coding  B2_r2_c2 - EMG             B2_r2_c3 - Force Plate
-B2_r2_c4 - GNSS/GPS       B2_r2_c5 - MEG/EEG
-
-B3_r3_c1 - HR/ECG         B3_r3_c2 - Markerless_MP_Yolo  B3_r3_c3 - vailá_and_jump
-B3_r3_c4 - Cube2D         B3_r3_c5 - Animal Open Field 
-B3_r4_c1 - Tracker        B3_r4_c2 - ML Walkway       B3_r4_c3 - vailá
-B3_r4_c4 - vailá          B3_r4_c5 - vailá
-============================== Tools Available (Frame C) ===================
-C_A: Data Files
-
-C_A_r1_c1 - Edit CSV      C_A_r1_c2 - C3D <--> CSV   C_A_r1_c3 - Gapfill | split
-C_A_r2_c1 - Make DLT2D    C_A_r2_c2 - Rec2D 1DLT     C_A_r2_c3 - Rec2D MultiDLT
-C_A_r3_c1 - Make DLT3D    C_A_r3_c2 - Rec3D 1DLT     C_A_r3_c3 - Rec3D MultiDLT
-C_A_r4_c1 - vailá         C_A_r4_c2 - vailá          C_A_r4_c3 - vailá
-
-C_B: Video and Image
-C_B_r1_c1 - Video<-->PNG  C_B_r1_c2 - Cut Videos    C_B_r1_c3 - Draw Box
-C_B_r2_c1 - CompressH264  C_B_r2_c2 - Compress H265 C_B_r2_c3 - Make Sync file
-C_B_r3_c1 - GetPixelCoord C_B_r3_c2 - Metadata info C_B_r3_c3 - Merge Videos
-C_B_r4_c1 - Distort video C_B_r4_c2 - Cut Video     C_B_r4_c3 - vailá
-
-C_C: Visualization
-C_C_r1_c1 - Show C3D      C_C_r1_c2 - Show CSV       C_C_r2_c1 - Plot 2D
-C_C_r2_c2 - Plot 3D       C_C_r3_c1 - vailá          C_C_r3_c2 - vailá
-C_C_r4_c1 - vailá         C_C_r4_c2 - vailá          C_C_r4_c3 - vailá
-
-Type 'h' for help or 'exit' to quit.
-
-Use the button 'imagination!' to access command-line (xonsh) tools for advanced multimodal analysis!
-```
+An overview of the project structure:
 
 ```bash
 vaila
