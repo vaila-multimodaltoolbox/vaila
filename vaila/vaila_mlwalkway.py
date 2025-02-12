@@ -51,6 +51,7 @@ def run_ml_valid_models():
 
 
 def run_walkway_ml_prediction():
+    # Passa a instância de Tk para o módulo walkway_ml_prediction
     from vaila.walkway_ml_prediction import run_prediction
 
     run_prediction()
