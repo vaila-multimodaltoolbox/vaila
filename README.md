@@ -1,4 +1,4 @@
-# *vailá* - Multimodal Toolbox
+# *vailá* - Multimodal Toolbox 
 
 <p align="center">
   <img src="docs/images/vaila.png" alt="vailá Logo" width="300"/>
