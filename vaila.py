@@ -94,56 +94,62 @@ if platform.system() == "Darwin":
         # Silently continue if AppKit is not available
         pass
 
-from vaila import (
-    cluster_analysis,
-    imu_analysis,
-    markerless_2D_analysis,
-    markerless_3D_analysis,
-    mocap_analysis,
-    forceplate_analysis,
-    convert_c3d_to_csv,
-    convert_csv_to_c3d,
-    rearrange_data_in_directory,
-    run_drawboxe,
-    count_frames_in_videos,
-    import_file,
-    export_file,
-    copy_file,
-    move_file,
-    remove_file,
-    rename_files,
-    tree_file,
-    find_file,
-    transfer_file,
-    show_c3d,
-    sync_videos,
-    VideoProcessor,
-    compress_videos_h264_gui,
-    compress_videos_h265_gui,
-    cut_videos,
-    show_csv,
-    getpixelvideo,
-    dlt2d,
-    rec2d,
-    rec2d_one_dlt2d,
-    show_vaila_message,
-    emg_labiocom,
-    plot_2d,
-    plot_3d,
-    process_videos_gui,
-    run_fill_split_dialog,
-    vaila_and_jump,
-    animal_open_field,
-    vaila_lensdistortvideo,
-    vaila_datdistort,
-    cube2d_kinematics,
-    markerless2d_mpyolo,
-    yolov11track,
-    cutvideo,
-    vaila_distortvideo_gui,
-    viewc3d,
-    mphands,
-)
+# Conditionally import tracking-related modules
+try:
+    from vaila import (
+        cluster_analysis,
+        imu_analysis,
+        markerless_2D_analysis,
+        markerless_3D_analysis,
+        mocap_analysis,
+        forceplate_analysis,
+        convert_c3d_to_csv,
+        convert_csv_to_c3d,
+        rearrange_data_in_directory,
+        run_drawboxe,
+        count_frames_in_videos,
+        import_file,
+        export_file,
+        copy_file,
+        move_file,
+        remove_file,
+        rename_files,
+        tree_file,
+        find_file,
+        transfer_file,
+        show_c3d,
+        sync_videos,
+        VideoProcessor,
+        compress_videos_h264_gui,
+        compress_videos_h265_gui,
+        cut_videos,
+        show_csv,
+        getpixelvideo,
+        dlt2d,
+        rec2d,
+        rec2d_one_dlt2d,
+        show_vaila_message,
+        emg_labiocom,
+        plot_2d,
+        plot_3d,
+        process_videos_gui,
+        run_fill_split_dialog,
+        vaila_and_jump,
+        animal_open_field,
+        vaila_lensdistortvideo,
+        vaila_datdistort,
+        cube2d_kinematics,
+        markerless2d_mpyolo,
+        cutvideo,
+        vaila_distortvideo_gui,
+        viewc3d,
+        mphands,
+    )
+    TRACKING_AVAILABLE = True
+    from vaila import yolov11track
+except ImportError as e:
+    print(f"Warning: Some tracking features will not be available: {e}")
+    TRACKING_AVAILABLE = False
 
 
 text = r"""
@@ -1426,8 +1432,14 @@ class Vaila(tk.Tk):
     # B_r4_c1
     def tracker(self):
         """Runs the yolov11track analysis."""
-        print("Running tracker analysis...")
-        yolov11track.run_yolov11track()
+        if TRACKING_AVAILABLE:
+            print("Running tracker analysis...")
+            yolov11track.run_yolov11track()
+        else:
+            messagebox.showwarning(
+                "Feature Unavailable",
+                "Tracking features are not available. Please install required packages (boxmot)."
+            )
 
     # B_r4_c2 - ML Walkway
     def ml_walkway(self):
