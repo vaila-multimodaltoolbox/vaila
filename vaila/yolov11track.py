@@ -1,3 +1,47 @@
+"""
+Project: vailá
+Script: yolov11track.py
+
+Author: Paulo Roberto Pereira Santiago
+Email: paulosantiago@usp.br
+GitHub: https://github.com/vaila-multimodaltoolbox/vaila
+Creation Date: 2025-02-16
+Version: 0.01
+
+Description:
+    This script performs object detection and tracking on video files using the YOLO model.
+    It integrates multiple features, including:
+      - Object detection and tracking using the Ultralytics YOLO library.
+      - A graphical interface (Tkinter) for dynamic parameter configuration.
+      - Video processing with OpenCV, including drawing bounding boxes and overlaying tracking data.
+      - Generation of CSV files containing frame-by-frame tracking information per tracker ID.
+      - Video conversion to more compatible formats using FFmpeg.
+
+Usage:
+    Run the script from the command line by passing the path to a video file as an argument:
+        python yolov11track.py /path/to/video.mp4
+
+Requirements:
+    - Python 3.x
+    - OpenCV
+    - PyTorch
+    - Ultralytics (YOLO)
+    - Tkinter (for GUI operations)
+    - FFmpeg (for video conversion)
+    - Additional dependencies as imported (numpy, csv, etc.)
+
+License:
+    This project is licensed under the terms of the MIT License (or another applicable license).
+
+Change History:
+    - 2023-10: Initial version implemented, integrating detection and tracking with various configurable options.
+
+Notes:
+    - Ensure that all dependencies are installed.
+    - Since the script uses a graphical interface (Tkinter) for model selection and configuration, a GUI-enabled environment is required.
+    
+"""
+
 import os
 import sys
 import csv
@@ -358,22 +402,16 @@ def run_yolov11track():
 
     # Build the full path for the model
     models_dir = os.path.join(os.path.dirname(__file__), "models")
-    os.makedirs(
-        models_dir, exist_ok=True
-    )  # Create models directory if it doesn't exist
+    os.makedirs(models_dir, exist_ok=True)
     model_path = os.path.join(models_dir, model_name)
 
     # Download the model if it doesn't exist
     if not os.path.exists(model_path):
         try:
             print(f"Downloading model {model_name}...")
-            # Save the current directory
             current_dir = os.getcwd()
-            # Change to the models directory
             os.chdir(models_dir)
-            # Download the model
             YOLO(model_name)
-            # Return to the original directory
             os.chdir(current_dir)
             print(f"Model downloaded successfully to {model_path}")
         except Exception as e:
@@ -391,14 +429,12 @@ def run_yolov11track():
     model = YOLO(model_path)
 
     # Process each video in the directory
-
     for video_file in os.listdir(video_dir):
         if video_file.endswith((".mp4", ".avi", ".mov")):
             video_path = os.path.join(video_dir, video_file)
             video_name = os.path.splitext(os.path.basename(video_path))[0]
 
             # Create a subdirectory for this specific video
-
             output_dir = os.path.join(main_output_dir, video_name)
             os.makedirs(output_dir, exist_ok=True)
 
@@ -413,11 +449,7 @@ def run_yolov11track():
             out_video_path = os.path.join(output_dir, f"processed_{video_name}.mp4")
 
             # Use the 'mp4v' codec which is more stable
-
-            writer = cv2.VideoWriter(
-                out_video_path, cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height)
-            )
-
+            writer = cv2.VideoWriter(out_video_path, cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height))
             if not writer.isOpened():
                 print(f"Error creating video file: {out_video_path}")
                 continue
@@ -425,6 +457,7 @@ def run_yolov11track():
             # Process the frames
             cap = cv2.VideoCapture(video_path)
             frame_idx = 0
+
             results = model.track(
                 source=video_path,
                 conf=config["conf"],
@@ -434,6 +467,7 @@ def run_yolov11track():
                 save=False,
                 stream=True,
                 persist=True,
+                classes=[0, 32]
             )
 
             tracker_csv_files = {}
@@ -478,15 +512,16 @@ def run_yolov11track():
                     )
 
                     # Initialize and update the CSV for each tracker id
-                    if tracker_id not in tracker_csv_files:
-                        tracker_csv_files[tracker_id] = initialize_csv(
+                    key = (tracker_id, label)
+                    if key not in tracker_csv_files:
+                        tracker_csv_files[key] = initialize_csv(
                             output_dir,
                             label,
                             tracker_id,
                             int(cap.get(cv2.CAP_PROP_FRAME_COUNT)),
                         )
                     update_csv(
-                        tracker_csv_files[tracker_id],
+                        tracker_csv_files[key],
                         frame_idx,
                         tracker_id,
                         label,
