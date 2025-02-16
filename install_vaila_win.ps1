@@ -205,19 +205,20 @@ If (Test-Path $wtPath) {
     Write-Output "'vaila' profile added to Windows Terminal successfully."
 }
 
-# Grant full permissions to the MediaPipe model directory in the Conda environment
-$mediapipeModelDir = "$condaPath\envs\vaila\Lib\site-packages\mediapipe\modules\pose_landmark"
-Write-Output "Granting full permissions to the directory $mediapipeModelDir..."
+# Grant full permissions to the entire mediapipe folder in the 'vaila' environment
+$mediapipeBaseDir = "$condaPath\envs\vaila\Lib\site-packages\mediapipe"
+Write-Output "Adjusting permissions on folder '$mediapipeBaseDir' to allow write access for non-administrative users..."
 
-If (Test-Path $mediapipeModelDir) {
+If (Test-Path $mediapipeBaseDir) {
     Try {
-        Start-Process "icacls.exe" -ArgumentList "`"$mediapipeModelDir`" /grant Users:(OI)(CI)F /T" -Wait -NoNewWindow
-        Write-Output "Permissions successfully granted for $mediapipeModelDir."
+        # Grant full control to the folder and all its files/subfolders for the 'Users' group
+        Start-Process "icacls.exe" -ArgumentList "`"$mediapipeBaseDir`" /grant Users:(OI)(CI)F /T" -Wait -NoNewWindow
+        Write-Output "Permissions have been successfully adjusted for '$mediapipeBaseDir'."
     } Catch {
-        Write-Warning "Failed to grant permissions for $mediapipeModelDir. Details: $_"
+        Write-Warning "Failed to adjust permissions for '$mediapipeBaseDir'. Details: $_"
     }
 } Else {
-    Write-Warning "Directory $mediapipeModelDir not found. No permissions were changed."
+    Write-Warning "Directory '$mediapipeBaseDir' was not found. No permissions were changed."
 }
 
 # Create a Desktop shortcut for vaila
