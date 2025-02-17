@@ -168,12 +168,12 @@ def predict_metrics(selected_metrics, valid_features, output_dir):
             ).columns
             if col not in columns_to_ignore
         ]
-        
+
         # Adicionar verificação para garantir que não haja colunas não numéricas
         if len(numeric_columns) == 0:
             print(f"No valid numeric features found for {metric}. Skipping.")
             continue
-        
+
         valid_features_numeric = valid_features[numeric_columns]
         if os.path.exists(scaler_path):
             try:
@@ -245,8 +245,10 @@ def run_prediction(selected_metrics=None):
         return
 
     # Usando genfromtxt para carregar os dados e ignorar colunas não numéricas
-    valid_features = np.genfromtxt(feature_file, delimiter=',', names=True, dtype=None, encoding=None)
-    
+    valid_features = np.genfromtxt(
+        feature_file, delimiter=",", names=True, dtype=None, encoding=None
+    )
+
     # Convertendo para DataFrame e filtrando apenas colunas numéricas
     valid_features_df = pd.DataFrame(valid_features)
     valid_features_df = valid_features_df.select_dtypes(include=[np.number])
