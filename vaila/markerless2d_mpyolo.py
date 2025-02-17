@@ -648,7 +648,9 @@ def process_mediapipe_pose(video_path, output_dir, tracking_data, params):
                     )
 
                     # Processa a pose
-                    landmarks_px = process_single_pose(frame, bbox, pose_estimator, width, height)
+                    landmarks_px = process_single_pose(
+                        frame, bbox, pose_estimator, width, height
+                    )
 
                     if landmarks_px:
                         # Em vez de gerar um arquivo "pose_person_{object_id}.csv", salva todos os dados
@@ -746,7 +748,10 @@ def create_visualization_video(video_path, output_dir, tracking_data, params):
             for class_id, objects in tracking_data.items():
                 for object_id, detections in objects.items():
                     # Retrieve detection data for the current frame
-                    frame_data = next((data for data in detections if data["frame"] == frame_idx), None)
+                    frame_data = next(
+                        (data for data in detections if data["frame"] == frame_idx),
+                        None,
+                    )
                     if frame_data is None:
                         continue
 
@@ -756,7 +761,9 @@ def create_visualization_video(video_path, output_dir, tracking_data, params):
                     cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
 
                     # Create label with class name and object ID
-                    label = f"{COCO_CLASSES.get(class_id, str(class_id))} ID:{object_id}"
+                    label = (
+                        f"{COCO_CLASSES.get(class_id, str(class_id))} ID:{object_id}"
+                    )
                     (label_width, label_height), baseline = cv2.getTextSize(
                         label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2
                     )
@@ -780,7 +787,11 @@ def create_visualization_video(video_path, output_dir, tracking_data, params):
                     )
 
                     # Se for detecção de pessoa (classe 0) e houver dados de pose, desenha os landmarks.
-                    if class_id == 0 and object_id in pose_data and frame_idx in pose_data[object_id]:
+                    if (
+                        class_id == 0
+                        and object_id in pose_data
+                        and frame_idx in pose_data[object_id]
+                    ):
                         frame_pose = pose_data[object_id][frame_idx]
                         landmarks = []
                         for i in range(33):  # MediaPipe Pose tem 33 landmarks
@@ -793,18 +804,31 @@ def create_visualization_video(video_path, output_dir, tracking_data, params):
                                 else:
                                     landmarks.append(None)
                             except KeyError:
-                                print(f"Warning: Missing landmark data for frame {frame_idx}, person {object_id}")
+                                print(
+                                    f"Warning: Missing landmark data for frame {frame_idx}, person {object_id}"
+                                )
                                 landmarks.append(None)
 
                         # Desenha conexões dos landmarks
                         for connection in mp_pose.POSE_CONNECTIONS:
                             start_idx, end_idx = connection
-                            if landmarks[start_idx] is not None and landmarks[end_idx] is not None:
-                                cv2.line(frame, landmarks[start_idx][:2], landmarks[end_idx][:2], (255, 255, 255), 1)
+                            if (
+                                landmarks[start_idx] is not None
+                                and landmarks[end_idx] is not None
+                            ):
+                                cv2.line(
+                                    frame,
+                                    landmarks[start_idx][:2],
+                                    landmarks[end_idx][:2],
+                                    (255, 255, 255),
+                                    1,
+                                )
                         # Desenha pontos dos landmarks
                         for lm in landmarks:
                             if lm is not None:
-                                cv2.circle(frame, (int(lm[0]), int(lm[1])), 2, (0, 0, 255), -1)
+                                cv2.circle(
+                                    frame, (int(lm[0]), int(lm[1])), 2, (0, 0, 255), -1
+                                )
 
             # Save the annotated frame
             frame_path = os.path.join(temp_dir, f"frame_{frame_idx:06d}.png")
@@ -812,7 +836,10 @@ def create_visualization_video(video_path, output_dir, tracking_data, params):
 
             frame_idx += 1
             if frame_idx % 30 == 0:
-                print(f"\rCreating visualization: {(frame_idx/total_frames)*100:.1f}%", end="")
+                print(
+                    f"\rCreating visualization: {(frame_idx/total_frames)*100:.1f}%",
+                    end="",
+                )
 
         # Create video using FFmpeg from the saved frames
         print("\nEncoding final video...")
@@ -823,12 +850,18 @@ def create_visualization_video(video_path, output_dir, tracking_data, params):
         ffmpeg_cmd = [
             "ffmpeg",
             "-y",
-            "-framerate", str(fps),
-            "-i", input_pattern,
-            "-c:v", "libx264",
-            "-preset", "slow",
-            "-crf", "18",
-            "-pix_fmt", "yuv420p",
+            "-framerate",
+            str(fps),
+            "-i",
+            input_pattern,
+            "-c:v",
+            "libx264",
+            "-preset",
+            "slow",
+            "-crf",
+            "18",
+            "-pix_fmt",
+            "yuv420p",
             output_video,
         ]
         subprocess.run(ffmpeg_cmd, check=True)
@@ -1014,7 +1047,7 @@ def run_multithreaded_tracking():
 def save_tracking_data_to_csv(tracking_data, output_dir):
     """
     Salva os dados do tracking (YOLO) em arquivos CSV para as classes não referentes a pessoa.
-    
+
     Para cada classe (exceto a 0, que já possui o CSV de pose), cria um arquivo CSV com os dados
     de cada objeto acompanhado (detections) usando as colunas:
     ["frame", "object_id", "x_min", "y_min", "x_max", "y_max", "confidence"].
@@ -1024,11 +1057,21 @@ def save_tracking_data_to_csv(tracking_data, output_dir):
             continue  # Dados de pessoas são tratados na etapa de pose.
         class_name = COCO_CLASSES.get(class_id, str(class_id))
         for object_id, detections in objects.items():
-            csv_path = os.path.join(output_dir, f"{class_name}_{object_id}_detections.csv")
+            csv_path = os.path.join(
+                output_dir, f"{class_name}_{object_id}_detections.csv"
+            )
             # Inicializa o CSV com as colunas esperadas.
-            columns = ["frame", "object_id", "x_min", "y_min", "x_max", "y_max", "confidence"]
+            columns = [
+                "frame",
+                "object_id",
+                "x_min",
+                "y_min",
+                "x_max",
+                "y_max",
+                "confidence",
+            ]
             pd.DataFrame(columns=columns).to_csv(csv_path, index=False)
-            
+
             for detection in detections:
                 row_data = {
                     "frame": detection["frame"],
@@ -1039,7 +1082,9 @@ def save_tracking_data_to_csv(tracking_data, output_dir):
                     "y_max": detection["bbox"][3],
                     "confidence": detection["confidence"],
                 }
-                pd.DataFrame([row_data]).to_csv(csv_path, mode="a", header=False, index=False)
+                pd.DataFrame([row_data]).to_csv(
+                    csv_path, mode="a", header=False, index=False
+                )
 
 
 def run_markerless2d_mpyolo():
