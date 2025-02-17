@@ -449,7 +449,9 @@ def run_yolov11track():
             out_video_path = os.path.join(output_dir, f"processed_{video_name}.mp4")
 
             # Use the 'mp4v' codec which is more stable
-            writer = cv2.VideoWriter(out_video_path, cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height))
+            writer = cv2.VideoWriter(
+                out_video_path, cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height)
+            )
             if not writer.isOpened():
                 print(f"Error creating video file: {out_video_path}")
                 continue
@@ -467,7 +469,7 @@ def run_yolov11track():
                 save=False,
                 stream=True,
                 persist=True,
-                classes=[0, 32]
+                classes=[0, 32],
             )
 
             tracker_csv_files = {}
