@@ -145,6 +145,7 @@ try:
         viewc3d,
         mphands,
     )
+
     TRACKING_AVAILABLE = True
     from vaila import yolov11track
 except ImportError as e:
@@ -1438,7 +1439,7 @@ class Vaila(tk.Tk):
         else:
             messagebox.showwarning(
                 "Feature Unavailable",
-                "Tracking features are not available. Please install required packages (boxmot)."
+                "Tracking features are not available. Please install required packages (boxmot).",
             )
 
     # B_r4_c2 - ML Walkway
