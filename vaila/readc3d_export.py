@@ -42,6 +42,8 @@ $ python readc3d_export.py
 Notes:
 - Ensure that all necessary libraries are installed.
 - This script is designed to handle large datasets efficiently, but saving to Excel format may take significant time depending on the dataset size.
+- The cálculo e a exportação dos dados de COP foram removidos deste script.
+  O processamento do COP será realizado posteriormente no script cop_calculate.py.
 """
 
 import os
@@ -225,33 +227,33 @@ def save_to_files(
     analog_units,
     analog_freq,
     file_name,
-    output_dir,
+    run_save_dir,
     save_excel,
     datac3d,
 ):
     """
-    Save extracted data to CSV files and all parameters to .info files.
+    Salva os dados extraídos em arquivos CSV e .info dentro de um diretório
+    criado para o arquivo específico, dentro do diretório de salvamento da execução.
     """
     print(f"Saving data to files for {file_name}")
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    dir_name = os.path.join(output_dir, "vaila_c3d_to_csv", f"{file_name}_{timestamp}")
-    os.makedirs(dir_name, exist_ok=True)
-    print(f"Directory created: {dir_name}")
+    # Cria uma subpasta para o arquivo dentro do diretório de salvamento
+    file_dir = os.path.join(run_save_dir, file_name)
+    os.makedirs(file_dir, exist_ok=True)
+    print(f"Directory created: {file_dir}")
 
-    # Save all data to detailed .info file
-    save_info_file(datac3d, file_name, dir_name)
-    # Save simplified short .info file
+    # Salva arquivo .info detalhado e o arquivo .info resumido
+    save_info_file(datac3d, file_name, file_dir)
     save_short_info_file(
         marker_labels,
         marker_freq,
         analog_labels,
         analog_units,
         analog_freq,
-        dir_name,
+        file_dir,
         file_name,
     )
-    # Save events data
-    save_events(datac3d, file_name, dir_name)
+    # Salva eventos
+    save_events(datac3d, file_name, file_dir)
 
     # Prepare marker columns
     marker_columns = [
@@ -271,11 +273,11 @@ def save_to_files(
         )
         print(f"Saving markers CSV for {file_name}")
         markers_df.to_csv(
-            os.path.join(dir_name, f"{file_name}_markers.csv"), index=False
+            os.path.join(file_dir, f"{file_name}_markers.csv"), index=False
         )
     else:
         print(f"No markers found for {file_name}, saving empty file.")
-        save_empty_file(os.path.join(dir_name, f"{file_name}_markers.csv"))
+        save_empty_file(os.path.join(file_dir, f"{file_name}_markers.csv"))
 
     # Save analog data
     if analogs.size > 0:
@@ -290,11 +292,11 @@ def save_to_files(
         )
         print(f"Saving analogs CSV for {file_name}")
         analogs_df.to_csv(
-            os.path.join(dir_name, f"{file_name}_analogs.csv"), index=False
+            os.path.join(file_dir, f"{file_name}_analogs.csv"), index=False
         )
     else:
         print(f"No analogs found for {file_name}, saving empty file.")
-        save_empty_file(os.path.join(dir_name, f"{file_name}_analogs.csv"))
+        save_empty_file(os.path.join(file_dir, f"{file_name}_analogs.csv"))
 
     # Save points residuals data
     if points_residuals.size > 0:
@@ -309,17 +311,17 @@ def save_to_files(
         )
         print(f"Saving points residuals CSV for {file_name}")
         points_residuals_df.to_csv(
-            os.path.join(dir_name, f"{file_name}_points_residuals.csv"), index=False
+            os.path.join(file_dir, f"{file_name}_points_residuals.csv"), index=False
         )
     else:
         print(f"No points residuals found for {file_name}, saving empty file.")
-        save_empty_file(os.path.join(dir_name, f"{file_name}_points_residuals.csv"))
+        save_empty_file(os.path.join(file_dir, f"{file_name}_points_residuals.csv"))
 
     # Optionally save to Excel
     if save_excel:
         print("Saving to Excel. This process can take a long time...")
         with pd.ExcelWriter(
-            os.path.join(dir_name, f"{file_name}.xlsx"), engine="openpyxl"
+            os.path.join(file_dir, f"{file_name}.xlsx"), engine="openpyxl"
         ) as writer:
             if markers.size > 0:
                 markers_df.to_excel(writer, sheet_name="Markers", index=False)
@@ -331,11 +333,14 @@ def save_to_files(
                 )
 
     print(f"Files for {file_name} saved successfully!")
+    return file_dir
 
 
 def convert_c3d_to_csv():
     """
     Main function to convert C3D files to CSV and .info files.
+    O cálculo e a exportação do CSV com dados de COP foram removidos deste script.
+    Eles serão realizados posteriormente no script cop_calculate.py.
     """
     root = Tk()
     root.withdraw()
@@ -352,7 +357,7 @@ def convert_c3d_to_csv():
     output_directory = filedialog.askdirectory(title="Select Output Directory")
     print(f"Debug: output_directory = {output_directory}")
 
-    root.destroy()  # Use root.destroy() to properly close the Tkinter resources
+    root.destroy()  # Fecha os recursos do Tkinter
 
     if input_directory and output_directory:
         c3d_files = sorted(
@@ -360,7 +365,12 @@ def convert_c3d_to_csv():
         )
         print(f"Found {len(c3d_files)} .c3d files in the input directory.")
 
-        # Simplified progress bar
+        # Cria o diretório raiz para salvamento com timestamp no nome
+        run_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        run_save_dir = os.path.join(output_directory, f"vaila_c3d_to_csv_{run_timestamp}")
+        os.makedirs(run_save_dir, exist_ok=True)
+        print(f"Run-level save directory created: {run_save_dir}")
+
         progress_bar = tqdm(
             total=len(c3d_files), desc="Processing C3D files", unit="file"
         )
@@ -381,7 +391,8 @@ def convert_c3d_to_csv():
                     datac3d,
                 ) = importc3d(file_path)
                 file_name = os.path.splitext(c3d_file)[0]
-                save_to_files(
+                # Salva os dados extraídos em arquivos CSV e .info dentro do diretório de salvamento da execução
+                out_dir = save_to_files(
                     markers,
                     marker_labels,
                     marker_freq,
@@ -391,15 +402,13 @@ def convert_c3d_to_csv():
                     analog_units,
                     analog_freq,
                     file_name,
-                    output_directory,
+                    run_save_dir,
                     save_excel,
                     datac3d,
                 )
             except Exception as e:
                 print(f"Error processing {c3d_file}: {e}")
                 messagebox.showerror("Error", f"Failed to process {c3d_file}: {e}")
-
-            # Update progress bar after each file
             progress_bar.update(1)
 
         progress_bar.close()
