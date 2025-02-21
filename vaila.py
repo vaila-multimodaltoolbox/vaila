@@ -4,7 +4,7 @@ vaila.py
 ===============================================================================
 Author: Paulo R. P. Santiago
 Date: 22 January 2025
-Version updated: 16.Feb.2025
+Version updated: 20.Feb.2025
 Python Version: 3.12.9
 
 
@@ -226,7 +226,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 16.Feb.2025 (Python 3.12.9)")
+        self.title("vailá - 20.Feb.2025 (Python 3.12.9)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -577,15 +577,16 @@ class Vaila(tk.Tk):
         )
 
         # B2 - Multimodal Toolbox: Second row of buttons (EMG, Force Plate, GNSS/GPS, MEG/EEG)
-        # B2_r2_c1 - Vector Coding
         row2_frame = tk.Frame(analysis_frame)
         row2_frame.pack(fill="x")
+        # B2_r2_c1 - Vector Coding
         vector_coding_btn = tk.Button(
             row2_frame,
             text="Vector Coding",
             width=button_width,
             command=self.vector_coding,
         )
+
 
         # B2_r2_c2 - EMG
         emg_analysis_btn = tk.Button(
@@ -1300,10 +1301,10 @@ class Vaila(tk.Tk):
         The user will be prompted to select the file, the axis, and the names of the
         two joints. The module will then calculate the coupling angle between the two
         joints and save the result in a CSV file.
-
         """
-        show_vaila_message()
-        # vector_coding.run_vector_coding()
+        # Importar diretamente do arquivo run_vector_coding.py
+        from vaila.run_vector_coding import run_vector_coding
+        run_vector_coding()
 
     # B_r2_c2
     def emg_analysis(self):
