@@ -51,7 +51,6 @@ from .filemanager import (
     transfer_file,
 )
 from .showc3d import show_c3d
-from .vector_coding import vector_coding
 from .syncvid import sync_videos
 from .compress_videos_h264 import compress_videos_h264_gui
 from .compress_videos_h265 import compress_videos_h265_gui
