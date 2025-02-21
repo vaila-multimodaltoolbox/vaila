@@ -3,9 +3,9 @@
 vaila_lensdistortvideo.py
 ===============================================================================
 Author: Prof. Paulo R. P. Santiago
-Date: 20 December 2024
-Version: 0.1.0
-Python Version: 3.12.8
+Date: 21 Feb 2025
+Version: 0.1.1
+Python Version: 3.12.9
 ===============================================================================
 
 Este script processa vídeos aplicando a correção de distorção da lente com base
@@ -483,51 +483,51 @@ def distort_video_gui():
 
 def distort_video_gui_cv2():
     """
-    Ajuste dos parâmetros de distorção utilizando a interface do OpenCV.
+    Adjust distortion parameters using an OpenCV-based interface.
 
-    O usuário seleciona um vídeo (para extrair o primeiro frame) e na janela com trackbars
-    pode modificar os parâmetros de correção: [fx, fy, cx, cy, k1, k2, k3, p1, p2] e o fator de escala.
-
-    Pressione 'c' para confirmar ou 'q' para cancelar.
+    The user selects a video file (to extract the first frame) and can use the OpenCV trackbars
+    to modify the correction parameters: [fx, fy, cx, cy, k1, k2, k3, p1, p2] and the scale factor.
+    
+    Press 'c' to confirm or 'q' to cancel.
 
     Returns:
-        dict: Parâmetros confirmados, ou None se cancelados.
+        dict: Confirmed parameters, or None if canceled.
     """
     import math
 
-    # Seleciona o vídeo para extração do frame
+    # Use Tkinter to select the video file for frame extraction
     root = tk.Tk()
     root.withdraw()
     video_path = filedialog.askopenfilename(
-        title="Selecione o vídeo para extrair o primeiro frame",
+        title="Select the video for frame extraction",
         filetypes=(("Video Files", "*.mp4;*.avi;*.mov"), ("All Files", "*.*")),
     )
     if not video_path:
         return None
+    # Destroy the Tkinter root, freeing the main thread for OpenCV usage
+    root.destroy()
 
     cap = cv2.VideoCapture(video_path)
     ret, frame = cap.read()
     cap.release()
     if not ret:
-        messagebox.showerror("Erro", "Não foi possível ler o frame do vídeo.")
+        messagebox.showerror("Error", "Could not read the video frame.")
         return None
     original_frame = frame.copy()
     orig_height, orig_width = original_frame.shape[:2]
 
-    # Estima os parâmetros iniciais considerando um FOV de 90°
+    # Estimate initial parameters assuming a 90° FOV
     fov = 90
     default_fx = int((orig_width / 2) / math.tan(math.radians(fov / 2)))
     default_fy = default_fx
     default_cx = orig_width // 2
     default_cy = orig_height // 2
 
-    # Cria uma janela para preview e ajuste dos parâmetros
-    window_name = (
-        "Ajuste de Parâmetros (Pressione 'c' para confirmar, 'q' para cancelar)"
-    )
+    # Create a window for preview and parameter adjustment using OpenCV
+    window_name = "Parameter Adjustment (Press 'c' to confirm, 'q' to cancel)"
     cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
 
-    # Define os trackbars com intervalos e valores padrão
+    # Define trackbars with their ranges and default values
     trackbars = {
         "fx": {
             "min": int(default_fx * 0.5),
@@ -546,15 +546,14 @@ def distort_video_gui_cv2():
         "k3": {"min": -1000, "max": 1000, "default": 0},
         "p1": {"min": -1000, "max": 1000, "default": 0},
         "p2": {"min": -1000, "max": 1000, "default": 0},
-        # Fator de escala para visualização (0.5 a 1.5) multiplicado por 100 para ter resolução de 0.01
+        # Scale factor for visualization (0.5 to 1.5), multiplied by 100 for 0.01 resolution
         "scale": {"min": 50, "max": 150, "default": 100},
     }
 
-    # Função "dummy" para callback das trackbars
     def nothing(x):
         pass
 
-    # Cria os trackbars na janela
+    # Create the OpenCV trackbars in the window
     for name, params in trackbars.items():
         cv2.createTrackbar(
             name,
@@ -564,18 +563,16 @@ def distort_video_gui_cv2():
             nothing,
         )
 
-    # Função auxiliar para retornar o valor real do trackbar (com offset)
     def get_trackbar_value(trackbar_name):
         params = trackbars[trackbar_name]
         pos = cv2.getTrackbarPos(trackbar_name, window_name)
         return params["min"] + pos
 
     while True:
-        # Verifica se a janela ainda está visível; se não, encerra a função
+        # Verify that the window is still open
         if cv2.getWindowProperty(window_name, cv2.WND_PROP_VISIBLE) < 1:
             return None
 
-        # Obtém os valores atuais dos trackbars
         fx = float(get_trackbar_value("fx"))
         fy = float(get_trackbar_value("fy"))
         cx = float(get_trackbar_value("cx"))
@@ -587,7 +584,6 @@ def distort_video_gui_cv2():
         p2 = get_trackbar_value("p2") / 1000.0
         scale = get_trackbar_value("scale") / 100.0
 
-        # Monta as matrizes de câmera e distorção
         camera_matrix = np.array(
             [[fx, 0, cx], [0, fy, cy], [0, 0, 1]], dtype=np.float32
         )
@@ -602,8 +598,6 @@ def distort_video_gui_cv2():
         undistorted = cv2.undistort(
             original_frame, camera_matrix, dist_coeffs, None, new_camera_matrix
         )
-
-        # Redimensiona a imagem para visualização de acordo com o fator "scale"
         new_w = int(orig_width * scale)
         new_h = int(orig_height * scale)
         preview = cv2.resize(undistorted, (new_w, new_h))
@@ -632,24 +626,26 @@ def run_distortvideo_gui():
     """Main function to run lens distortion correction using a single video and an OpenCV-based GUI."""
     rprint("[yellow]Running lens distortion correction with OpenCV GUI...[/yellow]")
 
-    # Extrai os parâmetros via interface OpenCV (versão anterior que funcionava)
+    # Extract parameters via the OpenCV-based interface
     parameters = distort_video_gui_cv2()
     if parameters is None:
-        rprint("[red]A extração dos parâmetros foi cancelada.[/red]")
+        rprint("[red]Parameter extraction was canceled.[/red]")
         return
 
-    # Seleciona o vídeo a ser processado (pode ser o mesmo utilizado para ajuste)
+    # Use Tkinter to select the video for processing (can be the same used for adjustment)
     root = tk.Tk()
     root.withdraw()
     video_path = filedialog.askopenfilename(
-        title="Selecione o vídeo para processar",
+        title="Select the video for processing",
         filetypes=(("Video Files", "*.mp4;*.avi;*.mov"), ("All Files", "*.*")),
     )
     if not video_path:
-        rprint("[red]Nenhum vídeo foi selecionado para processamento.[/red]")
+        rprint("[red]No video was selected for processing.[/red]")
         return
+    # Destroy the Tkinter root after the video selection
+    root.destroy()
 
-    # Salva os parâmetros em um arquivo CSV no mesmo diretório do vídeo selecionado
+    # Save the parameters to a CSV file in the same directory as the selected video
     base_name = os.path.splitext(os.path.basename(video_path))[0]
     params_csv = os.path.join(
         os.path.dirname(video_path), f"{base_name}_parameters.csv"
@@ -668,24 +664,23 @@ def run_distortvideo_gui():
                 f"{parameters['p1']:.17f},"
                 f"{parameters['p2']:.17f}\n"
             )
-        rprint(f"\n[blue]Parâmetros salvos em: {params_csv}[/blue]")
+        rprint(f"\n[blue]Parameters saved to: {params_csv}[/blue]")
     except Exception as e:
-        rprint(f"[red]Erro ao salvar parâmetros: {e}[/red]")
+        rprint(f"[red]Error saving parameters: {e}[/red]")
 
-    # Define o caminho de saída do vídeo processado
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_path = os.path.join(
         os.path.dirname(video_path), f"{base_name}_undistorted_{timestamp}.mp4"
     )
 
     try:
-        rprint(f"\n[cyan]Processando o vídeo: {video_path}[/cyan]")
+        rprint(f"\n[cyan]Processing video: {video_path}[/cyan]")
         process_video(video_path, output_path, parameters)
     except Exception as e:
-        rprint(f"[red]Erro no processamento do vídeo: {e}[/red]")
+        rprint(f"[red]Error processing video: {e}[/red]")
 
-    rprint("\n[green]Processamento completo![/green]")
-    rprint(f"[blue]Vídeo de saída salvo em: {output_path}[/blue]")
+    rprint("\n[green]Processing complete![/green]")
+    rprint(f"[blue]Output saved as: {output_path}[/blue]")
 
 
 if __name__ == "__main__":
