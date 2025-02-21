@@ -3,17 +3,17 @@
 vaila_lensdistortvideo.py
 ===============================================================================
 Author: Prof. Paulo R. P. Santiago
-Date: 20 December 2024
-Version: 0.1.0
-Python Version: 3.12.8
+Date: 21 Feb 2025
+Version: 0.1.1
+Python Version: 3.12.9
 ===============================================================================
 
-Este script processa vídeos aplicando a correção de distorção da lente com base
-nos parâmetros intrínsecos da câmera e coeficientes de distorção. Agora, em
-vez de carregar os parâmetros de um arquivo CSV, é possível ajustá-los interativamente
-através de uma interface gráfica com sliders e botões. Para isso é extraído o primeiro
-frame do vídeo e o resultado (imagem undistorted) é exibido em um preview atualizado em tempo
-real.
+This script processes videos applying lens distortion correction based on
+intrinsic camera parameters and distortion coefficients. Now, instead of loading
+parameters from a CSV file, it is possible to adjust them interactively
+through a graphical interface with sliders and buttons. For this, the first
+frame of the video and the result (undistorted image) is displayed in an updated
+preview in real time.
 ===============================================================================
 """
 
@@ -21,6 +21,7 @@ import cv2
 import numpy as np
 import pandas as pd
 import os
+import pathlib
 from rich import print
 import tkinter as tk
 from tkinter import filedialog, messagebox
@@ -35,7 +36,7 @@ from rich.progress import (
 from rich.console import Console
 from rich import print as rprint
 import subprocess
-from PIL import Image, ImageTk  # Para converter imagens para exibição com Tkinter
+from PIL import Image, ImageTk  # To convert images for display with Tkinter
 import math
 import pygame
 
@@ -124,7 +125,7 @@ def process_video(input_path, output_path, parameters):
                 frame_count += 1
                 progress.update(process_task, advance=1)
 
-                # Exibe informações adicionais a cada 100 frames
+                # Display additional information every 100 frames
                 if frame_count % 100 == 0:
                     elapsed = progress.tasks[0].elapsed
                     if elapsed:
@@ -135,7 +136,7 @@ def process_video(input_path, output_path, parameters):
                             f"Estimated time remaining: {remaining:.1f}s[/dim]"
                         )
 
-        # Cria o vídeo final com FFmpeg
+        # Create the final video with FFmpeg
         rprint("\n[yellow]Creating final video with FFmpeg...[/yellow]")
         input_pattern = os.path.join(temp_dir, "frame_%06d.png")
         ffmpeg_cmd = [
@@ -159,10 +160,10 @@ def process_video(input_path, output_path, parameters):
         subprocess.run(ffmpeg_cmd, check=True)
 
     finally:
-        # Libera a captura de vídeo
+        # Release the video capture
         cap.release()
 
-        # Remove arquivos temporários
+        # Remove temporary files
         if os.path.exists(temp_dir):
             for file in os.listdir(temp_dir):
                 os.remove(os.path.join(temp_dir, file))
@@ -194,20 +195,24 @@ def select_file(title="Select a file", filetypes=(("CSV Files", "*.csv"),)):
 
 def distort_video_gui():
     """
-    GUI para ajustar interativamente os parâmetros de distorção
-    usando o primeiro frame de um vídeo como exemplo.
+    GUI to adjust distortion parameters interactively
+    using the first frame of a video as an example.
 
-    Após o ajuste, os parâmetros (fx,fy,cx,cy,k1,k2,k3,p1,p2) são salvos
-    em um arquivo CSV para uso posterior.
+    After adjustment, the parameters (fx,fy,cx,cy,k1,k2,k3,p1,p2) are saved
+    in a CSV file for later use.
     """
-    # Cria a janela raiz (oculta)
+    # Print the directory and name of the script being executed
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+
+    # Create the root window (hidden)
     root = tk.Tk()
     root.withdraw()
 
-    # Seleciona o vídeo e extrai o primeiro frame
+    # Select the video and extract the first frame
     video_path = filedialog.askopenfilename(
-        title="Selecione o vídeo para extrair o primeiro frame",
-        filetypes=(("Video Files", "*.mp4;*.avi;*.mov"), ("All Files", "*.*")),
+        title="Select the video to extract the first frame",
+        filetypes=(("Video Files", "*.mp4;*.avi;*.mov;*.mkv;*.webm;*.MP4;*.AVI;*.MOV;*.MKV;*.WEBM"), ("All Files", "*.*")),
     )
     if not video_path:
         return None
@@ -216,20 +221,20 @@ def distort_video_gui():
     ret, frame = cap.read()
     cap.release()
     if not ret:
-        messagebox.showerror("Erro", "Não foi possível ler o frame do vídeo.")
+        messagebox.showerror("Error", "Could not read the video frame.")
         return None
 
     original_frame = frame.copy()
     orig_height, orig_width = original_frame.shape[:2]
 
-    # Estima os parâmetros iniciais usando FOV de 90°
+    # Estimate initial parameters using a 90° FOV
     fov = 90
     default_fx = int((orig_width / 2) / math.tan(math.radians(fov / 2)))
     default_fy = default_fx
     default_cx = orig_width // 2
     default_cy = orig_height // 2
 
-    # Cria a janela de preview
+    # Create the preview window
     preview_win = tk.Toplevel(root)
     preview_win.title("Preview - Distortion Correction")
     init_width = min(800, orig_width)
@@ -238,14 +243,14 @@ def distort_video_gui():
     preview_label = tk.Label(preview_win)
     preview_label.pack(expand=True, fill="both")
 
-    # Cria a janela de controles
+    # Create the controls window
     control_win = tk.Toplevel(root)
-    control_win.title("Controles de Parâmetros")
+    control_win.title("Controls of Parameters")
     control_win.geometry("350x700")
     controls_frame = tk.Frame(control_win)
     controls_frame.pack(expand=True, fill="both", padx=5, pady=5)
 
-    # Define as variáveis para os parâmetros
+    # Define the variables for the parameters
     fx_var = tk.DoubleVar(value=default_fx)
     fy_var = tk.DoubleVar(value=default_fy)
     cx_var = tk.DoubleVar(value=default_cx)
@@ -258,7 +263,7 @@ def distort_video_gui():
     scale_var = tk.DoubleVar(value=1.0)
 
     def update_preview():
-        # Obtém os parâmetros atuais
+        # Get the current parameters
         fx = fx_var.get()
         fy = fy_var.get()
         cx = cx_var.get()
@@ -269,12 +274,12 @@ def distort_video_gui():
         p1 = p1_var.get()
         p2 = p2_var.get()
 
-        # Cria a matriz da câmera e os coeficientes de distorção
+        # Create the camera matrix and distortion coefficients
         camera_matrix = np.array(
             [[fx, 0, cx], [0, fy, cy], [0, 0, 1]], dtype=np.float32
         )
         dist_coeffs = np.array([k1, k2, p1, p2, k3], dtype=np.float32)
-        # Calcula a nova matriz da câmera (opcional, porém útil)
+        # Calculate the new camera matrix (optional, but useful)
         new_camera_matrix, roi = cv2.getOptimalNewCameraMatrix(
             camera_matrix,
             dist_coeffs,
@@ -286,7 +291,7 @@ def distort_video_gui():
             original_frame, camera_matrix, dist_coeffs, None, new_camera_matrix
         )
 
-        # Redimensiona a imagem para caber na janela de preview
+        # Resize the image to fit in the preview window
         scale = scale_var.get()
         preview_win.update_idletasks()
         win_w = preview_win.winfo_width()
@@ -297,30 +302,30 @@ def distort_video_gui():
             undistorted, (new_w, new_h), interpolation=cv2.INTER_LINEAR
         )
 
-        # Converte para RGB e cria a imagem para Tkinter
+        # Convert to RGB and create the image for Tkinter
         resized_rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
         pil_image = Image.fromarray(resized_rgb)
         tk_image = ImageTk.PhotoImage(pil_image)
         preview_label.configure(image=tk_image)
-        preview_label.image = tk_image  # Mantém referência
+        preview_label.image = tk_image  # Keep reference
         preview_win.after(100, update_preview)
 
     update_preview()
 
-    # Função auxiliar para criar sliders (mantida, mas sem bindings de teclado)
+    # Helper function to create sliders (kept, but without keyboard bindings)
     slider_row = 0
 
     def add_slider(label_text, var, from_val, to_val, resolution):
         nonlocal slider_row
-        # Cria um frame para agrupar o rótulo, o slider e o campo entry
+        # Create a frame to group the label, the slider and the entry field
         frame = tk.Frame(controls_frame)
         frame.grid(row=slider_row, column=0, columnspan=2, sticky="we", padx=2, pady=2)
 
-        # Rótulo do slider
+        # Label of the slider
         lbl = tk.Label(frame, text=label_text)
         lbl.pack(side="left")
 
-        # Slider propriamente dito
+        # Slider itself
         slider = tk.Scale(
             frame,
             variable=var,
@@ -333,18 +338,18 @@ def distort_video_gui():
         )
         slider.pack(side="left", fill="x", expand=True)
 
-        # Campo entry para digitação manual do valor
+        # Entry field for manual value input
         entry = tk.Entry(frame, width=8)
         entry.pack(side="left", padx=5)
         entry.insert(0, str(var.get()))
 
-        # Atualiza o campo entry quando o slider é movido
+        # Update the entry field when the slider is moved
         def slider_changed(val):
             try:
                 fval = float(val)
             except ValueError:
                 fval = 0
-            # Se a resolução for menor que 1, usa formatação float; senão, inteiro.
+            # If the resolution is less than 1, use float formatting; otherwise, integer.
             if resolution < 1:
                 entry_value = f"{fval:.3f}"
             else:
@@ -354,13 +359,13 @@ def distort_video_gui():
 
         slider.config(command=slider_changed)
 
-        # Atualiza o slider quando o usuário digita o valor manualmente
+        # Update the slider when the user manually inputs the value
         def entry_changed(event):
             try:
                 new_val = float(entry.get())
             except ValueError:
                 new_val = slider.get()
-            # Garante que o valor esteja dentro dos limites
+            # Ensure the value is within the limits
             if new_val < from_val:
                 new_val = from_val
             elif new_val > to_val:
@@ -370,11 +375,11 @@ def distort_video_gui():
         entry.bind("<Return>", entry_changed)
         entry.bind("<FocusOut>", entry_changed)
 
-        # Configura o scroll do mouse para incrementar/decrementar exatamente 1 unidade de 'resolution'
+        # Configure the mouse scroll to increment/decrement exactly 1 unit of 'resolution'
         def on_mousewheel(event):
             r = float(slider.cget("resolution"))
             if event.delta:
-                # Ignora o valor absoluto; usa somente o sinal
+                # Ignore the absolute value; use only the sign
                 step = 1 if event.delta > 0 else -1
                 slider.set(slider.get() + step * r)
             elif hasattr(event, "num"):
@@ -401,12 +406,12 @@ def distort_video_gui():
     add_slider("p2", p2_var, -1.0, 1.0, 0.001)
     add_slider("Scale", scale_var, 0.5, 1.5, 0.001)
 
-    # --- Vinculação global de eventos de teclado para sliders --- #
+    # --- Global keyboard event binding for sliders --- #
     def on_key_global(event):
         focused_widget = control_win.focus_get()
         if isinstance(focused_widget, tk.Scale):
             current_val = focused_widget.get()
-            # Obtém a resolução configurada para o slider
+            # Get the resolution configured for the slider
             resolution = float(focused_widget.cget("resolution"))
             if event.keysym == "Left":
                 focused_widget.set(current_val - resolution)
@@ -417,7 +422,7 @@ def distort_video_gui():
     control_win.bind_all("<KeyPress-Right>", on_key_global)
     # ----------------------------------------------------------------- #
 
-    # Classe para manter o estado da confirmação
+    # Class to maintain the confirmation state
     class State:
         def __init__(self):
             self.confirmed = False
@@ -456,9 +461,9 @@ def distort_video_gui():
     root.mainloop()
 
     if state.confirmed:
-        # Seleciona onde salvar o arquivo de parâmetros
+        # Select where to save the parameters file
         params_file = filedialog.asksaveasfilename(
-            title="Salvar parâmetros",
+            title="Save parameters",
             defaultextension=".csv",
             filetypes=(("CSV Files", "*.csv"), ("All Files", "*.*")),
         )
@@ -483,51 +488,53 @@ def distort_video_gui():
 
 def distort_video_gui_cv2():
     """
-    Ajuste dos parâmetros de distorção utilizando a interface do OpenCV.
+    Adjust distortion parameters using an OpenCV-based interface.
 
-    O usuário seleciona um vídeo (para extrair o primeiro frame) e na janela com trackbars
-    pode modificar os parâmetros de correção: [fx, fy, cx, cy, k1, k2, k3, p1, p2] e o fator de escala.
-
-    Pressione 'c' para confirmar ou 'q' para cancelar.
+    The user selects a video file (to extract the first frame) and can use the OpenCV trackbars
+    to modify the correction parameters: [fx, fy, cx, cy, k1, k2, k3, p1, p2] and the scale factor.
+    
+    Press 'c' to confirm or 'q' to cancel.
 
     Returns:
-        dict: Parâmetros confirmados, ou None se cancelados.
+        dict: Confirmed parameters, or None if canceled.
     """
-    import math
+    # Print the directory and name of the script being executed
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
 
-    # Seleciona o vídeo para extração do frame
+    # Use Tkinter to select the video file for frame extraction
     root = tk.Tk()
     root.withdraw()
     video_path = filedialog.askopenfilename(
-        title="Selecione o vídeo para extrair o primeiro frame",
-        filetypes=(("Video Files", "*.mp4;*.avi;*.mov"), ("All Files", "*.*")),
+        title="Select the video for frame extraction",
+        filetypes=[("Video Files", "*.mp4 *.avi *.mov *.mkv *.webm *.MP4 *.AVI *.MOV *.MKV *.WEBM"), ("All Files", "*.*")]
     )
     if not video_path:
         return None
+    # Destroy the Tkinter root, freeing the main thread for OpenCV usage
+    root.destroy()
 
     cap = cv2.VideoCapture(video_path)
     ret, frame = cap.read()
     cap.release()
     if not ret:
-        messagebox.showerror("Erro", "Não foi possível ler o frame do vídeo.")
+        messagebox.showerror("Error", "Could not read the video frame.")
         return None
     original_frame = frame.copy()
     orig_height, orig_width = original_frame.shape[:2]
 
-    # Estima os parâmetros iniciais considerando um FOV de 90°
+    # Estimate initial parameters assuming a 90° FOV
     fov = 90
     default_fx = int((orig_width / 2) / math.tan(math.radians(fov / 2)))
     default_fy = default_fx
     default_cx = orig_width // 2
     default_cy = orig_height // 2
 
-    # Cria uma janela para preview e ajuste dos parâmetros
-    window_name = (
-        "Ajuste de Parâmetros (Pressione 'c' para confirmar, 'q' para cancelar)"
-    )
+    # Create a window for preview and parameter adjustment using OpenCV
+    window_name = "Parameter Adjustment (Press 'c' to confirm, 'q' to cancel)"
     cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
 
-    # Define os trackbars com intervalos e valores padrão
+    # Define trackbars with their ranges and default values
     trackbars = {
         "fx": {
             "min": int(default_fx * 0.5),
@@ -546,15 +553,14 @@ def distort_video_gui_cv2():
         "k3": {"min": -1000, "max": 1000, "default": 0},
         "p1": {"min": -1000, "max": 1000, "default": 0},
         "p2": {"min": -1000, "max": 1000, "default": 0},
-        # Fator de escala para visualização (0.5 a 1.5) multiplicado por 100 para ter resolução de 0.01
+        # Scale factor for visualization (0.5 to 1.5), multiplied by 100 for 0.01 resolution
         "scale": {"min": 50, "max": 150, "default": 100},
     }
 
-    # Função "dummy" para callback das trackbars
     def nothing(x):
         pass
 
-    # Cria os trackbars na janela
+    # Create the OpenCV trackbars in the window
     for name, params in trackbars.items():
         cv2.createTrackbar(
             name,
@@ -564,18 +570,16 @@ def distort_video_gui_cv2():
             nothing,
         )
 
-    # Função auxiliar para retornar o valor real do trackbar (com offset)
     def get_trackbar_value(trackbar_name):
         params = trackbars[trackbar_name]
         pos = cv2.getTrackbarPos(trackbar_name, window_name)
         return params["min"] + pos
 
     while True:
-        # Verifica se a janela ainda está visível; se não, encerra a função
+        # Verify that the window is still open
         if cv2.getWindowProperty(window_name, cv2.WND_PROP_VISIBLE) < 1:
             return None
 
-        # Obtém os valores atuais dos trackbars
         fx = float(get_trackbar_value("fx"))
         fy = float(get_trackbar_value("fy"))
         cx = float(get_trackbar_value("cx"))
@@ -587,7 +591,6 @@ def distort_video_gui_cv2():
         p2 = get_trackbar_value("p2") / 1000.0
         scale = get_trackbar_value("scale") / 100.0
 
-        # Monta as matrizes de câmera e distorção
         camera_matrix = np.array(
             [[fx, 0, cx], [0, fy, cy], [0, 0, 1]], dtype=np.float32
         )
@@ -602,8 +605,6 @@ def distort_video_gui_cv2():
         undistorted = cv2.undistort(
             original_frame, camera_matrix, dist_coeffs, None, new_camera_matrix
         )
-
-        # Redimensiona a imagem para visualização de acordo com o fator "scale"
         new_w = int(orig_width * scale)
         new_h = int(orig_height * scale)
         preview = cv2.resize(undistorted, (new_w, new_h))
@@ -631,25 +632,31 @@ def distort_video_gui_cv2():
 def run_distortvideo_gui():
     """Main function to run lens distortion correction using a single video and an OpenCV-based GUI."""
     rprint("[yellow]Running lens distortion correction with OpenCV GUI...[/yellow]")
+        
+    # Print the directory and name of the script being executed
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
 
-    # Extrai os parâmetros via interface OpenCV (versão anterior que funcionava)
+    # Extract parameters via the OpenCV-based interface
     parameters = distort_video_gui_cv2()
     if parameters is None:
-        rprint("[red]A extração dos parâmetros foi cancelada.[/red]")
+        rprint("[red]Parameter extraction was canceled.[/red]")
         return
 
-    # Seleciona o vídeo a ser processado (pode ser o mesmo utilizado para ajuste)
+    # Use Tkinter to select the video for processing (can be the same as used for adjustment)
     root = tk.Tk()
     root.withdraw()
     video_path = filedialog.askopenfilename(
-        title="Selecione o vídeo para processar",
-        filetypes=(("Video Files", "*.mp4;*.avi;*.mov"), ("All Files", "*.*")),
+        title="Select the video for processing",
+        filetypes=[("Video Files", "*.mp4 *.avi *.mov *.mkv *.webm *.MP4 *.AVI *.MOV *.MKV *.WEBM"), ("All Files", "*.*")]
     )
     if not video_path:
-        rprint("[red]Nenhum vídeo foi selecionado para processamento.[/red]")
+        rprint("[red]No video was selected for processing.[/red]")
         return
+    # Destroy the Tkinter root after the video selection
+    root.destroy()
 
-    # Salva os parâmetros em um arquivo CSV no mesmo diretório do vídeo selecionado
+    # Save the parameters to a CSV file in the same directory as the selected video
     base_name = os.path.splitext(os.path.basename(video_path))[0]
     params_csv = os.path.join(
         os.path.dirname(video_path), f"{base_name}_parameters.csv"
@@ -668,24 +675,23 @@ def run_distortvideo_gui():
                 f"{parameters['p1']:.17f},"
                 f"{parameters['p2']:.17f}\n"
             )
-        rprint(f"\n[blue]Parâmetros salvos em: {params_csv}[/blue]")
+        rprint(f"\n[blue]Parameters saved to: {params_csv}[/blue]")
     except Exception as e:
-        rprint(f"[red]Erro ao salvar parâmetros: {e}[/red]")
+        rprint(f"[red]Error saving parameters: {e}[/red]")
 
-    # Define o caminho de saída do vídeo processado
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_path = os.path.join(
         os.path.dirname(video_path), f"{base_name}_undistorted_{timestamp}.mp4"
     )
 
     try:
-        rprint(f"\n[cyan]Processando o vídeo: {video_path}[/cyan]")
+        rprint(f"\n[cyan]Processing video: {video_path}[/cyan]")
         process_video(video_path, output_path, parameters)
     except Exception as e:
-        rprint(f"[red]Erro no processamento do vídeo: {e}[/red]")
+        rprint(f"[red]Error processing video: {e}[/red]")
 
-    rprint("\n[green]Processamento completo![/green]")
-    rprint(f"[blue]Vídeo de saída salvo em: {output_path}[/blue]")
+    rprint("\n[green]Processing complete![/green]")
+    rprint(f"[blue]Output saved as: {output_path}[/blue]")
 
 
 if __name__ == "__main__":
