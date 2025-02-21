@@ -61,7 +61,7 @@ def get_coupling_angle(
         size=15,
     )
 
-    phase = ["Anti-Phase", "In-Phase", f"{joint1_name} Phase", f"{joint2_name} Phase"]
+    phase = [f"{joint1_name}", "In-Phase", f"{joint2_name}", "Anti-Phase"]
     data = [array_joint1, array_joint2, coupangle, group_percent, phase]
     df_result = pd.DataFrame(data).T
     df_result.columns = [
@@ -159,66 +159,62 @@ def timenormalize_data(data, n_points=101):
     f = interpolate.interp1d(x, data, axis=0)
     return f(np.linspace(0, 100, n_points))
 
+
 def calculate_coupling_angle(angle1, angle2):
     """
-    Calculate the coupling angle and classify the coordination pattern.
+    Calculates Vector Coding for coordination between two joint angle time-series.
 
-    This implementation uses literature-based categorization:
-      - 1: Anti-Phase
-      - 2: In-Phase
-      - 3: Joint1 Phase
-      - 4: Joint2 Phase
+    Parameters:
+    - joint1_array (np.ndarray): First joint angle time-series.
+    - joint2_array (np.ndarray): Second joint angle time-series.
 
-    The function returns an array (group_phase) of percentages for each category [1,2,3,4] 
-    and the coupling angle values.
+    Returns:
+    - tuple: A tuple containing group phase percentages and coupled angles.
+
+
+        Raises:
+    - ValueError: If input arrays are not of equal length or are empty.
     """
     if len(angle1) != len(angle2) or len(angle1) == 0:
         raise ValueError("Input arrays must be of equal non-zero length.")
 
-    # Compute differences between successive samples
-    diff1 = np.diff(angle1, axis=0)
-    diff2 = np.diff(angle2, axis=0)
-    vm_ab = np.hypot(diff1, diff2)
-    
-    # Avoid division by zero by using np.divide with 'where'
-    cosang = np.divide(diff1, vm_ab, out=np.zeros_like(diff1), where=vm_ab != 0)
-    sinang = np.divide(diff2, vm_ab, out=np.zeros_like(diff1), where=vm_ab != 0)
-    coupangle = np.degrees(np.arctan2(cosang, sinang))
+    # Calculate joint differences
+    array_joint1 = np.diff(angle1, axis=0)
+    array_joint2 = np.diff(angle2, axis=0)
+
+    # Calculate vector magnitude and angle
+    vm_ab = np.hypot(array_joint1, array_joint2)
+    cosang_ab = np.divide(array_joint1, vm_ab, where=vm_ab!=0)
+    sinang_ab = np.divide(array_joint2, vm_ab, where=vm_ab!=0)
+    coupangle = np.degrees(np.arctan2(cosang_ab, sinang_ab))
+
+    # Ensure angle values are within 0-360 range
     coupangle[coupangle < 0] += 360
 
-    # Use np.select to assign category codes based on the ranges:
-    # According to literature:
-    #   0°–22.5°         → 1 (Anti-Phase)
-    #   22.5°–67.5°       → 2 (In-Phase)
-    #   67.5°–112.5°      → 3 (Joint1 Phase)
-    #   112.5°–157.5°     → 4 (Joint2 Phase)
-    #   157.5°–202.5°     → 1 (Anti-Phase)
-    #   202.5°–247.5°     → 2 (In-Phase)
-    #   247.5°–292.5°     → 3 (Joint1 Phase)
-    #   292.5°–337.5°     → 4 (Joint2 Phase)
-    #   337.5°–360°       → 1 (Anti-Phase)
-    conditions = [
-        (coupangle >= 0) & (coupangle < 22.5),
-        (coupangle >= 22.5) & (coupangle < 67.5),
-        (coupangle >= 67.5) & (coupangle < 112.5),
-        (coupangle >= 112.5) & (coupangle < 157.5),
-        (coupangle >= 157.5) & (coupangle < 202.5),
-        (coupangle >= 202.5) & (coupangle < 247.5),
-        (coupangle >= 247.5) & (coupangle < 292.5),
-        (coupangle >= 292.5) & (coupangle < 337.5),
-        (coupangle >= 337.5) & (coupangle < 360)
-    ]
-    # Assignment: 1,2,3,4,1,2,3,4,1
-    codes = [1, 2, 3, 4, 1, 2, 3, 4, 1]
-    cat = np.select(conditions, codes, default=0)
+    # Assign categorical variable based on angle ranges
+    CtgVar_vc_DG = np.select(
+        condlist=[(coupangle >= 0) & (coupangle < 22.5),        # Joint 1 - Phase 
+                    (coupangle >= 22.5) & (coupangle < 67.5),   # In-Phase
+                    (coupangle >= 67.5) & (coupangle < 112.5),  # Joint 2 - Phase
+                    (coupangle >= 112.5) & (coupangle < 157.5), # Anti-Phase 
+                    (coupangle >= 157.5) & (coupangle < 202.5), # Joint 1 - Phase 
+                    (coupangle >= 202.5) & (coupangle < 247.5), # In-Phase 
+                    (coupangle >= 247.5) & (coupangle < 292.5), # Joint 2 - Phase
+                    (coupangle >= 292.5) & (coupangle < 337.5), # Anti-Phase
+                    (coupangle >= 337.5) & (coupangle < 360)],  # Joint 1 - Phase
+        choicelist=[1, 2, 3, 4, 1, 2, 3, 4, 1],
+        default=0
+    )
+    # Group 1 - Joint 1 - Phase
+    # Group 2 - In-Phase 
+    # Group 3 - Joint 2 - Phase
+    # Group 4 - Anti-Phase
+    
+    # Calculate the frequency for each pattern of coordination
+    group_phase = [round((np.count_nonzero(CtgVar_vc_DG == i) / len(CtgVar_vc_DG)) * 100, 3) for i in range(1, 5)]
 
-    # Calculate percentages for each category (codes 1 through 4)
-    group_phase = []
-    for i in range(1, 5):
-        perc = round((np.count_nonzero(cat == i) / len(cat)) * 100, 2)
-        group_phase.append(perc)
-    group_phase = np.array(group_phase)
     return group_phase, coupangle
+
 
 def create_coupling_angle_figure(group_percent, coupangle, array_joint1, array_joint2, 
                                joint1_name, joint2_name, axis="angle", size=15):
@@ -307,7 +303,7 @@ def create_coupling_angle_figure(group_percent, coupangle, array_joint1, array_j
     )
 
     # Third subplot: Coordination patterns as a bar plot
-    labels = ["Anti-Phase", "In-Phase", f"{joint1_name} Phase", f"{joint2_name} Phase"]
+    labels = [f"{joint1_name}", "In-Phase", f"{joint2_name}", "Anti-Phase"]
     ax[2].bar(labels, group_percent, color=gray_colors, alpha=0.7)
     ax[2].set_title(
         f"Categorization of Coordination Patterns | {joint1_name} - {joint2_name}",
