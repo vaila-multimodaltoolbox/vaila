@@ -12,7 +12,7 @@
 ✅ **Process gait features** using pixel data from MediaPipe (**via Makerless 2D in *vailá***).
 ✅ **Train ML models** usando as extracting features e targets.
 ✅ **Validate ML models** after training.
-✅ **Run ML predictions** using pre-trained models ou modelos novos treinados por você.
+✅ **Run ML predictions** using pre-trained models or new models trained by you.
 
 Each function is accessible through buttons in the user-friendly GUI, automating complex ML workflows with ease!
 
