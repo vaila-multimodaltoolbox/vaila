@@ -1,53 +1,58 @@
-# =============================================================================
-# ML_valid_models.py
-# =============================================================================
-# Author: Abel Gonçalves Chinaglia
-# Ph.D. Candidate in PPGRDF - FMRP - USP
-# Date: 05 Feb. 2025
-# Version: 1.0.0
-# Python Version: 3.8+
+"""
+ =============================================================================
+ ML_valid_models.py
+ =============================================================================
+ Author: Abel Gonçalves Chinaglia
+ Ph.D. Candidate in PPGRDF - FMRP - USP
+ Date: 05 Feb. 2025
+ Version: 1.0.0
+ Python Version: 3.8+
 
-# Description:
-# ------------
-# This script validates previously trained machine learning models by testing
-# their performance on a separate validation dataset. It loads models trained
-# with cross-validation and evaluates their prediction accuracy on new data.
+ Description:
+ ------------
+ This script validates previously trained machine learning models by testing
+ their performance on a separate validation dataset. It loads models trained
+ with cross-validation and evaluates their prediction accuracy on new data.
 
-# Key Features:
-# --------------
-# - Loads and validates models for multiple gait-related features
-# - Calculates comprehensive metrics including MSE, RMSE, MAE, R², and others
-# - Supports validation of models trained with cross-validation
-# - Handles data preprocessing with saved StandardScaler parameters
-# - Interactive file selection through GUI dialogs
-# - Progress tracking with progress bars
-# - Completion notification through GUI dialog
+ Key Features:
+ --------------
+ - Loads and validates models for multiple gait-related features
+ - Calculates comprehensive metrics including MSE, RMSE, MAE, R², and others
+ - Supports validation of models trained with cross-validation
+ - Handles data preprocessing with saved StandardScaler parameters
+ - Interactive file selection through GUI dialogs
+ - Progress tracking with progress bars
+ - Completion notification through GUI dialog
 
-# Execution:
-# ----------
-# - Run the script:
-#   $ python valid_models.py
-# - Select the feature dataset file (CSV) when prompted
-# - Select the target dataset file (CSV) when prompted
-# - The script will automatically process the validation data and generate metrics
+ Execution:
+ ----------
+ - Run the script:
+   $ python valid_models.py
+ - Select the feature dataset file (CSV) when prompted
+ - Select the target dataset file (CSV) when prompted
+ - The script will automatically process the validation data and generate metrics
 
-# Output Structure:
-# -----------------
-# - Validation metrics are saved in the respective model directories
-# - Each target feature has its own metrics file with detailed performance measures
-# - Results are saved as CSV files containing all evaluation metrics
+ Output Structure:
+ -----------------
+ - Validation metrics are saved in the respective model directories
+ - Each target feature has its own metrics file with detailed performance measures
+ - Results are saved as CSV files containing all evaluation metrics
 
-# License:
-# --------
-# This program is licensed under the GNU Lesser General Public License v3.0.
-# For more details, visit: https://www.gnu.org/licenses/lgpl-3.0.html
+ License:
+ --------
+ This program is licensed under the GNU Lesser General Public License v3.0.
+ For more details, visit: https://www.gnu.org/licenses/lgpl-3.0.html
 
-# =============================================================================
+ =============================================================================
+"""
 import os
+from rich import print
 import json
 import pickle
 import numpy as np
 import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import (
     mean_squared_error,
@@ -59,7 +64,7 @@ from sklearn.metrics import (
 )
 from tkinter import Tk, filedialog, messagebox
 from tqdm import tqdm  # For progress bar
-import argparse
+# import argparse
 
 
 # Function to calculate metrics
@@ -148,6 +153,10 @@ def run_ml_valid_models():
     """
     Main function to validate machine learning models
     """
+    # Print the directory and name of the script being executed
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    
     # Get file paths using Tkinter
     print("Please select the feature dataset file for validation...")
     features_path = select_file(title="Select Feature Dataset (CSV)")
@@ -277,7 +286,7 @@ def run_ml_valid_models():
             print(f"Validation metrics saved to: {metrics_file}")
 
             # The plots will be saved in the same directory as the CSV
-            plots_dir = target_metrics_path  # No need to create a subdirectory
+            plots_dir = target_path  # Change to target_path to save plots in the same directory as the CSV
 
             # Plot the metrics and save them as PNGs
             metrics_df = pd.read_csv(metrics_file)

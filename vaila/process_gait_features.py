@@ -1,41 +1,43 @@
-# ===============================================================================
-# process_gait_features.py
-# ===============================================================================
-# Author: Abel Gonçalves Chinaglia
-# Ph.D. Candidate in PPGRDF - FMRP - USP
-# Date: 05 Feb. 2025
-# Version: 1.0.0
-# Python Version: 3.8+
-#
-# Description:
-# ------------
-# This script extracts spatial and temporal features from gait analysis data
-# stored in .csv files. It computes metrics such as mean, variance, range, speed,
-# and step length for each individual and trial, organizing the results in a final
-# .csv file for further analysis.
-#
-# Key Features:
-# -------------
-# 1. Asks for the participant's name to save it in the results.
-# 2. Requests the number of steps per trial to divide data into blocks for analysis.
-# 3. Calculates spatial, temporal, and kinematic features for each trial and individual.
-# 4. Automatically processes all .csv files in the selected directory.
-# 5. Saves the results in an output .csv file for further analysis.
-#
-# Usage:
-# ------
-# 1. Place all gait data files in the main directory.
-# 2. Run the script and select the input and output directories via a graphical interface.
-#
-# Output Files:
-# -------------
-# - `gait_features.csv`: Contains extracted features for all individuals and trials.
-#
-# License:
-# --------
-# This program is licensed under the GNU Lesser General Public License v3.0.
-# For more details, visit: https://www.gnu.org/licenses/lgpl-3.0.html
-# ===============================================================================
+"""
+ ===============================================================================
+ process_gait_features.py
+ ===============================================================================
+ Author: Abel Gonçalves Chinaglia
+ Ph.D. Candidate in PPGRDF - FMRP - USP
+ Date: 05 Feb. 2025
+ Update: 24.Feb.2025
+ Python Version: 3.12.9
+
+ Description:
+ ------------
+ This script extracts spatial and temporal features from gait analysis data
+ stored in .csv files. It computes metrics such as mean, variance, range, speed,
+ and step length for each individual and trial, organizing the results in a final
+ .csv file for further analysis.
+
+ Key Features:
+ -------------
+ 1. Asks for the participant's name to save it in the results.
+ 2. Requests the number of steps per trial to divide data into blocks for analysis.
+ 3. Calculates spatial, temporal, and kinematic features for each trial and individual.
+ 4. Automatically processes all .csv files in the selected directory.
+ 5. Saves the results in an output .csv file for further analysis.
+
+ Usage:
+ ------
+ 1. Place all gait data files in the main directory.
+ 2. Run the script and select the input and output directories via a graphical interface.
+
+ Output Files:
+ -------------
+ - `gait_features.csv`: Contains extracted features for all individuals and trials.
+
+ License:
+ --------
+ This program is licensed under the GNU Lesser General Public License v3.0.
+ For more details, visit: https://www.gnu.org/licenses/lgpl-3.0.html
+ ===============================================================================
+"""
 
 import os
 import pandas as pd
