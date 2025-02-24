@@ -143,8 +143,7 @@ try:
         cutvideo,
         vaila_distortvideo_gui,
         viewc3d,
-        mphands,
-    )
+        )
 
     TRACKING_AVAILABLE = True
     from vaila import yolov11track
@@ -1582,9 +1581,9 @@ class Vaila(tk.Tk):
         que se encontra na pasta "vaila".
         """
         try:
-            # Constrói o caminho para o script dlt3d.py (ajuste se necessário)
+            # Build the path to the dlt3d.py script
             script_path = os.path.join("vaila", "dlt3d.py")
-            # Executa o script em um novo processo
+            # Execute the script in a new process
             subprocess.Popen([sys.executable, script_path])
         except Exception as e:
             messagebox.showerror("Error", f"Error running dlt3d.py: {e}")
@@ -1600,7 +1599,8 @@ class Vaila(tk.Tk):
         input the sample rate and start and end indices for analysis.
 
         """
-        pass  # Aqui você deve adicionar a lógica para a reconstrução 3D com 1 DLT
+        from vaila import rec3d_one_dlt3d
+        rec3d_one_dlt3d.run_rec3d_one_dlt3d()
 
     # C_A_r3_c3 - for multi dlts in rows
     def rec3d(self):
