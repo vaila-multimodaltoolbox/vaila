@@ -4,7 +4,7 @@ vaila_mlwalkway.py
 Create by: Abel G. Chinaglia & Paulo R. P. Santiago
 LaBioCoM - Laboratory of Biomechanics and Motor Control
 Date: 10.Feb.2025  
-Update: 11.Feb
+Update: 24.Feb.2025
 
 This module provides a graphical user interface (GUI) for executing various machine learning (ML) tasks related to gait analysis using the VAILA system. The GUI includes buttons for:
 1. Processing gait features from MediaPipe data (use pixel data from MediaPipe in button vailá -> Makerless 2D).
@@ -17,6 +17,7 @@ Each button triggers the respective function that executes the corresponding ML 
 """
 
 import os
+from rich import print
 import platform
 import subprocess
 import sys
@@ -62,6 +63,9 @@ def run_vaila_mlwalkway_gui():
     root = tk.Tk()
     root.title("vaila ML Walkway")
     root.geometry("300x200")
+    # Print the directory and name of the script being executed
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
 
     # Create frame for buttons
     button_frame = ttk.Frame(root)
