@@ -1,21 +1,25 @@
-# rec2d_one_dlt2d.py
-# Author: Paulo Santiago
-# Version: 0.0.5
-# Last Updated: August 9, 2024
-# Description: Batch processing of 2D coordinates reconstruction using DLT parameters from a single set of DLT parameters.
-# --------------------------------------------------
-# Usage Instructions:
-# - Place all the CSV files containing pixel coordinates in a directory.
-# - Select the DLT parameters file (should contain only one set of DLT parameters).
-# - The script will process each CSV file in the directory and save the reconstructed 2D coordinates in a new directory with a timestamp.
-# --------------------------------------------------
+"""
+rec2d_one_dlt2d.py
+Author: Paulo Santiago
+Version: 0.0.5
+Last Updated: February 24, 2025
+Description: Batch processing of 2D coordinates reconstruction using DLT parameters from a single set of DLT parameters.
+--------------------------------------------------
+ Usage Instructions:
+- Place all the CSV files containing pixel coordinates in a directory.
+- Select the DLT parameters file (should contain only one set of DLT parameters).
+- The script will process each CSV file in the directory and save the reconstructed 2D coordinates in a new directory with a timestamp.
+--------------------------------------------------
+"""
 
+import os
+from rich import print
 import numpy as np
 import pandas as pd
 from numpy.linalg import inv
 from tkinter import filedialog, Tk, messagebox
 from datetime import datetime
-import os
+
 
 
 def read_coordinates(file_path, usecols=None):
@@ -74,6 +78,10 @@ def process_files_in_directory(dlt_params, directory):
 
 
 def main():
+    # Print the directory and name of the script being executed
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    
     root = Tk()
     root.withdraw()
 
