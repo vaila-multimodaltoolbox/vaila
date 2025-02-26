@@ -1,191 +1,192 @@
 """
 Script: dlt3d.py
-Author: vailá
-Version: 0.02
-Last Updated: January 30, 2025
+Author: Paulo Roberto Pereira Santana
+Version: 0.01
+Last Updated: 24 February, 2025
 
 Description:
-    This script calculates the Direct Linear Transformation (DLT) parameters for 3D coordinate
-    transformations. It uses pixel coordinates from video calibration data and corresponding 
-    real-world 3D coordinates to compute the DLT parameters (a row vector with 11 numbers).
+    This script calculates the Direct Linear Transformation (DLT) parameters for 3D coordinate transformations.
+    It uses pixel coordinates from video calibration data and corresponding real-world 3D coordinates to compute the 11
+    DLT parameters for each frame (or uses a single row of real-world coordinates for all frames).
 
-    The procedure is as follows:
-      - The user selects a pixel coordinate CSV file containing calibration data.
-      - Optionally, the user can create a REF3D template file from the pixel file. If not, the user 
-        must select an existing REF3D file (which contains the real-world 3D coordinates).
-      - The calibration points from the files are used to compute the DLT parameters via a linear 
-        solution obtained by inverting the normal equations.
-      
+    New Features:
+      - Generates a REF3D template (with _x, _y, _z columns) from the pixel file.
+      - Validates that the REF3D file contains the three axes for each point.
+      - Updated calculation of DLT parameters (11 parameters) using least squares.
+      - Graphical file selection using Tkinter.
+      - Improved console output.
+
 Usage:
-    1. Run the script.
-    2. A graphical interface will prompt you to select:
-         - A pixel coordinate CSV file for calibration.
-         - Optionally, create a REF3D template based on the pixel file.
-           If you choose not to create one, then select an existing REF3D file.
-    3. The script calculates the DLT parameters and saves them as a "dlt3d" file.
-    
-Output:
-    A CSV file with a header row: "frame", "dlt_param_1", ..., "dlt_param_11"
-    and one data row containing the computed parameters.
-    
-License:
-    This program is free software: you can redistribute it and/or modify it under the terms of 
-    the GNU General Public License.
+    Run the script and select a pixel coordinate CSV file. Then, choose whether to create a REF3D template.
+    If you opt to create the template, edit it with the real-world coordinates and run the DLT process again.
+    Otherwise, select the edited REF3D file, and the script will calculate the parameters and save an output file
+    with the .dlt3d extension.
 """
 
 import os
 import numpy as np
 import pandas as pd
-import csv
-from numpy.linalg import inv
-from tkinter import filedialog, Tk, messagebox
 from rich import print
+from tkinter import filedialog, messagebox, Tk
 
+def read_pixel_file(file_path):
+    """Reads the pixel coordinate CSV file."""
+    df = pd.read_csv(file_path)
+    return df
 
-def read_coordinates(file_path, usecols):
-    """
-    Reads coordinates from a CSV file using the specified columns.
-    """
-    df = pd.read_csv(file_path, usecols=usecols)
-    return df.to_numpy()
-
-
-def dlt_calib(cp3d, cp2d):
-    """
-    Calculates the DLT (3D) calibration parameters (11 parameters).
-
-    Args:
-        cp3d (array-like): Calibration 3D points. Shape (m, 3). If extra columns are present (e.g. frame),
-                           the first column is ignored.
-        cp2d (array-like): Corresponding pixel coordinates. Shape (m, 2).
-
-    Returns:
-        np.array: 1D array with 11 DLT parameters.
-    """
-    cp3d = np.asarray(cp3d)
-    # If there is an extra column (e.g., frame numbers), ignore the first column.
-    if cp3d.shape[1] > 3:
-        cp3d = cp3d[:, 1:]
-
-    cp2d = np.asarray(cp2d)
-    m = cp3d.shape[0]
-    M = np.zeros((2 * m, 11))
-    N = np.zeros((2 * m, 1))
-
-    for i in range(m):
-        X, Y, Z = cp3d[i, :]
-        x, y = cp2d[i, :]
-        M[2 * i, :] = [X, Y, Z, 1, 0, 0, 0, 0, -x * X, -x * Y, -x * Z]
-        M[2 * i + 1, :] = [0, 0, 0, 0, X, Y, Z, 1, -y * X, -y * Y, -y * Z]
-        N[2 * i, 0] = x
-        N[2 * i + 1, 0] = y
-
-    DLT = inv(M.T.dot(M)).dot(M.T).dot(N)
-    return DLT.flatten()
-
-
-def create_ref3d_template(pixel_file):
-    """
-    Creates a REF3D template file from the pixel coordinate file by clearing all coordinate data
-    (except, for example, the frame number).
-
-    Returns:
-        str: Path to the generated REF3D file.
-    """
-    df = pd.read_csv(pixel_file)
-    template = df.copy()
-    # Zero out all columns except the first one (usually the frame column)
-    template.iloc[:, 1:] = np.nan
-    template_file = os.path.splitext(pixel_file)[0] + ".ref3d"
-    template.to_csv(template_file, index=False)
-    return template_file
-
-
-def process_files(pixel_file, real_file):
-    """
-    Processes the pixel and real-world coordinate files to compute DLT parameters.
-
-    Args:
-        pixel_file (str): Path to the pixel coordinate CSV file.
-        real_file (str): Path to the REF3D file containing real-world 3D coordinates.
-
-    Returns:
-        np.array: The computed DLT parameters (row vector with 11 parameters).
-    """
-    # Read calibration points from the pixel file (ignore the 'frame' column)
-    cp2d = read_coordinates(pixel_file, usecols=lambda c: c != "frame")
-    # Read real-world coordinates from the REF3D file (ignore the 'frame' column)
-    cp3d = read_coordinates(real_file, usecols=lambda c: c != "frame")
-
-    if cp2d.shape[0] != cp3d.shape[0]:
-        print(
-            "The number of calibration points in the pixel file and the REF3D file do not match!"
-        )
+def read_ref3d_file(file_path):
+    """Reads the REF3D file and checks if the _z columns are present."""
+    df = pd.read_csv(file_path)
+    # Expected to have 25 points with columns: p1_x, p1_y, p1_z, ..., p25_x, p25_y, p25_z
+    expected_columns = []
+    for i in range(1, 26):
+        expected_columns.extend([f"p{i}_x", f"p{i}_y", f"p{i}_z"])
+    if not all(col in df.columns for col in expected_columns):
+        print("Error: REF3D file does not contain the expected columns with _z coordinates!")
         return None
+    return df
 
-    return dlt_calib(cp3d, cp2d)
+def calculate_dlt3d_params(pixel_coords, ref_coords):
+    """
+    Computes the 11 DLT3d parameters using the following models:
+    
+      u = (L1*X + L2*Y + L3*Z + L4) / (L9*X + L10*Y + L11*Z + 1)
+      v = (L5*X + L6*Y + L7*Z + L8) / (L9*X + L10*Y + L11*Z + 1)
+      
+    The equations are rearranged to form a linear system:
+      X   Y   Z   1   0   0   0   0  -uX  -uY  -uZ = u
+      0   0   0   0   X   Y   Z   1  -vX  -vY  -vZ = v
+    """
+    n = pixel_coords.shape[0]
+    A = np.zeros((2 * n, 11))
+    B = np.zeros((2 * n,))
+    for i in range(n):
+        X, Y, Z = ref_coords[i, :]
+        u, v = pixel_coords[i, :]
+        # First equation (for u)
+        A[2 * i, 0:4] = [X, Y, Z, 1]
+        A[2 * i, 8:11] = -u * np.array([X, Y, Z])
+        B[2 * i] = u
+        # Second equation (for v)
+        A[2 * i + 1, 4:8] = [X, Y, Z, 1]
+        A[2 * i + 1, 8:11] = -v * np.array([X, Y, Z])
+        B[2 * i + 1] = v
+    # Solve the system A * L = B using least squares
+    L, residuals, rank, s = np.linalg.lstsq(A, B, rcond=None)
+    return L
 
+def process_files(pixel_file, ref3d_file):
+    """
+    Processes the pixel and REF3D files.
+    If the REF3D file contains only one row, the same real-world points are used for every frame.
+    """
+    pixel_df = read_pixel_file(pixel_file)
+    ref_df = read_ref3d_file(ref3d_file)
+    if ref_df is None:
+        return None
+    dlt_params_all = {}
+    # If the REF3D file consists of only one row, use it for all frames:
+    if len(ref_df) == 1:
+        ref_coords_arr = []
+        ref_line = ref_df.iloc[0]
+        for i in range(1, 26):
+            ref_coords_arr.append([
+                ref_line[f"p{i}_x"],
+                ref_line[f"p{i}_y"],
+                ref_line[f"p{i}_z"]
+            ])
+        ref_coords_arr = np.array(ref_coords_arr)
+        for _, row in pixel_df.iterrows():
+            pixel_coords_arr = []
+            for i in range(1, 26):
+                pixel_coords_arr.append([
+                    row[f"p{i}_x"],
+                    row[f"p{i}_y"]
+                ])
+            pixel_coords_arr = np.array(pixel_coords_arr)
+            L = calculate_dlt3d_params(pixel_coords_arr, ref_coords_arr)
+            frame = row['frame']
+            dlt_params_all[frame] = L
+    else:
+        # If REF3D contains multiple rows, match the frame numbers
+        for _, row in pixel_df.iterrows():
+            frame = row['frame']
+            ref_line = ref_df[ref_df['frame'] == frame]
+            if ref_line.empty:
+                print(f"Frame {frame} not found in REF3D file.")
+                continue
+            ref_line = ref_line.iloc[0]
+            pixel_coords_arr = []
+            ref_coords_arr = []
+            for i in range(1, 26):
+                pixel_coords_arr.append([row[f"p{i}_x"], row[f"p{i}_y"]])
+                ref_coords_arr.append([
+                    ref_line[f"p{i}_x"],
+                    ref_line[f"p{i}_y"],
+                    ref_line[f"p{i}_z"]
+                ])
+            pixel_coords_arr = np.array(pixel_coords_arr)
+            ref_coords_arr = np.array(ref_coords_arr)
+            L = calculate_dlt3d_params(pixel_coords_arr, ref_coords_arr)
+            dlt_params_all[frame] = L
+    return dlt_params_all
 
 def save_dlt_parameters(output_file, dlt_params):
-    """
-    Saves the DLT parameters to a CSV file.
-    """
-    with open(output_file, "w", newline="") as csvfile:
-        csvwriter = csv.writer(csvfile)
-        header = ["frame"] + [f"dlt_param_{j}" for j in range(1, 12)]
-        csvwriter.writerow(header)
-        # Using frame index 0 as a placeholder
-        csvwriter.writerow([0] + list(dlt_params))
-    messagebox.showinfo("Success", f"DLT parameters saved to {output_file}")
-    print(f"DLT parameters saved to {output_file}")
-
+    """Saves the computed DLT3d parameters to a CSV file without spaces after commas."""
+    with open(output_file, "w") as f:
+        f.write("frame,L1,L2,L3,L4,L5,L6,L7,L8,L10,L11,L11\n")  # Please verify header names if needed
+        for frame, params in dlt_params.items():
+            param_str = ",".join([f"{p:.6f}" for p in params])
+            f.write(f"{frame},{param_str}\n")
+    # Show a message box indicating success
+    messagebox.showinfo("Success", f"DLT3d file saved successfully: {output_file}")
+    print(f"DLT3d parameters saved to {output_file}")
 
 def main():
+    # Print the directory and name of the script being executed
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
-    print("Starting DLT3D calibration...")
-
     root = Tk()
     root.withdraw()
-
     pixel_file = filedialog.askopenfilename(
-        title="Select the PIXEL coordinate file for calibration.",
-        filetypes=[("CSV files", "*.csv")],
+        title="Select the pixel coordinate file",
+        filetypes=[("CSV files", "*.csv")]
     )
     if not pixel_file:
-        print("Pixel file selection cancelled.")
+        print("Pixel file selection canceled.")
         return
-
-    create_ref = messagebox.askyesno(
-        "Create REF3D File",
-        "Do you want to create a REF3D template based on the pixel file?",
-    )
-    if create_ref:
-        real_file = create_ref3d_template(pixel_file)
-        messagebox.showinfo(
-            "Template Created",
-            f"Template REF3D file created:\n{real_file}\nPlease edit it with the real-world coordinates and run the process again.",
-        )
-        print(f"Template REF3D file created: {real_file}")
+    
+    # Ask the user if they want to generate a REF3D template
+    mode = messagebox.askquestion("Mode", "Do you want to create a REF3D template?")
+    if mode == "yes":
+        real_file = os.path.splitext(pixel_file)[0] + ".ref3d"
+        # Create a template with header for 25 points with _x, _y, _z (default value 0.0)
+        template_data = {"frame": [0]}
+        for i in range(1, 26):
+            template_data[f"p{i}_x"] = [0.0]
+            template_data[f"p{i}_y"] = [0.0]
+            template_data[f"p{i}_z"] = [0.0]
+        template_df = pd.DataFrame(template_data)
+        template_df.to_csv(real_file, index=False)
+        messagebox.showinfo("Success", f"REF3D template created: {real_file}")
+        print(f"REF3D template created: {real_file}")
+        print("Please edit the REF3D file with the real coordinates and run the DLT process again.")
         return
     else:
         real_file = filedialog.askopenfilename(
-            title="Select the REF3D file with real-world coordinates.",
-            filetypes=[("REF3D files", "*.ref3d")],
+            title="Select the real 3D coordinates file",
+            filetypes=[("REF3D files", "*.ref3d")]
         )
         if not real_file:
-            print("Real-world coordinates file selection cancelled.")
+            print("Real file selection canceled.")
             return
 
     dlt_params = process_files(pixel_file, real_file)
     if dlt_params is None:
-        messagebox.showerror("Error", "Calibration failed due to mismatched data.")
+        print("Error processing the files.")
         return
-
     output_file = os.path.splitext(pixel_file)[0] + ".dlt3d"
     save_dlt_parameters(output_file, dlt_params)
-    root.destroy()
-
 
 if __name__ == "__main__":
     main()

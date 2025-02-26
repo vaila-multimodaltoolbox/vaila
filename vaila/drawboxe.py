@@ -116,6 +116,10 @@ def apply_boxes_directly_to_video(input_path, output_path, coordinates, selectio
                 pts = np.array(coords, np.int32)
                 if mode == "inside":
                     cv2.fillPoly(frame, [pts], (0, 0, 0))
+                elif mode == "outside":
+                    mask = np.zeros(frame.shape[:2], dtype=np.uint8)
+                    cv2.fillPoly(mask, [pts], 255)
+                    frame = cv2.bitwise_and(frame, frame, mask=mask)
 
         out.write(frame)
         frame_count += 1
@@ -159,6 +163,10 @@ def apply_boxes_to_frames(frames_dir, coordinates, selections, frame_intervals):
                         pts = np.array(coords, np.int32)
                         if mode == "inside":
                             cv2.fillPoly(img, [pts], (0, 0, 0))
+                        elif mode == "outside":
+                            mask = np.zeros(img.shape[:2], dtype=np.uint8)
+                            cv2.fillPoly(mask, [pts], 255)
+                            img = cv2.bitwise_and(img, img, mask=mask)
 
                 cv2.imwrite(frame_path, img)
 
@@ -194,7 +202,7 @@ def get_box_coordinates(image_path):
             "trapezoid" if selection_mode["shape"] == "trapezoid" else "rectangle"
         )
         ax.set_title(
-            f'Red box: inside, Blue box: outside\nCurrent mode: {selection_mode["mode"]}, Shape: {shape_text}\n'
+            f'Red: rectangle inside, Blue: rectangle outside\nGreen: trapezoid inside, Yellow: trapezoid outside\nCurrent mode: {selection_mode["mode"]}, Shape: {shape_text}\n'
             'Click to select corners. Press "e" to toggle mode, "t" to toggle shape, Enter to finish.'
         )
         fig.canvas.draw()
@@ -250,7 +258,8 @@ def get_box_coordinates(image_path):
                     ]
                     points.extend(rect_points)
 
-                    color = "b" if selection_mode["mode"] == "outside" else "r"
+                    # Retângulos: vermelho (inside) ou azul (outside)
+                    color = "blue" if selection_mode["mode"] == "outside" else "red"
                     rect = patches.Rectangle(
                         (x1, y1),
                         x2 - x1,
@@ -268,10 +277,11 @@ def get_box_coordinates(image_path):
                 # Trapezoid logic
                 temp_points.append((event.xdata, event.ydata))
                 if len(temp_points) == 4:
-                    color = "b" if selection_mode["mode"] == "outside" else "r"
+                    # Trapézios: verde (inside) ou amarelo (outside)
+                    color = "yellow" if selection_mode["mode"] == "outside" else "green"
                     trap = patches.Polygon(
                         temp_points,
-                        linewidth=1,
+                        linewidth=1.5,
                         edgecolor=color,
                         facecolor="none",
                     )

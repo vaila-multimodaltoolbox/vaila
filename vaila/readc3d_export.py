@@ -47,6 +47,7 @@ Notes:
 """
 
 import os
+from rich import print
 import pandas as pd
 from ezc3d import c3d
 from datetime import datetime
@@ -339,9 +340,10 @@ def save_to_files(
 def convert_c3d_to_csv():
     """
     Main function to convert C3D files to CSV and .info files.
-    O cálculo e a exportação do CSV com dados de COP foram removidos deste script.
-    Eles serão realizados posteriormente no script cop_calculate.py.
     """
+    # Print the directory and name of the script being executed
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
     root = Tk()
     root.withdraw()
 

@@ -1048,8 +1048,8 @@ class ColumnReorderGUI(tk.Tk):
 
 def convert_dvideo_to_vaila(file_path, save_directory):
     try:
-        # Read the .dat file with space-separated values
-        df = pd.read_csv(file_path, delim_whitespace=True, header=None)
+        # Read the .dat file with space-separated values using raw string literal for regex separator
+        df = pd.read_csv(file_path, sep=r'\s+', header=None)
 
         # Calculate the number of points (assuming the first column is 'frame')
         num_points = (df.shape[1] - 1) // 2
