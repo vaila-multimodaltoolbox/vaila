@@ -34,7 +34,8 @@ Run the script, select the necessary CSV files for point and analog data, provid
 parameters, and save the resulting C3D file to the desired location.
 
 """
-
+import os
+from rich import print
 import numpy as np
 import pandas as pd
 import re
@@ -201,6 +202,9 @@ def convert_csv_to_c3d():
     """
     Handle the CSV to C3D conversion process, including file selection and user inputs.
     """
+    # Print the directory and name of the script being executed
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
     root = tk.Tk()
     root.withdraw()
 
@@ -356,6 +360,70 @@ def create_c3d_from_csv(
     else:
         print("Save operation cancelled.")
         messagebox.showwarning("Warning", "Save operation cancelled.")
+
+
+def auto_create_c3d_from_csv(points_df, output_path, analog_df=None, point_rate=100, analog_rate=1000, conversion_factor=1, sort_markers=False):
+    """
+    Create a C3D file from the given points DataFrame and automatically
+    saves it to the specified output_path without prompting the user.
+    
+    Args:
+        points_df (pd.DataFrame): DataFrame containing point data with headers.
+        output_path (str): Full file path where the C3D file should be saved.
+        analog_df (pd.DataFrame, optional): DataFrame with analog data if available.
+        point_rate (int): Point data sampling rate.
+        analog_rate (int): Analog data sampling rate.
+        conversion_factor (float): Conversion factor for the point coordinates.
+        sort_markers (bool): Whether to sort marker labels alphabetically.
+    
+    Raises:
+        Exception: If there is an error writing the C3D file.
+    """
+    print("Creating C3D from CSV (auto mode)...")
+    c3d = ezc3d.c3d()
+    points_df = validate_and_filter_columns(points_df)
+    marker_labels = [col.rsplit("_", 1)[0] for col in points_df.columns[1::3]]
+    if sort_markers:
+        marker_labels.sort()
+    print("Marker labels for C3D:", marker_labels)
+    c3d["parameters"]["POINT"]["UNITS"]["value"] = ["m"]
+    c3d["parameters"]["POINT"]["LABELS"]["value"] = marker_labels
+    c3d["parameters"]["POINT"]["RATE"]["value"] = [point_rate]
+    
+    num_markers = len(marker_labels)
+    num_frames = len(points_df)
+    print(f"Number of markers: {num_markers}, Number of frames: {num_frames}")
+    
+    points_data = np.zeros((4, num_markers, num_frames))
+    for i, label in enumerate(marker_labels):
+        try:
+            points_data[0, i, :] = points_df[f"{label}_X"].values * conversion_factor
+            points_data[1, i, :] = points_df[f"{label}_Y"].values * conversion_factor
+            points_data[2, i, :] = points_df[f"{label}_Z"].values * conversion_factor
+            points_data[3, i, :] = 1
+        except KeyError as e:
+            raise KeyError(f"Error accessing data for marker '{label}': {e}")
+    c3d["data"]["points"] = points_data
+    
+    if analog_df is not None:
+        analog_labels = list(analog_df.columns[1:])
+        num_analog = len(analog_labels)
+        c3d["parameters"]["ANALOG"]["LABELS"]["value"] = analog_labels
+        c3d["parameters"]["ANALOG"]["RATE"]["value"] = [analog_rate]
+        num_analog_frames = analog_df.shape[0]
+        analog_data = np.zeros((1, num_analog, num_analog_frames))
+        for i, label in enumerate(analog_labels):
+            try:
+                analog_data[0, i, :] = analog_df[label].values
+            except KeyError as e:
+                raise KeyError(f"Error accessing analog data for marker '{label}': {e}")
+        c3d["data"]["analogs"] = analog_data
+    
+    try:
+        c3d.write(output_path)
+        print(f"C3D file saved successfully to {output_path}")
+    except Exception as e:
+        raise Exception(f"Failed to save C3D file: {e}")
 
 
 if __name__ == "__main__":
