@@ -22,8 +22,8 @@ New Features:
     - `min_detection_confidence=1.0`
     - `min_tracking_confidence=1.0`
     - `model_complexity=2` (maximum complexity)
-    - `enable_segmentation=True` (segmentation activated)
-    - `smooth_segmentation=True` (smooth segmentation enabled)
+    - `enable_segmentation=False` (segmentation activated)
+    - `smooth_segmentation=False` (smooth segmentation enabled)
 - User input dialog allows fine-tuning these values if desired.
 
 Usage:
@@ -152,9 +152,9 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
         self.model_complexity_entry = tk.Entry(master)
         self.model_complexity_entry.insert(0, "2")
         self.enable_segmentation_entry = tk.Entry(master)
-        self.enable_segmentation_entry.insert(0, "True")
+        self.enable_segmentation_entry.insert(0, "False")
         self.smooth_segmentation_entry = tk.Entry(master)
-        self.smooth_segmentation_entry.insert(0, "True")
+        self.smooth_segmentation_entry.insert(0, "False")
         self.static_image_mode_entry = tk.Entry(master)
         self.static_image_mode_entry.insert(0, "False")
 
