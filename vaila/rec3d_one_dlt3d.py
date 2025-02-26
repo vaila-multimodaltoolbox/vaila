@@ -7,7 +7,7 @@ Last Updated: February 24, 2025
 Description:
     Batch 3D reconstruction using the Direct Linear Transformation (DLT) method with multiple cameras.
     Each camera has a corresponding DLT3D parameter file (one set of 11 parameters per file) and a pixel coordinate CSV file.
-    The pixel files are expected to use Vailá's standard header:
+    The pixel files are expected to use vailá's standard header:
       frame,p1_x,p1_y,p2_x,p2_y,...,p25_x,p25_y
     For each common frame found among the pixel files, the script reconstructs 3D points for all 25 markers.
     The output file contains the 3D reconstructed coordinates (x,y,z) for each marker.
@@ -113,6 +113,12 @@ def run_rec3d_one_dlt3d():
             df["frame"] = 0
         pixel_dfs.append(df)
     
+    # Calculate number of markers by counting the columns that match the pattern "p{number}_x"
+    first_df = pixel_dfs[0]
+    x_columns = [col for col in first_df.columns if col.endswith('_x') and col.startswith('p')]
+    num_markers = len(x_columns)
+    print(f"[DEBUG] Detected {num_markers} markers from x-coordinate columns")
+    
     # Debug: List unique frame values for each pixel file
     for idx, df in enumerate(pixel_dfs, start=1):
         frames = df["frame"].unique()
@@ -127,13 +133,13 @@ def run_rec3d_one_dlt3d():
         return
     common_frames = sorted(common_frames)
     
-    # For each common frame, perform reconstruction for all 25 markers
+    # For each common frame, perform reconstruction for all markers
     reconstruction_results = []
     for frame in common_frames:
         print(f"[DEBUG] Processing frame: {frame}")
         row_results = [frame]
-        # Loop through markers 1 to 25
-        for marker in range(1, 26):
+        # Loop through all detected markers
+        for marker in range(1, num_markers + 1):
             pixel_obs_list = []
             valid_marker = True
             for df in pixel_dfs:
@@ -166,9 +172,9 @@ def run_rec3d_one_dlt3d():
         messagebox.showerror("Error", "No valid 3D reconstruction could be performed!")
         return
     
-    # Prepara header: frame, depois p1_x, p1_y, p1_z, ..., p25_x, p25_y, p25_z
+    # Prepare header for all markers
     header = ["frame"]
-    for marker in range(1, 26):
+    for marker in range(1, num_markers + 1):
         header.extend([f"p{marker}_x", f"p{marker}_y", f"p{marker}_z"])
     
     rec3d_df = pd.DataFrame(reconstruction_results, columns=header)
@@ -262,9 +268,10 @@ def save_rec3d_as_c3d(rec3d_df, output_dir, default_filename, point_rate=100, co
     from tkinter import filedialog, messagebox
 
     num_frames = rec3d_df.shape[0]
-    # Trabalhamos com 25 marcadores; define os rótulos.
-    marker_labels = [f"p{i}" for i in range(1, 26)]
-    num_markers = len(marker_labels)
+    # Define the markers based on the actual columns
+    x_columns = [col for col in rec3d_df.columns if col.endswith('_x') and col.startswith('p')]
+    num_markers = len(x_columns)
+    marker_labels = [f"p{i}" for i in range(1, num_markers + 1)]
     
     # Inicializa a matriz de pontos com shape (4, num_markers, num_frames)
     points_data = np.zeros((4, num_markers, num_frames))

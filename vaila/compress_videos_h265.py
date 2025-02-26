@@ -97,6 +97,7 @@ import platform
 import tempfile
 from tkinter import filedialog, messagebox, Tk
 import tkinter as tk
+from tkinter import ttk
 
 # Global variables for success and failure counts
 success_count = 0
@@ -252,7 +253,7 @@ class CompressionConfigDialog(tk.simpledialog.Dialog):
             master, text="Video Compression Settings", font=("Arial", 10, "bold")
         ).grid(row=0, columnspan=2, pady=10)
 
-        tk.Label(master, text="Preset:").grid(row=1)
+        tk.Label(master, text="Preset:").grid(row=1, sticky="e")
         self.preset_var = tk.StringVar(value="medium")
         presets = [
             "ultrafast",
@@ -265,20 +266,20 @@ class CompressionConfigDialog(tk.simpledialog.Dialog):
             "slower",
             "veryslow",
         ]
-        self.preset_menu = tk.OptionMenu(master, self.preset_var, *presets)
-        self.preset_menu.grid(row=1, column=1, sticky="ew")
+        self.preset_combo = ttk.Combobox(master, textvariable=self.preset_var, values=presets, state="readonly")
+        self.preset_combo.grid(row=1, column=1, sticky="ew")
 
-        tk.Label(master, text="CRF Value (0-51, lower is better quality):").grid(row=2)
+        tk.Label(master, text="CRF Value (0-51, lower is better quality):").grid(row=2, sticky="e")
         self.crf_entry = tk.Entry(master)
         self.crf_entry.insert(0, "23")
         self.crf_entry.grid(row=2, column=1)
 
-        tk.Label(master, text="Use GPU acceleration if available:").grid(row=3)
+        tk.Label(master, text="Use GPU acceleration if available:").grid(row=3, sticky="e")
         self.use_gpu_var = tk.BooleanVar(value=False)
         self.use_gpu_check = tk.Checkbutton(master, variable=self.use_gpu_var)
         self.use_gpu_check.grid(row=3, column=1)
 
-        return self.preset_menu
+        return self.preset_combo
 
     def validate(self):
         try:

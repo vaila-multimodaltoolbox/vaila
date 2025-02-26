@@ -198,7 +198,7 @@ C_B: Video and Image
 C_B_r1_c1 - Video<-->PNG  C_B_r1_c2 - Cut Videos    C_B_r1_c3 - Draw Box
 C_B_r2_c1 - CompressH264  C_B_r2_c2 - Compress H265 C_B_r2_c3 - Make Sync file
 C_B_r3_c1 - GetPixelCoord C_B_r3_c2 - Metadata info C_B_r3_c3 - Merge Videos
-C_B_r4_c1 - Distort video C_B_r4_c2 - Cut Video     C_B_r4_c3 - vailá
+C_B_r4_c1 - Distort video C_B_r4_c2 - Cut Video     C_B_r4_c3 - Resize Video
 
 C_C: Visualization
 C_C_r1_c1 - Show C3D      C_C_r1_c2 - Show CSV       C_C_r2_c1 - Plot 2D
@@ -958,11 +958,11 @@ class Vaila(tk.Tk):
             width=button_width,
         )
 
-        # C_B_r4_c3 - Video: vailá
-        vaila_btn15 = tk.Button(
+        # C_B_r4_c3 - Video: Resize Video
+        resize_video_btn = tk.Button(
             tools_col2,
-            text="vailá",
-            command=self.show_vaila_message,
+            text="Resize Video",
+            command=self.resize_video,
             width=button_width,
         )
 
@@ -978,7 +978,7 @@ class Vaila(tk.Tk):
         video_processing_btn.grid(row=2, column=2, padx=2, pady=2)
         vaila_distortvideo_btn.grid(row=3, column=0, padx=2, pady=2)
         cut_video_btn.grid(row=3, column=1, padx=2, pady=2)
-        vaila_btn15.grid(row=3, column=2, padx=2, pady=2)
+        resize_video_btn.grid(row=3, column=2, padx=2, pady=2)
 
         tools_col2.pack(side="left", fill="both", expand=True, padx=5, pady=5)
 
@@ -1804,6 +1804,18 @@ class Vaila(tk.Tk):
         - ESC: Save and exit
         """
         cutvideo.main()
+    
+    def resize_video(self):
+        """Runs the video resizing module.
+
+        This function runs the video resizing module, which can be used to
+        resize video files. The module will prompt the user to select the
+        directory containing the video files and input the sample rate and start
+        and end indices for analysis.
+        """
+        from vaila import resize_video
+        resize_video.run_resize_video()
+
 
     # C_C_r1_c1
     def show_c3d_data(self):
