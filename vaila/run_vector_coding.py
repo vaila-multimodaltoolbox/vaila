@@ -18,7 +18,9 @@ def get_coupling_angle(
     savedir=None,
     savename="vectorcoding_result",
 ):
-    print("-------------------------------------------------------------------------------")
+    print(
+        "-------------------------------------------------------------------------------"
+    )
     print(f"Processing: {file}")
     print(f"Joint 1: {joint1_name}")
     print(f"Joint 2: {joint2_name}")
@@ -29,10 +31,12 @@ def get_coupling_angle(
     # Load CSV file
     print("\n Loading CSV file.")
     df = pd.read_csv(file)
-    
+
     # Instead of using the header name, always use the 2nd and 3rd column (idx: 1 and 2)
     if df.shape[1] < 3:
-        print("Error: The CSV file must contain at least three columns (frame + 2 data columns).")
+        print(
+            "Error: The CSV file must contain at least three columns (frame + 2 data columns)."
+        )
         return
     array_joint1_raw = df.iloc[:, 1].values
     array_joint2_raw = df.iloc[:, 2].values
@@ -82,7 +86,9 @@ def get_coupling_angle(
         fig.savefig(f"{output_path}.png", dpi=300, bbox_inches="tight")
 
         print(f"\n All results files have been saved in {output_path}.")
-        print("-------------------------------------------------------------------------------")
+        print(
+            "-------------------------------------------------------------------------------"
+        )
     else:
         fig.show()
         print("\n DataFrame with results:")
@@ -115,18 +121,32 @@ def run_vector_coding():
         if file.lower().endswith(".csv")
     ]
     if not csv_files:
-        messagebox.showerror("Erro", "Nenhum arquivo CSV encontrado na pasta selecionada.")
+        messagebox.showerror(
+            "Erro", "Nenhum arquivo CSV encontrado na pasta selecionada."
+        )
         return
 
     # Solicitar o frame rate (Hz) e os nomes dos ângulos (joint angles) apenas uma vez
-    freq = simpledialog.askfloat("Input", "Digite a frequência de amostragem (Hz):", initialvalue=100.0)
+    freq = simpledialog.askfloat(
+        "Input", "Digite a frequência de amostragem (Hz):", initialvalue=100.0
+    )
     if not freq:
         return
 
-    joint1_name = simpledialog.askstring("Input", "Digite o nome para o primeiro ângulo (usado apenas para rotulagem):", initialvalue="Joint1")
-    joint2_name = simpledialog.askstring("Input", "Digite o nome para o segundo ângulo (usado apenas para rotulagem):", initialvalue="Joint2")
+    joint1_name = simpledialog.askstring(
+        "Input",
+        "Digite o nome para o primeiro ângulo (usado apenas para rotulagem):",
+        initialvalue="Joint1",
+    )
+    joint2_name = simpledialog.askstring(
+        "Input",
+        "Digite o nome para o segundo ângulo (usado apenas para rotulagem):",
+        initialvalue="Joint2",
+    )
     if not all([freq, joint1_name, joint2_name]):
-        messagebox.showerror("Erro", "Por favor, forneça todas as informações solicitadas.")
+        messagebox.showerror(
+            "Erro", "Por favor, forneça todas as informações solicitadas."
+        )
         return
 
     # Criar a pasta de saída root (dentro do diretório escolhido) com um timestamp global
@@ -149,8 +169,11 @@ def run_vector_coding():
             savedir=sub_output_dir,
             savename=savename,
         )
-    
-    messagebox.showinfo("Processamento Concluído", f"Análise em batch completa.\nResultados salvos em:\n{output_root}")
+
+    messagebox.showinfo(
+        "Processamento Concluído",
+        f"Análise em batch completa.\nResultados salvos em:\n{output_root}",
+    )
 
 
 def timenormalize_data(data, n_points=101):
@@ -184,8 +207,8 @@ def calculate_coupling_angle(angle1, angle2):
 
     # Calculate vector magnitude and angle
     vm_ab = np.hypot(array_joint1, array_joint2)
-    cosang_ab = np.divide(array_joint1, vm_ab, where=vm_ab!=0)
-    sinang_ab = np.divide(array_joint2, vm_ab, where=vm_ab!=0)
+    cosang_ab = np.divide(array_joint1, vm_ab, where=vm_ab != 0)
+    sinang_ab = np.divide(array_joint2, vm_ab, where=vm_ab != 0)
     coupangle = np.degrees(np.arctan2(cosang_ab, sinang_ab))
 
     # Ensure angle values are within 0-360 range
@@ -193,31 +216,44 @@ def calculate_coupling_angle(angle1, angle2):
 
     # Assign categorical variable based on angle ranges
     CtgVar_vc_DG = np.select(
-        condlist=[(coupangle >= 0) & (coupangle < 22.5),        # Joint 1 - Phase 
-                    (coupangle >= 22.5) & (coupangle < 67.5),   # In-Phase
-                    (coupangle >= 67.5) & (coupangle < 112.5),  # Joint 2 - Phase
-                    (coupangle >= 112.5) & (coupangle < 157.5), # Anti-Phase 
-                    (coupangle >= 157.5) & (coupangle < 202.5), # Joint 1 - Phase 
-                    (coupangle >= 202.5) & (coupangle < 247.5), # In-Phase 
-                    (coupangle >= 247.5) & (coupangle < 292.5), # Joint 2 - Phase
-                    (coupangle >= 292.5) & (coupangle < 337.5), # Anti-Phase
-                    (coupangle >= 337.5) & (coupangle < 360)],  # Joint 1 - Phase
+        condlist=[
+            (coupangle >= 0) & (coupangle < 22.5),  # Joint 1 - Phase
+            (coupangle >= 22.5) & (coupangle < 67.5),  # In-Phase
+            (coupangle >= 67.5) & (coupangle < 112.5),  # Joint 2 - Phase
+            (coupangle >= 112.5) & (coupangle < 157.5),  # Anti-Phase
+            (coupangle >= 157.5) & (coupangle < 202.5),  # Joint 1 - Phase
+            (coupangle >= 202.5) & (coupangle < 247.5),  # In-Phase
+            (coupangle >= 247.5) & (coupangle < 292.5),  # Joint 2 - Phase
+            (coupangle >= 292.5) & (coupangle < 337.5),  # Anti-Phase
+            (coupangle >= 337.5) & (coupangle < 360),
+        ],  # Joint 1 - Phase
         choicelist=[1, 2, 3, 4, 1, 2, 3, 4, 1],
-        default=0
+        default=0,
     )
     # Group 1 - Joint 1 - Phase
-    # Group 2 - In-Phase 
+    # Group 2 - In-Phase
     # Group 3 - Joint 2 - Phase
     # Group 4 - Anti-Phase
-    
+
     # Calculate the frequency for each pattern of coordination
-    group_phase = [round((np.count_nonzero(CtgVar_vc_DG == i) / len(CtgVar_vc_DG)) * 100, 3) for i in range(1, 5)]
+    group_phase = [
+        round((np.count_nonzero(CtgVar_vc_DG == i) / len(CtgVar_vc_DG)) * 100, 3)
+        for i in range(1, 5)
+    ]
 
     return group_phase, coupangle
 
 
-def create_coupling_angle_figure(group_percent, coupangle, array_joint1, array_joint2, 
-                               joint1_name, joint2_name, axis="angle", size=15):
+def create_coupling_angle_figure(
+    group_percent,
+    coupangle,
+    array_joint1,
+    array_joint2,
+    joint1_name,
+    joint2_name,
+    axis="angle",
+    size=15,
+):
     """
     Create a figure with three subplots:
       1. Joint angles over time.
@@ -240,7 +276,7 @@ def create_coupling_angle_figure(group_percent, coupangle, array_joint1, array_j
     ax[0].set_title(
         f"Joint Angles | {joint1_name} - {joint2_name} | Axis: {axis}",
         size=letter_size,
-        weight="bold"
+        weight="bold",
     )
     ax[0].plot(
         array_joint1,
@@ -249,7 +285,7 @@ def create_coupling_angle_figure(group_percent, coupangle, array_joint1, array_j
         color="b",
         markersize=mark_size,
         alpha=alpha_value,
-        label=joint1_name
+        label=joint1_name,
     )
     ax[0].plot(
         array_joint2,
@@ -258,7 +294,7 @@ def create_coupling_angle_figure(group_percent, coupangle, array_joint1, array_j
         color="r",
         markersize=mark_size,
         alpha=alpha_value,
-        label=joint2_name
+        label=joint2_name,
     )
     ax[0].legend(loc="best", fontsize=letter_size, frameon=False)
     ax[0].set_ylabel("Joint Angle (°)", fontsize=letter_size)
@@ -269,7 +305,7 @@ def create_coupling_angle_figure(group_percent, coupangle, array_joint1, array_j
     ax[1].set_title(
         f"Coupling Angle | {joint1_name} - {joint2_name} | Axis: {axis}",
         size=letter_size,
-        weight="bold"
+        weight="bold",
     )
     ax[1].plot(
         coupangle,
@@ -278,7 +314,7 @@ def create_coupling_angle_figure(group_percent, coupangle, array_joint1, array_j
         markersize=mark_size,
         linestyle=":",
         alpha=alpha_value,
-        label="Coupling Angle"
+        label="Coupling Angle",
     )
     ax[1].legend(loc="best", fontsize=letter_size, frameon=False)
     ax[1].set_ylabel("Coupling Angle (°)", fontsize=letter_size)
@@ -294,12 +330,29 @@ def create_coupling_angle_figure(group_percent, coupangle, array_joint1, array_j
     # Add secondary y-axis with phase labels
     ax2 = ax[1].twinx()
     ax2.set_yticks(
-        [22.5 - 11.25, 67.5 - 22.5, 112.5 - 22.5, 157.5 - 22.5,
-         202.5 - 22.5, 247.5 - 22.5, 292.5 - 22.5, 337.5 - 22.5, 360],
-        [f"{joint1_name}", "In-Phase", f"{joint2_name}", "Anti-Phase",
-         f"{joint1_name}", "In-Phase", f"{joint2_name}", "Anti-Phase",
-         f"{joint1_name}"],
-        weight="bold"
+        [
+            22.5 - 11.25,
+            67.5 - 22.5,
+            112.5 - 22.5,
+            157.5 - 22.5,
+            202.5 - 22.5,
+            247.5 - 22.5,
+            292.5 - 22.5,
+            337.5 - 22.5,
+            360,
+        ],
+        [
+            f"{joint1_name}",
+            "In-Phase",
+            f"{joint2_name}",
+            "Anti-Phase",
+            f"{joint1_name}",
+            "In-Phase",
+            f"{joint2_name}",
+            "Anti-Phase",
+            f"{joint1_name}",
+        ],
+        weight="bold",
     )
 
     # Third subplot: Coordination patterns as a bar plot
@@ -308,12 +361,19 @@ def create_coupling_angle_figure(group_percent, coupangle, array_joint1, array_j
     ax[2].set_title(
         f"Categorization of Coordination Patterns | {joint1_name} - {joint2_name}",
         size=letter_size,
-        weight="bold"
+        weight="bold",
     )
     ax[2].set_ylabel("Percentage (%)", fontsize=letter_size)
     ax[2].set_ylim(0, 100)
     for i, val in enumerate(group_percent):
-        ax[2].text(i, val + 2, f"{val:.1f}%", ha='center', va='bottom', fontsize=letter_size-2)
+        ax[2].text(
+            i,
+            val + 2,
+            f"{val:.1f}%",
+            ha="center",
+            va="bottom",
+            fontsize=letter_size - 2,
+        )
 
     return fig, ax
 
