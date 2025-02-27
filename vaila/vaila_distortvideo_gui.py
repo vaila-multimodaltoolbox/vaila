@@ -212,7 +212,13 @@ def distort_video_gui():
     # Select the video and extract the first frame
     video_path = filedialog.askopenfilename(
         title="Select the video to extract the first frame",
-        filetypes=(("Video Files", "*.mp4;*.avi;*.mov;*.mkv;*.webm;*.MP4;*.AVI;*.MOV;*.MKV;*.WEBM"), ("All Files", "*.*")),
+        filetypes=(
+            (
+                "Video Files",
+                "*.mp4;*.avi;*.mov;*.mkv;*.webm;*.MP4;*.AVI;*.MOV;*.MKV;*.WEBM",
+            ),
+            ("All Files", "*.*"),
+        ),
     )
     if not video_path:
         return None
@@ -492,7 +498,7 @@ def distort_video_gui_cv2():
 
     The user selects a video file (to extract the first frame) and can use the OpenCV trackbars
     to modify the correction parameters: [fx, fy, cx, cy, k1, k2, k3, p1, p2] and the scale factor.
-    
+
     Press 'c' to confirm or 'q' to cancel.
 
     Returns:
@@ -507,7 +513,13 @@ def distort_video_gui_cv2():
     root.withdraw()
     video_path = filedialog.askopenfilename(
         title="Select the video for frame extraction",
-        filetypes=[("Video Files", "*.mp4 *.avi *.mov *.mkv *.webm *.MP4 *.AVI *.MOV *.MKV *.WEBM"), ("All Files", "*.*")]
+        filetypes=[
+            (
+                "Video Files",
+                "*.mp4 *.avi *.mov *.mkv *.webm *.MP4 *.AVI *.MOV *.MKV *.WEBM",
+            ),
+            ("All Files", "*.*"),
+        ],
     )
     if not video_path:
         return None
@@ -632,7 +644,7 @@ def distort_video_gui_cv2():
 def run_distortvideo_gui():
     """Main function to run lens distortion correction using a single video and an OpenCV-based GUI."""
     rprint("[yellow]Running lens distortion correction with OpenCV GUI...[/yellow]")
-        
+
     # Print the directory and name of the script being executed
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
@@ -648,7 +660,13 @@ def run_distortvideo_gui():
     root.withdraw()
     video_path = filedialog.askopenfilename(
         title="Select the video for processing",
-        filetypes=[("Video Files", "*.mp4 *.avi *.mov *.mkv *.webm *.MP4 *.AVI *.MOV *.MKV *.WEBM"), ("All Files", "*.*")]
+        filetypes=[
+            (
+                "Video Files",
+                "*.mp4 *.avi *.mov *.mkv *.webm *.MP4 *.AVI *.MOV *.MKV *.WEBM",
+            ),
+            ("All Files", "*.*"),
+        ],
     )
     if not video_path:
         rprint("[red]No video was selected for processing.[/red]")

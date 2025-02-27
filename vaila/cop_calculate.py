@@ -18,7 +18,8 @@ How to Run:
 License: GNU GPLv3
 --------
 vailá Multimodal Toolbox
-""" 
+"""
+
 import os
 import pandas as pd
 import numpy as np
@@ -49,6 +50,7 @@ def read_csv_full(filename):
 
 def select_headers(file_path):
     """Displays a GUI to select six (6) headers for force plate data analysis."""
+
     def get_csv_headers(file_path):
         """Reads the headers from a CSV file."""
         df = pd.read_csv(file_path)
@@ -59,9 +61,13 @@ def select_headers(file_path):
 
     def on_select():
         nonlocal selected_headers
-        selected_headers = [header for header, var in zip(headers, header_vars) if var.get()]
+        selected_headers = [
+            header for header, var in zip(headers, header_vars) if var.get()
+        ]
         if len(selected_headers) != 6:
-            messagebox.showinfo("Info", "Please select exactly six (6) headers for analysis.")
+            messagebox.showinfo(
+                "Info", "Please select exactly six (6) headers for analysis."
+            )
             return
         selection_window.quit()
         selection_window.destroy()
@@ -76,13 +82,17 @@ def select_headers(file_path):
 
     selection_window = Toplevel()
     selection_window.title("Select six (6) headers for Force Plate Data")
-    selection_window.geometry(f"{selection_window.winfo_screenwidth()}x{int(selection_window.winfo_screenheight()*0.9)}")
+    selection_window.geometry(
+        f"{selection_window.winfo_screenwidth()}x{int(selection_window.winfo_screenheight()*0.9)}"
+    )
 
     canvas = Canvas(selection_window)
     scrollbar = Scrollbar(selection_window, orient="vertical", command=canvas.yview)
     scrollable_frame = Frame(canvas)
 
-    scrollable_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+    scrollable_frame.bind(
+        "<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+    )
     canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
     canvas.configure(yscrollcommand=scrollbar.set)
 
@@ -99,7 +109,9 @@ def select_headers(file_path):
     btn_frame = Frame(selection_window)
     btn_frame.pack(side="right", padx=10, pady=10, fill="y", anchor="center")
     Button(btn_frame, text="Select All", command=select_all).pack(side="top", pady=5)
-    Button(btn_frame, text="Unselect All", command=unselect_all).pack(side="top", pady=5)
+    Button(btn_frame, text="Unselect All", command=unselect_all).pack(
+        side="top", pady=5
+    )
     Button(btn_frame, text="Confirm", command=on_select).pack(side="top", pady=5)
 
     selection_window.mainloop()
@@ -114,12 +126,12 @@ def select_headers(file_path):
 def calc_cop(data, board_height_m: float = 0.0):
     """
     Converts force (N) and moment (N.m) data into center of pressure (m) coordinates.
-    
+
     Parameters:
         data: numpy array with columns [Fx, Fy, Fz, Mx, My, Mz]
-        board_height_m: float, height of the board over the force plate (in meters). 
+        board_height_m: float, height of the board over the force plate (in meters).
                         If 0, assumes no board is present.
-    
+
     Returns:
         cop_xyz: numpy array with columns [CP_ap, CP_ml, h] in meters.
                  For no board (h = 0), CP_ap = -My/Fz and CP_ml = Mx/Fz.
@@ -177,20 +189,26 @@ def main():
     print(f"Output Directory: {output_dir}")
 
     # Ask for moment unit
-    moment_unit = simpledialog.askstring("Moment Unit of Measurement",
-                                           "Enter the unit of measurement for your moment data (e.g. N.m, N.mm)",
-                                           initialvalue="N.m",
-                                           parent=root)
+    moment_unit = simpledialog.askstring(
+        "Moment Unit of Measurement",
+        "Enter the unit of measurement for your moment data (e.g. N.m, N.mm)",
+        initialvalue="N.m",
+        parent=root,
+    )
     print(f"Moment unit of measurement: {moment_unit}")
 
     # Ask for force plate dimensions in mm (convert to meters)
-    dimensions_input = simpledialog.askstring("Force Plate Dimensions",
-                                                "Enter the force plate dimensions (length [X-axis], width [Y-axis]) in mm, separated by a comma:",
-                                                initialvalue="508,464",
-                                                parent=root)
+    dimensions_input = simpledialog.askstring(
+        "Force Plate Dimensions",
+        "Enter the force plate dimensions (length [X-axis], width [Y-axis]) in mm, separated by a comma:",
+        initialvalue="508,464",
+        parent=root,
+    )
     if dimensions_input:
         try:
-            fp_dimensions_xy = [float(dim) / 1000 for dim in dimensions_input.split(",")]
+            fp_dimensions_xy = [
+                float(dim) / 1000 for dim in dimensions_input.split(",")
+            ]
             if len(fp_dimensions_xy) != 2:
                 raise ValueError("Please provide exactly two values: length and width.")
         except ValueError as e:
@@ -201,10 +219,12 @@ def main():
         fp_dimensions_xy = [0.508, 0.464]
 
     # Ask for board height (in mm) and convert to meters
-    board_height_mm = simpledialog.askfloat("Board Height",
-                                              "Enter the height of the board over the force plate (in mm):",
-                                              initialvalue=0.0,
-                                              parent=root)
+    board_height_mm = simpledialog.askfloat(
+        "Board Height",
+        "Enter the height of the board over the force plate (in mm):",
+        initialvalue=0.0,
+        parent=root,
+    )
     if board_height_mm is not None:
         board_height_m = board_height_mm / 1000
         print(f"Using provided board height: {board_height_m} m")
@@ -244,8 +264,12 @@ def main():
             continue
 
         if not all(header in df_full.columns for header in selected_headers):
-            messagebox.showerror("Header Error", f"Selected headers not found in file {file_name}.")
-            print(f"Error: Selected headers not found in file {file_name}. Skipping file.")
+            messagebox.showerror(
+                "Header Error", f"Selected headers not found in file {file_name}."
+            )
+            print(
+                f"Error: Selected headers not found in file {file_name}. Skipping file."
+            )
             continue
 
         data = df_full[selected_headers].to_numpy()
@@ -254,22 +278,30 @@ def main():
             cop_xyz_m = calc_cop(data, board_height_m=board_height_m)
         except Exception as e:
             print(f"Error processing data for file {file_name}: {e}")
-            messagebox.showerror("Data Processing Error", f"Error processing data for file {file_name}: {e}")
+            messagebox.showerror(
+                "Data Processing Error",
+                f"Error processing data for file {file_name}: {e}",
+            )
             continue
 
         # Convert CoP from meters to millimeters
         cop_xyz_mm = cop_xyz_m * 1000
 
         file_name_without_extension = os.path.splitext(file_name)[0]
-        output_file_path = os.path.join(main_output_dir, f"{file_name_without_extension}_{timestamp}.csv")
-        output_df = pd.DataFrame(cop_xyz_mm, columns=["cop_ap_mm", "cop_ml_mm", "cop_z_mm"])
+        output_file_path = os.path.join(
+            main_output_dir, f"{file_name_without_extension}_{timestamp}.csv"
+        )
+        output_df = pd.DataFrame(
+            cop_xyz_mm, columns=["cop_ap_mm", "cop_ml_mm", "cop_z_mm"]
+        )
         output_df.to_csv(output_file_path, index=False)
         print(f"Saved CoP data to: {output_file_path}")
 
     print("All files processed.")
-    messagebox.showinfo("Information", "CoP calculation complete! The window will close in 5 seconds.")
+    messagebox.showinfo(
+        "Information", "CoP calculation complete! The window will close in 5 seconds."
+    )
 
 
 if __name__ == "__main__":
     main()
-
