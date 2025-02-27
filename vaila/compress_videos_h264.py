@@ -268,15 +268,21 @@ class CompressionConfigDialog(tk.simpledialog.Dialog):
             "slower",
             "veryslow",
         ]
-        self.preset_combo = ttk.Combobox(master, textvariable=self.preset_var, values=presets, state="readonly")
+        self.preset_combo = ttk.Combobox(
+            master, textvariable=self.preset_var, values=presets, state="readonly"
+        )
         self.preset_combo.grid(row=1, column=1, sticky="ew")
 
-        tk.Label(master, text="CRF Value (0-51, lower is better quality):").grid(row=2, sticky="e")
+        tk.Label(master, text="CRF Value (0-51, lower is better quality):").grid(
+            row=2, sticky="e"
+        )
         self.crf_entry = tk.Entry(master)
         self.crf_entry.insert(0, "23")
         self.crf_entry.grid(row=2, column=1)
 
-        tk.Label(master, text="Use GPU acceleration if available:").grid(row=3, sticky="e")
+        tk.Label(master, text="Use GPU acceleration if available:").grid(
+            row=3, sticky="e"
+        )
         self.use_gpu_var = tk.BooleanVar(value=False)
         self.use_gpu_check = tk.Checkbutton(master, variable=self.use_gpu_var)
         self.use_gpu_check.grid(row=3, column=1)
