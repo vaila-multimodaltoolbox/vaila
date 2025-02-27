@@ -29,10 +29,12 @@ import pandas as pd
 from rich import print
 from tkinter import filedialog, messagebox, Tk
 
+
 def read_pixel_file(file_path):
     """Reads the pixel coordinate CSV file."""
     df = pd.read_csv(file_path)
     return df
+
 
 def read_ref3d_file(file_path):
     """Reads the REF3D file and checks if the _z columns are present."""
@@ -42,17 +44,20 @@ def read_ref3d_file(file_path):
     for i in range(1, 26):
         expected_columns.extend([f"p{i}_x", f"p{i}_y", f"p{i}_z"])
     if not all(col in df.columns for col in expected_columns):
-        print("Error: REF3D file does not contain the expected columns with _z coordinates!")
+        print(
+            "Error: REF3D file does not contain the expected columns with _z coordinates!"
+        )
         return None
     return df
+
 
 def calculate_dlt3d_params(pixel_coords, ref_coords):
     """
     Computes the 11 DLT3d parameters using the following models:
-    
+
       u = (L1*X + L2*Y + L3*Z + L4) / (L9*X + L10*Y + L11*Z + 1)
       v = (L5*X + L6*Y + L7*Z + L8) / (L9*X + L10*Y + L11*Z + 1)
-      
+
     The equations are rearranged to form a linear system:
       X   Y   Z   1   0   0   0   0  -uX  -uY  -uZ = u
       0   0   0   0   X   Y   Z   1  -vX  -vY  -vZ = v
@@ -75,6 +80,7 @@ def calculate_dlt3d_params(pixel_coords, ref_coords):
     L, residuals, rank, s = np.linalg.lstsq(A, B, rcond=None)
     return L
 
+
 def process_files(pixel_file, ref3d_file):
     """
     Processes the pixel and REF3D files.
@@ -90,28 +96,23 @@ def process_files(pixel_file, ref3d_file):
         ref_coords_arr = []
         ref_line = ref_df.iloc[0]
         for i in range(1, 26):
-            ref_coords_arr.append([
-                ref_line[f"p{i}_x"],
-                ref_line[f"p{i}_y"],
-                ref_line[f"p{i}_z"]
-            ])
+            ref_coords_arr.append(
+                [ref_line[f"p{i}_x"], ref_line[f"p{i}_y"], ref_line[f"p{i}_z"]]
+            )
         ref_coords_arr = np.array(ref_coords_arr)
         for _, row in pixel_df.iterrows():
             pixel_coords_arr = []
             for i in range(1, 26):
-                pixel_coords_arr.append([
-                    row[f"p{i}_x"],
-                    row[f"p{i}_y"]
-                ])
+                pixel_coords_arr.append([row[f"p{i}_x"], row[f"p{i}_y"]])
             pixel_coords_arr = np.array(pixel_coords_arr)
             L = calculate_dlt3d_params(pixel_coords_arr, ref_coords_arr)
-            frame = row['frame']
+            frame = row["frame"]
             dlt_params_all[frame] = L
     else:
         # If REF3D contains multiple rows, match the frame numbers
         for _, row in pixel_df.iterrows():
-            frame = row['frame']
-            ref_line = ref_df[ref_df['frame'] == frame]
+            frame = row["frame"]
+            ref_line = ref_df[ref_df["frame"] == frame]
             if ref_line.empty:
                 print(f"Frame {frame} not found in REF3D file.")
                 continue
@@ -120,27 +121,29 @@ def process_files(pixel_file, ref3d_file):
             ref_coords_arr = []
             for i in range(1, 26):
                 pixel_coords_arr.append([row[f"p{i}_x"], row[f"p{i}_y"]])
-                ref_coords_arr.append([
-                    ref_line[f"p{i}_x"],
-                    ref_line[f"p{i}_y"],
-                    ref_line[f"p{i}_z"]
-                ])
+                ref_coords_arr.append(
+                    [ref_line[f"p{i}_x"], ref_line[f"p{i}_y"], ref_line[f"p{i}_z"]]
+                )
             pixel_coords_arr = np.array(pixel_coords_arr)
             ref_coords_arr = np.array(ref_coords_arr)
             L = calculate_dlt3d_params(pixel_coords_arr, ref_coords_arr)
             dlt_params_all[frame] = L
     return dlt_params_all
 
+
 def save_dlt_parameters(output_file, dlt_params):
     """Saves the computed DLT3d parameters to a CSV file without spaces after commas."""
     with open(output_file, "w") as f:
-        f.write("frame,L1,L2,L3,L4,L5,L6,L7,L8,L10,L11,L11\n")  # Please verify header names if needed
+        f.write(
+            "frame,L1,L2,L3,L4,L5,L6,L7,L8,L10,L11,L11\n"
+        )  # Please verify header names if needed
         for frame, params in dlt_params.items():
             param_str = ",".join([f"{p:.6f}" for p in params])
             f.write(f"{frame},{param_str}\n")
     # Show a message box indicating success
     messagebox.showinfo("Success", f"DLT3d file saved successfully: {output_file}")
     print(f"DLT3d parameters saved to {output_file}")
+
 
 def main():
     # Print the directory and name of the script being executed
@@ -149,13 +152,12 @@ def main():
     root = Tk()
     root.withdraw()
     pixel_file = filedialog.askopenfilename(
-        title="Select the pixel coordinate file",
-        filetypes=[("CSV files", "*.csv")]
+        title="Select the pixel coordinate file", filetypes=[("CSV files", "*.csv")]
     )
     if not pixel_file:
         print("Pixel file selection canceled.")
         return
-    
+
     # Ask the user if they want to generate a REF3D template
     mode = messagebox.askquestion("Mode", "Do you want to create a REF3D template?")
     if mode == "yes":
@@ -170,12 +172,14 @@ def main():
         template_df.to_csv(real_file, index=False)
         messagebox.showinfo("Success", f"REF3D template created: {real_file}")
         print(f"REF3D template created: {real_file}")
-        print("Please edit the REF3D file with the real coordinates and run the DLT process again.")
+        print(
+            "Please edit the REF3D file with the real coordinates and run the DLT process again."
+        )
         return
     else:
         real_file = filedialog.askopenfilename(
             title="Select the real 3D coordinates file",
-            filetypes=[("REF3D files", "*.ref3d")]
+            filetypes=[("REF3D files", "*.ref3d")],
         )
         if not real_file:
             print("Real file selection canceled.")
@@ -187,6 +191,7 @@ def main():
         return
     output_file = os.path.splitext(pixel_file)[0] + ".dlt3d"
     save_dlt_parameters(output_file, dlt_params)
+
 
 if __name__ == "__main__":
     main()

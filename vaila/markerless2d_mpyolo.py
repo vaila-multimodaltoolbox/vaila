@@ -239,7 +239,7 @@ def get_parameters_dialog():
     # Create frames
     mode_frame = tk.LabelFrame(dialog, text="Processing Mode", padx=5, pady=5)
     mode_frame.pack(padx=10, pady=5, fill="x")
-    
+
     yolo_frame = tk.LabelFrame(dialog, text="YOLO Parameters", padx=5, pady=5)
     yolo_frame.pack(padx=10, pady=5, fill="x")
 
@@ -249,31 +249,38 @@ def get_parameters_dialog():
     # Processing mode selection - using dropdown menu
     mode_frame = tk.LabelFrame(dialog, text="Processing Mode", padx=5, pady=5)
     mode_frame.pack(padx=10, pady=5, fill="x")
-    
+
     # Create a frame for the dropdown and help icon
     mode_select_frame = tk.Frame(mode_frame)
     mode_select_frame.pack(fill="x", padx=5, pady=5)
-    
+
     # Label for the dropdown
-    tk.Label(mode_select_frame, text="Select processing mode:").pack(side="left", padx=(0, 5))
-    
+    tk.Label(mode_select_frame, text="Select processing mode:").pack(
+        side="left", padx=(0, 5)
+    )
+
     # Create dropdown (Combobox) for mode selection
     mode_var = tk.StringVar(value="sequential")
-    mode_dropdown = ttk.Combobox(mode_select_frame, textvariable=mode_var, state="readonly", width=20)
+    mode_dropdown = ttk.Combobox(
+        mode_select_frame, textvariable=mode_var, state="readonly", width=20
+    )
     mode_dropdown["values"] = ("sequential", "multithreaded")
     mode_dropdown.pack(side="left", padx=5)
-    
+
     # Set display names for the dropdown
-    mode_display = {"sequential": "Sequential Processing", "multithreaded": "Multithreaded Tracking"}
-    
+    mode_display = {
+        "sequential": "Sequential Processing",
+        "multithreaded": "Multithreaded Tracking",
+    }
+
     # Function to update the display text
     def update_dropdown_display(*args):
         current_value = mode_var.get()
         mode_dropdown.set(mode_display.get(current_value, current_value))
-    
+
     # Set initial display text
     update_dropdown_display()
-    
+
     # Add help button with tooltip functionality
     def show_help_tooltip(event=None):
         help_text = """
@@ -291,23 +298,29 @@ Multithreaded Tracking:
         """
         x = help_button.winfo_rootx() + 25
         y = help_button.winfo_rooty() + 20
-        
+
         # Create a toplevel window
         tooltip = tk.Toplevel(help_button)
         tooltip.wm_overrideredirect(True)
         tooltip.wm_geometry(f"+{x}+{y}")
-        
-        label = tk.Label(tooltip, text=help_text, justify="left",
-                        background="#ffffe0", relief="solid", borderwidth=1,
-                        font=("Arial", 10))
+
+        label = tk.Label(
+            tooltip,
+            text=help_text,
+            justify="left",
+            background="#ffffe0",
+            relief="solid",
+            borderwidth=1,
+            font=("Arial", 10),
+        )
         label.pack()
-        
+
         def hide_tooltip():
             tooltip.destroy()
-        
+
         tooltip.after(10000, hide_tooltip)  # Hide after 10 seconds
         help_button.bind("<Leave>", lambda e: tooltip.destroy())
-    
+
     help_button = tk.Button(mode_select_frame, text="?", width=2, height=1)
     help_button.pack(side="left", padx=5)
     help_button.bind("<Button-1>", show_help_tooltip)
@@ -395,8 +408,10 @@ Multithreaded Tracking:
         try:
             # Store the selected processing mode
             params["selected_mode"] = mode_var.get()
-            print(f"Selected processing mode: {mode_display.get(params['selected_mode'], params['selected_mode'])}")
-            
+            print(
+                f"Selected processing mode: {mode_display.get(params['selected_mode'], params['selected_mode'])}"
+            )
+
             params["yolo_conf"] = float(yolo_conf.get())
             params["yolo_iou"] = float(yolo_iou.get())
 
@@ -667,13 +682,29 @@ def process_yolo_tracking(video_path, output_dir, model, params):
                     # Create a CSV file for this object immediately
                     class_name = COCO_CLASSES.get(class_id, f"class_{class_id}")
                     csv_path = os.path.join(output_dir, f"{class_name}_{object_id}.csv")
-                    
+
                     # Initialize CSV with appropriate headers
                     if class_id == 0:  # Person class
-                        columns = ["frame", "object_id", "x1", "y1", "x2", "y2", "confidence"]
+                        columns = [
+                            "frame",
+                            "object_id",
+                            "x1",
+                            "y1",
+                            "x2",
+                            "y2",
+                            "confidence",
+                        ]
                     else:  # Other classes
-                        columns = ["frame", "object_id", "x1", "y1", "x2", "y2", "confidence"]
-                    
+                        columns = [
+                            "frame",
+                            "object_id",
+                            "x1",
+                            "y1",
+                            "x2",
+                            "y2",
+                            "confidence",
+                        ]
+
                     pd.DataFrame(columns=columns).to_csv(csv_path, index=False)
                     print(f"Created tracking CSV for {class_name} ID:{object_id}")
 
@@ -685,11 +716,11 @@ def process_yolo_tracking(video_path, output_dir, model, params):
                         "confidence": float(conf),
                     }
                 )
-                
+
                 # Save this detection to the object's CSV file immediately
                 class_name = COCO_CLASSES.get(class_id, f"class_{class_id}")
                 csv_path = os.path.join(output_dir, f"{class_name}_{object_id}.csv")
-                
+
                 # Prepare row data
                 x1, y1, x2, y2 = map(float, box.tolist())
                 row_data = {
@@ -701,16 +732,18 @@ def process_yolo_tracking(video_path, output_dir, model, params):
                     "y2": y2,
                     "confidence": float(conf),
                 }
-                
+
                 # Append to CSV
-                pd.DataFrame([row_data]).to_csv(csv_path, mode='a', header=False, index=False)
+                pd.DataFrame([row_data]).to_csv(
+                    csv_path, mode="a", header=False, index=False
+                )
 
         frame_idx += 1
         if frame_idx % 30 == 0:
             print(f"\rProcessing frame {frame_idx}", end="")
 
     print(f"\nProcessed {frame_idx} frames")
-    
+
     # Print summary of detected objects
     print("\nDetection Summary:")
     for class_id, objects in tracking_data.items():
@@ -719,18 +752,18 @@ def process_yolo_tracking(video_path, output_dir, model, params):
         for object_id in objects:
             frames = len(tracking_data[class_id][object_id])
             print(f"    ID:{object_id} - {frames} frames")
-    
+
     return tracking_data
 
 
 def process_mediapipe_pose(video_path, output_dir, tracking_data, params):
     """
     Second stage: MediaPipe pose estimation for tracked persons
-    
+
     This function processes each person detected in the video and saves:
     1. A normalized landmarks CSV file (values 0-1)
     2. A pixel coordinates CSV file (absolute pixel values)
-    
+
     The format matches the one used in markerless_2D_analysis.py
     """
     print("\nStage 2: MediaPipe Pose Estimation")
@@ -749,22 +782,35 @@ def process_mediapipe_pose(video_path, output_dir, tracking_data, params):
             # Create CSV files for each person
             norm_csv_path = os.path.join(output_dir, f"person_{object_id}_norm.csv")
             pixel_csv_path = os.path.join(output_dir, f"person_{object_id}_pixel.csv")
-            
+
             # Initialize CSV files with headers
             headers = ["frame_index"]
             for idx in range(33):  # MediaPipe has 33 landmarks
-                headers.extend([f"landmark_{idx}_x", f"landmark_{idx}_y", f"landmark_{idx}_z", f"landmark_{idx}_visibility"])
-            
-            with open(norm_csv_path, "w") as f_norm, open(pixel_csv_path, "w") as f_pixel:
+                headers.extend(
+                    [
+                        f"landmark_{idx}_x",
+                        f"landmark_{idx}_y",
+                        f"landmark_{idx}_z",
+                        f"landmark_{idx}_visibility",
+                    ]
+                )
+
+            with open(norm_csv_path, "w") as f_norm, open(
+                pixel_csv_path, "w"
+            ) as f_pixel:
                 f_norm.write(",".join(headers) + "\n")
                 f_pixel.write(",".join(headers) + "\n")
-            
+
             # Initialize arrays for all frames with NaN values
             for frame_idx in range(total_frames):
                 # Check if this frame has a detection for this person
                 frame_data = next(
-                    (data for data in tracking_data[0][object_id] if data["frame"] == frame_idx),
-                    None
+                    (
+                        data
+                        for data in tracking_data[0][object_id]
+                        if data["frame"] == frame_idx
+                    ),
+                    None,
                 )
 
                 if frame_data:
@@ -773,21 +819,29 @@ def process_mediapipe_pose(video_path, output_dir, tracking_data, params):
                     ret, frame = cap.read()
                     if not ret:
                         continue
-                    
+
                     bbox = frame_data["bbox"]
                     pose_estimator, _ = pose_manager.get_pose_estimator(bbox, object_id)
-                    
+
                     # Process the pose and get landmarks
-                    landmarks = process_single_pose(frame, bbox, pose_estimator, width, height)
-                    
+                    landmarks = process_single_pose(
+                        frame, bbox, pose_estimator, width, height
+                    )
+
                     if landmarks:
                         # Save normalized landmarks
-                        flat_landmarks_norm = [coord for landmark in landmarks for coord in landmark]
+                        flat_landmarks_norm = [
+                            coord for landmark in landmarks for coord in landmark
+                        ]
                         landmarks_norm_str = ",".join(
-                            "" if (isinstance(value, float) and np.isnan(value)) else f"{value:.6f}"
+                            (
+                                ""
+                                if (isinstance(value, float) and np.isnan(value))
+                                else f"{value:.6f}"
+                            )
                             for value in flat_landmarks_norm
                         )
-                        
+
                         # Calculate and save pixel landmarks
                         pixel_landmarks = []
                         for landmark in landmarks:
@@ -796,16 +850,22 @@ def process_mediapipe_pose(video_path, output_dir, tracking_data, params):
                             z = landmark[2]
                             vis = landmark[3]
                             pixel_landmarks.append([x_px, y_px, z, vis])
-                        
-                        flat_landmarks_pixel = [coord for landmark in pixel_landmarks for coord in landmark]
+
+                        flat_landmarks_pixel = [
+                            coord for landmark in pixel_landmarks for coord in landmark
+                        ]
                         landmarks_pixel_str = ",".join(
-                            "" if (isinstance(value, float) and np.isnan(value)) else str(value)
+                            (
+                                ""
+                                if (isinstance(value, float) and np.isnan(value))
+                                else str(value)
+                            )
                             for value in flat_landmarks_pixel
                         )
-                        
+
                         with open(norm_csv_path, "a") as f_norm:
                             f_norm.write(f"{frame_idx}," + landmarks_norm_str + "\n")
-                        
+
                         with open(pixel_csv_path, "a") as f_pixel:
                             f_pixel.write(f"{frame_idx}," + landmarks_pixel_str + "\n")
                     else:
@@ -816,11 +876,14 @@ def process_mediapipe_pose(video_path, output_dir, tracking_data, params):
                     # Write empty values for frames where the person was not detected
                     write_nan_row(norm_csv_path, frame_idx, 33)
                     write_nan_row(pixel_csv_path, frame_idx, 33)
-                
+
                 # Show progress
                 if frame_idx % 30 == 0:
-                    print(f"\rProcessing person {object_id}: {(frame_idx/total_frames)*100:.1f}% ({frame_idx}/{total_frames})", end="")
-            
+                    print(
+                        f"\rProcessing person {object_id}: {(frame_idx/total_frames)*100:.1f}% ({frame_idx}/{total_frames})",
+                        end="",
+                    )
+
             print(f"\nCompleted processing for person {object_id}")
 
     cap.release()
@@ -830,7 +893,7 @@ def process_mediapipe_pose(video_path, output_dir, tracking_data, params):
 def process_single_pose(frame, bbox, pose, width, height):
     """
     Process the pose for a single frame, drawing landmarks using proper pixel scaling.
-    
+
     Returns both normalized landmarks and pixel coordinates for saving to CSV files.
     The pixel coordinates are calculated as:
         x_px = int(landmark.x * frame_width)
@@ -846,12 +909,12 @@ def process_single_pose(frame, bbox, pose, width, height):
         y_px = int(landmark.y * height)
         # Draw a small circle at the landmark position
         cv2.circle(frame, (x_px, y_px), 2, (0, 255, 0), -1)
-    
+
     # Return the landmarks in normalized format
     landmarks = []
     for landmark in results.pose_landmarks.landmark:
         landmarks.append([landmark.x, landmark.y, landmark.z, landmark.visibility])
-    
+
     return landmarks
 
 
@@ -880,7 +943,7 @@ def create_visualization_video(video_path, output_dir, tracking_data, params):
             try:
                 df = pd.read_csv(pixel_csv_path)
                 # Convert the dataframe to a dictionary for quick frame access
-                pose_data[object_id] = df.set_index("frame_index").to_dict('index')
+                pose_data[object_id] = df.set_index("frame_index").to_dict("index")
                 print(f"Loaded pose data for person ID:{object_id}")
             except Exception as e:
                 print(f"Error loading pose data for person ID:{object_id}: {e}")
@@ -941,16 +1004,23 @@ def create_visualization_video(video_path, output_dir, tracking_data, params):
                     if class_id == 0 and object_id in pose_data:
                         # Get frame data from the pose CSV
                         frame_landmarks = pose_data[object_id].get(frame_idx)
-                        
+
                         if frame_landmarks:
                             landmarks = []
                             for i in range(33):  # MediaPipe Pose tem 33 landmarks
                                 try:
                                     x = frame_landmarks.get(f"landmark_{i}_x")
                                     y = frame_landmarks.get(f"landmark_{i}_y")
-                                    vis = frame_landmarks.get(f"landmark_{i}_visibility", 0.0)
-                                    
-                                    if x is not None and y is not None and not pd.isna(x) and not pd.isna(y):
+                                    vis = frame_landmarks.get(
+                                        f"landmark_{i}_visibility", 0.0
+                                    )
+
+                                    if (
+                                        x is not None
+                                        and y is not None
+                                        and not pd.isna(x)
+                                        and not pd.isna(y)
+                                    ):
                                         landmarks.append((int(x), int(y), vis))
                                     else:
                                         landmarks.append(None)
@@ -960,28 +1030,33 @@ def create_visualization_video(video_path, output_dir, tracking_data, params):
                             # Draw connections between landmarks
                             for connection in mp_pose.POSE_CONNECTIONS:
                                 start_idx, end_idx = connection
-                                if (landmarks[start_idx] is not None and 
-                                    landmarks[end_idx] is not None):
+                                if (
+                                    landmarks[start_idx] is not None
+                                    and landmarks[end_idx] is not None
+                                ):
                                     cv2.line(
                                         frame,
                                         landmarks[start_idx][:2],
                                         landmarks[end_idx][:2],
                                         (255, 255, 255),  # White connections
-                                        1
+                                        1,
                                     )
-                            
+
                             # Draw landmark points
                             for lm in landmarks:
                                 if lm is not None:
                                     cv2.circle(
-                                        frame, 
-                                        (int(lm[0]), int(lm[1])), 
+                                        frame,
+                                        (int(lm[0]), int(lm[1])),
                                         3,  # Larger size for better visibility
                                         (0, 0, 255),  # Red points
-                                        -1  # Filled circle
+                                        -1,  # Filled circle
                                     )
-                            
-                            print(f"\rDrawing pose for person ID:{object_id} on frame {frame_idx}", end="")
+
+                            print(
+                                f"\rDrawing pose for person ID:{object_id} on frame {frame_idx}",
+                                end="",
+                            )
 
             # Save the annotated frame
             frame_path = os.path.join(temp_dir, f"frame_{frame_idx:06d}.png")
@@ -1120,7 +1195,9 @@ def save_pose_to_csv(csv_path, frame_idx, person_id, landmarks_px):
         df.to_csv(csv_path, mode="a", header=False, index=False)
 
 
-def run_tracker_in_thread(model_path, video_source, tracker_config, save_output, output_dir, params):
+def run_tracker_in_thread(
+    model_path, video_source, tracker_config, save_output, output_dir, params
+):
     """
     Run YOLO tracker in its own thread for concurrent processing.
     Args:
@@ -1134,7 +1211,7 @@ def run_tracker_in_thread(model_path, video_source, tracker_config, save_output,
     # Each thread uses its own model instance
     model = YOLO(model_path)
     print(f"Started tracking for: {video_source}")
-    
+
     # Configure YOLO parameters
     model_params = {
         "conf": params["yolo_conf"],
@@ -1146,13 +1223,13 @@ def run_tracker_in_thread(model_path, video_source, tracker_config, save_output,
         "verbose": False,
         "tracker": tracker_config,
     }
-    
+
     # Dictionary to store tracking data
     tracking_data = {}  # Format: {class_id: {object_id: [frame_data]}}
-    
+
     # Process video with YOLO
     results = model.track(source=video_source, **model_params)
-    
+
     frame_idx = 0
     for result in results:
         if result.boxes.id is not None:
@@ -1173,9 +1250,17 @@ def run_tracker_in_thread(model_path, video_source, tracker_config, save_output,
                     # Create a CSV file for this object immediately
                     class_name = COCO_CLASSES.get(class_id, f"class_{class_id}")
                     csv_path = os.path.join(output_dir, f"{class_name}_{object_id}.csv")
-                    
+
                     # Initialize CSV with appropriate headers
-                    columns = ["frame", "object_id", "x1", "y1", "x2", "y2", "confidence"]
+                    columns = [
+                        "frame",
+                        "object_id",
+                        "x1",
+                        "y1",
+                        "x2",
+                        "y2",
+                        "confidence",
+                    ]
                     pd.DataFrame(columns=columns).to_csv(csv_path, index=False)
                     print(f" Created tracking CSV for {class_name} ID:{object_id}")
 
@@ -1187,11 +1272,11 @@ def run_tracker_in_thread(model_path, video_source, tracker_config, save_output,
                         "confidence": float(conf),
                     }
                 )
-                
+
                 # Save this detection to the object's CSV file immediately
                 class_name = COCO_CLASSES.get(class_id, f"class_{class_id}")
                 csv_path = os.path.join(output_dir, f"{class_name}_{object_id}.csv")
-                
+
                 # Prepare row data
                 x1, y1, x2, y2 = map(float, box.tolist())
                 row_data = {
@@ -1203,16 +1288,21 @@ def run_tracker_in_thread(model_path, video_source, tracker_config, save_output,
                     "y2": y2,
                     "confidence": float(conf),
                 }
-                
+
                 # Append to CSV
-                pd.DataFrame([row_data]).to_csv(csv_path, mode='a', header=False, index=False)
+                pd.DataFrame([row_data]).to_csv(
+                    csv_path, mode="a", header=False, index=False
+                )
 
         frame_idx += 1
         if frame_idx % 30 == 0:
-            print(f"\rProcessing {os.path.basename(video_source)}: frame {frame_idx}", end="")
-    
+            print(
+                f"\rProcessing {os.path.basename(video_source)}: frame {frame_idx}",
+                end="",
+            )
+
     print(f"\nFinished tracking for: {video_source}")
-    
+
     # Print summary of detected objects
     print(f"\nDetection Summary for {os.path.basename(video_source)}:")
     for class_id, objects in tracking_data.items():
@@ -1280,10 +1370,17 @@ def run_multithreaded_tracking():
         video_name = os.path.splitext(os.path.basename(video_file))[0]
         video_output_dir = os.path.join(output_dir, video_name)
         os.makedirs(video_output_dir, exist_ok=True)
-        
+
         t = threading.Thread(
             target=run_tracker_in_thread,
-            args=(model_path, video_file, tracker_config, save_output, video_output_dir, params),
+            args=(
+                model_path,
+                video_file,
+                tracker_config,
+                save_output,
+                video_output_dir,
+                params,
+            ),
             daemon=True,
         )
         threads.append(t)
@@ -1294,7 +1391,7 @@ def run_multithreaded_tracking():
 
     print("Multithreaded tracking complete.")
     print(f"All results saved to: {output_dir}")
-    
+
     # Try to open output folder
     try:
         if os.name == "nt":  # Windows
@@ -1303,7 +1400,7 @@ def run_multithreaded_tracking():
             subprocess.run(["xdg-open", output_dir])
     except Exception as e:
         print(f"Could not open the output directory: {e}")
-        
+
     root.destroy()
 
 
@@ -1411,16 +1508,16 @@ if __name__ == "__main__":
     # Print the script version and directory
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
-    
+
     # Get parameters first
     params = get_parameters_dialog()
     if not params:
         print("No parameters set. Exiting...")
         exit()
-    
+
     # Execute the selected processing mode
     selected_mode = params.get("selected_mode", "sequential")
-    
+
     if selected_mode == "sequential":
         print("Starting Sequential Processing mode...")
         run_markerless2d_mpyolo()

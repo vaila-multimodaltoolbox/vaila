@@ -45,6 +45,7 @@
 
  =============================================================================
 """
+
 import os
 from rich import print
 import json
@@ -64,6 +65,7 @@ from sklearn.metrics import (
 )
 from tkinter import Tk, filedialog, messagebox
 from tqdm import tqdm  # For progress bar
+
 # import argparse
 
 
@@ -156,7 +158,7 @@ def run_ml_valid_models():
     # Print the directory and name of the script being executed
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
-    
+
     # Get file paths using Tkinter
     print("Please select the feature dataset file for validation...")
     features_path = select_file(title="Select Feature Dataset (CSV)")
