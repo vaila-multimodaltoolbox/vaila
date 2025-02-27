@@ -49,10 +49,12 @@ from tkinter import filedialog, messagebox, simpledialog
 def check_ffmpeg_installed():
     """Check if FFmpeg is available on the system"""
     try:
-        subprocess.run(["ffmpeg", "-version"], 
-                      stdout=subprocess.PIPE, 
-                      stderr=subprocess.PIPE, 
-                      check=True)
+        subprocess.run(
+            ["ffmpeg", "-version"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True,
+        )
         return True
     except (subprocess.SubprocessError, FileNotFoundError):
         return False
@@ -248,32 +250,42 @@ def process_videos_gui():
     print("Starting video processing...")
 
     if not check_ffmpeg_installed():
-        messagebox.showerror("Error", "FFmpeg is not installed or not in PATH. Please install FFmpeg to use this feature.")
+        messagebox.showerror(
+            "Error",
+            "FFmpeg is not installed or not in PATH. Please install FFmpeg to use this feature.",
+        )
         return
 
     # Ask user to select one of the three options
-    operation = simpledialog.askstring(
-        "Operation", 
-        "Enter operation:\n'm' for merge (original+reverse)\n's' for split (keep second half)\n'multi' for multi-video merge"
-    ).strip().lower()
-    
+    operation = (
+        simpledialog.askstring(
+            "Operation",
+            "Enter operation:\n'm' for merge (original+reverse)\n's' for split (keep second half)\n'multi' for multi-video merge",
+        )
+        .strip()
+        .lower()
+    )
+
     if not operation or operation not in ["m", "s", "multi"]:
         messagebox.showerror(
             "Error",
             "Invalid operation selected. Please enter 'm', 's', or 'multi'.",
         )
         return
-    
+
     # For multi-video merge, call the new module
     if operation == "multi":
         try:
             from vaila import merge_multivideos
+
             merge_multivideos.run_merge_multivideos()
             return
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to start multi-video merger: {str(e)}")
+            messagebox.showerror(
+                "Error", f"Failed to start multi-video merger: {str(e)}"
+            )
             return
-    
+
     # For other operations, continue with existing code
     # Ask user to select source directory
     source_dir = filedialog.askdirectory(title="Select Source Directory")
@@ -288,15 +300,17 @@ def process_videos_gui():
         return
 
     # Ask if the user wants to use a text file with example format
-    txt_file_example = "Example format of videos_e_frames.txt:\n\nvideo1.mp4\nvideo2.mp4\nvideo3.mp4\n\n" + \
-                        "Each line should contain just the filename (if in source directory)\n" + \
-                        "or full path (if located elsewhere)"
+    txt_file_example = (
+        "Example format of videos_e_frames.txt:\n\nvideo1.mp4\nvideo2.mp4\nvideo3.mp4\n\n"
+        + "Each line should contain just the filename (if in source directory)\n"
+        + "or full path (if located elsewhere)"
+    )
     use_text_file = messagebox.askyesno(
         "Use Text File",
         f"Do you want to use a text file to specify videos to process?\n\n{txt_file_example}",
-        detail="Files will be processed in the order listed in the text file."
+        detail="Files will be processed in the order listed in the text file.",
     )
-    
+
     text_file_path = None
     if use_text_file:
         text_file_path = filedialog.askopenfilename(

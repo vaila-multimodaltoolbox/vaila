@@ -21,7 +21,6 @@ from tkinter import filedialog, Tk, messagebox
 from datetime import datetime
 
 
-
 def read_coordinates(file_path, usecols=None):
     df = pd.read_csv(file_path, usecols=usecols)
     coordinates = df.to_numpy()  # Não descartar NaN aqui
@@ -81,7 +80,7 @@ def main():
     # Print the directory and name of the script being executed
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
-    
+
     root = Tk()
     root.withdraw()
 

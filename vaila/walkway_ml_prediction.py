@@ -156,7 +156,7 @@ def predict_metrics(selected_metrics, valid_features, output_dir):
         return
 
     valid_features_numeric = valid_features[numeric_columns]
-    
+
     # After constructing valid_features_numeric, add:
     scaler_path = models_info[selected_metrics[0]]["scaler"]
 
@@ -167,8 +167,10 @@ def predict_metrics(selected_metrics, valid_features, output_dir):
                 scaler_params = json.load(f)
             mean = np.array(scaler_params.get("mean", []))
             scale = np.array(scaler_params.get("scale", []))
-            if (len(mean) == valid_features_numeric.shape[1] and
-                    len(scale) == valid_features_numeric.shape[1]):
+            if (
+                len(mean) == valid_features_numeric.shape[1]
+                and len(scale) == valid_features_numeric.shape[1]
+            ):
                 valid_features_scaled = (valid_features_numeric - mean) / scale
             else:
                 print("Mismatch in scaler parameters. Using unscaled features.")
@@ -179,7 +181,7 @@ def predict_metrics(selected_metrics, valid_features, output_dir):
     else:
         print("Scaler parameters not found. Using unscaled features.")
         valid_features_scaled = valid_features_numeric.copy()
-    
+
     # Converter DataFrame para array NumPy antes de passar para o modelo
     X_input = valid_features_scaled.to_numpy()
 
@@ -189,7 +191,7 @@ def predict_metrics(selected_metrics, valid_features, output_dir):
         model_path = models_info[metric]["model"]
         # Load the model from its file path
         model = joblib.load(model_path)
-        
+
         if hasattr(model, "predict"):
             y_pred = model.predict(X_input)
             results[metric] = y_pred
@@ -200,7 +202,14 @@ def predict_metrics(selected_metrics, valid_features, output_dir):
         results_df = pd.DataFrame(results)
 
         # Criar DataFrame com as colunas ignoradas (ex.: subject_name, trial_number, etc.)
-        ignored_columns = valid_features.loc[:, [col for col in valid_features.columns if col.strip().lower() in columns_to_ignore]]
+        ignored_columns = valid_features.loc[
+            :,
+            [
+                col
+                for col in valid_features.columns
+                if col.strip().lower() in columns_to_ignore
+            ],
+        ]
 
         # Adicionar as colunas ignoradas existentes ao DataFrame de resultados
         if not ignored_columns.empty:
@@ -236,9 +245,21 @@ def run_prediction(selected_metrics=None):
         return
 
     valid_features_df = pd.read_csv(feature_file)
-    columns_to_ignore = ["subject_name", "trial_number", "participant", "trial", "step_block"]
-    numeric_columns = [col for col in valid_features_df.columns if col.strip().lower() not in columns_to_ignore]
-    valid_features_df = valid_features_df[numeric_columns].apply(pd.to_numeric, errors='coerce')
+    columns_to_ignore = [
+        "subject_name",
+        "trial_number",
+        "participant",
+        "trial",
+        "step_block",
+    ]
+    numeric_columns = [
+        col
+        for col in valid_features_df.columns
+        if col.strip().lower() not in columns_to_ignore
+    ]
+    valid_features_df = valid_features_df[numeric_columns].apply(
+        pd.to_numeric, errors="coerce"
+    )
 
     print("Metrics selected for prediction:", selected_metrics)  # Print para depuração
 

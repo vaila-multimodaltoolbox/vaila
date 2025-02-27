@@ -143,7 +143,7 @@ try:
         cutvideo,
         vaila_distortvideo_gui,
         viewc3d,
-        )
+    )
 
     TRACKING_AVAILABLE = True
     from vaila import yolov11track
@@ -585,7 +585,6 @@ class Vaila(tk.Tk):
             width=button_width,
             command=self.vector_coding,
         )
-
 
         # B2_r2_c2 - EMG
         emg_analysis_btn = tk.Button(
@@ -1303,6 +1302,7 @@ class Vaila(tk.Tk):
         """
         # Importar diretamente do arquivo run_vector_coding.py
         from vaila.run_vector_coding import run_vector_coding
+
         run_vector_coding()
 
     # B_r2_c2
@@ -1600,6 +1600,7 @@ class Vaila(tk.Tk):
 
         """
         from vaila import rec3d_one_dlt3d
+
         rec3d_one_dlt3d.run_rec3d_one_dlt3d()
 
     # C_A_r3_c3 - for multi dlts in rows
@@ -1804,7 +1805,7 @@ class Vaila(tk.Tk):
         - ESC: Save and exit
         """
         cutvideo.main()
-    
+
     def resize_video(self):
         """Runs the video resizing module.
 
@@ -1814,8 +1815,8 @@ class Vaila(tk.Tk):
         and end indices for analysis.
         """
         from vaila import resize_video
-        resize_video.run_resize_video()
 
+        resize_video.run_resize_video()
 
     # C_C_r1_c1
     def show_c3d_data(self):
