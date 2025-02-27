@@ -46,6 +46,18 @@ import subprocess
 from tkinter import filedialog, messagebox, simpledialog
 
 
+def check_ffmpeg_installed():
+    """Check if FFmpeg is available on the system"""
+    try:
+        subprocess.run(["ffmpeg", "-version"], 
+                      stdout=subprocess.PIPE, 
+                      stderr=subprocess.PIPE, 
+                      check=True)
+        return True
+    except (subprocess.SubprocessError, FileNotFoundError):
+        return False
+
+
 def process_videos_merge(
     source_dir, target_dir, use_text_file=False, text_file_path=None
 ):
@@ -235,6 +247,10 @@ def process_videos_gui():
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
     print("Starting video processing...")
 
+    if not check_ffmpeg_installed():
+        messagebox.showerror("Error", "FFmpeg is not installed or not in PATH. Please install FFmpeg to use this feature.")
+        return
+
     # Ask user to select one of the three options
     operation = simpledialog.askstring(
         "Operation", 
@@ -251,8 +267,8 @@ def process_videos_gui():
     # For multi-video merge, call the new module
     if operation == "multi":
         try:
-            from vaila import merge_multvideos
-            merge_multvideos.run_merge_multivideos()
+            from vaila import merge_multivideos
+            merge_multivideos.run_merge_multivideos()
             return
         except Exception as e:
             messagebox.showerror("Error", f"Failed to start multi-video merger: {str(e)}")
