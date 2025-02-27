@@ -235,6 +235,30 @@ def process_videos_gui():
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
     print("Starting video processing...")
 
+    # Ask user to select one of the three options
+    operation = simpledialog.askstring(
+        "Operation", 
+        "Enter operation:\n'm' for merge (original+reverse)\n's' for split (keep second half)\n'multi' for multi-video merge"
+    ).strip().lower()
+    
+    if not operation or operation not in ["m", "s", "multi"]:
+        messagebox.showerror(
+            "Error",
+            "Invalid operation selected. Please enter 'm', 's', or 'multi'.",
+        )
+        return
+    
+    # For multi-video merge, call the new module
+    if operation == "multi":
+        try:
+            from vaila import merge_multvideos
+            merge_multvideos.run_merge_multivideos()
+            return
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to start multi-video merger: {str(e)}")
+            return
+    
+    # For other operations, continue with existing code
     # Ask user to select source directory
     source_dir = filedialog.askdirectory(title="Select Source Directory")
     if not source_dir:
@@ -247,24 +271,16 @@ def process_videos_gui():
         messagebox.showerror("Error", "No target directory selected.")
         return
 
-    # Ask user to select the operation (Merge or Split)
-    operation = (
-        simpledialog.askstring("Operation", "Enter 'm' for merge or 's' for split:")
-        .strip()
-        .lower()
-    )
-    if not operation or operation not in ["m", "s"]:
-        messagebox.showerror(
-            "Error",
-            "Invalid operation selected. Please enter 'm' for merge or 's' for split.",
-        )
-        return
-
-    # Ask if the user wants to use a text file
+    # Ask if the user wants to use a text file with example format
+    txt_file_example = "Example format of videos_e_frames.txt:\n\nvideo1.mp4\nvideo2.mp4\nvideo3.mp4\n\n" + \
+                        "Each line should contain just the filename (if in source directory)\n" + \
+                        "or full path (if located elsewhere)"
     use_text_file = messagebox.askyesno(
         "Use Text File",
-        "Do you want to use a text file (videos_e_frames.txt) to specify videos to process?",
+        f"Do you want to use a text file to specify videos to process?\n\n{txt_file_example}",
+        detail="Files will be processed in the order listed in the text file."
     )
+    
     text_file_path = None
     if use_text_file:
         text_file_path = filedialog.askopenfilename(
