@@ -1,6 +1,10 @@
 """
 File: readc3d_export.py
 
+Version: 0.1.9
+Date: February 2025
+Author: Prof. Paulo Santiago
+
 Description:
 This script processes .c3d files, extracting marker data, analog data, events, and points residuals,
 and saves them into CSV files. It also allows the option to save the data in Excel format.
@@ -17,19 +21,19 @@ Features:
 - Generates an info file containing metadata about markers, analogs, and their units.
 - Generates a simplified short info file with key parameters and headers.
 - Handles encoding errors to avoid crashes due to unexpected characters.
+- Extracts and saves force platform data including Center of Pressure (COP) from the C3D file into CSV files.
+- Saves the COP data in a combined CSV file with time columns and platform indices.
+- Saves a summary file with platform information.
 
 Dependencies:
-- Python 3.x
+- Python 3.12.9
 - ezc3d
 - Pandas
 - Tkinter
 - Tqdm
 - Numpy
 - Openpyxl (optional, for saving Excel files)
-
-Version: 1.8
-Date: October 2024
-Author: Prof. Paulo Santiago
+- Rich (optional, for console output)
 
 Usage:
 - Run the script, select the input directory containing .c3d files, and specify an output directory.
@@ -37,13 +41,20 @@ Usage:
 - The script will process each .c3d file in the input directory and save the results in the specified output directory.
 
 Example:
+Windows:
 $ python readc3d_export.py
+
+Linux:
+$ python3 readc3d_export.py
+
+macOS:
+$ python3 readc3d_export.py
 
 Notes:
 - Ensure that all necessary libraries are installed.
 - This script is designed to handle large datasets efficiently, but saving to Excel format may take significant time depending on the dataset size.
-- The cálculo e a exportação dos dados de COP foram removidos deste script.
-  O processamento do COP será realizado posteriormente no script cop_calculate.py.
+- The calculation and export of COP data were removed from this script.
+  The COP processing will be performed later in the cop_calculate.py script.
 """
 
 import os
@@ -123,7 +134,7 @@ def save_events(datac3d, file_name, output_dir):
     """
     print(f"Saving events for {file_name}")
 
-    # Verificar se os parâmetros necessários para eventos estão disponíveis
+    # Verify if the necessary parameters for events are available
     if "EVENT" not in datac3d["parameters"]:
         print(f"No events found for {file_name}, saving empty file.")
         save_empty_file(os.path.join(output_dir, f"{file_name}_events.csv"))
@@ -136,13 +147,13 @@ def save_events(datac3d, file_name, output_dir):
         save_empty_file(os.path.join(output_dir, f"{file_name}_events.csv"))
         return
 
-    # Coletar os dados de eventos
+    # Collect the event data
     event_contexts = event_params["CONTEXTS"]["value"]
     event_labels = event_params["LABELS"]["value"]
-    event_times = event_params["TIMES"]["value"][1, :]  # Apenas os tempos (linha 1)
+    event_times = event_params["TIMES"]["value"][1, :]  # Only the times (line 1)
     marker_freq = datac3d["header"]["points"]["frame_rate"]
 
-    # Construir os dados de eventos
+    # Build the event data
     events_data = []
     for context, label, time in zip(event_contexts, event_labels, event_times):
         frame = int(round(time * marker_freq))
@@ -150,7 +161,7 @@ def save_events(datac3d, file_name, output_dir):
             {"Context": context, "Label": label, "Time": time, "Frame": frame}
         )
 
-    # Salvar para um arquivo CSV
+    # Save to a CSV file
     events_df = pd.DataFrame(events_data)
     events_file_path = os.path.join(output_dir, f"{file_name}_events.csv")
     events_df.to_csv(events_file_path, index=False)
@@ -165,7 +176,8 @@ def importc3d(dat):
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
 
-    datac3d = c3d(dat)
+    # Load the C3D file with force platform data extraction
+    datac3d = c3d(dat, extract_forceplat_data=True)
     print(f"\nProcessing file: {dat}")
     print(f'Number of markers = {datac3d["parameters"]["POINT"]["USED"]["value"][0]}')
 
@@ -189,10 +201,15 @@ def importc3d(dat):
     marker_freq = datac3d["header"]["points"]["frame_rate"]
     analog_freq = datac3d["header"]["analogs"]["frame_rate"]
 
+    # Check for force platform data
+    has_platforms = "platform" in datac3d["data"]
+    num_platforms = len(datac3d["data"]["platform"]) if has_platforms else 0
+
     # Print summary information
     num_analog_channels = datac3d["parameters"]["ANALOG"]["USED"]["value"][0]
     print(f"Number of marker labels = {len(marker_labels)}")
     print(f"Number of analog channels = {num_analog_channels}")
+    print(f"Number of force platforms = {num_platforms}")
     print(f"Marker frequency = {marker_freq} Hz")
     print(f"Analog frequency = {analog_freq} Hz")
 
@@ -218,6 +235,180 @@ def save_empty_file(file_path):
         f.write("")
 
 
+def save_platform_data(datac3d, file_name, output_dir):
+    """
+    Save force platform data including Center of Pressure (COP) from the C3D file into CSV files.
+    """
+    print(f"Checking for platform data in {file_name}")
+
+    if "platform" not in datac3d["data"] or not datac3d["data"]["platform"]:
+        print(f"No force platform data found for {file_name}")
+        save_empty_file(os.path.join(output_dir, f"{file_name}_cop_all.csv"))
+        return
+
+    platforms = datac3d["data"]["platform"]
+    num_platforms = len(platforms)
+    print(f"Found {num_platforms} force platforms for {file_name}")
+
+    # Get analog frequency for time column
+    analog_freq = datac3d["header"]["analogs"]["frame_rate"]
+
+    # Prepare combined dataframe for all COPs
+    all_cop_data = []
+    max_frames = 0
+
+    # Process each platform
+    for platform_idx, platform in enumerate(platforms):
+        print(f"Processing platform {platform_idx} for {file_name}")
+
+        # Extract and save center of pressure data
+        if "center_of_pressure" in platform:
+            cop_data = platform["center_of_pressure"]
+            num_frames = cop_data.shape[1]
+            max_frames = max(max_frames, num_frames)
+
+            # Create DataFrame with time and cop x, y, z
+            time_values = [f"{i / analog_freq:.3f}" for i in range(num_frames)]
+
+            cop_df = pd.DataFrame(
+                {
+                    "Time": time_values,
+                    f"COP_X_P{platform_idx}": cop_data[0, :],
+                    f"COP_Y_P{platform_idx}": cop_data[1, :],
+                    f"COP_Z_P{platform_idx}": cop_data[2, :],
+                }
+            )
+
+            # Save individual platform COP data to CSV
+            cop_file_path = os.path.join(
+                output_dir, f"{file_name}_platform{platform_idx}_cop.csv"
+            )
+            cop_df.to_csv(cop_file_path, index=False)
+            print(f"COP data saved to: {cop_file_path}")
+
+            # Add to combined data
+            all_cop_data.append({"platform": platform_idx, "data": cop_data})
+
+        # Extract and save force data
+        if "force" in platform:
+            force_data = platform["force"]
+
+            # Create DataFrame with time and force x, y, z
+            num_frames = force_data.shape[1]
+            time_values = [f"{i / analog_freq:.3f}" for i in range(num_frames)]
+
+            force_df = pd.DataFrame(
+                {
+                    "Time": time_values,
+                    "Force_X": force_data[0, :],
+                    "Force_Y": force_data[1, :],
+                    "Force_Z": force_data[2, :],
+                }
+            )
+
+            # Save to CSV
+            force_file_path = os.path.join(
+                output_dir, f"{file_name}_platform{platform_idx}_force.csv"
+            )
+            force_df.to_csv(force_file_path, index=False)
+            print(f"Force data saved to: {force_file_path}")
+
+        # Extract and save moment data
+        if "moment" in platform:
+            moment_data = platform["moment"]
+
+            # Create DataFrame with time and moment x, y, z
+            num_frames = moment_data.shape[1]
+            time_values = [f"{i / analog_freq:.3f}" for i in range(num_frames)]
+
+            moment_df = pd.DataFrame(
+                {
+                    "Time": time_values,
+                    "Moment_X": moment_data[0, :],
+                    "Moment_Y": moment_data[1, :],
+                    "Moment_Z": moment_data[2, :],
+                }
+            )
+
+            # Save to CSV
+            moment_file_path = os.path.join(
+                output_dir, f"{file_name}_platform{platform_idx}_moment.csv"
+            )
+            moment_df.to_csv(moment_file_path, index=False)
+            print(f"Moment data saved to: {moment_file_path}")
+
+    # Create combined COP CSV with data from all platforms
+    if all_cop_data:
+        # Create time column
+        time_values = [f"{i / analog_freq:.3f}" for i in range(max_frames)]
+        combined_cop = {"Time": time_values}
+
+        # Add data from each platform
+        for platform_data in all_cop_data:
+            platform_idx = platform_data["platform"]
+            cop_data = platform_data["data"]
+            num_frames = cop_data.shape[1]
+
+            # Add columns for this platform
+            combined_cop[f"P{platform_idx}_COP_X"] = np.pad(
+                cop_data[0, :],
+                (0, max_frames - num_frames),
+                "constant",
+                constant_values=np.nan,
+            )
+            combined_cop[f"P{platform_idx}_COP_Y"] = np.pad(
+                cop_data[1, :],
+                (0, max_frames - num_frames),
+                "constant",
+                constant_values=np.nan,
+            )
+            combined_cop[f"P{platform_idx}_COP_Z"] = np.pad(
+                cop_data[2, :],
+                (0, max_frames - num_frames),
+                "constant",
+                constant_values=np.nan,
+            )
+
+        # Save combined COP data
+        combined_cop_df = pd.DataFrame(combined_cop)
+        combined_cop_path = os.path.join(output_dir, f"{file_name}_cop_all.csv")
+        combined_cop_df.to_csv(combined_cop_path, index=False)
+        print(f"Combined COP data saved to: {combined_cop_path}")
+
+    # Save a summary file with platform information
+    try:
+        platform_info_path = os.path.join(output_dir, f"{file_name}_platform_info.csv")
+        platform_info = []
+
+        for platform_idx, platform in enumerate(platforms):
+            if "origin" in platform and "corners" in platform:
+                origin = platform["origin"]
+                corners = platform["corners"]
+
+                platform_info.append(
+                    {
+                        "Platform": platform_idx,
+                        "Origin_X": origin[0],
+                        "Origin_Y": origin[1],
+                        "Origin_Z": origin[2],
+                        "Corner1_X": corners[0, 0],
+                        "Corner1_Y": corners[1, 0],
+                        "Corner2_X": corners[0, 1],
+                        "Corner2_Y": corners[1, 1],
+                        "Corner3_X": corners[0, 2],
+                        "Corner3_Y": corners[1, 2],
+                        "Corner4_X": corners[0, 3],
+                        "Corner4_Y": corners[1, 3],
+                    }
+                )
+
+        if platform_info:
+            pd.DataFrame(platform_info).to_csv(platform_info_path, index=False)
+            print(f"Platform information saved to: {platform_info_path}")
+    except Exception as e:
+        print(f"Error saving platform information: {e}")
+
+
 def save_to_files(
     markers,
     marker_labels,
@@ -233,16 +424,16 @@ def save_to_files(
     datac3d,
 ):
     """
-    Salva os dados extraídos em arquivos CSV e .info dentro de um diretório
-    criado para o arquivo específico, dentro do diretório de salvamento da execução.
+    Save the extracted data to CSV files and .info files within a specific directory
+    created for the specific file, within the execution save directory.
     """
     print(f"Saving data to files for {file_name}")
-    # Cria uma subpasta para o arquivo dentro do diretório de salvamento
+    # Create a subfolder for the file within the execution save directory
     file_dir = os.path.join(run_save_dir, file_name)
     os.makedirs(file_dir, exist_ok=True)
     print(f"Directory created: {file_dir}")
 
-    # Salva arquivo .info detalhado e o arquivo .info resumido
+    # Save detailed .info file and the short .info file
     save_info_file(datac3d, file_name, file_dir)
     save_short_info_file(
         marker_labels,
@@ -253,8 +444,11 @@ def save_to_files(
         file_dir,
         file_name,
     )
-    # Salva eventos
+    # Save events
     save_events(datac3d, file_name, file_dir)
+
+    # Save force platform data
+    save_platform_data(datac3d, file_name, file_dir)
 
     # Prepare marker columns
     marker_columns = [
@@ -333,6 +527,30 @@ def save_to_files(
                     writer, sheet_name="Points Residuals", index=False
                 )
 
+            # Add platform data to Excel if available
+            if "platform" in datac3d["data"] and datac3d["data"]["platform"]:
+                for platform_idx, platform in enumerate(datac3d["data"]["platform"]):
+                    if "center_of_pressure" in platform:
+                        cop_data = platform["center_of_pressure"]
+                        num_frames = cop_data.shape[1]
+                        time_values = [
+                            f"{i / analog_freq:.3f}" for i in range(num_frames)
+                        ]
+
+                        cop_df = pd.DataFrame(
+                            {
+                                "Time": time_values,
+                                "COP_X": cop_data[0, :],
+                                "COP_Y": cop_data[1, :],
+                                "COP_Z": cop_data[2, :],
+                            }
+                        )
+                        cop_df.to_excel(
+                            writer,
+                            sheet_name=f"Platform{platform_idx}_COP",
+                            index=False,
+                        )
+
     print(f"Files for {file_name} saved successfully!")
     return file_dir
 
@@ -359,7 +577,7 @@ def convert_c3d_to_csv():
     output_directory = filedialog.askdirectory(title="Select Output Directory")
     print(f"Debug: output_directory = {output_directory}")
 
-    root.destroy()  # Fecha os recursos do Tkinter
+    root.destroy()  # Close the Tkinter resources
 
     if input_directory and output_directory:
         c3d_files = sorted(
@@ -367,9 +585,11 @@ def convert_c3d_to_csv():
         )
         print(f"Found {len(c3d_files)} .c3d files in the input directory.")
 
-        # Cria o diretório raiz para salvamento com timestamp no nome
+        # Create the root directory for saving with timestamp in the name
         run_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        run_save_dir = os.path.join(output_directory, f"vaila_c3d_to_csv_{run_timestamp}")
+        run_save_dir = os.path.join(
+            output_directory, f"vaila_c3d_to_csv_{run_timestamp}"
+        )
         os.makedirs(run_save_dir, exist_ok=True)
         print(f"Run-level save directory created: {run_save_dir}")
 
@@ -393,7 +613,7 @@ def convert_c3d_to_csv():
                     datac3d,
                 ) = importc3d(file_path)
                 file_name = os.path.splitext(c3d_file)[0]
-                # Salva os dados extraídos em arquivos CSV e .info dentro do diretório de salvamento da execução
+                # Save the extracted data in CSV files and .info files within the execution save directory
                 out_dir = save_to_files(
                     markers,
                     marker_labels,
