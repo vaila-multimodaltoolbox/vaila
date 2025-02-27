@@ -61,6 +61,10 @@ class VideoMergeApp:
         self.video_files = []  # List to store the selected video paths
         self.output_dir = ""   # Output directory
         
+        # Create style for selected frame
+        self.style = ttk.Style()
+        self.style.configure("Selected.TFrame", background="#ADD8E6")  # Light blue background
+        
         # Create main frame
         self.main_frame = ttk.Frame(root, padding="10")
         self.main_frame.pack(fill=tk.BOTH, expand=True)
@@ -255,8 +259,16 @@ class VideoMergeApp:
         
         # Create a frame for each video
         for i, video_path in enumerate(self.video_files):
-            frame = ttk.Frame(self.scrollable_frame)
-            frame.pack(fill=tk.X, pady=2)
+            # Use tk.Frame instead of ttk.Frame for better styling control
+            frame = tk.Frame(self.scrollable_frame, bd=1, relief=tk.FLAT)
+            frame.pack(fill=tk.X, pady=2, padx=2)
+            
+            # Add selection indicator
+            self.selection_indicator = tk.Label(frame, text="►", fg="blue", width=2)
+            self.selection_indicator.pack(side=tk.LEFT, padx=(2, 0))
+            # Hide the indicator initially
+            if self.selected_index != i:
+                self.selection_indicator.pack_forget()
             
             # Add video index and name
             index_label = ttk.Label(frame, text=f"{i+1}.", width=3)
@@ -277,13 +289,31 @@ class VideoMergeApp:
         """Handle selection of a video in the list"""
         # Clear previous selection
         if self.selected_index is not None and 0 <= self.selected_index < len(self.video_frames):
-            self.video_frames[self.selected_index].configure(style="")
+            self.video_frames[self.selected_index].config(bg=self.root.cget("bg"), bd=1, relief=tk.FLAT)
+            # Remove all selection indicators from previous selected frame
+            for widget in self.video_frames[self.selected_index].winfo_children():
+                if isinstance(widget, tk.Label) and widget.cget("text") == "►":
+                    widget.pack_forget()
         
         self.selected_index = index
         
         # Highlight new selection
         if 0 <= index < len(self.video_frames):
-            self.video_frames[index].configure(style="Selected.TFrame")
+            # Set border and background
+            self.video_frames[index].config(bg="#e6f2ff", bd=1, relief=tk.RAISED)
+            
+            # Add selection indicator
+            selection_indicator = None
+            for widget in self.video_frames[index].winfo_children():
+                if isinstance(widget, tk.Label) and widget.cget("text") == "►":
+                    selection_indicator = widget
+                    break
+            
+            if selection_indicator:
+                selection_indicator.pack(side=tk.LEFT, padx=(2, 0), before=self.video_frames[index].winfo_children()[1])
+        
+        # Print debug info
+        print(f"Selected video at index {index}")
     
     def move_up(self):
         """Move the selected video up in the list"""
