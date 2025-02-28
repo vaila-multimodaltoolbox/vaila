@@ -10,8 +10,8 @@ can be used for batch processing of videos in a directory.
 
 Version:
 --------
-0.0.2
-date: 2025-01-22
+0.0.3
+date: 2025-02-28
 
 Author:
 -------
@@ -25,6 +25,7 @@ Version History:
 ----------------
 - v1.0 (2024-08-12): Initial version with support for adding boxes to videos and extracting frames.
 - v0.0.2 (2025-01-22): Added draw shape trapezoid.
+- v0.0.3 (2025-02-28): Fixed bug when selecting trapezoid shape.
 
 Contact:
 --------
@@ -36,7 +37,7 @@ Contributions are welcome. Please follow the contribution guidelines provided in
 
 Dependencies:
 -------------
-- Python 3.12.8 (Anaconda environment)
+- Python 3.12.9 (Anaconda environment)
 - os
 - ffmpeg (installed via Conda or available in PATH)
 - matplotlib
@@ -329,6 +330,7 @@ def run_drawboxe():
     # Print the directory and name of the script being executed
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+
     root = tk.Tk()
     root.withdraw()
 

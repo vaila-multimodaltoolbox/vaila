@@ -20,7 +20,7 @@
 #   installed via conda-forge.
 #
 # Dependencies:
-# - Python 3.11.8
+# - Python 3.12.9
 # - Tkinter (included with Python)
 # - FFmpeg (installed via Conda or available in PATH)
 #
