@@ -1,8 +1,8 @@
 """
 File: readc3d_export.py
 
-Version: 0.1.9
-Date: February 2025
+Updated Version: 0.2.0
+Date: 28 February 2025
 Author: Prof. Paulo Santiago
 
 Description:
@@ -24,6 +24,9 @@ Features:
 - Extracts and saves force platform data including Center of Pressure (COP) from the C3D file into CSV files.
 - Saves the COP data in a combined CSV file with time columns and platform indices.
 - Saves a summary file with platform information.
+- Saves a summary file with marker information.
+- Saves a summary file with analog information.
+- Saves a summary file with points residuals information.
 
 Dependencies:
 - Python 3.12.9
@@ -34,6 +37,13 @@ Dependencies:
 - Numpy
 - Openpyxl (optional, for saving Excel files)
 - Rich (optional, for console output)
+
+Contact:
+- Paulo Roberto Pereira Santiago
+- paulosantiago@usp.br
+
+Version history:
+- v0.2.0 (28 February 2025): Added support for saving COP data in a combined CSV file.  
 
 Usage:
 - Run the script, select the input directory containing .c3d files, and specify an output directory.
@@ -54,7 +64,22 @@ Notes:
 - Ensure that all necessary libraries are installed.
 - This script is designed to handle large datasets efficiently, but saving to Excel format may take significant time depending on the dataset size.
 - The calculation and export of COP data were removed from this script.
-  The COP processing will be performed later in the cop_calculate.py script.
+- The COP processing will be performed later in the cop_calculate.py script.
+
+License:
+- This script is licensed under the GNU General Public License v3.0. GPLv3.
+- If you use this script, please cite the following paper:
+
+Citation:
+@misc{vaila2024,
+  title={vailá - Versatile Anarcho Integrated Liberation Ánalysis in Multimodal Toolbox},
+  author={Paulo Roberto Pereira Santiago and Guilherme Manna Cesar and Ligia Yumi Mochida and Juan Aceros and others},
+  year={2024},
+  eprint={2410.07238},
+  archivePrefix={arXiv},
+  primaryClass={cs.HC},
+  url={https://arxiv.org/abs/2410.07238}
+}
 """
 
 import os
@@ -409,6 +434,212 @@ def save_platform_data(datac3d, file_name, output_dir):
         print(f"Error saving platform information: {e}")
 
 
+def save_rotation_data(datac3d, file_name, output_dir):
+    """Save rotation data if available in the C3D file"""
+    print(f"Checking for rotation data in {file_name}")
+
+    rotations = datac3d["header"]["rotations"]
+    if rotations["size"] > 0 and "rotations" in datac3d["data"]:
+        rotation_data = datac3d["data"]["rotations"]
+        # Process and save rotation data...
+        rotation_df = pd.DataFrame(rotation_data)
+        rotation_path = os.path.join(output_dir, f"{file_name}_rotations.csv")
+        rotation_df.to_csv(rotation_path, index=False)
+        print(f"Rotation data saved to: {rotation_path}")
+    else:
+        print(f"No rotation data found for {file_name}")
+        save_empty_file(os.path.join(output_dir, f"{file_name}_rotations.csv"))
+
+
+def save_meta_points_data(datac3d, file_name, output_dir):
+    """Save all meta_points data from the C3D file"""
+    print(f"Checking for meta_points data in {file_name}")
+
+    if "meta_points" in datac3d["data"]:
+        meta_points = datac3d["data"]["meta_points"]
+        marker_freq = datac3d["header"]["points"]["frame_rate"]
+
+        # Already saving residuals, check for other metadata
+        for meta_key, meta_data in meta_points.items():
+            if meta_key != "residuals":  # Skip residuals as it's already saved
+                print(f"Processing meta_points {meta_key}, shape: {meta_data.shape}")
+
+                try:
+                    # Handle different dimensions for meta_data
+                    if len(meta_data.shape) == 3:
+                        # For 3D data, save each "layer" separately
+                        for i in range(meta_data.shape[0]):
+                            layer_data = meta_data[
+                                i, :, :
+                            ].T  # Transpose to get frames as rows
+
+                            # Create time column
+                            time_values = [
+                                f"{j / marker_freq:.3f}"
+                                for j in range(layer_data.shape[0])
+                            ]
+
+                            # Create DataFrame with appropriate column names
+                            cols = [
+                                f"{meta_key}_{i}_{j}"
+                                for j in range(layer_data.shape[1])
+                            ]
+                            df = pd.DataFrame(layer_data, columns=cols)
+                            df.insert(0, "Time", time_values)
+
+                            # Save to CSV
+                            meta_path = os.path.join(
+                                output_dir, f"{file_name}_meta_{meta_key}_layer{i}.csv"
+                            )
+                            df.to_csv(meta_path, index=False)
+                            print(
+                                f"Meta points {meta_key} layer {i} saved to: {meta_path}"
+                            )
+
+                    elif len(meta_data.shape) == 2:
+                        # For 2D data, can convert directly
+                        time_values = [
+                            f"{j / marker_freq:.3f}" for j in range(meta_data.shape[1])
+                        ]
+                        df = pd.DataFrame(
+                            meta_data.T
+                        )  # Transpose to get frames as rows
+                        df.insert(0, "Time", time_values)
+                        meta_path = os.path.join(
+                            output_dir, f"{file_name}_meta_{meta_key}.csv"
+                        )
+                        df.to_csv(meta_path, index=False)
+                        print(f"Meta points {meta_key} saved to: {meta_path}")
+
+                    else:
+                        print(
+                            f"Skipping meta_points {meta_key}: unsupported shape {meta_data.shape}"
+                        )
+
+                except Exception as e:
+                    print(f"Error processing meta_points {meta_key}: {e}")
+
+
+def save_header_summary(datac3d, file_name, output_dir):
+    """Save a summary of all header information"""
+    print(f"Saving header summary for {file_name}")
+
+    header_path = os.path.join(output_dir, f"{file_name}_header.csv")
+
+    # Flatten header structure into rows
+    header_rows = []
+    for section, content in datac3d["header"].items():
+        if isinstance(content, dict):
+            for key, value in content.items():
+                header_rows.append(
+                    {"Section": section, "Property": key, "Value": str(value)}
+                )
+        else:
+            header_rows.append(
+                {"Section": section, "Property": "", "Value": str(content)}
+            )
+
+    pd.DataFrame(header_rows).to_csv(header_path, index=False)
+    print(f"Header summary saved to: {header_path}")
+
+
+def save_parameter_groups(datac3d, file_name, output_dir):
+    """Save important parameter groups to separate files for easy access"""
+    print(f"Saving parameter groups for {file_name}")
+
+    # Important parameter groups that users often need
+    key_groups = ["POINT", "ANALOG", "FORCE_PLATFORM", "TRIAL", "SUBJECT"]
+
+    for group in key_groups:
+        if group in datac3d["parameters"]:
+            group_path = os.path.join(output_dir, f"{file_name}_params_{group}.csv")
+
+            # Flatten parameter structure into rows
+            param_rows = []
+            for param, content in datac3d["parameters"][group].items():
+                if "value" in content:
+                    value = content["value"]
+                    # Convert arrays and lists to strings
+                    if isinstance(value, (np.ndarray, list, tuple)):
+                        try:
+                            # For numeric arrays, show shape and sample
+                            if isinstance(value, np.ndarray) and value.size > 10:
+                                value_str = f"Array shape {value.shape}, sample: {value.flatten()[:5]}..."
+                            else:
+                                value_str = str(value)
+                        except:
+                            value_str = "Array (could not convert to string)"
+                    else:
+                        value_str = str(value)
+
+                    param_rows.append(
+                        {
+                            "Parameter": param,
+                            "Value": value_str,
+                            "Description": content.get("description", ""),
+                        }
+                    )
+
+            if param_rows:
+                pd.DataFrame(param_rows).to_csv(group_path, index=False)
+                print(f"Parameter group {group} saved to: {group_path}")
+
+
+def save_data_statistics(datac3d, file_name, output_dir):
+    """Save statistics about the data in the C3D file"""
+    print(f"Calculating data statistics for {file_name}")
+
+    stats = {
+        "File": file_name,
+        "Markers_Count": datac3d["parameters"]["POINT"]["USED"]["value"][0],
+        "Analog_Channels": datac3d["parameters"]["ANALOG"]["USED"]["value"][0],
+        "Frame_Count": datac3d["header"]["points"]["last_frame"]
+        - datac3d["header"]["points"]["first_frame"]
+        + 1,
+        "First_Frame": datac3d["header"]["points"]["first_frame"],
+        "Last_Frame": datac3d["header"]["points"]["last_frame"],
+        "Duration_Seconds": (
+            datac3d["header"]["points"]["last_frame"]
+            - datac3d["header"]["points"]["first_frame"]
+            + 1
+        )
+        / datac3d["header"]["points"]["frame_rate"],
+        "Marker_Rate": datac3d["header"]["points"]["frame_rate"],
+        "Analog_Rate": datac3d["header"]["analogs"]["frame_rate"],
+        "Platforms_Count": (
+            len(datac3d["data"]["platform"]) if "platform" in datac3d["data"] else 0
+        ),
+    }
+
+    # Try to get more details if available
+    try:
+        if (
+            "TRIAL" in datac3d["parameters"]
+            and "ACTUAL_START_FIELD" in datac3d["parameters"]["TRIAL"]
+        ):
+            stats["Trial_Start"] = str(
+                datac3d["parameters"]["TRIAL"]["ACTUAL_START_FIELD"]["value"]
+            )
+        if (
+            "TRIAL" in datac3d["parameters"]
+            and "ACTUAL_END_FIELD" in datac3d["parameters"]["TRIAL"]
+        ):
+            stats["Trial_End"] = str(
+                datac3d["parameters"]["TRIAL"]["ACTUAL_END_FIELD"]["value"]
+            )
+        if (
+            "SUBJECT" in datac3d["parameters"]
+            and "NAME" in datac3d["parameters"]["SUBJECT"]
+        ):
+            stats["Subject"] = str(datac3d["parameters"]["SUBJECT"]["NAME"]["value"])
+    except:
+        pass
+
+    stats_path = os.path.join(output_dir, f"{file_name}_statistics.csv")
+    pd.DataFrame([stats]).to_csv(stats_path, index=False)
+    print(f"Data statistics saved to: {stats_path}")
+
+
 def save_to_files(
     markers,
     marker_labels,
@@ -449,6 +680,21 @@ def save_to_files(
 
     # Save force platform data
     save_platform_data(datac3d, file_name, file_dir)
+
+    # Save rotation data
+    save_rotation_data(datac3d, file_name, file_dir)
+
+    # Save meta_points data
+    save_meta_points_data(datac3d, file_name, file_dir)
+
+    # Save header summary
+    save_header_summary(datac3d, file_name, file_dir)
+
+    # Save parameter groups
+    save_parameter_groups(datac3d, file_name, file_dir)
+
+    # Save data statistics
+    save_data_statistics(datac3d, file_name, file_dir)
 
     # Prepare marker columns
     marker_columns = [
@@ -641,6 +887,24 @@ def convert_c3d_to_csv():
     else:
         print("Input or output directory not selected.")
         messagebox.showwarning("Warning", "Input or output directory not selected.")
+
+
+def print_complete_data_structure(data, prefix=""):
+    """Recursively explore and print all data structure keys and shapes"""
+    if isinstance(data, dict):
+        for key, value in data.items():
+            if isinstance(value, (dict, list, np.ndarray)):
+                print(f"{prefix}{key}: {type(value)}")
+                print_complete_data_structure(value, prefix + "  ")
+            else:
+                print(f"{prefix}{key}: {value}")
+    elif isinstance(data, list):
+        if len(data) > 0:
+            print(f"{prefix}[0]: {type(data[0])}")
+            if isinstance(data[0], dict):
+                print_complete_data_structure(data[0], prefix + "  ")
+    elif isinstance(data, np.ndarray):
+        print(f"{prefix}Shape: {data.shape}, Type: {data.dtype}")
 
 
 if __name__ == "__main__":
