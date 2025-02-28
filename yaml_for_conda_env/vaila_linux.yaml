@@ -66,6 +66,7 @@ dependencies:
       - imageio
       - imageio-ffmpeg
       - python-dotenv
+      - openpyxl
       - pygame
       - imufusion
       - PyQt5
