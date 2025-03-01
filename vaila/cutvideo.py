@@ -123,7 +123,9 @@ def play_video_with_cuts(video_path):
     screen = pygame.display.set_mode(
         (window_width, window_height + 80), pygame.RESIZABLE
     )
-    pygame.display.set_caption("Video Cutting Tool")
+    pygame.display.set_caption(
+        "Space:Play/Pause | ←→:Frame | S:Start | E:End | R:Reset | DEL:Remove | L:List | ESC:Save"
+    )
 
     # Initialize variables
     clock = pygame.time.Clock()
@@ -219,13 +221,163 @@ def play_video_with_cuts(video_path):
         # First save cuts to text file
         txt_path = save_cuts_to_txt(video_path, cuts)
 
+        # Garantir que o pygame está fechado
+        if pygame.get_init():
+            pygame.quit()
+            print("Pygame closed before video processing")
+
         # Ask if user wants to generate videos now
         if messagebox.askyesno(
             "Generate Videos",
             "Cuts saved to text file. Do you want to generate video files now?",
         ):
-            return save_cuts(video_path, cuts)
+            success = save_cuts(video_path, cuts)
+
+            # Ask if user wants to apply the same cuts to all videos in the directory
+            if success and messagebox.askyesno(
+                "Batch Processing",
+                "Do you want to apply these same cuts to all other videos in this directory?",
+            ):
+                batch_process_videos(video_path, cuts)
+
+            return success
         return True
+
+    def batch_process_videos(source_video_path, cuts):
+        """Apply the same cuts to all videos in the same directory."""
+        if not cuts:
+            messagebox.showinfo("Info", "No cuts to apply!")
+            return
+
+        # Get the directory of the source video
+        source_dir = Path(source_video_path).parent
+        source_name = Path(source_video_path).name
+
+        # Get all video files in the directory
+        video_extensions = [
+            ".mp4",
+            ".MP4",
+            ".avi",
+            ".AVI",
+            ".mov",
+            ".MOV",
+            ".mkv",
+            ".MKV",
+        ]
+        video_files = []
+
+        for ext in video_extensions:
+            video_files.extend(list(source_dir.glob(f"*{ext}")))
+
+        # Remove the source video from the list
+        video_files = [v for v in video_files if v.name != source_name]
+
+        if not video_files:
+            messagebox.showinfo("Info", "No other video files found in this directory.")
+            return
+
+        # Create a progress dialog
+        root = Tk()
+        root.title("Batch Processing")
+        root.geometry("400x150")
+
+        from tkinter import ttk
+
+        label = ttk.Label(root, text="Processing videos in batch...")
+        label.pack(pady=10)
+
+        progress = ttk.Progressbar(
+            root, orient="horizontal", length=300, mode="determinate"
+        )
+        progress.pack(pady=10)
+        progress["maximum"] = len(video_files)
+
+        status_label = ttk.Label(root, text="")
+        status_label.pack(pady=5)
+
+        # Create output directory
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_dir = source_dir / f"vailacut_batch_{timestamp}"
+        output_dir.mkdir(exist_ok=True)
+
+        processed_count = 0
+
+        def process_next_video():
+            nonlocal processed_count
+
+            if processed_count < len(video_files):
+                video_path = str(video_files[processed_count])
+                video_name = Path(video_path).stem
+
+                # Salvar informações de corte para cada vídeo processado
+                save_cuts_to_txt(video_path, cuts)
+
+                status_label.config(text=f"Processing: {video_name}")
+
+                try:
+                    # Get video properties
+                    cap = cv2.VideoCapture(video_path)
+                    if not cap.isOpened():
+                        status_label.config(text=f"Error opening: {video_name}")
+                        root.after(100, process_next_video)
+                        processed_count += 1
+                        progress["value"] = processed_count
+                        return
+
+                    fps = int(cap.get(cv2.CAP_PROP_FPS))
+                    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+                    # Process each cut
+                    for i, (start_frame, end_frame) in enumerate(cuts):
+                        # Skip if end frame is beyond video length
+                        if start_frame >= total_frames:
+                            continue
+
+                        # Adjust end frame if needed
+                        actual_end_frame = min(end_frame, total_frames - 1)
+
+                        output_path = (
+                            output_dir
+                            / f"{video_name}_frame_{start_frame}_to_{actual_end_frame}.mp4"
+                        )
+                        out = cv2.VideoWriter(
+                            str(output_path),
+                            cv2.VideoWriter_fourcc(*"mp4v"),
+                            fps,
+                            (width, height),
+                        )
+
+                        cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+                        for _ in range(actual_end_frame - start_frame + 1):
+                            ret, frame = cap.read()
+                            if not ret:
+                                break
+                            out.write(frame)
+
+                        out.release()
+
+                    cap.release()
+
+                except Exception as e:
+                    status_label.config(text=f"Error processing {video_name}: {str(e)}")
+
+                processed_count += 1
+                progress["value"] = processed_count
+                root.after(100, process_next_video)
+            else:
+                status_label.config(text="Batch processing complete!")
+                root.after(2000, root.destroy)
+
+        # Start processing
+        root.after(100, process_next_video)
+        root.mainloop()
+
+        messagebox.showinfo(
+            "Batch Complete",
+            f"Processed {processed_count} videos. Output saved to {output_dir}",
+        )
 
     def save_cuts(video_path, cuts):
         if not cuts:
