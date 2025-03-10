@@ -1,8 +1,9 @@
 """
 Script: dlt3d.py
-Author: Paulo Roberto Pereira Santana
-Version: 0.01
-Last Updated: 24 February, 2025
+Author: Paulo Roberto Pereira Santiago
+Version: 0.02
+Create: 24 February, 2025
+Last Updated: 10 March, 2025
 
 Description:
     This script calculates the Direct Linear Transformation (DLT) parameters for 3D coordinate transformations.
@@ -39,9 +40,29 @@ def read_pixel_file(file_path):
 def read_ref3d_file(file_path):
     """Reads the REF3D file and checks if the _z columns are present."""
     df = pd.read_csv(file_path)
-    # Expected to have 25 points with columns: p1_x, p1_y, p1_z, ..., p25_x, p25_y, p25_z
+    # Dynamically determine the number of points from the input file
+    # instead of hardcoding to 25 points
+    input_columns = list(df.columns)
+    
+    # Find all point columns (p1_x, p1_y, p2_x, p2_y, etc.)
+    point_columns = [col for col in input_columns if col.startswith('p') and ('_x' in col or '_y' in col)]
+    
+    # Determine the highest point number
+    point_numbers = set()
+    for col in point_columns:
+        # Extract the number from column names like "p1_x", "p20_y", etc.
+        if '_' in col:
+            parts = col.split('_')
+            if len(parts) >= 2:
+                point_num = parts[0][1:]  # Remove 'p' from 'p1', 'p20', etc.
+                if point_num.isdigit():
+                    point_numbers.add(int(point_num))
+    
+    num_points = max(point_numbers) if point_numbers else 0
+    
+    # Generate expected columns for the 3D reference file
     expected_columns = []
-    for i in range(1, 26):
+    for i in range(1, num_points + 1):
         expected_columns.extend([f"p{i}_x", f"p{i}_y", f"p{i}_z"])
     if not all(col in df.columns for col in expected_columns):
         print(
@@ -90,19 +111,34 @@ def process_files(pixel_file, ref3d_file):
     ref_df = read_ref3d_file(ref3d_file)
     if ref_df is None:
         return None
+    
+    # Determine the number of points from the pixel file columns
+    pixel_columns = list(pixel_df.columns)
+    point_columns = [col for col in pixel_columns if col.startswith('p') and ('_x' in col or '_y' in col)]
+    point_numbers = set()
+    for col in point_columns:
+        if '_' in col:
+            parts = col.split('_')
+            if len(parts) >= 2:
+                point_num = parts[0][1:]  # Remove 'p' from 'p1', 'p20', etc.
+                if point_num.isdigit():
+                    point_numbers.add(int(point_num))
+    
+    num_points = max(point_numbers) if point_numbers else 0
+    
     dlt_params_all = {}
     # If the REF3D file consists of only one row, use it for all frames:
     if len(ref_df) == 1:
         ref_coords_arr = []
         ref_line = ref_df.iloc[0]
-        for i in range(1, 26):
+        for i in range(1, num_points + 1):
             ref_coords_arr.append(
                 [ref_line[f"p{i}_x"], ref_line[f"p{i}_y"], ref_line[f"p{i}_z"]]
             )
         ref_coords_arr = np.array(ref_coords_arr)
         for _, row in pixel_df.iterrows():
             pixel_coords_arr = []
-            for i in range(1, 26):
+            for i in range(1, num_points + 1):
                 pixel_coords_arr.append([row[f"p{i}_x"], row[f"p{i}_y"]])
             pixel_coords_arr = np.array(pixel_coords_arr)
             L = calculate_dlt3d_params(pixel_coords_arr, ref_coords_arr)
@@ -119,7 +155,7 @@ def process_files(pixel_file, ref3d_file):
             ref_line = ref_line.iloc[0]
             pixel_coords_arr = []
             ref_coords_arr = []
-            for i in range(1, 26):
+            for i in range(1, num_points + 1):
                 pixel_coords_arr.append([row[f"p{i}_x"], row[f"p{i}_y"]])
                 ref_coords_arr.append(
                     [ref_line[f"p{i}_x"], ref_line[f"p{i}_y"], ref_line[f"p{i}_z"]]
@@ -158,13 +194,28 @@ def main():
         print("Pixel file selection canceled.")
         return
 
+    # Determine the number of points from the pixel file
+    pixel_df = read_pixel_file(pixel_file)
+    pixel_columns = list(pixel_df.columns)
+    point_columns = [col for col in pixel_columns if col.startswith('p') and ('_x' in col or '_y' in col)]
+    point_numbers = set()
+    for col in point_columns:
+        if '_' in col:
+            parts = col.split('_')
+            if len(parts) >= 2:
+                point_num = parts[0][1:]  # Remove 'p' from 'p1', 'p20', etc.
+                if point_num.isdigit():
+                    point_numbers.add(int(point_num))
+    
+    num_points = max(point_numbers) if point_numbers else 0
+
     # Ask the user if they want to generate a REF3D template
     mode = messagebox.askquestion("Mode", "Do you want to create a REF3D template?")
     if mode == "yes":
         real_file = os.path.splitext(pixel_file)[0] + ".ref3d"
         # Create a template with header for 25 points with _x, _y, _z (default value 0.0)
         template_data = {"frame": [0]}
-        for i in range(1, 26):
+        for i in range(1, num_points + 1):
             template_data[f"p{i}_x"] = [0.0]
             template_data[f"p{i}_y"] = [0.0]
             template_data[f"p{i}_z"] = [0.0]
