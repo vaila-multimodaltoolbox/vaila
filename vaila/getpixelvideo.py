@@ -4,9 +4,9 @@ Pixel Coordinate Tool - getpixelvideo.py
 ================================================================================
 Author: Prof. Dr. Paulo R. P. Santiago
 Date: 09 December 2024
-Update: 16 January 2025
-Version: 0.0.2
-Python Version: 3.12.8
+Update: 10 March 2025
+Version: 0.0.3
+Python Version: 3.12.9
 
 Description:
 ------------
@@ -24,6 +24,7 @@ New Features in This Version:
 """
 
 import os
+from rich import print
 import pygame
 import cv2
 import pandas as pd
@@ -172,23 +173,52 @@ def play_video_with_controls(video_path, coordinates=None):
         )
 
     def show_help_dialog():
-        help_message = (
-            "Video Player Controls:\n"
-            "- Space: Play/Pause\n"
-            "- Right Arrow: Next Frame (when paused)\n"
-            "- Left Arrow: Previous Frame (when paused)\n"
-            "- Up Arrow: Fast Forward (when paused)\n"
-            "- Down Arrow: Rewind (when paused)\n"
-            "- +: Zoom In\n"
-            "- -: Zoom Out\n"
-            "- Left Click on video: Add Marker\n"
-            "- Right Click on video: Remove Last Marker\n"
-            "- Middle Click on video: Enable Pan/Move\n"
-            "- Drag Slider: Jump to Frame\n"
-            "- C: Toggle 1 line marker mode\n"
-            "     (When enabled, all markers are appended sequentially in one line.)"
-        )
-        messagebox.showinfo("Help", help_message)
+        # Instead of using tkinter, display help directly in pygame
+        help_lines = [
+            "Video Player Controls:",
+            "- Space: Play/Pause",
+            "- Right Arrow: Next Frame (when paused)",
+            "- Left Arrow: Previous Frame (when paused)",
+            "- Up Arrow: Fast Forward (when paused)",
+            "- Down Arrow: Rewind (when paused)",
+            "- +: Zoom In",
+            "- -: Zoom Out",
+            "- Left Click on video: Add Marker",
+            "- Right Click on video: Remove Last Marker",
+            "- Middle Click on video: Enable Pan/Move",
+            "- Drag Slider: Jump to Frame",
+            "- C: Toggle 1 line marker mode",
+            "     (When enabled, all markers are appended sequentially in one line.)",
+            "",
+            "Press any key to close this help"
+        ]
+
+        # Create semi-transparent overlay
+        overlay = pygame.Surface((window_width, window_height + 80))
+        overlay.set_alpha(230)
+        overlay.fill((0, 0, 0))
+        
+        # Render help text
+        font = pygame.font.Font(None, 24)
+        line_height = 28
+        
+        for i, line in enumerate(help_lines):
+            text_surface = font.render(line, True, (255, 255, 255))
+            overlay.blit(text_surface, (20, 20 + i * line_height))
+        
+        # Display help and wait for key/click
+        screen.blit(overlay, (0, 0))
+        pygame.display.flip()
+        
+        waiting_for_input = True
+        while waiting_for_input:
+            for event in pygame.event.get():
+                if event.type in (pygame.KEYDOWN, pygame.MOUSEBUTTONDOWN):
+                    waiting_for_input = False
+                if event.type == pygame.QUIT:
+                    waiting_for_input = False
+                    global running
+                    running = False
 
     def save_1_line_coordinates(video_path, one_line_markers):
         if not one_line_markers:
@@ -216,10 +246,17 @@ def play_video_with_controls(video_path, coordinates=None):
 
         df = pd.DataFrame([row_values], columns=header)
         df.to_csv(output_file, index=False)
+        
+        # Display save confirmation on screen instead of messagebox
         print(f"1 line coordinates saved to: {output_file}")
+        return output_file
 
     running = True
     saved = False
+    showing_save_message = False
+    save_message_timer = 0
+    save_message_text = ""
+    
     while running:
         cap.set(cv2.CAP_PROP_POS_FRAMES, frame_count)
         ret, frame = cap.read()
@@ -268,6 +305,22 @@ def play_video_with_controls(video_path, coordinates=None):
             slider_width,
             slider_height,
         ) = draw_controls()
+        
+        # Show save message if needed
+        if showing_save_message:
+            save_message_timer -= 1
+            if save_message_timer <= 0:
+                showing_save_message = False
+            else:
+                # Draw save message notification at top of screen
+                msg_font = pygame.font.Font(None, 28)
+                msg_surface = msg_font.render(save_message_text, True, (255, 255, 255))
+                msg_bg = pygame.Surface((msg_surface.get_width() + 20, msg_surface.get_height() + 10))
+                msg_bg.set_alpha(200)
+                msg_bg.fill((0, 100, 0))
+                screen.blit(msg_bg, (window_width//2 - msg_bg.get_width()//2, 10))
+                screen.blit(msg_surface, (window_width//2 - msg_surface.get_width()//2, 15))
+        
         pygame.display.flip()
 
         for event in pygame.event.get():
@@ -283,11 +336,13 @@ def play_video_with_controls(video_path, coordinates=None):
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     if one_line_mode:
-                        save_1_line_coordinates(video_path, one_line_markers)
+                        output_file = save_1_line_coordinates(video_path, one_line_markers)
                     else:
-                        save_coordinates(video_path, coordinates, total_frames)
+                        output_file = save_coordinates(video_path, coordinates, total_frames)
                     saved = True
-                    messagebox.showinfo("Success", "Coordinates saved successfully!")
+                    save_message_text = f"Saved to: {os.path.basename(output_file)}"
+                    showing_save_message = True
+                    save_message_timer = 90  # Show for about 3 seconds at 30fps
                     running = False
                 elif event.key == pygame.K_SPACE:
                     paused = not paused
@@ -305,16 +360,6 @@ def play_video_with_controls(video_path, coordinates=None):
                     zoom_level = max(0.2, zoom_level / 1.2)
                 elif event.key == pygame.K_c:
                     one_line_mode = not one_line_mode
-                    if one_line_mode:
-                        messagebox.showinfo(
-                            "1 Line Mode",
-                            "1 line marker mode activated. Markers will be appended sequentially in one line.",
-                        )
-                    else:
-                        messagebox.showinfo(
-                            "1 Line Mode",
-                            "1 line marker mode deactivated. Markers will be saved per frame.",
-                        )
 
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 x, y = event.pos
@@ -323,27 +368,17 @@ def play_video_with_controls(video_path, coordinates=None):
                     rel_y = y - window_height
                     if one_line_button_rect.collidepoint(x, rel_y):
                         one_line_mode = not one_line_mode
-                        if one_line_mode:
-                            messagebox.showinfo(
-                                "1 Line Mode",
-                                "1 line marker mode activated. Markers will be appended sequentially in one line.",
-                            )
-                        else:
-                            messagebox.showinfo(
-                                "1 Line Mode",
-                                "1 line marker mode deactivated. Markers will be saved per frame.",
-                            )
                     elif help_button_rect.collidepoint(x, rel_y):
                         show_help_dialog()
                     elif save_button_rect.collidepoint(x, rel_y):
                         if one_line_mode:
-                            save_1_line_coordinates(video_path, one_line_markers)
+                            output_file = save_1_line_coordinates(video_path, one_line_markers)
                         else:
-                            save_coordinates(video_path, coordinates, total_frames)
+                            output_file = save_coordinates(video_path, coordinates, total_frames)
                         saved = True
-                        messagebox.showinfo(
-                            "Success", "Coordinates saved successfully!"
-                        )
+                        save_message_text = f"Saved to: {os.path.basename(output_file)}"
+                        showing_save_message = True
+                        save_message_timer = 90  # Show for about 3 seconds at 30fps
                     elif slider_y <= rel_y <= slider_y + slider_height:
                         dragging_slider = True
                         rel_x = x - slider_x
@@ -467,6 +502,7 @@ def save_coordinates(video_path, coordinates, total_frames):
 
     df.to_csv(output_file, index=False)
     print(f"Coordinates saved to: {output_file}")
+    return output_file
 
 
 def get_video_path():
@@ -480,6 +516,11 @@ def get_video_path():
 
 
 def main():
+    # Print the script version and directory
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    print("-" * 80)
+    
     video_path = get_video_path()
     if not video_path:
         print("No video selected. Exiting.")
