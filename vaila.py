@@ -226,7 +226,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 10.Mar.2025 (Python 3.12.9)")
+        self.title("vailá - 11.Mar.2025 (Python 3.12.9)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
