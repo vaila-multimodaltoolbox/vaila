@@ -4,8 +4,8 @@ vaila.py
 ===============================================================================
 Author: Paulo R. P. Santiago
 Date:  7 October 2024
-Update: 10 March 2025
-Version updated: 0.1.0
+Update: 11 March 2025
+Version updated: 0.1.1
 Python Version: 3.12.9
 
 
