@@ -1626,15 +1626,20 @@ class VideoMergeApp:
                         "libx264",
                         "-preset",
                         "medium",
-                        # Ensure no frames are dropped
+                        # Ensure no frames are dropped or added
                         "-vsync",
-                        "0",
-                        # Standardize resolution
+                        "passthrough",
+                        "-copyts",  # Copy timestamps exactly
+                        # Remove any potential padding frames
                         "-vf",
-                        f"scale={highest_res[0]}:{highest_res[1]}:force_original_aspect_ratio=decrease,pad={highest_res[0]}:{highest_res[1]}:(ow-iw)/2:(oh-ih)/2",
+                        f"scale={highest_res[0]}:{highest_res[1]}:force_original_aspect_ratio=decrease,pad={highest_res[0]}:{highest_res[1]}:(ow-iw)/2:(oh-ih)/2,setpts=PTS-STARTPTS",
                         "-pix_fmt",
                         "yuv420p",
                         "-an",  # Remove audio
+                        # Additional options to ensure frame count preservation
+                        "-fflags",
+                        "+genpts",
+                        "-start_at_zero",
                         temp_file,
                     ]
 
