@@ -7,6 +7,10 @@ Please see AUTHORS for contributors.
 
 Licensed under GNU Lesser General Public License v3.0
 
+Created: 25 February 2025
+Update: 13 March 2025
+Version updated: 0.2.0
+
 Description:
 This script allows users to merge multiple video files into a single video in a specified order.
 It provides two methods of selecting videos:
@@ -44,6 +48,7 @@ Installation of FFmpeg (for video processing):
 
 import os
 import time
+from rich import print
 import subprocess
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk, simpledialog
@@ -106,7 +111,7 @@ class VideoMergeApp:
         self.mode_frame = ttk.LabelFrame(self.main_frame, text="Merge Mode")
         self.mode_frame.pack(fill=tk.X, pady=(0, 10))
 
-        # Criar os botões de modo usando a nova função
+        # Create mode buttons using the new function
         self.create_mode_buttons()
 
         # Label for output directory
@@ -622,7 +627,19 @@ class VideoMergeApp:
 
             # Create timestamp directory
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            output_subdir = os.path.join(self.output_dir, f"merged_videos_{timestamp}")
+
+            # Adicionar o nome do método de mesclagem ao diretório de saída
+            method_name = ""
+            if self.selected_mode == "fast":
+                method_name = "fast"
+            elif self.selected_mode == "precise":
+                method_name = "precise"
+            elif self.selected_mode == "frame_accurate":
+                method_name = "accurate"
+
+            output_subdir = os.path.join(
+                self.output_dir, f"merge_{method_name}_{timestamp}"
+            )
             os.makedirs(output_subdir, exist_ok=True)
 
             # Full output path
@@ -662,18 +679,16 @@ class VideoMergeApp:
 
             # Select the appropriate merging method based on user choice
             if mode == "precise":
-                print("DEBUG: Usando modo preciso")
+                print("DEBUG: Using precise mode")
                 self.do_precise_merge(output_video_path, output_subdir)
             elif mode == "frame_accurate":
-                print("DEBUG: Usando modo frame-accurate")
+                print("DEBUG: Using frame-accurate mode")
                 self.do_frame_accurate_merge(output_video_path, output_subdir)
             elif mode == "fast":
-                print("DEBUG: Usando modo rápido")
+                print("DEBUG: Using fast mode")
                 self.do_fast_merge(output_video_path, output_subdir)
             else:
-                print(
-                    f"DEBUG: Modo desconhecido: '{mode}', usando padrão (frame-accurate)"
-                )
+                print(f"DEBUG: Unknown mode: '{mode}', using default (frame-accurate)")
                 self.do_frame_accurate_merge(output_video_path, output_subdir)
         except Exception as e:
             import traceback
@@ -865,10 +880,39 @@ class VideoMergeApp:
             if process.returncode != 0:
                 raise Exception("Error during final merge")
 
+            # Verify final output frame count
+            verify_cmd = [
+                "ffprobe",
+                "-v",
+                "error",
+                "-count_frames",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "stream=nb_read_frames",
+                "-of",
+                "csv=p=0",
+                output_video_path,
+            ]
+
+            result = subprocess.run(verify_cmd, capture_output=True, text=True)
+            final_frames = int(result.stdout.strip())
+
+            # Calcular o total de frames dos vídeos originais
+            total_original_frames = 0
+            for video_path in self.video_files:
+                meta = self.video_metadata.get(video_path, {})
+                frames = meta.get("frames", 0)
+                if frames != "Unknown":
+                    total_original_frames += int(frames)
+
             # Write log file with information
-            log_file_path = os.path.join(
-                output_subdir, f"{os.path.basename(output_video_path)}_merge_info.txt"
+            base_name = os.path.splitext(os.path.basename(output_video_path))[0]
+            log_file_path = os.path.join(output_subdir, f"{base_name}_merge_info.txt")
+            frame_report_path = os.path.join(
+                output_subdir, f"{base_name}_frame_report.txt"
             )
+
             with open(log_file_path, "w") as log_file:
                 log_file.write(f"Merged Video: {output_video_path}\n")
                 log_file.write(
@@ -881,6 +925,11 @@ class VideoMergeApp:
                 log_file.write(
                     f"Merge Mode: Precise (reencoded for consistent frames)\n\n"
                 )
+                log_file.write(f"Sum of original frames: {total_original_frames}\n")
+                log_file.write(f"Frames in final video: {final_frames}\n")
+                log_file.write(
+                    f"Difference: {final_frames - total_original_frames} frames\n\n"
+                )
                 log_file.write("Videos merged in this order:\n")
 
                 for i, video_path in enumerate(self.video_files, 1):
@@ -892,6 +941,60 @@ class VideoMergeApp:
                     log_file.write(
                         f"{i}. {video_path}\n   [{resolution}, {fps} FPS, {codec}, {frames} frames]\n"
                     )
+
+            # Adicionar um relatório de frames também para o modo preciso
+            with open(frame_report_path, "w") as report_file:
+                report_file.write("FRAME COUNT REPORT\n")
+                report_file.write("==============================\n\n")
+                report_file.write(f"Final Video: {base_name}.mp4\n")
+                report_file.write(f"Target FPS: {target_fps}\n")
+                report_file.write(f"Total Frames in Final Video: {final_frames}\n\n")
+                report_file.write("Input Videos:\n")
+                report_file.write("------------------\n")
+
+                for i, video_path in enumerate(self.video_files, 1):
+                    meta = self.video_metadata.get(video_path, {})
+                    frames = meta.get("frames", "Unknown")
+                    fps = meta.get("fps", "Unknown")
+                    video_name = os.path.basename(video_path)
+
+                    report_file.write(f"{i}. {video_name}\n")
+                    report_file.write(f"   Original Frames: {frames}\n")
+                    report_file.write(f"   Original FPS: {fps}\n")
+                    if fps != target_fps:
+                        report_file.write(
+                            f"   Note: FPS converted from {fps} to {target_fps}\n"
+                        )
+                    report_file.write("\n")
+
+                report_file.write("Summary:\n")
+                report_file.write("-------\n")
+                report_file.write(f"Sum of original frames: {total_original_frames}\n")
+                report_file.write(f"Frames in final video: {final_frames}\n")
+                report_file.write(
+                    f"Difference: {final_frames - total_original_frames} frames\n\n"
+                )
+
+                if total_original_frames != final_frames:
+                    report_file.write(
+                        "Note: Frame count difference is expected in Precise mode due to FPS conversion\n"
+                    )
+                    # Calcular a diferença percentual
+                    if total_original_frames > 0:
+                        percent_diff = abs(
+                            (final_frames - total_original_frames)
+                            / total_original_frames
+                            * 100
+                        )
+                        report_file.write(f"Percent difference: {percent_diff:.2f}%\n")
+                else:
+                    report_file.write(
+                        "UNUSUAL: Frame count was exactly preserved despite FPS conversion\n"
+                    )
+
+                report_file.write(
+                    f"All videos reencoded to {target_fps} FPS for consistent playback\n"
+                )
 
             # If process succeeded, clean up temp files and show success message
             if process.returncode == 0:
@@ -917,8 +1020,12 @@ class VideoMergeApp:
 
                 # Pass the output video path directly to the lambda
                 output_path = output_video_path
+                report_path = frame_report_path
                 self.root.after(
-                    0, lambda path=output_path: self.merge_complete(True, path)
+                    0,
+                    lambda path=output_path, report=report_path: self.merge_complete(
+                        True, f"{path}\n\nFrame report: {report}"
+                    ),
                 )
             else:
                 # Capturar o código de retorno para a lambda
@@ -1124,10 +1231,53 @@ class VideoMergeApp:
                 print(f"ERRO no subprocess: {str(subprocess_error)}")
                 raise subprocess_error
 
+            # Após a conclusão do processamento, verificar o número de frames do vídeo final
+            verify_cmd = [
+                "ffprobe",
+                "-v",
+                "error",
+                "-count_frames",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "stream=nb_read_frames",
+                "-of",
+                "csv=p=0",
+                output_video_path,
+            ]
+
+            # Tentar obter a contagem de frames do vídeo final
+            final_frames = 0
+            try:
+                result = subprocess.run(
+                    verify_cmd, capture_output=True, text=True, timeout=60
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    final_frames = int(result.stdout.strip())
+                else:
+                    print(
+                        f"WARNING: Could not count frames in final video: {result.stderr}"
+                    )
+            except Exception as e:
+                print(f"ERROR: Exception counting frames in final video: {str(e)}")
+
+            # Calcular o total de frames dos vídeos originais
+            total_original_frames = 0
+            for video_path in self.video_files:
+                meta = self.video_metadata.get(video_path, {})
+                frames = meta.get("frames", 0)
+                if frames != "Unknown":
+                    total_original_frames += int(frames)
+                else:
+                    print(f"WARNING: Unknown frame count for {video_path}")
+
             # Create log file
-            log_file_path = os.path.join(
-                output_subdir, f"{os.path.basename(output_video_path)}_merge_info.txt"
+            base_name = os.path.splitext(os.path.basename(output_video_path))[0]
+            log_file_path = os.path.join(output_subdir, f"{base_name}_merge_info.txt")
+            frame_report_path = os.path.join(
+                output_subdir, f"{base_name}_frame_report.txt"
             )
+
             with open(log_file_path, "w", encoding="utf-8") as log_file:
                 log_file.write(f"Merged Video: {output_video_path}\n")
                 log_file.write(
@@ -1136,7 +1286,15 @@ class VideoMergeApp:
                 log_file.write(
                     f"Merge Mode: Fast (direct concat without reencoding)\n\n"
                 )
-                log_file.write("Videos merged in this order:\n")
+                log_file.write(f"Sum of original frames: {total_original_frames}\n")
+                log_file.write(
+                    f"Frames in final video: {final_frames if final_frames > 0 else 'Could not determine'}\n"
+                )
+                if final_frames > 0:
+                    log_file.write(
+                        f"Difference: {final_frames - total_original_frames} frames\n"
+                    )
+                log_file.write("\nVideos merged in this order:\n")
                 for i, video_path in enumerate(self.video_files, 1):
                     meta = self.video_metadata.get(video_path, {})
                     resolution = meta.get("resolution", "Unknown")
@@ -1147,13 +1305,76 @@ class VideoMergeApp:
                         f"{i}. {video_path}\n   [{resolution}, {fps} FPS, {codec}, {frames} frames]\n"
                     )
 
-                # Add error information, if any
-                if process.returncode != 0:
-                    log_file.write("\n\nERRO DURANTE A MESCLAGEM:\n")
-                    for line in stderr_output:
-                        log_file.write(line)
+                    # Add error information, if any
+                    if process.returncode != 0:
+                        log_file.write("\n\nERROR DURING MERGE PROCESS:\n")
+                        for line in stderr_output:
+                            log_file.write(line)
 
-            # Clear temporary files
+            # Adicionar um relatório de frames para o modo rápido
+            with open(frame_report_path, "w", encoding="utf-8") as report_file:
+                report_file.write("FRAME COUNT REPORT\n")
+                report_file.write("==============================\n\n")
+                report_file.write(f"Final Video: {base_name}.mp4\n")
+                report_file.write(
+                    "Fast Mode: Direct concatenation without reencoding\n\n"
+                )
+                report_file.write("Input Videos:\n")
+                report_file.write("------------------\n")
+
+                total_frames = 0
+                for i, video_path in enumerate(self.video_files, 1):
+                    meta = self.video_metadata.get(video_path, {})
+                    frames = meta.get("frames", "Unknown")
+                    fps = meta.get("fps", "Unknown")
+                    video_name = os.path.basename(video_path)
+                    if frames != "Unknown":
+                        total_frames += int(frames)
+
+                    report_file.write(f"{i}. {video_name}\n")
+                    report_file.write(f"   Original Frames: {frames}\n")
+                    report_file.write(f"   FPS: {fps}\n")
+                    report_file.write("\n")
+
+                report_file.write("Summary:\n")
+                report_file.write("-------\n")
+                report_file.write(f"Sum of original frames: {total_original_frames}\n")
+                report_file.write(
+                    f"Frames in final video: {final_frames if final_frames > 0 else 'Could not determine'}\n"
+                )
+
+                if final_frames > 0:
+                    report_file.write(
+                        f"Difference: {final_frames - total_original_frames} frames\n\n"
+                    )
+
+                    if total_original_frames == final_frames:
+                        report_file.write(
+                            "\nSUCCESS: The frame count was precisely preserved!\n"
+                        )
+                    else:
+                        report_file.write(
+                            f"\nWARNING: Difference of {final_frames - total_original_frames} frames in the final video!\n"
+                        )
+                        # Calcular a diferença percentual
+                        if total_original_frames > 0:
+                            percent_diff = abs(
+                                (final_frames - total_original_frames)
+                                / total_original_frames
+                                * 100
+                            )
+                            report_file.write(
+                                f"Percent difference: {percent_diff:.2f}%\n"
+                            )
+
+                report_file.write(
+                    "\nNote: In Fast mode, exact frame count should be preserved because no reencoding occurs\n"
+                )
+                report_file.write(
+                    "Different FPS between videos may affect playback unless all videos have identical properties\n"
+                )
+
+            # Clean up temp files
             try:
                 for temp_file in copied_files:
                     try:
@@ -1177,8 +1398,12 @@ class VideoMergeApp:
                 print("DEBUG: Fast merge completed successfully!")
                 # Pass the output video path directly to the lambda
                 output_path = output_video_path
+                report_path = frame_report_path
                 self.root.after(
-                    0, lambda path=output_path: self.merge_complete(True, path)
+                    0,
+                    lambda path=output_path, report=report_path: self.merge_complete(
+                        True, f"{path}\n\nFrame report: {report}"
+                    ),
                 )
             else:
                 # Capture the error message for the lambda
@@ -1320,7 +1545,7 @@ class VideoMergeApp:
                     total_frames += frames
                     frame_counts.append(frames)
 
-                    # Usar valores capturados na lambda
+                    # Use captured values in lambda
                     current_i = i
                     current_width = width
                     current_height = height
@@ -1413,7 +1638,7 @@ class VideoMergeApp:
                         temp_file,
                     ]
 
-                    print(f"DEBUG: Comando de conversão: {' '.join(convert_cmd)}")
+                    print(f"DEBUG: Conversion command: {' '.join(convert_cmd)}")
 
                     process = subprocess.Popen(
                         convert_cmd,
@@ -1525,7 +1750,7 @@ class VideoMergeApp:
                 output_video_path,
             ]
 
-            print(f"DEBUG: Comando de concatenação final: {' '.join(concat_cmd)}")
+            print(f"DEBUG: Final concatenation command: {' '.join(concat_cmd)}")
 
             process = subprocess.Popen(
                 concat_cmd,
@@ -1541,7 +1766,7 @@ class VideoMergeApp:
             for line in process.stderr:
                 stderr_output.append(line)
                 if "frame=" in line or "time=" in line:
-                    # Capturar a linha atual para a lambda
+                    # Capture the current line for the lambda
                     current_line = line.strip()
                     self.root.after(
                         0,
@@ -1579,11 +1804,10 @@ class VideoMergeApp:
             final_frames = int(result.stdout.strip())
 
             # Write log file with detailed frame count information
-            log_file_path = os.path.join(
-                output_subdir, f"{os.path.basename(output_video_path)}_merge_info.txt"
-            )
+            base_name = os.path.splitext(os.path.basename(output_video_path))[0]
+            log_file_path = os.path.join(output_subdir, f"{base_name}_merge_info.txt")
             frame_report_path = os.path.join(
-                output_subdir, f"{os.path.basename(output_video_path)}_frame_report.txt"
+                output_subdir, f"{base_name}_frame_report.txt"
             )
 
             with open(log_file_path, "w") as log_file:
@@ -1597,8 +1821,9 @@ class VideoMergeApp:
                 log_file.write(
                     f"Merge Mode: Frame Accurate (preserves exact frame counts)\n\n"
                 )
-                log_file.write(f"Expected total frames: {total_frames}\n")
-                log_file.write(f"Actual total frames: {final_frames}\n\n")
+                log_file.write(f"Sum of original frames: {total_frames}\n")
+                log_file.write(f"Frames in final video: {final_frames}\n")
+                log_file.write(f"Difference: {final_frames - total_frames} frames\n\n")
                 log_file.write("Videos merged in this order:\n")
 
                 for i, video_path in enumerate(self.video_files, 1):
@@ -1618,9 +1843,7 @@ class VideoMergeApp:
             with open(frame_report_path, "w") as report_file:
                 report_file.write("FRAME COUNT REPORT\n")
                 report_file.write("==============================\n\n")
-                report_file.write(
-                    f"Final Video: {os.path.basename(output_video_path)}\n"
-                )
+                report_file.write(f"Final Video: {base_name}.mp4\n")
                 report_file.write(f"Total Frames in Final Video: {final_frames}\n\n")
                 report_file.write("Input Videos:\n")
                 report_file.write("------------------\n")
@@ -1640,10 +1863,11 @@ class VideoMergeApp:
                         )
                     report_file.write("\n")
 
-                report_file.write("Resumo:\n")
+                report_file.write("Summary:\n")
                 report_file.write("-------\n")
-                report_file.write(f"Soma dos frames originais: {total_frames}\n")
-                report_file.write(f"Frames no vídeo final: {final_frames}\n")
+                report_file.write(f"Sum of original frames: {total_frames}\n")
+                report_file.write(f"Frames in final video: {final_frames}\n")
+                report_file.write(f"Difference: {final_frames - total_frames} frames\n")
 
                 if total_frames == final_frames:
                     report_file.write(
@@ -1653,30 +1877,40 @@ class VideoMergeApp:
                     report_file.write(
                         f"\nWARNING: Difference of {final_frames - total_frames} frames in the final video!\n"
                     )
+                    # Calcular a diferença percentual
+                    if total_frames > 0:
+                        percent_diff = abs(
+                            (final_frames - total_frames) / total_frames * 100
+                        )
+                        report_file.write(f"Percent difference: {percent_diff:.2f}%\n")
 
-            # Clean up temp files automatically to save disk space
-            self.root.after(
-                0,
-                lambda: self.progress_label.config(
-                    text="Cleaning up temporary files..."
-                ),
-            )
+                report_file.write(
+                    "\nNote: In Frame Accurate mode, the frame count should be preserved exactly\n"
+                )
+                report_file.write(
+                    "Different FPS between videos may affect playback unless all videos have identical properties\n"
+                )
 
-            for temp_file in temp_files:
-                try:
-                    os.remove(temp_file)
-                except Exception as e:
-                    print(f"Error removing temp file {temp_file}: {str(e)}")
-
+            # Clean up temp files
             try:
+                for temp_file in temp_files:
+                    try:
+                        os.remove(temp_file)
+                    except Exception as e:
+                        print(f"Error removing temp file {temp_file}: {str(e)}")
+
                 os.remove(filelist_path)
+                print(f"DEBUG: Filelist removed: {filelist_path}")
+
                 os.rmdir(temp_dir)
+                print(f"DEBUG: Temporary directory removed: {temp_dir}")
             except Exception as e:
-                print(f"Error removing temp directory: {str(e)}")
+                print(f"ERROR: Error removing temporary files: {str(e)}")
 
             # If process succeeded, show success message
             if process.returncode == 0:
-                # Passar os caminhos diretamente para a lambda
+                print("DEBUG: Frame Accurate merge completed successfully!")
+                # Pass the output video path directly to the lambda
                 output_path = output_video_path
                 report_path = frame_report_path
                 self.root.after(
@@ -1686,7 +1920,7 @@ class VideoMergeApp:
                     ),
                 )
             else:
-                # Capturar o código de retorno para a lambda
+                # Capture the return code for the lambda
                 return_code = process.returncode
                 self.root.after(
                     0,
@@ -1696,7 +1930,7 @@ class VideoMergeApp:
                 )
 
         except Exception as e:
-            # Capturar a mensagem de erro como string para evitar problemas com a variável 'e'
+            # Capture the error message as a string to avoid problems with the 'e' variable
             error_message = str(e)
             self.root.after(
                 0, lambda msg=error_message: self.merge_complete(False, msg)
@@ -1751,12 +1985,12 @@ class VideoMergeApp:
                     "• Working with already-compatible video files"
                 )
 
-            # Usar after para garantir que a mensagem seja exibida na thread principal
+            # Use after to ensure the message is displayed in the main thread
             self.root.after(0, lambda t=title, m=message: messagebox.showinfo(t, m))
 
         except Exception as e:
-            print(f"Erro ao mostrar ajuda do modo: {str(e)}")
-            # Usar after para garantir que a mensagem de erro seja exibida na thread principal
+            print(f"Error showing mode help: {str(e)}")
+            # Use after to ensure the error message is displayed in the main thread
             error_message = str(e)
             self.root.after(
                 0,
@@ -1768,38 +2002,38 @@ class VideoMergeApp:
     def merge_complete(self, success, message):
         """Handle completion of the merge process"""
         try:
-            print(f"DEBUG: Finalizando processo de mesclagem. Sucesso: {success}")
+            print(f"DEBUG: Finalizing merge process. Success: {success}")
 
             # Stop progress bar
             try:
                 self.progress_bar.stop()
                 self.progress_bar.pack_forget()
                 self.progress_label.pack_forget()
-                print("DEBUG: Barra de progresso parada e removida")
+                print("DEBUG: Progress bar stopped and removed")
             except Exception as e:
-                print(f"Erro ao parar barra de progresso: {str(e)}")
+                print(f"Error stopping progress bar: {str(e)}")
 
             if success:
-                print(f"DEBUG: Mesclagem concluída com sucesso: {message}")
+                print(f"DEBUG: Merge completed successfully: {message}")
                 messagebox.showinfo(
                     "Success", f"Videos merged successfully!\nOutput: {message}"
                 )
             else:
-                print(f"DEBUG: Erro na mesclagem: {message}")
+                print(f"DEBUG: Error merging videos: {message}")
                 messagebox.showerror("Error", f"Failed to merge videos: {message}")
         except Exception as e:
             import traceback
 
-            print(f"Erro ao finalizar processo de mesclagem: {str(e)}")
+            print(f"Error finishing merge process: {str(e)}")
             print(traceback.format_exc())
-            # Tentar mostrar uma mensagem de erro básica
+            # Try to show a basic error message
             try:
                 messagebox.showerror(
                     "Error",
                     f"An error occurred while completing the merge process: {str(e)}",
                 )
             except:
-                print("Não foi possível mostrar mensagem de erro")
+                print("Could not show error message")
 
     def create_mode_buttons(self):
         """Create buttons for merge mode selection instead of radiobuttons"""
@@ -1844,10 +2078,10 @@ class VideoMergeApp:
             button_frame = ttk.Frame(self.mode_buttons_frame)
             button_frame.pack(fill=tk.X, anchor=tk.W, padx=5, pady=2)
 
-            # Print para debug
-            print(f"DEBUG: Criando botão para o modo: '{mode}'")
+            # Print for debug
+            print(f"DEBUG: Creating button for mode: '{mode}'")
 
-            # Cada botão chama select_mode com seu modo correspondente
+            # Each button calls select_mode with its corresponding mode
             button = ttk.Button(
                 button_frame,
                 text=text,
@@ -1865,32 +2099,36 @@ class VideoMergeApp:
             )
             help_button.pack(side=tk.LEFT, padx=5)
 
-        # Destacar o botão do modo padrão
+        # Highlight the default mode button
         self.update_mode_buttons()
 
     def select_mode(self, mode):
         """Explicitly set the merge mode"""
-        print(f"DEBUG: Modo selecionado explicitamente: '{mode}'")
+        print(f"DEBUG: Selected mode explicitly: '{mode}'")
         self.selected_mode = mode
 
-        # Atualizar a label que mostra o modo selecionado
+        # Update the label that shows the selected mode
         mode_names = {
             "frame_accurate": "Frame Accurate Mode",
             "precise": "Precise Mode",
             "fast": "Fast Mode",
         }
-        self.mode_label.config(text=f"Selected: {mode_names.get(mode, 'Unknown Mode')}")
+        mode_display_name = mode_names.get(mode, "Unknown Mode")
+        self.mode_label.config(text=f"Selected: {mode_display_name}")
 
-        # Atualizar a aparência dos botões
+        # Atualizar o título da janela com o modo selecionado
+        self.root.title(f"Merge Multiple Videos - {mode_display_name}")
+
+        # Update the appearance of mode buttons
         self.update_mode_buttons()
 
     def update_mode_buttons(self):
-        """Update the appearance of mode buttons to highlight the selected one"""
+        """Update the appearance of mode buttons"""
         for mode, button in self.mode_buttons:
             if mode == self.selected_mode:
-                button.configure(style="Selected.TButton")
+                button.config(style="Selected.TButton")
             else:
-                button.configure(style="Normal.TButton")
+                button.config(style="Normal.TButton")
 
 
 def run_merge_multivideos():
@@ -1901,17 +2139,27 @@ def run_merge_multivideos():
         print("Starting multi-video merger...")
 
         root = tk.Tk()
+
+        # Configuração mais robusta para Windows 11
+        root.attributes("-topmost", True)
+        root.lift()  # Levanta a janela acima de todas as outras
+        root.focus_force()  # Força o foco
+        root.deiconify()  # Garante que a janela não está minimizada
+
+        # Pequeno delay para garantir que a janela seja exibida corretamente
+        root.after(100, lambda: root.attributes("-topmost", False))
+
         app = VideoMergeApp(root)
         root.mainloop()
     except Exception as e:
         import traceback
 
-        print(f"ERRO FATAL na aplicação: {str(e)}")
+        print(f"FATAL ERROR in application: {str(e)}")
         print(traceback.format_exc())
         try:
             messagebox.showerror("Fatal Error", f"A fatal error occurred: {str(e)}")
         except:
-            print("Não foi possível mostrar mensagem de erro")
+            print("Could not show error message")
 
 
 if __name__ == "__main__":

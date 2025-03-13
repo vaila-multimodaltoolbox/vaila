@@ -1,5 +1,5 @@
 """
-File: numberframes.py
+numberframes.py
 
 Description:
 This script allows users to analyze video files within a selected directory and extract metadata such as frame count, frame rate (FPS), resolution, codec, and duration. The script generates a summary of this information, displays it in a user-friendly graphical interface, and saves the metadata to text files. The "basic" file contains essential metadata, while the "full" file includes all possible metadata extracted using `ffprobe`.
@@ -21,6 +21,7 @@ Usage:
 """
 
 import os
+from rich import print
 import cv2
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
@@ -89,6 +90,10 @@ def get_video_info(video_path):
 
 
 def count_frames_in_videos():
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    print("Starting video frame counting...")
+
     root = tk.Tk()
     root.withdraw()
 
