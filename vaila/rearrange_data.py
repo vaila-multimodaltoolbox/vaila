@@ -43,6 +43,7 @@ Requirements:
 """
 
 import os
+from rich import print
 import pandas as pd
 import tkinter as tk
 from tkinter import filedialog, simpledialog, messagebox, Scrollbar
@@ -1110,12 +1111,12 @@ def batch_convert_dvideo(directory_path):
 
 
 def rearrange_data_in_directory():
-    root = tk.Tk()
-    root.withdraw()
-
     # Print the directory and name of the script being executed
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+
+    root = tk.Tk()
+    root.withdraw()
 
     selected_directory = filedialog.askdirectory(
         title="Select Directory Containing CSV Files"
@@ -1124,18 +1125,18 @@ def rearrange_data_in_directory():
         print("No directory selected.")
         return
 
-    # Busca arquivos CSV no diretório
+    # Find all CSV files in the selected directory
     file_names = sorted(
         [f for f in os.listdir(selected_directory) if f.endswith(".csv")]
     )
 
-    # Caso não existam arquivos CSV, continuar e abrir a GUI
+    # If no CSV files are found, continue and open the GUI
     if not file_names:
         print("No CSV files found in the directory.")
         file_names = ["Empty"]
         original_headers = []
     else:
-        # Pega headers do primeiro arquivo CSV se existir
+        # Get headers from the first CSV file if it exists
         example_file = os.path.join(selected_directory, file_names[0])
         try:
             original_headers = get_headers(example_file)
@@ -1145,13 +1146,13 @@ def rearrange_data_in_directory():
             print("-" * 80)
             print("")
 
-            # Tenta criar a GUI
+            # Try to create the GUI
             app = ColumnReorderGUI(original_headers, file_names, selected_directory)
             app.mainloop()
         except pd.errors.ParserError:
             print("Parser error detected. Running header standardization...")
             standardize_header()
-            # Após standardize_header, reinicie o processo
+            # After standardize_header, restart the process
             rearrange_data_in_directory()
         except Exception as e:
             print(f"Unexpected error: {e}")
