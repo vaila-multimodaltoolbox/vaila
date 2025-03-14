@@ -3,7 +3,7 @@ vaila_mlwalkway.py
 
 Create by: Abel G. Chinaglia & Paulo R. P. Santiago
 LaBioCoM - Laboratory of Biomechanics and Motor Control
-Date: 10.Feb.2025  
+Date: 10.Feb.2025
 Update: 24.Feb.2025
 
 This module provides a graphical user interface (GUI) for executing various machine learning (ML) tasks related to gait analysis using the VAILA system. The GUI includes buttons for:

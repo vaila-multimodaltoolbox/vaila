@@ -9,7 +9,7 @@ Python Version: 3.11.11
 
 Description:
 ------------
-This script processes movement data of animals in an open field test, performing 
+This script processes movement data of animals in an open field test, performing
 comprehensive kinematic analyses and generating visualizations to evaluate animal behavior.
 
 Key Features:
@@ -20,7 +20,7 @@ Key Features:
   - Average speed.
   - Time stationary (speed < 0.05 m/s).
   - Time spent in defined speed ranges (0-45 m/min).
-- Analyzes the time spent in specific zones of a 60x60 cm open field, divided into 
+- Analyzes the time spent in specific zones of a 60x60 cm open field, divided into
   3x3 grid cells of 20x20 cm each, including:
   - Percentage and count of time in each zone.
   - Percentage and count of time in the center zone and border areas.
@@ -50,7 +50,7 @@ Usage:
      - `position_y(m)` - Y-coordinate in meters.
 3. Input the sampling frequency (Hz) and the cutoff frequency (Hz) for filtering.
 4. The script will process all `.csv` files in the selected directory.
-5. Results, including figures and a detailed text summary, will be saved in a timestamped 
+5. Results, including figures and a detailed text summary, will be saved in a timestamped
    directory, with subdirectories for each processed file.
 
 Example:
