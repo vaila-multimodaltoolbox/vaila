@@ -16,9 +16,9 @@ Version: 2.1.0
 
 Description:
 ------------
-This module offers functionality to either extract PNG frames from video files or 
-create videos from a sequence of PNG images. It is designed for applications in 
-machine learning, computer vision, and biomechanics, ensuring that all frames and 
+This module offers functionality to either extract PNG frames from video files or
+create videos from a sequence of PNG images. It is designed for applications in
+machine learning, computer vision, and biomechanics, ensuring that all frames and
 videos maintain consistent quality and formatting.
 
 The main features of the module include:

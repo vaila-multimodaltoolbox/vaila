@@ -5,19 +5,19 @@ Version: 0.2.1
 Last Updated: January 15, 2025
 
 Description:
-This script performs batch processing of videos for 2D pose estimation using 
-MediaPipe's Pose model. It processes videos from a specified input directory, 
-overlays pose landmarks on each video frame, and exports both normalized and 
-pixel-based landmark coordinates to CSV files. 
+This script performs batch processing of videos for 2D pose estimation using
+MediaPipe's Pose model. It processes videos from a specified input directory,
+overlays pose landmarks on each video frame, and exports both normalized and
+pixel-based landmark coordinates to CSV files.
 
-The user can configure key MediaPipe parameters via a graphical interface, 
-including detection confidence, tracking confidence, model complexity, and 
-whether to enable segmentation and smooth segmentation. The default settings 
-prioritize the highest detection accuracy and tracking precision, which may 
+The user can configure key MediaPipe parameters via a graphical interface,
+including detection confidence, tracking confidence, model complexity, and
+whether to enable segmentation and smooth segmentation. The default settings
+prioritize the highest detection accuracy and tracking precision, which may
 increase computational cost.
 
 New Features:
-- Default values for MediaPipe parameters are set to maximize detection and 
+- Default values for MediaPipe parameters are set to maximize detection and
   tracking accuracy:
     - `min_detection_confidence=1.0`
     - `min_tracking_confidence=1.0`
@@ -27,11 +27,11 @@ New Features:
 - User input dialog allows fine-tuning these values if desired.
 
 Usage:
-- Run the script to open a graphical interface for selecting the input directory 
-  containing video files (.mp4, .avi, .mov), the output directory, and for 
+- Run the script to open a graphical interface for selecting the input directory
+  containing video files (.mp4, .avi, .mov), the output directory, and for
   specifying the MediaPipe configuration parameters.
-- The script processes each video, generating an output video with overlaid pose 
-  landmarks, and CSV files containing both normalized and pixel-based landmark 
+- The script processes each video, generating an output video with overlaid pose
+  landmarks, and CSV files containing both normalized and pixel-based landmark
   coordinates.
 
 How to Execute:
@@ -41,9 +41,9 @@ How to Execute:
    - Tkinter is usually bundled with Python installations.
 2. Open a terminal and navigate to the directory where `markerless_2D_analysis.py` is located.
 3. Run the script using Python:
-   
+
    python markerless_2D_analysis.py
-   
+
 4. Follow the graphical interface prompts:
    - Select the input directory with videos (.mp4, .avi, .mov).
    - Select the base output directory for processed videos and CSVs.
@@ -59,28 +59,28 @@ Requirements:
 
 Output:
 The following files are generated for each processed video:
-1. Processed Video (`*_mp.mp4`): 
+1. Processed Video (`*_mp.mp4`):
    The video with the 2D pose landmarks overlaid on the original frames.
 2. Normalized Landmark CSV (`*_mp_norm.csv`):
-   A CSV file containing the landmark coordinates normalized to a scale between 0 and 1 
+   A CSV file containing the landmark coordinates normalized to a scale between 0 and 1
    for each frame. These coordinates represent the relative positions of landmarks in the video.
 3. Pixel Landmark CSV (`*_mp_pixel.csv`):
-   A CSV file containing the landmark coordinates in pixel format. The x and y coordinates 
+   A CSV file containing the landmark coordinates in pixel format. The x and y coordinates
    are scaled to the video’s resolution, representing the exact pixel positions of the landmarks.
 4. Log File (`log_info.txt`):
-   A log file containing video metadata and processing information, such as resolution, frame rate, 
+   A log file containing video metadata and processing information, such as resolution, frame rate,
    total number of frames, codec used, and the MediaPipe Pose configuration used in the processing.
 
 License:
-This program is free software: you can redistribute it and/or modify it under the terms of 
-the GNU General Public License as published by the Free Software Foundation, either version 3 
+This program is free software: you can redistribute it and/or modify it under the terms of
+the GNU General Public License as published by the Free Software Foundation, either version 3
 of the License, or (at your option) any later version.
 
-This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; 
-without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. 
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 See the GNU General Public License for more details.
 
-You should have received a copy of the GNU GPLv3 (General Public License Version 3) along with this program. 
+You should have received a copy of the GNU GPLv3 (General Public License Version 3) along with this program.
 If not, see <https://www.gnu.org/licenses/>.
 """
 

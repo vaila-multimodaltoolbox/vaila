@@ -2,7 +2,7 @@
 # Plot the CoP pathway with points only (no connecting lines)
 ax2.plot(X_n, Y_n, label='CoP Pathway', color='blue', marker='.', markersize=3, linestyle='None')
 Module: cop_analysis.py
-Description: This module provides a comprehensive set of tools for analyzing Center of Pressure (CoP) data from force plate measurements. 
+Description: This module provides a comprehensive set of tools for analyzing Center of Pressure (CoP) data from force plate measurements.
              CoP data is critical in understanding balance and postural control in various fields such as biomechanics, rehabilitation, and sports science.
 
              The module includes:

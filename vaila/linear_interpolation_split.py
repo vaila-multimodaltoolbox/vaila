@@ -9,23 +9,23 @@ Python Version: 3.11.9
 
 Description:
 ------------
-This script provides functionality to either fill missing data in CSV files using 
-linear interpolation or split data into a separate CSV file. It is intended for 
-use in biomechanical data analysis, where gaps in time-series data can be filled 
+This script provides functionality to either fill missing data in CSV files using
+linear interpolation or split data into a separate CSV file. It is intended for
+use in biomechanical data analysis, where gaps in time-series data can be filled
 and datasets can be split for further analysis.
 
 Key Features:
 -------------
-1. **Linear Interpolation**: 
+1. **Linear Interpolation**:
    - Fills gaps in numerical data using linear interpolation.
-2. **Data Splitting**: 
+2. **Data Splitting**:
    - Splits CSV files into two halves for easier data management and analysis.
 
 Usage:
 ------
-- Run this script to launch a graphical user interface (GUI) that provides options 
+- Run this script to launch a graphical user interface (GUI) that provides options
   to perform linear interpolation on CSV files or to split them into two parts.
-- The filled or split files are saved in new directories to avoid overwriting the 
+- The filled or split files are saved in new directories to avoid overwriting the
   original files.
 
 License:

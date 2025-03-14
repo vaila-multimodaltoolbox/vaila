@@ -8,9 +8,9 @@ Version: 1.2
 
 Description:
 ------------
-This script performs IMU sensor data analysis from CSV and C3D files. 
+This script performs IMU sensor data analysis from CSV and C3D files.
 It processes accelerometer and gyroscope data, calculates tilt angles and Euler angles,
-and generates graphs and CSV files with the processed results. File names for outputs 
+and generates graphs and CSV files with the processed results. File names for outputs
 include the prefix of the processed file.
 
 Features:
