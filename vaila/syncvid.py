@@ -1,14 +1,14 @@
 """
 syncvid.py
 
-This script is used for manually synchronizing videos, allowing the user to input 
+This script is used for manually synchronizing videos, allowing the user to input
 keyframes for multiple video files and select a main camera for synchronization.
 
 Features:
-- Manual synchronization: Allows the user to manually input keyframes for 
+- Manual synchronization: Allows the user to manually input keyframes for
   synchronization.
-- Automatic synchronization (using flash): Automatically extracts the median of 
-  the R, G, and B values from a specific region of each video to automatically 
+- Automatic synchronization (using flash): Automatically extracts the median of
+  the R, G, and B values from a specific region of each video to automatically
   synchronize the videos based on a flash or brightness change.
 
 Dependencies:
@@ -17,7 +17,7 @@ Dependencies:
 - numpy: For numerical array manipulation, used in automatic synchronization.
 
 Usage:
-- Run the script and follow the instructions in the GUI to select the videos 
+- Run the script and follow the instructions in the GUI to select the videos
   and choose the synchronization method.
 - Save the resulting synchronization file in the desired format.
 

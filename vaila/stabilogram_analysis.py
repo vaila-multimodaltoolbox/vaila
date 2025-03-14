@@ -1,6 +1,6 @@
 """
 Module: stabilogram_analysis.py
-Description: 
+Description:
 This module provides a comprehensive set of functions for analyzing Center of Pressure (CoP) data obtained from force plate measurements in postural control studies. The functions included in this module allow for the calculation of various stabilometric parameters and the generation of stabilogram plots to evaluate balance and stability.
 
 The main features of this module include:

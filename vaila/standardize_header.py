@@ -6,8 +6,8 @@ Last Updated: February 04, 2025
 
 Description:
 -------------
-This script is designed to standardize headers across multiple CSV files in a selected directory. 
-It allows users to select a specific line to use as the header and remove unwanted rows from each file. 
+This script is designed to standardize headers across multiple CSV files in a selected directory.
+It allows users to select a specific line to use as the header and remove unwanted rows from each file.
 The processed files are saved in a timestamped directory to ensure version tracking and data integrity.
 
 Key Features:

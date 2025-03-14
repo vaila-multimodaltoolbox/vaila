@@ -9,9 +9,9 @@ Python Version: 3.11.9
 
 Description:
 ------------
-This toolkit provides advanced functionalities to analyze EMG (Electromyography) signals. 
-It includes filtering, full-wave rectification, linear envelope calculation, RMS calculation, 
-and median frequency analysis. The toolkit now supports recursive processing of all CSV files 
+This toolkit provides advanced functionalities to analyze EMG (Electromyography) signals.
+It includes filtering, full-wave rectification, linear envelope calculation, RMS calculation,
+and median frequency analysis. The toolkit now supports recursive processing of all CSV files
 within a selected directory for batch analysis.
 
 Key Functionalities:
@@ -25,7 +25,7 @@ Key Functionalities:
 
 Input:
 ------
-- CSV files: The script reads CSV or text files containing raw EMG data. 
+- CSV files: The script reads CSV or text files containing raw EMG data.
   The first column is assumed to be sample numbers.
   The second column is the EMG signal (in µVolts).
 
@@ -88,20 +88,20 @@ New Features in v1.1:
 
 License:
 --------
-This program is free software: you can redistribute it and/or modify it under the terms of 
-the GNU General Public License as published by the Free Software Foundation, either version 3 
+This program is free software: you can redistribute it and/or modify it under the terms of
+the GNU General Public License as published by the Free Software Foundation, either version 3
 of the License, or (at your option) any later version.
 
-This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; 
-without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. 
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 See the GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License along with this program. 
+You should have received a copy of the GNU General Public License along with this program.
 If not, see https://www.gnu.org/licenses/.
 
 Disclaimer:
 -----------
-This script is provided "as is," without any warranty, express or implied, and is intended for 
+This script is provided "as is," without any warranty, express or implied, and is intended for
 academic and research purposes only.
 
 Changelog:

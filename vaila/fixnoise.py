@@ -4,7 +4,7 @@ version 0.02
 
 This script is designed to batch process CSV files, applying a noise filter (fixnoise) interactively.
 The user selects a directory containing CSV files and, from the first file, chooses the headers of interest.
-The script applies the same header selection for all subsequent files and allows the user to mark start and end points 
+The script applies the same header selection for all subsequent files and allows the user to mark start and end points
 for specific segment replacements. If no points are selected, the file is saved without changes.
 
 Author: Prof. Dr. Paulo R. P. Santiago

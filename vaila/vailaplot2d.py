@@ -9,39 +9,39 @@ Version: 1.1
 Description:
 ------------
 This script provides functionality for generating 2D plots within vailá:Versatile
-Anarcho Integrated Liberation Ánalysis in Multimodal Toolbox. It includes 
-a graphical user interface (GUI) for selecting and plotting various graph types, 
-such as scatter plots, angle-angle plots, and confidence intervals. Additionally, 
-the script offers buttons to clear all plots from memory, clear cached data, 
+Anarcho Integrated Liberation Ánalysis in Multimodal Toolbox. It includes
+a graphical user interface (GUI) for selecting and plotting various graph types,
+such as scatter plots, angle-angle plots, and confidence intervals. Additionally,
+the script offers buttons to clear all plots from memory, clear cached data,
 and create new figure windows for refreshed plotting.
 
 Plot Types Supported:
 ---------------------
-1. Time Scatter Plot: Plots time-series data across multiple headers from selected 
+1. Time Scatter Plot: Plots time-series data across multiple headers from selected
    files.
-2. Angle-Angle Plot: Displays relationships between two angles based on header pairs 
+2. Angle-Angle Plot: Displays relationships between two angles based on header pairs
    from the selected files.
-3. Confidence Interval Plot: Plots data with corresponding confidence intervals, 
+3. Confidence Interval Plot: Plots data with corresponding confidence intervals,
    highlighting statistical variability.
 4. Boxplot: Generates boxplots for selected data columns.
-5. SPM (Statistical Parametric Mapping): Conducts SPM analysis using data from 
+5. SPM (Statistical Parametric Mapping): Conducts SPM analysis using data from
    multiple headers.
 
 Functionalities:
 ----------------
-1. GUI for Plot Selection: A simple, intuitive GUI using Python's Tkinter library allows 
+1. GUI for Plot Selection: A simple, intuitive GUI using Python's Tkinter library allows
    users to select files, headers, and the desired plot type.
 2. Plot and Data Management:
    - Clear All Plots: Button to clear all matplotlib plots from memory.
-   - Clear Data: Button to clear loaded data from memory (pandas DataFrames, selected 
+   - Clear Data: Button to clear loaded data from memory (pandas DataFrames, selected
      files, and headers).
    - New Figure: Button to create a new figure window for fresh plotting.
-3. Dynamic Plotting: The script dynamically loads and plots data based on user selections 
+3. Dynamic Plotting: The script dynamically loads and plots data based on user selections
    from CSV files.
 
 New Features in v1.1:
 ---------------------
-- Added functionality to clear all loaded data (pandas DataFrames) from memory 
+- Added functionality to clear all loaded data (pandas DataFrames) from memory
   when clearing plots.
 - Improved memory management by invoking garbage collection after clearing data.
 - Enhanced user feedback in the console for clearer actions.
@@ -49,7 +49,7 @@ New Features in v1.1:
 Modules and Packages Required:
 ------------------------------
 - Python Standard Libraries: tkinter for GUI creation, os for file management.
-- External Libraries: 
+- External Libraries:
   * matplotlib for plotting.
   * pandas for CSV data handling.
   * spm1d for Statistical Parametric Mapping analysis.
@@ -58,12 +58,12 @@ Modules and Packages Required:
 
 How to Use:
 -----------
-1. Run the Script: 
+1. Run the Script:
    Execute the script using the following command:
    python -m vaila.plot_2d_graphs
 
 2. Select Plot Type:
-   A GUI window will appear, offering multiple plot types. Select the desired plot 
+   A GUI window will appear, offering multiple plot types. Select the desired plot
    type and follow the prompts to choose files and headers for plotting.
 
 3. Use Plot Controls:
@@ -74,21 +74,21 @@ How to Use:
 
 License:
 --------
-This script is licensed under the GNU General Public License v3.0. For more details, 
+This script is licensed under the GNU General Public License v3.0. For more details,
 refer to the LICENSE file located in the project root, or visit:
 https://www.gnu.org/licenses/gpl-3.0.en.html
 
 Disclaimer:
 -----------
-This script is provided "as is," without any warranty, express or implied. The authors 
-are not liable for any damage or data loss resulting from the use of this script. It is 
+This script is provided "as is," without any warranty, express or implied. The authors
+are not liable for any damage or data loss resulting from the use of this script. It is
 intended solely for academic and research purposes.
 
 Changelog:
 ----------
-- 2024-09-23: Initial creation of the script with support for multiple plot types 
+- 2024-09-23: Initial creation of the script with support for multiple plot types
   and dynamic plot management.
-- 2024-09-24: Added functionality to clear plots and data from memory, improved 
+- 2024-09-24: Added functionality to clear plots and data from memory, improved
   memory management.
 ================================================================================
 """
