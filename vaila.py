@@ -4,8 +4,8 @@ vaila.py
 ===============================================================================
 Author: Paulo R. P. Santiago
 Date:  7 October 2024
-Update: 13 March 2025
-Version updated: 0.2.2
+Update: 14 March 2025
+Version updated: 0.2.3
 Python Version: 3.12.9
 
 
@@ -53,6 +53,15 @@ Key Features:
    - Provides tools for analyzing open field test data for rodents, including
      calculations of total distance traveled, speed, and time spent in each zone.
 
+7. **Video Distortion** (New Feature):
+   - Provides tools for distorting videos, including adding noise, blurring,
+     and other effects.
+
+8. **Audio Video Processing** (New Feature):
+   - Provides tools for processing audio and video files, including inserting
+     audio into videos and downloading videos from YouTube.
+
+
 Usage:
 ------
 - Run this script to launch the main graphical user interface (GUI) built with
@@ -71,6 +80,7 @@ License:
 --------
 This program is licensed under the GNU Lesser General Public License v3.0.
 For more details, visit: https://www.gnu.org/licenses/lgpl-3.0.html
+Visit the project repository: https://github.com/vaila-multimodaltoolbox
 ===============================================================================
 """
 
@@ -154,10 +164,11 @@ except ImportError as e:
 
 
 text = r"""
+version: 14.Mar.2025 (Python 3.12.9)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
-                           \/  \/|_/|/|_/\/|_/                    
+                           \/  \/|_/|/|_/\/|_/                   
 ##########################################################################
 Mocap fullbody_c3d           Markerless_3D       Markerless_2D_MP
                   \                |                /
@@ -187,22 +198,22 @@ B3_r3_c1 - HR/ECG         B3_r3_c2 - Markerless_MP_Yolo  B3_r3_c3 - vailá_and_j
 B3_r3_c4 - Cube2D         B3_r3_c5 - Animal Open Field 
 B3_r4_c1 - Tracker        B3_r4_c2 - ML Walkway       B3_r4_c3 - Markerless Hands
 B3_r4_c4 - vailá          B3_r4_c5 - vailá
-============================== Tools Available (Frame C) ===================
-C_A: Data Files
 
+============================== Tools Available (Frame C) ===================
+-> C_A: Data Files
 C_A_r1_c1 - Edit CSV      C_A_r1_c2 - C3D <--> CSV   C_A_r1_c3 - Gapfill | split
 C_A_r2_c1 - Make DLT2D    C_A_r2_c2 - Rec2D 1DLT     C_A_r2_c3 - Rec2D MultiDLT
 C_A_r3_c1 - Make DLT3D    C_A_r3_c2 - Rec3D 1DLT     C_A_r3_c3 - Rec3D MultiDLT
 C_A_r4_c1 - vailá         C_A_r4_c2 - vailá          C_A_r4_c3 - vailá
 
-C_B: Video and Image
+-> C_B: Video and Image
 C_B_r1_c1 - Video<-->PNG  C_B_r1_c2 - Cut Videos    C_B_r1_c3 - Draw Box
 C_B_r2_c1 - CompressH264  C_B_r2_c2 - Compress H265 C_B_r2_c3 - Make Sync file
 C_B_r3_c1 - GetPixelCoord C_B_r3_c2 - Metadata info C_B_r3_c3 - Merge Videos
 C_B_r4_c1 - Distort video C_B_r4_c2 - Cut Video     C_B_r4_c3 - Resize Video
-C_B_r5_c1 - YT Downloader C_B_r5_c2 - vailá         C_B_r5_c3 - vailá
+C_B_r5_c1 - YT Downloader C_B_r5_c2 - Insert Audio  C_B_r5_c3 - vailá
 
-C_C: Visualization
+-> C_C: Visualization
 C_C_r1_c1 - Show C3D      C_C_r1_c2 - Show CSV       C_C_r2_c1 - Plot 2D
 C_C_r2_c2 - Plot 3D       C_C_r3_c1 - vailá          C_C_r3_c2 - vailá
 C_C_r4_c1 - vailá         C_C_r4_c2 - vailá          C_C_r4_c3 - vailá
@@ -227,7 +238,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 13.Mar.2025 (Python 3.12.9)")
+        self.title("vailá - 14.Mar.2025 (Python 3.12.9)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -974,11 +985,11 @@ class Vaila(tk.Tk):
             width=button_width,
         )
 
-        # C_B_r5_c2 - Video: vailá
-        vaila_btn12 = tk.Button(
+        # C_B_r5_c2 - Video: Insert Audio
+        iaudiovid_btn = tk.Button(
             tools_col2,
-            text="vailá",
-            command=self.show_vaila_message,
+            text="Insert Audio",
+            command=self.run_iaudiovid,
             width=button_width,
         )
 
@@ -1004,7 +1015,7 @@ class Vaila(tk.Tk):
         cut_video_btn.grid(row=3, column=1, padx=2, pady=2)
         resize_video_btn.grid(row=3, column=2, padx=2, pady=2)
         ytdownloader_btn.grid(row=4, column=0, padx=2, pady=2)
-        vaila_btn12.grid(row=4, column=1, padx=2, pady=2)
+        iaudiovid_btn.grid(row=4, column=1, padx=2, pady=2)
         vaila_btn13.grid(row=4, column=2, padx=2, pady=2)
         tools_col2.pack(side="left", fill="both", expand=True, padx=5, pady=5)
 
@@ -1857,6 +1868,28 @@ class Vaila(tk.Tk):
         from vaila import vaila_ytdown
 
         vaila_ytdown.run_ytdown()
+    
+    # C_B_r5_c2
+    def run_iaudiovid(self):
+        """Runs the Insert Audio module.
+
+        This function runs the Insert Audio module, which can be used to
+        insert audio into video files. The module will prompt the user to select
+        the directory containing the video files and input the sample rate and start
+        and end indices for analysis.
+        """
+        from vaila import vaila_iaudiovid
+
+        vaila_iaudiovid.run_iaudiovid()
+     
+    # C_B_r5_c3
+    def vaila(self):
+        """Runs the vailá module.
+
+        This function runs the vailá module, which can be used to
+        run vailá.
+        """
+    
 
     # C_C_r1_c1
     def show_c3d_data(self):
