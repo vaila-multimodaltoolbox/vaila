@@ -9,9 +9,9 @@ Python Version: 3.12.8
 
 Description:
 ------------
-This tool enables marking start and end frames for video cutting/trimming with 
-frame-by-frame navigation. Users can mark multiple segments and generate new 
-videos for each marked segment. Cuts can be saved to a text file and loaded 
+This tool enables marking start and end frames for video cutting/trimming with
+frame-by-frame navigation. Users can mark multiple segments and generate new
+videos for each marked segment. Cuts can be saved to a text file and loaded
 later for video generation.
 
 Controls:
@@ -136,6 +136,10 @@ def play_video_with_cuts(video_path):
 
     # Load existing cuts if available
     cuts = load_cuts_from_txt(video_path)
+    # Flag to track if cuts were loaded from a sync file
+    using_sync_file = len(cuts) > 0
+    if using_sync_file:
+        print(f"Loaded {len(cuts)} cuts from synchronization file")
 
     def draw_controls():
         slider_surface = pygame.Surface((window_width, 80))
@@ -231,19 +235,19 @@ def play_video_with_cuts(video_path):
             "Generate Videos",
             "Cuts saved to text file. Do you want to generate video files now?",
         ):
-            success = save_cuts(video_path, cuts)
+            success = save_cuts(video_path, cuts, using_sync_file)
 
             # Ask if user wants to apply the same cuts to all videos in the directory
             if success and messagebox.askyesno(
                 "Batch Processing",
                 "Do you want to apply these same cuts to all other videos in this directory?",
             ):
-                batch_process_videos(video_path, cuts)
+                batch_process_videos(video_path, cuts, using_sync_file)
 
             return success
         return True
 
-    def batch_process_videos(source_video_path, cuts):
+    def batch_process_videos(source_video_path, cuts, from_sync_file=False):
         """Apply the same cuts to all videos in the same directory."""
         if not cuts:
             messagebox.showinfo("Info", "No cuts to apply!")
@@ -295,9 +299,10 @@ def play_video_with_cuts(video_path):
         status_label = ttk.Label(root, text="")
         status_label.pack(pady=5)
 
-        # Create output directory
+        # Create output directory with improved naming
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_dir = source_dir / f"vailacut_batch_{timestamp}"
+        prefix = "sync_" if from_sync_file else ""
+        output_dir = source_dir / f"vailacut_{prefix}batch_{timestamp}"
         output_dir.mkdir(exist_ok=True)
 
         processed_count = 0
@@ -379,15 +384,16 @@ def play_video_with_cuts(video_path):
             f"Processed {processed_count} videos. Output saved to {output_dir}",
         )
 
-    def save_cuts(video_path, cuts):
+    def save_cuts(video_path, cuts, from_sync_file=False):
         if not cuts:
             messagebox.showinfo("Info", "No cuts were marked!")
             return False
 
-        # Create output directory
+        # Create output directory with improved naming
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         video_name = Path(video_path).stem
-        output_dir = Path(video_path).parent / f"vailacut_{timestamp}"
+        prefix = "sync_" if from_sync_file else ""
+        output_dir = Path(video_path).parent / f"vailacut_{prefix}{timestamp}"
         output_dir.mkdir(exist_ok=True)
 
         # Get video properties

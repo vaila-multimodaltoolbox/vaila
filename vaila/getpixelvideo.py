@@ -10,9 +10,9 @@ Python Version: 3.12.9
 
 Description:
 ------------
-This tool enables marking and saving pixel coordinates in video frames, with 
-zoom functionality for precise annotations. The window can now be resized dynamically, 
-and all UI elements adjust accordingly. Users can navigate the video frames, mark 
+This tool enables marking and saving pixel coordinates in video frames, with
+zoom functionality for precise annotations. The window can now be resized dynamically,
+and all UI elements adjust accordingly. Users can navigate the video frames, mark
 points, and save results in CSV format.
 
 New Features in This Version:

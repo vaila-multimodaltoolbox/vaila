@@ -5,12 +5,12 @@ Version: 0.02
 Last Updated: November 26, 2024
 
 Description:
-    This script calculates the Direct Linear Transformation (DLT) parameters for 2D coordinate transformations. 
-    It uses pixel coordinates from video calibration data and corresponding real-world coordinates to compute 
+    This script calculates the Direct Linear Transformation (DLT) parameters for 2D coordinate transformations.
+    It uses pixel coordinates from video calibration data and corresponding real-world coordinates to compute
     the DLT parameters for each frame in a dataset.
 
-    The script also allows users to create a template REF2D file from a pixel file, which can then be edited 
-    manually to include real-world coordinates. The main functionality includes reading input files, 
+    The script also allows users to create a template REF2D file from a pixel file, which can then be edited
+    manually to include real-world coordinates. The main functionality includes reading input files,
     performing DLT calculations, and saving the results to an output file.
 
 New Features:

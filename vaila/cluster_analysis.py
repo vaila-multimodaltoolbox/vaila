@@ -98,7 +98,7 @@ Changelog for Version 1.0:
 License:
 
     This script is distributed under the GNU General Public License v3.0 (GPLv3).
-    You are free to modify and redistribute this software, but it comes WITHOUT ANY WARRANTY; 
+    You are free to modify and redistribute this software, but it comes WITHOUT ANY WARRANTY;
     without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
     For more details, see <https://www.gnu.org/licenses/>.
 ================================================================================

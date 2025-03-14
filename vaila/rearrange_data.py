@@ -5,7 +5,7 @@ Author: Paulo Santiago
 
 Description:
 -------------
-This script provides tools for rearranging and processing CSV data files. 
+This script provides tools for rearranging and processing CSV data files.
 It includes functions for:
 - Reordering columns.
 - Merging and stacking CSV files.

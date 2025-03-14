@@ -68,7 +68,7 @@ How to Run:
 
 License:
 --------
-This script is provided "as is," without warranty. It is intended for academic 
+This script is provided "as is," without warranty. It is intended for academic
 and research purposes only.
 
 ================================================================================
@@ -1308,7 +1308,7 @@ def makefig3(
                 [active_segment_data[0], vpeak_impact_transient],
                 "r--",
                 linewidth=2.5,
-                label=f"RFD Impact Transient: {rfd_impact_transient:.3f}BW\u00B7s\u207B\u00B9",
+                label=f"RFD Impact Transient: {rfd_impact_transient:.3f}BW\u00b7s\u207b\u00b9",
             )
             # Se rfd_peakmax tem o mesmo intervalo de tempo que rfd_impact_transient
             ax3[i].plot(
@@ -1317,7 +1317,7 @@ def makefig3(
                 color="orange",
                 linestyle="--",
                 linewidth=2.5,
-                label=f"RFD Brake: {rfd_peakmax:.3f}BW\u00B7s\u207B\u00B9",
+                label=f"RFD Brake: {rfd_peakmax:.3f}BW\u00b7s\u207b\u00b9",
             )
             # Para RFD Propulsion, que começa n o pico máximo e vai até o fim do tempo total
             ax3[i].plot(
@@ -1325,7 +1325,7 @@ def makefig3(
                 [vpeakmax, active_segment_data[-1]],
                 "g--",
                 linewidth=2.5,
-                label=f"RFD Propulsion: {rfd_propulsion:.3f}BW\u00B7s\u207B\u00B9",
+                label=f"RFD Propulsion: {rfd_propulsion:.3f}BW\u00b7s\u207b\u00b9",
             )
             ax3[i].plot(
                 [],
@@ -1333,7 +1333,7 @@ def makefig3(
                 "s",
                 color="red",
                 alpha=0.3,
-                label=f"Impulse Impact Transient: {area_impact_transient:.3f}BW\u00B7s",
+                label=f"Impulse Impact Transient: {area_impact_transient:.3f}BW\u00b7s",
             )
             ax3[i].plot(
                 [],
@@ -1341,7 +1341,7 @@ def makefig3(
                 "s",
                 color="orange",
                 alpha=0.3,
-                label=f"Impulse Brake: {area_peakmax:.3f}BW\u00B7s",
+                label=f"Impulse Brake: {area_peakmax:.3f}BW\u00b7s",
             )
             ax3[i].plot(
                 [],
@@ -1349,7 +1349,7 @@ def makefig3(
                 "s",
                 color="green",
                 alpha=0.3,
-                label=f"Impulse Propulsion: {area_propulsion:.3f}BW\u00B7s",
+                label=f"Impulse Propulsion: {area_propulsion:.3f}BW\u00b7s",
             )
             ax3[i].plot(
                 [],
@@ -1357,7 +1357,7 @@ def makefig3(
                 "s",
                 color="gray",
                 alpha=0.2,
-                label=f"Total Impulse: {total_area:.3f}BW\u00B7s",
+                label=f"Total Impulse: {total_area:.3f}BW\u00b7s",
             )
             ax3[i].plot(
                 [], [], " ", label=f"Contact Time: {total_time:.3f}s"
@@ -1725,7 +1725,7 @@ def makefig4(
                 [active_segment_data[0], vpeak_impact_transient],
                 "r--",
                 linewidth=2.5,
-                label=f"RFD Impact Transient: {rfd_impact_transient:.3f}BW\u00B7s\u207B\u00B9",
+                label=f"RFD Impact Transient: {rfd_impact_transient:.3f}BW\u00b7s\u207b\u00b9",
             )
             # Se rfd_peakmax tem o mesmo intervalo de tempo que rfd_impact_transient
             ax4[i].plot(
@@ -1734,7 +1734,7 @@ def makefig4(
                 color="orange",
                 linestyle="--",
                 linewidth=2.5,
-                label=f"RFD Brake: {rfd_peakmax:.3f}BW\u00B7s\u207B\u00B9",
+                label=f"RFD Brake: {rfd_peakmax:.3f}BW\u00b7s\u207b\u00b9",
             )
             # Para RFD Propulsion, que começa n o pico máximo e vai até o fim do tempo total
             ax4[i].plot(
@@ -1742,7 +1742,7 @@ def makefig4(
                 [vpeakmax, active_segment_data[-1]],
                 "g--",
                 linewidth=2.5,
-                label=f"RFD Propulsion: {rfd_propulsion:.3f}BW\u00B7s\u207B\u00B9",
+                label=f"RFD Propulsion: {rfd_propulsion:.3f}BW\u00b7s\u207b\u00b9",
             )
             ax4[i].plot(
                 [],
@@ -1750,7 +1750,7 @@ def makefig4(
                 "s",
                 color="red",
                 alpha=0.3,
-                label=f"Impulse Impact Transient: {area_impact_transient:.3f}BW\u00B7s",
+                label=f"Impulse Impact Transient: {area_impact_transient:.3f}BW\u00b7s",
             )
             ax4[i].plot(
                 [],
@@ -1758,7 +1758,7 @@ def makefig4(
                 "s",
                 color="orange",
                 alpha=0.3,
-                label=f"Impulse Brake: {area_peakmax:.3f}BW\u00B7s",
+                label=f"Impulse Brake: {area_peakmax:.3f}BW\u00b7s",
             )
             ax4[i].plot(
                 [],
@@ -1766,7 +1766,7 @@ def makefig4(
                 "s",
                 color="green",
                 alpha=0.3,
-                label=f"Impulse Propulsion: {area_propulsion:.3f}BW\u00B7s",
+                label=f"Impulse Propulsion: {area_propulsion:.3f}BW\u00b7s",
             )
             ax4[i].plot(
                 [],
@@ -1774,7 +1774,7 @@ def makefig4(
                 "s",
                 color="gray",
                 alpha=0.2,
-                label=f"Total Impulse: {total_area:.3f}BW\u00B7s",
+                label=f"Total Impulse: {total_area:.3f}BW\u00b7s",
             )
             ax4[i].plot(
                 [], [], " ", label=f"Contact Time: {total_time:.3f}s"
