@@ -5,12 +5,12 @@ Date: September 29, 2024
 Version: 1.1
 
 Description:
-This script performs batch video cutting by processing a list of videos, extracting specified segments 
-based on frame ranges, and saving them in a structured output directory. The script supports GPU 
+This script performs batch video cutting by processing a list of videos, extracting specified segments
+based on frame ranges, and saving them in a structured output directory. The script supports GPU
 acceleration via NVIDIA NVENC when available, defaulting to CPU-based processing if a GPU is not detected.
 
-The script reads a list file where each line specifies the original video name, the desired name 
-for the cut video, the start frame, and the end frame. The videos are processed and saved in a "cut_videos" 
+The script reads a list file where each line specifies the original video name, the desired name
+for the cut video, the start frame, and the end frame. The videos are processed and saved in a "cut_videos"
 subdirectory inside the specified output directory.
 
 List file format:
@@ -22,10 +22,10 @@ PC001_STS_02_FLIRsagital.avi PC001_STS_02_FLIRsagital_cut.mp4 100 300
 The script automatically removes duplicate ".mp4" extensions from the new file name if necessary.
 
 ### Key Features:
-1. **Batch Video Processing**: Processes multiple video files in a batch based on the segments specified 
+1. **Batch Video Processing**: Processes multiple video files in a batch based on the segments specified
    in the list file.
 2. **Frame-Based Cutting**: Allows precise cutting of videos by specifying start and end frames for each segment.
-3. **GPU Acceleration**: Uses NVIDIA GPU with NVENC for accelerated video processing if available. Falls back 
+3. **GPU Acceleration**: Uses NVIDIA GPU with NVENC for accelerated video processing if available. Falls back
    to CPU-based processing using `libx264` if no GPU is detected.
 4. **Organized Output**: Saves all cut videos in a "cut_videos" subdirectory inside the specified output directory.
 
