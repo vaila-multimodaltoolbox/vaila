@@ -40,7 +40,7 @@ Requirements:
 - Tkinter for the GUI components (usually included with Python).
 
 Installation of FFmpeg (for video processing):
-- **Conda (recommended)**: 
+- **Conda (recommended)**:
   ```bash
   conda install -c conda-forge ffmpeg
   ```

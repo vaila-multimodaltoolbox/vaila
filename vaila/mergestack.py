@@ -22,20 +22,20 @@ Version history:
 
 Usage:
 ------
-python mergestack.py    
+python mergestack.py
 
 Description:
 ------------
-This script allows you to merge and stack CSV files.    
+This script allows you to merge and stack CSV files.
 The script provides functionality to merge and stack CSV files in different ways:
 
-1. Merge: Combines two CSV files horizontally (column-wise), inserting one file's columns 
+1. Merge: Combines two CSV files horizontally (column-wise), inserting one file's columns
    into another at a specified position.
 
-2. Stack: Combines two CSV files vertically (row-wise), appending one file's rows 
+2. Stack: Combines two CSV files vertically (row-wise), appending one file's rows
    to another either at the beginning or end.
 
-The script uses a graphical user interface (GUI) for file selection and provides 
+The script uses a graphical user interface (GUI) for file selection and provides
 feedback through message boxes and console output.
 
 Main functions:

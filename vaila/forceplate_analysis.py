@@ -4,47 +4,47 @@ forceplate_analysis.py
 ================================================================================
 Author: Prof. Paulo Santiago
 Date: 9 September 2024
-Update: 28 November 2024 
+Update: 28 November 2024
 Version: 0.7
 
 Description:
 ------------
-This script serves as the central control interface for the VAILA (Virtual Analysis 
-for Interactive Learning in Biomechanics) toolbox, providing a user-friendly graphical 
-user interface (GUI) for selecting and executing various biomechanical analysis scripts. 
-The analyses offered in this toolbox support the study and evaluation of postural control, 
-dynamic balance, gait data, and force measurements, which are critical in both clinical 
+This script serves as the central control interface for the VAILA (Virtual Analysis
+for Interactive Learning in Biomechanics) toolbox, providing a user-friendly graphical
+user interface (GUI) for selecting and executing various biomechanical analysis scripts.
+The analyses offered in this toolbox support the study and evaluation of postural control,
+dynamic balance, gait data, and force measurements, which are critical in both clinical
 and research settings.
 
 Key Analyses Supported:
 -----------------------
-1. Force Cube Analysis: Examines force data captured in a cubic arrangement, allowing for 
+1. Force Cube Analysis: Examines force data captured in a cubic arrangement, allowing for
    multidirectional force vector analysis.
-2. Center of Pressure (CoP) Balance Analysis: Evaluates postural stability by analyzing 
-   the center of pressure data, providing insights into balance control and sway 
+2. Center of Pressure (CoP) Balance Analysis: Evaluates postural stability by analyzing
+   the center of pressure data, providing insights into balance control and sway
    characteristics.
-3. Force CMJ (Countermovement Jump) Analysis: Analyzes the forces involved in a 
+3. Force CMJ (Countermovement Jump) Analysis: Analyzes the forces involved in a
    countermovement jump to assess athletic performance, muscle power, and explosiveness.
-4. Noise Signal Fixing: Identifies and corrects noise artifacts in force signals, ensuring 
+4. Noise Signal Fixing: Identifies and corrects noise artifacts in force signals, ensuring
    data accuracy for subsequent analyses.
 5. Calculate CoP: Executes a process to calculate the CoP data.
-6. Gait Analysis (Single Strike): Analyzes a single contact strike in gait data, calculating 
+6. Gait Analysis (Single Strike): Analyzes a single contact strike in gait data, calculating
    key metrics such as peak force, impulse, and rate of force development.
 
 Functionalities:
 ----------------
-1. GUI for Analysis Selection: Utilizes Python's Tkinter library to present a straightforward 
+1. GUI for Analysis Selection: Utilizes Python's Tkinter library to present a straightforward
    interface where users can choose their desired analysis with ease.
-2. Dynamic Module Importing: Efficiently loads only the necessary module for the selected 
+2. Dynamic Module Importing: Efficiently loads only the necessary module for the selected
    analysis, conserving system resources and improving performance.
-3. Execution of Analysis: Automatically runs the main function of the selected analysis module, 
+3. Execution of Analysis: Automatically runs the main function of the selected analysis module,
    guiding users through any necessary data input or parameter settings.
 
 Modules and Packages Required:
 ------------------------------
 - Python Standard Libraries: tkinter for GUI creation and management.
 - External Libraries: None required; all functionalities are built using standard Python libraries.
-- VAILA Toolbox Modules: 
+- VAILA Toolbox Modules:
   * force_cube_fig: For analyzing force cube data.
   * cop_analysis: For conducting CoP balance analysis.
   * force_cmj: For analyzing countermovement jump dynamics.
@@ -54,29 +54,29 @@ Modules and Packages Required:
 
 How to Use:
 -----------
-1. Run the Script: 
+1. Run the Script:
    Execute the script from the terminal using:
    python -m vaila.forceplate_analysis
    Alternatively, double-click the script file if your environment supports it.
 
 2. Select Analysis:
-   A GUI window will appear, prompting you to select the type of analysis to perform. Click on 
+   A GUI window will appear, prompting you to select the type of analysis to perform. Click on
    the corresponding button for the desired analysis.
 
 3. Follow Instructions:
-   The selected analysis will start, and you will be guided through the necessary steps, such as 
-   choosing data files or entering parameters. Follow the on-screen instructions to complete the 
+   The selected analysis will start, and you will be guided through the necessary steps, such as
+   choosing data files or entering parameters. Follow the on-screen instructions to complete the
    analysis.
 
 License:
 --------
-This script is licensed under the MIT License. For more details, please refer to the LICENSE file 
+This script is licensed under the MIT License. For more details, please refer to the LICENSE file
 located in the project root.
 
 Disclaimer:
 -----------
-This script is provided "as is," without any warranty, express or implied. The authors are not 
-liable for any damage or data loss resulting from the use of this script. It is intended solely for 
+This script is provided "as is," without any warranty, express or implied. The authors are not
+liable for any damage or data loss resulting from the use of this script. It is intended solely for
 academic and research purposes.
 
 Changelog:
