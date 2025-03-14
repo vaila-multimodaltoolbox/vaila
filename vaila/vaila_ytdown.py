@@ -488,9 +488,9 @@ if TKINTER_AVAILABLE:
     class DownloaderGUI:
         def __init__(self, root):
             self.root = root
-            self.root.title("YouTube High FPS Downloader")
-            self.root.geometry("750x600")
-            self.root.minsize(700, 550)
+            self.root.title("vailá YOUTUBE DOWNLOADER")
+            self.root.geometry("1024x960")
+            self.root.minsize(800, 800)
 
             # Create downloader instance
             self.downloader = YTDownloader()
@@ -499,11 +499,26 @@ if TKINTER_AVAILABLE:
             main_frame = ttk.Frame(root, padding=15)
             main_frame.pack(fill=tk.BOTH, expand=True)
 
-            # Main title and description
-            title_label = ttk.Label(
-                main_frame, text="vailá YOUTUBE DOWNLOADER", font=("Arial", 16, "bold")
+            # Criar um frame para o título
+            title_frame = ttk.Frame(main_frame)
+            title_frame.pack(pady=(0, 5), fill=tk.X)
+            
+            # Usar dois labels separados em vez do widget Text
+            # O primeiro label para "vailá" em itálico
+            vaila_label = ttk.Label(
+                title_frame, 
+                text="vailá",
+                font=("Arial", 16, "bold", "italic")
             )
-            title_label.pack(pady=(0, 5))
+            vaila_label.pack(side=tk.LEFT)
+            
+            # O segundo label para "YOUTUBE DOWNLOADER" em fonte normal
+            downloader_label = ttk.Label(
+                title_frame, 
+                text=" YOUTUBE DOWNLOADER",
+                font=("Arial", 16, "bold")
+            )
+            downloader_label.pack(side=tk.LEFT)
 
             desc_label = ttk.Label(
                 main_frame,
@@ -511,29 +526,6 @@ if TKINTER_AVAILABLE:
                 font=("Arial", 12),
             )
             desc_label.pack(pady=(0, 15))
-
-            # Load URL file section - made more prominent
-            file_frame = ttk.LabelFrame(
-                main_frame, text="Load URLs from File", padding=10
-            )
-            file_frame.pack(fill=tk.X, pady=10)
-
-            ttk.Label(
-                file_frame,
-                text="Load a text file with YouTube URLs (one per line)",
-                font=("Arial", 11),
-            ).pack(anchor=tk.W, pady=5)
-
-            file_button_frame = ttk.Frame(file_frame)
-            file_button_frame.pack(fill=tk.X, pady=5)
-
-            load_file_button = ttk.Button(
-                file_button_frame,
-                text="SELECT URL FILE",
-                command=self.load_url_file,
-                style="Accent.TButton",
-            )
-            load_file_button.pack(side=tk.LEFT, padx=5, pady=5)
 
             # Output directory section
             dir_frame = ttk.LabelFrame(main_frame, text="Save Location", padding=10)
@@ -558,7 +550,7 @@ if TKINTER_AVAILABLE:
             status_frame.pack(fill=tk.X, pady=10)
 
             self.status_var = tk.StringVar(
-                value="Ready - Please load a URL file to begin"
+                value="Ready - Please select output directory and load a URL file"
             )
             ttk.Label(
                 status_frame, textvariable=self.status_var, font=("Arial", 10, "bold")
@@ -576,6 +568,29 @@ if TKINTER_AVAILABLE:
             self.log_text = tk.Text(log_frame, height=10, width=80, wrap=tk.WORD)
             self.log_text.pack(fill=tk.BOTH, expand=True)
 
+            # Load URL file section
+            file_frame = ttk.LabelFrame(
+                main_frame, text="Load URLs from File", padding=10
+            )
+            file_frame.pack(fill=tk.X, pady=10)
+
+            ttk.Label(
+                file_frame,
+                text="Load a text file with YouTube URLs (one per line)",
+                font=("Arial", 11),
+            ).pack(anchor=tk.W, pady=5)
+
+            file_button_frame = ttk.Frame(file_frame)
+            file_button_frame.pack(fill=tk.X, pady=5)
+
+            load_file_button = ttk.Button(
+                file_button_frame,
+                text="SELECT URL FILE",
+                command=self.load_url_file,
+                style="Accent.TButton",
+            )
+            load_file_button.pack(side=tk.LEFT, padx=5, pady=5)
+
             # Add instructions for URL file format
             instructions_frame = ttk.Frame(main_frame)
             instructions_frame.pack(fill=tk.X, pady=5)
@@ -592,7 +607,7 @@ if TKINTER_AVAILABLE:
 
             # Log startup
             self.log("Downloader started - loading highest FPS version for all videos")
-            self.log("Please select a text file with YouTube URLs to begin")
+            self.log("Please select output directory and then load a URL file")
 
         def log(self, message):
             """Add a message to the log display."""
@@ -616,8 +631,19 @@ if TKINTER_AVAILABLE:
                 )
 
                 if directory:
+                    # Atualiza a variável e força a atualização da interface
                     self.output_dir_var.set(directory)
+                    self.root.update_idletasks()  # Força a atualização dos widgets
+                    
+                    # Garante que o Entry seja atualizado explicitamente
+                    for widget in self.root.winfo_children():
+                        widget.update()
+                        
                     self.update_status(f"Output directory set to: {directory}")
+                    
+                    # Log para debug
+                    self.log(f"Directory selected: {directory}")
+                    self.log(f"Variable value: {self.output_dir_var.get()}")
             except Exception as e:
                 self.log(f"Error selecting directory: {str(e)}")
 
