@@ -4,8 +4,8 @@ Author: Paulo R. P. Santiago
 Version: 2024-09-25 11:07:00
 
 Description:
-This script provides functionality to convert CSV files containing point and analog data 
-into the C3D format, commonly used for motion capture data analysis. The script uses the 
+This script provides functionality to convert CSV files containing point and analog data
+into the C3D format, commonly used for motion capture data analysis. The script uses the
 ezc3d library to create C3D files from CSV inputs while sanitizing and formatting the data
 to ensure compatibility with the C3D standard.
 
@@ -30,7 +30,7 @@ Dependencies:
 - tkinter: For GUI elements, including file dialogs and message boxes.
 
 Usage:
-Run the script, select the necessary CSV files for point and analog data, provide the required 
+Run the script, select the necessary CSV files for point and analog data, provide the required
 parameters, and save the resulting C3D file to the desired location.
 
 """

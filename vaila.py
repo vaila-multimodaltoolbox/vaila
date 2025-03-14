@@ -11,60 +11,60 @@ Python Version: 3.12.9
 
 Description:
 ------------
-vailá (Versatile Anarcho Integrated Liberation Ánalysis) is an open-source, 
-Python-based multimodal toolbox designed to streamline biomechanical data 
-analysis. It integrates multiple types of biomechanical data (e.g., IMU, motion 
-capture, markerless tracking, force plates, GNSS/GPS, EMG) into a unified, 
-flexible platform for advanced human movement analysis. The software was 
-developed with a modular architecture to ensure easy expansion, transparency, 
+vailá (Versatile Anarcho Integrated Liberation Ánalysis) is an open-source,
+Python-based multimodal toolbox designed to streamline biomechanical data
+analysis. It integrates multiple types of biomechanical data (e.g., IMU, motion
+capture, markerless tracking, force plates, GNSS/GPS, EMG) into a unified,
+flexible platform for advanced human movement analysis. The software was
+developed with a modular architecture to ensure easy expansion, transparency,
 and community-driven contributions.
 
-vailá offers batch processing of large datasets, multimodal data analysis, 
-and cross-platform compatibility (Linux, macOS, Windows). It is developed to 
-handle complex biomechanical workflows, including kinematic and kinetic data 
-processing, visualization, and data conversion, as discussed in the associated 
-paper. The system fosters a collaborative, transparent environment for research, 
+vailá offers batch processing of large datasets, multimodal data analysis,
+and cross-platform compatibility (Linux, macOS, Windows). It is developed to
+handle complex biomechanical workflows, including kinematic and kinetic data
+processing, visualization, and data conversion, as discussed in the associated
+paper. The system fosters a collaborative, transparent environment for research,
 allowing users to customize and expand the toolbox with new functionalities.
 
 Key Features:
 -------------
-1. **Multimodal Data Integration**: 
-   - Supports data from IMUs, markerless tracking (2D and 3D), MoCap systems, 
+1. **Multimodal Data Integration**:
+   - Supports data from IMUs, markerless tracking (2D and 3D), MoCap systems,
      force plates, GNSS/GPS, EMG, and other biomechanical sensors.
 
-2. **Data Processing and Batch Operations**: 
-   - Batch processing for large datasets across modalities, including video 
-     synchronization, pixel extraction, DLT-based 2D/3D reconstructions, and 
+2. **Data Processing and Batch Operations**:
+   - Batch processing for large datasets across modalities, including video
+     synchronization, pixel extraction, DLT-based 2D/3D reconstructions, and
      force analysis.
 
-3. **Data Conversion and File Management**: 
-   - Converts between multiple data formats (C3D <--> CSV), automates renaming, 
+3. **Data Conversion and File Management**:
+   - Converts between multiple data formats (C3D <--> CSV), automates renaming,
      copying, and managing large sets of biomechanical files.
 
-4. **Visualization**: 
-   - Includes 2D and 3D plotting of biomechanical data using libraries such as 
+4. **Visualization**:
+   - Includes 2D and 3D plotting of biomechanical data using libraries such as
      Matplotlib and Plotly.
 
-5. **Cross-Platform**: 
-   - Designed for macOS, Linux, and Windows, with full transparency of execution 
+5. **Cross-Platform**:
+   - Designed for macOS, Linux, and Windows, with full transparency of execution
      flow through rich terminal outputs and print statements for debugging.
 
 6. **Open Field Test Analysis** (New Feature):
-   - Provides tools for analyzing open field test data for rodents, including 
+   - Provides tools for analyzing open field test data for rodents, including
      calculations of total distance traveled, speed, and time spent in each zone.
 
 Usage:
 ------
-- Run this script to launch the main graphical user interface (GUI) built with 
+- Run this script to launch the main graphical user interface (GUI) built with
   Tkinter.
 - The GUI offers:
-  - **File Management (Frame A)**: Tools for renaming, importing, exporting, and 
+  - **File Management (Frame A)**: Tools for renaming, importing, exporting, and
     manipulating large sets of files.
-  - **Multimodal Analysis (Frame B)**: Tools for analyzing biomechanical data 
+  - **Multimodal Analysis (Frame B)**: Tools for analyzing biomechanical data
     (e.g., MoCap, IMU, and markerless tracking).
-  - **Available Tools (Frame C)**: Data conversion, video/image processing, 
+  - **Available Tools (Frame C)**: Data conversion, video/image processing,
     DLT-based 2D/3D reconstructions, and visualization tools.
-  - **Open Field Test Analysis (Frame D)**: Tools for analyzing open field test 
+  - **Open Field Test Analysis (Frame D)**: Tools for analyzing open field test
     data, providing insights into animal behavior and movement patterns.
 
 License:
@@ -200,6 +200,7 @@ C_B_r1_c1 - Video<-->PNG  C_B_r1_c2 - Cut Videos    C_B_r1_c3 - Draw Box
 C_B_r2_c1 - CompressH264  C_B_r2_c2 - Compress H265 C_B_r2_c3 - Make Sync file
 C_B_r3_c1 - GetPixelCoord C_B_r3_c2 - Metadata info C_B_r3_c3 - Merge Videos
 C_B_r4_c1 - Distort video C_B_r4_c2 - Cut Video     C_B_r4_c3 - Resize Video
+C_B_r5_c1 - YT Downloader C_B_r5_c2 - vailá         C_B_r5_c3 - vailá
 
 C_C: Visualization
 C_C_r1_c1 - Show C3D      C_C_r1_c2 - Show CSV       C_C_r2_c1 - Plot 2D
@@ -941,8 +942,7 @@ class Vaila(tk.Tk):
             width=button_width,
         )
 
-        # Avaliable blank (vailá) buttons for future tools (12-15)
-        # C_B_r4_c1 - Video: vailá
+        # C_B_r4_c1 - Video: Distort Video/data
         vaila_distortvideo_btn = tk.Button(
             tools_col2,
             text="Distort Video/data",
@@ -966,6 +966,30 @@ class Vaila(tk.Tk):
             width=button_width,
         )
 
+        # C_B_r5_c1 - Video: YT Downloader
+        ytdownloader_btn = tk.Button(
+            tools_col2,
+            text="YT Downloader",
+            command=self.ytdownloader,
+            width=button_width,
+        )
+
+        # C_B_r5_c2 - Video: vailá
+        vaila_btn12 = tk.Button(
+            tools_col2,
+            text="vailá",
+            command=self.show_vaila_message,
+            width=button_width,
+        )
+
+        # C_B_r5_c3 - Video: vailá
+        vaila_btn13 = tk.Button(
+            tools_col2,
+            text="vailá",
+            command=self.show_vaila_message,
+            width=button_width,
+        )
+
         # Packing Video buttons
         extract_png_btn.grid(row=0, column=0, padx=2, pady=2)
         cut_videos_btn.grid(row=0, column=1, padx=2, pady=2)
@@ -979,7 +1003,9 @@ class Vaila(tk.Tk):
         vaila_distortvideo_btn.grid(row=3, column=0, padx=2, pady=2)
         cut_video_btn.grid(row=3, column=1, padx=2, pady=2)
         resize_video_btn.grid(row=3, column=2, padx=2, pady=2)
-
+        ytdownloader_btn.grid(row=4, column=0, padx=2, pady=2)
+        vaila_btn12.grid(row=4, column=1, padx=2, pady=2)
+        vaila_btn13.grid(row=4, column=2, padx=2, pady=2)
         tools_col2.pack(side="left", fill="both", expand=True, padx=5, pady=5)
 
         ## VVVVVVVVVVVVVVV VISUALIZATION BUTTONS VVVVVVVVVVVVVVVV
@@ -1818,6 +1844,19 @@ class Vaila(tk.Tk):
         from vaila import resize_video
 
         resize_video.run_resize_video()
+
+    # C_B_r5_c1
+    def ytdownloader(self):
+        """Runs the YouTube downloader module.
+
+        This function runs the YouTube downloader module, which can be used to
+        download videos from YouTube. The module will prompt the user to select
+        the directory containing the video files and input the sample rate and start
+        and end indices for analysis.
+        """
+        from vaila import vaila_ytdown
+
+        vaila_ytdown.run_ytdown()
 
     # C_C_r1_c1
     def show_c3d_data(self):

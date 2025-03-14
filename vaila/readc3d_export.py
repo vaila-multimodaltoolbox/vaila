@@ -43,7 +43,7 @@ Contact:
 - paulosantiago@usp.br
 
 Version history:
-- v0.2.0 (28 February 2025): Added support for saving COP data in a combined CSV file.  
+- v0.2.0 (28 February 2025): Added support for saving COP data in a combined CSV file.
 
 Usage:
 - Run the script, select the input directory containing .c3d files, and specify an output directory.

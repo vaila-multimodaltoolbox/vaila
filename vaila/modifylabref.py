@@ -12,9 +12,9 @@ This Python script is designed for rotating and transforming 3D motion capture d
 It allows the application of predefined or custom rotation angles (in degrees) and
 rotation orders (e.g., 'xyz', 'zyx') to sets of 3D data points (e.g., from CSV files).
 
-The script supports different predefined rotation settings (A, B, C) and enables users 
-to provide custom angles and rotation sequences to rotate datasets as needed for biomechanical 
-analysis. Output files are generated after the rotations, preserving the original time column 
+The script supports different predefined rotation settings (A, B, C) and enables users
+to provide custom angles and rotation sequences to rotate datasets as needed for biomechanical
+analysis. Output files are generated after the rotations, preserving the original time column
 and saving the rotated data in CSV format.
 
 Main Features:
@@ -28,7 +28,7 @@ Main Features:
     2. Custom Rotation:
         - Users can input custom angles in the form of a list (e.g., [x, y, z] degrees).
         - Optionally, the rotation order (e.g., 'xyz', 'zyx') can be specified.
-        - Custom rotations are applied to each set of points, allowing flexible transformations 
+        - Custom rotations are applied to each set of points, allowing flexible transformations
           for various biomechanical data configurations.
 
     3. Automated File Processing:

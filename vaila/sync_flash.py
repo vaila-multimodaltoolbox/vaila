@@ -1,9 +1,9 @@
 """
 sync_flash.py
 
-This script provides a function to automatically detect brightness levels in a specific 
-region of a video file by calculating the median of the R, G, and B values in that region. 
-This functionality can be used to help synchronize videos based on flashes or sudden 
+This script provides a function to automatically detect brightness levels in a specific
+region of a video file by calculating the median of the R, G, and B values in that region.
+This functionality can be used to help synchronize videos based on flashes or sudden
 changes in brightness.
 
 Features:
@@ -16,13 +16,13 @@ Dependencies:
 - numpy: For efficient numerical operations and median calculation.
 
 Usage:
-- Import the `get_median_brightness` function into another script or use it directly 
+- Import the `get_median_brightness` function into another script or use it directly
   in this script's `__main__` block for testing or standalone operation.
 
 Example:
-- To calculate the median brightness in a region (x=50, y=50, width=100, height=100) 
+- To calculate the median brightness in a region (x=50, y=50, width=100, height=100)
   of a video:
-  
+
     ```python
     from sync_flash import get_median_brightness
     median_brightness = get_median_brightness("path/to/video.mp4", (50, 50, 100, 100))
