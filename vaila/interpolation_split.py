@@ -9,26 +9,26 @@ Python Version: 3.11.9
 
 Description:
 ------------
-This script provides functionality to fill missing data in CSV files using 
-linear interpolation, Kalman filter, Savitzky-Golay filter, nearest value fill, 
-or to split data into a separate CSV file. It is intended for use in biomechanical 
-data analysis, where gaps in time-series data can be filled and datasets can be 
+This script provides functionality to fill missing data in CSV files using
+linear interpolation, Kalman filter, Savitzky-Golay filter, nearest value fill,
+or to split data into a separate CSV file. It is intended for use in biomechanical
+data analysis, where gaps in time-series data can be filled and datasets can be
 split for further analysis.
 
 Key Features:
 -------------
-1. **Gap Filling with Interpolation**: 
-   - Fills gaps in numerical data using linear interpolation, Kalman filter, 
+1. **Gap Filling with Interpolation**:
+   - Fills gaps in numerical data using linear interpolation, Kalman filter,
      Savitzky-Golay filter, nearest value fill, or leaves NaNs as is.
    - Only the missing data (NaNs) are filled; existing data remains unchanged.
-2. **Data Splitting**: 
+2. **Data Splitting**:
    - Splits CSV files into two halves for easier data management and analysis.
 
 Usage:
 ------
-- Run this script to launch a graphical user interface (GUI) that provides options 
+- Run this script to launch a graphical user interface (GUI) that provides options
   to perform interpolation on CSV files or to split them into two parts.
-- The filled or split files are saved in new directories to avoid overwriting the 
+- The filled or split files are saved in new directories to avoid overwriting the
   original files.
 
 License:
