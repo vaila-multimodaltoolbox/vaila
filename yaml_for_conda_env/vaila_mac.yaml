@@ -85,3 +85,4 @@ dependencies:
       - folium
       - tensorflow
       - tensorflow-metal
+      - yt-dlp
