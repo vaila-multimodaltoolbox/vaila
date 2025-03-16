@@ -4,8 +4,8 @@ vaila.py
 ===============================================================================
 Author: Paulo R. P. Santiago
 Date:  7 October 2024
-Update: 14 March 2025
-Version updated: 0.2.3
+Update: 16 March 2025
+Version updated: 0.2.4
 Python Version: 3.12.9
 
 
@@ -164,7 +164,7 @@ except ImportError as e:
 
 
 text = r"""
-version: 14.Mar.2025 (Python 3.12.9)
+version: 16.Mar.2025 (Python 3.12.9)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -238,7 +238,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 14.Mar.2025 (Python 3.12.9)")
+        self.title("vailá - 16.Mar.2025 (Python 3.12.9)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -1868,7 +1868,7 @@ class Vaila(tk.Tk):
         from vaila import vaila_ytdown
 
         vaila_ytdown.run_ytdown()
-    
+
     # C_B_r5_c2
     def run_iaudiovid(self):
         """Runs the Insert Audio module.
@@ -1881,7 +1881,7 @@ class Vaila(tk.Tk):
         from vaila import vaila_iaudiovid
 
         vaila_iaudiovid.run_iaudiovid()
-     
+
     # C_B_r5_c3
     def vaila(self):
         """Runs the vailá module.
@@ -1889,7 +1889,6 @@ class Vaila(tk.Tk):
         This function runs the vailá module, which can be used to
         run vailá.
         """
-    
 
     # C_C_r1_c1
     def show_c3d_data(self):
