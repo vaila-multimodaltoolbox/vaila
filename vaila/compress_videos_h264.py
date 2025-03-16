@@ -15,10 +15,6 @@ saving the compressed versions in a subdirectory named 'compressed_h264'.
 The script supports GPU acceleration using NVIDIA NVENC if available or falls back to CPU encoding
 with libx264.
 
-The script has been updated to work on Windows, Linux, and macOS.
-It includes cross-platform detection of NVIDIA GPUs to utilize GPU acceleration where possible.
-On systems without an NVIDIA GPU (e.g., macOS), the script defaults to CPU-based compression.
-
 Usage:
 - Run the script to open a GUI, select the directory containing the videos,
   and the compression process will start automatically.
@@ -95,13 +91,9 @@ import os
 import subprocess
 import platform
 import tempfile
-import json
-from tkinter import filedialog, messagebox, Tk
-import time
-import re
+from datetime import datetime
 import tkinter as tk
-from tkinter import simpledialog
-from tkinter import ttk
+from tkinter import filedialog, messagebox, simpledialog
 
 # Variáveis globais
 success_count = 0
@@ -114,43 +106,29 @@ def is_nvidia_gpu_available():
 
     try:
         if os_type == "Windows":
-            # Use wmic command to get GPU names
             result = subprocess.run(
                 ["wmic", "path", "win32_VideoController", "get", "name"],
                 capture_output=True,
                 text=True,
                 check=True,
             )
-            if "NVIDIA" in result.stdout:
-                return True
-            else:
-                return False
-
+            return "NVIDIA" in result.stdout
         elif os_type == "Linux":
-            # Use lspci to get GPU names
             result = subprocess.run(
                 ["lspci"], capture_output=True, text=True, check=True
             )
-            if "NVIDIA" in result.stdout:
-                return True
-            else:
-                return False
-
+            return "NVIDIA" in result.stdout
         elif os_type == "Darwin":  # macOS
-            # No recent NVIDIA GPUs are supported on macOS
             return False
-
         else:
-            # Unsupported operating system
             return False
-
     except Exception as e:
         print(f"Error checking for NVIDIA GPU: {e}")
         return False
 
 
 def find_videos(directory):
-    """Find all video files in the specified directory without searching subdirectories."""
+    """Find all video files in the specified directory."""
     video_files = []
     for file in os.listdir(directory):
         if file.lower().endswith((".mp4", ".avi", ".mov", ".mkv", ".wmv")):
@@ -160,35 +138,24 @@ def find_videos(directory):
 
 def create_temp_file_with_videos(video_files):
     """Create temporary file with list of videos."""
-    temp_path = "temp_video_list.txt"
-    with open(temp_path, "w") as f:
-        for video in video_files:
-            f.write(f"{video}\n")  # Simplificado
-    return temp_path
+    temp = tempfile.NamedTemporaryFile(mode="w", delete=False)
+    for video in video_files:
+        temp.write(f"{video}\n")
+    temp.close()
+    return temp.name
 
 
-def get_video_duration(input_path):
-    """Get video duration in seconds using ffprobe."""
-    try:
-        cmd = [
-            "ffprobe",
-            "-v",
-            "error",
-            "-show_entries",
-            "format=duration",
-            "-of",
-            "default=noprint_wrappers=1:nokey=1",
-            input_path,
-        ]
-        output = subprocess.check_output(cmd).decode().strip()
-        return float(output)
-    except:
-        return None
-
-
-def run_compress_videos_h264(input_list, output_dir, preset, crf, use_gpu):
+def run_compress_videos_h264(input_list, output_dir, preset, crf, resolution, use_gpu):
     """Run the actual compression."""
     global success_count, failure_count
+    success_count = 0
+    failure_count = 0
+
+    print("\n[DEBUG] Compression Parameters:")
+    print(f"[DEBUG] - Preset: {preset}")
+    print(f"[DEBUG] - CRF: {crf}")
+    print(f"[DEBUG] - Resolution: {resolution}")
+    print(f"[DEBUG] - Use GPU: {use_gpu}")
 
     os.makedirs(output_dir, exist_ok=True)
 
@@ -201,45 +168,95 @@ def run_compress_videos_h264(input_list, output_dir, preset, crf, use_gpu):
         )
 
         try:
-            if use_gpu:
-                cmd = [
-                    "ffmpeg",
-                    "-y",
-                    "-i",
+            # Get original video resolution for debug
+            try:
+                cmd_probe = [
+                    "ffprobe",
+                    "-v",
+                    "error",
+                    "-select_streams",
+                    "v:0",
+                    "-show_entries",
+                    "stream=width,height",
+                    "-of",
+                    "csv=s=x:p=0",
                     video_path,
-                    "-c:v",
-                    "h264_nvenc",
-                    "-preset",
-                    preset,
-                    "-b:v",
-                    "5M",
-                    "-maxrate",
-                    "5M",
-                    "-bufsize",
-                    "10M",
-                    "-c:a",
-                    "copy",
-                    output_path,
                 ]
+                original_resolution = (
+                    subprocess.check_output(cmd_probe).decode().strip()
+                )
+                print(f"[DEBUG] Original video resolution: {original_resolution}")
+            except Exception as e:
+                print(f"[DEBUG] Error getting original resolution: {str(e)}")
+                original_resolution = "unknown"
+
+            # Base command
+            cmd = ["ffmpeg", "-y", "-i", video_path]
+
+            # Add scale filter if resolution is not original
+            if resolution != "original":
+                scale_filter = f"scale={resolution.replace('x', ':')}:force_original_aspect_ratio=decrease,pad={resolution.replace('x', ':')}:(ow-iw)/2:(oh-ih)/2"
+                print(f"[DEBUG] Applying scale filter: {scale_filter}")
+                cmd.extend(["-vf", scale_filter])
             else:
-                cmd = [
-                    "ffmpeg",
-                    "-y",
-                    "-i",
-                    video_path,
-                    "-c:v",
-                    "libx264",
-                    "-preset",
-                    preset,
-                    "-crf",
-                    str(crf),
-                    "-c:a",
-                    "copy",
-                    output_path,
-                ]
+                print("[DEBUG] Keeping original resolution (no scale filter)")
+
+            # Add encoding settings based on GPU availability
+            if use_gpu:
+                cmd.extend(
+                    [
+                        "-c:v",
+                        "h264_nvenc",
+                        "-preset",
+                        preset,
+                        "-b:v",
+                        "5M",
+                        "-maxrate",
+                        "5M",
+                        "-bufsize",
+                        "10M",
+                    ]
+                )
+            else:
+                cmd.extend(
+                    [
+                        "-c:v",
+                        "libx264",
+                        "-preset",
+                        preset,
+                        "-crf",
+                        str(crf),
+                    ]
+                )
+
+            # Add audio settings and output path
+            cmd.extend(["-c:a", "copy", output_path])
+
+            print("\n[DEBUG] Complete ffmpeg command:")
+            print(" ".join(cmd))
 
             print(f"\nProcessing: {os.path.basename(video_path)}")
             subprocess.run(cmd, check=True)
+
+            # Verify output video resolution
+            try:
+                cmd_check = [
+                    "ffprobe",
+                    "-v",
+                    "error",
+                    "-select_streams",
+                    "v:0",
+                    "-show_entries",
+                    "stream=width,height",
+                    "-of",
+                    "csv=s=x:p=0",
+                    output_path,
+                ]
+                output_resolution = subprocess.check_output(cmd_check).decode().strip()
+                print(f"[DEBUG] Output video resolution: {output_resolution}")
+            except Exception as e:
+                print(f"[DEBUG] Error checking output resolution: {str(e)}")
+
             success_count += 1
             print(f"Successfully compressed: {os.path.basename(video_path)}")
 
@@ -247,82 +264,319 @@ def run_compress_videos_h264(input_list, output_dir, preset, crf, use_gpu):
             failure_count += 1
             print(f"Failed to compress: {os.path.basename(video_path)}")
             print(f"Error: {str(e)}")
+            print(
+                f"[DEBUG] ffmpeg error output: {e.stderr if hasattr(e, 'stderr') else 'Not available'}"
+            )
 
 
-class CompressionConfigDialog(tk.simpledialog.Dialog):
-    def body(self, master):
-        tk.Label(
-            master, text="Video Compression Settings", font=("Arial", 10, "bold")
-        ).grid(row=0, columnspan=2, pady=10)
+def get_compression_parameters():
+    """
+    Create a single dialog window where user selects options by entering numbers.
+    """
+    # Create a dictionary to store parameters
+    params = {}
 
-        tk.Label(master, text="Preset:").grid(row=1, sticky="e")
-        self.preset_var = tk.StringVar(value="medium")
-        presets = [
-            "ultrafast",
-            "superfast",
-            "veryfast",
-            "faster",
-            "fast",
-            "medium",
-            "slow",
-            "slower",
-            "veryslow",
-        ]
-        self.preset_combo = ttk.Combobox(
-            master, textvariable=self.preset_var, values=presets, state="readonly"
-        )
-        self.preset_combo.grid(row=1, column=1, sticky="ew")
+    # Define options for reference
+    preset_options = [
+        "ultrafast",
+        "superfast",
+        "veryfast",
+        "faster",
+        "fast",
+        "medium",
+        "slow",
+        "slower",
+        "veryslow",
+    ]
+    resolution_options = [
+        "original",
+        "3840x2160",
+        "2560x1440",
+        "1920x1080",
+        "1280x720",
+        "854x480",
+        "640x360",
+    ]
 
-        tk.Label(master, text="CRF Value (0-51, lower is better quality):").grid(
-            row=2, sticky="e"
-        )
-        self.crf_entry = tk.Entry(master)
-        self.crf_entry.insert(0, "23")
-        self.crf_entry.grid(row=2, column=1)
+    # Create dialog window
+    dialog = tk.Toplevel()
+    dialog.title("Video Compression Settings")
+    dialog.grab_set()  # Make modal
 
-        tk.Label(master, text="Use GPU acceleration if available:").grid(
-            row=3, sticky="e"
-        )
-        self.use_gpu_var = tk.BooleanVar(value=False)
-        self.use_gpu_check = tk.Checkbutton(master, variable=self.use_gpu_var)
-        self.use_gpu_check.grid(row=3, column=1)
+    # Main frame with padding
+    main_frame = tk.Frame(dialog, padx=20, pady=15)
+    main_frame.pack(fill="both", expand=True)
 
-        return self.preset_combo
+    # Title
+    tk.Label(
+        main_frame, text="H.264 Video Compression Settings", font=("Arial", 12, "bold")
+    ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 15))
 
-    def validate(self):
+    # 1. Preset field with numbered options
+    tk.Label(
+        main_frame, text="Preset (enter number):", font=("Arial", 10, "bold")
+    ).grid(row=1, column=0, sticky="w", pady=5)
+    preset_var = tk.StringVar(value="5")  # Default to medium (index 5)
+    preset_entry = tk.Entry(main_frame, textvariable=preset_var, width=5)
+    preset_entry.grid(row=1, column=1, sticky="w", pady=5)
+
+    # Preset help text with numbered options
+    preset_help_text = "Options:\n"
+    for i, preset in enumerate(preset_options, 1):
+        preset_help_text += f"{i} = {preset}"
+        if i < len(preset_options):
+            preset_help_text += "   "
+            if i % 3 == 0:  # Break line every 3 options
+                preset_help_text += "\n"
+
+    tk.Label(
+        main_frame, text=preset_help_text, font=("Arial", 8, "italic"), justify="left"
+    ).grid(row=2, column=0, columnspan=2, sticky="w", padx=20)
+
+    # 2. CRF field (keep as is - already a number)
+    tk.Label(main_frame, text="CRF Value (0-51):", font=("Arial", 10, "bold")).grid(
+        row=3, column=0, sticky="w", pady=5
+    )
+    crf_var = tk.StringVar(value="23")
+    crf_entry = tk.Entry(main_frame, textvariable=crf_var, width=5)
+    crf_entry.grid(row=3, column=1, sticky="w", pady=5)
+
+    # CRF help text
+    tk.Label(
+        main_frame,
+        text="Lower = better quality (0-51), 23 is default",
+        font=("Arial", 8, "italic"),
+    ).grid(row=4, column=0, columnspan=2, sticky="w", padx=20)
+
+    # 3. Resolution field with numbered options
+    tk.Label(
+        main_frame, text="Resolution (enter number):", font=("Arial", 10, "bold")
+    ).grid(row=5, column=0, sticky="w", pady=5)
+    resolution_var = tk.StringVar(value="1")  # Default to original (index 1)
+    resolution_entry = tk.Entry(main_frame, textvariable=resolution_var, width=5)
+    resolution_entry.grid(row=5, column=1, sticky="w", pady=5)
+
+    # Resolution help text with numbered options
+    resolution_help_text = "Options:\n"
+    for i, res in enumerate(resolution_options, 1):
+        resolution_help_text += f"{i} = {res}"
+        if i < len(resolution_options):
+            resolution_help_text += "   "
+            if i % 2 == 0:  # Break line every 2 options
+                resolution_help_text += "\n"
+
+    tk.Label(
+        main_frame,
+        text=resolution_help_text,
+        font=("Arial", 8, "italic"),
+        justify="left",
+    ).grid(row=6, column=0, columnspan=2, sticky="w", padx=20)
+
+    # 4. GPU field with numbered options
+    tk.Label(
+        main_frame, text="Use GPU (enter number):", font=("Arial", 10, "bold")
+    ).grid(row=7, column=0, sticky="w", pady=5)
+    gpu_var = tk.StringVar(value="2")  # Default to No
+    gpu_entry = tk.Entry(main_frame, textvariable=gpu_var, width=5)
+    gpu_entry.grid(row=7, column=1, sticky="w", pady=5)
+
+    # GPU help text with numbered options
+    tk.Label(
+        main_frame,
+        text="Options: 1 = Yes (NVIDIA GPUs only)   2 = No (CPU encoding)",
+        font=("Arial", 8, "italic"),
+    ).grid(row=8, column=0, columnspan=2, sticky="w", padx=20)
+
+    # Separator
+    tk.Frame(main_frame, height=1, bg="gray").grid(
+        row=9, column=0, columnspan=2, sticky="ew", pady=15
+    )
+
+    # Button frame
+    button_frame = tk.Frame(main_frame)
+    button_frame.grid(row=10, column=0, columnspan=2, pady=10)
+
+    # Function for OK button
+    def on_ok():
         try:
-            crf = int(self.crf_entry.get())
-            if not (0 <= crf <= 51):
-                messagebox.showerror("Error", "CRF value must be between 0 and 51")
-                return False
-            return True
-        except ValueError:
-            messagebox.showerror("Error", "CRF value must be a number")
-            return False
+            # Validate preset
+            try:
+                preset_idx = int(preset_var.get().strip())
+                if not (1 <= preset_idx <= len(preset_options)):
+                    messagebox.showerror(
+                        "Error",
+                        f"Preset number must be between 1 and {len(preset_options)}",
+                    )
+                    return
+                preset = preset_options[preset_idx - 1]
+            except ValueError:
+                messagebox.showerror("Error", "Preset must be a number")
+                return
 
-    def apply(self):
-        self.result = {
-            "preset": self.preset_var.get(),
-            "crf": int(self.crf_entry.get()),
-            "use_gpu": self.use_gpu_var.get(),
-        }
+            # Validate CRF
+            try:
+                crf = int(crf_var.get().strip())
+                if not (0 <= crf <= 51):
+                    messagebox.showerror("Error", "CRF value must be between 0 and 51")
+                    return
+            except ValueError:
+                messagebox.showerror("Error", "CRF value must be a number")
+                return
+
+            # Validate resolution
+            try:
+                resolution_idx = int(resolution_var.get().strip())
+                if not (1 <= resolution_idx <= len(resolution_options)):
+                    messagebox.showerror(
+                        "Error",
+                        f"Resolution number must be between 1 and {len(resolution_options)}",
+                    )
+                    return
+                resolution = resolution_options[resolution_idx - 1]
+            except ValueError:
+                messagebox.showerror("Error", "Resolution must be a number")
+                return
+
+            # Validate GPU choice
+            try:
+                gpu_choice = int(gpu_var.get().strip())
+                if gpu_choice not in [1, 2]:
+                    messagebox.showerror(
+                        "Error", "GPU option must be 1 (Yes) or 2 (No)"
+                    )
+                    return
+                use_gpu = gpu_choice == 1
+            except ValueError:
+                messagebox.showerror("Error", "GPU option must be a number")
+                return
+
+            # Store parameters
+            params["preset"] = preset
+            params["crf"] = crf
+            params["resolution"] = resolution
+            params["use_gpu"] = use_gpu
+
+            # Show confirmation
+            confirm_msg = (
+                f"Selected compression settings:\n\n"
+                f"• Preset: {preset}\n"
+                f"• CRF: {crf}\n"
+                f"• Resolution: {resolution}\n"
+                f"• Use GPU: {'Yes' if use_gpu else 'No'}\n\n"
+                f"Continue with these settings?"
+            )
+
+            if messagebox.askyesno("Confirm Settings", confirm_msg):
+                dialog.destroy()
+            # If No, keep dialog open
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Error saving parameters: {str(e)}")
+
+    # Function for Cancel button
+    def on_cancel():
+        dialog.destroy()
+
+    # Add buttons
+    tk.Button(button_frame, text="OK", command=on_ok, width=10).pack(
+        side="left", padx=5
+    )
+    tk.Button(button_frame, text="Cancel", command=on_cancel, width=10).pack(
+        side="left", padx=5
+    )
+
+    # Function to show built-in help
+    def show_help():
+        help_text = """
+COMPRESSION SETTINGS HELP:
+
+PRESET: (speed vs quality tradeoff)
+1 = ultrafast: Fastest encoding, lowest quality
+2 = superfast: Very fast encoding, lower quality
+3 = veryfast: Fast encoding, decent quality
+4 = faster: Reasonably fast encoding, good quality
+5 = fast: Balanced encoding speed and quality
+6 = medium: Default preset with good balance
+7 = slow: Better quality, slower encoding
+8 = slower: Very good quality, much slower encoding
+9 = veryslow: Best quality, very slow encoding
+
+CRF VALUE (0-51): (quality setting)
+- Lower values = better quality, larger files
+- Higher values = lower quality, smaller files
+- 0 = lossless (largest files)
+- 23 = default value (good balance)
+- 51 = worst quality (smallest files)
+
+RESOLUTION: (output size)
+1 = original: Keep the original video resolution
+2 = 3840x2160: 4K UHD
+3 = 2560x1440: 2K QHD
+4 = 1920x1080: Full HD
+5 = 1280x720: HD
+6 = 854x480: SD
+7 = 640x360: Low resolution
+
+GPU ACCELERATION:
+1 = Yes: Use NVIDIA GPU for encoding (faster)
+2 = No: Use CPU for encoding (works on all systems)
+        """
+
+        help_dialog = tk.Toplevel(dialog)
+        help_dialog.title("Compression Settings Help")
+        help_dialog.transient(dialog)
+        help_dialog.grab_set()
+
+        text_widget = tk.Text(help_dialog, wrap="word", width=70, height=25)
+        text_widget.pack(padx=20, pady=20, fill="both", expand=True)
+        text_widget.insert("1.0", help_text)
+        text_widget.config(state="disabled")
+
+        tk.Button(help_dialog, text="Close", command=help_dialog.destroy).pack(pady=10)
+
+        # Center the help dialog
+        help_dialog.update_idletasks()
+        width = help_dialog.winfo_width()
+        height = help_dialog.winfo_height()
+        x = dialog.winfo_rootx() + (dialog.winfo_width() // 2) - (width // 2)
+        y = dialog.winfo_rooty() + (dialog.winfo_height() // 2) - (height // 2)
+        help_dialog.geometry(f"{width}x{height}+{x}+{y}")
+
+    # Add help button
+    tk.Button(main_frame, text="Help", command=show_help).grid(
+        row=11, column=0, columnspan=2, pady=5
+    )
+
+    # Center the dialog on screen
+    dialog.update_idletasks()
+    width = dialog.winfo_width()
+    height = dialog.winfo_height()
+    x = (dialog.winfo_screenwidth() // 2) - (width // 2)
+    y = (dialog.winfo_screenheight() // 2) - (height // 2)
+    dialog.geometry(f"{width}x{height}+{x}+{y}")
+
+    # Wait for window to close
+    dialog.wait_window()
+
+    # Return parameters if valid, otherwise None
+    return params if params else None
 
 
 def compress_videos_h264_gui():
-    root = tk.Tk()
-    root.withdraw()
-    # Print the directory and name of the script being executed
+    """Main function to run the GUI and compression process."""
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
     print("Starting compress_videos_h264_gui...")
 
-    # Get compression settings from dialog
-    dialog = CompressionConfigDialog(root, title="Compression Settings")
-    if not dialog.result:
+    # Get compression parameters through dialog
+    compression_config = get_compression_parameters()
+
+    # Check if user cancelled
+    if not compression_config:
+        print("User canceled the operation")
         return
 
-    compression_config = dialog.result
-
+    # Select video directory
     video_directory = filedialog.askdirectory(
         title="Select the directory containing videos to compress"
     )
@@ -330,18 +584,20 @@ def compress_videos_h264_gui():
         messagebox.showerror("Error", "No directory selected.")
         return
 
-    # Create output directory
-    output_directory = os.path.join(video_directory, "compressed_h264")
-
-    # Detect system and GPU availability
-    os_type = platform.system()
-    print(f"Operating System: {os_type}")
+    # Create output directory with timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_directory = os.path.join(video_directory, f"compressed_h264_{timestamp}")
 
     # Check if NVIDIA GPU is available when GPU is selected
     use_gpu = compression_config["use_gpu"] and is_nvidia_gpu_available()
     if compression_config["use_gpu"] and not use_gpu:
         print(
             "GPU acceleration requested but no NVIDIA GPU detected. Using CPU instead."
+        )
+        messagebox.showwarning(
+            "GPU Not Available",
+            "GPU acceleration was requested but no compatible NVIDIA GPU was detected.\n"
+            "Compression will proceed using CPU instead.",
         )
 
     # Find all video files
@@ -360,6 +616,7 @@ def compress_videos_h264_gui():
         output_directory,
         preset=compression_config["preset"],
         crf=compression_config["crf"],
+        resolution=compression_config["resolution"],
         use_gpu=use_gpu,
     )
 
