@@ -502,21 +502,17 @@ if TKINTER_AVAILABLE:
             # Criar um frame para o título
             title_frame = ttk.Frame(main_frame)
             title_frame.pack(pady=(0, 5), fill=tk.X)
-            
+
             # Usar dois labels separados em vez do widget Text
             # O primeiro label para "vailá" em itálico
             vaila_label = ttk.Label(
-                title_frame, 
-                text="vailá",
-                font=("Arial", 16, "bold", "italic")
+                title_frame, text="vailá", font=("Arial", 16, "bold", "italic")
             )
             vaila_label.pack(side=tk.LEFT)
-            
+
             # O segundo label para "YOUTUBE DOWNLOADER" em fonte normal
             downloader_label = ttk.Label(
-                title_frame, 
-                text=" YOUTUBE DOWNLOADER",
-                font=("Arial", 16, "bold")
+                title_frame, text=" YOUTUBE DOWNLOADER", font=("Arial", 16, "bold")
             )
             downloader_label.pack(side=tk.LEFT)
 
@@ -634,13 +630,13 @@ if TKINTER_AVAILABLE:
                     # Atualiza a variável e força a atualização da interface
                     self.output_dir_var.set(directory)
                     self.root.update_idletasks()  # Força a atualização dos widgets
-                    
+
                     # Garante que o Entry seja atualizado explicitamente
                     for widget in self.root.winfo_children():
                         widget.update()
-                        
+
                     self.update_status(f"Output directory set to: {directory}")
-                    
+
                     # Log para debug
                     self.log(f"Directory selected: {directory}")
                     self.log(f"Variable value: {self.output_dir_var.get()}")
