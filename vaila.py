@@ -4,8 +4,8 @@ vaila.py
 ===============================================================================
 Author: Paulo R. P. Santiago
 Date:  7 October 2024
-Update: 16 March 2025
-Version updated: 0.2.4
+Update: 17 March 2025
+Version updated: 0.3.1
 Python Version: 3.12.9
 
 
@@ -60,6 +60,9 @@ Key Features:
 8. **Audio Video Processing** (New Feature):
    - Provides tools for processing audio and video files, including inserting
      audio into videos and downloading videos from YouTube.
+
+9. **Install .exe Windows**:
+   - Provides a script to install the vailá toolbox as an .exe file for Windows.    
 
 
 Usage:
@@ -164,7 +167,7 @@ except ImportError as e:
 
 
 text = r"""
-version: 16.Mar.2025 (Python 3.12.9)
+version: 17.Mar.2025 (Python 3.12.9)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -238,7 +241,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 16.Mar.2025 (Python 3.12.9)")
+        self.title("vailá - 17.Mar.2025 (Python 3.12.9)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
