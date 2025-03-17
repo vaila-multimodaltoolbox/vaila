@@ -758,10 +758,31 @@ if TKINTER_AVAILABLE:
                     "Batch Download Complete",
                     f"All videos have been downloaded to:\n{batch_dir}",
                 )
+                
+                # Adicionar esta linha para limpar recursos após conclusão
+                self.cleanup_resources()
 
             except Exception as e:
                 self.log(f"Error in batch download: {str(e)}")
                 messagebox.showerror("Batch Download Error", str(e))
+
+        def cleanup_resources(self):
+            """Clean up resources to prevent hanging after download completion."""
+            try:
+                # Limpar referências a processos e threads
+                if hasattr(self, 'download_thread') and self.download_thread:
+                    self.download_thread = None
+                    
+                # Força o coletor de lixo para liberar recursos
+                import gc
+                gc.collect()
+                
+                # Atualizar a interface
+                self.root.update_idletasks()
+                
+                self.log("Resources cleaned up successfully")
+            except Exception as e:
+                self.log(f"Error cleaning up resources: {str(e)}")
 
 
 def run_ytdown():
