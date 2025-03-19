@@ -382,7 +382,7 @@ def process_video(input_file: str):
 
 def get_color_for_id(tracker_id):
     """Generate a distinct color for each tracker ID using a combination of techniques.
-    
+
     This function uses a more sophisticated approach to ensure colors are visually distinct:
     1. Uses golden ratio conjugate for better distribution across color space
     2. Varies saturation for even/odd IDs
@@ -391,30 +391,30 @@ def get_color_for_id(tracker_id):
     """
     # Predefined distinct colors for the first 10 IDs (in BGR)
     distinct_colors = [
-        (255, 0, 0),      # Blue
-        (0, 0, 255),      # Red
-        (0, 255, 0),      # Green
-        (255, 0, 255),    # Magenta
-        (0, 255, 255),    # Yellow
-        (255, 255, 0),    # Cyan
-        (128, 0, 255),    # Purple
-        (0, 165, 255),    # Orange
+        (255, 0, 0),  # Blue
+        (0, 0, 255),  # Red
+        (0, 255, 0),  # Green
+        (255, 0, 255),  # Magenta
+        (0, 255, 255),  # Yellow
+        (255, 255, 0),  # Cyan
+        (128, 0, 255),  # Purple
+        (0, 165, 255),  # Orange
         (255, 255, 255),  # White
-        (0, 0, 0),        # Black
+        (0, 0, 0),  # Black
     ]
-    
+
     # Use predefined colors for first few IDs
     if 0 <= tracker_id < len(distinct_colors):
         return distinct_colors[tracker_id]
-    
+
     # For higher IDs, use golden ratio method for better distribution
     golden_ratio_conjugate = 0.618033988749895
     h = (tracker_id * golden_ratio_conjugate) % 1.0
-    
+
     # Vary saturation and value based on ID to create more distinction
     s = 0.85 if tracker_id % 2 == 0 else 0.95
     v = 0.95 if tracker_id % 4 < 2 else 0.85
-    
+
     rgb = colorsys.hsv_to_rgb(h, s, v)
     # Convert to BGR (OpenCV format) with values 0-255
     return (int(rgb[2] * 255), int(rgb[1] * 255), int(rgb[0] * 255))
@@ -423,7 +423,7 @@ def get_color_for_id(tracker_id):
 def run_yolov11track():
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
-    
+
     root = tk.Tk()
     root.withdraw()
 
@@ -549,7 +549,9 @@ def run_yolov11track():
                     )
 
                     # Get a unique color for this tracker ID
-                    color = get_color_for_id(tracker_id) if tracker_id >= 0 else (0, 255, 0)
+                    color = (
+                        get_color_for_id(tracker_id) if tracker_id >= 0 else (0, 255, 0)
+                    )
 
                     label_text = f"{label}_id{tracker_id}, Conf: {conf:.2f}"
                     cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), color, 2)
