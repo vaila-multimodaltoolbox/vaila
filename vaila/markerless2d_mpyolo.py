@@ -2,10 +2,14 @@
 Script: markerless2d_mpyolo.py
 Author: Prof. Dr. Paulo Santiago
 Version: 0.0.5
-Last Updated: January 24, 2025
+Created: 18 February 2025
+Last Updated: 19 March 2025
 
 Description:
 This script combines YOLOv11 for person detection/tracking with MediaPipe for pose estimation.
+
+Usage:
+python markerless2d_mpyolo.py
 """
 
 import os
@@ -115,36 +119,80 @@ COCO_CLASSES = {
 
 
 def download_all_models(models_dir):
-    """Download all Ultralytics models if they are not already present."""
-    if not os.path.exists(models_dir):
-        os.makedirs(models_dir)
+    """
+    Download YOLO models to the models directory next to the script.
+    Works cross-platform on Windows, macOS, and Linux.
+    """
+    # Ensure models_dir is an absolute path
+    if not os.path.isabs(models_dir):
+        # Get the directory where the script is located
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        models_dir = os.path.join(script_dir, "models")
 
-    # Dictionary where keys are the model filenames and values are the URLs.
-    # The URLs are from the Ultralytics assets releases.
-    models = {
-        "yolo11n.pt": "https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11n.pt",
-        "yolo11s.pt": "https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11s.pt",
-        "yolo11m.pt": "https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11m.pt",
-        "yolo11l.pt": "https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11l.pt",
-        "yolo11x.pt": "https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11x.pt",
-        "yolo11n-pose.pt": "https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11n-pose.pt",
-        "yolo11s-pose.pt": "https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11s-pose.pt",
-        "yolo11m-pose.pt": "https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11m-pose.pt",
-        "yolo11l-pose.pt": "https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11l-pose.pt",
-        "yolo11x-pose.pt": "https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11x-pose.pt",
-    }
+    # Create the models directory if it doesn't exist
+    os.makedirs(models_dir, exist_ok=True)
+    print(f"Models will be downloaded to: {models_dir}")
 
-    for model_name, url in models.items():
+    # Models to download for YOLO v11
+    model_names = [
+        "yolo11n.pt",
+        "yolo11s.pt",
+        "yolo11m.pt",
+        "yolo11l.pt",
+        "yolo11x.pt",
+        "yolo11n-pose.pt",
+        "yolo11s-pose.pt",
+        "yolo11m-pose.pt",
+        "yolo11l-pose.pt",
+        "yolo11x-pose.pt",
+    ]
+
+    for model_name in model_names:
         model_path = os.path.join(models_dir, model_name)
+
         if os.path.exists(model_path):
-            print(f"{model_name} already exists, skipping download.")
-        else:
-            print(f"Downloading {model_name} from {url} ...")
+            print(f"{model_name} already exists at {model_path}, skipping download.")
+            continue
+
+        print(f"Downloading {model_name} to {model_path}...")
+        try:
+            # Create a temporary YOLO model instance that will download the weights
+            model = YOLO(model_name)
+
+            # Get the path where YOLO downloaded the model
+            source_path = model.ckpt_path
+
+            if os.path.exists(source_path):
+                # Copy the downloaded model to our models directory
+                import shutil
+
+                shutil.copy2(source_path, model_path)
+                print(f"Successfully saved {model_name} to {model_path}")
+            else:
+                print(
+                    f"YOLO downloaded the model but couldn't find it at {source_path}"
+                )
+
+        except Exception as e:
+            print(f"Error downloading {model_name}: {e}")
+            print("Trying alternative download method...")
+
             try:
-                urlretrieve(url, model_path)
-                print(f"Downloaded {model_name} to {model_path}")
-            except Exception as e:
-                print(f"Error downloading {model_name}: {e}")
+                # Try downloading through Ultralytics Hub
+                from ultralytics.utils.downloads import attempt_download
+
+                attempt_download(model_path, model_name)
+                if os.path.exists(model_path):
+                    print(
+                        f"Successfully downloaded {model_name} using attempt_download"
+                    )
+                else:
+                    print(f"Failed to download {model_name} to {model_path}")
+            except Exception as e2:
+                print(f"All download methods failed for {model_name}: {e2}")
+
+    # Return the models directory path
+    return models_dir
 
 
 def initialize_csv(output_dir, class_name, object_id, is_person=False):
