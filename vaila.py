@@ -160,7 +160,7 @@ try:
     )
 
     TRACKING_AVAILABLE = True
-    from vaila import yolov11track
+    from vaila import yolov12track
 except ImportError as e:
     print(f"Warning: Some tracking features will not be available: {e}")
     TRACKING_AVAILABLE = False
@@ -180,7 +180,7 @@ Mocap fullbody_c3d           Markerless_3D       Markerless_2D_MP
    IMU_csv --> |       vailá - multimodal toolbox      | <-- Cluster_csv
 Open Field --> +---------------------------------------+ <-- Force Plate
               ^                   |                    ^ <-- YOLOv11 and MediaPipe
-        EMG__/                    v                     \__Tracker YOLOv11
+        EMG__/                    v                     \__Tracker YOLOv12
                     +--------------------------+
                     | Results: Data and Figure | 
                     +--------------------------+
@@ -1473,10 +1473,10 @@ class Vaila(tk.Tk):
 
     # B_r4_c1
     def tracker(self):
-        """Runs the yolov11track analysis."""
+        """Runs the yolov12track analysis."""
         if TRACKING_AVAILABLE:
             print("Running tracker analysis...")
-            yolov11track.run_yolov11track()
+            yolov12track.run_yolov12track()
         else:
             messagebox.showwarning(
                 "Feature Unavailable",
