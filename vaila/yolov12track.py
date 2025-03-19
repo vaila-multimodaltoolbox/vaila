@@ -1,16 +1,16 @@
 """
 Project: vailá
-Script: yolov11track.py
+Script: yolov12track.py
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
-Creation Date: 16 February 2025
+Creation Date: 18 February 2025
 Update Date: 18 March 2025
-Version: 0.02
+Version: 0.01
 
 Description:
-    This script performs object detection and tracking on video files using the YOLO model.
+    This script performs object detection and tracking on video files using the YOLO model v12.
     It integrates multiple features, including:
       - Object detection and tracking using the Ultralytics YOLO library.
       - A graphical interface (Tkinter) for dynamic parameter configuration.
@@ -20,7 +20,7 @@ Description:
 
 Usage:
     Run the script from the command line by passing the path to a video file as an argument:
-        python yolov11track.py /path/to/video.mp4
+        python yolov12track.py /path/to/video.mp4
 
 Requirements:
     - Python 3.x
@@ -60,16 +60,21 @@ from pathlib import Path
 import subprocess
 import re
 import colorsys
+import pkg_resources
 
-# Configuração para evitar conflitos de biblioteca
+# Configure to avoid library conflicts
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
-torch.set_num_threads(1)  # Limita o número de threads para evitar conflitos
+torch.set_num_threads(1)  # Limits the number of threads to avoid conflicts
 
 
 def initialize_csv(output_dir, label, tracker_id, total_frames):
     """Inicializa um arquivo CSV para um ID de rastreador e rótulo específicos."""
     csv_file = os.path.join(output_dir, f"{label}_id{tracker_id}.csv")
     if not os.path.exists(csv_file):
+        # Get color for this ID
+        color = get_color_for_id(tracker_id)
+        color_r, color_g, color_b = color[2], color[1], color[0]  # BGR to RGB
+        
         with open(csv_file, mode="w", newline="") as file:
             writer = csv.writer(file)
             writer.writerow(
@@ -82,6 +87,9 @@ def initialize_csv(output_dir, label, tracker_id, total_frames):
                     "X_max",
                     "Y_max",
                     "Confidence",
+                    "Color_R",
+                    "Color_G", 
+                    "Color_B"
                 ]
             )
             for frame_idx in range(total_frames):
@@ -95,6 +103,9 @@ def initialize_csv(output_dir, label, tracker_id, total_frames):
                         np.nan,
                         np.nan,
                         np.nan,
+                        color_r,
+                        color_g,
+                        color_b
                     ]
                 )
     return csv_file
@@ -109,10 +120,18 @@ def update_csv(
         reader = csv.reader(file)
         rows = list(reader)
 
+    # Get color info from first data row (already saved in CSV)
+    if len(rows) > 1:
+        color_r, color_g, color_b = rows[1][-3], rows[1][-2], rows[1][-1]
+    else:
+        # Fallback if color info isn't in CSV yet
+        color = get_color_for_id(tracker_id)
+        color_r, color_g, color_b = color[2], color[1], color[0]  # BGR to RGB
+
     # Atualiza a linha específica do frame
     for i, row in enumerate(rows):
         if i > 0 and int(row[0]) == frame_idx:  # Pula o cabeçalho
-            rows[i] = [frame_idx, tracker_id, label, x_min, y_min, x_max, y_max, conf]
+            rows[i] = [frame_idx, tracker_id, label, x_min, y_min, x_max, y_max, conf, color_r, color_g, color_b]
             break
 
     with open(csv_file, mode="w", newline="") as file:
@@ -258,29 +277,29 @@ class ModelSelectorDialog(tk.simpledialog.Dialog):
     def body(self, master):
         models = [
             # Object Detection explanation: https://docs.ultralytics.com/tasks/detect/
-            ("yolo11n.pt", "Detection - Nano (fastest)"),
-            ("yolo11s.pt", "Detection - Small"),
-            ("yolo11m.pt", "Detection - Medium"),
-            ("yolo11l.pt", "Detection - Large"),
-            ("yolo11x.pt", "Detection - XLarge (most accurate)"),
+            ("yolo12n.pt", "Detection - Nano (fastest)"),
+            ("yolo12s.pt", "Detection - Small"),
+            ("yolo12m.pt", "Detection - Medium"),
+            ("yolo12l.pt", "Detection - Large"),
+            ("yolo12x.pt", "Detection - XLarge (most accurate)"),
             # Pose Estimation explanation: https://docs.ultralytics.com/tasks/pose/
-            ("yolo11n-pose.pt", "Pose - Nano (fastest)"),
-            ("yolo11s-pose.pt", "Pose - Small"),
-            ("yolo11m-pose.pt", "Pose - Medium"),
-            ("yolo11l-pose.pt", "Pose - Large"),
-            ("yolo11x-pose.pt", "Pose - XLarge (most accurate)"),
+            ("yolo12n-pose.pt", "Pose - Nano (fastest)"),
+            ("yolo12s-pose.pt", "Pose - Small"),
+            ("yolo12m-pose.pt", "Pose - Medium"),
+            ("yolo12l-pose.pt", "Pose - Large"),
+            ("yolo12x-pose.pt", "Pose - XLarge (most accurate)"),
             # Segmentation explanation: https://docs.ultralytics.com/tasks/segment/
-            ("yolo11n-seg.pt", "Segmentation - Nano"),
-            ("yolo11s-seg.pt", "Segmentation - Small"),
-            ("yolo11m-seg.pt", "Segmentation - Medium"),
-            ("yolo11l-seg.pt", "Segmentation - Large"),
-            ("yolo11x-seg.pt", "Segmentation - XLarge"),
+            ("yolo12n-seg.pt", "Segmentation - Nano"),
+            ("yolo12s-seg.pt", "Segmentation - Small"),
+            ("yolo12m-seg.pt", "Segmentation - Medium"),
+            ("yolo12l-seg.pt", "Segmentation - Large"),
+            ("yolo12x-seg.pt", "Segmentation - XLarge"),
             # OBB (Oriented Bounding Box) explanation: https://docs.ultralytics.com/tasks/obb/
-            ("yolo11n-obb.pt", "OBB - Nano"),
-            ("yolo11s-obb.pt", "OBB - Small"),
-            ("yolo11m-obb.pt", "OBB - Medium"),
-            ("yolo11l-obb.pt", "OBB - Large"),
-            ("yolo11x-obb.pt", "OBB - XLarge"),
+            ("yolo12n-obb.pt", "OBB - Nano"),
+            ("yolo12s-obb.pt", "OBB - Small"),
+            ("yolo12m-obb.pt", "OBB - Medium"),
+            ("yolo12l-obb.pt", "OBB - Large"),
+            ("yolo12x-obb.pt", "OBB - XLarge"),
         ]
 
         self.listbox = tk.Listbox(master, width=50, height=15)
@@ -380,17 +399,30 @@ def process_video(input_file: str):
     subprocess.run(cmd)
 
 
-def get_color_for_id(tracker_id):
-    """Generate a distinct color for each tracker ID using a combination of techniques.
+def get_color_for_id_improved(tracker_id):
+    """Generate a distinct color for each tracker ID using HSV color space."""
+    # Use diferentes números primos para criar maior variação no matiz
+    prime_factors = [79, 83, 89, 97, 101, 103, 107, 109, 113, 127]
+    h = ((tracker_id * prime_factors[tracker_id % len(prime_factors)]) % 359) / 359.0
     
-    This function uses a more sophisticated approach to ensure colors are visually distinct:
-    1. Uses golden ratio conjugate for better distribution across color space
-    2. Varies saturation for even/odd IDs
-    3. Uses a predefined list of distinct colors for the first N IDs
-    4. Ensures high contrast against common backgrounds
-    """
-    # Predefined distinct colors for the first 10 IDs (in BGR)
-    distinct_colors = [
+    # Maior variação de saturação e valor baseados no ID
+    s_values = [0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95, 1.0]
+    v_values = [0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95, 1.0]
+    
+    s = s_values[tracker_id % len(s_values)]
+    v = v_values[(tracker_id // len(s_values)) % len(v_values)]
+    
+    rgb = colorsys.hsv_to_rgb(h, s, v)
+    # Convert to BGR (OpenCV format) with values 0-255
+    return (int(rgb[2] * 255), int(rgb[1] * 255), int(rgb[0] * 255))
+
+
+def get_color_palette(num_colors=200):
+    """Generates a maximally distinct color palette using HSV color space."""
+    print(f"Generating a palette with {num_colors} distinct colors")
+    
+    # Base palette with distinct colors for the first few IDs - EXPANDED
+    base_palette = [
         (255, 0, 0),      # Blue
         (0, 0, 255),      # Red
         (0, 255, 0),      # Green
@@ -400,27 +432,70 @@ def get_color_for_id(tracker_id):
         (128, 0, 255),    # Purple
         (0, 165, 255),    # Orange
         (255, 255, 255),  # White
-        (0, 0, 0),        # Black
+        (128, 128, 128),  # Gray
+        (128, 128, 255),  # Pink
+        (255, 128, 128),  # Light Blue
+        (128, 255, 128),  # Light Green
+        (60, 20, 220),    # Crimson
+        (32, 165, 218),   # Coral
+        (0, 69, 255),     # Brown
+        (204, 50, 153),   # Violet
+        (79, 79, 47),     # Olive
+        (143, 143, 188),  # Silver
+        (209, 206, 0),    # Turquoise
+        (0, 215, 255),    # Gold
+        (34, 34, 178),    # Maroon
+        (85, 128, 0),     # Forest Green
+        (0, 0, 128),      # Dark Red
+        (192, 192, 192),  # Light gray
+        (0, 140, 255),    # Dark orange
+        (128, 0, 0),      # Navy
+        (0, 128, 128),    # Teal
+        (220, 20, 60),    # Dark blue
+        (122, 150, 233),  # Salmon
     ]
     
-    # Use predefined colors for first few IDs
-    if 0 <= tracker_id < len(distinct_colors):
-        return distinct_colors[tracker_id]
+    # Pré-calcular cores adicionais usando um método mais sofisticado
+    additional_colors = []
     
-    # For higher IDs, use golden ratio method for better distribution
-    golden_ratio_conjugate = 0.618033988749895
-    h = (tracker_id * golden_ratio_conjugate) % 1.0
+    # Gerar cores adicionais distribuindo uniformemente no espaço HSV
+    for i in range(num_colors - len(base_palette)):
+        # Varia matiz usando números primos para distribuição mais uniforme
+        h = ((i * 47 + 13) % 360) / 360.0  # Distribui no espectro total
+        
+        # Alterna níveis de saturação e valor para mais variações
+        s_level = 0.7 + 0.3 * ((i // 7) % 4) / 3  # Varia entre 0.7 e 1.0
+        v_level = 0.7 + 0.3 * ((i // 3) % 4) / 3  # Varia entre 0.7 e 1.0
+        
+        rgb = colorsys.hsv_to_rgb(h, s_level, v_level)
+        additional_colors.append((int(rgb[2] * 255), int(rgb[1] * 255), int(rgb[0] * 255)))
     
-    # Vary saturation and value based on ID to create more distinction
-    s = 0.85 if tracker_id % 2 == 0 else 0.95
-    v = 0.95 if tracker_id % 4 < 2 else 0.85
+    # Combinar base + cores adicionais
+    result = base_palette.copy() + additional_colors
     
-    rgb = colorsys.hsv_to_rgb(h, s, v)
-    # Convert to BGR (OpenCV format) with values 0-255
-    return (int(rgb[2] * 255), int(rgb[1] * 255), int(rgb[0] * 255))
+    # Garantir que temos exatamente o número de cores solicitado
+    if len(result) > num_colors:
+        result = result[:num_colors]
+    
+    return result
+
+# Substitua a função get_color_for_id por esta versão que usa a paleta
+COLORS = None
+
+def get_color_for_id(tracker_id):
+    """Retorna uma cor distinta para o ID usando uma paleta pré-calculada."""
+    global COLORS
+    
+    # Lazy-initialize the color palette (100 colors should be enough for most tracking needs)
+    if COLORS is None:
+        COLORS = get_color_palette(100)
+    
+    # Use modulo para reutilizar cores se tivermos mais IDs que cores
+    color_idx = tracker_id % len(COLORS)
+    return COLORS[color_idx]
 
 
-def run_yolov11track():
+def run_yolov12track():
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
     
@@ -613,7 +688,7 @@ def run_yolov11track():
 if __name__ == "__main__":
     if len(sys.argv) < 2:
 
-        print("Usage: python yolov11track.py [video_file]")
+        print("Usage: python yolov12track.py [video_file]")
 
         sys.exit(1)
 
