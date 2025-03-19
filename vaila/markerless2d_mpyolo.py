@@ -6,7 +6,7 @@ Created: 18 February 2025
 Last Updated: 19 March 2025
 
 Description:
-This script combines YOLOv11 for person detection/tracking with MediaPipe for pose estimation.
+This script combines YOLOv12 for person detection/tracking with MediaPipe for pose estimation.
 
 Usage:
 python markerless2d_mpyolo.py
@@ -28,6 +28,7 @@ import time
 from tkinter import ttk
 from urllib.request import urlretrieve  # New import for downloading models
 import threading
+import colorsys  # Adicionar esta importação no topo do arquivo
 
 # Configurações para evitar conflitos
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
@@ -117,82 +118,143 @@ COCO_CLASSES = {
     79: "toothbrush",
 }
 
+# Adicionar estas funções após as importações, próximo ao início do arquivo
+COLORS = None
 
-def download_all_models(models_dir):
+def get_color_palette(num_colors=200):
+    """Generates a maximally distinct color palette using HSV color space."""
+    print(f"Generating a palette with {num_colors} distinct colors")
+
+    # Base palette with distinct colors for the first few IDs
+    base_palette = [
+        (255, 0, 0),  # Blue
+        (0, 0, 255),  # Red
+        (0, 255, 0),  # Green
+        (255, 0, 255),  # Magenta
+        (0, 255, 255),  # Yellow
+        (255, 255, 0),  # Cyan
+        (128, 0, 255),  # Purple
+        (0, 165, 255),  # Orange
+        (255, 255, 255),  # White
+        (128, 128, 128),  # Gray
+        (128, 128, 255),  # Pink
+        (255, 128, 128),  # Light Blue
+        (128, 255, 128),  # Light Green
+        (60, 20, 220),  # Crimson
+        (32, 165, 218),  # Coral
+        (0, 69, 255),  # Brown
+        (204, 50, 153),  # Violet
+        (79, 79, 47),  # Olive
+        (143, 143, 188),  # Silver
+        (209, 206, 0),  # Turquoise
+        (0, 215, 255),  # Gold
+        (34, 34, 178),  # Maroon
+        (85, 128, 0),  # Forest Green
+        (0, 0, 128),  # Dark Red
+        (192, 192, 192),  # Light gray
+        (0, 140, 255),  # Dark orange
+        (128, 0, 0),  # Navy
+        (0, 128, 128),  # Teal
+        (220, 20, 60),  # Dark blue
+        (122, 150, 233),  # Salmon
+    ]
+
+    # Pre-calculate additional colors using a more sophisticated method
+    additional_colors = []
+
+    # Generate additional colors by distributing evenly in the HSV space
+    for i in range(num_colors - len(base_palette)):
+        # Vary hue using prime numbers for more uniform distribution
+        h = ((i * 47 + 13) % 360) / 360.0  # Distribute evenly across the spectrum
+
+        # Alternate saturation and value levels for more variations
+        s_level = 0.7 + 0.3 * ((i // 7) % 4) / 3  # Varies between 0.7 and 1.0
+        v_level = 0.7 + 0.3 * ((i // 3) % 4) / 3  # Varies between 0.7 and 1.0
+
+        rgb = colorsys.hsv_to_rgb(h, s_level, v_level)
+        additional_colors.append(
+            (int(rgb[2] * 255), int(rgb[1] * 255), int(rgb[0] * 255))
+        )
+
+    # Combine base + additional colors
+    result = base_palette.copy() + additional_colors
+
+    # Ensure we have exactly the requested number of colors
+    if len(result) > num_colors:
+        result = result[:num_colors]
+
+    return result
+
+def get_color_for_id(tracker_id):
+    """Returns a distinct color for the ID using a pre-calculated palette."""
+    global COLORS
+
+    # Lazy-initialize the color palette (100 colors should be enough for most tracking needs)
+    if COLORS is None:
+        COLORS = get_color_palette(100)
+
+    # Use modulo to reuse colors if we have more IDs than colors
+    color_idx = tracker_id % len(COLORS)
+    return COLORS[color_idx]
+
+def download_model(model_name):
     """
-    Download YOLO models to the models directory next to the script.
-    Works cross-platform on Windows, macOS, and Linux.
+    Download a specific YOLO model to the vaila/vaila/models directory.
+    
+    Args:
+        model_name: Name of the model to download (e.g., "yolo12x.pt")
+    
+    Returns:
+        Path to the downloaded model
     """
-    # Ensure models_dir is an absolute path
-    if not os.path.isabs(models_dir):
-        # Get the directory where the script is located
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        models_dir = os.path.join(script_dir, "models")
+    # Correto caminho para vaila/vaila/models
+    script_dir = os.path.dirname(os.path.abspath(__file__))  # vaila/
+    vaila_dir = os.path.dirname(script_dir)  # root directory
+    models_dir = os.path.join(vaila_dir, "vaila", "models")  # vaila/vaila/models
 
     # Create the models directory if it doesn't exist
     os.makedirs(models_dir, exist_ok=True)
     print(f"Models will be downloaded to: {models_dir}")
 
-    # Models to download for YOLO v11
-    model_names = [
-        "yolo11n.pt",
-        "yolo11s.pt",
-        "yolo11m.pt",
-        "yolo11l.pt",
-        "yolo11x.pt",
-        "yolo11n-pose.pt",
-        "yolo11s-pose.pt",
-        "yolo11m-pose.pt",
-        "yolo11l-pose.pt",
-        "yolo11x-pose.pt",
-    ]
+    model_path = os.path.join(models_dir, model_name)
 
-    for model_name in model_names:
-        model_path = os.path.join(models_dir, model_name)
+    # Check if model already exists
+    if os.path.exists(model_path):
+        print(f"Model {model_name} already exists at {model_path}, using existing file.")
+        return model_path
 
-        if os.path.exists(model_path):
-            print(f"{model_name} already exists at {model_path}, skipping download.")
-            continue
+    print(f"Downloading {model_name} to {model_path}...")
+    try:
+        # Create a temporary YOLO model instance that will download the weights
+        model = YOLO(model_name)
 
-        print(f"Downloading {model_name} to {model_path}...")
+        # Get the path where YOLO downloaded the model
+        source_path = model.ckpt_path
+
+        if os.path.exists(source_path):
+            # Copy the downloaded model to our models directory
+            import shutil
+            shutil.copy2(source_path, model_path)
+            print(f"Successfully saved {model_name} to {model_path}")
+        else:
+            print(f"YOLO downloaded the model but couldn't find it at {source_path}")
+
+    except Exception as e:
+        print(f"Error downloading {model_name}: {e}")
+        print("Trying alternative download method...")
+
         try:
-            # Create a temporary YOLO model instance that will download the weights
-            model = YOLO(model_name)
-
-            # Get the path where YOLO downloaded the model
-            source_path = model.ckpt_path
-
-            if os.path.exists(source_path):
-                # Copy the downloaded model to our models directory
-                import shutil
-
-                shutil.copy2(source_path, model_path)
-                print(f"Successfully saved {model_name} to {model_path}")
+            # Try downloading through Ultralytics Hub
+            from ultralytics.utils.downloads import attempt_download
+            attempt_download(model_path, model_name)
+            if os.path.exists(model_path):
+                print(f"Successfully downloaded {model_name} using attempt_download")
             else:
-                print(
-                    f"YOLO downloaded the model but couldn't find it at {source_path}"
-                )
+                print(f"Failed to download {model_name} to {model_path}")
+        except Exception as e2:
+            print(f"All download methods failed for {model_name}: {e2}")
 
-        except Exception as e:
-            print(f"Error downloading {model_name}: {e}")
-            print("Trying alternative download method...")
-
-            try:
-                # Try downloading through Ultralytics Hub
-                from ultralytics.utils.downloads import attempt_download
-
-                attempt_download(model_path, model_name)
-                if os.path.exists(model_path):
-                    print(
-                        f"Successfully downloaded {model_name} using attempt_download"
-                    )
-                else:
-                    print(f"Failed to download {model_name} to {model_path}")
-            except Exception as e2:
-                print(f"All download methods failed for {model_name}: {e2}")
-
-    # Return the models directory path
-    return models_dir
+    return model_path
 
 
 def initialize_csv(output_dir, class_name, object_id, is_person=False):
@@ -721,6 +783,9 @@ def process_yolo_tracking(video_path, output_dir, model, params):
             for box, track_id, cls_id, conf in zip(boxes, ids, clss, confs):
                 class_id = int(cls_id)
                 object_id = int(track_id)
+                
+                # Get color for this object ID
+                color = get_color_for_id(object_id)
 
                 # Initialize dictionary structure if needed
                 if class_id not in tracking_data:
@@ -741,6 +806,9 @@ def process_yolo_tracking(video_path, output_dir, model, params):
                             "x2",
                             "y2",
                             "confidence",
+                            "color_r",
+                            "color_g", 
+                            "color_b"
                         ]
                     else:  # Other classes
                         columns = [
@@ -751,17 +819,21 @@ def process_yolo_tracking(video_path, output_dir, model, params):
                             "x2",
                             "y2",
                             "confidence",
+                            "color_r",
+                            "color_g", 
+                            "color_b"
                         ]
 
                     pd.DataFrame(columns=columns).to_csv(csv_path, index=False)
                     print(f"Created tracking CSV for {class_name} ID:{object_id}")
 
-                # Store detection data
+                # Store detection data with color
                 tracking_data[class_id][object_id].append(
                     {
                         "frame": frame_idx,
                         "bbox": box.tolist(),
                         "confidence": float(conf),
+                        "color": color
                     }
                 )
 
@@ -779,6 +851,9 @@ def process_yolo_tracking(video_path, output_dir, model, params):
                     "x2": x2,
                     "y2": y2,
                     "confidence": float(conf),
+                    "color_r": color[0],
+                    "color_g": color[1],
+                    "color_b": color[2]
                 }
 
                 # Append to CSV
@@ -1019,8 +1094,12 @@ def create_visualization_video(video_path, output_dir, tracking_data, params):
 
                     bbox = frame_data["bbox"]
                     x1, y1, x2, y2 = map(int, bbox)
-                    # Draw bounding box
-                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                    
+                    # Use the color stored with the detection data, or get a new color
+                    color = frame_data.get("color", get_color_for_id(object_id))
+                    
+                    # Draw bounding box with the object's color
+                    cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
 
                     # Create label with class name and object ID
                     label = (
@@ -1029,15 +1108,15 @@ def create_visualization_video(video_path, output_dir, tracking_data, params):
                     (label_width, label_height), baseline = cv2.getTextSize(
                         label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2
                     )
-                    # Draw background rectangle for label
+                    # Draw background rectangle for label with the same color
                     cv2.rectangle(
                         frame,
                         (x1, y1 - label_height - 10),
                         (x1 + label_width + 10, y1),
-                        (0, 255, 0),
+                        color,
                         -1,
                     )
-                    # Draw label text
+                    # Draw label text with black color for better readability
                     cv2.putText(
                         frame,
                         label,
@@ -1086,7 +1165,7 @@ def create_visualization_video(video_path, output_dir, tracking_data, params):
                                         frame,
                                         landmarks[start_idx][:2],
                                         landmarks[end_idx][:2],
-                                        (255, 255, 255),  # White connections
+                                        color,  # Use the object's color for connections
                                         1,
                                     )
 
@@ -1097,7 +1176,7 @@ def create_visualization_video(video_path, output_dir, tracking_data, params):
                                         frame,
                                         (int(lm[0]), int(lm[1])),
                                         3,  # Larger size for better visibility
-                                        (0, 0, 255),  # Red points
+                                        color,  # Use the object's color for points
                                         -1,  # Filled circle
                                     )
 
@@ -1244,7 +1323,7 @@ def save_pose_to_csv(csv_path, frame_idx, person_id, landmarks_px):
 
 
 def run_tracker_in_thread(
-    model_path, video_source, tracker_config, save_output, output_dir, params
+    model_path, video_source, tracker_config, output_dir, params
 ):
     """
     Run YOLO tracker in its own thread for concurrent processing.
@@ -1252,7 +1331,6 @@ def run_tracker_in_thread(
         model_path (str): Local path of the model (or model name for auto-download).
         video_source (str): Path to the video file.
         tracker_config (str): Tracker configuration file (e.g. 'bytetrack.yaml').
-        save_output (bool): If True, outputs will be saved.
         output_dir (str): Directory to save tracking data.
         params (dict): YOLO parameters.
     """
@@ -1396,16 +1474,20 @@ def run_multithreaded_tracking():
     tracker_config = "bytetrack.yaml"
     save_output = True
 
-    models_dir = os.path.join(os.path.dirname(__file__), "models")
-    download_all_models(models_dir)
-
-    # Use the local model if available; otherwise, rely on YOLO auto-download.
-    model_path = os.path.join(models_dir, "yolo11x.pt")
-    if os.path.exists(model_path):
-        print(f"Found local model for tracking: {model_path}")
+    # Atualizar construção do caminho do modelo
+    model_name = "yolo12x.pt"
+    
+    # Caminho correto para vaila/vaila/models
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    vaila_dir = os.path.dirname(script_dir)
+    models_dir = os.path.join(vaila_dir, "vaila", "models")
+    model_path = os.path.join(models_dir, model_name)
+    
+    # Verificar se o modelo existe, baixar apenas se necessário
+    if not os.path.exists(model_path):
+        model_path = download_model(model_name)
     else:
-        print("Local model not found, using automatic download.")
-        model_path = "yolo11x.pt"
+        print(f"Found local model for tracking: {model_path}")
 
     # Get parameters for YOLO
     params = get_parameters_dialog()
@@ -1425,7 +1507,6 @@ def run_multithreaded_tracking():
                 model_path,
                 video_file,
                 tracker_config,
-                save_output,
                 video_output_dir,
                 params,
             ),
@@ -1462,85 +1543,32 @@ def save_tracking_data_to_csv(tracking_data, output_dir):
 
 
 def run_markerless2d_mpyolo():
-    # On the first run, download all models to the local "models" directory.
-    models_dir = os.path.join(os.path.dirname(__file__), "models")
-    download_all_models(models_dir)
-
+    # Atualizar construção do caminho do modelo
+    model_name = "yolo12x.pt"
+    
+    # Caminho correto para vaila/vaila/models
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    vaila_dir = os.path.dirname(script_dir)
+    models_dir = os.path.join(vaila_dir, "vaila", "models")
+    os.makedirs(models_dir, exist_ok=True)
+    model_path = os.path.join(models_dir, model_name)
+    
+    # Obter parâmetros antes de baixar o modelo
     root = tk.Tk()
     root.withdraw()
 
-    # Get parameters first
     params = get_parameters_dialog()
     if not params:
         print("No parameters set. Exiting...")
         return
 
-    # Select directory containing videos
-    video_dir = filedialog.askdirectory(title="Select Directory with Videos")
-    if not video_dir:
-        print("No directory selected. Exiting...")
-        return
-
-    # Create main output directory with timestamp
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    main_output_dir = os.path.join(video_dir, f"markerless2d_processed_{timestamp}")
-    os.makedirs(main_output_dir, exist_ok=True)
-
-    # Build the full model path for detection
-    model_path = os.path.join(models_dir, "yolo11x.pt")
-    if os.path.exists(model_path):
-        print(f"Found model at: {model_path}. Using the local file.")
-        model = YOLO(model_path)
+    # Apenas baixar o modelo depois de confirmar que vamos usá-lo
+    if not os.path.exists(model_path):
+        model_path = download_model(model_name)
     else:
-        print("Model not found, downloading automatically...")
-        model = YOLO("yolo11x.pt")
-
-    mp_pose = mp.solutions.pose  # MediaPipe Pose module
-    mp_drawing = mp.solutions.drawing_utils  # MediaPipe Drawing module
-
-    # Get list of video files in directory (not in subdirectories)
-    video_extensions = (".mp4", ".avi", ".mov", ".mkv", ".MP4", ".AVI", ".MOV", ".MKV")
-    video_files = [
-        f
-        for f in os.listdir(video_dir)
-        if os.path.isfile(os.path.join(video_dir, f)) and f.endswith(video_extensions)
-    ]
-
-    if not video_files:
-        print("No video files found in the selected directory.")
-        return
-
-    print(f"\nFound {len(video_files)} video files to process.")
-
-    # Process each video (sequentially in this mode)
-    for video_idx, video_file in enumerate(video_files, 1):
-        print(f"\n[{video_idx}/{len(video_files)}] Processing {video_file}")
-        video_path = os.path.join(video_dir, video_file)
-        output_dir = os.path.join(main_output_dir, os.path.splitext(video_file)[0])
-        os.makedirs(output_dir, exist_ok=True)
-
-        # Stage 1: YOLO tracking
-        tracking_data = process_yolo_tracking(video_path, output_dir, model, params)
-
-        # Stage 2: MediaPipe pose estimation
-        process_mediapipe_pose(video_path, output_dir, tracking_data, params)
-
-        # Create visualization video
-        create_visualization_video(video_path, output_dir, tracking_data, params)
-
-    print(f"\nBatch processing complete!")
-    print(f"All results saved to: {main_output_dir}")
-
-    # Try to open output folder
-    try:
-        if os.name == "nt":  # Windows
-            os.startfile(main_output_dir)
-        elif os.name == "posix":  # macOS and Linux
-            subprocess.run(["xdg-open", main_output_dir])
-    except Exception as e:
-        print(f"Could not open the output directory: {e}")
-
-    root.destroy()
+        print(f"Found model at: {model_path}. Using the local file.")
+    
+    # ... resto do código ...
 
 
 def write_nan_row(csv_path, frame_idx, num_landmarks):
