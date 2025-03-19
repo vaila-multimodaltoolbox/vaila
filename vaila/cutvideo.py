@@ -409,7 +409,10 @@ def play_video_with_cuts(video_path):
                     output_dir / f"{video_name}_frame_{start_frame}_to_{end_frame}.mp4"
                 )
                 out = cv2.VideoWriter(
-                    str(output_path), cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height)
+                    str(output_path),
+                    cv2.VideoWriter_fourcc(*"mp4v"),
+                    fps,
+                    (width, height),
                 )
 
                 cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
@@ -424,9 +427,9 @@ def play_video_with_cuts(video_path):
             return True
         finally:
             # Garantir que os recursos sejam liberados mesmo em caso de erro
-            if 'cap' in locals() and cap:
+            if "cap" in locals() and cap:
                 cap.release()
-            if 'out' in locals() and out:
+            if "out" in locals() and out:
                 out.release()
 
     running = True
@@ -568,15 +571,16 @@ def main():
         cleanup_resources()
         print("Program terminated successfully")
 
+
 def cleanup_resources():
     """Ensure all resources are properly released."""
     # Garantir que o OpenCV libere os recursos
     cv2.destroyAllWindows()
-    
+
     # Garantir que o Pygame seja encerrado
     if pygame.get_init():
         pygame.quit()
-    
+
     # Garantir que o Tkinter seja encerrado
     try:
         root = Tk()
@@ -584,10 +588,12 @@ def cleanup_resources():
         root.destroy()
     except:
         pass
-    
+
     # Forçar coleta de lixo para liberar memória
     import gc
+
     gc.collect()
+
 
 if __name__ == "__main__":
     main()
