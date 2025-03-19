@@ -55,26 +55,40 @@ import datetime
 from ultralytics import YOLO
 import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog
-from boxmot import StrongSort, ByteTrack, OcSort, DeepOcSort, HybridSort
 from pathlib import Path
 import subprocess
 import re
 import colorsys
 import pkg_resources
+from ultralytics.utils.checks import check_requirements
+
+# Garantir que o BoxMOT possa ser encontrado
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 # Configure to avoid library conflicts
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 torch.set_num_threads(1)  # Limits the number of threads to avoid conflicts
 
+# ReID model paths
+REID_MODELS = {
+    "lmbn_n_cuhk03_d.pt": "Lightweight (LMBN CUHK03)",
+    "osnet_x0_25_market1501.pt": "Lightweight (OSNet x0.25 Market1501)",
+    "mobilenetv2_x1_4_msmt17.engine": "Medium (MobileNetV2 MSMT17)",
+    "resnet50_msmt17.onnx": "Medium (ResNet50 MSMT17)",
+    "osnet_x1_0_msmt17.pt": "Medium (OSNet x1.0 MSMT17)",
+    "clip_market1501.pt": "Heavy (CLIP Market1501)",
+    "clip_vehicleid.pt": "Heavy (CLIP VehicleID)",
+}
+
 
 def initialize_csv(output_dir, label, tracker_id, total_frames):
-    """Inicializa um arquivo CSV para um ID de rastreador e rótulo específicos."""
+    """Initializes a CSV file for a specific tracker ID and label."""
     csv_file = os.path.join(output_dir, f"{label}_id{tracker_id}.csv")
     if not os.path.exists(csv_file):
         # Get color for this ID
         color = get_color_for_id(tracker_id)
         color_r, color_g, color_b = color[2], color[1], color[0]  # BGR to RGB
-        
+
         with open(csv_file, mode="w", newline="") as file:
             writer = csv.writer(file)
             writer.writerow(
@@ -88,8 +102,8 @@ def initialize_csv(output_dir, label, tracker_id, total_frames):
                     "Y_max",
                     "Confidence",
                     "Color_R",
-                    "Color_G", 
-                    "Color_B"
+                    "Color_G",
+                    "Color_B",
                 ]
             )
             for frame_idx in range(total_frames):
@@ -105,7 +119,7 @@ def initialize_csv(output_dir, label, tracker_id, total_frames):
                         np.nan,
                         color_r,
                         color_g,
-                        color_b
+                        color_b,
                     ]
                 )
     return csv_file
@@ -114,7 +128,7 @@ def initialize_csv(output_dir, label, tracker_id, total_frames):
 def update_csv(
     csv_file, frame_idx, tracker_id, label, x_min, y_min, x_max, y_max, conf
 ):
-    """Atualiza o arquivo CSV com dados de detecção para o frame específico."""
+    """Updates the CSV file with detection data for the specific frame."""
     rows = []
     with open(csv_file, mode="r", newline="") as file:
         reader = csv.reader(file)
@@ -128,10 +142,22 @@ def update_csv(
         color = get_color_for_id(tracker_id)
         color_r, color_g, color_b = color[2], color[1], color[0]  # BGR to RGB
 
-    # Atualiza a linha específica do frame
+    # Update the specific frame line
     for i, row in enumerate(rows):
-        if i > 0 and int(row[0]) == frame_idx:  # Pula o cabeçalho
-            rows[i] = [frame_idx, tracker_id, label, x_min, y_min, x_max, y_max, conf, color_r, color_g, color_b]
+        if i > 0 and int(row[0]) == frame_idx:  # Skip the header
+            rows[i] = [
+                frame_idx,
+                tracker_id,
+                label,
+                x_min,
+                y_min,
+                x_max,
+                y_max,
+                conf,
+                color_r,
+                color_g,
+                color_b,
+            ]
             break
 
     with open(csv_file, mode="w", newline="") as file:
@@ -150,7 +176,7 @@ class TrackerConfigDialog(tk.simpledialog.Dialog):
             row=0, column=0, padx=5, pady=5
         )
         self.conf = tk.Entry(master)
-        self.conf.insert(0, "0.25")
+        self.conf.insert(0, "0.15")
         self.conf.grid(row=0, column=1, padx=5, pady=5)
         help_text = tk.Label(master, text="?", cursor="hand2", fg="blue")
         help_text.grid(row=0, column=2, padx=5, pady=5)
@@ -325,13 +351,9 @@ class TrackerSelectorDialog(tk.simpledialog.Dialog):
         trackers = [
             ("bytetrack", "ByteTrack - YOLO's default tracker"),
             ("botsort", "BoTSORT - YOLO's alternative tracker"),
-            ("strongsort", "StrongSort - Best precision with ReID"),
-            ("ocsort", "OCSORT - Simple and efficient"),
-            ("deepocsort", "DeepOCSORT - Enhanced OCSORT"),
-            ("hybridsort", "HybridSORT - Hybrid method"),
         ]
 
-        self.listbox = tk.Listbox(master, width=50, height=10)
+        self.listbox = tk.Listbox(master, width=60, height=10)
         for tracker, desc in trackers:
             self.listbox.insert(tk.END, f"{tracker} - {desc}")
         self.listbox.pack(padx=5, pady=5)
@@ -341,6 +363,37 @@ class TrackerSelectorDialog(tk.simpledialog.Dialog):
     def validate(self):
         if not self.listbox.curselection():
             messagebox.showwarning("Warning", "Please select a tracker")
+            return False
+        return True
+
+    def apply(self):
+        selection = self.listbox.get(self.listbox.curselection())
+        self.result = selection.split(" - ")[0]
+
+
+class ReidModelSelectorDialog(tk.simpledialog.Dialog):
+    def body(self, master):
+        reid_models = list(REID_MODELS.items())
+
+        self.listbox = tk.Listbox(master, width=60, height=15)
+        for model, desc in reid_models:
+            self.listbox.insert(tk.END, f"{model} - {desc}")
+        self.listbox.pack(padx=5, pady=5)
+
+        help_text = tk.Label(
+            master,
+            text="ReID models help trackers maintain identity through occlusions\n"
+            "Lightweight: Faster but less accurate\n"
+            "Heavy: More accurate but uses more resources",
+            justify="left",
+        )
+        help_text.pack(padx=5, pady=5)
+
+        return self.listbox
+
+    def validate(self):
+        if not self.listbox.curselection():
+            messagebox.showwarning("Warning", "Please select a ReID model")
             return False
         return True
 
@@ -404,14 +457,14 @@ def get_color_for_id_improved(tracker_id):
     # Use diferentes números primos para criar maior variação no matiz
     prime_factors = [79, 83, 89, 97, 101, 103, 107, 109, 113, 127]
     h = ((tracker_id * prime_factors[tracker_id % len(prime_factors)]) % 359) / 359.0
-    
+
     # Maior variação de saturação e valor baseados no ID
     s_values = [0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95, 1.0]
     v_values = [0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95, 1.0]
-    
+
     s = s_values[tracker_id % len(s_values)]
     v = v_values[(tracker_id // len(s_values)) % len(v_values)]
-    
+
     rgb = colorsys.hsv_to_rgb(h, s, v)
     # Convert to BGR (OpenCV format) with values 0-255
     return (int(rgb[2] * 255), int(rgb[1] * 255), int(rgb[0] * 255))
@@ -420,77 +473,81 @@ def get_color_for_id_improved(tracker_id):
 def get_color_palette(num_colors=200):
     """Generates a maximally distinct color palette using HSV color space."""
     print(f"Generating a palette with {num_colors} distinct colors")
-    
+
     # Base palette with distinct colors for the first few IDs - EXPANDED
     base_palette = [
-        (255, 0, 0),      # Blue
-        (0, 0, 255),      # Red
-        (0, 255, 0),      # Green
-        (255, 0, 255),    # Magenta
-        (0, 255, 255),    # Yellow
-        (255, 255, 0),    # Cyan
-        (128, 0, 255),    # Purple
-        (0, 165, 255),    # Orange
+        (255, 0, 0),  # Blue
+        (0, 0, 255),  # Red
+        (0, 255, 0),  # Green
+        (255, 0, 255),  # Magenta
+        (0, 255, 255),  # Yellow
+        (255, 255, 0),  # Cyan
+        (128, 0, 255),  # Purple
+        (0, 165, 255),  # Orange
         (255, 255, 255),  # White
         (128, 128, 128),  # Gray
         (128, 128, 255),  # Pink
         (255, 128, 128),  # Light Blue
         (128, 255, 128),  # Light Green
-        (60, 20, 220),    # Crimson
-        (32, 165, 218),   # Coral
-        (0, 69, 255),     # Brown
-        (204, 50, 153),   # Violet
-        (79, 79, 47),     # Olive
+        (60, 20, 220),  # Crimson
+        (32, 165, 218),  # Coral
+        (0, 69, 255),  # Brown
+        (204, 50, 153),  # Violet
+        (79, 79, 47),  # Olive
         (143, 143, 188),  # Silver
-        (209, 206, 0),    # Turquoise
-        (0, 215, 255),    # Gold
-        (34, 34, 178),    # Maroon
-        (85, 128, 0),     # Forest Green
-        (0, 0, 128),      # Dark Red
+        (209, 206, 0),  # Turquoise
+        (0, 215, 255),  # Gold
+        (34, 34, 178),  # Maroon
+        (85, 128, 0),  # Forest Green
+        (0, 0, 128),  # Dark Red
         (192, 192, 192),  # Light gray
-        (0, 140, 255),    # Dark orange
-        (128, 0, 0),      # Navy
-        (0, 128, 128),    # Teal
-        (220, 20, 60),    # Dark blue
+        (0, 140, 255),  # Dark orange
+        (128, 0, 0),  # Navy
+        (0, 128, 128),  # Teal
+        (220, 20, 60),  # Dark blue
         (122, 150, 233),  # Salmon
     ]
-    
-    # Pré-calcular cores adicionais usando um método mais sofisticado
+
+    # Pre-calculate additional colors using a more sophisticated method
     additional_colors = []
-    
-    # Gerar cores adicionais distribuindo uniformemente no espaço HSV
+
+    # Generate additional colors by distributing evenly in the HSV space
     for i in range(num_colors - len(base_palette)):
-        # Varia matiz usando números primos para distribuição mais uniforme
-        h = ((i * 47 + 13) % 360) / 360.0  # Distribui no espectro total
-        
-        # Alterna níveis de saturação e valor para mais variações
-        s_level = 0.7 + 0.3 * ((i // 7) % 4) / 3  # Varia entre 0.7 e 1.0
-        v_level = 0.7 + 0.3 * ((i // 3) % 4) / 3  # Varia entre 0.7 e 1.0
-        
+        # Vary hue using prime numbers for more uniform distribution
+        h = ((i * 47 + 13) % 360) / 360.0  # Distribute evenly across the spectrum
+
+        # Alternate saturation and value levels for more variations
+        s_level = 0.7 + 0.3 * ((i // 7) % 4) / 3  # Varies between 0.7 and 1.0
+        v_level = 0.7 + 0.3 * ((i // 3) % 4) / 3  # Varies between 0.7 and 1.0
+
         rgb = colorsys.hsv_to_rgb(h, s_level, v_level)
-        additional_colors.append((int(rgb[2] * 255), int(rgb[1] * 255), int(rgb[0] * 255)))
-    
-    # Combinar base + cores adicionais
+        additional_colors.append(
+            (int(rgb[2] * 255), int(rgb[1] * 255), int(rgb[0] * 255))
+        )
+
+    # Combine base + additional colors
     result = base_palette.copy() + additional_colors
-    
-    # Garantir que temos exatamente o número de cores solicitado
+
+    # Ensure we have exactly the requested number of colors
     if len(result) > num_colors:
         result = result[:num_colors]
-    
+
     return result
 
-# Substitua a função get_color_for_id por esta versão que usa a paleta
+
+# Replace the get_color_for_id function with this version that uses the palette
 COLORS = None
 
+
 def get_color_for_id(tracker_id):
-    """Retorna uma cor distinta para o ID usando uma paleta pré-calculada."""
+    """Returns a distinct color for the ID using a pre-calculated palette."""
     global COLORS
-    
+
     # Lazy-initialize the color palette (100 colors should be enough for most tracking needs)
     if COLORS is None:
         COLORS = get_color_palette(100)
-    
-    # Use modulo para reutilizar cores se tivermos mais IDs que cores
+
+    # Use modulo to reuse colors if we have more IDs than colors
     color_idx = tracker_id % len(COLORS)
     return COLORS[color_idx]
 
@@ -498,7 +555,7 @@ def get_color_for_id(tracker_id):
 def run_yolov12track():
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
-    
+
     root = tk.Tk()
     root.withdraw()
 
@@ -521,6 +578,15 @@ def run_yolov12track():
     if not model_dialog.result:
         return
     model_name = model_dialog.result
+
+    # Select tracker using TrackerSelectorDialog
+    tracker_dialog = TrackerSelectorDialog(root, title="Select Tracking Method")
+    if not hasattr(tracker_dialog, "result"):
+        return
+    tracker_name = tracker_dialog.result
+
+    # Remova todas as partes de ReID, não são necessárias para os trackers padrão
+    reid_required = False
 
     # Build the full path for the model
     models_dir = os.path.join(os.path.dirname(__file__), "models")
@@ -582,6 +648,41 @@ def run_yolov12track():
             cap = cv2.VideoCapture(video_path)
             frame_idx = 0
 
+            print(f"Tracking with {tracker_name} (YOLO built-in tracker)")
+
+            # Find the tracker config file
+            tracker_config = None
+
+            # Option 1: Look for the tracker config in the Ultralytics package
+            ultralytics_path = pkg_resources.resource_filename(
+                "ultralytics", "cfg/trackers"
+            )
+            tracker_yaml = f"{tracker_name}.yaml"
+            yaml_path = os.path.join(ultralytics_path, tracker_yaml)
+
+            if os.path.exists(yaml_path):
+                tracker_config = yaml_path
+            else:
+                # Option 2: Create local copy of tracker config in our models directory
+                trackers_dir = os.path.join(models_dir, "trackers")
+                os.makedirs(trackers_dir, exist_ok=True)
+                local_yaml = os.path.join(trackers_dir, tracker_yaml)
+
+                # Create basic tracker config file if it doesn't exist
+                if not os.path.exists(local_yaml):
+                    with open(local_yaml, "w") as f:
+                        f.write(f"tracker_type: {tracker_name}\n")
+                        f.write("track_high_thresh: 0.5\n")
+                        f.write("track_low_thresh: 0.1\n")
+                        f.write("new_track_thresh: 0.6\n")
+                        f.write("track_buffer: 30\n")
+                        f.write("match_thresh: 0.8\n")
+
+                tracker_config = local_yaml
+
+            print(f"Using tracker config: {tracker_config}")
+
+            # Use YOLO's tracker with the config file
             results = model.track(
                 source=video_path,
                 conf=config["conf"],
@@ -591,6 +692,7 @@ def run_yolov12track():
                 save=False,
                 stream=True,
                 persist=True,
+                tracker=tracker_config,  # Use the config file path
                 classes=[0, 32],
             )
 
@@ -624,7 +726,9 @@ def run_yolov12track():
                     )
 
                     # Get a unique color for this tracker ID
-                    color = get_color_for_id(tracker_id) if tracker_id >= 0 else (0, 255, 0)
+                    color = (
+                        get_color_for_id(tracker_id) if tracker_id >= 0 else (0, 255, 0)
+                    )
 
                     label_text = f"{label}_id{tracker_id}, Conf: {conf:.2f}"
                     cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), color, 2)
@@ -687,9 +791,7 @@ def run_yolov12track():
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-
         print("Usage: python yolov12track.py [video_file]")
-
         sys.exit(1)
 
     video_file = sys.argv[1]

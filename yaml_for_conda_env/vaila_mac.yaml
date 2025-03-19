@@ -86,3 +86,7 @@ dependencies:
       - tensorflow
       - tensorflow-metal
       - yt-dlp
+      - torch
+      - torchvision
+      - torchaudio
+
