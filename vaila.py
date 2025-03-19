@@ -4,8 +4,8 @@ vaila.py
 ===============================================================================
 Author: Paulo R. P. Santiago
 Date:  7 October 2024
-Update: 17 March 2025
-Version updated: 0.3.1
+Update: 19 March 2025
+Version updated: 0.3.2
 Python Version: 3.12.9
 
 
@@ -62,7 +62,10 @@ Key Features:
      audio into videos and downloading videos from YouTube.
 
 9. **Install .exe Windows**:
-   - Provides a script to install the vailá toolbox as an .exe file for Windows.    
+   - Provides a script to install the vailá toolbox as an .exe file for Windows.
+
+10. **Soccer Field** (New Feature):
+    - Provides a script to create a soccer field video.
 
 
 Usage:
@@ -153,7 +156,6 @@ try:
         vaila_lensdistortvideo,
         vaila_datdistort,
         cube2d_kinematics,
-        markerless2d_mpyolo,
         cutvideo,
         vaila_distortvideo_gui,
         viewc3d,
@@ -179,7 +181,7 @@ Mocap fullbody_c3d           Markerless_3D       Markerless_2D_MP
    CUBE2D  --> +---------------------------------------+ <-- Vector Coding
    IMU_csv --> |       vailá - multimodal toolbox      | <-- Cluster_csv
 Open Field --> +---------------------------------------+ <-- Force Plate
-              ^                   |                    ^ <-- YOLOv11 and MediaPipe
+              ^                   |                    ^ <-- YOLOv12 and MediaPipe
         EMG__/                    v                     \__Tracker YOLOv12
                     +--------------------------+
                     | Results: Data and Figure | 
@@ -214,12 +216,13 @@ C_B_r1_c1 - Video<-->PNG  C_B_r1_c2 - Cut Videos    C_B_r1_c3 - Draw Box
 C_B_r2_c1 - CompressH264  C_B_r2_c2 - Compress H265 C_B_r2_c3 - Make Sync file
 C_B_r3_c1 - GetPixelCoord C_B_r3_c2 - Metadata info C_B_r3_c3 - Merge Videos
 C_B_r4_c1 - Distort video C_B_r4_c2 - Cut Video     C_B_r4_c3 - Resize Video
-C_B_r5_c1 - YT Downloader C_B_r5_c2 - Insert Audio  C_B_r5_c3 - vailá
+C_B_r5_c1 - YT Downloader C_B_r5_c2 - Insert Audio  C_B_r5_c3 - rm Dup PNG
 
 -> C_C: Visualization
 C_C_r1_c1 - Show C3D      C_C_r1_c2 - Show CSV       C_C_r2_c1 - Plot 2D
-C_C_r2_c2 - Plot 3D       C_C_r3_c1 - vailá          C_C_r3_c2 - vailá
+C_C_r2_c2 - Plot 3D       C_C_r3_c1 - Soccer Field   C_C_r3_c2 - vailá
 C_C_r4_c1 - vailá         C_C_r4_c2 - vailá          C_C_r4_c3 - vailá
+C_C_r5_c1 - vailá         C_C_r5_c2 - vailá          C_C_r5_c3 - vailá
 
 Type 'h' for help or 'exit' to quit.
 
@@ -241,7 +244,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 17.Mar.2025 (Python 3.12.9)")
+        self.title("vailá - 19.Mar.2025 (Python 3.12.9)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -280,19 +283,19 @@ class Vaila(tk.Tk):
         Adjusts the window dimensions, button width, and font size based on the operating system.
         """
         if platform.system() == "Darwin":  # macOS
-            self.geometry("1280x900")  # Wider window for macOS
+            self.geometry("1024x920")  # Wider window for macOS
             self.button_width = 12  # Slightly wider buttons
             self.font_size = 11  # Standard font size
         elif platform.system() == "Windows":  # Windows
-            self.geometry("1024x900")  # Compact horizontal size for Windows
+            self.geometry("1024x920")  # Compact horizontal size for Windows
             self.button_width = 13  # Narrower buttons for reduced width
             self.font_size = 11  # Standard font size
         elif platform.system() == "Linux":  # Linux
-            self.geometry("1280x900")  # Similar to macOS dimensions for Linux
+            self.geometry("1024x920")  # Similar to macOS dimensions for Linux
             self.button_width = 15  # Wider buttons
             self.font_size = 11  # Standard font size
         else:  # Default for other systems
-            self.geometry("1280x900")  # Default dimensions
+            self.geometry("1024x920")  # Default dimensions
             self.button_width = 15  # Default button width
             self.font_size = 11  # Default font size
 
@@ -716,7 +719,7 @@ class Vaila(tk.Tk):
             command=self.ml_walkway,
         )
 
-        # B4_r4_c3 - vailá
+        # B4_r4_c3 - Markerless Hands
         mphands_btn = tk.Button(
             row4_frame,
             text="Markerless Hands",
@@ -803,14 +806,6 @@ class Vaila(tk.Tk):
             width=button_width,
         )
 
-        # C_A_r1_c4 - Data Files: vailá
-        vaila_btn8to9 = tk.Button(
-            tools_col1,
-            text="vailá",
-            command=self.show_vaila_message,
-            width=button_width,
-        )
-
         # C_A_r2_c1 - Data Files: Make DLT2D
         dlt2d_btn = tk.Button(
             tools_col1, text="Make DLT2D", command=self.dlt2d, width=button_width
@@ -845,7 +840,7 @@ class Vaila(tk.Tk):
             tools_col1, text="Rec3D MultiDLT", command=self.rec3d, width=button_width
         )
 
-        # Avaliable blank (vailá) buttons for future tools (10-11)
+        # Avaliable blank (vailá) buttons for future tools
         # C_A_r4_c1 - Data Files: vailá
         vaila_btn9 = tk.Button(
             tools_col1,
@@ -870,6 +865,30 @@ class Vaila(tk.Tk):
             width=button_width,
         )
 
+        # C_A_r5_c1 - Data Files: vailá
+        vaila_btn12 = tk.Button(
+            tools_col1,
+            text="vailá",
+            command=self.show_vaila_message,
+            width=button_width,
+        )
+
+        # C_A_r5_c2 - Data Files: vailá
+        vaila_btn13 = tk.Button(
+            tools_col1,
+            text="vailá",
+            command=self.show_vaila_message,
+            width=button_width,
+        )
+
+        # C_A_r5_c3 - Data Files: vailá
+        vaila_btn14 = tk.Button(
+            tools_col1,
+            text="vailá",
+            command=self.show_vaila_message,
+            width=button_width,
+        )
+
         # Packing Data Files buttons
         reorder_csv_btn.grid(row=0, column=0, padx=2, pady=2)
         convert_btn.grid(row=0, column=1, padx=2, pady=2)
@@ -883,7 +902,9 @@ class Vaila(tk.Tk):
         vaila_btn9.grid(row=3, column=0, padx=2, pady=2)
         vaila_btn10.grid(row=3, column=1, padx=2, pady=2)
         vaila_btn11.grid(row=3, column=2, padx=2, pady=2)
-
+        vaila_btn12.grid(row=4, column=0, padx=2, pady=2)
+        vaila_btn13.grid(row=4, column=1, padx=2, pady=2)
+        vaila_btn14.grid(row=4, column=2, padx=2, pady=2)
         tools_col1.pack(side="left", fill="both", expand=True, padx=5, pady=5)
 
         ## VVVVVVVVVVVVVVV VIDEO BUTTONS VVVVVVVVVVVVVVVV
@@ -996,11 +1017,11 @@ class Vaila(tk.Tk):
             width=button_width,
         )
 
-        # C_B_r5_c3 - Video: vailá
-        vaila_btn13 = tk.Button(
+        # C_B_r5_c3 - Video: Remove Duplicate Frames
+        remove_duplicate_frames_btn = tk.Button(
             tools_col2,
-            text="vailá",
-            command=self.show_vaila_message,
+            text="rm Dup PNG",
+            command=self.remove_duplicate_frames,
             width=button_width,
         )
 
@@ -1019,11 +1040,11 @@ class Vaila(tk.Tk):
         resize_video_btn.grid(row=3, column=2, padx=2, pady=2)
         ytdownloader_btn.grid(row=4, column=0, padx=2, pady=2)
         iaudiovid_btn.grid(row=4, column=1, padx=2, pady=2)
-        vaila_btn13.grid(row=4, column=2, padx=2, pady=2)
+        remove_duplicate_frames_btn.grid(row=4, column=2, padx=2, pady=2)
         tools_col2.pack(side="left", fill="both", expand=True, padx=5, pady=5)
 
         ## VVVVVVVVVVVVVVV VISUALIZATION BUTTONS VVVVVVVVVVVVVVVV
-        # Visualization sub-columns (3-6)
+        # Visualization sub-columns
         # C_C_r1_c1 - Visualization: Show C3D
         show_c3d_btn = tk.Button(
             tools_col3, text="Show C3D", command=self.show_c3d_data, width=button_width
@@ -1047,11 +1068,11 @@ class Vaila(tk.Tk):
             width=button_width,
         )
 
-        # C_C_r3_c1 - Visualization: vailá
-        vaila_btn16 = tk.Button(
+        # C_C_r3_c1 - Visualization: Draw Soccer Field
+        draw_soccerfield_btn = tk.Button(
             tools_col3,
-            text="vailá",
-            command=self.show_vaila_message,
+            text="Draw Soccer Field",
+            command=self.draw_soccerfield,
             width=button_width,
         )
 
@@ -1079,8 +1100,16 @@ class Vaila(tk.Tk):
             width=button_width,
         )
 
-        # C_C_r4_c2 - Visualization: vailá
-        vaila_btn19 = tk.Button(
+        # C_C_r5_c1 - Visualization: vailá
+        vaila_btn20 = tk.Button(
+            tools_col3,
+            text="vailá",
+            command=self.show_vaila_message,
+            width=button_width,
+        )
+
+        # C_C_r5_c2 - Visualization: vailá
+        vaila_btn21 = tk.Button(
             tools_col3,
             text="vailá",
             command=self.show_vaila_message,
@@ -1092,10 +1121,12 @@ class Vaila(tk.Tk):
         show_csv_btn.grid(row=0, column=1, padx=2, pady=2)
         plot_2d_btn.grid(row=1, column=0, padx=2, pady=2)
         plot_3d_btn.grid(row=1, column=1, padx=2, pady=2)
-        vaila_btn16.grid(row=2, column=0, padx=2, pady=2)
+        draw_soccerfield_btn.grid(row=2, column=0, padx=2, pady=2)
         vaila_btn17.grid(row=2, column=1, padx=2, pady=2)
         vaila_btn18.grid(row=3, column=0, padx=2, pady=2)
         vaila_btn19.grid(row=3, column=1, padx=2, pady=2)
+        vaila_btn20.grid(row=4, column=0, padx=2, pady=2)
+        vaila_btn21.grid(row=4, column=1, padx=2, pady=2)
         tools_col3.pack(side="left", fill="both", expand=True, padx=5, pady=5)
         # Help and Exit Buttons Frame
         bottom_frame = tk.Frame(scrollable_frame)
@@ -1452,6 +1483,8 @@ class Vaila(tk.Tk):
     # B_r3_c4
     def markerless2d_mpyolo(self):
         """Runs the markerless2d_mpyolo analysis."""
+        from vaila import markerless2d_mpyolo
+
         markerless2d_mpyolo.run_markerless2d_mpyolo()
 
     # B_r3_c5
@@ -1886,12 +1919,15 @@ class Vaila(tk.Tk):
         vaila_iaudiovid.run_iaudiovid()
 
     # C_B_r5_c3
-    def vaila(self):
-        """Runs the vailá module.
+    def remove_duplicate_frames(self):
+        """Runs the Remove Duplicate Frames module.
 
-        This function runs the vailá module, which can be used to
-        run vailá.
+        This function runs the Remove Duplicate Frames module, which can be used to
+        remove duplicate frames from video files.
         """
+        from vaila import rm_duplicateframes
+
+        rm_duplicateframes.run_rm_duplicateframes()
 
     # C_C_r1_c1
     def show_c3d_data(self):
@@ -1960,7 +1996,16 @@ class Vaila(tk.Tk):
         plot_3d()
 
     # C_C_r3_c1
-    # def vaila(self):
+    def draw_soccerfield(self):
+        """Runs the soccer field drawing module.
+
+        This function runs the soccer field drawing module, which can be used to
+        visualize a soccer field using Matplotlib.
+
+        """
+        from vaila import soccerfield
+
+        soccerfield.run_soccerfield()
 
     # C_C_r3_c2
     # def vaila(self):

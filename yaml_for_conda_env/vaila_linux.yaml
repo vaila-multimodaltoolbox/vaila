@@ -96,3 +96,6 @@ dependencies:
       - simplekml
       - folium
       - yt-dlp
+      - torch
+      - torchvision
+      - torchaudio

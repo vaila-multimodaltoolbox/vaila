@@ -111,19 +111,19 @@ class VideoProcessor:
                 os.makedirs(output_dir, exist_ok=True)
                 output_pattern = os.path.join(output_dir, self.pattern)
 
-                # Obtém dimensões e informações do vídeo
+                # Get video dimensions and FPS
                 width, height, fps = self.get_video_info(video_path)
 
-                # Comando atualizado para melhor decodificação HEVC e PNG compatível
+                # Updated command for better HEVC decoding and PNG compatibility
                 command = [
                     "ffmpeg",
                     "-i",
                     video_path,
                     "-vf",
-                    f"scale={width}:{height}:flags=lanczos",  # Removido format=rgb24
+                    f"scale={width}:{height}:flags=lanczos",  # Removed format=rgb24
                     "-q:v",
                     "1",
-                    "-vsync",
+                    "-fps_mode",
                     "passthrough",
                     "-hwaccel",
                     "auto",
@@ -134,16 +134,16 @@ class VideoProcessor:
                     "-sws_flags",
                     "bicubic",
                     "-pix_fmt",
-                    "rgb24",  # Mantido para cor correta
+                    "rgb24",  # Kept for correct color
                     "-f",
-                    "image2",  # Força formato de imagem
+                    "image2",  # Forces image format
                     "-compression_level",
-                    "6",  # Nível de compressão PNG (0-9)
+                    "6",  # PNG compression level (0-9)
                     output_pattern,
                 ]
 
                 try:
-                    # Tenta primeiro com aceleração de hardware
+                    # Try first with hardware acceleration
                     try:
                         print(f"\nProcessing {item} with hardware acceleration...")
                         subprocess.run(command, check=True)
@@ -153,7 +153,7 @@ class VideoProcessor:
                             "\nHardware acceleration failed, trying software decoder..."
                         )
 
-                        # Remove aceleração de hardware para tentar decoder de software
+                        # Remove hardware acceleration to try software decoder
                         command = [
                             "ffmpeg",
                             "-i",
@@ -162,7 +162,7 @@ class VideoProcessor:
                             f"scale={width}:{height}:flags=lanczos",
                             "-q:v",
                             "1",
-                            "-vsync",
+                            "-fps_mode",
                             "passthrough",
                             "-sws_flags",
                             "bicubic",
@@ -183,7 +183,7 @@ class VideoProcessor:
                     )
                     print(f"Total frames extracted: {total_frames}")
 
-                    # Salva informações básicas do vídeo
+                    # Save basic video information
                     with open(os.path.join(output_dir, "video_info.txt"), "w") as f:
                         f.write(f"Original video: {item}\n")
                         f.write(f"FPS: {fps}\n")
