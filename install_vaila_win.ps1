@@ -255,4 +255,15 @@ $startMenuShortcut.Save()
 Write-Output "Start Menu shortcut for 'vaila' created at $startMenuShortcutPath."
 
 Write-Output "Installation and configuration of 'vaila' completed successfully!"
+
+Write-Output "Please restart your computer to apply all changes."
+
+Write-Output "If double-clicking on vaila icon in the desktop or Start Menu is not working, please check the following:   "
+Write-Output "1. Open the Start Menu and search for 'Windows PowerShell'."
+Write-Output "2. Right-click on 'Windows PowerShell' and select 'Run as administrator'."
+Write-Output "3. Type 'conda activate vaila' and press Enter."
+Write-Output "4. Type 'cd C:\Users\<username>\AppData\Local\vaila' and press Enter."
+Write-Output "5. Type 'python vaila.py' and press Enter."
+
+Write-Output "Thank you for using vailá - Multimodal Toolbox!"
 Pause
