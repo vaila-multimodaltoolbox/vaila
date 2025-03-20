@@ -85,7 +85,7 @@ except ImportError:
 
 def get_color_for_id(tracker_id):
     """Generate a distinct color for each tracker ID using a combination of techniques."""
-    # Predefined distinct colors for the first 10 IDs (in BGR)
+    # Base palette with distinct colors for the first few IDs - EXPANDED
     distinct_colors = [
         (255, 0, 0),  # Blue
         (0, 0, 255),  # Red
@@ -96,7 +96,27 @@ def get_color_for_id(tracker_id):
         (128, 0, 255),  # Purple
         (0, 165, 255),  # Orange
         (255, 255, 255),  # White
-        (0, 0, 0),  # Black
+        (128, 128, 128),  # Gray
+        (128, 128, 255),  # Pink
+        (255, 128, 128),  # Light Blue
+        (128, 255, 128),  # Light Green
+        (60, 20, 220),  # Crimson
+        (32, 165, 218),  # Coral
+        (0, 69, 255),  # Brown
+        (204, 50, 153),  # Violet
+        (79, 79, 47),  # Olive
+        (143, 143, 188),  # Silver
+        (209, 206, 0),  # Turquoise
+        (0, 215, 255),  # Gold
+        (34, 34, 178),  # Maroon
+        (85, 128, 0),  # Forest Green
+        (0, 0, 128),  # Dark Red
+        (192, 192, 192),  # Light gray
+        (0, 140, 255),  # Dark orange
+        (128, 0, 0),  # Navy
+        (0, 128, 128),  # Teal
+        (220, 20, 60),  # Dark blue
+        (122, 150, 233),  # Salmon
     ]
 
     # Use predefined colors for first few IDs
