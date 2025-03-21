@@ -1568,7 +1568,51 @@ def run_markerless2d_mpyolo():
     else:
         print(f"Found model at: {model_path}. Using the local file.")
     
-    # ... resto do código ...
+    # Selecionar arquivo de vídeo
+    video_path = filedialog.askopenfilename(
+        title="Select Video File",
+        filetypes=[("Video files", "*.mp4 *.avi *.mov *.mkv")]
+    )
+    
+    if not video_path:
+        print("No video file selected. Exiting...")
+        return
+    
+    print(f"Selected video: {video_path}")
+    
+    # Create output directory with timestamp
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    video_name = os.path.splitext(os.path.basename(video_path))[0]
+    output_dir = os.path.join(os.path.dirname(video_path), f"{video_name}_analysis_{timestamp}")
+    os.makedirs(output_dir, exist_ok=True)
+    print(f"Output directory: {output_dir}")
+    
+    # Initialize YOLO model
+    print(f"Loading YOLO model from {model_path}...")
+    model = YOLO(model_path)
+    
+    # Run first stage: YOLO detection and tracking
+    tracking_data = process_yolo_tracking(video_path, output_dir, model, params)
+    
+    # Run second stage: MediaPipe pose estimation (only if people were detected)
+    if 0 in tracking_data:  # Class 0 is 'person'
+        process_mediapipe_pose(video_path, output_dir, tracking_data, params)
+    
+    # Create visualization video
+    create_visualization_video(video_path, output_dir, tracking_data, params)
+    
+    print(f"\nProcessing complete! All results saved to: {output_dir}")
+    
+    # Try to open output folder
+    try:
+        if os.name == "nt":  # Windows
+            os.startfile(output_dir)
+        elif os.name == "posix":  # macOS and Linux
+            subprocess.run(["xdg-open", output_dir])
+    except Exception as e:
+        print(f"Could not open the output directory: {e}")
+    
+    root.destroy()
 
 
 def write_nan_row(csv_path, frame_idx, num_landmarks):
