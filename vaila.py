@@ -4,8 +4,8 @@ vaila.py
 ===============================================================================
 Author: Paulo R. P. Santiago
 Date:  7 October 2024
-Update: 20 March 2025
-Version updated: 0.3.3
+Update: 23 March 2025
+Version updated: 0.3.4
 Python Version: 3.12.9
 
 
@@ -169,7 +169,7 @@ except ImportError as e:
 
 
 text = r"""
-version: 20.Mar.2025 (Python 3.12.9)
+version: 23.Mar.2025 (Python 3.12.9)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -244,7 +244,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 20.Mar.2025 (Python 3.12.9)")
+        self.title("vailá - 23.Mar.2025 (Python 3.12.9)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -291,7 +291,7 @@ class Vaila(tk.Tk):
             self.button_width = 13  # Narrower buttons for reduced width
             self.font_size = 11  # Standard font size
         elif platform.system() == "Linux":  # Linux
-            self.geometry("1024x920")  # Similar to macOS dimensions for Linux
+            self.geometry("1300x920")  # Similar to macOS dimensions for Linux
             self.button_width = 15  # Wider buttons
             self.font_size = 11  # Standard font size
         else:  # Default for other systems
