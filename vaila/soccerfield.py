@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 20 March 2025
-Updated: 19 March 2025
-Version: 0.01
+Updated: 21 March 2025
+Version: 0.0.2
 
 Description:
     This script draws a soccer field based on the coordinates in soccerfield_ref3d.csv.
