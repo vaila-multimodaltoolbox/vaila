@@ -4,7 +4,8 @@ Video Cutting Tool - cutvideo.py
 ================================================================================
 Author: Prof. Dr. Paulo R. P. Santiago
 Date: 24 January 2025
-Version: 0.0.2
+Updated: 24 March 2025
+Version: 0.0.3
 Python Version: 3.12.8
 
 Description:
@@ -225,10 +226,9 @@ def play_video_with_cuts(video_path):
         # First save cuts to text file
         txt_path = save_cuts_to_txt(video_path, cuts)
 
-        # Garantir que o pygame está fechado
-        if pygame.get_init():
-            pygame.quit()
-            print("Pygame closed before video processing")
+        # Close pygame temporarily instead of fully quitting it
+        pygame.display.quit()
+        print("Pygame display closed before video processing")
 
         # Ask if user wants to generate videos now
         if messagebox.askyesno(
@@ -566,33 +566,32 @@ def main():
 
     try:
         play_video_with_cuts(video_path)
+    except Exception as e:
+        print(f"Error in cutvideo: {e}")
     finally:
-        # Limpar todos os recursos no final do programa
+        # Clean up resources more gently
         cleanup_resources()
-        print("Program terminated successfully")
+        print("Video cutting process completed")
 
 
 def cleanup_resources():
-    """Ensure all resources are properly released."""
-    # Garantir que o OpenCV libere os recursos
-    cv2.destroyAllWindows()
-
-    # Garantir que o Pygame seja encerrado
-    if pygame.get_init():
-        pygame.quit()
-
-    # Garantir que o Tkinter seja encerrado
+    """Ensure all resources are properly released without killing the main process."""
+    # Close OpenCV windows but don't destroy all windows globally
     try:
-        root = Tk()
-        root.quit()
-        root.destroy()
+        cap = cv2.VideoCapture(0)  # Dummy capture to reset OpenCV state
+        cap.release()
     except:
         pass
-
-    # Forçar coleta de lixo para liberar memória
-    import gc
-
-    gc.collect()
+    
+    # Close pygame display but don't fully quit pygame
+    if pygame.get_init():
+        pygame.display.quit()
+    
+    # Don't create a new Tkinter root window
+    # This was causing problems by creating new instances
+    
+    # Don't force garbage collection - this can cause lockups
+    # Let Python handle memory cleanup naturally
 
 
 if __name__ == "__main__":
