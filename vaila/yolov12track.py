@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 18 February 2025
-Update Date: 18 March 2025
-Version: 0.01
+Update Date: 24 March 2025
+Version: 0.02
 
 Description:
     This script performs object detection and tracking on video files using the YOLO model v12.
@@ -556,82 +556,113 @@ def get_color_for_id(tracker_id):
 
 def create_combined_person_csv(output_dir):
     """
-    Creates a combined CSV file with simplified tracking data for all person detections.
-    
+    Creates a combined CSV file with person tracking data organized by ID columns.
+    Each person gets their own set of columns (ID_n, X_n, Y_n, RGB_n).
+
     Args:
         output_dir: Directory containing the individual person CSV files
-        
+
     Returns:
         Path to the created combined CSV file
     """
     # Find all person CSV files
     person_csv_files = glob.glob(os.path.join(output_dir, "person_id*.csv"))
-    
+
     if not person_csv_files:
         print(f"No person tracking files found in {output_dir}")
         return None
-    
+
     print(f"Found {len(person_csv_files)} person tracking files")
-    
-    # Initialize data storage
-    combined_data = []
-    
-    # Process each person CSV file
+
+    # First, get all unique frames and person IDs
+    all_frames = set()
+    person_ids = set()
+    person_colors = {}  # Store RGB values for each person ID
+
+    # Read all files to get frame and ID information
     for csv_file in person_csv_files:
         try:
-            # Extract person ID from filename
-            filename = os.path.basename(csv_file)
-            person_id = filename.split("_id")[1].split(".")[0]
-            
-            # Read the CSV file
             df = pd.read_csv(csv_file)
-            
-            # Filter out rows without detection data (NaN values)
-            df = df.dropna(subset=["X_min", "X_max", "Y_max"])
-            
-            # Get color information (should be consistent across the file)
+            filename = os.path.basename(csv_file)
+            person_id = int(filename.split("_id")[1].split(".")[0])
+            person_ids.add(person_id)
+
+            # Get frames where this person appears
+            valid_frames = df.dropna(subset=["X_min", "X_max", "Y_max"])[
+                "Frame"
+            ].unique()
+            all_frames.update(valid_frames)
+
+            # Store color information for this person
             if not df.empty:
-                color_r = df["Color_R"].iloc[0]
-                color_g = df["Color_G"].iloc[0]
-                color_b = df["Color_B"].iloc[0]
-            else:
-                continue  # Skip empty dataframes
-                
-            # Calculate center X and use Y_max
-            for _, row in df.iterrows():
-                frame = int(row["Frame"])
-                x_center = (float(row["X_min"]) + float(row["X_max"])) / 2
-                y_point = float(row["Y_max"])  # Using bottom of bounding box
-                
-                combined_data.append({
-                    "Frame": frame,
-                    "Person_ID": person_id,
-                    "X": int(x_center),
-                    "Y": int(y_point),
-                    "Color_R": color_r,
-                    "Color_G": color_g,
-                    "Color_B": color_b
-                })
-        
+                r = int(df["Color_R"].iloc[0])
+                g = int(df["Color_G"].iloc[0])
+                b = int(df["Color_B"].iloc[0])
+                # Combine RGB values into a single integer
+                rgb_int = (r << 16) + (g << 8) + b
+                person_colors[person_id] = rgb_int
+
         except Exception as e:
             print(f"Error processing {csv_file}: {e}")
             continue
-    
-    # Create DataFrame from combined data
-    if combined_data:
-        combined_df = pd.DataFrame(combined_data)
-        
-        # Sort by frame and then by person ID
-        combined_df = combined_df.sort_values(by=["Frame", "Person_ID"])
-        
-        # Save to CSV
-        output_file = os.path.join(output_dir, "all_persons_positions.csv")
-        combined_df.to_csv(output_file, index=False)
-        print(f"Combined person tracking data saved to: {output_file}")
-        return output_file
-    else:
-        print("No valid person tracking data found")
-        return None
+
+    # Create a dictionary to store all data
+    all_data = {}
+    person_ids = sorted(list(person_ids))  # Sort IDs for consistent column order
+
+    # Initialize the data structure for all frames
+    for frame in all_frames:
+        all_data[frame] = {"Frame": frame}
+        for pid in person_ids:
+            all_data[frame].update(
+                {
+                    f"ID_{pid}": pid,
+                    f"X_{pid}": "",  # Empty string for missing values
+                    f"Y_{pid}": "",
+                    f"RGB_{pid}": person_colors.get(pid, ""),
+                }
+            )
+
+    # Now fill in the position data from each file
+    for csv_file in person_csv_files:
+        try:
+            df = pd.read_csv(csv_file)
+            person_id = int(os.path.basename(csv_file).split("_id")[1].split(".")[0])
+
+            # Process only rows with valid detection data
+            valid_data = df.dropna(subset=["X_min", "X_max", "Y_max"])
+
+            for _, row in valid_data.iterrows():
+                frame = int(row["Frame"])
+                if frame in all_data:
+                    x_center = int((float(row["X_min"]) + float(row["X_max"])) / 2)
+                    y_point = int(float(row["Y_max"]))
+
+                    all_data[frame][f"X_{person_id}"] = x_center
+                    all_data[frame][f"Y_{person_id}"] = y_point
+
+        except Exception as e:
+            print(f"Error processing positions from {csv_file}: {e}")
+            continue
+
+    # Convert to DataFrame
+    df_combined = pd.DataFrame(list(all_data.values()))
+
+    # Sort by frame number
+    df_combined = df_combined.sort_values("Frame")
+
+    # Organize columns in the desired order
+    columns = ["Frame"]
+    for pid in person_ids:
+        columns.extend([f"ID_{pid}", f"X_{pid}", f"Y_{pid}", f"RGB_{pid}"])
+
+    df_combined = df_combined[columns]
+
+    # Save to CSV
+    output_file = os.path.join(output_dir, "all_persons_positions.csv")
+    df_combined.to_csv(output_file, index=False)
+    print(f"Combined person tracking data saved to: {output_file}")
+    return output_file
 
 
 def run_yolov12track():
@@ -867,7 +898,7 @@ def run_yolov12track():
             print(
                 f"Processing completed for {video_file}. Results saved in '{output_dir}'."
             )
-            
+
             # Create combined person CSV after processing each video
             combined_csv = create_combined_person_csv(output_dir)
             if combined_csv:
