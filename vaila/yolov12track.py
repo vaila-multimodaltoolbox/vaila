@@ -61,6 +61,8 @@ import re
 import colorsys
 import pkg_resources
 from ultralytics.utils.checks import check_requirements
+import glob
+import pandas as pd
 
 # Garantir que o BoxMOT possa ser encontrado
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
@@ -552,6 +554,86 @@ def get_color_for_id(tracker_id):
     return COLORS[color_idx]
 
 
+def create_combined_person_csv(output_dir):
+    """
+    Creates a combined CSV file with simplified tracking data for all person detections.
+    
+    Args:
+        output_dir: Directory containing the individual person CSV files
+        
+    Returns:
+        Path to the created combined CSV file
+    """
+    # Find all person CSV files
+    person_csv_files = glob.glob(os.path.join(output_dir, "person_id*.csv"))
+    
+    if not person_csv_files:
+        print(f"No person tracking files found in {output_dir}")
+        return None
+    
+    print(f"Found {len(person_csv_files)} person tracking files")
+    
+    # Initialize data storage
+    combined_data = []
+    
+    # Process each person CSV file
+    for csv_file in person_csv_files:
+        try:
+            # Extract person ID from filename
+            filename = os.path.basename(csv_file)
+            person_id = filename.split("_id")[1].split(".")[0]
+            
+            # Read the CSV file
+            df = pd.read_csv(csv_file)
+            
+            # Filter out rows without detection data (NaN values)
+            df = df.dropna(subset=["X_min", "X_max", "Y_max"])
+            
+            # Get color information (should be consistent across the file)
+            if not df.empty:
+                color_r = df["Color_R"].iloc[0]
+                color_g = df["Color_G"].iloc[0]
+                color_b = df["Color_B"].iloc[0]
+            else:
+                continue  # Skip empty dataframes
+                
+            # Calculate center X and use Y_max
+            for _, row in df.iterrows():
+                frame = int(row["Frame"])
+                x_center = (float(row["X_min"]) + float(row["X_max"])) / 2
+                y_point = float(row["Y_max"])  # Using bottom of bounding box
+                
+                combined_data.append({
+                    "Frame": frame,
+                    "Person_ID": person_id,
+                    "X": int(x_center),
+                    "Y": int(y_point),
+                    "Color_R": color_r,
+                    "Color_G": color_g,
+                    "Color_B": color_b
+                })
+        
+        except Exception as e:
+            print(f"Error processing {csv_file}: {e}")
+            continue
+    
+    # Create DataFrame from combined data
+    if combined_data:
+        combined_df = pd.DataFrame(combined_data)
+        
+        # Sort by frame and then by person ID
+        combined_df = combined_df.sort_values(by=["Frame", "Person_ID"])
+        
+        # Save to CSV
+        output_file = os.path.join(output_dir, "all_persons_positions.csv")
+        combined_df.to_csv(output_file, index=False)
+        print(f"Combined person tracking data saved to: {output_file}")
+        return output_file
+    else:
+        print("No valid person tracking data found")
+        return None
+
+
 def run_yolov12track():
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
@@ -785,6 +867,11 @@ def run_yolov12track():
             print(
                 f"Processing completed for {video_file}. Results saved in '{output_dir}'."
             )
+            
+            # Create combined person CSV after processing each video
+            combined_csv = create_combined_person_csv(output_dir)
+            if combined_csv:
+                print(f"Combined person tracking file created: {combined_csv}")
 
     root.destroy()
 
