@@ -33,6 +33,23 @@ import numpy as np
 from tkinter import Tk, filedialog, messagebox
 
 
+def get_color_for_id(marker_id):
+    """Generate a consistent color for a given marker ID."""
+    colors = [
+        (0, 255, 0),     # Green
+        (255, 0, 0),     # Red
+        (0, 0, 255),     # Blue
+        (255, 255, 0),   # Yellow
+        (255, 0, 255),   # Magenta
+        (0, 255, 255),   # Cyan
+        (255, 128, 0),   # Orange
+        (128, 0, 255),   # Purple
+        (0, 128, 255),   # Light Blue
+        (128, 255, 0),   # Lime
+    ]
+    return colors[marker_id % len(colors)]
+
+
 def play_video_with_controls(video_path, coordinates=None):
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
@@ -146,14 +163,25 @@ def play_video_with_controls(video_path, coordinates=None):
         button_width = 50
         button_height = 20
         button_gap = 5
-        total_buttons_width = button_width * 4 + button_gap * 3  # Now 4 buttons
+        persist_button_width = 70  # Botão de persistência mais largo
+        total_buttons_width = (button_width * 4) + persist_button_width + (button_gap * 4)  # Agora 5 botões
         margin_right = 10
         cluster_x = window_width - total_buttons_width - margin_right
         cluster_y = slider_y - button_height - 5
 
+        # Load button
+        load_button_rect = pygame.Rect(
+            cluster_x, cluster_y, button_width, button_height
+        )
+        pygame.draw.rect(control_surface, (100, 100, 100), load_button_rect)
+        load_text = font.render("Load", True, (255, 255, 255))
+        control_surface.blit(
+            load_text, load_text.get_rect(center=load_button_rect.center)
+        )
+
         # Save button.
         save_button_rect = pygame.Rect(
-            cluster_x, cluster_y, button_width, button_height
+            cluster_x + button_width + button_gap, cluster_y, button_width, button_height
         )
         pygame.draw.rect(control_surface, (100, 100, 100), save_button_rect)
         save_text = font.render("Save", True, (255, 255, 255))
@@ -163,7 +191,7 @@ def play_video_with_controls(video_path, coordinates=None):
 
         # Help button.
         help_button_rect = pygame.Rect(
-            cluster_x + button_width + button_gap,
+            cluster_x + 2 * (button_width + button_gap),
             cluster_y,
             button_width,
             button_height,
@@ -176,7 +204,7 @@ def play_video_with_controls(video_path, coordinates=None):
 
         # "1 Line" mode toggle button.
         one_line_button_rect = pygame.Rect(
-            cluster_x + 2 * (button_width + button_gap),
+            cluster_x + 3 * (button_width + button_gap),
             cluster_y,
             button_width,
             button_height,
@@ -190,9 +218,9 @@ def play_video_with_controls(video_path, coordinates=None):
 
         # "Persist" mode toggle button.
         persist_button_rect = pygame.Rect(
-            cluster_x + 3 * (button_width + button_gap),
+            cluster_x + 4 * (button_width + button_gap),
             cluster_y,
-            button_width,
+            persist_button_width,
             button_height,
         )
         persist_color = (50, 150, 50) if persistence_enabled else (100, 100, 100)
@@ -212,6 +240,7 @@ def play_video_with_controls(video_path, coordinates=None):
             save_button_rect,
             help_button_rect,
             persist_button_rect,
+            load_button_rect,
             slider_margin_left,
             slider_y,
             slider_width,
@@ -235,6 +264,8 @@ def play_video_with_controls(video_path, coordinates=None):
             "- Drag Slider: Jump to Frame",
             "- C: Toggle 1 line marker mode",
             "- P: Toggle persistence mode",
+            "- A: Add new empty marker to file",
+            "- R: Remove last marker from file",
             "- 1: Decrease persistence frames by 1",
             "- 2: Increase persistence frames by 1",
             "- 3: Toggle full persistence (all frames)",
@@ -328,7 +359,7 @@ def play_video_with_controls(video_path, coordinates=None):
                         pygame.K_EQUALS,
                         pygame.K_KP_PLUS,
                     ):
-                        persistence_frames = min(persistence_frames + 1, 100)
+                        persistence_frames += 1  # Sem limite máximo
                         value_text = font.render(
                             f"Frames: {persistence_frames}", True, (255, 255, 255)
                         )
@@ -357,7 +388,7 @@ def play_video_with_controls(video_path, coordinates=None):
                         )
                         pygame.display.flip()
                     elif event.key in (pygame.K_MINUS, pygame.K_KP_MINUS):
-                        persistence_frames = max(persistence_frames - 1, 1)
+                        persistence_frames = max(1, persistence_frames - 1)
                         value_text = font.render(
                             f"Frames: {persistence_frames}", True, (255, 255, 255)
                         )
@@ -447,6 +478,186 @@ def play_video_with_controls(video_path, coordinates=None):
         print(f"1 line coordinates saved to: {output_file}")
         return output_file
 
+    def add_new_marker():
+        """Adiciona um novo marcador vazio a todos os frames"""
+        nonlocal coordinates, one_line_markers, selected_marker_idx
+        
+        if one_line_mode:
+            # No modo 1 line, adicionamos um novo índice de marcador com posição (0,0)
+            # Encontrar o maior índice atual e adicionar um depois dele
+            max_idx = -1
+            for idx, _ in enumerate(one_line_markers):
+                if idx > max_idx and idx not in deleted_markers:
+                    max_idx = idx
+            
+            new_idx = max_idx + 1
+            # Adicionar marcador vazio no frame atual
+            one_line_markers.append((frame_count, 0, 0))
+            selected_marker_idx = new_idx
+            
+            save_message_text = f"Adicionado novo marcador {new_idx+1}"
+            showing_save_message = True
+            save_message_timer = 60
+        else:
+            # No modo normal, adicionamos uma posição vazia em cada frame
+            # que não tem o número máximo de marcadores
+            max_markers = 0
+            for frame, markers in coordinates.items():
+                if len(markers) > max_markers:
+                    max_markers = len(markers)
+            
+            # Adicionar mais um marcador a cada frame
+            for frame in range(total_frames):
+                if len(coordinates[frame]) <= max_markers:
+                    coordinates[frame].append((0, 0))
+                    deleted_positions[frame].add(max_markers)  # Marcar como deleted até ser posicionado
+            
+            selected_marker_idx = max_markers
+            
+            save_message_text = f"Adicionado novo marcador {max_markers+1}"
+            showing_save_message = True
+            save_message_timer = 60
+        
+        # Fazer backup automático do arquivo original
+        make_backup()
+
+    def remove_marker():
+        """Remove o último marcador de todos os frames"""
+        nonlocal coordinates, one_line_markers, selected_marker_idx
+        
+        if one_line_mode:
+            # No modo 1 line, removemos o último índice de marcador
+            max_idx = -1
+            for idx, _ in enumerate(one_line_markers):
+                if idx > max_idx and idx not in deleted_markers:
+                    max_idx = idx
+            
+            if max_idx >= 0:
+                deleted_markers.add(max_idx)
+                selected_marker_idx = -1
+                
+                save_message_text = f"Removido marcador {max_idx+1}"
+                showing_save_message = True
+                save_message_timer = 60
+        else:
+            # No modo normal, removemos o último marcador em todos os frames
+            max_markers = 0
+            for frame, markers in coordinates.items():
+                if len(markers) > max_markers:
+                    max_markers = len(markers)
+            
+            if max_markers > 0:
+                # Adicionar o último marcador à lista de deleted em todos os frames
+                for frame in range(total_frames):
+                    if len(coordinates[frame]) == max_markers:
+                        deleted_positions[frame].add(max_markers - 1)
+                
+                selected_marker_idx = -1
+                
+                save_message_text = f"Removido marcador {max_markers}"
+                showing_save_message = True
+                save_message_timer = 60
+        
+        # Fazer backup automático do arquivo original
+        make_backup()
+
+    def make_backup():
+        """Faz um backup do arquivo original de coordenadas"""
+        if not os.path.exists(video_path):
+            return
+        
+        base_name = os.path.splitext(os.path.basename(video_path))[0]
+        video_dir = os.path.dirname(video_path)
+        
+        # Verifica se existe um arquivo de coordenadas
+        coords_file = os.path.join(video_dir, f"{base_name}_markers.csv")
+        if os.path.exists(coords_file):
+            backup_file = os.path.join(video_dir, f"{base_name}_markers_backup.csv")
+            try:
+                import shutil
+                shutil.copy2(coords_file, backup_file)
+            except Exception as e:
+                print(f"Erro ao fazer backup: {e}")
+        
+        # Também verifica o arquivo de 1 line
+        line_file = os.path.join(video_dir, f"{base_name}_markers_1_line.csv")
+        if os.path.exists(line_file):
+            backup_file = os.path.join(video_dir, f"{base_name}_markers_1_line_backup.csv")
+            try:
+                import shutil
+                shutil.copy2(line_file, backup_file)
+            except Exception as e:
+                print(f"Erro ao fazer backup: {e}")
+
+    def reload_coordinates():
+        """Carrega um novo arquivo de coordenadas durante a execução"""
+        nonlocal coordinates, one_line_markers, deleted_markers, deleted_positions, selected_marker_idx
+        
+        # Fazer backup do atual antes de carregar um novo
+        make_backup()
+        
+        # Criar uma nova instância do Tkinter para o diálogo de arquivo
+        root = Tk()
+        root.withdraw()
+        input_file = filedialog.askopenfilename(
+            title="Selecionar Arquivo de Keypoints",
+            filetypes=[("Arquivos CSV", "*.csv")],
+        )
+        if not input_file:
+            save_message_text = "Carregamento cancelado."
+            showing_save_message = True
+            save_message_timer = 60
+            return
+        
+        try:
+            # Verificar se é arquivo de 1 line ou normal
+            df = pd.read_csv(input_file)
+            if "_1_line" in input_file or len(df) == 1:
+                # Provavelmente é um arquivo de 1 line
+                one_line_markers = []
+                deleted_markers = set()
+                
+                for _, row in df.iterrows():
+                    frame_num = int(row["frame"])
+                    for i in range(1, 101):  # Assumindo no máximo 100 pontos
+                        x_col = f"p{i}_x"
+                        y_col = f"p{i}_y"
+                        if x_col in df.columns and y_col in df.columns:
+                            if pd.notna(row[x_col]) and pd.notna(row[y_col]):
+                                one_line_markers.append((frame_num, row[x_col], row[y_col]))
+                
+                save_message_text = f"Carregado arquivo de 1 line: {os.path.basename(input_file)}"
+                # Se estava no modo normal, alternar para o modo 1 line
+                one_line_mode = True
+            else:
+                # Arquivo de coordenadas normal
+                coordinates = {i: [] for i in range(total_frames)}
+                deleted_positions = {i: set() for i in range(total_frames)}
+                
+                for _, row in df.iterrows():
+                    frame_num = int(row["frame"])
+                    for i in range(1, 101):  # Assumindo no máximo 100 pontos
+                        x_col = f"p{i}_x"
+                        y_col = f"p{i}_y"
+                        if x_col in df.columns and y_col in df.columns:
+                            if pd.notna(row[x_col]) and pd.notna(row[y_col]):
+                                coordinates[frame_num].append((row[x_col], row[y_col]))
+                
+                save_message_text = f"Carregado arquivo: {os.path.basename(input_file)}"
+                # Se estava no modo 1 line, alternar para o modo normal
+                one_line_mode = False
+            
+            # Resetar marcador selecionado
+            selected_marker_idx = -1
+            
+            showing_save_message = True
+            save_message_timer = 90
+            
+        except Exception as e:
+            save_message_text = f"Erro ao carregar arquivo: {e}"
+            showing_save_message = True
+            save_message_timer = 90
+
     running = True
     saved = False
     showing_save_message = False
@@ -454,8 +665,21 @@ def play_video_with_controls(video_path, coordinates=None):
     save_message_text = ""
 
     while running:
-        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_count)
-        ret, frame = cap.read()
+        if paused:
+            # Quando pausado, vamos usar o método set para posicionar no frame exato
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_count)
+            ret, frame = cap.read()
+        else:
+            # Quando em reprodução, apenas leia o próximo frame sem reposicionar
+            ret, frame = cap.read()
+            if ret:
+                frame_count = int(cap.get(cv2.CAP_PROP_POS_FRAMES)) - 1
+            else:
+                # Final do vídeo alcançado, reiniciar
+                frame_count = 0
+                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                ret, frame = cap.read()
+        
         if not ret:
             break
 
@@ -479,61 +703,100 @@ def play_video_with_controls(video_path, coordinates=None):
         if persistence_enabled:
             # Calculate range of frames to show
             start_frame = max(0, frame_count - persistence_frames)
-
-            # Draw markers from previous frames with decreasing opacity
-            for past_frame in range(start_frame, frame_count):
-                # Calculate opacity based on how far back this frame is
-                opacity = int(
-                    200
-                    * (past_frame - start_frame + 1)
-                    / (frame_count - start_frame + 1)
-                )
-
-                if one_line_mode:
-                    for idx, (f_num, x, y) in enumerate(one_line_markers):
-                        if idx in deleted_markers:
+            
+            # Collect marker positions across frames for each ID
+            marker_trails = {}  # Dictionary: marker_id -> list of (frame_num, x, y) points
+            
+            if one_line_mode:
+                # In one_line mode, collect marker positions by their index
+                for idx, (f_num, x, y) in enumerate(one_line_markers):
+                    if idx in deleted_markers:
+                        continue  # Skip deleted markers
+                        
+                    if start_frame <= f_num <= frame_count:
+                        if idx not in marker_trails:
+                            marker_trails[idx] = []
+                        # Store with frame number to sort by time later
+                        marker_trails[idx].append((f_num, x, y))
+            else:
+                # In regular mode, need to track same marker ID across frames
+                for f_num in range(start_frame, frame_count + 1):
+                    for i, (x, y) in enumerate(coordinates[f_num]):
+                        if i in deleted_positions[f_num]:
                             continue  # Skip deleted markers
+                            
+                        if i not in marker_trails:
+                            marker_trails[i] = []
+                        marker_trails[i].append((f_num, x, y))
+            
+            # Draw trails for each marker
+            for marker_id, positions in marker_trails.items():
+                # Sort positions by frame number
+                positions.sort(key=lambda p: p[0])
+                
+                # Need at least 2 points to draw a line
+                if len(positions) < 2:
+                    continue
+                    
+                # Get marker's color - we'll base trail color on the marker's color
+                color = get_color_for_id(marker_id)
+                
+                # Draw line segments with decreasing opacity
+                for i in range(1, len(positions)):
+                    # Calculate opacity based on how recent this segment is
+                    segment_opacity = int(200 * (positions[i][0] - start_frame) / (frame_count - start_frame + 1))
+                    
+                    # Get screen coordinates for this segment
+                    prev_frame, prev_x, prev_y = positions[i-1]
+                    curr_frame, curr_x, curr_y = positions[i]
+                    
+                    prev_screen_x = int((prev_x * zoom_level) - crop_x)
+                    prev_screen_y = int((prev_y * zoom_level) - crop_y)
+                    curr_screen_x = int((curr_x * zoom_level) - crop_x)
+                    curr_screen_y = int((curr_y * zoom_level) - crop_y)
+                    
+                    # Create a temporary surface for the semi-transparent line
+                    # Make it large enough to contain the line with padding
+                    min_x = min(prev_screen_x, curr_screen_x) - 2
+                    min_y = min(prev_screen_y, curr_screen_y) - 2
+                    width = abs(curr_screen_x - prev_screen_x) + 4
+                    height = abs(curr_screen_y - prev_screen_y) + 4
+                    
+                    # Handle zero dimensions
+                    width = max(width, 1)
+                    height = max(height, 1)
+                    
+                    line_surface = pygame.Surface((width, height), pygame.SRCALPHA)
+                    
+                    # Line color with opacity
+                    line_color = (color[0], color[1], color[2], segment_opacity)
+                    
+                    # Draw the line segment on the surface
+                    pygame.draw.line(
+                        line_surface,
+                        line_color,
+                        (prev_screen_x - min_x, prev_screen_y - min_y),
+                        (curr_screen_x - min_x, curr_screen_y - min_y),
+                        max(3, int(6 * segment_opacity / 200))  # Linha mais espessa
+                    )
+                    
+                    # Blit the line segment to the screen
+                    screen.blit(line_surface, (min_x, min_y))
+                    
+                    # Desenhar ponto no início do segmento (ponto adicional)
+                    point_surface = pygame.Surface((8, 8), pygame.SRCALPHA)
+                    point_color = (0, 0, 0, segment_opacity)  # Cor preta com a mesma opacidade da linha
+                    pygame.draw.circle(point_surface, point_color, (4, 4), 2)  # Círculo de raio 2
+                    screen.blit(point_surface, (prev_screen_x - 4, prev_screen_y - 4))
 
-                        if f_num == past_frame:
-                            screen_x = int((x * zoom_level) - crop_x)
-                            screen_y = int((y * zoom_level) - crop_y)
-
-                            # Draw past markers in gray with decreasing opacity
-                            # Create a temporary surface for the semi-transparent circle
-                            circle_surface = pygame.Surface((14, 14), pygame.SRCALPHA)
-                            pygame.draw.circle(
-                                circle_surface, (150, 150, 150, opacity), (7, 7), 3
-                            )
-                            screen.blit(circle_surface, (screen_x - 7, screen_y - 7))
-
-                            # Draw the marker number with reduced opacity
-                            text_surface = font.render(
-                                str(idx + 1), True, (200, 200, 200, opacity)
-                            )
-                            text_surface.set_alpha(opacity)
-                            screen.blit(text_surface, (screen_x + 5, screen_y - 15))
-                else:
-                    for i, (x, y) in enumerate(coordinates[past_frame]):
-                        if i in deleted_positions[past_frame]:
-                            continue  # Skip deleted markers
-
-                        screen_x = int((x * zoom_level) - crop_x)
-                        screen_y = int((y * zoom_level) - crop_y)
-
-                        # Draw past markers in gray with decreasing opacity
-                        # Create a temporary surface for the semi-transparent circle
-                        circle_surface = pygame.Surface((14, 14), pygame.SRCALPHA)
-                        pygame.draw.circle(
-                            circle_surface, (150, 150, 150, opacity), (7, 7), 3
-                        )
-                        screen.blit(circle_surface, (screen_x - 7, screen_y - 7))
-
-                        # Draw the marker number with reduced opacity
-                        text_surface = font.render(
-                            str(i + 1), True, (200, 200, 200, opacity)
-                        )
-                        text_surface.set_alpha(opacity)
-                        screen.blit(text_surface, (screen_x + 5, screen_y - 15))
+                # Still draw the most recent point as a small circle
+                last_frame, last_x, last_y = positions[-1]
+                if last_frame < frame_count:  # Don't draw current frame again
+                    last_screen_x = int((last_x * zoom_level) - crop_x)
+                    last_screen_y = int((last_y * zoom_level) - crop_y)
+                    
+                    # Draw a small circle for the most recent position
+                    pygame.draw.circle(screen, color, (last_screen_x, last_screen_y), 2)
 
         # Draw current frame markers (same as before, on top of persistence markers)
         if one_line_mode:
@@ -579,6 +842,7 @@ def play_video_with_controls(video_path, coordinates=None):
             save_button_rect,
             help_button_rect,
             persist_button_rect,
+            load_button_rect,
             slider_x,
             slider_y,
             slider_width,
@@ -638,30 +902,30 @@ def play_video_with_controls(video_path, coordinates=None):
                     marker_position = 0
 
         if total_markers > 0 and marker_position > 0:
-            indicator_font = pygame.font.Font(None, 36)
+            indicator_font = pygame.font.Font(None, 48)
             indicator_text = f"Marker {selected_marker_idx+1}/{len(visible_markers)}"
             indicator_surface = indicator_font.render(
-                indicator_text, True, (255, 255, 255)
+                indicator_text, True, (255, 255, 0)
             )
 
-            # Create background for text
+            # Criar fundo mais visível
             indicator_bg = pygame.Surface(
                 (
-                    indicator_surface.get_width() + 20,
-                    indicator_surface.get_height() + 10,
+                    indicator_surface.get_width() + 30,
+                    indicator_surface.get_height() + 20,
                 )
             )
-            indicator_bg.set_alpha(180)
-            indicator_bg.fill((50, 50, 50))
+            indicator_bg.set_alpha(220)
+            indicator_bg.fill((50, 50, 100))
 
-            # Position in top-right corner
+            # Posicionar no centro superior da tela para maior visibilidade
             screen.blit(
-                indicator_bg, (window_width - indicator_bg.get_width() - 10, 10)
+                indicator_bg, (window_width // 2 - indicator_bg.get_width() // 2, 10)
             )
             screen.blit(
                 indicator_surface,
-                (window_width - indicator_surface.get_width() - 20, 15),
-            )
+                (window_width // 2 - indicator_surface.get_width() // 2, 15),
+                )
 
         pygame.display.flip()
 
@@ -980,30 +1244,46 @@ def play_video_with_controls(video_path, coordinates=None):
 
                 elif event.key == pygame.K_2:  # Increase persistence frames
                     if persistence_enabled:
-                        persistence_frames = min(100, persistence_frames + 1)
+                        persistence_frames += 1  # Sem limite máximo
                         save_message_text = f"Persistence: {persistence_frames} frames"
                         showing_save_message = True
                         save_message_timer = 30
 
-                elif event.key == pygame.K_3:  # Toggle full persistence
-                    if persistence_enabled and persistence_frames < total_frames:
-                        # Save current frames before switching to full mode
-                        previous_frames = persistence_frames
+                elif event.key == pygame.K_3:  # Alternar entre três modos
+                    if not persistence_enabled:
+                        # Modo 1: Ativar com persistência completa
+                        persistence_enabled = True
                         persistence_frames = total_frames
                         save_message_text = "Full persistence enabled"
-                    else:
-                        # If already in full mode or just enabling, set to 10 frames
+                    elif persistence_frames == total_frames:
+                        # Modo 2: Mudar de full para número específico de frames
                         persistence_frames = 10
                         save_message_text = f"Persistence: {persistence_frames} frames"
+                    else:
+                        # Modo 3: Desativar completamente
+                        persistence_enabled = False
+                        save_message_text = "Persistence disabled"
+                    
                     showing_save_message = True
                     save_message_timer = 30
+
+                # Adicionar novo marcador
+                elif event.key == pygame.K_a:
+                    add_new_marker()
+
+                # Remover marcador
+                elif event.key == pygame.K_r:
+                    remove_marker()
 
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 x, y = event.pos
                 if y >= window_height:
                     # Clique na área de controles
                     rel_y = y - window_height
-                    if one_line_button_rect.collidepoint(x, rel_y):
+                    if load_button_rect.collidepoint(x, rel_y):
+                        # Carregar novo arquivo
+                        reload_coordinates()
+                    elif one_line_button_rect.collidepoint(x, rel_y):
                         one_line_mode = not one_line_mode
                         selected_marker_idx = -1  # Reset selected marker
                     elif help_button_rect.collidepoint(x, rel_y):
@@ -1175,10 +1455,12 @@ def play_video_with_controls(video_path, coordinates=None):
                     frame_count = max(0, min(frame_count, total_frames - 1))
                     paused = True
 
-            if not paused:
-                frame_count = (frame_count + 1) % total_frames
-
-        clock.tick(fps)
+        if paused:
+            # Se pausado, não limitamos a taxa de FPS para que a interface seja responsiva
+            clock.tick(60)  # Taxa de atualização da interface
+        else:
+            # Se em reprodução, limitamos à taxa de FPS do vídeo
+            clock.tick(fps)
 
     cap.release()
     pygame.quit()
