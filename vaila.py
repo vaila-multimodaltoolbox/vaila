@@ -67,6 +67,13 @@ Key Features:
 10. **Soccer Field** (New Feature):
     - Provides a script to create a soccer field video.
 
+11. **Distort Video** (New Feature):
+    - Provides a script to distort videos, including adding noise, blurring,
+      and other effects.    
+
+12. **Get Pixel Coordinates** (New Feature):
+    - Provides a script to get the pixel coordinates of a video.    
+
 
 Usage:
 ------
