@@ -495,12 +495,12 @@ def distort_video_gui():
 def distort_video_gui_cv2():
     """
     Adjust distortion parameters using an OpenCV-based interface.
-
+    
     The user selects a video file (to extract the first frame) and can use the OpenCV trackbars
     to modify the correction parameters: [fx, fy, cx, cy, k1, k2, k3, p1, p2] and the scale factor.
-
+    
     Press 'c' to confirm or 'q' to cancel.
-
+    
     Returns:
         dict: Confirmed parameters, or None if canceled.
     """
@@ -534,6 +534,7 @@ def distort_video_gui_cv2():
         return None
     original_frame = frame.copy()
     orig_height, orig_width = original_frame.shape[:2]
+    aspect_ratio = orig_width / orig_height
 
     # Estimate initial parameters assuming a 90° FOV
     fov = 90
@@ -543,8 +544,9 @@ def distort_video_gui_cv2():
     default_cy = orig_height // 2
 
     # Create a window for preview and parameter adjustment using OpenCV
-    window_name = "Parameter Adjustment (Press 'c' to confirm, 'q' to cancel)"
+    window_name = "Parameter Adjustment (Press 'c' to confirm, 'q' to cancel, 'r' to reset view)"
     cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+    cv2.resizeWindow(window_name, orig_width, orig_height)
 
     # Define trackbars with their ranges and default values
     trackbars = {
@@ -617,11 +619,60 @@ def distort_video_gui_cv2():
         undistorted = cv2.undistort(
             original_frame, camera_matrix, dist_coeffs, None, new_camera_matrix
         )
-        new_w = int(orig_width * scale)
-        new_h = int(orig_height * scale)
-        preview = cv2.resize(undistorted, (new_w, new_h))
 
-        cv2.imshow(window_name, preview)
+        # Get current window size to maintain aspect ratio
+        window_rect = cv2.getWindowImageRect(window_name)
+        if window_rect[2] > 0 and window_rect[3] > 0:  # Valid window size
+            # Use a padding value for controls
+            control_padding = 150  # Espaço aproximado ocupado pelos controles
+            
+            # Calculate available height for the image (total height minus controls)
+            available_height = window_rect[3] - control_padding
+            if available_height <= 0:
+                available_height = window_rect[3]  # Fallback if window too small
+            
+            # Calculate image dimensions based on aspect ratio
+            display_height = available_height
+            display_width = int(display_height * aspect_ratio)
+            
+            # Check if width fits in window
+            if display_width > window_rect[2]:
+                display_width = window_rect[2]
+                display_height = int(display_width / aspect_ratio)
+            
+            # Apply scale factor
+            display_width = int(display_width * scale)
+            display_height = int(display_height * scale)
+            
+            # Resize maintaining aspect ratio
+            preview = cv2.resize(undistorted, (display_width, display_height))
+            
+            # Create a canvas of window size to place the image
+            canvas = np.zeros((window_rect[3], window_rect[2], 3), dtype=np.uint8)
+            
+            # Calculate position to center the image in the available space
+            x_offset = (window_rect[2] - display_width) // 2
+            y_offset = (available_height - display_height) // 2
+            
+            # Place the image on the canvas
+            if y_offset >= 0 and x_offset >= 0:
+                try:
+                    canvas[y_offset:y_offset + display_height, 
+                           x_offset:x_offset + display_width] = preview
+                except ValueError:
+                    # Fallback if dimensions don't match
+                    preview_resized = cv2.resize(undistorted, (window_rect[2], window_rect[3]))
+                    canvas = preview_resized
+            else:
+                # Fallback if offsets are negative
+                preview_resized = cv2.resize(undistorted, (window_rect[2], window_rect[3]))
+                canvas = preview_resized
+            
+            cv2.imshow(window_name, canvas)
+        else:
+            # Fallback if window dimensions are not valid
+            cv2.imshow(window_name, undistorted)
+
         key = cv2.waitKey(50) & 0xFF
         if key == ord("c"):
             cv2.destroyAllWindows()
@@ -639,6 +690,9 @@ def distort_video_gui_cv2():
         elif key == ord("q"):
             cv2.destroyAllWindows()
             return None
+        elif key == ord("r"):
+            # Reset window size to original dimensions
+            cv2.resizeWindow(window_name, orig_width, orig_height)
 
 
 def run_distortvideo_gui():
