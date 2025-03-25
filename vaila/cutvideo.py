@@ -195,28 +195,61 @@ def play_video_with_cuts(video_path):
         return slider_x, slider_width, slider_y, slider_height, help_button_rect
 
     def show_help_dialog():
-        help_message = (
-            "Video Cutting Controls:\n\n"
-            "Navigation:\n"
-            "- Space: Play/Pause\n"
-            "- Right Arrow: Next Frame\n"
-            "- Left Arrow: Previous Frame\n"
-            "- Up Arrow: Fast Forward (60 frames)\n"
-            "- Down Arrow: Rewind (60 frames)\n\n"
-            "Cutting Operations:\n"
-            "- S: Mark Start Frame\n"
-            "- E: Mark End Frame\n"
-            "- R: Reset Current Cut\n"
-            "- DELETE: Remove Last Cut\n"
-            "- L: List All Cuts\n\n"
-            "File Operations:\n"
-            "- ESC: Save cuts to file and optionally generate videos\n\n"
-            "Mouse Controls:\n"
-            "- Click on slider: Jump to frame\n"
-            "- Click 'Help': Show this dialog\n"
-            "- Drag window edges: Resize window"
-        )
-        messagebox.showinfo("Help", help_message)
+        """Display help information directly in pygame window."""
+        help_lines = [
+            "Video Cutting Controls:",
+            "",
+            "Navigation:",
+            "- Space: Play/Pause",
+            "- Right Arrow: Next Frame (when paused)",
+            "- Left Arrow: Previous Frame (when paused)",
+            "- Up Arrow: Fast Forward (60 frames)",
+            "- Down Arrow: Rewind (60 frames)",
+            "",
+            "Cutting Operations:",
+            "- S: Mark Start Frame",
+            "- E: Mark End Frame",
+            "- R: Reset Current Cut",
+            "- DELETE: Remove Last Cut",
+            "- L: List All Cuts",
+            "",
+            "File Operations:",
+            "- ESC: Save cuts to file and optionally generate videos",
+            "",
+            "Mouse Controls:",
+            "- Click on slider: Jump to frame",
+            "- Click 'Help': Show this dialog",
+            "- Drag window edges: Resize window",
+            "",
+            "Press any key to close this help"
+        ]
+
+        # Create semi-transparent overlay
+        overlay = pygame.Surface((window_width, window_height + 80))
+        overlay.set_alpha(230)
+        overlay.fill((0, 0, 0))
+
+        # Render help text
+        font = pygame.font.Font(None, 24)
+        line_height = 28
+
+        for i, line in enumerate(help_lines):
+            text_surface = font.render(line, True, (255, 255, 255))
+            overlay.blit(text_surface, (20, 20 + i * line_height))
+
+        # Display help and wait for key/click
+        screen.blit(overlay, (0, 0))
+        pygame.display.flip()
+
+        waiting_for_input = True
+        while waiting_for_input:
+            for event in pygame.event.get():
+                if event.type in (pygame.KEYDOWN, pygame.MOUSEBUTTONDOWN):
+                    waiting_for_input = False
+                if event.type == pygame.QUIT:
+                    waiting_for_input = False
+                    global running
+                    running = False
 
     def save_and_generate_videos():
         if not cuts:
