@@ -31,6 +31,7 @@ import cv2
 import pandas as pd
 import numpy as np
 from tkinter import Tk, filedialog, messagebox
+from datetime import datetime
 
 
 def get_color_for_id(marker_id):
@@ -85,7 +86,7 @@ def play_video_with_controls(video_path, coordinates=None):
     dragging_slider = False
 
     # Add marker navigation variables
-    selected_marker_idx = -1  # -1 means no marker selected
+    selected_marker_idx = 0  # Começar sempre com o marker 1 selecionado
 
     # Variables for the "1 line" mode (one-line marker mode)
     one_line_mode = False
@@ -102,6 +103,9 @@ def play_video_with_controls(video_path, coordinates=None):
     # Add persistence variables
     persistence_enabled = False
     persistence_frames = 10  # Default: show points from 10 previous frames
+
+    # Add sequential mode variable
+    sequential_mode = False
 
     def draw_controls():
         """
@@ -162,11 +166,11 @@ def play_video_with_controls(video_path, coordinates=None):
         # Draw button cluster in the lower-right corner.
         button_width = 50
         button_height = 20
-        button_gap = 5
-        persist_button_width = 70  # Botão de persistência mais largo
-        total_buttons_width = (button_width * 4) + persist_button_width + (button_gap * 4)  # Agora 5 botões
-        margin_right = 10
-        cluster_x = window_width - total_buttons_width - margin_right
+        button_gap = 10
+        persist_button_width = 70
+        seq_button_width = 70
+        total_buttons_width = (button_width * 3) + persist_button_width + seq_button_width + (button_gap * 4)
+        cluster_x = (window_width - total_buttons_width) // 2
         cluster_y = slider_y - button_height - 5
 
         # Load button
@@ -234,6 +238,20 @@ def play_video_with_controls(video_path, coordinates=None):
             persist_text, persist_text.get_rect(center=persist_button_rect.center)
         )
 
+        # Add Sequential mode button after persist button
+        seq_button_rect = pygame.Rect(
+            cluster_x + 4 * (button_width + button_gap) + persist_button_width + button_gap,
+            cluster_y,
+            seq_button_width,
+            button_height,
+        )
+        seq_color = (50, 150, 50) if sequential_mode else (100, 100, 100)
+        pygame.draw.rect(control_surface, seq_color, seq_button_rect)
+        seq_text = font.render("Sequential", True, (255, 255, 255))
+        control_surface.blit(
+            seq_text, seq_text.get_rect(center=seq_button_rect.center)
+        )
+
         screen.blit(control_surface, (0, window_height))
         return (
             one_line_button_rect,
@@ -241,6 +259,7 @@ def play_video_with_controls(video_path, coordinates=None):
             help_button_rect,
             persist_button_rect,
             load_button_rect,
+            seq_button_rect,  # Add sequential button to return
             slider_margin_left,
             slider_y,
             slider_width,
@@ -249,7 +268,7 @@ def play_video_with_controls(video_path, coordinates=None):
 
     def show_help_dialog():
         # Instead of using tkinter, display help directly in pygame
-        help_lines = [
+        help_lines_left = [
             "Video Player Controls:",
             "- Space: Play/Pause",
             "- Right Arrow: Next Frame (when paused)",
@@ -258,24 +277,36 @@ def play_video_with_controls(video_path, coordinates=None):
             "- Down Arrow: Rewind (when paused)",
             "- +: Zoom In",
             "- -: Zoom Out",
-            "- Left Click on video: Add Marker",
-            "- Right Click on video: Remove Last Marker",
-            "- Middle Click on video: Enable Pan/Move",
+            "- Left Click: Add Marker",
+            "- Right Click: Remove Last Marker",
+            "- Middle Click: Enable Pan/Move",
             "- Drag Slider: Jump to Frame",
-            "- C: Toggle 1 line marker mode",
-            "- P: Toggle persistence mode",
-            "- A: Add new empty marker to file",
-            "- R: Remove last marker from file",
-            "- 1: Decrease persistence frames by 1",
-            "- 2: Increase persistence frames by 1",
-            "- 3: Toggle full persistence (all frames)",
             "- TAB: Next marker in current frame",
             "- SHIFT+TAB: Previous marker in current frame",
-            "- DELETE: Delete currently selected marker",
+            "- DELETE: Delete selected marker",
+            "- A: Add new empty marker to file",
+            "- R: Remove last marker from file",
+        ]
+        
+        help_lines_right = [
+            "Marker Modes:",
+            "- Normal Mode (default): Clicking selects and",
+            "  updates the current marker. Use TAB to navigate.",
+            "  Each marker keeps its ID across all frames.",
             "",
-            "Persistence Mode:",
-            "Shows markers from previous frames. Use 1 and 2 to adjust",
-            "the number of frames, or 3 to toggle full persistence.",
+            "- 1 Line Mode (C key): Creates points in sequence",
+            "  in one frame. Each click adds a new marker.",
+            "  Use for tracing paths or outlines.",
+            "",
+            "- Sequential Mode (S key): Each click creates",
+            "  a new marker with incrementing IDs. No need",
+            "  to select markers first. Only in Normal mode.",
+            "",
+            "Persistence Mode (P key):",
+            "Shows markers from previous frames.",
+            "- 1: Decrease persistence frames",
+            "- 2: Increase persistence frames",
+            "- 3: Toggle full persistence",
             "",
             "Press any key to close this help",
         ]
@@ -285,13 +316,24 @@ def play_video_with_controls(video_path, coordinates=None):
         overlay.set_alpha(230)
         overlay.fill((0, 0, 0))
 
-        # Render help text
+        # Render help text in two columns
         font = pygame.font.Font(None, 24)
         line_height = 28
 
-        for i, line in enumerate(help_lines):
+        # Calculate column positions
+        col_width = window_width // 2 - 30
+        left_col_x = 20
+        right_col_x = window_width // 2 + 10
+
+        # Draw left column
+        for i, line in enumerate(help_lines_left):
             text_surface = font.render(line, True, (255, 255, 255))
-            overlay.blit(text_surface, (20, 20 + i * line_height))
+            overlay.blit(text_surface, (left_col_x, 20 + i * line_height))
+
+        # Draw right column
+        for i, line in enumerate(help_lines_right):
+            text_surface = font.render(line, True, (255, 255, 255))
+            overlay.blit(text_surface, (right_col_x, 20 + i * line_height))
 
         # Display help and wait for key/click
         screen.blit(overlay, (0, 0))
@@ -466,11 +508,12 @@ def play_video_with_controls(video_path, coordinates=None):
         # Fill in the non-deleted marker positions
         for idx, (_, x, y) in enumerate(one_line_markers):
             if idx not in deleted_markers:
-                # Marker indices are 1-based in the CSV
-                row_values[idx * 2 + 1] = int(
-                    x
-                )  # +1 for frame column, then multiply by 2 for x position
-                row_values[idx * 2 + 2] = int(y)  # +2 for y position
+                # Verificar se é um marcador vazio (None)
+                if x is not None and y is not None:
+                    # Marker indices are 1-based in the CSV
+                    row_values[idx * 2 + 1] = float(x)  # +1 for frame column, then multiply by 2 for x position
+                    row_values[idx * 2 + 2] = float(y)  # +2 for y position
+                # Se for None, deixar como vazio (já inicializado como "")
 
         df = pd.DataFrame([row_values], columns=header)
         df.to_csv(output_file, index=False)
@@ -479,42 +522,56 @@ def play_video_with_controls(video_path, coordinates=None):
         return output_file
 
     def add_new_marker():
-        """Adiciona um novo marcador vazio a todos os frames"""
-        nonlocal coordinates, one_line_markers, selected_marker_idx
+        """Adiciona um novo marcador vazio após o último marcador visível"""
+        nonlocal coordinates, one_line_markers, selected_marker_idx, showing_save_message, save_message_timer, save_message_text
         
         if one_line_mode:
-            # No modo 1 line, adicionamos um novo índice de marcador com posição (0,0)
-            # Encontrar o maior índice atual e adicionar um depois dele
-            max_idx = -1
+            # No modo 1 line, encontrar o maior número de marcador visível
+            visible_markers = []
             for idx, _ in enumerate(one_line_markers):
-                if idx > max_idx and idx not in deleted_markers:
-                    max_idx = idx
+                if idx not in deleted_markers:
+                    visible_markers.append(idx)
             
-            new_idx = max_idx + 1
-            # Adicionar marcador vazio no frame atual
-            one_line_markers.append((frame_count, 0, 0))
+            if visible_markers:
+                new_idx = max(visible_markers) + 1
+            else:
+                new_idx = 0
+            
+            # Adicionar marcador vazio no frame atual (usando None em vez de 0,0)
+            one_line_markers.append((frame_count, None, None))
             selected_marker_idx = new_idx
             
-            save_message_text = f"Adicionado novo marcador {new_idx+1}"
+            save_message_text = f"Adicionado novo marcador vazio {new_idx+1}"
             showing_save_message = True
             save_message_timer = 60
         else:
-            # No modo normal, adicionamos uma posição vazia em cada frame
-            # que não tem o número máximo de marcadores
-            max_markers = 0
-            for frame, markers in coordinates.items():
-                if len(markers) > max_markers:
-                    max_markers = len(markers)
+            # No modo normal, vamos verificar o número máximo de marcadores visíveis
+            max_visible_marker = -1
             
-            # Adicionar mais um marcador a cada frame
             for frame in range(total_frames):
-                if len(coordinates[frame]) <= max_markers:
-                    coordinates[frame].append((0, 0))
-                    deleted_positions[frame].add(max_markers)  # Marcar como deleted até ser posicionado
+                for i in range(len(coordinates[frame])):
+                    if i not in deleted_positions[frame]:
+                        max_visible_marker = max(max_visible_marker, i)
             
-            selected_marker_idx = max_markers
+            new_marker_idx = max_visible_marker + 1
             
-            save_message_text = f"Adicionado novo marcador {max_markers+1}"
+            # Adicionar mais um marcador a cada frame com posição vazia (None, None)
+            for frame in range(total_frames):
+                while len(coordinates[frame]) <= new_marker_idx:
+                    coordinates[frame].append((None, None))
+                
+                # Adicione o marcador como "deletado" em todos os frames exceto o atual
+                if frame != frame_count:
+                    deleted_positions[frame].add(new_marker_idx)
+            
+            # Remova o marcador da lista de deletados no frame atual para torná-lo visível
+            if new_marker_idx in deleted_positions[frame_count]:
+                deleted_positions[frame_count].remove(new_marker_idx)
+            
+            # Selecione o novo marcador adicionado
+            selected_marker_idx = new_marker_idx
+            
+            save_message_text = f"Adicionado novo marcador vazio {new_marker_idx+1}"
             showing_save_message = True
             save_message_timer = 60
         
@@ -522,39 +579,38 @@ def play_video_with_controls(video_path, coordinates=None):
         make_backup()
 
     def remove_marker():
-        """Remove o último marcador de todos os frames"""
-        nonlocal coordinates, one_line_markers, selected_marker_idx
+        """Remove o marcador selecionado apenas no frame atual"""
+        nonlocal coordinates, one_line_markers, selected_marker_idx, showing_save_message, save_message_timer, save_message_text
         
         if one_line_mode:
-            # No modo 1 line, removemos o último índice de marcador
-            max_idx = -1
-            for idx, _ in enumerate(one_line_markers):
-                if idx > max_idx and idx not in deleted_markers:
-                    max_idx = idx
-            
-            if max_idx >= 0:
-                deleted_markers.add(max_idx)
-                selected_marker_idx = -1
-                
-                save_message_text = f"Removido marcador {max_idx+1}"
+            if selected_marker_idx >= 0:
+                # Encontre e remova o marcador selecionado apenas no frame atual
+                for i, (f_num, _, _) in enumerate(one_line_markers):
+                    if i == selected_marker_idx and f_num == frame_count:
+                        # Em vez de remover completamente, adicione à lista de marcadores deletados
+                        deleted_markers.add(selected_marker_idx)
+                        save_message_text = f"Removido marcador {selected_marker_idx+1} no frame atual"
+                        showing_save_message = True
+                        save_message_timer = 60
+                        break
+            else:
+                save_message_text = "Nenhum marcador selecionado para remover"
                 showing_save_message = True
                 save_message_timer = 60
         else:
-            # No modo normal, removemos o último marcador em todos os frames
-            max_markers = 0
-            for frame, markers in coordinates.items():
-                if len(markers) > max_markers:
-                    max_markers = len(markers)
-            
-            if max_markers > 0:
-                # Adicionar o último marcador à lista de deleted em todos os frames
-                for frame in range(total_frames):
-                    if len(coordinates[frame]) == max_markers:
-                        deleted_positions[frame].add(max_markers - 1)
-                
-                selected_marker_idx = -1
-                
-                save_message_text = f"Removido marcador {max_markers}"
+            if selected_marker_idx >= 0:
+                # Adicione o marcador selecionado à lista de deletados apenas no frame atual
+                if selected_marker_idx < len(coordinates[frame_count]):
+                    deleted_positions[frame_count].add(selected_marker_idx)
+                    save_message_text = f"Removido marcador {selected_marker_idx+1} no frame atual"
+                    showing_save_message = True
+                    save_message_timer = 60
+                else:
+                    save_message_text = "Marcador não existe neste frame"
+                    showing_save_message = True
+                    save_message_timer = 60
+            else:
+                save_message_text = "Nenhum marcador selecionado para remover"
                 showing_save_message = True
                 save_message_timer = 60
         
@@ -562,32 +618,48 @@ def play_video_with_controls(video_path, coordinates=None):
         make_backup()
 
     def make_backup():
-        """Faz um backup do arquivo original de coordenadas"""
+        """Faz um backup do arquivo original de coordenadas com timestamp"""
         if not os.path.exists(video_path):
             return
         
         base_name = os.path.splitext(os.path.basename(video_path))[0]
         video_dir = os.path.dirname(video_path)
         
-        # Verifica se existe um arquivo de coordenadas
+        # Get current timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # Verifica se existe um arquivo de coordenadas normal
         coords_file = os.path.join(video_dir, f"{base_name}_markers.csv")
         if os.path.exists(coords_file):
-            backup_file = os.path.join(video_dir, f"{base_name}_markers_backup.csv")
+            backup_file = os.path.join(video_dir, f"{base_name}_markers_bk_{timestamp}.csv")
             try:
                 import shutil
                 shutil.copy2(coords_file, backup_file)
+                print(f"Backup created: {backup_file}")
             except Exception as e:
                 print(f"Erro ao fazer backup: {e}")
+        
+        # Verifica se existe arquivo sequential
+        seq_file = os.path.join(video_dir, f"{base_name}_markers_sequential.csv")
+        if os.path.exists(seq_file):
+            backup_file = os.path.join(video_dir, f"{base_name}_markers_sequential_bk_{timestamp}.csv")
+            try:
+                import shutil
+                shutil.copy2(seq_file, backup_file)
+                print(f"Sequential backup created: {backup_file}")
+            except Exception as e:
+                print(f"Erro ao fazer backup sequential: {e}")
         
         # Também verifica o arquivo de 1 line
         line_file = os.path.join(video_dir, f"{base_name}_markers_1_line.csv")
         if os.path.exists(line_file):
-            backup_file = os.path.join(video_dir, f"{base_name}_markers_1_line_backup.csv")
+            backup_file = os.path.join(video_dir, f"{base_name}_markers_1_line_bk_{timestamp}.csv")
             try:
                 import shutil
                 shutil.copy2(line_file, backup_file)
+                print(f"1-Line backup created: {backup_file}")
             except Exception as e:
-                print(f"Erro ao fazer backup: {e}")
+                print(f"Erro ao fazer backup 1-line: {e}")
 
     def reload_coordinates():
         """Carrega um novo arquivo de coordenadas durante a execução"""
@@ -647,8 +719,8 @@ def play_video_with_controls(video_path, coordinates=None):
                 # Se estava no modo 1 line, alternar para o modo normal
                 one_line_mode = False
             
-            # Resetar marcador selecionado
-            selected_marker_idx = -1
+            # Inicializar sempre no primeiro marcador (índice 0)
+            selected_marker_idx = 0
             
             showing_save_message = True
             save_message_timer = 90
@@ -750,6 +822,10 @@ def play_video_with_controls(video_path, coordinates=None):
                     prev_frame, prev_x, prev_y = positions[i-1]
                     curr_frame, curr_x, curr_y = positions[i]
                     
+                    # Skip if any coordinates are None
+                    if prev_x is None or prev_y is None or curr_x is None or curr_y is None:
+                        continue
+                    
                     prev_screen_x = int((prev_x * zoom_level) - crop_x)
                     prev_screen_y = int((prev_y * zoom_level) - crop_y)
                     curr_screen_x = int((curr_x * zoom_level) - crop_x)
@@ -791,26 +867,25 @@ def play_video_with_controls(video_path, coordinates=None):
 
                 # Still draw the most recent point as a small circle
                 last_frame, last_x, last_y = positions[-1]
-                if last_frame < frame_count:  # Don't draw current frame again
+                if last_frame < frame_count and last_x is not None and last_y is not None:  # Don't draw current frame again and check for None
                     last_screen_x = int((last_x * zoom_level) - crop_x)
                     last_screen_y = int((last_y * zoom_level) - crop_y)
                     
                     # Draw a small circle for the most recent position
                     pygame.draw.circle(screen, color, (last_screen_x, last_screen_y), 2)
 
-        # Draw current frame markers (same as before, on top of persistence markers)
+        # Draw current frame markers
         if one_line_mode:
-            frame_markers = []
             for idx, (f_num, x, y) in enumerate(one_line_markers):
-                if idx in deleted_markers:
-                    continue  # Skip deleted markers
-
                 if f_num == frame_count:
-                    frame_markers.append((idx, x, y))
+                    # Skip rendering if marker is empty/None
+                    if x is None or y is None:
+                        continue
+                    
                     screen_x = int((x * zoom_level) - crop_x)
                     screen_y = int((y * zoom_level) - crop_y)
 
-                    # Highlight selected marker
+                    # Highlight selected marker only in one_line_mode
                     if idx == selected_marker_idx:
                         pygame.draw.circle(
                             screen, (255, 165, 0), (screen_x, screen_y), 7
@@ -822,16 +897,13 @@ def play_video_with_controls(video_path, coordinates=None):
         else:
             for i, (x, y) in enumerate(coordinates[frame_count]):
                 if i in deleted_positions[frame_count]:
-                    continue  # Skip deleted markers
+                    continue
+                
+                if x is None or y is None:
+                    continue
 
                 screen_x = int((x * zoom_level) - crop_x)
                 screen_y = int((y * zoom_level) - crop_y)
-
-                # Highlight selected marker
-                if i == selected_marker_idx:
-                    pygame.draw.circle(
-                        screen, (255, 165, 0), (screen_x, screen_y), 7
-                    )  # Orange highlight
 
                 pygame.draw.circle(screen, (0, 255, 0), (screen_x, screen_y), 3)
                 text_surface = font.render(str(i + 1), True, (255, 255, 255))
@@ -843,6 +915,7 @@ def play_video_with_controls(video_path, coordinates=None):
             help_button_rect,
             persist_button_rect,
             load_button_rect,
+            seq_button_rect,  # Add sequential button to return
             slider_x,
             slider_y,
             slider_width,
@@ -868,65 +941,6 @@ def play_video_with_controls(video_path, coordinates=None):
                     msg_surface, (window_width // 2 - msg_surface.get_width() // 2, 15)
                 )
 
-        # Add current marker indicator if markers exist
-        if one_line_mode:
-            frame_markers_indices = [
-                i
-                for i, m in enumerate(one_line_markers)
-                if m[0] == frame_count and i not in deleted_markers
-            ]
-            total_markers = len(frame_markers_indices)
-
-            # Find the position of the selected marker in this frame's markers
-            if selected_marker_idx >= 0:
-                visible_markers = [i for i in frame_markers_indices]
-                try:
-                    marker_position = visible_markers.index(selected_marker_idx) + 1
-                except ValueError:
-                    marker_position = 0
-            else:
-                marker_position = 0
-        else:
-            visible_markers = [
-                i
-                for i in range(len(coordinates[frame_count]))
-                if i not in deleted_positions[frame_count]
-            ]
-            total_markers = len(visible_markers)
-
-            marker_position = 0
-            if selected_marker_idx >= 0:
-                try:
-                    marker_position = visible_markers.index(selected_marker_idx) + 1
-                except ValueError:
-                    marker_position = 0
-
-        if total_markers > 0 and marker_position > 0:
-            indicator_font = pygame.font.Font(None, 48)
-            indicator_text = f"Marker {selected_marker_idx+1}/{len(visible_markers)}"
-            indicator_surface = indicator_font.render(
-                indicator_text, True, (255, 255, 0)
-            )
-
-            # Criar fundo mais visível
-            indicator_bg = pygame.Surface(
-                (
-                    indicator_surface.get_width() + 30,
-                    indicator_surface.get_height() + 20,
-                )
-            )
-            indicator_bg.set_alpha(220)
-            indicator_bg.fill((50, 50, 100))
-
-            # Posicionar no centro superior da tela para maior visibilidade
-            screen.blit(
-                indicator_bg, (window_width // 2 - indicator_bg.get_width() // 2, 10)
-            )
-            screen.blit(
-                indicator_surface,
-                (window_width // 2 - indicator_surface.get_width() // 2, 15),
-                )
-
         pygame.display.flip()
 
         for event in pygame.event.get():
@@ -947,7 +961,8 @@ def play_video_with_controls(video_path, coordinates=None):
                         )
                     else:
                         output_file = save_coordinates(
-                            video_path, coordinates, total_frames, deleted_positions
+                            video_path, coordinates, total_frames, deleted_positions, 
+                            is_sequential=sequential_mode
                         )
                     saved = True
                     save_message_text = f"Saved to: {os.path.basename(output_file)}"
@@ -1155,77 +1170,6 @@ def play_video_with_controls(video_path, coordinates=None):
                                     else:
                                         selected_marker_idx = 0
 
-                elif event.key == pygame.K_DELETE:
-                    # Mark the currently selected marker as deleted without changing indices
-                    if selected_marker_idx >= 0:
-                        if one_line_mode:
-                            # Add to deleted set instead of removing
-                            if selected_marker_idx < len(one_line_markers):
-                                deleted_markers.add(selected_marker_idx)
-
-                                # Get non-deleted markers in this frame
-                                frame_markers_indices = [
-                                    i
-                                    for i, m in enumerate(one_line_markers)
-                                    if m[0] == frame_count and i not in deleted_markers
-                                ]
-
-                                # Select next visible marker if available
-                                if frame_markers_indices:
-                                    next_indices = [
-                                        i
-                                        for i in frame_markers_indices
-                                        if i > selected_marker_idx
-                                    ]
-                                    if next_indices:
-                                        selected_marker_idx = next_indices[0]
-                                    else:
-                                        # No marker after this one, select previous one
-                                        prev_indices = [
-                                            i
-                                            for i in frame_markers_indices
-                                            if i < selected_marker_idx
-                                        ]
-                                        if prev_indices:
-                                            selected_marker_idx = prev_indices[-1]
-                                        else:
-                                            selected_marker_idx = -1  # No markers left
-                                else:
-                                    selected_marker_idx = -1  # No visible markers left
-                        else:
-                            # Mark as deleted in the current frame
-                            if selected_marker_idx < len(coordinates[frame_count]):
-                                deleted_positions[frame_count].add(selected_marker_idx)
-
-                                # Find next visible marker
-                                frame_markers_indices = [
-                                    i
-                                    for i in range(len(coordinates[frame_count]))
-                                    if i not in deleted_positions[frame_count]
-                                ]
-
-                                if frame_markers_indices:
-                                    next_indices = [
-                                        i
-                                        for i in frame_markers_indices
-                                        if i > selected_marker_idx
-                                    ]
-                                    if next_indices:
-                                        selected_marker_idx = next_indices[0]
-                                    else:
-                                        # No marker after this one, select previous one
-                                        prev_indices = [
-                                            i
-                                            for i in frame_markers_indices
-                                            if i < selected_marker_idx
-                                        ]
-                                        if prev_indices:
-                                            selected_marker_idx = prev_indices[-1]
-                                        else:
-                                            selected_marker_idx = -1  # No markers left
-                                else:
-                                    selected_marker_idx = -1  # No visible markers left
-
                 # Add persistence toggle with 'p' key
                 elif event.key == pygame.K_p:
                     persistence_enabled = not persistence_enabled
@@ -1275,6 +1219,26 @@ def play_video_with_controls(video_path, coordinates=None):
                 elif event.key == pygame.K_r:
                     remove_marker()
 
+                # Atualize a função de teclado para usar a tecla 'd' para remover marcadores
+                elif event.key == pygame.K_d:
+                    remove_marker()
+
+                # Add sequential mode toggle with 'o' key
+                elif event.key == pygame.K_o:  # Toggle sequential mode with 'o' key
+                    if not one_line_mode:  # Only toggle if not in one-line mode
+                        sequential_mode = not sequential_mode
+                        save_message_text = f"Sequential mode {'enabled' if sequential_mode else 'disabled'}"
+                        showing_save_message = True
+                        save_message_timer = 30
+
+                # Add sequential mode toggle with 's' key
+                elif event.key == pygame.K_s:  # Toggle sequential mode with 's' key
+                    if not one_line_mode:  # Only toggle if not in one-line mode
+                        sequential_mode = not sequential_mode
+                        save_message_text = f"Sequential mode {'enabled' if sequential_mode else 'disabled'}"
+                        showing_save_message = True
+                        save_message_timer = 30
+
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 x, y = event.pos
                 if y >= window_height:
@@ -1295,7 +1259,8 @@ def play_video_with_controls(video_path, coordinates=None):
                             )
                         else:
                             output_file = save_coordinates(
-                                video_path, coordinates, total_frames, deleted_positions
+                                video_path, coordinates, total_frames, deleted_positions, 
+                                is_sequential=sequential_mode
                             )
                         saved = True
                         save_message_text = f"Saved to: {os.path.basename(output_file)}"
@@ -1307,6 +1272,12 @@ def play_video_with_controls(video_path, coordinates=None):
                         save_message_text = f"Persistence {'enabled' if persistence_enabled else 'disabled'}"
                         showing_save_message = True
                         save_message_timer = 30
+                    elif seq_button_rect.collidepoint(x, rel_y):
+                        if not one_line_mode:  # Only toggle if not in one-line mode
+                            sequential_mode = not sequential_mode
+                            save_message_text = f"Sequential mode {'enabled' if sequential_mode else 'disabled'}"
+                            showing_save_message = True
+                            save_message_timer = 30
                     elif slider_y <= rel_y <= slider_y + slider_height:
                         dragging_slider = True
                         rel_x = x - slider_x
@@ -1320,87 +1291,28 @@ def play_video_with_controls(video_path, coordinates=None):
                     video_y = (y + crop_y) / zoom_level
 
                     if event.button == 1:  # Left click
-                        # Check if a marker is selected
-                        if selected_marker_idx >= 0:
-                            if one_line_mode:
-                                # Find if this marker exists in the current frame
-                                marker_in_frame = False
-                                for i, (f_num, _, _) in enumerate(one_line_markers):
-                                    if (
-                                        i == selected_marker_idx
-                                        and f_num == frame_count
-                                    ):
-                                        # Update existing marker
-                                        one_line_markers[i] = (
-                                            frame_count,
-                                            video_x,
-                                            video_y,
-                                        )
-                                        save_message_text = (
-                                            f"Updated marker {selected_marker_idx+1}"
-                                        )
-                                        showing_save_message = True
-                                        save_message_timer = 30
-                                        marker_in_frame = True
-                                        break
-
-                                # If marker doesn't exist or was deleted, create/recreate it
-                                if not marker_in_frame:
-                                    if selected_marker_idx in deleted_markers:
-                                        deleted_markers.remove(selected_marker_idx)
-
-                                    # Find appropriate position to insert marker
-                                    insert_pos = len(one_line_markers)
-                                    for i, (f_num, _, _) in enumerate(one_line_markers):
-                                        if (
-                                            f_num == frame_count
-                                            and i > selected_marker_idx
-                                        ):
-                                            insert_pos = i
-                                            break
-
-                                    # Create new marker at selected index
-                                    one_line_markers.insert(
-                                        insert_pos, (frame_count, video_x, video_y)
-                                    )
-                                    save_message_text = f"{'Recreated' if selected_marker_idx < len(one_line_markers) else 'Added'} marker {selected_marker_idx+1}"
-                                    showing_save_message = True
-                                    save_message_timer = 30
-                            else:
-                                # Ensure the coordinates list is long enough for this marker
-                                while (
-                                    len(coordinates[frame_count]) <= selected_marker_idx
-                                ):
-                                    coordinates[frame_count].append((0, 0))
-
-                                # Update marker position
-                                coordinates[frame_count][selected_marker_idx] = (
-                                    video_x,
-                                    video_y,
-                                )
-
-                                # If this was a deleted marker, remove it from deleted list
-                                if (
-                                    selected_marker_idx
-                                    in deleted_positions[frame_count]
-                                ):
-                                    deleted_positions[frame_count].remove(
-                                        selected_marker_idx
-                                    )
-
-                                save_message_text = (
-                                    f"Updated marker {selected_marker_idx+1}"
-                                )
-                                showing_save_message = True
-                                save_message_timer = 30
+                        if one_line_mode:
+                            # Simply append the new marker
+                            one_line_markers.append((frame_count, video_x, video_y))
                         else:
-                            # No marker selected, add a new one
-                            if one_line_mode:
-                                one_line_markers.append((frame_count, video_x, video_y))
-                                selected_marker_idx = len(one_line_markers) - 1
-                            else:
+                            if sequential_mode:
+                                # Find the next available marker index
+                                next_idx = len(coordinates[frame_count])
                                 coordinates[frame_count].append((video_x, video_y))
-                                selected_marker_idx = len(coordinates[frame_count]) - 1
+                                selected_marker_idx = next_idx  # Auto-select the new marker
+                            else:
+                                # Use existing marker selection logic
+                                if selected_marker_idx >= 0:
+                                    # Update existing marker
+                                    while len(coordinates[frame_count]) <= selected_marker_idx:
+                                        coordinates[frame_count].append((None, None))
+                                    coordinates[frame_count][selected_marker_idx] = (video_x, video_y)
+                                    if selected_marker_idx in deleted_positions[frame_count]:
+                                        deleted_positions[frame_count].remove(selected_marker_idx)
+                                else:
+                                    # Add new marker at the end
+                                    coordinates[frame_count].append((video_x, video_y))
+                                    selected_marker_idx = len(coordinates[frame_count]) - 1
 
                     elif event.button == 3:  # Right click
                         # Keep existing behavior for right-click (delete most recent)
@@ -1485,13 +1397,31 @@ def load_coordinates_from_file(total_frames):
     try:
         df = pd.read_csv(input_file)
         coordinates = {i: [] for i in range(total_frames)}
+        
+        # Determinar o número máximo de marcadores no arquivo
+        max_marker = 0
+        for i in range(1, 101):  # Limite máximo de 100 marcadores
+            if f"p{i}_x" in df.columns:
+                max_marker = i
+        
         for _, row in df.iterrows():
             frame_num = int(row["frame"])
-            for i in range(1, 101):
+            
+            # Garantir que todos os frames tenham o mesmo número de marcadores
+            for i in range(1, max_marker + 1):
                 x_col = f"p{i}_x"
                 y_col = f"p{i}_y"
-                if pd.notna(row.get(x_col)) and pd.notna(row.get(y_col)):
-                    coordinates[frame_num].append((row[x_col], row[y_col]))
+                
+                if x_col in df.columns and y_col in df.columns:
+                    # Se x ou y for NaN/vazio, ambos serão considerados None
+                    x_val = row.get(x_col)
+                    y_val = row.get(y_col)
+                    
+                    if pd.isna(x_val) or pd.isna(y_val):
+                        coordinates[frame_num].append((None, None))
+                    else:
+                        coordinates[frame_num].append((x_val, y_val))
+                        
         print(f"Coordinates successfully loaded from: {input_file}")
         return coordinates
     except Exception as e:
@@ -1499,10 +1429,15 @@ def load_coordinates_from_file(total_frames):
         return {i: [] for i in range(total_frames)}
 
 
-def save_coordinates(video_path, coordinates, total_frames, deleted_positions=None):
+def save_coordinates(video_path, coordinates, total_frames, deleted_positions=None, is_sequential=False):
     base_name = os.path.splitext(os.path.basename(video_path))[0]
     video_dir = os.path.dirname(video_path)
-    output_file = os.path.join(video_dir, f"{base_name}_markers.csv")
+    
+    # Create different filenames based on the mode
+    if is_sequential:
+        output_file = os.path.join(video_dir, f"{base_name}_markers_sequential.csv")
+    else:
+        output_file = os.path.join(video_dir, f"{base_name}_markers.csv")
 
     # Initialize deleted_positions if not provided
     if deleted_positions is None:
@@ -1522,12 +1457,15 @@ def save_coordinates(video_path, coordinates, total_frames, deleted_positions=No
     df = pd.DataFrame(np.nan, index=range(total_frames), columns=columns)
     df["frame"] = df.index
 
-    # Preenche o DataFrame com os pontos marcados, convertendo pra int.
+    # Preenche o DataFrame com os pontos marcados
     for frame_num, points in coordinates.items():
         for i, (x, y) in enumerate(points):
             if i not in deleted_positions[frame_num]:  # Only save non-deleted markers
-                df.at[frame_num, f"p{i+1}_x"] = int(x)
-                df.at[frame_num, f"p{i+1}_y"] = int(y)
+                # Verificar se é um marcador vazio (None)
+                if x is not None and y is not None:
+                    df.at[frame_num, f"p{i+1}_x"] = float(x)
+                    df.at[frame_num, f"p{i+1}_y"] = float(y)
+                # Se for None, deixar como NaN (o que se tornará "" no CSV)
 
     # Substitui os valores NaN por strings vazias.
     df.fillna("", inplace=True)
