@@ -4,8 +4,8 @@ vaila.py
 ===============================================================================
 Author: Paulo R. P. Santiago
 Date:  7 October 2024
-Update: 25 March 2025
-Version updated: 0.3.5
+Update: 26 March 2025
+Version updated: 0.4.1
 Python Version: 3.12.9
 
 
@@ -176,7 +176,7 @@ except ImportError as e:
 
 
 text = r"""
-version: 25.Mar.2025 (Python 3.12.9)
+version: 26.Mar.2025 (Python 3.12.9)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -216,7 +216,7 @@ B3_r4_c4 - vailá          B3_r4_c5 - vailá
 C_A_r1_c1 - Edit CSV      C_A_r1_c2 - C3D <--> CSV   C_A_r1_c3 - Gapfill | split
 C_A_r2_c1 - Make DLT2D    C_A_r2_c2 - Rec2D 1DLT     C_A_r2_c3 - Rec2D MultiDLT
 C_A_r3_c1 - Make DLT3D    C_A_r3_c2 - Rec3D 1DLT     C_A_r3_c3 - Rec3D MultiDLT
-C_A_r4_c1 - vailá         C_A_r4_c2 - vailá          C_A_r4_c3 - vailá
+C_A_r4_c1 - ReID Marker  C_A_r4_c2 - vailá          C_A_r4_c3 - vailá
 
 -> C_B: Video and Image
 C_B_r1_c1 - Video<-->PNG  C_B_r1_c2 - Cut Videos    C_B_r1_c3 - Draw Box
@@ -251,7 +251,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 25.Mar.2025 (Python 3.12.9)")
+        self.title("vailá - 26.Mar.2025 (Python 3.12.9)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -849,10 +849,10 @@ class Vaila(tk.Tk):
 
         # Avaliable blank (vailá) buttons for future tools
         # C_A_r4_c1 - Data Files: vailá
-        vaila_btn9 = tk.Button(
+        reid_marker_btn = tk.Button(
             tools_col1,
-            text="vailá",
-            command=self.show_vaila_message,
+            text="ReID Marker",
+            command=self.reid_marker,
             width=button_width,
         )
 
@@ -906,7 +906,7 @@ class Vaila(tk.Tk):
         dlt3d_btn.grid(row=2, column=0, padx=2, pady=2)
         rec3d_one_btn.grid(row=2, column=1, padx=2, pady=2)
         rec3d_multiple_btn.grid(row=2, column=2, padx=2, pady=2)
-        vaila_btn9.grid(row=3, column=0, padx=2, pady=2)
+        reid_marker_btn.grid(row=3, column=0, padx=2, pady=2)
         vaila_btn10.grid(row=3, column=1, padx=2, pady=2)
         vaila_btn11.grid(row=3, column=2, padx=2, pady=2)
         vaila_btn12.grid(row=4, column=0, padx=2, pady=2)
@@ -1697,8 +1697,12 @@ class Vaila(tk.Tk):
         """
         pass  # Aqui você deve adicionar a lógica para a reconstrução 3D com múltiplos DLTs
 
-    # C_A_r4_c1
-    # def vaila(self):
+    # C_A_r4_c1 - ReID Marker   
+    def reid_marker(self):
+        """Runs the ReID Marker module."""
+        from vaila import reid_markers
+
+        reid_markers.run_reid_markers()
 
     # C_A_r4_c2
     # def vaila(self):
