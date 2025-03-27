@@ -905,6 +905,13 @@ def play_video_with_controls(video_path, coordinates=None):
                 screen_x = int((x * zoom_level) - crop_x)
                 screen_y = int((y * zoom_level) - crop_y)
 
+                # Adicionar destaque para o marcador selecionado
+                if i == selected_marker_idx:
+                    # Desenhar círculo laranja mais amplo como destaque
+                    pygame.draw.circle(
+                        screen, (255, 165, 0), (screen_x, screen_y), 7
+                    )  # Orange highlight
+
                 pygame.draw.circle(screen, (0, 255, 0), (screen_x, screen_y), 3)
                 text_surface = font.render(str(i + 1), True, (255, 255, 255))
                 screen.blit(text_surface, (screen_x + 5, screen_y - 15))
