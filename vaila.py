@@ -1702,7 +1702,7 @@ class Vaila(tk.Tk):
         """Runs the ReID Marker module."""
         from vaila import reid_markers
 
-        reid_markers.run_reid_markers()
+        reid_markers.create_gui_menu()
 
     # C_A_r4_c2
     # def vaila(self):
