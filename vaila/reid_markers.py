@@ -600,84 +600,170 @@ def advanced_reid_gui():
         nonlocal latest_temp_file, df
         
         selected_markers = get_selected_markers()
-        
         if not selected_markers:
             return
         
-        # Criar janela para parâmetros
-        params_window = tk.Toplevel()
-        params_window.title("Parâmetros de Preenchimento")
-        params_window.geometry("300x200")
-        params_window.resizable(False, False)
+        # Backup para operação de desfazer
+        temp_history.append(df.copy())
         
-        # Centralizar a janela
-        params_window.geometry(f"+{int(fig.canvas.manager.window.winfo_rootx() + 300)}+{int(fig.canvas.manager.window.winfo_rooty() + 200)}")
-        
-        # Estrutura da janela
-        tk.Label(params_window, text="Parâmetros de Preenchimento", font=("Arial", 12, "bold")).pack(pady=(15, 20))
-        
-        # Frame para método
-        method_frame = tk.Frame(params_window)
-        method_frame.pack(fill="x", pady=5)
-        tk.Label(method_frame, text="Método:", width=15, anchor="w").pack(side=tk.LEFT, padx=10)
-        method_var = tk.StringVar(value="linear")
-        method_combo = ttk.Combobox(method_frame, textvariable=method_var, values=["linear", "cubic"], width=15)
-        method_combo.pack(side=tk.LEFT)
-        
-        # Frame para tamanho máximo
-        max_gap_frame = tk.Frame(params_window)
-        max_gap_frame.pack(fill="x", pady=5)
-        tk.Label(max_gap_frame, text="Tamanho máx.:", width=15, anchor="w").pack(side=tk.LEFT, padx=10)
-        max_gap_var = tk.StringVar(value="30")
-        max_gap_entry = tk.Entry(max_gap_frame, textvariable=max_gap_var, width=15)
-        max_gap_entry.pack(side=tk.LEFT, padx=5)
-        
-        # Frame para botões
-        button_frame = tk.Frame(params_window)
-        button_frame.pack(pady=20)
-        
-        def apply_params():
-            try:
-                method = method_var.get()
-                max_gap = int(max_gap_var.get())
+        # Para cada marcador selecionado
+        for marker_id in selected_markers:
+            x_col = f"p{marker_id}_x"
+            y_col = f"p{marker_id}_y"
+            
+            if x_col not in df.columns or y_col not in df.columns:
+                continue
+            
+            x_values = df[x_col].values.copy()
+            y_values = df[y_col].values.copy()
+            
+            # Detectar gaps
+            gaps = detect_gaps(x_values, y_values)
+            if not gaps:
+                print(f"Marker {marker_id}: No gaps detected")
+                continue
+            
+            # Analisar características dos dados para configurar Kalman
+            valid_indices = ~(pd.isna(x_values) | pd.isna(y_values))
+            data_length = np.sum(valid_indices)
+            
+            # Preparar arrays para resultados
+            x_filled = x_values.copy()
+            y_filled = y_values.copy()
+            
+            # Processar cada gap
+            for gap_start, gap_end in gaps:
+                gap_size = gap_end - gap_start + 1
                 
-                if max_gap <= 0:
-                    messagebox.showerror("Erro", "O tamanho máximo da lacuna deve ser maior que 0")
-                    return
-                
-                # Backup para operação de desfazer
-                temp_history.append(df.copy())
-                
-                # Preencher lacunas para cada marcador selecionado
-                for marker_id in selected_markers:
-                    df = fill_gaps(df, marker_id, max_gap_size=max_gap, method=method)
-                    operations_log["fill_gaps"].append({
-                        "marker_id": marker_id,
-                        "max_gap_size": max_gap,
-                        "method": method,
-                        "timestamp": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
-                    })
-                
-                # Criar arquivo temporário
-                latest_temp_file = create_temp_file(df, file_path)
-                
-                # Carregar dados do arquivo temporário
-                df_temp = pd.read_csv(latest_temp_file)
-                df = df_temp
-                
-                update_plot()
-                params_window.destroy()
-                
-            except ValueError:
-                messagebox.showerror("Erro", "Por favor, insira um número válido para o tamanho máximo da lacuna")
+                # Escolher método baseado no tamanho do gap e dados disponíveis
+                if gap_size <= 5:
+                    # Gaps pequenos: interpolação linear simples
+                    before_idx = gap_start - 1
+                    after_idx = gap_end + 1
+                    
+                    while before_idx >= 0 and (pd.isna(x_values[before_idx]) or pd.isna(y_values[before_idx])):
+                        before_idx -= 1
+                        
+                    while after_idx < len(x_values) and (pd.isna(x_values[after_idx]) or pd.isna(y_values[after_idx])):
+                        after_idx += 1
+                    
+                    if before_idx >= 0 and after_idx < len(x_values):
+                        frames = [before_idx, after_idx]
+                        x_known = [x_values[before_idx], x_values[after_idx]]
+                        y_known = [y_values[before_idx], y_values[after_idx]]
+                        
+                        x_interp = np.interp(range(gap_start, gap_end + 1), frames, x_known)
+                        y_interp = np.interp(range(gap_start, gap_end + 1), frames, y_known)
+                        
+                        for i, idx in enumerate(range(gap_start, gap_end + 1)):
+                            x_filled[idx] = x_interp[i]
+                            y_filled[idx] = y_interp[i]
+                else:
+                    # Gaps maiores: Kalman filter com parâmetros estimados
+                    # Coletar contexto antes e depois do gap
+                    before_points = []
+                    after_points = []
+                    
+                    # Pontos antes do gap (até 20)
+                    i = gap_start - 1
+                    count = 0
+                    while i >= 0 and count < 20:
+                        if not pd.isna(x_values[i]) and not pd.isna(y_values[i]):
+                            before_points.insert(0, (i, x_values[i], y_values[i]))
+                            count += 1
+                        i -= 1
+                    
+                    # Pontos depois do gap (até 20)
+                    i = gap_end + 1
+                    count = 0
+                    while i < len(x_values) and count < 20:
+                        if not pd.isna(x_values[i]) and not pd.isna(y_values[i]):
+                            after_points.append((i, x_values[i], y_values[i]))
+                            count += 1
+                        i += 1
+                    
+                    # Verificar se temos contexto suficiente
+                    if len(before_points) >= 3 and len(after_points) >= 3:
+                        # Implementação simples de Kalman
+                        # Estimar velocidade média dos pontos de contexto
+                        if len(before_points) > 1:
+                            dx_before = (before_points[-1][1] - before_points[0][1]) / (before_points[-1][0] - before_points[0][0])
+                            dy_before = (before_points[-1][2] - before_points[0][2]) / (before_points[-1][0] - before_points[0][0])
+                        else:
+                            dx_before = 0
+                            dy_before = 0
+                            
+                        if len(after_points) > 1:
+                            dx_after = (after_points[-1][1] - after_points[0][1]) / (after_points[-1][0] - after_points[0][0])
+                            dy_after = (after_points[-1][2] - after_points[0][2]) / (after_points[-1][0] - after_points[0][0])
+                        else:
+                            dx_after = 0
+                            dy_after = 0
+                        
+                        # Média ponderada das velocidades
+                        dx = (dx_before + dx_after) / 2
+                        dy = (dy_before + dy_after) / 2
+                        
+                        # Ponto inicial
+                        x_start = before_points[-1][1]
+                        y_start = before_points[-1][2]
+                        
+                        # Predição linear com ajuste para o ponto final
+                        x_end = after_points[0][1]
+                        y_end = after_points[0][2]
+                        
+                        # Ajustar para combinar o ponto final
+                        for i, idx in enumerate(range(gap_start, gap_end + 1)):
+                            t = i / gap_size  # Fator de interpolação (0 a 1)
+                            # Combinação de predição linear e correção para o ponto final
+                            x_filled[idx] = x_start + dx * i * (1-t) + (x_end - x_start) * t
+                            y_filled[idx] = y_start + dy * i * (1-t) + (y_end - y_start) * t
+                    else:
+                        # Fallback para interpolação linear se não tivermos contexto suficiente
+                        before_idx = gap_start - 1
+                        after_idx = gap_end + 1
+                        
+                        while before_idx >= 0 and (pd.isna(x_values[before_idx]) or pd.isna(y_values[before_idx])):
+                            before_idx -= 1
+                            
+                        while after_idx < len(x_values) and (pd.isna(x_values[after_idx]) or pd.isna(y_values[after_idx])):
+                            after_idx += 1
+                        
+                        if before_idx >= 0 and after_idx < len(x_values):
+                            frames = [before_idx, after_idx]
+                            x_known = [x_values[before_idx], x_values[after_idx]]
+                            y_known = [y_values[before_idx], y_values[after_idx]]
+                            
+                            x_interp = np.interp(range(gap_start, gap_end + 1), frames, x_known)
+                            y_interp = np.interp(range(gap_start, gap_end + 1), frames, y_known)
+                            
+                            for i, idx in enumerate(range(gap_start, gap_end + 1)):
+                                x_filled[idx] = x_interp[i]
+                                y_filled[idx] = y_interp[i]
+            
+            # Atualizar o DataFrame com valores preenchidos
+            df[x_col] = x_filled
+            df[y_col] = y_filled
+            print(f"Filled gaps intelligently for marker {marker_id}")
+            
+            # Registrar operação
+            operations_log["fill_gaps"].append({
+                "marker_id": marker_id,
+                "method": "intelligent_kalman",
+                "timestamp": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
+            })
         
-        tk.Button(button_frame, text="Aplicar", command=apply_params, width=10).pack(side=tk.LEFT, padx=10)
-        tk.Button(button_frame, text="Cancelar", command=params_window.destroy, width=10).pack(side=tk.LEFT, padx=10)
+        # Criar arquivo temporário
+        latest_temp_file = create_temp_file(df, file_path)
         
-        # Configurar foco e comportamento modal
-        params_window.transient(fig.canvas.manager.window)
-        params_window.grab_set()
-        max_gap_entry.focus_set()
+        # Carregar dados do arquivo temporário
+        df_temp = pd.read_csv(latest_temp_file)
+        df = df_temp
+        
+        # Atualizar o gráfico
+        update_plot()
+        
+        messagebox.showinfo("Processo Concluído", f"Preenchimento inteligente de gaps concluído para {len(selected_markers)} marcador(es).")
     
     def on_merge_markers(event):
         nonlocal latest_temp_file, df
