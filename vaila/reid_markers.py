@@ -21,16 +21,19 @@ by getpixelvideo.py. It offers the following functionalities:
 
 import os
 import sys
+from rich import print
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from matplotlib.widgets import Button, RangeSlider, CheckButtons, TextBox
+from matplotlib.widgets import Button, RangeSlider, CheckButtons, TextBox, RadioButtons
 from tkinter import Tk, filedialog, messagebox, Frame, Label, Button as TkButton
 import tkinter as tk
 from scipy.interpolate import interp1d
 import json
 from statsmodels.tsa.arima.model import ARIMA
 import warnings
+import shutil  # Para operações de diretório
+from tkinter import ttk
 
 
 def load_markers_file():
@@ -62,6 +65,40 @@ def save_markers_file(df, original_path, suffix="_reid"):
     df.to_csv(new_path, index=False)
     print(f"Markers saved to: {new_path}")
     return new_path
+
+
+def create_temp_dir(original_path):
+    """Cria um diretório temporário para armazenar arquivos de edição."""
+    base_dir = os.path.dirname(original_path)
+    base_name = os.path.basename(original_path).split('.')[0]
+    temp_dir = os.path.join(base_dir, f"{base_name}_temp")
+    
+    # Criar diretório se não existir
+    if not os.path.exists(temp_dir):
+        os.makedirs(temp_dir)
+        
+    return temp_dir
+
+
+def create_temp_file(df, original_path, suffix="_temp"):
+    """Create a temporary file with current changes."""
+    temp_dir = create_temp_dir(original_path)
+    base_name = os.path.basename(original_path).split('.')[0]
+    ext = os.path.splitext(original_path)[1]
+    timestamp = pd.Timestamp.now().strftime("%Y%m%d%H%M%S")
+    temp_path = os.path.join(temp_dir, f"{base_name}{suffix}_{timestamp}{ext}")
+    
+    df.to_csv(temp_path, index=False)
+    print(f"Temporary file created: {temp_path}")
+    return temp_path
+
+
+def clear_temp_dir(original_path):
+    """Remove o diretório temporário e seus arquivos."""
+    temp_dir = create_temp_dir(original_path)
+    if os.path.exists(temp_dir):
+        shutil.rmtree(temp_dir)
+        print(f"Temporary directory removed: {temp_dir}")
 
 
 def detect_markers(df):
@@ -253,11 +290,11 @@ def visualize_markers(df, marker_ids=None):
     frames = df['frame'].values
     
     # Set up the figure with subplots
-    fig = plt.figure(figsize=(12, 8))
+    fig = plt.figure(figsize=(16, 10))
     ax1 = plt.subplot2grid((2, 1), (0, 0))  # X coordinates
     ax2 = plt.subplot2grid((2, 1), (1, 0))  # Y coordinates
     
-    plt.subplots_adjust(left=0.25, bottom=0.1, right=0.8)  # Make room for legend
+    plt.subplots_adjust(left=0.2, bottom=0.25, right=0.85)  # Make room for legend
     
     # Create an area for the markers checkbox
     markers_checkbox_ax = plt.axes([0.05, 0.2, 0.15, 0.7])
@@ -275,577 +312,13 @@ def visualize_markers(df, marker_ids=None):
         initial_visibility
     )
     
-    # Dictionary to store plot lines
-    lines_x = {}
-    lines_y = {}
-    
-    # Function to update plot based on checkbox selection
-    def update_plot():
-        # Get current checkbox states
-        checked = marker_selection.get_status()
-        visible_markers = [all_markers[i] for i, checked_state in enumerate(checked) if checked_state]
-        
-        # Clear current axes
-        ax1.clear()
-        ax2.clear()
-        
-        # Set up axes labels and grids
-        ax1.set_title("X Coordinates of Markers")
-        ax1.set_xlabel("Frame")
-        ax1.set_ylabel("X Position")
-        ax1.grid(True)
-        
-        ax2.set_title("Y Coordinates of Markers")
-        ax2.set_xlabel("Frame")
-        ax2.set_ylabel("Y Position")
-        ax2.grid(True)
-        
-        # Plot only selected markers
-        for marker_id in visible_markers:
-            x_values, y_values = get_marker_coords(df, marker_id)
-            if x_values is not None and y_values is not None:
-                lines_x[marker_id] = ax1.plot(frames, x_values, label=f"Marker {marker_id}")[0]
-                lines_y[marker_id] = ax2.plot(frames, y_values, label=f"Marker {marker_id}")[0]
-        
-        # Place legend outside the plot to avoid overlap
-        if visible_markers:  # Only create legend if there are visible markers
-            ax1.legend(loc='upper left', bbox_to_anchor=(1.05, 1), borderaxespad=0)
-            ax2.legend(loc='upper left', bbox_to_anchor=(1.05, 1), borderaxespad=0)
-        
-        fig.canvas.draw_idle()
-    
-    # Connect checkbox callback
-    marker_selection.on_clicked(lambda event: update_plot())
-    
-    # Add save button
-    save_button_ax = plt.axes([0.05, 0.05, 0.15, 0.04])
-    save_button = Button(save_button_ax, "Close")
-    
-    # Add select all/none buttons
-    select_all_ax = plt.axes([0.05, 0.12, 0.07, 0.04])
-    select_none_ax = plt.axes([0.13, 0.12, 0.07, 0.04])
-    
-    select_all_button = Button(select_all_ax, "All")
-    select_none_button = Button(select_none_ax, "None")
-    
-    def on_save(event):
-        plt.close(fig)  # Close the figure when done
-    
-    def select_all(event):
-        for i in range(len(all_markers)):
-            marker_selection.set_active(i)
-        update_plot()
-    
-    def select_none(event):
-        for i in range(len(all_markers)):
-            if marker_selection.get_status()[i]:
-                marker_selection.set_active(i)
-        update_plot()
-    
-    save_button.on_clicked(on_save)
-    select_all_button.on_clicked(select_all)
-    select_none_button.on_clicked(select_none)
-    
-    # Initial plot
-    update_plot()
-    
-    plt.tight_layout(rect=[0.25, 0, 0.8, 1])  # Adjust layout to make room for checkboxes and legend
-    plt.show()
-    
-    # Return which markers were selected when the figure was closed
-    return [all_markers[i] for i, checked in enumerate(marker_selection.get_status()) if checked]
-
-
-def reid_gui():
-    """Graphical interface for the re-identification process."""
-    # Load file
-    df, file_path = load_markers_file()
-    if df is None:
-        return
-    
-    # Detect markers
-    markers = detect_markers(df)
-    
-    # Set up the interface
-    fig = plt.figure(figsize=(12, 10))
-    
-    # Create subplots for X and Y coordinates
-    ax1 = plt.subplot2grid((2, 1), (0, 0))  # X coordinates
-    ax2 = plt.subplot2grid((2, 1), (1, 0))  # Y coordinates
-    
-    plt.subplots_adjust(bottom=0.3)
-    
-    ax1.set_title("X Coordinates of Markers")
-    ax1.set_xlabel("Frame")
-    ax1.set_ylabel("X Position")
-    ax1.grid(True)
-    
-    ax2.set_title("Y Coordinates of Markers")
-    ax2.set_xlabel("Frame")
-    ax2.set_ylabel("Y Position")
-    ax2.grid(True)
-    
-    # Create areas for buttons and controls
-    fill_button_ax = plt.axes([0.2, 0.05, 0.15, 0.04])
-    merge_button_ax = plt.axes([0.4, 0.05, 0.15, 0.04])
-    swap_button_ax = plt.axes([0.6, 0.05, 0.15, 0.04])
-    
-    # Areas for marker selection
-    markers_checkbox_ax = plt.axes([0.05, 0.1, 0.15, 0.15])
-    
-    # Slider for frame range selection
-    frames_slider_ax = plt.axes([0.3, 0.15, 0.6, 0.03])
-    
-    # Areas for parameter input
-    source_marker_ax = plt.axes([0.3, 0.1, 0.1, 0.03])
-    target_marker_ax = plt.axes([0.5, 0.1, 0.1, 0.03])
-    
-    # Save button
-    save_button_ax = plt.axes([0.8, 0.05, 0.15, 0.04])
-    
-    # Create controls
-    marker_selection = CheckButtons(markers_checkbox_ax, [f"Marker {m}" for m in markers], [True] * len(markers))
-    
-    frames_range = RangeSlider(frames_slider_ax, "Frames", 0, len(df) - 1, valinit=(0, len(df) - 1))
-    
-    source_marker_text = TextBox(source_marker_ax, "Source ID: ", initial="")
-    target_marker_text = TextBox(target_marker_ax, "Target ID: ", initial="")
-    
-    fill_button = Button(fill_button_ax, "Fill Gaps")
-    merge_button = Button(merge_button_ax, "Merge Markers")
-    swap_button = Button(swap_button_ax, "Swap Markers")
-    save_button = Button(save_button_ax, "Save Changes")
-    
-    # Track operations performed
-    operations_log = {
-        "fill_gaps": [],
-        "merge_markers": [],
-        "swap_markers": []
-    }
-    
-    # Draw initial data
-    def update_plot():
-        ax1.clear()
-        ax2.clear()
-        
-        ax1.set_title("X Coordinates of Markers")
-        ax1.set_xlabel("Frame")
-        ax1.set_ylabel("X Position")
-        ax1.grid(True)
-        
-        ax2.set_title("Y Coordinates of Markers")
-        ax2.set_xlabel("Frame")
-        ax2.set_ylabel("Y Position")
-        ax2.grid(True)
-        
-        checked = marker_selection.get_status()
-        visible_markers = [markers[i] for i, checked_state in enumerate(checked) if checked_state]
-        
-        frames = df['frame'].values
-        
-        for marker_id in visible_markers:
-            x_values, y_values = get_marker_coords(df, marker_id)
-            if x_values is not None and y_values is not None:
-                ax1.plot(frames, x_values, label=f"Marker {marker_id}")
-                ax2.plot(frames, y_values, label=f"Marker {marker_id}")
-        
-        start_frame, end_frame = frames_range.val
-        ax1.axvline(start_frame, color='r', linestyle='--')
-        ax1.axvline(end_frame, color='r', linestyle='--')
-        ax2.axvline(start_frame, color='r', linestyle='--')
-        ax2.axvline(end_frame, color='r', linestyle='--')
-        
-        ax1.set_xlim(0, len(df) - 1)
-        ax2.set_xlim(0, len(df) - 1)
-        
-        ax1.legend()
-        ax2.legend()
-        
-        fig.canvas.draw_idle()
-    
-    # Connect callbacks
-    def on_marker_select(event):
-        update_plot()
-    
-    def on_fill_gaps(event):
-        checked = marker_selection.get_status()
-        visible_markers = [markers[i] for i, checked_state in enumerate(checked) if checked_state]
-        
-        for marker_id in visible_markers:
-            df_new = fill_gaps(df, marker_id)
-            operations_log["fill_gaps"].append({
-                "marker_id": marker_id,
-                "timestamp": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
-            })
-        
-        update_plot()
-    
-    # Get selected markers
-    def get_selected_markers():
-        checked = marker_selection.get_status()
-        return [markers[i] for i, checked_state in enumerate(checked) if checked_state]
-    
-    def on_merge_markers(event):
-        selected_markers = get_selected_markers()
-        
-        if len(selected_markers) < 2:
-            messagebox.showinfo("Information", "Please select at least 2 markers for merging. First marker will be source, others will be targets.")
-            return
-        
-        source_id = selected_markers[0]  # First selected marker is the source
-        targets = selected_markers[1:]   # All other selected markers are targets
-        
-        start_frame, end_frame = map(int, frames_range.val)
-        
-        # Ask if user wants to completely merge the markers
-        complete_merge = messagebox.askyesno(
-            "Complete Merge", 
-            f"Do you want to completely merge markers {targets} into marker {source_id}?\n\n"
-            f"If Yes: Coordinates from markers {targets} will be transferred to marker {source_id}, and these markers will be removed.\n"
-            f"If No: Only values in the selected frame range will be merged."
-        )
-        
-        # Frame range for merging - use full range if complete merge
-        merge_range = (0, len(df) - 1) if complete_merge else (start_frame, end_frame)
-        start_frame, end_frame = merge_range
-        
-        # Get source columns
-        source_x_col = f"p{source_id}_x"
-        source_y_col = f"p{source_id}_y"
-        
-        # Process each target marker
-        for target_id in targets:
-            target_x_col = f"p{target_id}_x"
-            target_y_col = f"p{target_id}_y"
-            
-            if complete_merge:
-                # For complete merge, transfer ALL valid coordinates from target to source,
-                # regardless of whether source already has data there
-                for i in range(start_frame, end_frame + 1):
-                    # Check if target has valid data at this frame
-                    target_x_valid = not (pd.isna(df.at[i, target_x_col]) or df.at[i, target_x_col] == "")
-                    target_y_valid = not (pd.isna(df.at[i, target_y_col]) or df.at[i, target_y_col] == "")
-                    
-                    if target_x_valid and target_y_valid:
-                        # Transfer data from target to source, always taking the target's data
-                        # regardless of whether source already has coordinates
-                        df.at[i, source_x_col] = df.at[i, target_x_col]
-                        df.at[i, source_y_col] = df.at[i, target_y_col]
-                
-                # Record the operation
-                operations_log["merge_markers"].append({
-                    "source_id": source_id,
-                    "target_id": target_id,
-                    "frame_range": [start_frame, end_frame],
-                    "complete_merge": True,
-                    "timestamp": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
-                })
-                
-                # Add to list of markers to remove when saving
-                if target_id not in operations_log["removed_markers"]:
-                    operations_log["removed_markers"].append(target_id)
-            else:
-                # For partial merge, ensure we copy all valid coordinates from target to source
-                # for the specified frame range
-                for i in range(start_frame, end_frame + 1):
-                    # Check if target has valid data at this frame
-                    target_x_valid = not (pd.isna(df.at[i, target_x_col]) or df.at[i, target_x_col] == "")
-                    target_y_valid = not (pd.isna(df.at[i, target_y_col]) or df.at[i, target_y_col] == "")
-                    
-                    if target_x_valid and target_y_valid:
-                        # Transfer data from target to source, always taking the target's data
-                        df.at[i, source_x_col] = df.at[i, target_x_col]
-                        df.at[i, source_y_col] = df.at[i, target_y_col]
-                
-                # Record the operation
-                operations_log["merge_markers"].append({
-                    "source_id": source_id,
-                    "target_id": target_id,
-                    "frame_range": [start_frame, end_frame],
-                    "complete_merge": False,
-                    "timestamp": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
-                })
-        
-        update_plot()
-        
-        if len(targets) == 1:
-            messagebox.showinfo(
-                "Success", 
-                f"Merged marker {targets[0]} into marker {source_id}" +
-                (f" for frames {start_frame}-{end_frame}." if not complete_merge else " completely.")
-            )
-        else:
-            messagebox.showinfo(
-                "Success", 
-                f"Merged markers {targets} into marker {source_id}" +
-                (f" for frames {start_frame}-{end_frame}." if not complete_merge else " completely.")
-            )
-    
-    def on_swap_markers(event):
-        selected_markers = get_selected_markers()
-        
-        if len(selected_markers) != 2:
-            messagebox.showinfo("Information", "Please select exactly 2 markers for swapping.")
-            return
-        
-        marker_id1 = selected_markers[0]
-        marker_id2 = selected_markers[1]
-        
-        start_frame, end_frame = map(int, frames_range.val)
-        
-        df_new = swap_markers(df, marker_id1, marker_id2, (start_frame, end_frame))
-        operations_log["swap_markers"].append({
-            "marker_id1": marker_id1,
-            "marker_id2": marker_id2,
-            "frame_range": [start_frame, end_frame],
-            "timestamp": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
-        })
-        
-        update_plot()
-        messagebox.showinfo("Success", f"Swapped markers {marker_id1} and {marker_id2} for frames {start_frame}-{end_frame}.")
-    
-    def on_save(event):
-        new_file = save_markers_file(df, file_path)
-        save_operations_log(operations_log, new_file)
-        plt.close(fig)
-    
-    # Connect callbacks
-    marker_selection.on_clicked(on_marker_select)
-    frames_range.on_changed(lambda val: update_plot())
-    fill_button.on_clicked(on_fill_gaps)
-    merge_button.on_clicked(on_merge_markers)
-    swap_button.on_clicked(on_swap_markers)
-    save_button.on_clicked(on_save)
-    
-    # Initialize plot
-    update_plot()
-    
-    plt.show()
-
-
-def auto_fill_gaps():
-    """Automatically fill gaps for all markers."""
-    df, file_path = load_markers_file()
-    if df is None:
-        return
-        
-    markers = detect_markers(df)
-    total_filled = 0
-    
-    # Add metadata column to track which markers had gaps filled
-    if 'processed_info' not in df.columns:
-        df['processed_info'] = ""
-    
-    for marker_id in markers:
-        # Get original data to compare
-        orig_x, orig_y = get_marker_coords(df, marker_id)
-        
-        # Fill gaps for this marker
-        df = fill_gaps(df, marker_id)
-        
-        # Get updated data
-        new_x, new_y = get_marker_coords(df, marker_id)
-        
-        # Compare to see if any gaps were filled
-        changes = 0
-        for i in range(len(orig_x)):
-            if pd.isna(orig_x[i]) and not pd.isna(new_x[i]):
-                changes += 1
-        
-        if changes > 0:
-            total_filled += 1
-            # Update the metadata to include information about filled gaps
-            df.loc[0, 'processed_info'] += f"Filled {changes} gaps for marker {marker_id}; "
-    
-    # Add timestamp and processing info
-    timestamp = pd.Timestamp.now().strftime("%Y-%m-%d_%H-%M-%S")
-    df.loc[0, 'processed_info'] += f"Auto-processed on {timestamp}"
-    
-    # Save with a more descriptive suffix
-    new_file = save_markers_file(df, file_path, suffix=f"_gap_filled_{timestamp}")
-    
-    # Create operations log
-    operations_log = {
-        "operation": "auto_fill_gaps",
-        "timestamp": timestamp,
-        "markers_processed": markers,
-        "markers_with_changes": total_filled
-    }
-    
-    save_operations_log(operations_log, new_file)
-    
-    # Show confirmation with details
-    messagebox.showinfo(
-        "Gap Filling Complete", 
-        f"All gaps have been filled successfully.\n\n"
-        f"{total_filled} out of {len(markers)} markers had gaps filled.\n"
-        f"Results saved to: {os.path.basename(new_file)}"
-    )
-    
-    # Return to main menu or show visualization
-    if messagebox.askyesno("View Results", "Would you like to visualize the results?"):
-        visualize_markers(df)
-
-
-def create_gui_menu():
-    """Create main GUI menu for the application."""
-    root = Tk()
-    root.title("Marker Re-identification Tool")
-    root.geometry("500x350")  # Increased height for new button
-    
-    # Set up frame for buttons
-    frame = Frame(root, padx=20, pady=20)
-    frame.pack(expand=True)
-    
-    # Title label
-    title_label = Label(frame, text="Marker Re-identification Tool", font=("Arial", 16, "bold"))
-    title_label.grid(row=0, column=0, pady=(0, 20))
-    
-    # Description
-    desc_label = Label(frame, text="Select an option:", font=("Arial", 12))
-    desc_label.grid(row=1, column=0, pady=(0, 20), sticky="w")
-    
-    # Buttons for the different options
-    btn_width = 30
-    btn_height = 2
-    
-    # Main unified interface button
-    option1_btn = TkButton(
-        frame, 
-        text="Marker Visualization & Re-identification", 
-        width=btn_width, 
-        height=btn_height,
-        command=lambda: [root.destroy(), advanced_reid_gui()]
-    )
-    option1_btn.grid(row=2, column=0, pady=10)
-    
-    # Option for auto-fill gaps with linear interpolation
-    option2_btn = TkButton(
-        frame, 
-        text="Auto-fill Gaps (Linear Interpolation)", 
-        width=btn_width, 
-        height=btn_height,
-        command=lambda: [root.destroy(), auto_fill_gaps()]
-    )
-    option2_btn.grid(row=3, column=0, pady=10)
-    
-    # Option for auto-fill gaps with ARIMA model
-    option3_btn = TkButton(
-        frame, 
-        text="Auto-fill Gaps (ARIMA Model)", 
-        width=btn_width, 
-        height=btn_height,
-        command=lambda: [root.destroy(), auto_fill_gaps_arima()]
-    )
-    option3_btn.grid(row=4, column=0, pady=10)
-    
-    # Exit button
-    option4_btn = TkButton(
-        frame, 
-        text="Exit", 
-        width=btn_width, 
-        height=btn_height,
-        command=root.destroy
-    )
-    option4_btn.grid(row=5, column=0, pady=10)
-    
-    # Version info
-    version_label = Label(frame, text="Version 0.1.0", font=("Arial", 8))
-    version_label.grid(row=6, column=0, pady=(20, 0))
-    
-    root.mainloop()
-
-
-# Update the compatibility function
-def run_reid_markers():
-    """Compatibility function for vaila.py integration - launches the GUI menu."""
-    create_gui_menu()
-
-
-def advanced_reid_gui():
-    """
-    Combined interface with interactive marker selection and re-identification tools.
-    Uses checkbox selection for all operations, making the interface more intuitive.
-    """
-    # Load file
-    df, file_path = load_markers_file()
-    if df is None:
-        return
-    
-    # Detect markers
-    all_markers = detect_markers(df)
-    frames = df['frame'].values
-    
-    # Set up the interface with a larger figure for better visibility
-    fig = plt.figure(figsize=(14, 10))
-    
-    # Create subplots for X and Y coordinates
-    ax1 = plt.subplot2grid((2, 1), (0, 0))  # X coordinates
-    ax2 = plt.subplot2grid((2, 1), (1, 0))  # Y coordinates
-    
-    plt.subplots_adjust(left=0.25, bottom=0.25, right=0.85)
-    
-    ax1.set_title("X Coordinates of Markers")
-    ax1.set_xlabel("Frame")
-    ax1.set_ylabel("X Position")
-    ax1.grid(True)
-    
-    ax2.set_title("Y Coordinates of Markers")
-    ax2.set_xlabel("Frame")
-    ax2.set_ylabel("Y Position")
-    ax2.grid(True)
-    
-    # Create areas for buttons and controls (adjusted to add delete button)
-    fill_button_ax = plt.axes([0.3, 0.1, 0.12, 0.04])
-    merge_button_ax = plt.axes([0.44, 0.1, 0.12, 0.04])
-    swap_button_ax = plt.axes([0.58, 0.1, 0.12, 0.04])
-    delete_button_ax = plt.axes([0.72, 0.1, 0.12, 0.04])  # New button for delete
-    
-    # Areas for marker selection with more space for better visibility
-    markers_checkbox_ax = plt.axes([0.04, 0.25, 0.18, 0.65])
-    
-    # Slider for frame range selection
+    # Add frame range slider
     frames_slider_ax = plt.axes([0.3, 0.15, 0.5, 0.03])
-    
-    # Save and close buttons
-    save_button_ax = plt.axes([0.3, 0.05, 0.15, 0.04])
-    close_button_ax = plt.axes([0.5, 0.05, 0.15, 0.04])
-    
-    # Add select all/none buttons
-    select_all_ax = plt.axes([0.04, 0.2, 0.08, 0.03])
-    select_none_ax = plt.axes([0.14, 0.2, 0.08, 0.03])
-    
-    # Create interactive controls
-    marker_selection = CheckButtons(
-        markers_checkbox_ax, 
-        [f"Marker {m}" for m in all_markers], 
-        [True] * len(all_markers)
-    )
-    
     frames_range = RangeSlider(frames_slider_ax, "Frames", 0, len(df) - 1, valinit=(0, len(df) - 1))
-    
-    fill_button = Button(fill_button_ax, "Fill Gaps")
-    merge_button = Button(merge_button_ax, "Merge Markers")
-    swap_button = Button(swap_button_ax, "Swap Markers")
-    delete_button = Button(delete_button_ax, "Delete Marker")  # New delete button
-    save_button = Button(save_button_ax, "Save Changes")
-    close_button = Button(close_button_ax, "Close")
-    
-    select_all_button = Button(select_all_ax, "All")
-    select_none_button = Button(select_none_ax, "None")
     
     # Dictionary to store plot lines
     lines_x = {}
     lines_y = {}
-    
-    # Track operations performed
-    operations_log = {
-        "fill_gaps": [],
-        "merge_markers": [],
-        "swap_markers": [],
-        "delete_markers": [],  # Add tracking for delete operations
-        "removed_markers": []  # Track which markers have been merged and should be removed
-    }
     
     # Function to update plot based on checkbox selection
     def update_plot():
@@ -886,9 +359,231 @@ def advanced_reid_gui():
         ax2.set_xlim(0, len(df) - 1)
         
         # Place legend outside the plot to avoid overlap
-        if visible_markers:  # Only create legend if there are visible markers
-            ax1.legend(loc='upper left', bbox_to_anchor=(1.05, 1), borderaxespad=0)
-            ax2.legend(loc='upper left', bbox_to_anchor=(1.05, 1), borderaxespad=0)
+        if visible_markers and any(marker_id in lines_x for marker_id in visible_markers):
+            handles1 = [lines_x[m] for m in visible_markers if m in lines_x]
+            handles2 = [lines_y[m] for m in visible_markers if m in lines_y]
+            
+            if handles1:
+                ax1.legend(handles=handles1, loc='upper left', bbox_to_anchor=(1.05, 1), borderaxespad=0)
+            if handles2:
+                ax2.legend(handles=handles2, loc='upper left', bbox_to_anchor=(1.05, 1), borderaxespad=0)
+        
+        fig.canvas.draw_idle()
+    
+    # Connect checkbox callback
+    marker_selection.on_clicked(lambda event: update_plot())
+    
+    # Add save button
+    save_button_ax = plt.axes([0.05, 0.05, 0.15, 0.04])
+    save_button = Button(save_button_ax, "Close")
+    
+    # Add select all/none buttons
+    select_all_ax = plt.axes([0.05, 0.12, 0.07, 0.04])
+    select_none_ax = plt.axes([0.13, 0.12, 0.07, 0.04])
+    
+    select_all_button = Button(select_all_ax, "All")
+    select_none_button = Button(select_none_ax, "None")
+    
+    def on_save(event):
+        plt.close(fig)  # Close the figure when done
+    
+    def select_all(event):
+        for i in range(len(all_markers)):
+            if not marker_selection.get_status()[i]:
+                marker_selection.set_active(i)
+        update_plot()
+    
+    def select_none(event):
+        for i in range(len(all_markers)):
+            if marker_selection.get_status()[i]:
+                marker_selection.set_active(i)
+        update_plot()
+    
+    save_button.on_clicked(on_save)
+    select_all_button.on_clicked(select_all)
+    select_none_button.on_clicked(select_none)
+    
+    # Initial plot
+    update_plot()
+    
+    plt.tight_layout(rect=[0.2, 0.25, 0.85, 1])  # Adjust layout to make room for checkboxes and legend
+    plt.show()
+    
+    # Return which markers were selected when the figure was closed
+    return [all_markers[i] for i, checked in enumerate(marker_selection.get_status()) if checked]
+
+
+def advanced_reid_gui():
+    # Load file
+    df, file_path = load_markers_file()
+    if df is None:
+        return
+    
+    # Add variables for tracking history and temp files
+    latest_temp_file = file_path
+    temp_history = []
+    
+    # Detect markers
+    all_markers = detect_markers(df)
+    frames = df['frame'].values
+    
+    # Set up the interface with a larger figure for better visibility
+    fig = plt.figure(figsize=(18, 10))
+    
+    # Create subplots for X and Y coordinates
+    ax1 = plt.subplot2grid((2, 1), (0, 0))
+    ax2 = plt.subplot2grid((2, 1), (1, 0))
+    
+    plt.subplots_adjust(left=0.2, bottom=0.3, right=0.85, top=0.95)  # Aumentei o bottom para dar mais espaço
+    
+    ax1.set_title("X Coordinates of Markers")
+    ax1.set_xlabel("Frame")
+    ax1.set_ylabel("X Position")
+    ax1.grid(True)
+    
+    ax2.set_title("Y Coordinates of Markers")
+    ax2.set_xlabel("Frame")
+    ax2.set_ylabel("Y Position")
+    ax2.grid(True)
+    
+    # Create areas for buttons and controls
+    fill_button_ax = plt.axes([0.3, 0.1, 0.12, 0.04])
+    merge_button_ax = plt.axes([0.44, 0.1, 0.12, 0.04])
+    swap_button_ax = plt.axes([0.58, 0.1, 0.12, 0.04])
+    delete_button_ax = plt.axes([0.72, 0.1, 0.12, 0.04])
+    
+    # Areas for marker selection - REDUCED WIDTH from 0.18 to 0.12
+    markers_checkbox_ax = plt.axes([0.04, 0.25, 0.12, 0.65])
+    
+    # Slider for frame range selection
+    frames_slider_ax = plt.axes([0.3, 0.15, 0.5, 0.03])
+    frames_range = RangeSlider(frames_slider_ax, "Frames", 0, len(df) - 1, valinit=(0, len(df) - 1))
+    
+    # Save and close buttons
+    save_button_ax = plt.axes([0.3, 0.05, 0.15, 0.04])
+    close_button_ax = plt.axes([0.5, 0.05, 0.15, 0.04])
+    
+    # Add select all/none buttons - REDUCED WIDTH from 0.08 to 0.05
+    select_all_ax = plt.axes([0.04, 0.2, 0.05, 0.03])
+    select_none_ax = plt.axes([0.10, 0.2, 0.05, 0.03])
+    
+    # Add undo button
+    undo_button_ax = plt.axes([0.68, 0.05, 0.12, 0.04])
+    
+    # Add help button
+    help_button_ax = plt.axes([0.04, 0.05, 0.08, 0.03])
+    
+    # Create interactive controls
+    marker_selection = CheckButtons(
+        markers_checkbox_ax, 
+        [f"Marker {m}" for m in all_markers], 
+        [True] * len(all_markers)
+    )
+    
+    fill_button = Button(fill_button_ax, "Fill Gaps")
+    merge_button = Button(merge_button_ax, "Merge Markers")
+    swap_button = Button(swap_button_ax, "Swap Markers")
+    delete_button = Button(delete_button_ax, "Delete Marker")
+    save_button = Button(save_button_ax, "Save Changes and Exit")
+    close_button = Button(close_button_ax, "Close")
+    
+    select_all_button = Button(select_all_ax, "All")
+    select_none_button = Button(select_none_ax, "None")
+    undo_button = Button(undo_button_ax, "Undo")
+    help_button = Button(help_button_ax, "Help")
+    
+    # Dictionary to store plot lines
+    lines_x = {}
+    lines_y = {}
+    
+    # Track operations performed
+    operations_log = {
+        "fill_gaps": [],
+        "merge_markers": [],
+        "swap_markers": [],
+        "delete_markers": [],
+        "removed_markers": []
+    }
+    
+    def create_temp_dir(original_path):
+        """Create a temporary directory for storing edit files."""
+        base_dir = os.path.dirname(original_path)
+        base_name = os.path.basename(original_path).split('.')[0]
+        temp_dir = os.path.join(base_dir, f"{base_name}_temp")
+        
+        # Create directory if it doesn't exist
+        if not os.path.exists(temp_dir):
+            os.makedirs(temp_dir)
+            
+        return temp_dir
+    
+    def create_temp_file(df, original_path, suffix="_temp"):
+        """Create a temporary file with current changes."""
+        temp_dir = create_temp_dir(original_path)
+        base_name = os.path.basename(original_path).split('.')[0]
+        ext = os.path.splitext(original_path)[1]
+        timestamp = pd.Timestamp.now().strftime("%Y%m%d%H%M%S")
+        temp_path = os.path.join(temp_dir, f"{base_name}{suffix}_{timestamp}{ext}")
+        
+        df.to_csv(temp_path, index=False)
+        print(f"Temporary file created: {temp_path}")
+        return temp_path
+    
+    def clear_temp_dir(original_path):
+        """Remove the temporary directory and its files."""
+        temp_dir = create_temp_dir(original_path)
+        if os.path.exists(temp_dir):
+            import shutil
+            shutil.rmtree(temp_dir)
+            print(f"Temporary directory removed: {temp_dir}")
+    
+    # Function to update plot based on checkbox selection
+    def update_plot():
+        # Get current checkbox states
+        checked = marker_selection.get_status()
+        visible_markers = [all_markers[i] for i, checked_state in enumerate(checked) if checked_state]
+        
+        # Clear current axes
+        ax1.clear()
+        ax2.clear()
+        
+        # Set up axes labels and grids
+        ax1.set_title("X Coordinates of Markers")
+        ax1.set_xlabel("Frame")
+        ax1.set_ylabel("X Position")
+        ax1.grid(True)
+        
+        ax2.set_title("Y Coordinates of Markers")
+        ax2.set_xlabel("Frame")
+        ax2.set_ylabel("Y Position")
+        ax2.grid(True)
+        
+        # Plot only selected markers
+        for marker_id in visible_markers:
+            x_values, y_values = get_marker_coords(df, marker_id)
+            if x_values is not None and y_values is not None:
+                lines_x[marker_id] = ax1.plot(frames, x_values, label=f"Marker {marker_id}")[0]
+                lines_y[marker_id] = ax2.plot(frames, y_values, label=f"Marker {marker_id}")[0]
+        
+        # Show frame range with vertical lines
+        start_frame, end_frame = frames_range.val
+        ax1.axvline(start_frame, color='r', linestyle='--')
+        ax1.axvline(end_frame, color='r', linestyle='--')
+        ax2.axvline(start_frame, color='r', linestyle='--')
+        ax2.axvline(end_frame, color='r', linestyle='--')
+        
+        ax1.set_xlim(0, len(df) - 1)
+        ax2.set_xlim(0, len(df) - 1)
+        
+        # Place legend outside the plot to avoid overlap
+        if visible_markers and any(marker_id in lines_x for marker_id in visible_markers):
+            handles1 = [lines_x[m] for m in visible_markers if m in lines_x]
+            handles2 = [lines_y[m] for m in visible_markers if m in lines_y]
+            
+            if handles1:
+                ax1.legend(handles=handles1, loc='upper left', bbox_to_anchor=(1.05, 1), borderaxespad=0)
+            if handles2:
+                ax2.legend(handles=handles2, loc='upper left', bbox_to_anchor=(1.05, 1), borderaxespad=0)
         
         fig.canvas.draw_idle()
     
@@ -902,229 +597,244 @@ def advanced_reid_gui():
         update_plot()
     
     def on_fill_gaps(event):
+        nonlocal latest_temp_file, df
+        
         selected_markers = get_selected_markers()
         
         if not selected_markers:
-            messagebox.showinfo("Information", "Please select at least one marker to fill gaps.")
             return
-            
-        for marker_id in selected_markers:
-            df_new = fill_gaps(df, marker_id)
-            operations_log["fill_gaps"].append({
-                "marker_id": marker_id,
-                "timestamp": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
-            })
         
-        update_plot()
-        messagebox.showinfo("Success", f"Filled gaps for {len(selected_markers)} marker(s).")
+        # Criar janela para parâmetros
+        params_window = tk.Toplevel()
+        params_window.title("Parâmetros de Preenchimento")
+        params_window.geometry("300x200")
+        params_window.resizable(False, False)
+        
+        # Centralizar a janela
+        params_window.geometry(f"+{int(fig.canvas.manager.window.winfo_rootx() + 300)}+{int(fig.canvas.manager.window.winfo_rooty() + 200)}")
+        
+        # Estrutura da janela
+        tk.Label(params_window, text="Parâmetros de Preenchimento", font=("Arial", 12, "bold")).pack(pady=(15, 20))
+        
+        # Frame para método
+        method_frame = tk.Frame(params_window)
+        method_frame.pack(fill="x", pady=5)
+        tk.Label(method_frame, text="Método:", width=15, anchor="w").pack(side=tk.LEFT, padx=10)
+        method_var = tk.StringVar(value="linear")
+        method_combo = ttk.Combobox(method_frame, textvariable=method_var, values=["linear", "cubic"], width=15)
+        method_combo.pack(side=tk.LEFT)
+        
+        # Frame para tamanho máximo
+        max_gap_frame = tk.Frame(params_window)
+        max_gap_frame.pack(fill="x", pady=5)
+        tk.Label(max_gap_frame, text="Tamanho máx.:", width=15, anchor="w").pack(side=tk.LEFT, padx=10)
+        max_gap_var = tk.StringVar(value="30")
+        max_gap_entry = tk.Entry(max_gap_frame, textvariable=max_gap_var, width=15)
+        max_gap_entry.pack(side=tk.LEFT, padx=5)
+        
+        # Frame para botões
+        button_frame = tk.Frame(params_window)
+        button_frame.pack(pady=20)
+        
+        def apply_params():
+            try:
+                method = method_var.get()
+                max_gap = int(max_gap_var.get())
+                
+                if max_gap <= 0:
+                    messagebox.showerror("Erro", "O tamanho máximo da lacuna deve ser maior que 0")
+                    return
+                
+                # Backup para operação de desfazer
+                temp_history.append(df.copy())
+                
+                # Preencher lacunas para cada marcador selecionado
+                for marker_id in selected_markers:
+                    df = fill_gaps(df, marker_id, max_gap_size=max_gap, method=method)
+                    operations_log["fill_gaps"].append({
+                        "marker_id": marker_id,
+                        "max_gap_size": max_gap,
+                        "method": method,
+                        "timestamp": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
+                    })
+                
+                # Criar arquivo temporário
+                latest_temp_file = create_temp_file(df, file_path)
+                
+                # Carregar dados do arquivo temporário
+                df_temp = pd.read_csv(latest_temp_file)
+                df = df_temp
+                
+                update_plot()
+                params_window.destroy()
+                
+            except ValueError:
+                messagebox.showerror("Erro", "Por favor, insira um número válido para o tamanho máximo da lacuna")
+        
+        tk.Button(button_frame, text="Aplicar", command=apply_params, width=10).pack(side=tk.LEFT, padx=10)
+        tk.Button(button_frame, text="Cancelar", command=params_window.destroy, width=10).pack(side=tk.LEFT, padx=10)
+        
+        # Configurar foco e comportamento modal
+        params_window.transient(fig.canvas.manager.window)
+        params_window.grab_set()
+        max_gap_entry.focus_set()
     
     def on_merge_markers(event):
+        nonlocal latest_temp_file, df
+        
         selected_markers = get_selected_markers()
         
         if len(selected_markers) < 2:
-            messagebox.showinfo("Information", "Please select at least 2 markers for merging. First marker will be source, others will be targets.")
             return
         
-        source_id = selected_markers[0]  # First selected marker is the source
-        targets = selected_markers[1:]   # All other selected markers are targets
+        # Backup para operação de desfazer
+        temp_history.append(df.copy())
+        
+        # Use o marcador com o menor ID como o destino (a ser mantido)
+        source_id = min(selected_markers)
+        # Todos os outros marcadores selecionados serão fontes (a serem mesclados e removidos)
+        sources = [m for m in selected_markers if m != source_id]
         
         start_frame, end_frame = map(int, frames_range.val)
         
-        # Ask if user wants to completely merge the markers
-        complete_merge = messagebox.askyesno(
-            "Complete Merge", 
-            f"Do you want to completely merge markers {targets} into marker {source_id}?\n\n"
-            f"If Yes: Coordinates from markers {targets} will be transferred to marker {source_id}, and these markers will be removed.\n"
-            f"If No: Only values in the selected frame range will be merged."
-        )
+        # Obter colunas do alvo (o que será mantido)
+        target_x_col = f"p{source_id}_x"
+        target_y_col = f"p{source_id}_y"
         
-        # Frame range for merging - use full range if complete merge
-        merge_range = (0, len(df) - 1) if complete_merge else (start_frame, end_frame)
-        start_frame, end_frame = merge_range
-        
-        # Get source columns
-        source_x_col = f"p{source_id}_x"
-        source_y_col = f"p{source_id}_y"
-        
-        # Process each target marker
-        for target_id in targets:
-            target_x_col = f"p{target_id}_x"
-            target_y_col = f"p{target_id}_y"
+        # Processar cada marcador fonte (a ser removido)
+        for source_id_to_remove in sources:
+            source_x_col = f"p{source_id_to_remove}_x"
+            source_y_col = f"p{source_id_to_remove}_y"
             
-            if complete_merge:
-                # For complete merge, transfer ALL valid coordinates from target to source,
-                # regardless of whether source already has data there
-                for i in range(start_frame, end_frame + 1):
-                    # Check if target has valid data at this frame
-                    target_x_valid = not (pd.isna(df.at[i, target_x_col]) or df.at[i, target_x_col] == "")
-                    target_y_valid = not (pd.isna(df.at[i, target_y_col]) or df.at[i, target_y_col] == "")
-                    
-                    if target_x_valid and target_y_valid:
-                        # Transfer data from target to source, always taking the target's data
-                        # regardless of whether source already has coordinates
-                        df.at[i, source_x_col] = df.at[i, target_x_col]
-                        df.at[i, source_y_col] = df.at[i, target_y_col]
+            # Transferir TODAS as coordenadas válidas da fonte para o alvo
+            for i in range(start_frame, end_frame + 1):
+                # Verificar se a fonte tem dados válidos neste quadro
+                source_x_valid = not (pd.isna(df.at[i, source_x_col]) or df.at[i, source_x_col] == "")
+                source_y_valid = not (pd.isna(df.at[i, source_y_col]) or df.at[i, source_y_col] == "")
                 
-                # Record the operation
-                operations_log["merge_markers"].append({
-                    "source_id": source_id,
-                    "target_id": target_id,
-                    "frame_range": [start_frame, end_frame],
-                    "complete_merge": True,
-                    "timestamp": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
-                })
-                
-                # Add to list of markers to remove when saving
-                if target_id not in operations_log["removed_markers"]:
-                    operations_log["removed_markers"].append(target_id)
-            else:
-                # For partial merge, ensure we copy all valid coordinates from target to source
-                # for the specified frame range
-                for i in range(start_frame, end_frame + 1):
-                    # Check if target has valid data at this frame
-                    target_x_valid = not (pd.isna(df.at[i, target_x_col]) or df.at[i, target_x_col] == "")
-                    target_y_valid = not (pd.isna(df.at[i, target_y_col]) or df.at[i, target_y_col] == "")
-                    
-                    if target_x_valid and target_y_valid:
-                        # Transfer data from target to source, always taking the target's data
-                        df.at[i, source_x_col] = df.at[i, target_x_col]
-                        df.at[i, source_y_col] = df.at[i, target_y_col]
-                
-                # Record the operation
-                operations_log["merge_markers"].append({
-                    "source_id": source_id,
-                    "target_id": target_id,
-                    "frame_range": [start_frame, end_frame],
-                    "complete_merge": False,
-                    "timestamp": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
-                })
+                if source_x_valid and source_y_valid:
+                    # Transferir dados da fonte para o alvo
+                    df.at[i, target_x_col] = df.at[i, source_x_col]
+                    df.at[i, target_y_col] = df.at[i, source_y_col]
+            
+            # Adicionar à lista de marcadores para remover ao salvar
+            if source_id_to_remove not in operations_log["removed_markers"]:
+                operations_log["removed_markers"].append(source_id_to_remove)
+            
+            # Registrar a operação
+            operations_log["merge_markers"].append({
+                "target_id": source_id,  # O marcador que estamos mantendo
+                "source_id": source_id_to_remove,  # O marcador sendo mesclado e removido
+                "frame_range": [start_frame, end_frame],
+                "timestamp": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
+            })
+        
+        # REMOVER OS MARCADORES APÓS A TRANSFERÊNCIA DE DADOS
+        columns_to_remove = []
+        for marker_id in sources:
+            columns_to_remove.append(f"p{marker_id}_x")
+            columns_to_remove.append(f"p{marker_id}_y")
+        
+        df = df.drop(columns=columns_to_remove)
+        
+        # Criar arquivo temporário
+        latest_temp_file = create_temp_file(df, file_path)
+        
+        # Carregar dados do arquivo temporário para atualizar o gráfico
+        df_temp = pd.read_csv(latest_temp_file)
+        df = df_temp  # Atualizar o DataFrame com dados do arquivo temporário
         
         update_plot()
-        
-        if len(targets) == 1:
-            messagebox.showinfo(
-                "Success", 
-                f"Merged marker {targets[0]} into marker {source_id}" +
-                (f" for frames {start_frame}-{end_frame}." if not complete_merge else " completely.")
-            )
-        else:
-            messagebox.showinfo(
-                "Success", 
-                f"Merged markers {targets} into marker {source_id}" +
-                (f" for frames {start_frame}-{end_frame}." if not complete_merge else " completely.")
-            )
     
     def on_swap_markers(event):
+        nonlocal latest_temp_file, df
+        
         selected_markers = get_selected_markers()
         
         if len(selected_markers) != 2:
-            messagebox.showinfo("Information", "Please select exactly 2 markers for swapping.")
+            print("Erro: Por favor, selecione exatamente dois marcadores para trocar dados.")
             return
         
-        marker_id1 = selected_markers[0]
-        marker_id2 = selected_markers[1]
+        marker_id1, marker_id2 = selected_markers
         
-        start_frame, end_frame = map(int, frames_range.val)
+        # Backup para operação de desfazer
+        temp_history.append(df.copy())
         
-        df_new = swap_markers(df, marker_id1, marker_id2, (start_frame, end_frame))
-        operations_log["swap_markers"].append({
-            "marker_id1": marker_id1,
-            "marker_id2": marker_id2,
-            "frame_range": [start_frame, end_frame],
-            "timestamp": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
-        })
+        # Trocar dados entre os dois marcadores selecionados
+        df = swap_markers(df, marker_id1, marker_id2, (0, len(df) - 1))
+        
+        # Criar arquivo temporário
+        latest_temp_file = create_temp_file(df, file_path)
+        
+        # Carregar dados do arquivo temporário para atualizar o gráfico
+        df_temp = pd.read_csv(latest_temp_file)
+        df = df_temp  # Atualizar o DataFrame com dados do arquivo temporário
         
         update_plot()
-        messagebox.showinfo("Success", f"Swapped markers {marker_id1} and {marker_id2} for frames {start_frame}-{end_frame}.")
     
-    # New function to handle marker deletion
     def on_delete_markers(event):
+        nonlocal latest_temp_file, df
+        
         selected_markers = get_selected_markers()
         
         if not selected_markers:
-            messagebox.showinfo("Information", "Please select at least one marker to delete.")
             return
         
-        # Confirm deletion
-        confirm = messagebox.askyesno(
-            "Confirm Deletion", 
-            f"Are you sure you want to completely delete the following markers?\n\n{selected_markers}\n\n"
-            f"This will remove these markers from the dataset."
-        )
+        # Backup para operação de desfazer
+        temp_history.append(df.copy())
         
-        if not confirm:
-            return
-            
-        # Add markers to the removed list
-        for marker_id in selected_markers:
-            if marker_id not in operations_log["removed_markers"]:
-                operations_log["removed_markers"].append(marker_id)
-                
-            # Log the deletion operation
-            operations_log["delete_markers"].append({
-                "marker_id": marker_id,
-                "timestamp": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
-            })
-            
-            # Set columns to NaN in the dataframe for immediate visual feedback
-            x_col = f"p{marker_id}_x"
-            y_col = f"p{marker_id}_y"
-            
-            if x_col in df.columns:
-                df[x_col] = np.nan
-            if y_col in df.columns:
-                df[y_col] = np.nan
+        # Remover marcadores selecionados
+        df = df.drop(columns=[f"p{m}_x" for m in selected_markers] + [f"p{m}_y" for m in selected_markers])
+        
+        # Criar arquivo temporário
+        latest_temp_file = create_temp_file(df, file_path)
+        
+        # Carregar dados do arquivo temporário para atualizar o gráfico
+        df_temp = pd.read_csv(latest_temp_file)
+        df = df_temp  # Atualizar o DataFrame com dados do arquivo temporário
         
         update_plot()
-        messagebox.showinfo("Success", f"Marked {len(selected_markers)} marker(s) for deletion. Changes will be applied when saved.")
     
     def on_save(event):
-        timestamp = pd.Timestamp.now().strftime("%Y-%m-%d_%H-%M-%S")
+        nonlocal latest_temp_file, df
         
-        # Create a copy of the dataframe for saving
-        df_to_save = df.copy()
+        # Salvar o arquivo final com as modificações
+        save_markers_file(df, file_path)
+        print(f"Arquivo final salvo com modificações")
         
-        # Handle markers that need to be completely merged or deleted
-        if operations_log["removed_markers"]:
-            removed_markers = set(operations_log["removed_markers"])
-            
-            # Remove columns for merged/deleted markers
-            for marker_id in removed_markers:
-                x_col = f"p{marker_id}_x"
-                y_col = f"p{marker_id}_y"
-                
-                if x_col in df_to_save.columns:
-                    df_to_save.drop(columns=[x_col], inplace=True)
-                if y_col in df_to_save.columns:
-                    df_to_save.drop(columns=[y_col], inplace=True)
+        # Limpar diretório temporário 
+        clear_temp_dir(file_path)
         
-        # Save the modified dataframe
-        new_file = save_markers_file(df_to_save, file_path, suffix=f"_reid_{timestamp}")
-        save_operations_log(operations_log, new_file)
-        
-        messagebox.showinfo(
-            "Save Complete", 
-            f"Changes saved to: {os.path.basename(new_file)}\n" +
-            (f"Removed markers: {operations_log['removed_markers']}" if operations_log["removed_markers"] else "")
-        )
+        # Fechar a janela
+        plt.close(fig)
     
     def on_close(event):
-        if (operations_log["fill_gaps"] or operations_log["merge_markers"] or 
-            operations_log["swap_markers"] or operations_log["delete_markers"]):
-            if messagebox.askyesno("Unsaved Changes", "You have unsaved changes. Do you want to save before closing?"):
-                on_save(None)
-        plt.close(fig)
+        # Limpar diretório temporário antes de fechar
+        clear_temp_dir(file_path)
+        plt.close(fig)  # Close the figure when done
+    
+    def on_undo(event):
+        nonlocal latest_temp_file, df
+        
+        if temp_history:
+            df = temp_history.pop()
+            latest_temp_file = create_temp_file(df, file_path)
+            update_plot()
+        else:
+            print("Não há mais operações para desfazer.")
+    
+    def open_help(event):
+        import webbrowser
+        webbrowser.open("https://vaila.readthedocs.io/en/latest/")
     
     def select_all(event):
         for i in range(len(all_markers)):
-            # If not already selected, toggle it
             if not marker_selection.get_status()[i]:
                 marker_selection.set_active(i)
         update_plot()
     
     def select_none(event):
         for i in range(len(all_markers)):
-            # If currently selected, toggle it off
             if marker_selection.get_status()[i]:
                 marker_selection.set_active(i)
         update_plot()
@@ -1135,26 +845,18 @@ def advanced_reid_gui():
     fill_button.on_clicked(on_fill_gaps)
     merge_button.on_clicked(on_merge_markers)
     swap_button.on_clicked(on_swap_markers)
-    delete_button.on_clicked(on_delete_markers)  # Connect the new delete button
+    delete_button.on_clicked(on_delete_markers)
     save_button.on_clicked(on_save)
     close_button.on_clicked(on_close)
     select_all_button.on_clicked(select_all)
     select_none_button.on_clicked(select_none)
-    
-    # Add operation instruction text
-    operation_text = plt.figtext(0.04, 0.05, 
-        "Operations Guide:\n"
-        "• Fill Gaps: Works on all selected markers\n"
-        "• Merge: First selected marker → other markers\n"
-        "• Swap: Exchanges data between exactly 2 markers\n"
-        "• Delete: Removes selected markers completely\n"  # Add delete to guide
-        "• Frame range applies to all operations", 
-        fontsize=9)
+    undo_button.on_clicked(on_undo)
+    help_button.on_clicked(open_help)
     
     # Initialize plot
     update_plot()
     
-    plt.tight_layout(rect=[0.25, 0.25, 0.85, 1])  # Adjust layout
+    plt.tight_layout(rect=[0.2, 0.25, 0.85, 1])  # Adjust layout
     plt.show()
 
 
@@ -1392,7 +1094,7 @@ def auto_fill_gaps_arima():
     # ARIMA p parameter row
     p_frame = Frame(params_frame)
     p_frame.pack(fill="x", pady=5)
-    Label(p_frame, text="p (AR):", width=10, anchor="w").pack(side=tk.LEFT)
+    Label(p_frame, text="p (AR):", width=10, anchor="w").pack(side=tk.LEFT, padx=10)
     p_var = tk.StringVar(value=str(default_p))
     p_entry = tk.Entry(p_frame, textvariable=p_var, width=5)
     p_entry.pack(side=tk.LEFT, padx=5)
@@ -1607,6 +1309,69 @@ def auto_fill_gaps_arima():
     help_all_button.pack(pady=10)
     
     arima_params_window.mainloop()
+
+
+def create_gui_menu():
+    """Create main GUI menu for the application."""
+
+    # Print the script version and directory
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    root = Tk()
+    root.title("Marker Re-identification Tool")
+    root.geometry("500x300")  # Reduced height since we're removing an option
+    
+    # Set up frame for buttons
+    frame = Frame(root, padx=20, pady=20)
+    frame.pack(expand=True)
+    
+    # Title label
+    title_label = Label(frame, text="Marker Re-identification Tool", font=("Arial", 16, "bold"))
+    title_label.grid(row=0, column=0, pady=(0, 20))
+    
+    # Description
+    desc_label = Label(frame, text="Select an option:", font=("Arial", 12))
+    desc_label.grid(row=1, column=0, pady=(0, 20), sticky="w")
+    
+    # Buttons for the different options
+    btn_width = 30
+    btn_height = 2
+    
+    # Interactive Re-identification button
+    option1_btn = TkButton(
+        frame, 
+        text="Interactive Re-identification", 
+        width=btn_width, 
+        height=btn_height,
+        command=lambda: [root.destroy(), advanced_reid_gui()]
+    )
+    option1_btn.grid(row=2, column=0, pady=10)
+    
+    # Auto Fill Gaps (ARIMA) button
+    option2_btn = TkButton(
+        frame, 
+        text="Auto Fill Gaps (ARIMA)", 
+        width=btn_width, 
+        height=btn_height,
+        command=lambda: [root.destroy(), auto_fill_gaps_arima()]
+    )
+    option2_btn.grid(row=3, column=0, pady=10)
+    
+    # Exit button - row changed from 5 to 4 since we removed an option
+    option4_btn = TkButton(
+        frame, 
+        text="Exit", 
+        width=btn_width, 
+        height=btn_height,
+        command=root.destroy
+    )
+    option4_btn.grid(row=4, column=0, pady=10)
+    
+    # Version info - row changed from 6 to 5
+    version_label = Label(frame, text="Version 0.1.0", font=("Arial", 8))
+    version_label.grid(row=5, column=0, pady=(20, 0))
+    
+    root.mainloop()
 
 
 if __name__ == "__main__":
