@@ -134,5 +134,48 @@ echo "Ensuring correct ownership and permissions for the application..."
 sudo chown -R "${USER}:admin" "${APP_PATH}"
 chmod -R +x "${APP_PATH}"
 
+# Check if Homebrew is installed, install it if not
+echo "Checking if Homebrew is installed..."
+if ! command -v brew &> /dev/null; then
+    echo "Installing Homebrew..."
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+else
+    echo "Homebrew is already installed."
+    brew update
+fi
+
+# Check if rsync is available (it should be built into macOS)
+echo "Verifying rsync availability..."
+if ! command -v rsync &> /dev/null; then
+    echo "Installing rsync via Homebrew..."
+    brew install rsync
+else
+    echo "rsync is already available on this system."
+fi
+
+# Enable SSH (Remote Login) service
+echo "Configuring SSH (Remote Login) service..."
+echo "You may be prompted for your password to enable SSH."
+sudo systemsetup -setremotelogin on
+
+# Remove ffmpeg from Conda environment if installed
+echo "Removing ffmpeg installed via Conda..."
+conda remove -n vaila ffmpeg -y
+
+# Install ffmpeg via Homebrew
+echo "Installing ffmpeg via Homebrew..."
+brew install ffmpeg
+
+# Set permissions for the Conda environment
+echo "Setting permissions for Conda environment..."
+CONDA_BASE=$(conda info --base)
+VAILA_ENV_DIR="${CONDA_BASE}/envs/vaila"
+if [ -d "$VAILA_ENV_DIR" ]; then
+    chmod -R u+rwX "$VAILA_ENV_DIR"
+    echo "Permissions set for Conda environment directory."
+else
+    echo "Conda environment directory not found at $VAILA_ENV_DIR."
+fi
+
 echo "vaila Launcher created and configured in /Applications as a symbolic link! Check the Applications folder."
 echo "Installation and setup completed."
