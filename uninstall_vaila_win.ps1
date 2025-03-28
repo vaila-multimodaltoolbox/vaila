@@ -25,9 +25,6 @@ If (-Not (Get-Command conda -ErrorAction SilentlyContinue)) {
     Exit
 }
 
-# Get Conda installation path
-$condaPath = (& conda info --base).Trim()
-
 # Remove the 'vaila' Conda environment
 Write-Output "Checking if the 'vaila' Conda environment exists..."
 $envExists = conda env list | Select-String -Pattern "^vaila"

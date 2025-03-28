@@ -4,10 +4,9 @@ vaila.py
 ===============================================================================
 Author: Paulo R. P. Santiago
 Date:  7 October 2024
-Update: 26 March 2025
-Version updated: 0.4.2
+Update: 28 March 2025
+Version updated: 0.4.3
 Python Version: 3.12.9
-
 
 Description:
 ------------
@@ -176,7 +175,7 @@ except ImportError as e:
 
 
 text = r"""
-version: 26.Mar.2025 (Python 3.12.9)
+version: 28.Mar.2025 (Python 3.12.9)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -190,9 +189,9 @@ Mocap fullbody_c3d           Markerless_3D       Markerless_2D_MP
 Open Field --> +---------------------------------------+ <-- Force Plate
               ^                   |                    ^ <-- YOLOv12 and MediaPipe
         EMG__/                    v                     \__Tracker YOLOv12
-                    +--------------------------+
-                    | Results: Data and Figure | 
-                    +--------------------------+
+                +-------------------------------------+
+                | Results: Processed Data and Figures | 
+                +-------------------------------------+
 
 ============================ File Manager (Frame A) ========================
 A_r1_c1 - Rename          A_r1_c2 - Import           A_r1_c3 - Export
@@ -251,7 +250,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 26.Mar.2025 (Python 3.12.9)")
+        self.title("vailá - 28.Mar.2025 (Python 3.12.9)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
