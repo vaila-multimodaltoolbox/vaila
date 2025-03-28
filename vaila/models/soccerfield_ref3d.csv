@@ -8,10 +8,10 @@ meio_campo_dir,52.50,68.00,0.00
 centro_campo,52.50,34.00,0.00
 circulo_centro_intersec_sup,52.50,43.15,0.00
 circulo_centro_intersec_inf,52.50,24.85,0.00
-gol_esq_poste_esq,0.00,30.84,0.00
-gol_esq_poste_dir,0.00,37.16,0.00
-gol_dir_poste_esq,105.00,30.84,0.00
-gol_dir_poste_dir,105.00,37.16,0.00
+gol_esq_poste_inf,0.00,30.84,0.00
+gol_esq_poste_sup,0.00,37.16,0.00
+gol_dir_poste_inf,105.00,30.84,0.00
+gol_dir_poste_sup,105.00,37.16,0.00
 ga_esq_sup_esq,16.50,13.85,0.00
 ga_esq_sup_dir,16.50,54.15,0.00
 ga_esq_inf_esq,0.00,13.85,0.00
