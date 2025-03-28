@@ -92,4 +92,3 @@ killall Dock
 echo "Launchpad refreshed."
 
 echo "Uninstallation completed. vaila has been removed from your system."
-
