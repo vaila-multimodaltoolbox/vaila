@@ -3,7 +3,7 @@ Script: markerless2d_mpyolo.py
 Author: Prof. Dr. Paulo Santiago
 Version: 0.0.5
 Created: 18 February 2025
-Last Updated: 19 March 2025
+Last Updated: 28 March 2025
 
 Description:
 This script combines YOLOv12 for person detection/tracking with MediaPipe for pose estimation.
@@ -348,26 +348,47 @@ def save_landmarks_to_csv(csv_path, frame_idx, person_id, landmarks):
 def get_parameters_dialog():
     """Create a dialog for MediaPipe and YOLO parameters."""
     dialog = tk.Tk()
-    dialog.title("Detection Parameters")
-
+    dialog.title("Detection Parameters Yolo and MediaPipe")
+    
+    # Set a large initial size right after creating the dialog
+    dialog.geometry("1024x768")
+    
+    # Create main scrollable frame
+    main_frame = tk.Frame(dialog)
+    main_frame.pack(fill="both", expand=True)
+    
+    # Add canvas with scrollbar
+    canvas = tk.Canvas(main_frame)
+    scrollbar = tk.Scrollbar(main_frame, orient="vertical", command=canvas.yview)
+    scrollable_frame = tk.Frame(canvas)
+    
+    # Configure scrolling
+    scrollable_frame.bind(
+        "<Configure>",
+        lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+    )
+    
+    canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+    canvas.configure(yscrollcommand=scrollbar.set)
+    
+    # Pack scrolling components
+    canvas.pack(side="left", fill="both", expand=True)
+    scrollbar.pack(side="right", fill="y")
+    
     # Dictionary to store the results
     params = {}
-
-    # Create frames
-    mode_frame = tk.LabelFrame(dialog, text="Processing Mode", padx=5, pady=5)
+    
+    # Create frames inside scrollable_frame instead of main_frame
+    mode_frame = tk.LabelFrame(scrollable_frame, text="Processing Mode", padx=5, pady=5)
     mode_frame.pack(padx=10, pady=5, fill="x")
 
-    yolo_frame = tk.LabelFrame(dialog, text="YOLO Parameters", padx=5, pady=5)
+    yolo_frame = tk.LabelFrame(scrollable_frame, text="YOLO Parameters", padx=5, pady=5)
     yolo_frame.pack(padx=10, pady=5, fill="x")
 
-    mp_frame = tk.LabelFrame(dialog, text="MediaPipe Parameters", padx=5, pady=5)
+    mp_frame = tk.LabelFrame(scrollable_frame, text="MediaPipe Parameters", padx=5, pady=5)
     mp_frame.pack(padx=10, pady=5, fill="x")
 
     # Processing mode selection - using dropdown menu
-    mode_frame = tk.LabelFrame(dialog, text="Processing Mode", padx=5, pady=5)
-    mode_frame.pack(padx=10, pady=5, fill="x")
-
-    # Create a frame for the dropdown and help icon
     mode_select_frame = tk.Frame(mode_frame)
     mode_select_frame.pack(fill="x", padx=5, pady=5)
 
@@ -391,7 +412,7 @@ def get_parameters_dialog():
     }
 
     # Function to update the display text
-    def update_dropdown_display(*args):
+    def update_dropdown_display():
         current_value = mode_var.get()
         mode_dropdown.set(mode_display.get(current_value, current_value))
 
@@ -399,7 +420,7 @@ def get_parameters_dialog():
     update_dropdown_display()
 
     # Add help button with tooltip functionality
-    def show_help_tooltip(event=None):
+    def show_help_tooltip(_event=None):
         help_text = """
 Sequential Processing:
 • Process videos one at a time
@@ -465,7 +486,7 @@ Multithreaded Tracking:
 
     # Classes display in grid
     classes_frame = tk.LabelFrame(
-        dialog,
+        scrollable_frame,
         text="Available Classes (Enter numbers separated by commas)",
         padx=5,
         pady=5,
@@ -574,18 +595,13 @@ Multithreaded Tracking:
         except ValueError as e:
             tk.messagebox.showerror("Error", "Please enter valid values")
 
-    tk.Button(dialog, text="Start Processing", command=on_submit).pack(pady=10)
-
-    # Center the dialog
-    dialog.update_idletasks()
-    width = dialog.winfo_width()
-    height = dialog.winfo_height()
-    x = (dialog.winfo_screenwidth() // 2) - (width // 2)
-    y = (dialog.winfo_screenheight() // 2) - (height // 2)
-    dialog.geometry(f"{width}x{height}+{x}+{y}")
-
+    tk.Button(scrollable_frame, text="Start Processing", command=on_submit).pack(pady=10)
+    
+    # No final da função, configure o tamanho do canvas
+    canvas.config(width=1004, height=748)  # Ligeiramente menor que a janela
+    
     dialog.mainloop()
-
+    
     return params if params else None
 
 
