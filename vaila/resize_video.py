@@ -466,6 +466,18 @@ class ROISelector:
                 )
 
 
+def validate_scale_factor(value, status_var):
+    try:
+        scale = int(value)
+        if scale < 1:
+            status_var.set("Scale factor must be a positive integer")
+            return False
+        return scale
+    except ValueError:
+        status_var.set("Scale factor must be a valid integer")
+        return False
+
+
 def batch_resize_videos():
     """Function to batch process multiple videos"""
     root = tk.Tk()
@@ -501,16 +513,16 @@ def batch_resize_videos():
     scale_frame = Frame(root, padx=10, pady=10)
     scale_frame.pack(fill=tk.X)
 
-    Label(scale_frame, text="Select scale factor:").pack(anchor=tk.W)
+    Label(scale_frame, text="Enter scale factor (integer):").pack(anchor=tk.W)
 
-    # Create radio buttons for each scale factor
-    factors_frame = Frame(scale_frame)
-    factors_frame.pack(fill=tk.X, pady=5)
+    # Caixa de texto para fator de escala personalizado
+    scale_entry = tk.Entry(scale_frame, width=5)
+    scale_entry.insert(0, "2")  # Valor padrão
+    scale_entry.pack(anchor=tk.W, pady=5)
 
-    for i, factor in enumerate([2, 3, 4, 5, 6, 7, 8]):
-        Radiobutton(
-            factors_frame, text=f"{factor}x", variable=scale_var, value=factor
-        ).grid(row=0, column=i, padx=10)
+    # Texto explicativo
+    Label(scale_frame, text="Valid values: 2, 3, 4, 5, 6, 7, 8, etc. (Higher values may cause memory issues)", 
+          font=("Arial", 8, "italic")).pack(anchor=tk.W)
 
     # Help text frame
     help_frame = Frame(root, padx=10, pady=5)
@@ -537,7 +549,7 @@ converting MediaPipe coordinates back to the original video dimensions."""
         command=lambda: start_batch_processing(
             input_dir_var.get(),
             output_dir_var.get(),
-            scale_var.get(),
+            validate_scale_factor(scale_entry.get(), status_var) or 2,  # Validar e usar 2 como fallback
             False,  # No ROI
             status_var,
             root,
@@ -554,7 +566,11 @@ converting MediaPipe coordinates back to the original video dimensions."""
         buttons_frame,
         text="Crop and Resize",
         command=lambda: crop_and_resize_single(
-            input_dir_var.get(), output_dir_var.get(), scale_var.get(), status_var, root
+            input_dir_var.get(), 
+            output_dir_var.get(), 
+            int(scale_entry.get()),  # Usar valor da caixa de texto
+            status_var, 
+            root
         ),
         bg="#2196F3",
         fg="white",
@@ -571,7 +587,7 @@ converting MediaPipe coordinates back to the original video dimensions."""
         bg="#FFC107",
         fg="black",
         font=("Arial", 11),
-        width=20,
+        width=30,
         height=2,
     ).pack(pady=5)
 
@@ -590,7 +606,7 @@ converting MediaPipe coordinates back to the original video dimensions."""
         # Create new window for conversion
         convert_window = tk.Toplevel(root)
         convert_window.title("Convert MediaPipe Coordinates")
-        convert_window.geometry("600x450")
+        convert_window.geometry("800x450")
 
         # Variables for file paths
         metadata_path_var = StringVar(value="No file selected")
