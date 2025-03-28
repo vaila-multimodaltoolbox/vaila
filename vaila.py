@@ -189,9 +189,9 @@ Mocap fullbody_c3d           Markerless_3D       Markerless_2D_MP
 Open Field --> +---------------------------------------+ <-- Force Plate
               ^                   |                    ^ <-- YOLOv12 and MediaPipe
         EMG__/                    v                     \__Tracker YOLOv12
-                +-------------------------------------+
-                | Results: Processed Data and Figures | 
-                +-------------------------------------+
+               +--------------------------------------+
+               | Results: Processed Data and Figures  | 
+               +--------------------------------------+
 
 ============================ File Manager (Frame A) ========================
 A_r1_c1 - Rename          A_r1_c2 - Import           A_r1_c3 - Export
