@@ -122,6 +122,32 @@ echo "Installing ffmpeg from system repositories..."
 sudo apt update
 sudo apt install ffmpeg -y
 
+# Install rsync
+echo "Installing rsync..."
+sudo apt install rsync -y
+
+# Install and configure SSH
+echo "Installing and configuring OpenSSH Server..."
+sudo apt install openssh-server -y
+
+# Check if SSH server is running and enable it
+echo "Ensuring SSH service is enabled and running..."
+sudo systemctl enable ssh
+sudo systemctl start ssh
+
+# Configure SSH for better security (optional but recommended)
+echo "Configuring SSH security settings..."
+sudo sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin no/' /etc/ssh/sshd_config
+sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
+sudo systemctl restart ssh
+
+# Configure firewall to allow SSH connections
+echo "Configuring firewall for SSH..."
+if command -v ufw &> /dev/null; then
+    sudo ufw allow ssh
+    sudo ufw status
+fi
+
 # Activate the Conda environment
 source "$CONDA_BASE/etc/profile.d/conda.sh"
 conda activate vaila
@@ -129,6 +155,25 @@ conda activate vaila
 # Install moviepy using pip
 echo "Installing moviepy..."
 pip install moviepy
+
+# Grant permissions to the Conda environment directory
+echo "Setting permissions for Conda environment..."
+VAILA_ENV_DIR="${CONDA_BASE}/envs/vaila"
+if [ -d "$VAILA_ENV_DIR" ]; then
+    chmod -R u+rwX "$VAILA_ENV_DIR"
+    echo "Permissions set for Conda environment directory."
+else
+    echo "Conda environment directory not found at $VAILA_ENV_DIR."
+fi
+
+# Check for missing dependencies
+echo "Verifying system dependencies..."
+for pkg in python3 pip git curl wget; do
+    if ! command -v $pkg &> /dev/null; then
+        echo "Installing $pkg..."
+        sudo apt install -y $pkg
+    fi
+done
 
 echo "vaila Launcher created and available in the Applications menu!"
 echo "Installation and setup completed."

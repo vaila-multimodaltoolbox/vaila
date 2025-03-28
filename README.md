@@ -29,7 +29,6 @@ The analysis of human movement is fundamental in both health and sports biomecha
 
 ## Table of Contents
 - [Introduction](#introduction)
-- [New Key Features in v12.Feb.2025](#new-key-features-in-v12feb2025)
 - [Description](#description)
 - [Installation and Setup](#installation-and-setup)
 - [Running the Application](#running-the-application)
@@ -53,38 +52,6 @@ The analysis of human movement is fundamental in both health and sports biomecha
 - **Heart Rate/ECG**
 - **MEG/EEG**
 - **Video Analysis**
-
-## New Key Features in v12.Feb.2025
-
-### 🚀 **1. Multimodal Analysis**
-- 🐭 **Animal Open Field Test**: Analyze rodent open field test data to calculate:
-  - 📏 Total distance traveled
-  - ⏱️ Time spent in zones
-  - 📊 Movement speed distribution
-- 🎥 **Markerless 2D/3D Tracking**: Enhanced support for markerless tracking videos.
-  - **MediaPipe**: Support for MediaPipe models.
-  - **YOLOv11**: Support for YOLOv11 models tracking.
-- 🦾 **Force Analysis**: Expanded tools for kinetic data analysis (e.g., force plate).
-  - **Jump Analysis**: Analyze jump data to calculate:
-    - 📏 Jump height
-    - 📏 Ground Reaction Force (GRF)
-    - 📏 Center of Pressure (COP)
-    ### **2. File Management**
-- Batch tools for renaming, copying, importing, exporting, and organizing files.
-- Tree generation and advanced file search based on patterns or extensions.
-
-### **3. Video Processing**
-- **Frame Extraction**: Convert videos to PNG frames.
-- **Compression**: Support for H.264 and H.265 (HEVC) video compression.
-- **Synchronization**: Align videos based on timestamps or flashes.
-- **Pixel Coordinates Extraction**: Retrieve pixel data for video-based analysis.
-- **Cut Videos**: Cut videos based on timestamps or flashes.
-- **Draw Box**: Draw a box on the video to mark the area of interest.
-
-### **4. Visualization Tools**
-- **2D/3D Plotting**: Enhanced visualization for biomechanical data.
-- **C3D and CSV Display**: Interactive tools for viewing and analyzing raw motion data.
----
 
 ## Description
 
@@ -127,6 +94,74 @@ cd vaila
 
 ## Installation Instructions
 
+
+---
+
+## 🔵 For Windows:
+
+## YouTube How to install *vailá* Windows 11
+[How to Install Vailá on Windows 11 | Step-by-Step Guide](https://youtu.be/w2iZfeD_j30)
+
+### **Important Notice Before Installation**
+
+> *vailá* values freedom and the goodwill to learn. If you are not the owner of your computer and do not have permission to perform the installation, we recommend doing it on your own computer. If you are prevented from installing software, it means you are not prepared to liberate yourself, make your modifications, and create, which is the philosophy of *vailá!*
+
+If you need any further adjustments or have additional requests, feel free to let me know!
+
+### 1. **Install Anaconda**
+   - Download and install [Anaconda](https://www.anaconda.com/download/success).
+   - REMEMBER install "Admin for all users" [Anaconda install](https://www.anaconda.com/docs/getting-started/anaconda/advanced-install/multi-user)
+   - Ensure that **Conda** is accessible from the terminal after installation.
+
+### 2. **Download *vailá***
+   - Use **Git** to clone the repository:
+     ```bash
+     git clone https://github.com/vaila-multimodaltoolbox/vaila
+     cd vaila
+     ```
+   - **Or download the zip file**:
+     - Go to [*vailá* GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila), download the `.zip` file, and extract the contents.
+     - **Included the Reminder**: Added a note in both the **Download *vailá*** section and the **Important Notes** section to remind users to rename the directory from `vaila-main` to `vaila` if they downloaded the zip file.
+
+### 3. **Run the Installation Script**
+   - Open **PowerShell** (with Anaconda initialized) or **Anaconda PowerShell Prompt**.
+   - Navigate to the directory where *vailá* was downloaded or extracted.
+   - Execute the installation script:
+     ```powershell
+     .\install_vaila_win.ps1
+     ```
+
+### 4. **Automatic Configuration**
+   - The script will:
+     - Set up the Conda environment using `yaml_for_conda_env/vaila_win.yaml`.
+     - Copy *vailá* program files to `C:\Users\<YourUser>\AppData\Local\vaila`.
+     - Initialize Conda for PowerShell.
+     - Install **PowerShell 7** using **winget**.
+     - Install **Chocolatey** package manager.
+     - Install **rsync** via Chocolatey for file synchronization.
+     - Install and configure **OpenSSH** for secure communication.
+     - Install **FFmpeg** and **Windows Terminal** using **winget**.
+     - Add a profile for *vailá* in **Windows Terminal** for quick access.
+     - Set appropriate permissions for the installation directories.
+     - Create shortcuts for launching *vailá*:
+       - **Desktop shortcut**: A shortcut will be created on your desktop.
+       - **Start Menu shortcut**: A shortcut will be added to the Windows Start Menu.
+
+### ⚠️ **Important Notes**
+   - Ensure **Conda** is accessible from the command line before running the script.
+   - The installation script requires administrative privileges to install system components.
+   - The installation script dynamically configures paths, so no manual adjustments are necessary for user-specific directories.
+
+### 5. **Launching *vailá***
+   - After installation, you can launch *vailá*:
+     - Using the Desktop shortcut.
+     - From the **Windows Start Menu** under *vailá*.
+     - From **Windows Terminal** via the pre-configured *vailá* profile.
+     - Manually, by running the following commands:
+       ```powershell
+       conda activate vaila
+       python vaila.py
+       ```
 ---
 
 ## 🟠 For Linux:
@@ -184,70 +219,7 @@ sudo chmod +x install_vaila_mac.sh
 - You may be prompted for your password when the script uses sudo to create the symbolic link.
 - Ensure that Conda is added to your PATH and accessible from the command line.
 
----
 
-## 🔵 For Windows:
-
-## YouTube How to install *vailá* Windows 11
-[How to Install Vailá on Windows 11 | Step-by-Step Guide](https://youtu.be/w2iZfeD_j30)
-
-### **Important Notice Before Installation**
-
-> *vailá* values freedom and the goodwill to learn. If you are not the owner of your computer and do not have permission to perform the installation, we recommend doing it on your own computer. If you are prevented from installing software, it means you are not prepared to liberate yourself, make your modifications, and create, which is the philosophy of *vailá!*
-
-If you need any further adjustments or have additional requests, feel free to let me know!
-
-### 1. **Install Anaconda**
-   - Download and install [Anaconda](https://www.anaconda.com/download/success).
-   - Ensure that **Conda** is accessible from the terminal after installation.
-
-### 2. **Download *vailá***
-   - Use **Git** to clone the repository:
-     ```bash
-     git clone https://github.com/vaila-multimodaltoolbox/vaila
-     cd vaila
-     ```
-   - **Or download the zip file**:
-     - Go to [*vailá* GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila), download the `.zip` file, and extract the contents.
-     - **Included the Reminder**: Added a note in both the **Download *vailá*** section and the **Important Notes** section to remind users to rename the directory from `vaila-main` to `vaila` if they downloaded the zip file.
-
-### 3. **Run the Installation Script**
-   - Open **PowerShell** (with Anaconda initialized) or **Anaconda PowerShell Prompt**.
-   - Navigate to the directory where *vailá* was downloaded or extracted.
-   - Execute the installation script:
-     ```powershell
-     .\install_vaila_win.ps1
-     ```
-   - **Or run the script with Admin privileges Policy**:
-     ```powershell
-     powershell -ExecutionPolicy Bypass -File .\install_vaila_win.ps1
-     ```
-
-### 4. **Automatic Configuration**
-   - The script will:
-     - Set up the Conda environment using `yaml_for_conda_env/vaila_win.yaml`.
-     - Copy *vailá* program files to `C:\Users\<YourUser>\AppData\Local\vaila`.
-     - Initialize Conda for PowerShell.
-     - Install **FFmpeg**, **Windows Terminal**, and **PowerShell 7** using **winget** (if not already installed).
-     - Add a profile for *vailá* in **Windows Terminal** for quick access.
-     - Create shortcuts for launching *vailá*:
-       - **Desktop shortcut**: A shortcut will be created on your desktop.
-       - **Start Menu shortcut**: A shortcut will be added to the Windows Start Menu.
-
-### ⚠️ **Important Notes**
-   - Ensure **Conda** is accessible from the command line before running the script.
-   - The installation script dynamically configures paths, so no manual adjustments are necessary for user-specific directories.
-
-### 5. **Launching *vailá***
-   - After installation, you can launch *vailá*:
-     - Using the Desktop shortcut.
-     - From the **Windows Start Menu** under *vailá*.
-     - From **Windows Terminal** via the pre-configured *vailá* profile.
-     - Manually, by running the following commands:
-       ```powershell
-       conda activate vaila
-       python vaila.py
-       ```
 ---
 
 ## Running the Application
