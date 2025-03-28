@@ -117,7 +117,7 @@ $psInstalled = Get-Command pwsh -ErrorAction SilentlyContinue
 If ($psInstalled) {
     Write-Output "PowerShell 7 is already installed. Upgrading..."
     Try {
-        winget upgrade --id Microsoft.Powershell -e --source winget --silent
+        winget upgrade --id Microsoft.PowerShell -e --source winget --silent
         Write-Output "PowerShell 7 upgraded successfully."
     } Catch {
         Write-Warning "Failed to upgrade PowerShell 7."
@@ -125,11 +125,31 @@ If ($psInstalled) {
 } Else {
     Write-Output "PowerShell 7 is not installed. Installing..."
     Try {
-        winget install --id Microsoft.Powershell -e --source winget --silent
+        winget install --id Microsoft.PowerShell -e --source winget --silent
         Write-Output "PowerShell 7 installed successfully."
     } Catch {
         Write-Warning "Failed to install PowerShell 7 via winget."
     }
+}
+
+# Install Chocolatey
+Write-Output "Installing Chocolatey package manager..."
+Try {
+    Set-ExecutionPolicy Bypass -Scope Process -Force
+    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+    Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+    Write-Output "Chocolatey installed successfully."
+} Catch {
+    Write-Warning "Failed to install Chocolatey. Error: $_"
+}
+
+# Install rsync via Chocolatey
+Write-Output "Installing rsync via Chocolatey..."
+Try {
+    choco install rsync -y
+    Write-Output "rsync installed successfully via Chocolatey."
+} Catch {
+    Write-Warning "Failed to install rsync via Chocolatey. Error: $_"
 }
 
 # 2. FFmpeg
@@ -205,20 +225,29 @@ If (Test-Path $wtPath) {
     Write-Output "'vaila' profile added to Windows Terminal successfully."
 }
 
-# Grant full permissions to the entire mediapipe folder in the 'vaila' environment
-$mediapipeBaseDir = "$condaPath\envs\vaila\Lib\site-packages\mediapipe"
-Write-Output "Adjusting permissions on folder '$mediapipeBaseDir' to allow write access for non-administrative users..."
+# Grant full permissions to the vaila directory
+Write-Output "Adjusting permissions on vaila directory '$vailaProgramPath' to allow read, write, and execute access..."
+Try {
+    # Grant full control to the folder and all its files/subfolders for the 'Users' group
+    Start-Process "icacls.exe" -ArgumentList "`"$vailaProgramPath`" /grant Users:(OI)(CI)F /T" -Wait -NoNewWindow
+    Write-Output "Permissions have been successfully adjusted for '$vailaProgramPath'."
+} Catch {
+    Write-Warning "Failed to adjust permissions for '$vailaProgramPath'. Details: $_"
+}
 
-If (Test-Path $mediapipeBaseDir) {
+# Grant full permissions to the vaila Anaconda environment
+$vailaEnvDir = "C:\ProgramData\anaconda3\envs\vaila"
+Write-Output "Adjusting permissions on Anaconda environment directory '$vailaEnvDir' to allow read, write, and execute access..."
+If (Test-Path $vailaEnvDir) {
     Try {
         # Grant full control to the folder and all its files/subfolders for the 'Users' group
-        Start-Process "icacls.exe" -ArgumentList "`"$mediapipeBaseDir`" /grant Users:(OI)(CI)F /T" -Wait -NoNewWindow
-        Write-Output "Permissions have been successfully adjusted for '$mediapipeBaseDir'."
+        Start-Process "icacls.exe" -ArgumentList "`"$vailaEnvDir`" /grant Users:(OI)(CI)F /T" -Wait -NoNewWindow
+        Write-Output "Permissions have been successfully adjusted for '$vailaEnvDir'."
     } Catch {
-        Write-Warning "Failed to adjust permissions for '$mediapipeBaseDir'. Details: $_"
+        Write-Warning "Failed to adjust permissions for '$vailaEnvDir'. Details: $_"
     }
 } Else {
-    Write-Warning "Directory '$mediapipeBaseDir' was not found. No permissions were changed."
+    Write-Warning "Directory '$vailaEnvDir' was not found. No permissions were changed."
 }
 
 # Create a Desktop shortcut for vaila
@@ -253,6 +282,53 @@ $startMenuShortcut.WorkingDirectory = "$vailaProgramPath"
 $startMenuShortcut.Save()
 
 Write-Output "Start Menu shortcut for 'vaila' created at $startMenuShortcutPath."
+
+# Install and enable OpenSSH Client and Server
+Write-Output "Checking if OpenSSH is installed..."
+$sshClientInstalled = Get-WindowsCapability -Online | Where-Object Name -like 'OpenSSH.Client*' | Select-Object -ExpandProperty State
+$sshServerInstalled = Get-WindowsCapability -Online | Where-Object Name -like 'OpenSSH.Server*' | Select-Object -ExpandProperty State
+
+# Install OpenSSH Client if not already installed
+if ($sshClientInstalled -ne "Installed") {
+    Write-Output "Installing OpenSSH Client..."
+    Try {
+        Add-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0
+        Write-Output "OpenSSH Client installed successfully."
+    } Catch {
+        Write-Warning "Failed to install OpenSSH Client. Error: $_"
+    }
+} else {
+    Write-Output "OpenSSH Client is already installed."
+}
+
+# Install OpenSSH Server if not already installed
+if ($sshServerInstalled -ne "Installed") {
+    Write-Output "Installing OpenSSH Server..."
+    Try {
+        Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0
+        Write-Output "OpenSSH Server installed successfully."
+    } Catch {
+        Write-Warning "Failed to install OpenSSH Server. Error: $_"
+    }
+}
+
+# Configure and start OpenSSH Server
+if ((Get-WindowsCapability -Online | Where-Object Name -like 'OpenSSH.Server*' | Select-Object -ExpandProperty State) -eq "Installed") {
+    Write-Output "Configuring OpenSSH Server..."
+    Try {
+        # Start the service
+        Start-Service sshd
+        # Set it to start automatically
+        Set-Service -Name sshd -StartupType 'Automatic'
+        # Confirm the Firewall rule is configured
+        if (!(Get-NetFirewallRule -Name "OpenSSH-Server-In-TCP" -ErrorAction SilentlyContinue | Select-Object Name, Enabled)) {
+            New-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -DisplayName 'OpenSSH Server (sshd)' -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 22
+        }
+        Write-Output "OpenSSH Server configured and started successfully."
+    } Catch {
+        Write-Warning "Failed to configure OpenSSH Server. Error: $_"
+    }
+}
 
 Write-Output "Installation and configuration of 'vaila' completed successfully!"
 
