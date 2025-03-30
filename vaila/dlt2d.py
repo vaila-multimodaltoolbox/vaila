@@ -156,15 +156,27 @@ def filter_and_shape_coordinates(coords):
 
     Returns:
     np.array: Filtered and reshaped coordinates.
+    tuple: Indices of valid coordinate pairs.
     """
-    filtered_coords = [row for row in coords if not np.isnan(row).any()]
-    return np.array(filtered_coords).reshape(-1, 2)
+    valid_pairs = []
+    filtered_coords = []
+    
+    # Process coordinates in pairs (x,y)
+    for i in range(0, len(coords), 2):
+        if i+1 < len(coords) and not np.isnan(coords[i]) and not np.isnan(coords[i+1]):
+            filtered_coords.append([coords[i], coords[i+1]])
+            valid_pairs.append(i // 2)  # Store the index of the valid pair
+    
+    return np.array(filtered_coords), valid_pairs
 
 
 def process_files(pixel_file, real_file):
     """
     Process the coordinate files to calculate the DLT parameters.
-
+    Supports two scenarios:
+    1. Single reference line in .ref2d file - applies to all frames
+    2. Multiple reference lines - each line corresponds to a frame in the pixel file
+    
     Args:
     pixel_file (str): Path to the pixel coordinate file.
     real_file (str): Path to the real-world coordinate file.
@@ -172,26 +184,88 @@ def process_files(pixel_file, real_file):
     Returns:
     list: List of DLT parameters for each frame.
     """
-    pixel_coords = read_coordinates(pixel_file, usecols=lambda x: x != "frame")
-    real_coords = read_coordinates(real_file, usecols=lambda x: x != "frame")
-
-    if pixel_coords.shape[1] != real_coords.shape[1]:
-        print("The number of coordinate pairs in the two files must match.")
+    # Read the full dataframes
+    pixel_df = pd.read_csv(pixel_file)
+    real_df = pd.read_csv(real_file)
+    
+    # Ensure both files have the same column structure
+    if len(pixel_df.columns) != len(real_df.columns):
+        print("The number of columns in the two files must match.")
         return
-
+    
+    # Extract coordinate column names (excluding 'frame')
+    coord_cols = [col for col in pixel_df.columns if col != 'frame']
+    
+    # Check if we're using a single reference row for all frames
+    single_ref_mode = len(real_df) == 1
+    if single_ref_mode:
+        print("Single reference mode: Using the same reference coordinates for all frames")
+        # Store the single reference row for repeated use
+        ref_row = real_df.iloc[0]
+    elif len(real_df) != len(pixel_df):
+        print(f"Warning: Pixel file has {len(pixel_df)} frames but reference file has {len(real_df)} frames.")
+        print("Files should have either the same number of frames or reference file should have exactly 1 frame.")
+        return
+    
     dlt_params = []
-    for i in range(len(pixel_coords)):
-        if not np.isnan(pixel_coords[i]).any() and not np.isnan(real_coords[i]).any():
-            L = filter_and_shape_coordinates(pixel_coords[i])
-            F = filter_and_shape_coordinates(real_coords[i])
-            if F.shape[0] == L.shape[0] and F.shape[0] >= 4:
-                print(f"Frame {i}: F = {F}, L = {L}")
-                dlt_params.append((i, dlt2d(F, L)))
-            else:
-                dlt_params.append((i, [np.nan] * 8))
+    
+    # Process each frame from the pixel file
+    for i in range(len(pixel_df)):
+        frame = pixel_df.iloc[i]['frame']
+        print(f"Processing frame {frame}...")
+        
+        # Get pixel coordinates for this frame
+        pixel_row = pixel_df.iloc[i]
+        
+        # Get reference coordinates - either from the same row or from the single reference row
+        if single_ref_mode:
+            real_row = ref_row
         else:
-            dlt_params.append((i, [np.nan] * 8))
-
+            real_row = real_df.iloc[i]
+        
+        # Filter coordinates to keep only complete pairs
+        L_coords = []
+        F_coords = []
+        
+        # Process coordinates in pairs (x,y)
+        for j in range(0, len(coord_cols), 2):
+            if j+1 < len(coord_cols):  # Ensure we have a complete pair
+                point_name = coord_cols[j].split('_')[0]  # Extract point name (e.g., p1 from p1_x)
+                px_x = pixel_row[coord_cols[j]]
+                px_y = pixel_row[coord_cols[j+1]]
+                real_x = real_row[coord_cols[j]]
+                real_y = real_row[coord_cols[j+1]]
+                
+                # Only use pairs where both pixel and real coordinates are valid
+                if (not pd.isna(px_x) and not pd.isna(px_y) and 
+                    not pd.isna(real_x) and not pd.isna(real_y)):
+                    L_coords.append([px_x, px_y])
+                    F_coords.append([real_x, real_y])
+                    print(f"  Using point {point_name} for frame {frame}")
+                else:
+                    if single_ref_mode:
+                        note = "(missing in pixel or reference data)"
+                    else:
+                        note = "(missing in frame data)"
+                    print(f"  Skipping point {point_name} for frame {frame} {note}")
+        
+        # Convert to numpy arrays
+        L = np.array(L_coords)
+        F = np.array(F_coords)
+        
+        # Calculate DLT parameters if we have enough points
+        if len(L) >= 4 and len(F) >= 4:
+            print(f"  Frame {frame}: Using {len(L)} valid coordinate pairs")
+            try:
+                params = dlt2d(F, L)
+                dlt_params.append((frame, params))
+            except Exception as e:
+                print(f"  Error calculating DLT for frame {frame}: {e}")
+                dlt_params.append((frame, [np.nan] * 8))
+        else:
+            print(f"  Frame {frame}: Not enough valid coordinate pairs ({len(L)}). Need at least 4.")
+            dlt_params.append((frame, [np.nan] * 8))
+    
     return dlt_params
 
 
