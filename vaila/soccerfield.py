@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 20 March 2025
-Updated: 21 March 2025
-Version: 0.0.2
+Updated: 30 March 2025
+Version: 0.0.3
 
 Description:
     This script draws a soccer field based on the coordinates in soccerfield_ref3d.csv.
@@ -952,6 +952,119 @@ def run_soccerfield():
             import traceback
             traceback.print_exc()
     
+    def show_help_dialog():
+        """Show a help dialog with instructions on how to use the application"""
+        help_window = tk.Toplevel(root)
+        help_window.title("Soccer Field Visualization - Help")
+        help_window.geometry("750x650")  # Increased width from 700 to 750
+        
+        # Create a frame with scrollbar
+        main_frame = Frame(help_window)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # Add scrollbar
+        scrollbar = tk.Scrollbar(main_frame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Create canvas for scrolling
+        canvas = tk.Canvas(main_frame, yscrollcommand=scrollbar.set)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        scrollbar.config(command=canvas.yview)
+        
+        # Create frame for content
+        content_frame = Frame(canvas)
+        canvas.create_window((0, 0), window=content_frame, anchor=tk.NW)
+        
+        # Add help text content
+        tk.Label(content_frame, text="Soccer Field Visualization", 
+                font=("Arial", 16, "bold")).pack(anchor=tk.W, pady=(0, 10))
+        
+        # Introduction
+        tk.Label(content_frame, text="This tool allows you to visualize a soccer field and create or load marker paths.", 
+                font=("Arial", 10), justify=tk.LEFT, wraplength=650).pack(anchor=tk.W, pady=(0, 10))
+        
+        # Section: Buttons
+        tk.Label(content_frame, text="Button Functions:", 
+                font=("Arial", 12, "bold")).pack(anchor=tk.W, pady=(10, 5))
+        
+        button_help = [
+            ("Load Default Field", "Opens the standard soccer field visualization."),
+            ("Load Custom Field", "Allows you to select a custom field definition file (.csv)."),
+            ("Load Markers CSV", "Loads and displays marker paths from a CSV file."),
+            ("Hide/Show Reference Points", "Toggles field reference points visibility."),
+            ("Select Markers", "Choose which markers to display when multiple markers are loaded."),
+            ("Create/Disable Manual Markers", "Enables or disables manual marker creation mode."),
+            ("Clear All Markers", "Removes all manually created markers from the field.")
+        ]
+        
+        for button, desc in button_help:
+            frame = Frame(content_frame)
+            frame.pack(fill=tk.X, pady=2, anchor=tk.W)
+            tk.Label(frame, text=f"• {button}: ", font=("Arial", 10, "bold"), 
+                    width=30, anchor=tk.W).pack(side=tk.LEFT)  # Increased width from 25 to 30
+            tk.Label(frame, text=desc, font=("Arial", 10), 
+                    justify=tk.LEFT, wraplength=430).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        # Section: Creating markers
+        tk.Label(content_frame, text="Creating Markers:", 
+                font=("Arial", 12, "bold")).pack(anchor=tk.W, pady=(20, 5))
+        
+        marker_help = [
+            ("1. Enable marker mode by clicking 'Create Manual Markers'"),
+            ("2. Left-click on the field to place a marker"),
+            ("3. Hold Shift + left-click to create a marker with the next number"),
+            ("4. Right-click on a marker to delete it"),
+            ("5. Use Ctrl+S to save all markers to a CSV file"),
+            ("6. Click 'Clear All Markers' to remove all markers")
+        ]
+        
+        for step in marker_help:
+            tk.Label(content_frame, text=step, font=("Arial", 10), 
+                    justify=tk.LEFT).pack(anchor=tk.W, pady=2)
+        
+        # Section: Toolbar
+        tk.Label(content_frame, text="Field Navigation Toolbar:", 
+                font=("Arial", 12, "bold")).pack(anchor=tk.W, pady=(20, 5))
+        
+        toolbar_help = [
+            ("Home", "Reset the view to the original zoom level"),
+            ("Pan", "Click and drag to move around the field"),
+            ("Zoom", "Zoom in/out of a rectangular region"),
+            ("Save", "Save the current field view as a PNG image")
+        ]
+        
+        for tool, desc in toolbar_help:
+            frame = Frame(content_frame)
+            frame.pack(fill=tk.X, pady=2, anchor=tk.W)
+            tk.Label(frame, text=f"• {tool}: ", font=("Arial", 10, "bold"), 
+                    width=15, anchor=tk.W).pack(side=tk.LEFT)  # Increased width from 10 to 15
+            tk.Label(frame, text=desc, font=("Arial", 10), 
+                    justify=tk.LEFT, wraplength=500).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        # Tips and keyboard shortcuts
+        tk.Label(content_frame, text="Tips & Shortcuts:", 
+                font=("Arial", 12, "bold")).pack(anchor=tk.W, pady=(20, 5))
+        
+        tips = [
+            "• When saving manually created markers (Ctrl+S), the CSV will be saved in the same location and with the same name as your PNG file.",
+            "• For precise marker placement, you can zoom in using the navigation toolbar.",
+            "• When loading a markers CSV, you can select which markers to display using the 'Select Markers' button.",
+            "• The field size follows official FIFA regulations (105m × 68m)."
+        ]
+        
+        for tip in tips:
+            tk.Label(content_frame, text=tip, font=("Arial", 10), 
+                    justify=tk.LEFT, wraplength=650).pack(anchor=tk.W, pady=5)
+        
+        # Update canvas scroll region
+        content_frame.update_idletasks()
+        canvas.config(scrollregion=canvas.bbox(tk.ALL))
+        
+        # Add a Close button at the bottom
+        tk.Button(help_window, text="Close", command=help_window.destroy,
+                 bg="white", fg="black", padx=20, pady=5).pack(pady=10)
+    
     # Add buttons
     Button(button_frame, text="Load Default Field", command=load_field, 
            bg="white", fg="black", padx=10, pady=5).pack(side=tk.LEFT, padx=5, pady=5)
@@ -979,6 +1092,10 @@ def run_soccerfield():
     
     # Add Clear All button
     Button(button_frame, text="Clear All Markers", command=lambda: clear_all_markers(),
+           bg="white", fg="black", padx=10, pady=5).pack(side=tk.LEFT, padx=5, pady=5)
+    
+    # Add Help button
+    Button(button_frame, text="Help", command=lambda: show_help_dialog(),
            bg="white", fg="black", padx=10, pady=5).pack(side=tk.LEFT, padx=5, pady=5)
     
     # Frame for plotting
