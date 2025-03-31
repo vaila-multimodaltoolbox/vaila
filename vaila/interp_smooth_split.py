@@ -771,6 +771,35 @@ def generate_report(dest_dir, config, processed_files):
     return report_path
 
 
+def detect_float_format(original_path):
+    """Detecta o formato de float com base no número máximo de casas decimais do arquivo original.
+    
+    Args:
+        original_path: Caminho do arquivo CSV original
+        
+    Returns:
+        str: String de formato para float (ex: '%.6f')
+    """
+    try:
+        original_df = pd.read_csv(original_path)
+        max_decimals = 0
+        for col in original_df.select_dtypes(include=[np.number]).columns:
+            # Considere somente valores não-nulos
+            valid_values = original_df[col].dropna().astype(str)
+            if not valid_values.empty:
+                # Extrai a parte decimal usando expressão regular
+                decimals = valid_values.str.extract(r'\.(\d+)', expand=False)
+                if not decimals.empty:
+                    # Calcula o número máximo de dígitos encontrados na parte decimal
+                    col_max = decimals.dropna().str.len().max()
+                    if pd.notna(col_max) and col_max > max_decimals:
+                        max_decimals = col_max
+        # Se encontrou casas decimais, constrói o formato; caso contrário, usa 6
+        return f'%.{int(max_decimals)}f' if max_decimals > 0 else '%.6f'
+    except Exception as e:
+        print(f"Erro ao detectar o formato de float: {str(e)}")
+        return '%.6f'
+
 def process_file(file_path, dest_dir, config):
     try:
         # Initialize dictionary with file information
@@ -1006,9 +1035,13 @@ def process_file(file_path, dest_dir, config):
         df = df[df[first_col].between(min_frame, max_frame)].reset_index(drop=True)
         print(f"Final shape after removing padding: {df.shape}")
         
-        # Salvar o DataFrame processado
+        # Detecta o formato de float com base no arquivo original
+        float_format = detect_float_format(file_info['original_path'])
+        print(f"Using float format: {float_format}")
+        
+        # Salvar o DataFrame processado utilizando o float_format detectado
         print(f"\nSaving processed file to: {output_path}")
-        df.to_csv(output_path, index=False)
+        df.to_csv(output_path, index=False, float_format=float_format)
         print(f"File saved successfully!")
         
         return file_info
