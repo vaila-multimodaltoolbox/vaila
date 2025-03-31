@@ -209,16 +209,16 @@ def apply_temporal_filter(landmarks_history, window=5):
     """Aplica filtro Savitzky-Golay para suavizar movimento dos landmarks"""
     if len(landmarks_history) < window:
         return landmarks_history[-1]
-    
+
     # Certifique-se de que window é ímpar
     if window % 2 == 0:
         window -= 1
-    
+
     filtered_landmarks = []
     for i in range(len(landmarks_history[0])):
         # Extrair histórico para este landmark
         landmark_data = [frame[i] for frame in landmarks_history]
-        
+
         # Filtrar cada dimensão separadamente
         filtered_coords = []
         for dim in range(3):  # x, y, z
@@ -231,20 +231,20 @@ def apply_temporal_filter(landmarks_history, window=5):
                     filtered_coords.append(landmark_data[-1][dim])
             else:
                 filtered_coords.append(landmark_data[-1][dim])
-        
+
         filtered_landmarks.append(filtered_coords)
-    
+
     return filtered_landmarks
 
 
 def estimate_occluded_landmarks(landmarks, landmarks_history=None):
     """Estima posições de landmarks ocultos com base em restrições anatômicas"""
     estimated = landmarks.copy()
-    
+
     # Só prosseguir se temos alguns landmarks visíveis
     if all(np.isnan(lm[0]) for lm in landmarks):
         return landmarks
-    
+
     # 1. Regras de simetria bilateral
     # Se um lado estiver visível mas o outro não, usar simetria
     pairs = [
@@ -255,11 +255,11 @@ def estimate_occluded_landmarks(landmarks, landmarks_history=None):
         (25, 26),  # joelhos
         (27, 28),  # tornozelos
     ]
-    
+
     for left_idx, right_idx in pairs:
         left_visible = not np.isnan(landmarks[left_idx][0])
         right_visible = not np.isnan(landmarks[right_idx][0])
-        
+
         if left_visible and not right_visible:
             # Simetria espelhada no eixo X (invertendo o centro)
             if not np.isnan(landmarks[0][0]):  # Se o nariz estiver visível
@@ -268,7 +268,7 @@ def estimate_occluded_landmarks(landmarks, landmarks_history=None):
                 estimated[right_idx][0] = center_x - offset_x
                 estimated[right_idx][1] = landmarks[left_idx][1]
                 estimated[right_idx][2] = landmarks[left_idx][2]
-        
+
         elif right_visible and not left_visible:
             # Mesma lógica, mas para o outro lado
             if not np.isnan(landmarks[0][0]):
@@ -277,21 +277,29 @@ def estimate_occluded_landmarks(landmarks, landmarks_history=None):
                 estimated[left_idx][0] = center_x - offset_x
                 estimated[left_idx][1] = landmarks[right_idx][1]
                 estimated[left_idx][2] = landmarks[right_idx][2]
-    
+
     # 2. Regras de continuidade de membros
     # Se ombro e pulso estiverem visíveis mas cotovelo não, estimar posição do cotovelo
-    if not np.isnan(landmarks[11][0]) and not np.isnan(landmarks[15][0]) and np.isnan(landmarks[13][0]):
+    if (
+        not np.isnan(landmarks[11][0])
+        and not np.isnan(landmarks[15][0])
+        and np.isnan(landmarks[13][0])
+    ):
         # Cotovelo esquerdo: interpolação simples entre ombro e pulso
         estimated[13][0] = (landmarks[11][0] + landmarks[15][0]) / 2
         estimated[13][1] = (landmarks[11][1] + landmarks[15][1]) / 2
         estimated[13][2] = (landmarks[11][2] + landmarks[15][2]) / 2
-    
-    if not np.isnan(landmarks[12][0]) and not np.isnan(landmarks[16][0]) and np.isnan(landmarks[14][0]):
+
+    if (
+        not np.isnan(landmarks[12][0])
+        and not np.isnan(landmarks[16][0])
+        and np.isnan(landmarks[14][0])
+    ):
         # Cotovelo direito: interpolação simples
         estimated[14][0] = (landmarks[12][0] + landmarks[16][0]) / 2
         estimated[14][1] = (landmarks[12][1] + landmarks[16][1]) / 2
         estimated[14][2] = (landmarks[12][2] + landmarks[16][2]) / 2
-    
+
     # 3. Usar histórico de landmarks se disponível
     if landmarks_history and len(landmarks_history) > 0:
         for i, landmark in enumerate(estimated):
@@ -301,7 +309,7 @@ def estimate_occluded_landmarks(landmarks, landmarks_history=None):
                     if not np.isnan(past_frame[i][0]):
                         estimated[i] = past_frame[i]
                         break
-    
+
     return estimated
 
 
@@ -363,31 +371,36 @@ def process_video(video_path, output_dir, pose_config):
         # Mostrar progresso
         if frame_count % 30 == 0:
             progress = (frame_count / total_frames) * 100
-            print(f"\rProcessando frame {frame_count}/{total_frames} ({progress:.1f}%)", end="")
+            print(
+                f"\rProcessando frame {frame_count}/{total_frames} ({progress:.1f}%)",
+                end="",
+            )
 
         # Processar frame com MediaPipe
         results = pose.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-        
+
         if results.pose_landmarks:
             landmarks = [
                 [landmark.x, landmark.y, landmark.z]
                 for landmark in results.pose_landmarks.landmark
             ]
-            
+
             # Estimar landmarks ocultos
             if pose_config.get("estimate_occluded", False):
-                landmarks = estimate_occluded_landmarks(landmarks, list(landmarks_history))
-            
+                landmarks = estimate_occluded_landmarks(
+                    landmarks, list(landmarks_history)
+                )
+
             # Adicionar ao histórico
             landmarks_history.append(landmarks)
-            
+
             # Aplicar filtragem temporal
             if pose_config.get("apply_filtering", False) and len(landmarks_history) > 3:
                 landmarks = apply_temporal_filter(list(landmarks_history))
-            
+
             # Guardar landmarks processados
             normalized_landmarks_list.append(landmarks)
-            
+
             pixel_landmarks = [
                 [int(landmark[0] * width), int(landmark[1] * height), landmark[2]]
                 for landmark in landmarks
@@ -408,7 +421,9 @@ def process_video(video_path, output_dir, pose_config):
     pose.close()
 
     # Salvar CSVs com landmarks processados
-    with open(output_file_path, "w") as f_norm, open(output_pixel_file_path, "w") as f_pixel:
+    with open(output_file_path, "w") as f_norm, open(
+        output_pixel_file_path, "w"
+    ) as f_pixel:
         f_norm.write(",".join(headers) + "\n")
         f_pixel.write(",".join(headers) + "\n")
 
@@ -416,14 +431,20 @@ def process_video(video_path, output_dir, pose_config):
             landmarks_norm = normalized_landmarks_list[frame_idx]
             landmarks_pixel = pixel_landmarks_list[frame_idx]
 
-            flat_landmarks_norm = [coord for landmark in landmarks_norm for coord in landmark]
-            flat_landmarks_pixel = [coord for landmark in landmarks_pixel for coord in landmark]
+            flat_landmarks_norm = [
+                coord for landmark in landmarks_norm for coord in landmark
+            ]
+            flat_landmarks_pixel = [
+                coord for landmark in landmarks_pixel for coord in landmark
+            ]
 
             landmarks_norm_str = ",".join(
-                "NaN" if np.isnan(value) else f"{value:.6f}" for value in flat_landmarks_norm
+                "NaN" if np.isnan(value) else f"{value:.6f}"
+                for value in flat_landmarks_norm
             )
             landmarks_pixel_str = ",".join(
-                "NaN" if np.isnan(value) else str(value) for value in flat_landmarks_pixel
+                "NaN" if np.isnan(value) else str(value)
+                for value in flat_landmarks_pixel
             )
 
             f_norm.write(f"{frame_idx}," + landmarks_norm_str + "\n")
@@ -435,51 +456,57 @@ def process_video(video_path, output_dir, pose_config):
     cap = cv2.VideoCapture(str(video_path))
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     out = cv2.VideoWriter(str(output_video_path), fourcc, fps, (width, height))
-    
+
     mp_drawing = mp.solutions.drawing_utils
     mp_pose = mp.solutions.pose
-    
-    drawing_spec = mp_drawing.DrawingSpec(color=(0, 255, 0), thickness=2, circle_radius=2)
+
+    drawing_spec = mp_drawing.DrawingSpec(
+        color=(0, 255, 0), thickness=2, circle_radius=2
+    )
     connection_spec = mp_drawing.DrawingSpec(color=(255, 0, 0), thickness=2)
-    
+
     frame_idx = 0
     while cap.isOpened():
         success, frame = cap.read()
         if not success:
             break
-            
+
         if frame_idx % 30 == 0:
             progress = (frame_idx / total_frames) * 100
-            print(f"\rGerando vídeo {frame_idx}/{total_frames} ({progress:.1f}%)", end="")
-            
+            print(
+                f"\rGerando vídeo {frame_idx}/{total_frames} ({progress:.1f}%)", end=""
+            )
+
         # Obter landmarks processados para este frame
         if frame_idx < len(pixel_landmarks_list):
             landmarks_px = pixel_landmarks_list[frame_idx]
-            
+
             # Desenhar landmarks usando os dados processados
             if not all(np.isnan(lm[0]) for lm in landmarks_px):
                 # Criar um objeto PoseLandmarkList para desenho
                 landmark_proto = landmark_pb2.NormalizedLandmarkList()
-                
+
                 for i, lm in enumerate(landmarks_px):
                     landmark = landmark_proto.landmark.add()
                     landmark.x = lm[0] / width  # Normalizar para 0-1
                     landmark.y = lm[1] / height  # Normalizar para 0-1
                     landmark.z = lm[2] if not np.isnan(lm[2]) else 0
-                    landmark.visibility = 1.0  # Visibilidade máxima para todos os pontos processados
-                
+                    landmark.visibility = (
+                        1.0  # Visibilidade máxima para todos os pontos processados
+                    )
+
                 # Desenhar landmarks
                 mp_drawing.draw_landmarks(
                     frame,
                     landmark_proto,
                     mp_pose.POSE_CONNECTIONS,
                     landmark_drawing_spec=drawing_spec,
-                    connection_drawing_spec=connection_spec
+                    connection_drawing_spec=connection_spec,
                 )
-        
+
         out.write(frame)
         frame_idx += 1
-        
+
     # Fechar recursos
     cap.release()
     out.release()
@@ -487,7 +514,7 @@ def process_video(video_path, output_dir, pose_config):
     # Criar log
     end_time = time.time()
     execution_time = end_time - start_time
-    
+
     log_info_path = output_dir / "log_info.txt"
     with open(log_info_path, "w") as log_file:
         log_file.write(f"Video Path: {video_path}\n")
@@ -498,7 +525,9 @@ def process_video(video_path, output_dir, pose_config):
         log_file.write(f"Execution Time: {execution_time} seconds\n")
         log_file.write(f"MediaPipe Pose Configuration: {pose_config}\n")
         if frames_with_missing_data:
-            log_file.write(f"Frames with missing data: {len(frames_with_missing_data)}\n")
+            log_file.write(
+                f"Frames with missing data: {len(frames_with_missing_data)}\n"
+            )
         else:
             log_file.write("No frames with missing data.\n")
 
