@@ -221,7 +221,7 @@ def play_video_with_cuts(video_path):
             "- Click 'Help': Show this dialog",
             "- Drag window edges: Resize window",
             "",
-            "Press any key to close this help"
+            "Press any key to close this help",
         ]
 
         # Create semi-transparent overlay
@@ -615,14 +615,14 @@ def cleanup_resources():
         cap.release()
     except:
         pass
-    
+
     # Close pygame display but don't fully quit pygame
     if pygame.get_init():
         pygame.display.quit()
-    
+
     # Don't create a new Tkinter root window
     # This was causing problems by creating new instances
-    
+
     # Don't force garbage collection - this can cause lockups
     # Let Python handle memory cleanup naturally
 
