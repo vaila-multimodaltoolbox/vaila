@@ -521,8 +521,11 @@ def batch_resize_videos():
     scale_entry.pack(anchor=tk.W, pady=5)
 
     # Texto explicativo
-    Label(scale_frame, text="Valid values: 2, 3, 4, 5, 6, 7, 8, etc. (Higher values may cause memory issues)", 
-          font=("Arial", 8, "italic")).pack(anchor=tk.W)
+    Label(
+        scale_frame,
+        text="Valid values: 2, 3, 4, 5, 6, 7, 8, etc. (Higher values may cause memory issues)",
+        font=("Arial", 8, "italic"),
+    ).pack(anchor=tk.W)
 
     # Help text frame
     help_frame = Frame(root, padx=10, pady=5)
@@ -549,7 +552,8 @@ converting MediaPipe coordinates back to the original video dimensions."""
         command=lambda: start_batch_processing(
             input_dir_var.get(),
             output_dir_var.get(),
-            validate_scale_factor(scale_entry.get(), status_var) or 2,  # Validar e usar 2 como fallback
+            validate_scale_factor(scale_entry.get(), status_var)
+            or 2,  # Validar e usar 2 como fallback
             False,  # No ROI
             status_var,
             root,
@@ -566,11 +570,11 @@ converting MediaPipe coordinates back to the original video dimensions."""
         buttons_frame,
         text="Crop and Resize",
         command=lambda: crop_and_resize_single(
-            input_dir_var.get(), 
-            output_dir_var.get(), 
+            input_dir_var.get(),
+            output_dir_var.get(),
             int(scale_entry.get()),  # Usar valor da caixa de texto
-            status_var, 
-            root
+            status_var,
+            root,
         ),
         bg="#2196F3",
         fg="white",
