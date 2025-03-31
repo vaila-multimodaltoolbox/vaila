@@ -68,10 +68,10 @@ Key Features:
 
 11. **Distort Video** (New Feature):
     - Provides a script to distort videos, including adding noise, blurring,
-      and other effects.    
+      and other effects.
 
 12. **Get Pixel Coordinates** (New Feature):
-    - Provides a script to get the pixel coordinates of a video.    
+    - Provides a script to get the pixel coordinates of a video.
 
 
 Usage:
@@ -122,7 +122,6 @@ try:
     from vaila import (
         cluster_analysis,
         imu_analysis,
-        markerless_3D_analysis,
         mocap_analysis,
         forceplate_analysis,
         convert_c3d_to_csv,
@@ -205,7 +204,7 @@ B2_r2_c4 - GNSS/GPS       B2_r2_c5 - MEG/EEG
 B3_r3_c1 - HR/ECG         B3_r3_c2 - Markerless_MP_Yolo  B3_r3_c3 - vailá_and_jump
 B3_r3_c4 - Cube2D         B3_r3_c5 - Animal Open Field 
 B3_r4_c1 - Tracker        B3_r4_c2 - ML Walkway       B3_r4_c3 - Markerless Hands
-B3_r4_c4 - vailá          B3_r4_c5 - vailá
+B3_r4_c4 - MP Angles          B3_r4_c5 - vailá
 
 ============================== Tools Available (Frame C) ===================
 -> C_A: Data Files
@@ -730,10 +729,10 @@ class Vaila(tk.Tk):
             command=self.markerless_hands,
         )
 
-        # B4_r4_c4 - vailá
-        vaila_btn6 = tk.Button(
+        # B4_r4_c4 - MP Angles
+        mpangles_btn = tk.Button(
             row4_frame,
-            text="vailá",
+            text="MP Angles",
             width=button_width,
             command=self.show_vaila_message,
         )
@@ -750,7 +749,7 @@ class Vaila(tk.Tk):
         tracker_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         mlwalkway_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         mphands_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
-        vaila_btn6.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        mpangles_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         vaila_btn7.pack(side="left", expand=True, fill="x", padx=2, pady=2)
 
         ## VVVVVVVVVVVVVVV TOOLS BUTTONS VVVVVVVVVVVVVVVV
@@ -1336,48 +1335,62 @@ class Vaila(tk.Tk):
         """Runs the Markerless 2D Analysis module."""
         import tkinter as tk
         from tkinter import messagebox, simpledialog
-        
+
         root = tk.Tk()
         root.withdraw()
-        
+
         # Simples diálogo de escolha
         choices = {
             "1": "Standard (Faster, single-person)",
-            "2": "Advanced (Slower, multi-person with YOLO)"
+            "2": "Advanced (Slower, multi-person with YOLO)",
         }
-        
+
         choice = simpledialog.askstring(
             "Markerless 2D Analysis Version",
             "Select version:\n\n1: Standard (Faster, single-person)\n2: Advanced (Slower, multi-person with YOLO)",
-            initialvalue="1"
+            initialvalue="1",
         )
-        
+
         if not choice or choice not in choices:
             return
-        
+
         if choice == "1":
             from vaila.markerless_2D_analysis import process_videos_in_directory
         else:
             from vaila.markerless2d_analysis_v2 import process_videos_in_directory
-        
+
         process_videos_in_directory()
 
     # B_r1_c5
     def markerless_3d_analysis(self):
-        """Runs the Markerless 3D Analysis module.
+        """Runs the Markerless 3D Analysis module."""
+        import tkinter as tk
+        from tkinter import messagebox, simpledialog
 
-        This function runs the Markerless 3D Analysis module, which can be used to analyze
-        3D video data without using markers. It processes the motion data from 3D video
-        recordings to extract relevant motion parameters.
+        root = tk.Tk()
+        root.withdraw()
 
-        The user will be prompted to select the directory containing the 3D video files.
-        The module will then process the selected files, extract motion data and generate
-        CSV files with the processed results.
+        # Simples diálogo de escolha
+        choices = {
+            "1": "Standard (Faster, single-person)",
+            "2": "Advanced (Slower, multi-person with YOLO)",
+        }
 
-        """
-        selected_path = filedialog.askdirectory()
-        if selected_path:
-            markerless_3D_analysis.analyze_markerless_3D_data(selected_path)
+        choice = simpledialog.askstring(
+            "Markerless 3D Analysis Version",
+            "Select version:\n\n1: Standard (Faster, single-person)\n2: Advanced (Slower, multi-person with YOLO)",
+            initialvalue="1",
+        )
+
+        if not choice or choice not in choices:
+            return
+
+        if choice == "1":
+            from vaila.markerless_3D_analysis import process_videos_in_directory
+        else:
+            from vaila.markerless3d_analysis_v2 import process_videos_in_directory
+
+        process_videos_in_directory()
 
     # B_r2_c1
     def vector_coding(self):
@@ -1498,6 +1511,7 @@ class Vaila(tk.Tk):
 
         """
         from vaila.vaila_and_jump import vaila_and_jump
+
         vaila_and_jump()
 
     # B_r3_c4
@@ -1550,21 +1564,12 @@ class Vaila(tk.Tk):
 
         mphands.run_mphands()
 
-    # B_r4_c2 - ML Walkway
-    def ml_walkway(self):
-        """Invokes the vaila_mlwalkway module."""
-        from vaila import vaila_mlwalkway
+    # B_r4_c4 - MP Angles
+    def mp_angles(self):
+        """Runs the MP Angles module."""
+        from vaila import mp_angles
 
-        vaila_mlwalkway.run_vaila_mlwalkway_gui()
-
-    # B_r4_c3 - Markerless Hands
-    def markerless_hands(self):
-        """Invokes the vaila_mphands module."""
-        from vaila import mphands
-
-        mphands.run_mphands()
-
-    # C_A_r1_c1
+        mp_angles.run_mp_angles()
 
     def reorder_csv_data(self):
         """Runs the Reorder CSV Data module.
@@ -1626,6 +1631,7 @@ class Vaila(tk.Tk):
 
         """
         from vaila.interp_smooth_split import run_fill_split_dialog
+
         run_fill_split_dialog()
 
     # C_A_r2_c1
@@ -1711,7 +1717,7 @@ class Vaila(tk.Tk):
         """
         pass  # Aqui você deve adicionar a lógica para a reconstrução 3D com múltiplos DLTs
 
-    # C_A_r4_c1 - ReID Marker   
+    # C_A_r4_c1 - ReID Marker
     def reid_marker(self):
         """Runs the ReID Marker module."""
         from vaila import reid_markers

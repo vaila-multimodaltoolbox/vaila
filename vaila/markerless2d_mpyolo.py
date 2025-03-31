@@ -349,35 +349,34 @@ def get_parameters_dialog():
     """Create a dialog for MediaPipe and YOLO parameters."""
     dialog = tk.Tk()
     dialog.title("Detection Parameters Yolo and MediaPipe")
-    
+
     # Set a large initial size right after creating the dialog
     dialog.geometry("1024x768")
-    
+
     # Create main scrollable frame
     main_frame = tk.Frame(dialog)
     main_frame.pack(fill="both", expand=True)
-    
+
     # Add canvas with scrollbar
     canvas = tk.Canvas(main_frame)
     scrollbar = tk.Scrollbar(main_frame, orient="vertical", command=canvas.yview)
     scrollable_frame = tk.Frame(canvas)
-    
+
     # Configure scrolling
     scrollable_frame.bind(
-        "<Configure>",
-        lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        "<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
     )
-    
+
     canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
     canvas.configure(yscrollcommand=scrollbar.set)
-    
+
     # Pack scrolling components
     canvas.pack(side="left", fill="both", expand=True)
     scrollbar.pack(side="right", fill="y")
-    
+
     # Dictionary to store the results
     params = {}
-    
+
     # Create frames inside scrollable_frame instead of main_frame
     mode_frame = tk.LabelFrame(scrollable_frame, text="Processing Mode", padx=5, pady=5)
     mode_frame.pack(padx=10, pady=5, fill="x")
@@ -385,7 +384,9 @@ def get_parameters_dialog():
     yolo_frame = tk.LabelFrame(scrollable_frame, text="YOLO Parameters", padx=5, pady=5)
     yolo_frame.pack(padx=10, pady=5, fill="x")
 
-    mp_frame = tk.LabelFrame(scrollable_frame, text="MediaPipe Parameters", padx=5, pady=5)
+    mp_frame = tk.LabelFrame(
+        scrollable_frame, text="MediaPipe Parameters", padx=5, pady=5
+    )
     mp_frame.pack(padx=10, pady=5, fill="x")
 
     # Processing mode selection - using dropdown menu
@@ -595,13 +596,15 @@ Multithreaded Tracking:
         except ValueError as e:
             tk.messagebox.showerror("Error", "Please enter valid values")
 
-    tk.Button(scrollable_frame, text="Start Processing", command=on_submit).pack(pady=10)
-    
+    tk.Button(scrollable_frame, text="Start Processing", command=on_submit).pack(
+        pady=10
+    )
+
     # No final da função, configure o tamanho do canvas
     canvas.config(width=1004, height=748)  # Ligeiramente menor que a janela
-    
+
     dialog.mainloop()
-    
+
     return params if params else None
 
 
