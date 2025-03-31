@@ -85,10 +85,9 @@ dependencies:
       - paramiko
       - scp
       - spm1d
-      - pykalman
+      - pykalman==0.10.0
       - ydata_profiling
       - 'xonsh[full]'
-      - ultralytics
       - boxmot
       - intel-openmp
       - open3d
@@ -98,3 +97,4 @@ dependencies:
       - simplekml
       - folium
       - yt-dlp
+      - ultralytics

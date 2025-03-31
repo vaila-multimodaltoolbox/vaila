@@ -4,8 +4,8 @@ vaila.py
 ===============================================================================
 Author: Paulo R. P. Santiago
 Date:  7 October 2024
-Update: 28 March 2025
-Version updated: 0.4.3
+Update: 31 March 2025
+Version updated: 0.4.4
 Python Version: 3.12.9
 
 Description:
@@ -102,7 +102,7 @@ import platform
 import subprocess
 from rich import print
 import tkinter as tk
-from tkinter import messagebox, filedialog, ttk, Toplevel, Label, Button
+from tkinter import messagebox, filedialog, ttk, Toplevel, Label, Button, simpledialog
 from PIL import Image, ImageTk
 import webbrowser
 import sys
@@ -122,7 +122,6 @@ try:
     from vaila import (
         cluster_analysis,
         imu_analysis,
-        markerless_2D_analysis,
         markerless_3D_analysis,
         mocap_analysis,
         forceplate_analysis,
@@ -175,7 +174,7 @@ except ImportError as e:
 
 
 text = r"""
-version: 28.Mar.2025 (Python 3.12.9)
+version: 31.Mar.2025 (Python 3.12.9)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -250,7 +249,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 28.Mar.2025 (Python 3.12.9)")
+        self.title("vailá - 31.Mar.2025 (Python 3.12.9)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -1336,18 +1335,34 @@ class Vaila(tk.Tk):
 
     # B_r1_c4
     def markerless_2d_analysis(self):
-        """Runs the Markerless 2D Analysis module.
-
-        This function runs the Markerless 2D Analysis module, which can be used to analyze
-        2D video data without using markers. It processes the motion data from 2D video
-        recordings to extract relevant motion parameters.
-
-        The user will be prompted to select the directory containing the 2D video files.
-        The module will then process the selected files, extract motion data and generate
-        CSV files with the processed results.
-
-        """
-        markerless_2D_analysis.process_videos_in_directory()
+        """Runs the Markerless 2D Analysis module."""
+        import tkinter as tk
+        from tkinter import messagebox, simpledialog
+        
+        root = tk.Tk()
+        root.withdraw()
+        
+        # Simples diálogo de escolha
+        choices = {
+            "1": "Standard (Faster, single-person)",
+            "2": "Advanced (Slower, multi-person with YOLO)"
+        }
+        
+        choice = simpledialog.askstring(
+            "Markerless 2D Analysis Version",
+            "Select version:\n\n1: Standard (Faster, single-person)\n2: Advanced (Slower, multi-person with YOLO)",
+            initialvalue="1"
+        )
+        
+        if not choice or choice not in choices:
+            return
+        
+        if choice == "1":
+            from vaila.markerless_2D_analysis import process_videos_in_directory
+        else:
+            from vaila.markerless2d_analysis_v2 import process_videos_in_directory
+        
+        process_videos_in_directory()
 
     # B_r1_c5
     def markerless_3d_analysis(self):

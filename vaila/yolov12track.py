@@ -404,6 +404,99 @@ class ReidModelSelectorDialog(tk.simpledialog.Dialog):
         self.result = selection.split(" - ")[0]
 
 
+class ClassSelectorDialog(tk.simpledialog.Dialog):
+    def body(self, master):
+        # Lista de classes COCO padrão usada pelo YOLO
+        self.coco_classes = {
+            0: 'person', 1: 'bicycle', 2: 'car', 3: 'motorcycle', 4: 'airplane', 5: 'bus', 
+            6: 'train', 7: 'truck', 8: 'boat', 9: 'traffic light', 10: 'fire hydrant', 
+            11: 'stop sign', 12: 'parking meter', 13: 'bench', 14: 'bird', 15: 'cat', 
+            16: 'dog', 17: 'horse', 18: 'sheep', 19: 'cow', 20: 'elephant', 21: 'bear', 
+            22: 'zebra', 23: 'giraffe', 24: 'backpack', 25: 'umbrella', 26: 'handbag', 
+            27: 'tie', 28: 'suitcase', 29: 'frisbee', 30: 'skis', 31: 'snowboard', 
+            32: 'sports ball', 33: 'kite', 34: 'baseball bat', 35: 'baseball glove', 
+            36: 'skateboard', 37: 'surfboard', 38: 'tennis racket', 39: 'bottle', 
+            40: 'wine glass', 41: 'cup', 42: 'fork', 43: 'knife', 44: 'spoon', 
+            45: 'bowl', 46: 'banana', 47: 'apple', 48: 'sandwich', 49: 'orange', 
+            50: 'broccoli', 51: 'carrot', 52: 'hot dog', 53: 'pizza', 54: 'donut', 
+            55: 'cake', 56: 'chair', 57: 'couch', 58: 'potted plant', 59: 'bed', 
+            60: 'dining table', 61: 'toilet', 62: 'tv', 63: 'laptop', 64: 'mouse', 
+            65: 'remote', 66: 'keyboard', 67: 'cell phone', 68: 'microwave', 
+            69: 'oven', 70: 'toaster', 71: 'sink', 72: 'refrigerator', 73: 'book', 
+            74: 'clock', 75: 'vase', 76: 'scissors', 77: 'teddy bear', 
+            78: 'hair drier', 79: 'toothbrush'
+        }
+        
+        # Frame para a lista de classes
+        classes_frame = tk.Frame(master)
+        classes_frame.pack(fill="both", expand=True, padx=10, pady=5)
+        
+        # Label e scrollbar para a lista de classes
+        tk.Label(classes_frame, text="Classes disponíveis:").grid(row=0, column=0, sticky="w")
+        
+        # Crie um widget Text com scrollbar para mostrar as classes
+        self.classes_text = tk.Text(classes_frame, width=40, height=15)
+        scrollbar = tk.Scrollbar(classes_frame, command=self.classes_text.yview)
+        self.classes_text.config(yscrollcommand=scrollbar.set)
+        
+        self.classes_text.grid(row=1, column=0, sticky="nsew")
+        scrollbar.grid(row=1, column=1, sticky="ns")
+        
+        # Preencha o widget Text com a lista de classes
+        for class_id, class_name in self.coco_classes.items():
+            self.classes_text.insert(tk.END, f"{class_id}: {class_name}\n")
+        
+        self.classes_text.config(state="disabled")  # Torna o texto somente leitura
+        
+        # Frame para entrada das classes selecionadas
+        input_frame = tk.Frame(master)
+        input_frame.pack(fill="x", padx=10, pady=10)
+        
+        tk.Label(input_frame, text="Digite as classes desejadas (números separados por vírgula):").pack(anchor="w")
+        
+        # Campo de entrada para as classes selecionadas
+        self.classes_entry = tk.Entry(input_frame, width=40)
+        self.classes_entry.pack(fill="x", pady=5)
+        self.classes_entry.insert(0, "0, 32")  # Valor padrão: pessoa e bola esportiva
+        
+        # Adicione exemplos e instruções
+        tk.Label(input_frame, 
+                text="Exemplos:\n- '0' para rastrear apenas pessoas\n- '0, 2, 5, 7' para pessoas, carros, ônibus e trens\n- Deixe vazio para rastrear todas as classes",
+                justify="left").pack(anchor="w", pady=5)
+        
+        return self.classes_entry
+    
+    def validate(self):
+        # Valide a entrada do usuário
+        try:
+            # Se estiver vazio, aceite (significando todas as classes)
+            if not self.classes_entry.get().strip():
+                return True
+                
+            # Verifique se a entrada pode ser convertida em lista de inteiros
+            classes_input = self.classes_entry.get().replace(" ", "")
+            if classes_input:
+                class_ids = [int(x) for x in classes_input.split(",")]
+                
+                # Verifique se todos os IDs são válidos
+                for class_id in class_ids:
+                    if class_id < 0 or class_id > 79:
+                        messagebox.showwarning("Aviso", f"Classe ID {class_id} fora do intervalo válido (0-79)")
+                        return False
+            return True
+        except ValueError:
+            messagebox.showwarning("Aviso", "Formato inválido. Use números separados por vírgula.")
+            return False
+    
+    def apply(self):
+        # Processe a entrada e retorne a lista de classes
+        classes_input = self.classes_entry.get().strip().replace(" ", "")
+        if not classes_input:
+            self.result = None  # Nenhuma classe específica significa todas as classes
+        else:
+            self.result = [int(x) for x in classes_input.split(",")]
+
+
 def standardize_filename(filename: str) -> str:
     """
     Remove unwanted characters and replace spaces with underscores.
@@ -729,6 +822,13 @@ def run_yolov12track():
     # Initialize the YOLO model
     model = YOLO(model_path)
 
+    # Selecionar classes para rastreamento
+    class_dialog = ClassSelectorDialog(root, title="Selecionar Classes para Rastreamento")
+    if not hasattr(class_dialog, "result"):
+        return
+    
+    target_classes = class_dialog.result
+
     # Process each video in the directory
     for video_file in os.listdir(video_dir):
         if video_file.endswith((".mp4", ".avi", ".mov")):
@@ -806,7 +906,7 @@ def run_yolov12track():
                 stream=True,
                 persist=True,
                 tracker=tracker_config,  # Use the config file path
-                classes=[0, 32],
+                classes=target_classes,  # Usa as classes selecionadas pelo usuário
             )
 
             tracker_csv_files = {}
