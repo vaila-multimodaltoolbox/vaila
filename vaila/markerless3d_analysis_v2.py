@@ -1,11 +1,12 @@
 """
-Script: markerless_2D_analysis.py
+Script: markerless_3D_analysis.py
 Author: Prof. Dr. Paulo Santiago
-Version: 0.3.0
+Version: 0.0.1
+Create:
 Last Updated: April 2025
 
 Description:
-Versão aprimorada do script markerless_2D_analysis.py que incorpora detecção prévia
+Versão aprimorada do script markerless_3D_analysis.py que incorpora detecção prévia
 com YOLO para melhorar a precisão do MediaPipe na estimativa de pose, especialmente
 em casos de oclusão no plano sagital.
 
