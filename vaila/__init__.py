@@ -35,7 +35,6 @@ from .batchcut import batch_cut_videos, cut_videos
 from .drawboxe import run_drawboxe
 from . import cluster_analysis
 from . import imu_analysis
-from . import markerless_2D_analysis
 from . import markerless_3D_analysis
 from . import mocap_analysis
 from . import forceplate_analysis

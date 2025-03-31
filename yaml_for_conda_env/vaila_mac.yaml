@@ -71,9 +71,9 @@ dependencies:
       - ezc3d
       - h5py
       - paramiko
+      - pykalman==0.10.0
       - scp
       - spm1d
-      - pykalman
       - ydata_profiling
       - 'xonsh[full]'
       - ultralytics
