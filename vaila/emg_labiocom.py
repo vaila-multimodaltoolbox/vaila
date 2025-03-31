@@ -3,9 +3,10 @@
 EMG Analysis Toolkit - emg_labiocom
 ================================================================================
 Author: Prof. Dr. Paulo R. P. Santiago
-Date: 23 September 2024
-Version: 1.1
-Python Version: 3.11.9
+Creation Date: 23 September 2024
+Update Date: 31 March 2025
+Version: 0.0.2
+Python Version: 3.12.9
 
 Description:
 ------------

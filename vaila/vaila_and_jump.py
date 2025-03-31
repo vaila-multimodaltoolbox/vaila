@@ -3,9 +3,12 @@
 vaila_and_jump.py
 ===============================================================================
 Author: Prof. Paulo R. P. Santiago
-Date: 24 Oct 2024
-Version: 1.2.0
-Python Version: 3.11.9
+Email: paulosantiago@usp.br
+GitHub: https://github.com/vaila-multimodaltoolbox/vaila
+Creation Date: 24 Oct 2024
+Update Date: 31 March 2025
+Version: 0.0.2
+Python Version: 3.12.9
 
 Description:
 ------------

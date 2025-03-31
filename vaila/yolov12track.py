@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 18 February 2025
-Update Date: 24 March 2025
-Version: 0.02
+Update Date: 31 March 2025
+Version: 0.0.4
 
 Description:
     This script performs object detection and tracking on video files using the YOLO model v12.
@@ -37,6 +37,8 @@ License:
 Change History:
     - 2023-10: Initial version implemented, integrating detection and tracking with various configurable options.
     - 2025-03: Added color-coding for each tracker ID, improved GUI, and added more detailed help text.
+    - 2025-03: Added support for multiple models and trackers.
+    - 2025-03: Added support for video conversion to more compatible formats using FFmpeg.
 
 Notes:
     - Ensure that all dependencies are installed.
@@ -54,13 +56,12 @@ import numpy as np
 import datetime
 from ultralytics import YOLO
 import tkinter as tk
-from tkinter import filedialog, messagebox, simpledialog
+from tkinter import filedialog, messagebox
 from pathlib import Path
 import subprocess
 import re
 import colorsys
 import pkg_resources
-from ultralytics.utils.checks import check_requirements
 import glob
 import pandas as pd
 
