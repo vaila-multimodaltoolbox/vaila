@@ -225,29 +225,19 @@ If (Test-Path $wtPath) {
     Write-Output "'vaila' profile added to Windows Terminal successfully."
 }
 
-# Grant full permissions to the vaila directory
-Write-Output "Adjusting permissions on vaila directory '$vailaProgramPath' to allow read, write, and execute access..."
-Try {
-    # Grant full control to the folder and all its files/subfolders for the 'Users' group
-    Start-Process "icacls.exe" -ArgumentList "`"$vailaProgramPath`" /grant Users:(OI)(CI)F /T" -Wait -NoNewWindow
-    Write-Output "Permissions have been successfully adjusted for '$vailaProgramPath'."
-} Catch {
-    Write-Warning "Failed to adjust permissions for '$vailaProgramPath'. Details: $_"
-}
-
-# Grant full permissions to the vaila Anaconda environment
-$vailaEnvDir = "C:\ProgramData\anaconda3\envs\vaila"
-Write-Output "Adjusting permissions on Anaconda environment directory '$vailaEnvDir' to allow read, write, and execute access..."
-If (Test-Path $vailaEnvDir) {
+# Grant full permissions only to the site-packages directory
+$vailaSitePackagesDir = "C:\ProgramData\anaconda3\envs\vaila\Lib\site-packages"
+Write-Output "Adjusting permissions on site-packages directory '$vailaSitePackagesDir' to allow read, write, and execute access..."
+If (Test-Path $vailaSitePackagesDir) {
     Try {
         # Grant full control to the folder and all its files/subfolders for the 'Users' group
-        Start-Process "icacls.exe" -ArgumentList "`"$vailaEnvDir`" /grant Users:(OI)(CI)F /T" -Wait -NoNewWindow
-        Write-Output "Permissions have been successfully adjusted for '$vailaEnvDir'."
+        Start-Process "icacls.exe" -ArgumentList "`"$vailaSitePackagesDir`" /grant Users:(OI)(CI)F /T" -Wait -NoNewWindow
+        Write-Output "Permissions have been successfully adjusted for '$vailaSitePackagesDir'."
     } Catch {
-        Write-Warning "Failed to adjust permissions for '$vailaEnvDir'. Details: $_"
+        Write-Warning "Failed to adjust permissions for '$vailaSitePackagesDir'. Details: $_"
     }
 } Else {
-    Write-Warning "Directory '$vailaEnvDir' was not found. No permissions were changed."
+    Write-Warning "Directory '$vailaSitePackagesDir' was not found. No permissions were changed."
 }
 
 # Create a Desktop shortcut for vaila
