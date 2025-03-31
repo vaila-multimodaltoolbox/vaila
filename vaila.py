@@ -155,8 +155,6 @@ try:
         plot_2d,
         plot_3d,
         process_videos_gui,
-        run_fill_split_dialog,
-        vaila_and_jump,
         animal_open_field,
         vaila_lensdistortvideo,
         vaila_datdistort,
@@ -211,7 +209,7 @@ B3_r4_c4 - vailá          B3_r4_c5 - vailá
 
 ============================== Tools Available (Frame C) ===================
 -> C_A: Data Files
-C_A_r1_c1 - Edit CSV      C_A_r1_c2 - C3D <--> CSV   C_A_r1_c3 - Gapfill | split
+C_A_r1_c1 - Edit CSV      C_A_r1_c2 - C3D <--> CSV   C_A_r1_c3 - Smooth_Fill_Split
 C_A_r2_c1 - Make DLT2D    C_A_r2_c2 - Rec2D 1DLT     C_A_r2_c3 - Rec2D MultiDLT
 C_A_r3_c1 - Make DLT3D    C_A_r3_c2 - Rec3D 1DLT     C_A_r3_c3 - Rec3D MultiDLT
 C_A_r4_c1 - ReID Marker  C_A_r4_c2 - vailá          C_A_r4_c3 - vailá
@@ -806,7 +804,7 @@ class Vaila(tk.Tk):
         # C_A_r1_c3 - Data Files: GapFill - interpolation and split data csv
         gapfill_btn = tk.Button(
             tools_col1,
-            text="GapFill - split",
+            text="Smooth_Fill_Split",
             command=self.gapfill_split,  # Assuming this correctly calls the method in the Vaila class
             width=button_width,
         )
@@ -1499,6 +1497,7 @@ class Vaila(tk.Tk):
         files and input the sampling rate and start and end indices for analysis.
 
         """
+        from vaila.vaila_and_jump import vaila_and_jump
         vaila_and_jump()
 
     # B_r3_c4
@@ -1626,6 +1625,7 @@ class Vaila(tk.Tk):
         whether to perform linear interpolation or splitting.
 
         """
+        from vaila.interp_smooth_split import run_fill_split_dialog
         run_fill_split_dialog()
 
     # C_A_r2_c1
