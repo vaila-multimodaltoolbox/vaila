@@ -4,9 +4,9 @@ Video Cutting Tool - cutvideo.py
 ================================================================================
 Author: Prof. Dr. Paulo R. P. Santiago
 Date: 24 January 2025
-Updated: 24 March 2025
-Version: 0.0.3
-Python Version: 3.12.8
+Updated: 31 March 2025
+Version: 0.0.4
+Python Version: 3.12.9
 
 Description:
 ------------
@@ -105,28 +105,23 @@ def play_video_with_cuts(video_path):
     # Calculate aspect ratio
     aspect_ratio = original_width / original_height
 
-    # Calculate window size maintaining aspect ratio
-    if original_width > max_width:
+    # Calculate initial window size maintaining aspect ratio
+    if original_width / max_width > original_height / max_height:
+        # Width is the limiting factor
         window_width = max_width
         window_height = int(window_width / aspect_ratio)
-    elif original_height > max_height:
+    else:
+        # Height is the limiting factor
         window_height = max_height
         window_width = int(window_height * aspect_ratio)
-    else:
-        window_width = original_width
-        window_height = original_height
 
     # Ensure minimum size
     window_width = max(640, min(window_width, max_width))
     window_height = max(480, min(window_height, max_height))
 
     # Initialize window
-    screen = pygame.display.set_mode(
-        (window_width, window_height + 80), pygame.RESIZABLE
-    )
-    pygame.display.set_caption(
-        "Space:Play/Pause | ←→:Frame | S:Start | E:End | R:Reset | DEL:Remove | L:List | ESC:Save"
-    )
+    screen = pygame.display.set_mode((window_width, window_height + 80), pygame.RESIZABLE)
+    pygame.display.set_caption("Space:Play/Pause | ←→:Frame | S:Start | E:End | R:Reset | DEL:Remove | L:List | ESC:Save")
 
     # Initialize variables
     clock = pygame.time.Clock()
@@ -472,21 +467,35 @@ def play_video_with_cuts(video_path):
         if not ret:
             break
 
-        # Resize frame to fit window while maintaining aspect ratio
-        frame_height = window_height
-        frame_width = window_width
-        frame = cv2.resize(frame, (frame_width, frame_height))
+        # Calculate scaling factors for width and height
+        scale_w = window_width / original_width
+        scale_h = window_height / original_height
+        scale = min(scale_w, scale_h)  # Use the smaller scale to fit in window
+
+        # Calculate new dimensions
+        new_width = int(original_width * scale)
+        new_height = int(original_height * scale)
+
+        # Calculate position to center the frame
+        x_offset = (window_width - new_width) // 2
+        y_offset = (window_height - new_height) // 2
+
+        # Resize frame while maintaining aspect ratio
+        frame = cv2.resize(frame, (new_width, new_height))
 
         # Convert frame to pygame surface
         frame_surface = pygame.surfarray.make_surface(
             cv2.cvtColor(frame, cv2.COLOR_BGR2RGB).swapaxes(0, 1)
         )
-        screen.blit(frame_surface, (0, 0))
+
+        # Fill screen with black
+        screen.fill((0, 0, 0))
+
+        # Draw frame at centered position
+        screen.blit(frame_surface, (x_offset, y_offset))
 
         # Draw controls
-        slider_x, slider_width, slider_y, slider_height, help_button_rect = (
-            draw_controls()
-        )
+        slider_x, slider_width, slider_y, slider_height, help_button_rect = draw_controls()
         pygame.display.flip()
 
         for event in pygame.event.get():
@@ -496,9 +505,16 @@ def play_video_with_cuts(video_path):
             elif event.type == pygame.VIDEORESIZE:
                 new_w, new_h = event.w, event.h
                 if new_h > 80:
-                    # Maintain minimum size
+                    # Update window dimensions while maintaining aspect ratio
                     window_width = max(640, new_w)
                     window_height = max(480, new_h - 80)
+                    
+                    # Recalculate window size to maintain aspect ratio
+                    if window_width / aspect_ratio > window_height:
+                        window_width = int(window_height * aspect_ratio)
+                    else:
+                        window_height = int(window_width / aspect_ratio)
+                    
                     screen = pygame.display.set_mode(
                         (window_width, window_height + 80), pygame.RESIZABLE
                     )
