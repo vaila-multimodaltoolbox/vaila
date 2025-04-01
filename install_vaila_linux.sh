@@ -34,6 +34,15 @@ fi
 # Get Conda base path
 CONDA_BASE=$(conda info --base)
 
+# Check for missing dependencies
+echo "Verifying system dependencies..."
+for pkg in python3 pip git curl wget ffmpeg rsync pkg-config libcairo2-dev; do
+    if ! dpkg -l | grep -q " $pkg "; then
+        echo "Installing $pkg..."
+        sudo apt install -y $pkg
+    fi
+done
+
 # Check if the "vaila" environment already exists
 if conda env list | grep -q "^vaila"; then
     echo "Conda environment 'vaila' already exists. Updating it..."
@@ -152,6 +161,14 @@ fi
 source "$CONDA_BASE/etc/profile.d/conda.sh"
 conda activate vaila
 
+# Install Cairo dependencies and pycairo
+echo "Installing Cairo dependencies..."
+sudo apt install -y pkg-config libcairo2-dev
+
+# Install pycairo with force reinstall and no cache
+echo "Installing pycairo..."
+pip install --force-reinstall --no-cache-dir pycairo
+
 # Install moviepy using pip
 echo "Installing moviepy..."
 pip install moviepy
@@ -165,15 +182,6 @@ if [ -d "$VAILA_ENV_DIR" ]; then
 else
     echo "Conda environment directory not found at $VAILA_ENV_DIR."
 fi
-
-# Check for missing dependencies
-echo "Verifying system dependencies..."
-for pkg in python3 pip git curl wget; do
-    if ! command -v $pkg &> /dev/null; then
-        echo "Installing $pkg..."
-        sudo apt install -y $pkg
-    fi
-done
 
 echo "vaila Launcher created and available in the Applications menu!"
 echo "Installation and setup completed."
