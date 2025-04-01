@@ -1,10 +1,11 @@
 """
 ================================================================================
-plot_2d_graphs.py
+vailaplot2d.py
 ================================================================================
 Author: Prof. Paulo Santiago
-Date: 23 September 2024
-Version: 1.1
+Created: 23 September 2024
+Updated: 01 April 2025
+Version: 0.0.2
 
 Description:
 ------------
@@ -209,17 +210,25 @@ def plot_time_scatter():
     plt.figure()
     for file_idx, file_path in enumerate(selected_files):
         data = pd.read_csv(file_path)
+        # Get the first column name (could be Time, Frame, or anything else)
+        x_column = data.columns[0]
+        
         for header_idx, header in enumerate(selected_headers):
+            if header == x_column:  # Skip if the header is the x-axis column
+                continue
+                
             color = predefined_colors[
                 (file_idx * len(selected_headers) + header_idx) % len(predefined_colors)
             ]
             plt.plot(
-                data["Time"],
+                data[x_column],
                 data[header],
                 label=f"{os.path.basename(file_path)}-{header}",
                 color=color,
             )
-    plt.xlabel("Time")
+    
+    # Set x-label based on the first column name
+    plt.xlabel(x_column)
     plt.ylabel("Values")
     plt.legend(loc="best", fontsize="small")
     plt.tight_layout()
