@@ -285,7 +285,7 @@ class Vaila(tk.Tk):
         Adjusts the window dimensions, button width, and font size based on the operating system.
         """
         if platform.system() == "Darwin":  # macOS
-            self.geometry("1024x920")  # Wider window for macOS
+            self.geometry("1920x1080")  # Wider window for macOS
             self.button_width = 12  # Slightly wider buttons
             self.font_size = 11  # Standard font size
         elif platform.system() == "Windows":  # Windows
