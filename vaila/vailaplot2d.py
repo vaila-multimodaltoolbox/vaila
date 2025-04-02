@@ -111,6 +111,7 @@ from tkinter import (
 from spm1d import stats
 import os
 import matplotlib.colors as mcolors
+import numpy as np
 
 # Global variables to store user selections
 selected_files = []
@@ -212,11 +213,11 @@ def plot_time_scatter():
         data = pd.read_csv(file_path)
         # Get the first column name (could be Time, Frame, or anything else)
         x_column = data.columns[0]
-        
+
         for header_idx, header in enumerate(selected_headers):
             if header == x_column:  # Skip if the header is the x-axis column
                 continue
-                
+
             color = predefined_colors[
                 (file_idx * len(selected_headers) + header_idx) % len(predefined_colors)
             ]
@@ -226,7 +227,7 @@ def plot_time_scatter():
                 label=f"{os.path.basename(file_path)}-{header}",
                 color=color,
             )
-    
+
     # Set x-label based on the first column name
     plt.xlabel(x_column)
     plt.ylabel("Values")
@@ -266,24 +267,43 @@ def plot_confidence_interval():
     for file_idx, file_path in enumerate(selected_files):
         data = pd.read_csv(file_path)
         headers = [header for header in selected_headers if header in data.columns]
-        if len(headers) < 2:
-            print("Please select at least two headers for confidence interval plot.")
+        if len(headers) < 1:
+            print("Please select at least one header for confidence interval plot.")
             return
-        for header_idx, header in enumerate(headers):
-            values = data[header].dropna()
-            ci = 1.96 * values.std() / (len(values) ** 0.5)
-            color = predefined_colors[
-                (file_idx * len(headers) + header_idx) % len(predefined_colors)
-            ]
-            plt.errorbar(
-                x=range(len(values)),
-                y=values,
-                yerr=ci,
-                label=f"{os.path.basename(file_path)}-{header}",
-                color=color,
-            )
-    plt.xlabel("Index")
+
+        # Calculate median across all selected columns for each time point
+        median_values = data[headers].median(axis=1)
+
+        # Calculate confidence interval using bootstrap
+        n_bootstrap = 1000
+        bootstrap_medians = np.zeros((len(data), n_bootstrap))
+
+        for i in range(n_bootstrap):
+            # Randomly sample columns with replacement
+            sampled_cols = np.random.choice(headers, size=len(headers), replace=True)
+            bootstrap_medians[:, i] = data[sampled_cols].median(axis=1)
+
+        # Calculate 95% confidence interval
+        ci_lower = np.percentile(bootstrap_medians, 2.5, axis=1)
+        ci_upper = np.percentile(bootstrap_medians, 97.5, axis=1)
+
+        # Plot median and confidence interval
+        color = predefined_colors[file_idx % len(predefined_colors)]
+        plt.plot(
+            median_values, label=f"{os.path.basename(file_path)} - Median", color=color
+        )
+        plt.fill_between(
+            range(len(median_values)),
+            ci_lower,
+            ci_upper,
+            alpha=0.2,
+            color=color,
+            label=f"{os.path.basename(file_path)} - 95% CI",
+        )
+
+    plt.xlabel("Time Points")
     plt.ylabel("Values")
+    plt.title("Median and 95% Confidence Interval")
     plt.legend(loc="best", fontsize="small")
     plt.tight_layout()
     plt.show()

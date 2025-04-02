@@ -120,8 +120,12 @@ def play_video_with_cuts(video_path):
     window_height = max(480, min(window_height, max_height))
 
     # Initialize window
-    screen = pygame.display.set_mode((window_width, window_height + 80), pygame.RESIZABLE)
-    pygame.display.set_caption("Space:Play/Pause | ←→:Frame | S:Start | E:End | R:Reset | DEL:Remove | L:List | ESC:Save")
+    screen = pygame.display.set_mode(
+        (window_width, window_height + 80), pygame.RESIZABLE
+    )
+    pygame.display.set_caption(
+        "Space:Play/Pause | ←→:Frame | S:Start | E:End | R:Reset | DEL:Remove | L:List | ESC:Save"
+    )
 
     # Initialize variables
     clock = pygame.time.Clock()
@@ -495,7 +499,9 @@ def play_video_with_cuts(video_path):
         screen.blit(frame_surface, (x_offset, y_offset))
 
         # Draw controls
-        slider_x, slider_width, slider_y, slider_height, help_button_rect = draw_controls()
+        slider_x, slider_width, slider_y, slider_height, help_button_rect = (
+            draw_controls()
+        )
         pygame.display.flip()
 
         for event in pygame.event.get():
@@ -508,13 +514,13 @@ def play_video_with_cuts(video_path):
                     # Update window dimensions while maintaining aspect ratio
                     window_width = max(640, new_w)
                     window_height = max(480, new_h - 80)
-                    
+
                     # Recalculate window size to maintain aspect ratio
                     if window_width / aspect_ratio > window_height:
                         window_width = int(window_height * aspect_ratio)
                     else:
                         window_height = int(window_width / aspect_ratio)
-                    
+
                     screen = pygame.display.set_mode(
                         (window_width, window_height + 80), pygame.RESIZABLE
                     )
