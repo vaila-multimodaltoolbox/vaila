@@ -299,6 +299,8 @@ def save_dlt_parameters(output_file, dlt_params):
         csvwriter = csv.writer(csvfile)
         csvwriter.writerow(["frame"] + [f"dlt_param_{j}" for j in range(1, 9)])
         for frame, params in dlt_params:
+            # Converter o frame para inteiro antes de salvar
+            frame = int(frame)
             csvwriter.writerow([frame] + list(params))
 
     messagebox.showinfo("Success", f"DLT parameters saved to {output_file}")
