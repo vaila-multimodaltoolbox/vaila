@@ -327,7 +327,9 @@ class InterpolationConfigDialog(tk.simpledialog.Dialog):
                     justify="left",
                 )
                 explanation.pack(anchor="w", padx=5, pady=2)
-                self.params_widgets.extend([header, label1, entry1, label2, entry2, explanation])
+                self.params_widgets.extend(
+                    [header, label1, entry1, label2, entry2, explanation]
+                )
 
                 # Guardar referências aos entries para acesso posterior
                 self.param_entries["window_length"] = entry1
@@ -381,7 +383,9 @@ class InterpolationConfigDialog(tk.simpledialog.Dialog):
                     justify="left",
                 )
                 explanation.pack(anchor="w", padx=5, pady=2)
-                self.params_widgets.extend([header, label1, entry1, label2, entry2, explanation])
+                self.params_widgets.extend(
+                    [header, label1, entry1, label2, entry2, explanation]
+                )
 
                 # Guardar referências aos entries para acesso posterior
                 self.param_entries["frac"] = entry1
@@ -496,7 +500,9 @@ class InterpolationConfigDialog(tk.simpledialog.Dialog):
                     justify="left",
                 )
                 explanation.pack(anchor="w", padx=5, pady=2)
-                self.params_widgets.extend([header, label1, entry1, label2, entry2, reminder, explanation])
+                self.params_widgets.extend(
+                    [header, label1, entry1, label2, entry2, reminder, explanation]
+                )
 
                 # Guardar referências aos entries para acesso posterior
                 self.param_entries["cutoff"] = entry1
@@ -510,7 +516,7 @@ class InterpolationConfigDialog(tk.simpledialog.Dialog):
                     font=("", 10, "bold"),
                 )
                 header.pack(anchor="w", padx=5, pady=5)
-                
+
                 label = tk.Label(
                     self.params_frame,
                     text="Smoothing factor (s):",
@@ -523,7 +529,7 @@ class InterpolationConfigDialog(tk.simpledialog.Dialog):
                     "<Return>",
                     lambda e: self.update_parameter_value(e, self.spline_smoothing),
                 )
-                
+
                 # Add detailed explanation
                 explanation = tk.Label(
                     self.params_frame,
@@ -544,7 +550,7 @@ class InterpolationConfigDialog(tk.simpledialog.Dialog):
                     justify="left",
                 )
                 explanation.pack(anchor="w", padx=5, pady=2)
-                
+
                 self.params_widgets.extend([header, label, entry, explanation])
                 self.param_entries["smoothing_factor"] = entry
 
@@ -556,7 +562,7 @@ class InterpolationConfigDialog(tk.simpledialog.Dialog):
                     font=("", 10, "bold"),
                 )
                 header.pack(anchor="w", padx=5, pady=5)
-                
+
                 # AR order (p)
                 label1 = tk.Label(
                     self.params_frame,
@@ -566,7 +572,7 @@ class InterpolationConfigDialog(tk.simpledialog.Dialog):
                 label1.pack(anchor="w", padx=5, pady=2)
                 entry1 = tk.Entry(self.params_frame, textvariable=self.arima_p)
                 entry1.pack(fill="x", padx=5, pady=2)
-                
+
                 # Difference order (d)
                 label2 = tk.Label(
                     self.params_frame,
@@ -576,7 +582,7 @@ class InterpolationConfigDialog(tk.simpledialog.Dialog):
                 label2.pack(anchor="w", padx=5, pady=2)
                 entry2 = tk.Entry(self.params_frame, textvariable=self.arima_d)
                 entry2.pack(fill="x", padx=5, pady=2)
-                
+
                 # MA order (q)
                 label3 = tk.Label(
                     self.params_frame,
@@ -586,7 +592,7 @@ class InterpolationConfigDialog(tk.simpledialog.Dialog):
                 label3.pack(anchor="w", padx=5, pady=2)
                 entry3 = tk.Entry(self.params_frame, textvariable=self.arima_q)
                 entry3.pack(fill="x", padx=5, pady=2)
-                
+
                 # Add detailed explanation
                 explanation = tk.Label(
                     self.params_frame,
@@ -613,13 +619,20 @@ class InterpolationConfigDialog(tk.simpledialog.Dialog):
                     justify="left",
                 )
                 explanation.pack(anchor="w", padx=5, pady=2)
-                
-                self.params_widgets.extend([header, label1, entry1, label2, entry2, label3, entry3, explanation])
-                self.param_entries.update({
-                    "p": entry1,
-                    "d": entry2,
-                    "q": entry3
-                })
+
+                self.params_widgets.extend(
+                    [
+                        header,
+                        label1,
+                        entry1,
+                        label2,
+                        entry2,
+                        label3,
+                        entry3,
+                        explanation,
+                    ]
+                )
+                self.param_entries.update({"p": entry1, "d": entry2, "q": entry3})
 
         except ValueError:
             label = tk.Label(
@@ -741,10 +754,12 @@ class InterpolationConfigDialog(tk.simpledialog.Dialog):
                 if not self.spline_smoothing.get():
                     messagebox.showerror("Error", "Spline smoothing factor is required")
                     return False
-                
+
                 s = float(self.spline_smoothing.get())
                 if s < 0:
-                    messagebox.showerror("Error", "Smoothing factor must be non-negative")
+                    messagebox.showerror(
+                        "Error", "Smoothing factor must be non-negative"
+                    )
                     return False
 
             return True
@@ -904,7 +919,7 @@ Parameters have been confirmed and will be used for processing.
                 4: "kalman",
                 5: "butterworth",
                 6: "splines",
-                7: "arima"
+                7: "arima",
             }
 
             # Debug: Print dos valores dos Entry widgets
@@ -950,7 +965,9 @@ Parameters have been confirmed and will be used for processing.
             elif smooth_method == 6:  # Splines
                 smoothing_factor = float(self.spline_smoothing.get())
                 smooth_params = {"smoothing_factor": smoothing_factor}
-                print(f"APPLY: Spline Smoothing settings - smoothing_factor={smoothing_factor}")
+                print(
+                    f"APPLY: Spline Smoothing settings - smoothing_factor={smoothing_factor}"
+                )
 
             elif smooth_method == 7:  # ARIMA
                 p = int(self.arima_p.get())
@@ -993,7 +1010,7 @@ Parameters have been confirmed and will be used for processing.
                 order = (
                     int(smooth_params["p"]),
                     int(smooth_params["d"]),
-                    int(smooth_params["q"])
+                    int(smooth_params["q"]),
                 )
                 summary += f"\nARIMA Parameters:\n- Order: {order}"
 
@@ -1091,7 +1108,9 @@ def generate_report(dest_dir, config, processed_files):
                 )
 
             elif config["smooth_method"] == "splines":
-                f.write(f"Smoothing Factor: {config['smooth_params'].get('smoothing_factor', 1.0)}\n")
+                f.write(
+                    f"Smoothing Factor: {config['smooth_params'].get('smoothing_factor', 1.0)}\n"
+                )
 
             f.write("\n")
 
@@ -1188,6 +1207,7 @@ def detect_float_format(original_path):
         print(f"Erro ao detectar o formato de float: {str(e)}")
         return "%.6f"
 
+
 # Scripts to filter/smooth data
 def butter_filter(
     data,
@@ -1271,38 +1291,40 @@ def butter_filter(
     else:
         filtered_data = sosfiltfilt(sos, data, axis=axis, padlen=0)
 
-    return filtered_data     
+    return filtered_data
+
 
 def savgol_smooth(data, window_length, polyorder):
     """
     Applies the Savitzky-Golay filter to the data.
-    
+
     Parameters:
     - data: array-like, 1D or 2D array
     - window_length: int, length of the filter window (must be odd)
     - polyorder: int, order of the polynomial to fit
-    
+
     Returns:
     - filtered_data: array-like, smoothed data
     """
     data = np.asarray(data)
     return savgol_filter(data, window_length, polyorder, axis=0)
 
+
 def lowess_smooth(data, frac, it):
     """
     Applies LOWESS smoothing to the data.
-    
+
     Parameters:
     - data: array-like, 1D or 2D array (assumed to have no NaNs after gap filling)
     - frac: float, between 0 and 1, fraction of data to use for smoothing
     - it: int, number of iterations
-    
+
     Returns:
     - filtered_data: array-like, smoothed data
     """
     data = np.asarray(data)
     x = np.arange(len(data)) if data.ndim == 1 else np.arange(data.shape[0])
-    
+
     try:
         if data.ndim == 1:
             # Process 1D data
@@ -1312,7 +1334,7 @@ def lowess_smooth(data, frac, it):
                 frac=frac,
                 it=it,
                 return_sorted=False,
-                is_sorted=True
+                is_sorted=True,
             )
             return smoothed
         else:
@@ -1325,21 +1347,22 @@ def lowess_smooth(data, frac, it):
                     frac=frac,
                     it=it,
                     return_sorted=False,
-                    is_sorted=True
+                    is_sorted=True,
                 )
             return smoothed
     except Exception as e:
         print(f"Error in LOWESS smoothing: {str(e)}")
         return data  # Return original data if smoothing fails
 
+
 def spline_smooth(data, s=1.0):
     """
     Applies spline smoothing to the data.
-    
+
     Parameters:
     - data: array-like, 1D or 2D array
     - s: float, smoothing factor
-    
+
     Returns:
     - filtered_data: array-like, smoothed data
     """
@@ -1357,14 +1380,15 @@ def spline_smooth(data, s=1.0):
             filtered[:, j] = spline(x)
         return filtered
 
+
 def kalman_smooth(data, n_iter=5):
     """
     Applies Kalman smoothing to the data.
-    
+
     Parameters:
     - data: array-like, 1D or 2D array
     - n_iter: int, number of EM iterations
-    
+
     Returns:
     - filtered_data: array-like, smoothed data
     """
@@ -1378,22 +1402,25 @@ def kalman_smooth(data, n_iter=5):
         filtered = np.empty_like(data)
         for j in range(data.shape[1]):
             col = data[:, j]
-            kf = KalmanFilter(initial_state_mean=np.mean(col), n_dim_obs=1, n_dim_state=2)
+            kf = KalmanFilter(
+                initial_state_mean=np.mean(col), n_dim_obs=1, n_dim_state=2
+            )
             smoothed_state_means, _ = kf.em(col, n_iter=n_iter).smooth(col)
             filtered[:, j] = smoothed_state_means[:, 0]
         return filtered
 
+
 def arima_smooth(data, order=(1, 0, 0)):
     """
     Applies ARIMA smoothing to the input data using the ARIMA.filter method.
-    
+
     Parameters:
         data (array-like): The input time series data. Can be 1D or 2D.
         order (tuple): The ARIMA model order (p, d, q):
             p: Number of AR terms (autoregressive)
             d: Number of differences
             q: Number of MA terms (moving average)
-        
+
     Returns:
         filtered_data (array-like): The smoothed data.
     """
@@ -1415,22 +1442,25 @@ def arima_smooth(data, order=(1, 0, 0)):
             try:
                 model = ARIMA(data[:, j], order=order)
                 result = model.fit()  # Primeiro ajusta o modelo
-                smoothed[:, j] = result.fittedvalues  # Depois obtém os valores suavizados
+                smoothed[:, j] = (
+                    result.fittedvalues
+                )  # Depois obtém os valores suavizados
             except Exception as e:
                 print(f"Error in ARIMA smoothing for column {j}: {str(e)}")
                 smoothed[:, j] = data[:, j]  # Keep original data for failed columns
         return smoothed
 
+
 def process_file(file_path, dest_dir, config):
     try:
         # Get base filename without extension
         base_filename = os.path.splitext(os.path.basename(file_path))[0]
-        
+
         # Create method suffix based on smoothing method
         method_suffix = "original"  # default if no smoothing
         if config["smooth_method"] != "none":
             method_suffix = config["smooth_method"]
-            
+
             # Add parameters to the suffix for specific methods
             if config["smooth_method"] == "butterworth":
                 cutoff = config["smooth_params"].get("cutoff", 10)
@@ -1453,7 +1483,7 @@ def process_file(file_path, dest_dir, config):
             elif config["smooth_method"] == "splines":
                 s = config["smooth_params"].get("smoothing_factor", 1.0)
                 method_suffix += f"_s{s}"
-        
+
         # Create output filename with method suffix
         output_filename = f"{base_filename}_{method_suffix}.csv"
         output_path = os.path.join(dest_dir, output_filename)
@@ -1732,64 +1762,58 @@ def process_file(file_path, dest_dir, config):
                 if config["smooth_method"] == "savgol":
                     params = config["smooth_params"]
                     smoothed = savgol_smooth(
-                        data_matrix, 
-                        params["window_length"], 
-                        params["polyorder"]
+                        data_matrix, params["window_length"], params["polyorder"]
                     )
-                    print(f"Applied Savitzky-Golay filter with window={params['window_length']}, order={params['polyorder']}")
-                    
+                    print(
+                        f"Applied Savitzky-Golay filter with window={params['window_length']}, order={params['polyorder']}"
+                    )
+
                 elif config["smooth_method"] == "lowess":
                     params = config["smooth_params"]
-                    print(f"Applying LOWESS smoothing (fraction={params['frac']}, iterations={params['it']})")
-                    smoothed = lowess_smooth(
-                        data_matrix,
-                        params["frac"],
-                        params["it"]
+                    print(
+                        f"Applying LOWESS smoothing (fraction={params['frac']}, iterations={params['it']})"
                     )
+                    smoothed = lowess_smooth(data_matrix, params["frac"], params["it"])
                     print("LOWESS smoothing completed")
-                    
+
                 elif config["smooth_method"] == "kalman":
                     params = config["smooth_params"]
-                    smoothed = kalman_smooth(
-                        data_matrix, 
-                        params["n_iter"]
-                    )
+                    smoothed = kalman_smooth(data_matrix, params["n_iter"])
                     print(f"Applied Kalman filter with {params['n_iter']} iterations")
-                    
+
                 elif config["smooth_method"] == "butterworth":
                     params = config["smooth_params"]
                     smoothed = butter_filter(
                         data_matrix,
                         fs=params["fs"],
                         cutoff=params["cutoff"],
-                        filter_type="low"
+                        filter_type="low",
                     )
-                    print(f"Applied Butterworth filter with cutoff={params['cutoff']}Hz, fs={params['fs']}Hz")
-                    
+                    print(
+                        f"Applied Butterworth filter with cutoff={params['cutoff']}Hz, fs={params['fs']}Hz"
+                    )
+
                 elif config["smooth_method"] == "splines":
                     params = config["smooth_params"]
                     smoothed = spline_smooth(
-                        data_matrix,
-                        s=float(params.get("smoothing_factor", 1.0))
+                        data_matrix, s=float(params.get("smoothing_factor", 1.0))
                     )
-                    print(f"Applied Spline smoothing with smoothing factor={params.get('smoothing_factor', 1.0)}")
-                    
+                    print(
+                        f"Applied Spline smoothing with smoothing factor={params.get('smoothing_factor', 1.0)}"
+                    )
+
                 elif config["smooth_method"] == "arima":
                     params = config["smooth_params"]
-                    order = (
-                        int(params["p"]),
-                        int(params["d"]),
-                        int(params["q"])
-                    )
+                    order = (int(params["p"]), int(params["d"]), int(params["q"]))
                     smoothed = arima_smooth(data_matrix, order=order)
                     print(f"Applied ARIMA filter with order={order}")
-                    
+
                 # Update the DataFrame with smoothed values
                 if smoothed is not None and not np.any(np.isnan(smoothed)):
                     print("\nUpdating DataFrame with smoothed values:")
                     print(f"Shape of smoothed data: {smoothed.shape}")
                     print(f"Shape of numeric columns: {len(numeric_cols)}")
-                    
+
                     try:
                         df[numeric_cols] = smoothed
                         print("DataFrame updated successfully")
@@ -1801,7 +1825,7 @@ def process_file(file_path, dest_dir, config):
                     error_msg = "Smoothing produced invalid or NaN values - keeping original data"
                     print(error_msg)
                     file_info["warnings"].append(error_msg)
-                
+
             except Exception as e:
                 error_msg = f"Error during smoothing: {str(e)}"
                 print(error_msg)
