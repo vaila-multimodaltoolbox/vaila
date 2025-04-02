@@ -1587,7 +1587,19 @@ def kalman_smooth(data, n_iter=5, mode=1):
             
             filtered_data = np.empty_like(data)
             for j in range(0, n_features, 2):
-                # Initialize Kalman filter for 2D state (x,y positions and velocities)
+                # Calculate initial velocities from first few points
+                x_diff = np.diff(data[:5, j])
+                y_diff = np.diff(data[:5, j+1])
+                init_vx = np.mean(x_diff) if len(x_diff) > 0 else 0
+                init_vy = np.mean(y_diff) if len(y_diff) > 0 else 0
+                
+                # Calculate initial accelerations
+                x_acc = np.diff(x_diff)
+                y_acc = np.diff(y_diff)
+                init_ax = np.mean(x_acc) if len(x_acc) > 0 else 0
+                init_ay = np.mean(y_acc) if len(y_acc) > 0 else 0
+                
+                # Initialize Kalman filter for 2D state (x,y positions, velocities, and accelerations)
                 # State vector: [x, y, vx, vy, ax, ay]
                 # Transition matrix models constant acceleration motion
                 transition_matrix = np.array([
@@ -1605,14 +1617,14 @@ def kalman_smooth(data, n_iter=5, mode=1):
                     [0, 1, 0, 0, 0, 0]   # observe y
                 ])
                 
-                # Initialize state mean with first observation and zero velocities/accelerations
+                # Initialize state mean with first observation and calculated velocities/accelerations
                 initial_state_mean = np.array([
                     data[0, j],    # initial x
                     data[0, j+1],  # initial y
-                    0,             # initial vx
-                    0,             # initial vy
-                    0,             # initial ax
-                    0              # initial ay
+                    init_vx,       # initial vx
+                    init_vy,       # initial vy
+                    init_ax,       # initial ax
+                    init_ay        # initial ay
                 ])
                 
                 # Initialize state covariance with high uncertainty in velocities and accelerations
@@ -1656,8 +1668,11 @@ def kalman_smooth(data, n_iter=5, mode=1):
                 # Prepare observations for the x,y pair
                 observations = np.column_stack([data[:, j], data[:, j+1]])
                 
-                # Apply EM algorithm and smoothing
-                smoothed_state_means, _ = kf.em(observations, n_iter=n_iter).smooth(observations)
+                # Apply EM algorithm with more iterations for better convergence
+                kf = kf.em(observations, n_iter=n_iter)
+                
+                # Apply smoothing
+                smoothed_state_means, _ = kf.smooth(observations)
                 
                 # Extract x,y positions from smoothed state means
                 filtered_data[:, j] = smoothed_state_means[:, 0]  # x position
