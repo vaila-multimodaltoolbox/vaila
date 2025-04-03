@@ -249,16 +249,6 @@ def run_datdistort():
     print(f"Files processed: {processed_count}")
     print(f"Output directory: {output_dir}")
 
-    # Open output directory in file explorer
-    if processed_count > 0:
-        try:
-            if os.name == "nt":  # Windows
-                os.startfile(output_dir)
-            elif os.name == "posix":  # macOS and Linux
-                subprocess.run(["xdg-open", output_dir])
-        except:
-            pass  # Ignore if can't open file explorer
-
 
 if __name__ == "__main__":
     run_datdistort()
