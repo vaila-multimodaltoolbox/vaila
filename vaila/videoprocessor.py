@@ -236,6 +236,47 @@ def process_videos_merge(
                 ):
                     video_files.append(entry.path)
 
+    # Detect hardware encoder and available presets - moved outside the loop
+    encoder_info = detect_hardware_encoder()
+    encoder = encoder_info["encoder"]
+    quality_param = encoder_info["quality_param"]
+    quality_values = encoder_info["quality_values"]
+
+    # Ask user to choose quality by number (1-9) - moved outside the loop
+    quality_msg = "Choose quality level (1-9):\n1-3: Fast (lower quality)\n4-6: Medium\n7-9: High (slower)"
+    quality_num = simpledialog.askinteger(
+        "Quality Level", quality_msg, minvalue=1, maxvalue=9, initialvalue=5
+    )
+
+    # Map the number to a quality setting - moved outside the loop
+    if quality_num <= 3:
+        quality = "fast"
+    elif quality_num <= 6:
+        quality = "medium"
+    else:
+        quality = "high"
+
+    # Get preset value - moved outside the loop
+    preset_value = quality_values[quality]
+
+    # Simplified approach: use numerical presets for libx264 - moved outside the loop
+    if encoder == "libx264":
+        # Convert p1-p9 to actual preset names
+        preset_map = {
+            "p1": "ultrafast",
+            "p2": "veryfast",
+            "p3": "faster",
+            "p4": "fast",
+            "p5": "medium",
+            "p6": "slow",
+            "p7": "slower",
+            "p8": "veryslow",
+            "p9": "placebo",
+        }
+        preset_value = preset_map.get(preset_value, "medium")
+
+    print(f"Using encoder: {encoder} with {quality_param}={preset_value}")
+
     # Iterate over video files and apply the merge process
     for video_path in tqdm.tqdm(video_files, desc="Processing videos"):
         try:
@@ -255,47 +296,6 @@ def process_videos_merge(
                 ):
                     print(f"Skipping {video_path} (output exists)")
                     continue
-
-            # Detect hardware encoder and available presets
-            encoder_info = detect_hardware_encoder()
-            encoder = encoder_info["encoder"]
-            quality_param = encoder_info["quality_param"]
-            quality_values = encoder_info["quality_values"]
-
-            # Ask user to choose quality by number (1-9)
-            quality_msg = "Choose quality level (1-9):\n1-3: Fast (lower quality)\n4-6: Medium\n7-9: High (slower)"
-            quality_num = simpledialog.askinteger(
-                "Quality Level", quality_msg, minvalue=1, maxvalue=9, initialvalue=5
-            )
-
-            # Map the number to a quality setting
-            if quality_num <= 3:
-                quality = "fast"
-            elif quality_num <= 6:
-                quality = "medium"
-            else:
-                quality = "high"
-
-            # Get preset value
-            preset_value = quality_values[quality]
-
-            # Simplified approach: use numerical presets for libx264
-            if encoder == "libx264":
-                # Convert p1-p9 to actual preset names
-                preset_map = {
-                    "p1": "ultrafast",
-                    "p2": "veryfast",
-                    "p3": "faster",
-                    "p4": "fast",
-                    "p5": "medium",
-                    "p6": "slow",
-                    "p7": "slower",
-                    "p8": "veryslow",
-                    "p9": "placebo",
-                }
-                preset_value = preset_map.get(preset_value, "medium")
-
-            print(f"Using encoder: {encoder} with {quality_param}={preset_value}")
 
             # Prepare command
             ffmpeg_command = [
