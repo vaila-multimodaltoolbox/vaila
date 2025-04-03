@@ -204,7 +204,6 @@ def convert_mediapipe_to_pixel_format(file_path, save_directory):
 
     new_df.to_csv(new_file_path, index=False)
     print(f"Converted MediaPipe data saved to {new_file_path}")
-    messagebox.showinfo("Success", f"Converted MediaPipe data saved to {new_file_path}")
 
 
 # Function to batch convert all MediaPipe CSV files in a directory
@@ -236,9 +235,6 @@ def batch_convert_mediapipe(directory_path):
         convert_mediapipe_to_pixel_format(file_path, save_directory)
 
     print(f"All files have been converted and saved to {save_directory}")
-    messagebox.showinfo(
-        "Success", f"All files have been converted and saved to {save_directory}"
-    )
 
 
 def convert_kinovea_to_vaila(file_path, save_directory):
@@ -1253,14 +1249,12 @@ def batch_convert_yolo_tracker(directory_path=None):
                 f"\nHowever, there were errors with {len(errors)} file(s):\n"
                 + "\n".join(f"{name}: {error}" for name, error in errors)
             )
-            success_message += error_message
-        messagebox.showinfo("YOLO Tracker Conversion Completed", success_message)
+            print(error_message)
     elif errors:
         error_message = f"All files failed to convert.\nErrors:\n" + "\n".join(
             f"{name}: {error}" for name, error in errors
         )
         print(error_message)
-        messagebox.showerror("YOLO Tracker Conversion Failed", error_message)
 
 
 def rearrange_data_in_directory():
