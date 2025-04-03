@@ -789,9 +789,7 @@ class InterpolationConfigDialog(tk.simpledialog.Dialog):
             return True
 
         except ValueError as e:
-            messagebox.showerror(
-                "Error", f"Please enter valid numeric values: {str(e)}"
-            )
+            print(f"Error: Please enter valid numeric values: {str(e)}")
             return False
 
     def confirm_parameters(self):
@@ -1301,6 +1299,7 @@ def generate_report(dest_dir, config, processed_files):
                     f.write("\n" + "=" * 80 + "\n\n")
 
                 except Exception as e:
+                    print(f"Error: {str(e)}")
                     f.write(f"File {idx}: {file_info['original_filename']}\n")
                     f.write(f"Error during verification: {str(e)}\n")
                     f.write("-" * 40 + "\n\n")
@@ -1357,7 +1356,7 @@ def detect_float_format(original_path):
         # Se encontrou casas decimais, constrói o formato; caso contrário, usa 6
         return f"%.{int(max_decimals)}f" if max_decimals > 0 else "%.6f"
     except Exception as e:
-        print(f"Erro ao detectar o formato de float: {str(e)}")
+        print(f"Error: Could not detect float format: {str(e)}")
         return "%.6f"
 
 
