@@ -4,8 +4,8 @@ vaila.py
 ===============================================================================
 Author: Paulo R. P. Santiago
 Date:  7 October 2024
-Update: 31 March 2025
-Version updated: 0.4.4
+Update: 03 April 2025
+Version updated: 0.4.5
 Python Version: 3.12.9
 
 Description:
@@ -171,7 +171,7 @@ except ImportError as e:
 
 
 text = r"""
-version: 31.Mar.2025 (Python 3.12.9)
+version: 03.Apr.2025 (Python 3.12.9)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -246,7 +246,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 31.Mar.2025 (Python 3.12.9)")
+        self.title("vailá - 03.Apr.2025 (Python 3.12.9)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
