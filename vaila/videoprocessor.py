@@ -3,6 +3,9 @@ vailá - Multimodal Toolbox
 © Paulo Santiago, Guilherme Cesar, Ligia Mochida, Bruno Bedo
 https://github.com/vaila-multimodaltoolbox/vaila
 Please see AUTHORS for contributors.
+Created by Paulo Santiago
+Date: 03 April 2025
+Updated: 03 April 2025
 
 Licensed under GNU Lesser General Public License v3.0
 
@@ -44,6 +47,7 @@ import os
 import time
 import subprocess
 from tkinter import filedialog, messagebox, simpledialog
+import tqdm
 
 
 def check_ffmpeg_installed():
@@ -58,6 +62,152 @@ def check_ffmpeg_installed():
         return True
     except (subprocess.SubprocessError, FileNotFoundError):
         return False
+
+
+def detect_hardware_encoder():
+    """Detect hardware acceleration support with verification"""
+    try:
+        # First check available encoders
+        result = subprocess.run(
+            ["ffmpeg", "-encoders"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+
+        # Test if NVIDIA is actually working
+        if "h264_nvenc" in result.stdout:
+            try:
+                test_cmd = [
+                    "ffmpeg",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "color=black:s=32x32:r=1:d=1",
+                    "-c:v",
+                    "h264_nvenc",
+                    "-f",
+                    "null",
+                    "-",
+                ]
+                test_result = subprocess.run(
+                    test_cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    timeout=3,
+                )
+
+                if (
+                    "Cannot load nvcuda.dll" not in test_result.stderr
+                    and "Error" not in test_result.stderr
+                ):
+                    print("NVIDIA GPU hardware encoding confirmed working (h264_nvenc)")
+                    return {
+                        "encoder": "h264_nvenc",
+                        "quality_param": "preset",
+                        "quality_values": {
+                            "high": "p7",  # slow (previously "hq")
+                            "medium": "p5",  # medium
+                            "fast": "p3",  # fast (previously "hp")
+                        },
+                    }
+                else:
+                    print("NVIDIA NVENC found but not working, falling back to CPU")
+            except Exception as e:
+                print(f"NVIDIA NVENC test failed: {e}, falling back to CPU")
+
+        # Check for Intel QSV
+        if "h264_qsv" in result.stdout:
+            try:
+                test_cmd = [
+                    "ffmpeg",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "color=black:s=32x32:r=1:d=1",
+                    "-c:v",
+                    "h264_qsv",
+                    "-f",
+                    "null",
+                    "-",
+                ]
+                test_result = subprocess.run(
+                    test_cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    timeout=3,
+                )
+
+                if "Error" not in test_result.stderr:
+                    print(
+                        "Intel Quick Sync hardware encoding confirmed working (h264_qsv)"
+                    )
+                    return {
+                        "encoder": "h264_qsv",
+                        "quality_param": "preset",
+                        "quality_values": {
+                            "high": "veryslow",
+                            "medium": "medium",
+                            "fast": "veryfast",
+                        },
+                    }
+                else:
+                    print("Intel QSV found but not working, falling back to CPU")
+            except Exception as e:
+                print(f"Intel QSV test failed: {e}, falling back to CPU")
+
+        # Default to CPU encoding
+        print("Using CPU software encoding (libx264)")
+        return {
+            "encoder": "libx264",
+            "quality_param": "preset",
+            "quality_values": {
+                "high": "p7",  # slow
+                "medium": "p5",  # medium
+                "fast": "p2",  # veryfast
+            },
+        }
+
+    except Exception as e:
+        print(f"Error detecting encoders: {e}, falling back to libx264")
+        return {
+            "encoder": "libx264",
+            "quality_param": "preset",
+            "quality_values": {
+                "high": "p7",  # slow
+                "medium": "p5",  # medium
+                "fast": "p2",  # veryfast
+            },
+        }
+
+
+def check_video_size(video_path):
+    """Check video size before processing"""
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=size",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                video_path,
+            ],
+            stdout=subprocess.PIPE,
+            text=True,
+        )
+        size_bytes = int(result.stdout.strip())
+        size_gb = size_bytes / (1024**3)
+
+        if size_gb > 4:  # Limit of 4GB for example
+            return False, f"Video is too large ({size_gb:.2f} GB)"
+        return True, ""
+    except:
+        return True, ""  # Proceed in case of error
 
 
 def process_videos_merge(
@@ -82,12 +232,12 @@ def process_videos_merge(
         with os.scandir(source_dir) as entries:
             for entry in entries:
                 if entry.is_file() and entry.name.lower().endswith(
-                    (".mp4", ".avi", ".mov", ".mkv")
+                    (".mp4", ".avi", ".mov", ".mkv", ".MP4", ".AVI", ".MOV", ".MKV")
                 ):
                     video_files.append(entry.path)
 
     # Iterate over video files and apply the merge process
-    for video_path in video_files:
+    for video_path in tqdm.tqdm(video_files, desc="Processing videos"):
         try:
             print(f"Processing video: {video_path}")
 
@@ -97,53 +247,238 @@ def process_videos_merge(
                 f"{os.path.splitext(os.path.basename(video_path))[0]}_double.mp4",
             )
 
-            # Command to reverse the video and concatenate with the original
+            # Verificar se já processou este vídeo anteriormente
+            if os.path.exists(output_video):
+                if not messagebox.askyesno(
+                    "File exists",
+                    f"Output file already exists:\n{output_video}\n\nOverwrite?",
+                ):
+                    print(f"Skipping {video_path} (output exists)")
+                    continue
+
+            # Detect hardware encoder and available presets
+            encoder_info = detect_hardware_encoder()
+            encoder = encoder_info["encoder"]
+            quality_param = encoder_info["quality_param"]
+            quality_values = encoder_info["quality_values"]
+
+            # Ask user to choose quality by number (1-9)
+            quality_msg = "Choose quality level (1-9):\n1-3: Fast (lower quality)\n4-6: Medium\n7-9: High (slower)"
+            quality_num = simpledialog.askinteger(
+                "Quality Level", quality_msg, minvalue=1, maxvalue=9, initialvalue=5
+            )
+
+            # Map the number to a quality setting
+            if quality_num <= 3:
+                quality = "fast"
+            elif quality_num <= 6:
+                quality = "medium"
+            else:
+                quality = "high"
+
+            # Get preset value
+            preset_value = quality_values[quality]
+
+            # Simplified approach: use numerical presets for libx264
+            if encoder == "libx264":
+                # Convert p1-p9 to actual preset names
+                preset_map = {
+                    "p1": "ultrafast",
+                    "p2": "veryfast",
+                    "p3": "faster",
+                    "p4": "fast",
+                    "p5": "medium",
+                    "p6": "slow",
+                    "p7": "slower",
+                    "p8": "veryslow",
+                    "p9": "placebo",
+                }
+                preset_value = preset_map.get(preset_value, "medium")
+
+            print(f"Using encoder: {encoder} with {quality_param}={preset_value}")
+
+            # Prepare command
             ffmpeg_command = [
                 "ffmpeg",
                 "-i",
                 video_path,
-                "-vf",
-                "reverse",
-                "-c:v",
-                "libx264",
-                "-preset",
-                "fast",
-                "-f",
-                "mpegts",
-                "pipe:1",
-            ]
-            reverse_process = subprocess.Popen(ffmpeg_command, stdout=subprocess.PIPE)
-
-            ffmpeg_concat_command = [
-                "ffmpeg",
-                "-i",
-                video_path,
-                "-f",
-                "mpegts",
-                "-i",
-                "pipe:0",
                 "-filter_complex",
-                "[1:v][0:v]concat=n=2:v=1:a=0",
+                "[0:v]reverse[r];[r][0:v]concat=n=2:v=1:a=0[out]",
+                "-map",
+                "[out]",
                 "-c:v",
-                "libx264",
-                "-preset",
-                "fast",
+                encoder,
+                "-threads",
+                "4",
+                f"-{quality_param}",
+                preset_value,
                 output_video,
             ]
-            subprocess.run(
-                ffmpeg_concat_command, stdin=reverse_process.stdout, check=True
-            )
 
-            # Write a log file with the frame information
+            # Then get metadata
+            try:
+                # 1. Obter duração do vídeo
+                duration_cmd = [
+                    "ffprobe",
+                    "-v",
+                    "error",
+                    "-show_entries",
+                    "format=duration",
+                    "-of",
+                    "default=noprint_wrappers=1:nokey=1",
+                    video_path,
+                ]
+                duration = float(
+                    subprocess.run(
+                        duration_cmd,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                    ).stdout.strip()
+                )
+
+                # 2. Obter resolução
+                resolution_cmd = [
+                    "ffprobe",
+                    "-v",
+                    "error",
+                    "-select_streams",
+                    "v:0",
+                    "-show_entries",
+                    "stream=width,height",
+                    "-of",
+                    "default=noprint_wrappers=1:nokey=1",
+                    video_path,
+                ]
+                resolution = (
+                    subprocess.run(
+                        resolution_cmd,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                    )
+                    .stdout.strip()
+                    .split("\n")
+                )
+                width = int(resolution[0])
+                height = int(resolution[1])
+
+                # 3. Obter número de frames
+                frames_cmd = [
+                    "ffprobe",
+                    "-v",
+                    "error",
+                    "-select_streams",
+                    "v:0",
+                    "-count_frames",
+                    "-show_entries",
+                    "stream=nb_read_frames",
+                    "-of",
+                    "default=noprint_wrappers=1:nokey=1",
+                    video_path,
+                ]
+                total_frames = int(
+                    subprocess.run(
+                        frames_cmd,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                    ).stdout.strip()
+                )
+
+                # 4. Obter taxa de quadros
+                fps_cmd = [
+                    "ffprobe",
+                    "-v",
+                    "error",
+                    "-select_streams",
+                    "v:0",
+                    "-show_entries",
+                    "stream=r_frame_rate",
+                    "-of",
+                    "default=noprint_wrappers=1:nokey=1",
+                    video_path,
+                ]
+                fps_str = subprocess.run(
+                    fps_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+                ).stdout.strip()
+                frame_rate = eval(fps_str)  # Convert "30000/1001" to float
+
+                # Calcular informações do vídeo resultante
+                merged_frames = total_frames * 2
+                merged_duration = duration * 2
+                reverse_start_frame = total_frames
+
+                print(
+                    f"Video info: {width}x{height}, {frame_rate} fps, {duration:.2f}s, {total_frames} frames"
+                )
+
+            except Exception as e:
+                print(f"Warning: Could not get detailed video info: {e}")
+                width = height = "Unknown"
+                duration = 0
+                frame_rate = "Unknown"
+                total_frames = 0
+                merged_frames = 0
+                merged_duration = 0
+                reverse_start_frame = 0
+
+            subprocess.run(ffmpeg_command, check=True)
+
+            # Após o processamento, escrever log detalhado
             log_file_path = os.path.join(
                 output_dir,
                 f"{os.path.splitext(os.path.basename(video_path))[0]}_merge_frames.txt",
             )
             with open(log_file_path, "w") as log_file:
-                log_file.write(f"Video: {video_path}\n")
+                log_file.write(f"DETAILED VIDEO MERGE REPORT\n")
+                log_file.write(f"=========================\n\n")
+                log_file.write(f"Source Video: {video_path}\n")
+                log_file.write(f"Output Video: {output_video}\n")
                 log_file.write(
-                    f"Frame where merge starts: 0 (since it's the full video + reverse)\n"
+                    f"Processing Date: {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n"
                 )
+
+                log_file.write(f"ORIGINAL VIDEO DETAILS\n")
+                log_file.write(f"---------------------\n")
+                log_file.write(f"Resolution: {width} x {height}\n")
+                log_file.write(f"Frame Rate: {frame_rate} fps\n")
+                log_file.write(f"Duration: {duration:.2f} seconds\n")
+                log_file.write(f"Total Frames: {total_frames}\n\n")
+
+                log_file.write(f"MERGED VIDEO STRUCTURE\n")
+                log_file.write(f"---------------------\n")
+                log_file.write(f"Part 1 (Original Video):\n")
+                log_file.write(f"  - Start Frame: 0\n")
+                log_file.write(f"  - End Frame: {total_frames - 1}\n")
+                log_file.write(f"  - Duration: {duration:.2f} seconds\n\n")
+
+                log_file.write(f"Part 2 (Reversed Video):\n")
+                log_file.write(f"  - Start Frame: {reverse_start_frame}\n")
+                log_file.write(f"  - End Frame: {merged_frames - 1}\n")
+                log_file.write(f"  - Duration: {duration:.2f} seconds\n\n")
+
+                log_file.write(f"MERGED VIDEO DETAILS\n")
+                log_file.write(f"-------------------\n")
+                log_file.write(f"Total Frames: {merged_frames}\n")
+                log_file.write(f"Total Duration: {merged_duration:.2f} seconds\n")
+                log_file.write(f"Encoder: {encoder}\n")
+                log_file.write(f"Quality Setting: {quality_param}={preset_value}\n")
+
+                # Adicionar tamanho do arquivo
+                output_size_mb = os.path.getsize(output_video) / (1024 * 1024)
+                log_file.write(f"File Size: {output_size_mb:.2f} MB\n")
+
+                log_file.write(f"\nFFmpeg Command Used:\n")
+                log_file.write(f"{' '.join(ffmpeg_command)}\n")
+
+            # Registre tempo de execução por vídeo
+            start_time = time.time()
+            # ... processamento ...
+            elapsed = time.time() - start_time
+            print(
+                f"Processed in {elapsed:.2f} seconds ({os.path.getsize(output_video)/1024/1024:.2f} MB)"
+            )
 
             print(f"Video processed and saved to: {output_video}")
         except subprocess.CalledProcessError as e:
@@ -179,7 +514,7 @@ def process_videos_split(
                     video_files.append(entry.path)
 
     # Iterate over video files and apply the split process
-    for video_path in video_files:
+    for video_path in tqdm.tqdm(video_files, desc="Processing videos"):
         try:
             print(f"Processing video: {video_path}")
 
@@ -212,6 +547,55 @@ def process_videos_split(
                 f"{os.path.splitext(os.path.basename(video_path))[0]}_2half.mp4",
             )
 
+            # Obter informações detalhadas do vídeo
+            ffprobe_info_command = [
+                "ffprobe",
+                "-v",
+                "error",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "stream=r_frame_rate,width,height",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "csv=p=0",
+                video_path,
+            ]
+
+            try:
+                video_info = (
+                    subprocess.run(
+                        ffprobe_info_command,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                    )
+                    .stdout.strip()
+                    .split(",")
+                )
+
+                frame_rate = eval(video_info[0])  # Convert "30000/1001" to float
+                width = int(video_info[1])
+                height = int(video_info[2])
+                duration = float(video_info[3])
+
+                # Calcular informações do vídeo resultante
+                half_duration = duration / 2
+                second_half_duration = duration - half_duration
+
+                print(
+                    f"Video info: {width}x{height}, {frame_rate} fps, {duration:.2f}s, {total_frames} frames"
+                )
+
+            except Exception as e:
+                print(f"Warning: Could not get detailed video info: {e}")
+                width = height = "Unknown"
+                duration = 0
+                frame_rate = "Unknown"
+                half_duration = 0
+                second_half_duration = 0
+
             # Command to extract the second half of the video by frames
             ffmpeg_command = [
                 "ffmpeg",
@@ -223,18 +607,57 @@ def process_videos_split(
                 "vfr",
                 "-c:v",
                 "libx264",
+                "-threads",
+                "4",
                 output_video,
             ]
             subprocess.run(ffmpeg_command, check=True)
 
-            # Write a log file with the frame information
+            # Após processamento, escrever log detalhado
             log_file_path = os.path.join(
                 output_dir,
                 f"{os.path.splitext(os.path.basename(video_path))[0]}_split_frames.txt",
             )
             with open(log_file_path, "w") as log_file:
-                log_file.write(f"Video: {video_path}\n")
-                log_file.write(f"Frame where split starts: {half_frame}\n")
+                log_file.write(f"DETAILED VIDEO SPLIT REPORT\n")
+                log_file.write(f"=========================\n\n")
+                log_file.write(f"Source Video: {video_path}\n")
+                log_file.write(f"Output Video: {output_video}\n")
+                log_file.write(
+                    f"Processing Date: {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+                )
+
+                log_file.write(f"ORIGINAL VIDEO DETAILS\n")
+                log_file.write(f"---------------------\n")
+                log_file.write(f"Resolution: {width} x {height}\n")
+                log_file.write(f"Frame Rate: {frame_rate} fps\n")
+                log_file.write(f"Duration: {duration:.2f} seconds\n")
+                log_file.write(f"Total Frames: {total_frames}\n\n")
+
+                log_file.write(f"SPLIT DETAILS\n")
+                log_file.write(f"------------\n")
+                log_file.write(f"First Half (Discarded):\n")
+                log_file.write(f"  - Start Frame: 0\n")
+                log_file.write(f"  - End Frame: {half_frame - 1}\n")
+                log_file.write(f"  - Duration: {half_duration:.2f} seconds\n\n")
+
+                log_file.write(f"Second Half (Kept):\n")
+                log_file.write(f"  - Start Frame: {half_frame}\n")
+                log_file.write(f"  - End Frame: {total_frames - 1}\n")
+                log_file.write(f"  - Duration: {second_half_duration:.2f} seconds\n\n")
+
+                log_file.write(f"OUTPUT VIDEO DETAILS\n")
+                log_file.write(f"-------------------\n")
+                log_file.write(f"Total Frames: {total_frames - half_frame}\n")
+                log_file.write(f"Total Duration: {second_half_duration:.2f} seconds\n")
+                log_file.write(f"Encoder: libx264\n")
+
+                # Adicionar tamanho do arquivo
+                output_size_mb = os.path.getsize(output_video) / (1024 * 1024)
+                log_file.write(f"File Size: {output_size_mb:.2f} MB\n")
+
+                log_file.write(f"\nFFmpeg Command Used:\n")
+                log_file.write(f"{' '.join(ffmpeg_command)}\n")
 
             print(f"Video processed and saved to: {output_video}")
         except subprocess.CalledProcessError as e:
