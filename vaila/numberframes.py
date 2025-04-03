@@ -38,54 +38,113 @@ def get_video_info(video_path):
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
 
     try:
-        # ffprobe command to extract video metadata
-        command = [
+        # 1. Obter duração do vídeo
+        duration_cmd = [
+            "ffprobe",
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+            video_path,
+        ]
+        duration = float(
+            subprocess.run(
+                duration_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+            ).stdout.strip()
+        )
+
+        # 2. Obter resolução
+        resolution_cmd = [
             "ffprobe",
             "-v",
             "error",
             "-select_streams",
             "v:0",
             "-show_entries",
-            "stream=nb_frames,r_frame_rate,width,height,codec_name",
-            "-show_entries",
-            "format=duration",
+            "stream=width,height",
             "-of",
-            "json",
+            "default=noprint_wrappers=1:nokey=1",
             video_path,
         ]
-        result = subprocess.run(
-            command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+        resolution = (
+            subprocess.run(
+                resolution_cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            .stdout.strip()
+            .split("\n")
         )
-        if result.returncode != 0:
-            print(f"Error: ffprobe failed for {video_path}: {result.stderr}")
-            return None
+        width = int(resolution[0])
+        height = int(resolution[1])
 
-        import json
+        # 3. Obter número de frames
+        frames_cmd = [
+            "ffprobe",
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-count_frames",
+            "-show_entries",
+            "stream=nb_read_frames",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+            video_path,
+        ]
+        total_frames = int(
+            subprocess.run(
+                frames_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+            ).stdout.strip()
+        )
 
-        metadata = json.loads(result.stdout)
+        # 4. Obter taxa de quadros
+        fps_cmd = [
+            "ffprobe",
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=r_frame_rate",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+            video_path,
+        ]
+        fps_str = subprocess.run(
+            fps_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+        ).stdout.strip()
+        frame_rate = eval(fps_str)  # Convert "30000/1001" to float
 
-        # Extract relevant metadata
-        stream_info = metadata.get("streams", [{}])[0]
-        format_info = metadata.get("format", {})
+        # Calcular informações do vídeo resultante
+        merged_frames = total_frames * 2
+        merged_duration = duration * 2
+        reverse_start_frame = total_frames
 
-        frame_count = int(stream_info.get("nb_frames", 0))
-        fps = eval(stream_info.get("r_frame_rate", "0"))
-        width = stream_info.get("width", 0)
-        height = stream_info.get("height", 0)
-        codec = stream_info.get("codec_name", "unknown")
-        duration = float(format_info.get("duration", 0))
+        print(
+            f"Video info: {width}x{height}, {frame_rate} fps, {duration:.2f}s, {total_frames} frames"
+        )
 
         return {
             "file_name": os.path.basename(video_path),
-            "frame_count": frame_count,
-            "fps": fps,
+            "frame_count": total_frames,
+            "fps": frame_rate,
             "resolution": f"{width}x{height}",
-            "codec": codec,
             "duration": duration,
         }
 
     except Exception as e:
-        print(f"Error parsing video info for {video_path}: {str(e)}")
+        print(f"Warning: Could not get detailed video info: {e}")
+        width = height = "Unknown"
+        duration = "Unknown"
+        frame_rate = "Unknown"
+        total_frames = "Unknown"
+        merged_frames = "Unknown"
+        merged_duration = "Unknown"
+        reverse_start_frame = "Unknown"
         return None
 
 
@@ -157,7 +216,7 @@ def display_video_info(video_infos, output_file):
     scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
 
     # Adding headers
-    headers = ["Video File", "Frames", "FPS", "Resolution", "Codec", "Duration (s)"]
+    headers = ["Video File", "Frames", "FPS", "Resolution", "Duration (s)"]
     for i, header in enumerate(headers):
         ttk.Label(scrollable_frame, text=header, font=("Arial", 10, "bold")).grid(
             row=0, column=i, padx=10, pady=5, sticky=tk.W
@@ -169,7 +228,7 @@ def display_video_info(video_infos, output_file):
         ).grid(row=i, column=0, sticky=tk.W, pady=5)
         if "error" in info:
             ttk.Label(scrollable_frame, text=info["error"]).grid(
-                row=i, column=1, columnspan=5, sticky=tk.W, padx=10
+                row=i, column=1, columnspan=4, sticky=tk.W, padx=10
             )
         else:
             ttk.Label(scrollable_frame, text=info["frame_count"]).grid(
@@ -181,11 +240,8 @@ def display_video_info(video_infos, output_file):
             ttk.Label(scrollable_frame, text=info["resolution"]).grid(
                 row=i, column=3, sticky=tk.W, padx=10
             )
-            ttk.Label(scrollable_frame, text=info["codec"]).grid(
-                row=i, column=4, sticky=tk.W, padx=10
-            )
             ttk.Label(scrollable_frame, text=f"{info['duration']:.2f}").grid(
-                row=i, column=5, sticky=tk.W, padx=10
+                row=i, column=4, sticky=tk.W, padx=10
             )
 
     root.mainloop()
@@ -204,7 +260,6 @@ def save_basic_metadata_to_file(video_infos, directory_path):
                 f.write(f"Frames: {info['frame_count']}\n")
                 f.write(f"FPS: {info['fps']}\n")
                 f.write(f"Resolution: {info['resolution']}\n")
-                f.write(f"Codec: {info['codec']}\n")
                 f.write(f"Duration (s): {info['duration']:.2f}\n\n")
 
     return output_file
