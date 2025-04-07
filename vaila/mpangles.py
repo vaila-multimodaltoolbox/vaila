@@ -225,60 +225,222 @@ def compute_absolute_angle(p1, p2):
     return angle
 
 
-def compute_relative_angle(p1, p2, p3):
+def compute_relative_angle(a, b, c):
     """
-    Calculates the relative angle (in degrees) between vector p1->p2 and p2->p3.
-    Uses cross product and dot product for robust angle calculation.
-
+    Compute the angle between three points.
+    
     Args:
-        p1 (list): [x, y] coordinates of first point
-        p2 (list): [x, y] coordinates of second (joint) point
-        p3 (list): [x, y] coordinates of third point
-
+        a: First point (3D vector)
+        b: Middle point (3D vector)
+        c: Third point (3D vector)
+        
     Returns:
-        float: Angle in degrees (0 to 180)
+        Angle in degrees
     """
-    # Create vectors
-    u = np.array([p2[0] - p1[0], p2[1] - p1[1]])
-    v = np.array([p3[0] - p2[0], p3[1] - p2[1]])
-
+    # Calculate vectors
+    vector_ab = np.array(a) - np.array(b)
+    vector_cb = np.array(c) - np.array(b)
+    
     # Normalize vectors
-    u_norm = np.linalg.norm(u)
-    v_norm = np.linalg.norm(v)
+    norm_ab = np.linalg.norm(vector_ab)
+    norm_cb = np.linalg.norm(vector_cb)
+    
+    if norm_ab == 0 or norm_cb == 0:
+        return 0.0
+    
+    vector_ab_normalized = vector_ab / norm_ab
+    vector_cb_normalized = vector_cb / norm_cb
+    
+    # Calculate dot product
+    dot_product = np.dot(vector_ab_normalized, vector_cb_normalized)
+    
+    # Clamp dot product to valid range for arccos
+    dot_product = np.clip(dot_product, -1.0, 1.0)
+    
+    # Calculate angle in radians
+    angle_rad = np.arccos(dot_product)
+    
+    # Convert to degrees
+    angle_deg = np.degrees(angle_rad)
+    
+    return angle_deg
 
-    # Check for zero-length vectors
-    if u_norm == 0 or v_norm == 0:
-        return np.nan
 
-    u = u / u_norm
-    v = v / v_norm
-
-    # Calculate cross and dot products
-    cross = u[0] * v[1] - u[1] * v[0]
-    dot = np.dot(u, v)
-
-    # Calculate angle
-    angle = np.degrees(np.arctan2(cross, dot))
-
-    # Ensure angle is positive
-    if angle < 0:
-        angle = 180 + angle
-
-    return angle
+def compute_knee_angle(hip, knee, ankle):
+    """
+    Compute the knee angle using thigh vector (hip-knee) and shank vector (ankle-knee).
+    
+    Args:
+        hip: Hip point (3D vector)
+        knee: Knee point (3D vector)
+        ankle: Ankle point (3D vector)
+        
+    Returns:
+        Knee angle in degrees
+    """
+    # Calculate thigh vector (hip to knee)
+    thigh_vector = np.array(hip) - np.array(knee)
+    
+    # Calculate shank vector (ankle to knee)
+    shank_vector = np.array(ankle) - np.array(knee)
+    
+    # Normalize vectors
+    thigh_norm = np.linalg.norm(thigh_vector)
+    shank_norm = np.linalg.norm(shank_vector)
+    
+    if thigh_norm == 0 or shank_norm == 0:
+        return 0.0
+    
+    thigh_vector_normalized = thigh_vector / thigh_norm
+    shank_vector_normalized = shank_vector / shank_norm
+    
+    # Calculate dot product
+    dot_product = np.dot(thigh_vector_normalized, shank_vector_normalized)
+    
+    # Clamp dot product to valid range for arccos
+    dot_product = np.clip(dot_product, -1.0, 1.0)
+    
+    # Calculate angle in radians
+    angle_rad = np.arccos(dot_product)
+    
+    # Convert to degrees
+    angle_deg = np.degrees(angle_rad)
+    
+    return angle_deg
 
 
 def compute_midpoint(p1, p2):
     """
-    Calculates the midpoint between two points.
-
+    Compute the midpoint between two 2D points.
+    
     Args:
-        p1 (list): [x, y] coordinates of first point
-        p2 (list): [x, y] coordinates of second point
-
+        p1: First point (2D vector)
+        p2: Second point (2D vector)
+        
     Returns:
-        list: [x, y] coordinates of midpoint
+        Midpoint as a 2D vector
     """
     return [(p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2]
+
+
+def compute_hip_angle(hip, knee, trunk_vector):
+    """
+    Compute the hip angle using thigh vector (knee-hip) and trunk vector.
+    
+    Args:
+        hip: Hip point (3D vector)
+        knee: Knee point (3D vector)
+        trunk_vector: Normalized trunk vector
+        
+    Returns:
+        Hip angle in degrees
+    """
+    # Calculate thigh vector (knee to hip)
+    thigh_vector = np.array(hip) - np.array(knee)
+    
+    # Normalize thigh vector
+    thigh_norm = np.linalg.norm(thigh_vector)
+    
+    if thigh_norm == 0:
+        return 0.0
+    
+    thigh_vector_normalized = thigh_vector / thigh_norm
+    
+    # Calculate dot product
+    dot_product = np.dot(thigh_vector_normalized, trunk_vector)
+    
+    # Clamp dot product to valid range for arccos
+    dot_product = np.clip(dot_product, -1.0, 1.0)
+    
+    # Calculate angle in radians
+    angle_rad = np.arccos(dot_product)
+    
+    # Convert to degrees
+    angle_deg = np.degrees(angle_rad)
+    
+    return angle_deg
+
+
+def compute_ankle_angle(knee, ankle, foot_index, heel):
+    """
+    Compute the ankle angle using shank vector (knee-ankle) and foot vector (foot_index-heel).
+    
+    Args:
+        knee: Knee point (3D vector)
+        ankle: Ankle point (3D vector)
+        foot_index: Foot index point (3D vector)
+        heel: Heel point (3D vector)
+        
+    Returns:
+        Ankle angle in degrees
+    """
+    # Calculate shank vector (knee to ankle)
+    shank_vector = np.array(ankle) - np.array(knee)
+    
+    # Calculate foot vector (foot_index to heel)
+    foot_vector = np.array(heel) - np.array(foot_index)
+    
+    # Normalize vectors
+    shank_norm = np.linalg.norm(shank_vector)
+    foot_norm = np.linalg.norm(foot_vector)
+    
+    if shank_norm == 0 or foot_norm == 0:
+        return 0.0
+    
+    shank_vector_normalized = shank_vector / shank_norm
+    foot_vector_normalized = foot_vector / foot_norm
+    
+    # Calculate dot product
+    dot_product = np.dot(foot_vector_normalized, shank_vector_normalized)
+    
+    # Clamp dot product to valid range for arccos
+    dot_product = np.clip(dot_product, -1.0, 1.0)
+    
+    # Calculate angle in radians
+    angle_rad = np.arccos(dot_product)
+    
+    # Convert to degrees
+    angle_deg = np.degrees(angle_rad)
+    
+    return angle_deg
+
+
+def compute_shoulder_angle(shoulder, elbow, trunk_vector):
+    """
+    Compute the shoulder angle using upper arm vector (elbow-shoulder) and trunk vector.
+    
+    Args:
+        shoulder: Shoulder point (2D vector)
+        elbow: Elbow point (2D vector)
+        trunk_vector: Normalized trunk vector (2D)
+        
+    Returns:
+        Shoulder angle in degrees
+    """
+    # Calculate upper arm vector (elbow to shoulder)
+    upper_arm_vector = np.array(elbow) - np.array(shoulder)
+    
+    # Normalize upper arm vector
+    upper_arm_norm = np.linalg.norm(upper_arm_vector)
+    
+    if upper_arm_norm == 0:
+        return 0.0
+    
+    upper_arm_normalized = upper_arm_vector / upper_arm_norm
+    
+    # Calculate dot product
+    dot_product = np.dot(upper_arm_normalized, trunk_vector)
+    
+    # Clamp dot product to valid range for arccos
+    dot_product = np.clip(dot_product, -1.0, 1.0)
+    
+    # Calculate angle in radians
+    angle_rad = np.arccos(dot_product)
+    
+    # Convert to degrees
+    angle_deg = np.degrees(angle_rad)
+    
+    return angle_deg
 
 
 def process_angles(input_csv, output_csv, segments=None):
@@ -295,49 +457,109 @@ def process_angles(input_csv, output_csv, segments=None):
         df = pd.read_csv(input_csv)
         print(f"Reading input file: {input_csv}")
         
-        # Get landmarks for angle calculation
-        # Example for left arm angles:
+        # Extract all landmarks needed for angle calculations
+        # Right side landmarks
+        right_shoulder = get_vector_landmark(df, "right_shoulder")
+        right_elbow = get_vector_landmark(df, "right_elbow")
+        right_wrist = get_vector_landmark(df, "right_wrist")
+        right_hip = get_vector_landmark(df, "right_hip")
+        right_knee = get_vector_landmark(df, "right_knee")
+        right_ankle = get_vector_landmark(df, "right_ankle")
+        right_foot_index = get_vector_landmark(df, "right_foot_index")
+        right_heel = get_vector_landmark(df, "right_heel")
+        
+        # Left side landmarks
         left_shoulder = get_vector_landmark(df, "left_shoulder")
         left_elbow = get_vector_landmark(df, "left_elbow")
         left_wrist = get_vector_landmark(df, "left_wrist")
+        left_hip = get_vector_landmark(df, "left_hip")
+        left_knee = get_vector_landmark(df, "left_knee")
+        left_ankle = get_vector_landmark(df, "left_ankle")
+        left_foot_index = get_vector_landmark(df, "left_foot_index")
+        left_heel = get_vector_landmark(df, "left_heel")
         
-        # Calculate angles
-        # Absolute angle of upper arm (shoulder to elbow)
-        left_upper_arm_angles = np.array([
-            compute_absolute_angle(shoulder, elbow) 
-            for shoulder, elbow in zip(left_shoulder, left_elbow)
+        # Calculate midpoints for trunk vector
+        mid_hip = [compute_midpoint(l_hip, r_hip) for l_hip, r_hip in zip(left_hip, right_hip)]
+        mid_shoulder = [compute_midpoint(l_shoulder, r_shoulder) for l_shoulder, r_shoulder in zip(left_shoulder, right_shoulder)]
+        
+        # Calculate trunk vector (mid_hip - mid_shoulder) and normalize
+        trunk_vectors = []
+        for m_hip, m_shoulder in zip(mid_hip, mid_shoulder):
+            trunk_vector = np.array(m_hip) - np.array(m_shoulder)  # Changed direction to hip - shoulder
+            trunk_norm = np.linalg.norm(trunk_vector)
+            
+            if trunk_norm == 0:
+                trunk_vectors.append(np.array([0, 0]))
+            else:
+                trunk_vectors.append(trunk_vector / trunk_norm)
+        
+        # Right side angles
+        right_elbow_angles = np.array([
+            compute_relative_angle(shoulder, elbow, wrist)
+            for shoulder, elbow, wrist in zip(right_shoulder, right_elbow, right_wrist)
         ])
         
-        # Absolute angle of forearm (elbow to wrist)
-        left_forearm_angles = np.array([
-            compute_absolute_angle(elbow, wrist)
-            for elbow, wrist in zip(left_elbow, left_wrist)
+        right_shoulder_angles = np.array([
+            compute_shoulder_angle(shoulder, elbow, trunk_vector)
+            for shoulder, elbow, trunk_vector in zip(right_shoulder, right_elbow, trunk_vectors)
         ])
         
-        # Relative angle at elbow
+        right_hip_angles = np.array([
+            compute_hip_angle(hip, knee, trunk_vector)
+            for hip, knee, trunk_vector in zip(right_hip, right_knee, trunk_vectors)
+        ])
+        
+        right_knee_angles = np.array([
+            compute_knee_angle(hip, knee, ankle)
+            for hip, knee, ankle in zip(right_hip, right_knee, right_ankle)
+        ])
+        
+        right_ankle_angles = np.array([
+            compute_ankle_angle(knee, ankle, foot_index, heel)
+            for knee, ankle, foot_index, heel in zip(right_knee, right_ankle, right_foot_index, right_heel)
+        ])
+        
+        # Left side angles
         left_elbow_angles = np.array([
             compute_relative_angle(shoulder, elbow, wrist)
             for shoulder, elbow, wrist in zip(left_shoulder, left_elbow, left_wrist)
         ])
         
-        # Para extrair outros marcadores:
-        right_shoulder = get_vector_landmark(df, "right_shoulder")
-        right_hip = get_vector_landmark(df, "right_hip")
-        right_knee = get_vector_landmark(df, "right_knee")
-
-        # Para calcular ângulos do quadril direito:
-        right_hip_angles = np.array([
-            compute_absolute_angle(hip, knee)
-            for hip, knee in zip(right_hip, right_knee)
+        left_shoulder_angles = np.array([
+            compute_shoulder_angle(shoulder, elbow, trunk_vector)
+            for shoulder, elbow, trunk_vector in zip(left_shoulder, left_elbow, trunk_vectors)
+        ])
+        
+        left_hip_angles = np.array([
+            compute_hip_angle(hip, knee, trunk_vector)
+            for hip, knee, trunk_vector in zip(left_hip, left_knee, trunk_vectors)
+        ])
+        
+        left_knee_angles = np.array([
+            compute_knee_angle(hip, knee, ankle)
+            for hip, knee, ankle in zip(left_hip, left_knee, left_ankle)
+        ])
+        
+        left_ankle_angles = np.array([
+            compute_ankle_angle(knee, ankle, foot_index, heel)
+            for knee, ankle, foot_index, heel in zip(left_knee, left_ankle, left_foot_index, left_heel)
         ])
         
         # Create output DataFrame
         angles_df = pd.DataFrame({
             'frame_index': df.iloc[:, 0],
-            'left_upper_arm_abs': left_upper_arm_angles,
-            'left_forearm_abs': left_forearm_angles,
+            # Right side angles
+            'right_elbow_rel': right_elbow_angles,
+            'right_shoulder_rel': right_shoulder_angles,
+            'right_hip_rel': right_hip_angles,
+            'right_knee_rel': right_knee_angles,
+            'right_ankle_rel': right_ankle_angles,
+            # Left side angles
             'left_elbow_rel': left_elbow_angles,
-            'right_hip_abs': right_hip_angles
+            'left_shoulder_rel': left_shoulder_angles,
+            'left_hip_rel': left_hip_angles,
+            'left_knee_rel': left_knee_angles,
+            'left_ankle_rel': left_ankle_angles
         })
         
         # Save to CSV
