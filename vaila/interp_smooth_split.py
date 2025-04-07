@@ -31,7 +31,7 @@ Key Features:
     )
     y = Filtering or smoothing the data method
     return y[padding_length:-padding_length]
-
+ 
 3. **Filtering/Smoothing**:
    - Applies Kalman filter, Savitzky-Golay filter, or nearest value fill to
      numerical data.
@@ -83,7 +83,7 @@ class InterpolationConfigDialog(tk.simpledialog.Dialog):
         self.arima_p = tk.StringVar(value="1")  # AR order
         self.arima_d = tk.StringVar(value="0")  # Difference order
         self.arima_q = tk.StringVar(value="0")  # MA order
-
+        
         # Call parent constructor after initializing variables
         super().__init__(parent, title="Interpolation Configuration")
 
@@ -91,39 +91,39 @@ class InterpolationConfigDialog(tk.simpledialog.Dialog):
         # Create main frame with scrollbar
         main_container = tk.Frame(master)
         main_container.pack(fill="both", expand=True)
-
+        
         # Create a canvas with scrollbar
         canvas = tk.Canvas(main_container, width=800, height=600)
         scrollbar = tk.Scrollbar(
             main_container, orient="vertical", command=canvas.yview
         )
         scrollable_frame = tk.Frame(canvas)
-
+        
         scrollable_frame.bind(
             "<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
         )
-
+        
         canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
-
+        
         canvas.pack(side="left", fill="both", expand=True, padx=5, pady=5)
         scrollbar.pack(side="right", fill="y")
-
+        
         # Create two columns
         left_column = tk.Frame(scrollable_frame)
         right_column = tk.Frame(scrollable_frame)
-
+        
         left_column.grid(row=0, column=0, sticky="nw", padx=10)
         right_column.grid(row=0, column=1, sticky="nw", padx=10)
-
+        
         # ====== LEFT COLUMN - METHODS SELECTION ======
-
+        
         # Frame for the gap filling method
         interp_frame = tk.LabelFrame(
             left_column, text="Gap Filling Method", padx=5, pady=5
         )
         interp_frame.pack(fill="x", pady=5, anchor="n")
-
+        
         # List of interpolation methods
         interp_text = """
 1 - Linear Interpolation (simple, works well for most cases)
@@ -132,24 +132,24 @@ class InterpolationConfigDialog(tk.simpledialog.Dialog):
 4 - Kalman Filter (good for movement data, models physics)
 5 - None (leave gaps as NaN)
 6 - Skip (keep original data, apply only smoothing)"""
-
+        
         tk.Label(interp_frame, text=interp_text, justify="left").pack(
             anchor="w", padx=5
         )
-
+        
         tk.Label(interp_frame, text="Enter gap filling method (1-6):").pack(
             anchor="w", padx=5, pady=5
         )
         self.interp_entry = tk.Entry(interp_frame)
         self.interp_entry.insert(0, "1")  # Default: linear
         self.interp_entry.pack(fill="x", padx=5)
-
+        
         # Frame for smoothing method
         smooth_frame = tk.LabelFrame(
             left_column, text="Smoothing Method", padx=5, pady=5
         )
         smooth_frame.pack(fill="x", pady=5, anchor="n")
-
+        
         # List of smoothing methods
         smooth_text = """
 1 - None (no smoothing)
@@ -159,11 +159,11 @@ class InterpolationConfigDialog(tk.simpledialog.Dialog):
 5 - Butterworth Filter (4th order, frequency domain filtering)
 6 - Spline Smoothing (flexible curve fitting)
 7 - ARIMA (time series modeling and filtering)"""
-
+        
         tk.Label(smooth_frame, text=smooth_text, justify="left").pack(
             anchor="w", padx=5
         )
-
+        
         # Important explanatory note
         tk.Label(
             smooth_frame,
@@ -178,7 +178,7 @@ class InterpolationConfigDialog(tk.simpledialog.Dialog):
         self.smooth_entry = tk.Entry(smooth_frame)
         self.smooth_entry.insert(0, "1")  # Default: no smoothing
         self.smooth_entry.pack(fill="x", padx=5)
-
+        
         # Add button to update parameters based on selection
         update_button = tk.Button(
             smooth_frame, text="Update Parameters", command=self.update_params_frame
@@ -190,20 +190,20 @@ class InterpolationConfigDialog(tk.simpledialog.Dialog):
             left_column, text="Split Configuration", padx=5, pady=5
         )
         split_frame.pack(fill="x", pady=5, anchor="n")
-
+        
         self.split_var = tk.BooleanVar(value=False)
         tk.Checkbutton(
             split_frame, text="Split data into two parts", variable=self.split_var
         ).pack(anchor="w")
-
+        
         # ====== RIGHT COLUMN - PARAMETERS ======
-
+        
         # Frame for specific method parameters
         self.params_frame = tk.LabelFrame(
             right_column, text="Method Parameters", padx=5, pady=5
         )
         self.params_frame.pack(fill="x", pady=5, anchor="n")
-
+        
         # Create empty widgets for parameters
         self.params_widgets = []
         self.param_entries = {}  # Dictionary to keep track of parameter entries
@@ -217,54 +217,54 @@ class InterpolationConfigDialog(tk.simpledialog.Dialog):
             font=("Arial", 10, "bold"),
         )
         self.confirm_button.pack(pady=10)
-
+        
         # Frame for padding
         padding_frame = tk.LabelFrame(
             right_column, text="Padding Configuration", padx=5, pady=5
         )
         padding_frame.pack(fill="x", pady=5, anchor="n")
-
+        
         tk.Label(padding_frame, text="Padding length (% of data):").pack(anchor="w")
         self.padding_entry = tk.Entry(padding_frame)
         self.padding_entry.insert(0, "10")  # Default 10%
         self.padding_entry.pack(fill="x", padx=5)
-
+        
         # Frame for gap configuration
         gap_frame = tk.LabelFrame(
             right_column, text="Gap Configuration", padx=5, pady=5
         )
         gap_frame.pack(fill="x", pady=5, anchor="n")
-
+        
         tk.Label(gap_frame, text="Maximum gap size to fill (frames):").pack(anchor="w")
         self.max_gap_entry = tk.Entry(gap_frame)
         self.max_gap_entry.insert(0, "60")  # Default 60 frames
         self.max_gap_entry.pack(fill="x", padx=5)
-
+        
         # Explanatory label
         tk.Label(
             gap_frame,
-            text="Note: Gaps larger than this value will be left as NaN. Set to 0 to fill all gaps.",
+                text="Note: Gaps larger than this value will be left as NaN. Set to 0 to fill all gaps.", 
             foreground="blue",
             justify="left",
             wraplength=350,
         ).pack(anchor="w", padx=5, pady=2)
-
+        
         # Initialize the parameters frame
         self.update_params_frame()
-
+        
         # Bind the mouse wheel to the canvas for scrolling
         self.bind_mousewheel(canvas)
-
+        
         return self.interp_entry  # Initial focus
-
+    
     def bind_mousewheel(self, canvas):
         """Bind mouse wheel to scrolling canvas"""
 
         def _on_mousewheel(event):
             canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-
+            
         canvas.bind_all("<MouseWheel>", _on_mousewheel)
-
+    
     def update_params_frame(self):
         try:
             # Clear existing widgets
@@ -272,9 +272,9 @@ class InterpolationConfigDialog(tk.simpledialog.Dialog):
                 widget.destroy()
             self.params_widgets.clear()
             self.param_entries.clear()
-
+            
             smooth_method = int(self.smooth_entry.get())
-
+            
             if smooth_method == 2:  # Savitzky-Golay
                 # Add section header with special emphasis
                 header = tk.Label(
@@ -283,7 +283,7 @@ class InterpolationConfigDialog(tk.simpledialog.Dialog):
                     font=("", 10, "bold"),
                 )
                 header.pack(anchor="w", padx=5, pady=5)
-
+                
                 label1 = tk.Label(
                     self.params_frame,
                     text="Window length (must be odd):",
@@ -297,7 +297,7 @@ class InterpolationConfigDialog(tk.simpledialog.Dialog):
                     "<Return>",
                     lambda e: self.update_parameter_value(e, self.savgol_window),
                 )
-
+                
                 label2 = tk.Label(
                     self.params_frame, text="Polynomial order:", foreground="red"
                 )
@@ -335,14 +335,14 @@ class InterpolationConfigDialog(tk.simpledialog.Dialog):
                 # Guardar referências aos entries para acesso posterior
                 self.param_entries["window_length"] = entry1
                 self.param_entries["polyorder"] = entry2
-
+                
             elif smooth_method == 3:  # LOWESS
                 # Add section header with special emphasis
                 header = tk.Label(
                     self.params_frame, text="LOWESS Parameters:", font=("", 10, "bold")
                 )
                 header.pack(anchor="w", padx=5, pady=5)
-
+                
                 label1 = tk.Label(
                     self.params_frame, text="Fraction (0-1):", foreground="red"
                 )
@@ -354,7 +354,7 @@ class InterpolationConfigDialog(tk.simpledialog.Dialog):
                     "<Return>",
                     lambda e: self.update_parameter_value(e, self.lowess_frac),
                 )
-
+                
                 label2 = tk.Label(
                     self.params_frame, text="Number of iterations:", foreground="red"
                 )
@@ -391,7 +391,7 @@ class InterpolationConfigDialog(tk.simpledialog.Dialog):
                 # Guardar referências aos entries para acesso posterior
                 self.param_entries["frac"] = entry1
                 self.param_entries["it"] = entry2
-
+                
             elif smooth_method == 4:  # Kalman
                 # Add section header with special emphasis
                 header = tk.Label(
@@ -400,7 +400,7 @@ class InterpolationConfigDialog(tk.simpledialog.Dialog):
                     font=("", 10, "bold"),
                 )
                 header.pack(anchor="w", padx=5, pady=5)
-
+                
                 # Number of iterations
                 label1 = tk.Label(
                     self.params_frame, text="Number of EM iterations:", foreground="red"
@@ -457,7 +457,7 @@ class InterpolationConfigDialog(tk.simpledialog.Dialog):
                 # Guardar referências aos entries para acesso posterior
                 self.param_entries["n_iter"] = entry1
                 self.param_entries["mode"] = entry2
-
+                
             elif smooth_method == 5:  # Butterworth
                 # Add section header with special emphasis
                 header = tk.Label(
@@ -466,7 +466,7 @@ class InterpolationConfigDialog(tk.simpledialog.Dialog):
                     font=("", 10, "bold"),
                 )
                 header.pack(anchor="w", padx=5, pady=5)
-
+                
                 label1 = tk.Label(
                     self.params_frame,
                     text="Cutoff frequency (Hz, e.g. 4):",
@@ -493,17 +493,17 @@ class InterpolationConfigDialog(tk.simpledialog.Dialog):
                 entry2.bind(
                     "<Return>", lambda e: self.update_parameter_value(e, self.butter_fs)
                 )
-
+                
                 # Strong reminder for Butterworth
                 reminder = tk.Label(
                     self.params_frame,
-                    text="* You MUST enter both cutoff and sampling frequency values.\nNo default values will be used.",
+                                  text="* You MUST enter both cutoff and sampling frequency values.\nNo default values will be used.",
                     foreground="red",
                     font=("", 9, "bold"),
                     justify="left",
                 )
                 reminder.pack(anchor="w", padx=5, pady=5)
-
+                
                 # Add detailed explanation
                 explanation = tk.Label(
                     self.params_frame,
@@ -664,7 +664,7 @@ class InterpolationConfigDialog(tk.simpledialog.Dialog):
             )
             label.pack(anchor="w", padx=5, pady=5)
             self.params_widgets.append(label)
-
+    
     def update_parameter_value(self, event, stringvar):
         """Atualiza o valor da StringVar quando o usuário pressiona Enter"""
         widget = event.widget
@@ -677,19 +677,19 @@ class InterpolationConfigDialog(tk.simpledialog.Dialog):
         try:
             interp_num = int(self.interp_entry.get())
             smooth_num = int(self.smooth_entry.get())
-
+            
             if not (1 <= interp_num <= 7):
                 messagebox.showerror(
                     "Error", "Gap filling method must be between 1 and 7"
                 )
                 return False
-
+            
             if not (1 <= smooth_num <= 7):
                 messagebox.showerror(
                     "Error", "Smoothing method must be between 1 and 7"
                 )
                 return False
-
+            
             # Validate parameters specifically
             if smooth_num == 2:  # Savitzky-Golay
                 if not self.savgol_window.get() or not self.savgol_poly.get():
@@ -697,7 +697,7 @@ class InterpolationConfigDialog(tk.simpledialog.Dialog):
                         "Error", "Savitzky-Golay parameters are required"
                     )
                     return False
-
+                
                 window = int(self.savgol_window.get())
                 poly = int(self.savgol_poly.get())
                 if window % 2 == 0:
@@ -708,31 +708,31 @@ class InterpolationConfigDialog(tk.simpledialog.Dialog):
                         "Error", "Polynomial order must be less than window length"
                     )
                     return False
-
+            
             elif smooth_num == 3:  # LOWESS
                 if not self.lowess_frac.get() or not self.lowess_it.get():
                     messagebox.showerror("Error", "LOWESS parameters are required")
                     return False
-
+                
                 frac = float(self.lowess_frac.get())
                 if not (0 < frac <= 1):
                     messagebox.showerror("Error", "Fraction must be between 0 and 1")
                     return False
-
+            
             elif smooth_num == 4:  # Kalman
                 if not self.kalman_iterations.get():
                     messagebox.showerror(
                         "Error", "Kalman filter iterations are required"
                     )
                     return False
-
+                
                 n_iter = int(self.kalman_iterations.get())
                 if n_iter <= 0:
                     messagebox.showerror(
                         "Error", "Number of iterations must be positive"
                     )
                     return False
-
+            
             elif smooth_num == 5:  # Butterworth
                 if not self.butter_cutoff.get() or not self.butter_fs.get():
                     messagebox.showerror(
@@ -740,7 +740,7 @@ class InterpolationConfigDialog(tk.simpledialog.Dialog):
                         "Butterworth filter requires both cutoff and sampling frequencies",
                     )
                     return False
-
+                
                 cutoff = float(self.butter_cutoff.get())
                 fs = float(self.butter_fs.get())
                 if cutoff <= 0 or fs <= 0:
@@ -752,28 +752,28 @@ class InterpolationConfigDialog(tk.simpledialog.Dialog):
                         "Cutoff frequency must be less than half of sampling frequency (Nyquist frequency)",
                     )
                     return False
-
+            
             # Validate general parameters
             if not self.padding_entry.get():
                 messagebox.showerror("Error", "Padding percentage is required")
                 return False
-
+                
             padding = float(self.padding_entry.get())
-
+            
             if not self.max_gap_entry.get():
                 messagebox.showerror("Error", "Maximum gap size is required")
                 return False
-
+                
             max_gap = int(self.max_gap_entry.get())
-
+            
             if not (0 <= padding <= 100):
                 messagebox.showerror("Error", "Padding must be between 0 and 100%")
                 return False
-
+            
             if max_gap < 0:
                 messagebox.showerror("Error", "Maximum gap size must be non-negative")
                 return False
-
+                
             if smooth_num == 6:  # Splines
                 if not self.spline_smoothing.get():
                     messagebox.showerror("Error", "Spline smoothing factor is required")
@@ -787,11 +787,11 @@ class InterpolationConfigDialog(tk.simpledialog.Dialog):
                 return False
 
             return True
-
+            
         except ValueError as e:
             print(f"Error: Please enter valid numeric values: {str(e)}")
             return False
-
+    
     def confirm_parameters(self):
         """Confirma e atualiza os parâmetros antes do processamento"""
         try:
@@ -949,7 +949,7 @@ Parameters have been confirmed and will be used for processing.
                 5: "none",
                 6: "skip",
             }
-
+            
             smooth_map = {
                 1: "none",
                 2: "savgol",
@@ -972,7 +972,7 @@ Parameters have been confirmed and will be used for processing.
             max_gap = int(self.max_gap_entry.get())
             padding = float(self.padding_entry.get())
             do_split = self.split_var.get()
-
+            
             # Prepara os parâmetros de smoothing com base no método escolhido
             smooth_params = {}
             if smooth_method == 2:  # Savitzky-Golay
@@ -982,13 +982,13 @@ Parameters have been confirmed and will be used for processing.
                 print(
                     f"APPLY: Savitzky-Golay settings - window={window_length}, polyorder={polyorder}"
                 )
-
+                
             elif smooth_method == 3:  # LOWESS
                 frac = float(self.lowess_frac.get())
                 it = int(self.lowess_it.get())
                 smooth_params = {"frac": frac, "it": it}
                 print(f"APPLY: LOWESS settings - frac={frac}, it={it}")
-
+                
             elif smooth_method == 4:  # Kalman
                 n_iter = int(self.kalman_iterations.get())
                 mode = int(self.kalman_mode.get())
@@ -999,13 +999,13 @@ Parameters have been confirmed and will be used for processing.
                     return False
                 smooth_params = {"n_iter": n_iter, "mode": mode}
                 print(f"APPLY: Kalman settings - n_iter={n_iter}, mode={mode}")
-
+                
             elif smooth_method == 5:  # Butterworth
                 cutoff = float(self.butter_cutoff.get())
                 fs = float(self.butter_fs.get())
                 smooth_params = {"cutoff": cutoff, "fs": fs}
                 print(f"APPLY: Butterworth settings - cutoff={cutoff} Hz, fs={fs} Hz")
-
+            
             elif smooth_method == 6:  # Splines
                 smoothing_factor = float(self.spline_smoothing.get())
                 smooth_params = {"smoothing_factor": smoothing_factor}
@@ -1058,7 +1058,7 @@ Parameters have been confirmed and will be used for processing.
                     int(smooth_params["q"]),
                 )
                 summary += f"\nARIMA Parameters:\n- Order: {order}"
-
+            
             if messagebox.askokcancel("Confirm Parameters", summary):
                 config_result = {
                     "padding": padding,
@@ -1074,7 +1074,7 @@ Parameters have been confirmed and will be used for processing.
                 self.result = config_result
             else:
                 self.result = None
-
+                
         except ValueError as e:
             messagebox.showerror("Error", f"Invalid parameter value: {str(e)}")
             self.result = None
@@ -1092,7 +1092,7 @@ Parameters have been confirmed and will be used for processing.
 def generate_report(dest_dir, config, processed_files):
     """
     Generates a detailed processing report and saves it to a text file.
-
+    
     Args:
         dest_dir: Directory where the processed files were saved
         config: Configuration settings used in processing
@@ -1100,35 +1100,35 @@ def generate_report(dest_dir, config, processed_files):
     """
     timestamp = pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
     report_path = os.path.join(dest_dir, "processing_report.txt")
-
+    
     with open(report_path, "w", encoding="utf-8") as f:
         # Header
         f.write("=" * 80 + "\n")
         f.write(f"PROCESSING REPORT - VAILA INTERPOLATION AND SMOOTHING TOOL\n")
         f.write(f"Date and Time: {timestamp}\n")
         f.write("=" * 80 + "\n\n")
-
+        
         # General configuration
         f.write("GENERAL CONFIGURATION\n")
         f.write("-" * 80 + "\n")
         f.write(f"Gap Filling Method: {config['interp_method']}\n")
-
+        
         if config["interp_method"] not in ["none", "skip"]:
             f.write(f"Maximum Gap Size to Fill: {config['max_gap']} frames")
             if config["max_gap"] == 0:
                 f.write(" (no limit - all gaps filled)\n")
             else:
                 f.write("\n")
-
+        
         f.write(f"Smoothing Method: {config['smooth_method']}\n")
         f.write(f"Padding: {config['padding']}%\n")
         f.write(f"Split Data: {'Yes' if config['do_split'] else 'No'}\n\n")
-
+        
         # Specific parameters
         if config["smooth_method"] != "none":
             f.write("SMOOTHING PARAMETERS\n")
             f.write("-" * 80 + "\n")
-
+            
             if config["smooth_method"] == "savgol":
                 f.write(
                     f"Window Length: {config['smooth_params'].get('window_length', 7)}\n"
@@ -1140,10 +1140,10 @@ def generate_report(dest_dir, config, processed_files):
             elif config["smooth_method"] == "lowess":
                 f.write(f"Fraction: {config['smooth_params'].get('frac', 0.3)}\n")
                 f.write(f"Iterations: {config['smooth_params'].get('it', 3)}\n")
-
+            
             elif config["smooth_method"] == "kalman":
                 f.write(f"EM Iterations: {config['smooth_params'].get('n_iter', 5)}\n")
-
+            
             elif config["smooth_method"] == "butterworth":
                 f.write(
                     f"Cutoff Frequency: {config['smooth_params'].get('cutoff', 10)} Hz\n"
@@ -1156,13 +1156,13 @@ def generate_report(dest_dir, config, processed_files):
                 f.write(
                     f"Smoothing Factor: {config['smooth_params'].get('smoothing_factor', 1.0)}\n"
                 )
-
+            
             f.write("\n")
-
+        
         # Processed files
         f.write("PROCESSED FILES\n")
         f.write("-" * 80 + "\n")
-
+        
         for idx, file_info in enumerate(processed_files, 1):
             f.write(f"File {idx}: {file_info['original_filename']}\n")
             f.write(f"  - Original Path: {file_info['original_path']}\n")
@@ -1171,7 +1171,7 @@ def generate_report(dest_dir, config, processed_files):
             )
             f.write(f"  - Total Missing Values: {file_info['total_missing']}\n")
             f.write(f"  - Processed Output: {file_info['output_path']}\n")
-
+            
             # If split, show both parts
             if config["do_split"] and "output_part2_path" in file_info:
                 f.write(
@@ -1180,7 +1180,7 @@ def generate_report(dest_dir, config, processed_files):
                 f.write(
                     f"  - Split Part 2: {file_info['output_part2_path']} ({file_info['part2_size']} frames)\n"
                 )
-
+            
             # Details of columns with interpolated values
             if file_info["columns_with_missing"]:
                 f.write("  - Columns with missing values:\n")
@@ -1188,15 +1188,15 @@ def generate_report(dest_dir, config, processed_files):
                     "columns_with_missing"
                 ].items():
                     f.write(f"    - {col_name}: {missing_count} missing values\n")
-
+            
             # Additional information if applicable
             if file_info.get("warnings"):
                 f.write("  - Warnings during processing:\n")
                 for warning in file_info["warnings"]:
                     f.write(f"    - {warning}\n")
-
+            
             f.write("\n")
-
+        
         # Add smoothing verification section
         if config["smooth_method"] != "none":
             f.write("SMOOTHING VERIFICATION\n")
@@ -1311,7 +1311,7 @@ def generate_report(dest_dir, config, processed_files):
         f.write(f"Output Directory: {dest_dir}\n")
         f.write(f"Python Version: {os.sys.version.split()[0]}\n")
         f.write(f"Processing Completed at: {timestamp}\n\n")
-
+        
         # Instructions for the user
         f.write("NOTES\n")
         f.write("-" * 80 + "\n")
@@ -1325,7 +1325,7 @@ def generate_report(dest_dir, config, processed_files):
             "- The output directory includes the processing methods in its name for easy reference.\n"
         )
         f.write("- For questions or issues, please contact: paulosantiago@usp.br\n")
-
+    
     print(f"Generated detailed processing report: {report_path}")
     return report_path
 
@@ -1361,87 +1361,38 @@ def detect_float_format(original_path):
 
 
 # Scripts to filter/smooth data
-def butter_filter(
-    data,
-    fs,
-    filter_type="low",
-    cutoff=None,
-    lowcut=None,
-    highcut=None,
-    order=4,
-    padding=True,
-):
+def butter_filter(data, fs, filter_type="low", cutoff=None, lowcut=None, highcut=None, order=4, padding=True):
     """
-    Applies a Butterworth filter (low-pass or band-pass) to the input data.
-
-    Parameters:
-    - data: array-like
-        The input signal to be filtered. Can be 1D or multidimensional. Filtering is applied along the first axis.
-    - fs: float
-        The sampling frequency of the signal.
-    - filter_type: str, default='low'
-        The type of filter to apply: 'low' for low-pass or 'band' for band-pass.
-    - cutoff: float, optional
-        The cutoff frequency for a low-pass filter.
-    - lowcut: float, optional
-        The lower cutoff frequency for a band-pass filter.
-    - highcut: float, optional
-        The upper cutoff frequency for a band-pass filter.
-    - order: int, default=4
-        The order of the Butterworth filter.
-    - padding: bool, default=True
-        Whether to pad the signal to mitigate edge effects.
-
-    Returns:
-    - filtered_data: array-like
-        The filtered signal.
+    Applies a Butterworth filter to the input data.
     """
-    # Check filter type and set parameters
-    nyq = 0.5 * fs  # Nyquist frequency
-    if filter_type == "low":
-        if cutoff is None:
-            raise ValueError("Cutoff frequency must be provided for low-pass filter.")
-        normal_cutoff = cutoff / nyq
-        sos = butter(order, normal_cutoff, btype="low", analog=False, output="sos")
-    elif filter_type == "band":
-        if lowcut is None or highcut is None:
-            raise ValueError(
-                "Lowcut and highcut frequencies must be provided for band-pass filter."
-            )
-        low = lowcut / nyq
-        high = highcut / nyq
-        sos = butter(order, [low, high], btype="band", analog=False, output="sos")
-    else:
-        raise ValueError(
-            "Unsupported filter type. Use 'low' for low-pass or 'band' for band-pass."
-        )
-
+    # Convert data to numpy array and handle NaN values
     data = np.asarray(data)
-    axis = 0  # Filtering along the first axis (rows)
+    if np.isnan(data).any():
+        # Interpolate NaN values before filtering
+        nan_mask = np.isnan(data)
+        x = np.arange(len(data))
+        data = pd.Series(data).interpolate(method='linear', limit_direction='both').values
 
-    # Apply padding if needed to handle edge effects
+    # Calculate Nyquist frequency
+    nyq = 0.5 * fs
+    normal_cutoff = cutoff / nyq
+
+    # Design the Butterworth filter
+    b, a = butter(order, normal_cutoff, btype='low', analog=False)
+
+    # Apply padding if requested
     if padding:
-        data_len = data.shape[axis]
-        # Ensure padding length is suitable for data length
-        max_padlen = data_len - 1
-        padlen = min(int(fs), max_padlen, 15)
+        # Use a fixed padding length that's reasonable for your data
+        pad_len = min(int(len(data) * 0.1), 20)  # 10% of data length or 20 points, whichever is smaller
+        padded_data = np.pad(data, pad_len, mode='reflect')
+        filtered_data = filtfilt(b, a, padded_data)
+        filtered_data = filtered_data[pad_len:-pad_len]
+        else:
+        filtered_data = filtfilt(b, a, data)
 
-        if data_len <= padlen:
-            raise ValueError(
-                f"The length of the input data ({data_len}) must be greater than the padding length ({padlen})."
-            )
-
-        # Pad the data along the specified axis
-        pad_width = [(0, 0)] * data.ndim
-        pad_width[axis] = (padlen, padlen)
-        padded_data = np.pad(data, pad_width=pad_width, mode="reflect")
-        filtered_padded_data = sosfiltfilt(sos, padded_data, axis=axis, padlen=0)
-        # Remove padding
-        idx = [slice(None)] * data.ndim
-        idx[axis] = slice(padlen, -padlen)
-        filtered_data = filtered_padded_data[tuple(idx)]
-    else:
-        filtered_data = sosfiltfilt(sos, data, axis=axis, padlen=0)
+    # Restore NaN values if they existed
+    if np.isnan(data).any():
+        filtered_data[nan_mask] = np.nan
 
     return filtered_data
 
@@ -1493,7 +1444,7 @@ def lowess_smooth(data, frac, it):
                     is_sorted=True,
                 )
                 return smoothed[pad_len:-pad_len]
-            else:
+        else:
                 padded_data = np.pad(data, ((pad_len, pad_len), (0, 0)), mode="reflect")
                 padded_x = np.arange(len(padded_data))
                 smoothed = np.empty_like(data)
@@ -1517,7 +1468,7 @@ def lowess_smooth(data, frac, it):
                     return_sorted=False,
                     is_sorted=True,
                 )
-            else:
+        else:
                 smoothed = np.empty_like(data)
                 for j in range(data.shape[1]):
                     smoothed[:, j] = lowess(
@@ -1780,7 +1731,7 @@ def process_file(file_path, dest_dir, config):
         output_filename = f"{base_filename}_{method_suffix}.csv"
         output_path = os.path.join(dest_dir, output_filename)
 
-        file_info = {
+    file_info = {
             "original_path": file_path,
             "original_filename": os.path.basename(file_path),
             "output_path": output_path,
@@ -1794,86 +1745,86 @@ def process_file(file_path, dest_dir, config):
         print(f"Maximum Gap Size: {config['max_gap']} frames")
         print(f"Smoothing Method: {config['smooth_method']}")
         print("=" * 80 + "\n")
-
-        df = pd.read_csv(file_path)
-        filename = os.path.basename(file_path)
-
-        # Record original size
+    
+    df = pd.read_csv(file_path)
+    filename = os.path.basename(file_path)
+    
+    # Record original size
         file_info["original_size"] = len(df)
         file_info["original_columns"] = len(df.columns)
-
-        # Preserve the first column as integers
-        first_col = df.columns[0]
-        df[first_col] = df[first_col].astype(int)
-
-        # Generate complete sequence of indices
-        min_frame = df[first_col].min()
-        max_frame = df[first_col].max()
-        print(f"Frame range: {min_frame} to {max_frame}")
-
-        # Create DataFrame with all frames
-        all_frames = pd.DataFrame({first_col: range(min_frame, max_frame + 1)})
-
-        # Merge with original data to identify gaps
+    
+    # Preserve the first column as integers
+    first_col = df.columns[0]
+    df[first_col] = df[first_col].astype(int)
+    
+    # Generate complete sequence of indices
+    min_frame = df[first_col].min()
+    max_frame = df[first_col].max()
+    print(f"Frame range: {min_frame} to {max_frame}")
+    
+    # Create DataFrame with all frames
+    all_frames = pd.DataFrame({first_col: range(min_frame, max_frame + 1)})
+    
+    # Merge with original data to identify gaps
         df = pd.merge(all_frames, df, on=first_col, how="left")
-        print(f"Shape after adding missing frames: {df.shape}")
-
-        # Count missing values
+    print(f"Shape after adding missing frames: {df.shape}")
+    
+    # Count missing values
         file_info["total_missing"] = df.isna().sum().sum()
         file_info["columns_with_missing"] = {}
-
-        for col in df.columns:
-            missing = df[col].isna().sum()
-            if missing > 0:
+    
+    for col in df.columns:
+        missing = df[col].isna().sum()
+        if missing > 0:
                 file_info["columns_with_missing"][col] = missing
-
-        # Apply padding if necessary
+    
+    # Apply padding if necessary 
         padding_percent = config["padding"]
-        print(f"Using exact padding value: {padding_percent}%")
-
-        pad_len = 0
-        if padding_percent > 0:
-            pad_len = int(len(df) * padding_percent / 100)
-            print(f"Applying padding of {pad_len} frames")
-
-            # Create frames for padding
+    print(f"Using exact padding value: {padding_percent}%")
+    
+    pad_len = 0
+    if padding_percent > 0:
+        pad_len = int(len(df) * padding_percent / 100)
+        print(f"Applying padding of {pad_len} frames")
+        
+        # Create frames for padding
             pad_before = pd.DataFrame(
                 {first_col: range(min_frame - pad_len, min_frame)}
             )
             pad_after = pd.DataFrame(
                 {first_col: range(max_frame + 1, max_frame + pad_len + 1)}
             )
-
-            # Add empty columns in paddings
-            for col in df.columns[1:]:
-                pad_before[col] = np.nan
-                pad_after[col] = np.nan
-
-            # Concatenate with padding
-            df = pd.concat([pad_before, df, pad_after]).reset_index(drop=True)
-            print(f"Shape after padding: {df.shape}")
-
-        # Process numeric columns
-        numeric_cols = df.select_dtypes(include=[np.number]).columns.drop(first_col)
-        print(f"Processing {len(numeric_cols)} numeric columns")
+        
+        # Add empty columns in paddings
+        for col in df.columns[1:]:
+            pad_before[col] = np.nan
+            pad_after[col] = np.nan
+        
+        # Concatenate with padding
+        df = pd.concat([pad_before, df, pad_after]).reset_index(drop=True)
+        print(f"Shape after padding: {df.shape}")
+    
+    # Process numeric columns
+    numeric_cols = df.select_dtypes(include=[np.number]).columns.drop(first_col)
+    print(f"Processing {len(numeric_cols)} numeric columns")
 
         # STEP 1: Apply interpolation to each column
         print("\nSTEP 1: Applying interpolation to each column")
-        for col in numeric_cols:
-            print(f"\nProcessing column: {col}")
-            nan_mask = df[col].isna()
-            print(f"Found {nan_mask.sum()} NaN values in column {col}")
-
+    for col in numeric_cols:
+        print(f"\nProcessing column: {col}")
+        nan_mask = df[col].isna()
+        print(f"Found {nan_mask.sum()} NaN values in column {col}")
+        
             if nan_mask.any() and config["interp_method"] not in ["none", "skip"]:
                 print(f"Applying {config['interp_method']} interpolation")
-
+            
             # Check maximum gap size
             max_gap = config["max_gap"]
             print(f"Using maximum gap size: {max_gap} frames")
-
+            
             if max_gap > 0:
                 print(f"Limiting gap filling to gaps of {max_gap} frames or less")
-
+                
                 # Identify consecutive NaN groups
                 nan_groups = []
                 start_idx = None
@@ -1961,46 +1912,46 @@ def process_file(file_path, dest_dir, config):
 
                 remaining_nans = df[col].isna().sum()
                 print(f"After interpolation, {remaining_nans} NaN values remain")
-
-        else:  # No gap size limit
+            
+            else:  # No gap size limit
             if config["interp_method"] == "linear":
                 df[col] = df[col].interpolate(method="linear", limit_direction="both")
             elif config["interp_method"] == "nearest":
                 df[col] = df[col].interpolate(method="nearest", limit_direction="both")
             elif config["interp_method"] == "cubic":
-                try:
-                    valid_mask = ~nan_mask
+                    try:
+                        valid_mask = ~nan_mask
                     if valid_mask.sum() >= 3:
-                        x_valid = df[first_col][valid_mask].values
-                        y_valid = df[col][valid_mask].values
-                        sort_idx = np.argsort(x_valid)
-                        x_valid = x_valid[sort_idx]
-                        y_valid = y_valid[sort_idx]
+                            x_valid = df[first_col][valid_mask].values
+                            y_valid = df[col][valid_mask].values
+                            sort_idx = np.argsort(x_valid)
+                            x_valid = x_valid[sort_idx]
+                            y_valid = y_valid[sort_idx]
                         cs = CubicSpline(x_valid, y_valid, bc_type="natural")
-                        x_nan = df[first_col][nan_mask].values
-                        df.loc[nan_mask, col] = cs(x_nan)
-                    else:
+                            x_nan = df[first_col][nan_mask].values
+                            df.loc[nan_mask, col] = cs(x_nan)
+                        else:
                         print(
                             "Not enough points for cubic spline, falling back to linear"
                         )
                         df[col] = df[col].interpolate(
                             method="linear", limit_direction="both"
                         )
-                except Exception as e:
-                    print(f"Error applying Cubic Spline: {str(e)}")
+                    except Exception as e:
+                        print(f"Error applying Cubic Spline: {str(e)}")
                     print("Falling back to linear interpolation")
                     df[col] = df[col].interpolate(
                         method="linear", limit_direction="both"
                     )
             elif config["interp_method"] == "kalman":
                 try:
-                    temp_series = df[col].copy()
+                        temp_series = df[col].copy()
                     temp_filled = temp_series.interpolate(
                         method="linear", limit_direction="both"
                     )
-                    kf = KalmanFilter(
-                        initial_state_mean=np.mean(temp_filled.dropna()),
-                        n_dim_obs=1,
+                        kf = KalmanFilter(
+                            initial_state_mean=np.mean(temp_filled.dropna()),
+                            n_dim_obs=1,
                         n_dim_state=2,
                     )
                     observations = np.array(
@@ -2010,9 +1961,9 @@ def process_file(file_path, dest_dir, config):
                     smoothed_state_means, _ = kf.em(observations, n_iter=n_iter).smooth(
                         observations
                     )
-                    df.loc[nan_mask, col] = smoothed_state_means[nan_mask, 0]
-                except Exception as e:
-                    print(f"Error applying Kalman for gap filling: {str(e)}")
+                        df.loc[nan_mask, col] = smoothed_state_means[nan_mask, 0]
+                    except Exception as e:
+                        print(f"Error applying Kalman for gap filling: {str(e)}")
                     print("Falling back to linear interpolation")
                     df[col] = df[col].interpolate(
                         method="linear", limit_direction="both"
@@ -2077,8 +2028,8 @@ def process_file(file_path, dest_dir, config):
                         order = (int(params["p"]), int(params["d"]), int(params["q"]))
                         df[col] = arima_smooth(df[col].values, order=order)
                         print(f"Applied ARIMA filter with order={order}")
-
-                except Exception as e:
+                
+            except Exception as e:
                     error_msg = f"Error smoothing column {col}: {str(e)}"
                     print(error_msg)
                     file_info["warnings"].append(error_msg)
@@ -2092,13 +2043,13 @@ def process_file(file_path, dest_dir, config):
 
         # Detect float format from original file
         float_format = detect_float_format(file_info["original_path"])
-        print(f"Using float format: {float_format}")
+            print(f"Using float format: {float_format}")
 
         # Save processed DataFrame
         print(f"\nSaving processed file to: {output_path}")
-        df.to_csv(output_path, index=False, float_format=float_format)
+            df.to_csv(output_path, index=False, float_format=float_format)
         print("File saved successfully!")
-
+            
         return file_info
 
     except Exception as e:
@@ -2123,18 +2074,18 @@ def process_file(file_path, dest_dir, config):
 def run_fill_split_dialog():
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
-
+    
     root = tk.Tk()
     root.withdraw()
-
+    
     # Open configuration dialog
     config_dialog = InterpolationConfigDialog(root)
     if not hasattr(config_dialog, "result") or config_dialog.result is None:
         print("Operation canceled by user.")
         return
-
+        
     config = config_dialog.result
-
+    
     # Select source directory
     source_dir = filedialog.askdirectory(title="Select Source Directory")
     if not source_dir:
@@ -2142,10 +2093,10 @@ def run_fill_split_dialog():
 
     # Create destination directory with method names
     timestamp = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
-
+    
     # Create descriptive names for methods
     interp_name = config["interp_method"]
-
+    
     # Add information about smoothing parameters if used
     smooth_info = "no_smooth"
     if config["smooth_method"] != "none":
@@ -2153,11 +2104,11 @@ def run_fill_split_dialog():
         try:
             if config["smooth_method"] == "butterworth":
                 cutoff = config["smooth_params"].get("cutoff", 10)
-                smooth_info += f"_cut{cutoff}"
+            smooth_info += f"_cut{cutoff}"
             elif config["smooth_method"] == "savgol":
                 window = config["smooth_params"].get("window_length", 7)
                 poly = config["smooth_params"].get("polyorder", 2)
-                smooth_info += f"_w{window}p{poly}"
+            smooth_info += f"_w{window}p{poly}"
             elif config["smooth_method"] == "lowess":
                 frac = config["smooth_params"].get("frac", 0.3)
                 it = config["smooth_params"].get("it", 3)
@@ -2180,7 +2131,7 @@ def run_fill_split_dialog():
         except Exception as e:
             print(f"Warning: Error formatting smooth_info: {str(e)}")
             smooth_info = config["smooth_method"]  # Fallback to basic name
-
+    
     # Directory with informative name
     dest_dir_name = f"processed_{interp_name}_{smooth_info}_{timestamp}"
     dest_dir = os.path.join(source_dir, dest_dir_name)
@@ -2188,16 +2139,16 @@ def run_fill_split_dialog():
 
     # List to store information about processed files
     processed_files = []
-
+    
     # Process each file
     for filename in os.listdir(source_dir):
         if filename.endswith(".csv"):
             try:
-                file_info = process_file(
+            file_info = process_file(
                     os.path.join(source_dir, filename), dest_dir, config
-                )
+            )
                 if file_info is not None:
-                    processed_files.append(file_info)
+            processed_files.append(file_info)
                 else:
                     print(f"Warning: No information returned for file {filename}")
             except Exception as e:
@@ -2218,13 +2169,13 @@ def run_fill_split_dialog():
 
     # Filtra arquivos processados para remover None
     processed_files = [pf for pf in processed_files if pf is not None]
-
+    
     # Generate detailed processing report
     if processed_files:
-        report_path = generate_report(dest_dir, config, processed_files)
+    report_path = generate_report(dest_dir, config, processed_files)
         messagebox.showinfo(
             "Complete",
-            f"Processing complete. Results saved in {dest_dir}\n"
+                       f"Processing complete. Results saved in {dest_dir}\n"
             f"A detailed processing report has been saved to:\n{report_path}",
         )
     else:

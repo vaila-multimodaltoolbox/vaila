@@ -52,6 +52,8 @@ from vaila import modifylabref
 from vaila.mergestack import select_file, merge_csv_files, stack_csv_files
 from vaila.standardize_header import standardize_header
 from vaila.dlc2vaila import batch_convert_dlc
+import gc
+import numpy as np
 
 # Dictionary for metric unit conversions with abbreviations
 CONVERSIONS = {
@@ -338,33 +340,24 @@ class ColumnReorderGUI(tk.Tk):
         self.directory_path = directory_path
         self.rearranged_path = os.path.join(directory_path, "data_rearranged")
         self.history = []
-
-        # Verifique se não há arquivos CSV e simule um CSV vazio
+        
+        # Verificar o tamanho do arquivo antes de carregar
         if self.file_names == ["Empty"]:
-            print("No CSV files found. Simulating an empty CSV file.")
-            self.df = pd.DataFrame(columns=["Column1", "Column2", "Column3"])
-            self.file_names = ["Simulated_Empty_File.csv"]
-            self.max_decimal_places = 2
-            self.scientific_notation = False
+            self.is_large_file = False
+            self.setup_empty_gui()
         else:
             base_file_name = file_names[0]
             full_path = os.path.join(directory_path, base_file_name)
+            file_size_mb = os.path.getsize(full_path) / (1024 * 1024)
+            self.is_large_file = file_size_mb > 100  # Arquivos maiores que 100MB são considerados grandes
+            
+            if self.is_large_file:
+                print(f"Large file detected ({file_size_mb:.2f} MB). Loading in simplified mode...")
+                self.setup_large_file_gui(full_path)
+            else:
+                self.setup_normal_gui(full_path)
 
-            try:
-                # Primeira tentativa de ler o arquivo
-                self.df = pd.read_csv(full_path)
-                self.max_decimal_places, self.scientific_notation = (
-                    detect_precision_and_notation(full_path)
-                )
-            except pd.errors.ParserError:
-                # Se houver erro de parsing, standardize o header e encerre a GUI
-                print("Parser error detected. Standardizing header...")
-                self.withdraw()
-                standardize_header()
-                self.quit()  # Encerra a GUI atual
-                return
-
-        # Em vez de um tamanho fixo, define o tamanho relativo à tela
+        # Configurar o tamanho da janela
         self.title(f"Reorder CSV Columns - {self.file_names[0]}")
         screen_width = self.winfo_screenwidth()
         screen_height = self.winfo_screenheight()
@@ -372,10 +365,54 @@ class ColumnReorderGUI(tk.Tk):
         window_height = int(screen_height * 0.8)
         self.geometry(f"{window_width}x{window_height}")
 
+    def setup_empty_gui(self):
+        """Configuração para quando não há arquivos CSV"""
+        print("No CSV files found. Simulating an empty CSV file.")
+        self.df = pd.DataFrame(columns=["Column1", "Column2", "Column3"])
+        self.file_names = ["Simulated_Empty_File.csv"]
+        self.max_decimal_places = 2
+        self.scientific_notation = False
         self.setup_gui()
 
-    def setup_gui(self):
-        # Function to set up the GUI elements
+    def setup_large_file_gui(self, file_path):
+        """Configuração especial para arquivos grandes"""
+        try:
+            # Ler apenas o cabeçalho e as primeiras linhas
+            print("Reading file headers...")
+            self.df = pd.read_csv(file_path, nrows=5)  # Ler apenas 5 linhas para exemplo
+            self.max_decimal_places = 3  # Valor padrão para arquivos grandes
+            self.scientific_notation = False
+            
+            # Mostrar aviso sobre modo simplificado
+            messagebox.showinfo(
+                "Large File Mode",
+                "File is too large for full preview. Running in simplified mode.\n"
+                "Only headers and first 5 rows will be shown."
+            )
+            
+            self.setup_gui(is_large_file=True)
+            
+        except Exception as e:
+            print(f"Error loading large file: {e}")
+            self.setup_empty_gui()
+
+    def setup_normal_gui(self, file_path):
+        """Configuração normal para arquivos pequenos"""
+        try:
+            self.df = pd.read_csv(file_path)
+            self.max_decimal_places, self.scientific_notation = detect_precision_and_notation(file_path)
+            self.setup_gui(is_large_file=False)
+        except pd.errors.ParserError:
+            print("Parser error detected. Standardizing header...")
+            self.withdraw()
+            standardize_header()
+            self.quit()
+        except Exception as e:
+            print(f"Error loading file: {e}")
+            self.setup_empty_gui()
+
+    def setup_gui(self, is_large_file=False):
+        """Configuração da interface gráfica com modo para arquivos grandes"""
         main_frame = tk.Frame(self)
         main_frame.pack(fill=tk.BOTH, expand=True)
 
@@ -384,7 +421,8 @@ class ColumnReorderGUI(tk.Tk):
         scrollable_frame = tk.Frame(canvas)
 
         scrollable_frame.bind(
-            "<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
         )
 
         canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
@@ -393,50 +431,67 @@ class ColumnReorderGUI(tk.Tk):
         scrollbar.pack(side="right", fill="y")
         canvas.pack(side="left", fill="both", expand=True)
 
+        # Adicionar aviso para arquivos grandes
+        if is_large_file:
+            warning_label = tk.Label(
+                scrollable_frame,
+                text="⚠️ Large File Mode: Limited Preview Available ⚠️",
+                font=("default", 12, "bold"),
+                fg="red"
+            )
+            warning_label.grid(row=0, column=0, columnspan=3, pady=5)
+
+        # Instruções normais
+        instructions_text = (
+            "Click to select a Column and press Enter to reorder. Select and press 'd' to delete.\n"
+            "Press 'm' to manually select range. Press 'l' to edit rows. Press Ctrl+S to save. "
+            "Press Ctrl+Z to undo.\nPress Esc to save and exit."
+        )
+        if is_large_file:
+            instructions_text += "\nLarge File Mode: Changes will be applied to the entire file."
+        
         self.instructions = tk.Label(
             scrollable_frame,
-            text="Click to select a Column and press Enter to reorder. Select and press 'd' to delete.\nPress 'm' to manually select range. Press 'l' to edit rows. Press Ctrl+S to save. Press Ctrl+Z to undo.\nPress Esc to save and exit.",
-            font=("default", 10),
+            text=instructions_text,
+            font=("default", 10)
         )
-        self.instructions.grid(row=0, column=0, columnspan=3, pady=10, sticky="n")
+        self.instructions.grid(row=1, column=0, columnspan=3, pady=10, sticky="n")
 
+        # Resto da configuração da GUI permanece o mesmo
         self.header_frame = tk.Frame(scrollable_frame)
-        self.header_frame.grid(
-            row=1, column=0, columnspan=2, pady=10, padx=10, sticky="nsew"
-        )
+        self.header_frame.grid(row=2, column=0, columnspan=2, pady=10, padx=10, sticky="nsew")
 
-        self.number_label = tk.Label(
-            self.header_frame, text="Number", font=("default", 12, "bold")
-        )
+        # Labels para número e nome
+        self.number_label = tk.Label(self.header_frame, text="Number", font=("default", 12, "bold"))
         self.number_label.grid(row=0, column=0, padx=(10, 5), pady=(10, 0))
 
-        self.name_label = tk.Label(
-            self.header_frame, text="Name", font=("default", 12, "bold")
-        )
+        self.name_label = tk.Label(self.header_frame, text="Name", font=("default", 12, "bold"))
         self.name_label.grid(row=0, column=1, padx=(5, 10), pady=(10, 0))
 
-        self.shape_label = tk.Label(
-            self.header_frame, text=f"Shape: {self.df.shape}", font=("default", 12)
-        )
+        # Mostrar shape com informação adicional para arquivos grandes
+        if is_large_file:
+            shape_text = f"Shape: {self.df.shape[0]} rows (showing first 5) × {self.df.shape[1]} columns"
+        else:
+            shape_text = f"Shape: {self.df.shape}"
+        
+        self.shape_label = tk.Label(self.header_frame, text=shape_text, font=("default", 12))
         self.shape_label.grid(row=0, column=2, padx=(5, 10), pady=(10, 0))
 
-        self.order_listbox = tk.Listbox(
-            self.header_frame, selectmode=tk.MULTIPLE, width=5, height=30
-        )
+        # Listboxes
+        self.order_listbox = tk.Listbox(self.header_frame, selectmode=tk.MULTIPLE, width=5, height=30)
         self.order_listbox.grid(row=1, column=0, padx=(10, 5), pady=10, sticky="ns")
 
-        self.header_listbox = tk.Listbox(
-            self.header_frame, selectmode=tk.MULTIPLE, width=50, height=30
-        )
+        self.header_listbox = tk.Listbox(self.header_frame, selectmode=tk.MULTIPLE, width=50, height=30)
         self.header_listbox.grid(row=1, column=1, padx=(5, 10), pady=10, sticky="ns")
 
+        # Atualizar listboxes
         self.update_listbox()
-        self.update_shape_label()
-
-        # Adjust the button frame to be placed next to the column names listbox
+        
+        # Adicionar frame de botões
         button_frame = tk.Frame(self.header_frame)
         button_frame.grid(row=1, column=2, padx=10, pady=10, sticky="ns")
 
+        # Adicionar todos os botões
         self.convert_button = tk.Button(
             button_frame, text="Convert Units", command=self.convert_units
         )
@@ -463,7 +518,7 @@ class ColumnReorderGUI(tk.Tk):
         )
         yolo_tracker_button.grid(row=4, column=0, padx=5, pady=5, sticky="n")
 
-        # Shift the existing buttons down one row
+        # MediaPipe button
         mediapipe_button = tk.Button(
             button_frame,
             text="Convert MediaPipe to vailá",
@@ -471,6 +526,7 @@ class ColumnReorderGUI(tk.Tk):
         )
         mediapipe_button.grid(row=5, column=0, padx=5, pady=5, sticky="n")
 
+        # DVideo button
         dvideo_button = tk.Button(
             button_frame,
             text="Convert Dvideo to vailá",
@@ -478,6 +534,7 @@ class ColumnReorderGUI(tk.Tk):
         )
         dvideo_button.grid(row=6, column=0, padx=5, pady=5, sticky="n")
 
+        # DLC button
         dlc_button = tk.Button(
             button_frame,
             text="Convert DLC to vailá",
@@ -485,11 +542,13 @@ class ColumnReorderGUI(tk.Tk):
         )
         dlc_button.grid(row=7, column=0, padx=5, pady=5, sticky="n")
 
+        # Standardize button
         standardize_button = tk.Button(
             button_frame, text="Standardize Header", command=standardize_header
         )
         standardize_button.grid(row=8, column=0, padx=5, pady=5, sticky="n")
 
+        # Kinovea button
         kinovea_button = tk.Button(
             button_frame,
             text="Convert Kinovea to vailá",
@@ -497,7 +556,11 @@ class ColumnReorderGUI(tk.Tk):
         )
         kinovea_button.grid(row=9, column=0, padx=5, pady=5, sticky="n")
 
-        # Bind events to functions
+        # Configurar bindings
+        self.setup_bindings()
+
+    def setup_bindings(self):
+        """Configurar todos os atalhos de teclado"""
         self.bind("<Return>", self.swap_columns)
         self.bind("d", self.delete_columns)
         self.bind("m", self.manual_selection)
@@ -1115,71 +1178,73 @@ def batch_convert_dvideo(directory_path):
     print(f"All files have been converted and saved to {save_directory}")
 
 
-def convert_yolo_tracker_to_pixel_format(tracker_file, save_directory=None):
-    """
-    Converts YOLO tracker output format (all_persons_positions.csv) to a format compatible with getpixelvideo.py.
-
-    The YOLO tracker format has columns: Frame,ID_1,X_1,Y_1,RGB_1,ID_2,X_2,Y_2,RGB_2,...
-    The pixel format needs columns: frame,p1_x,p1_y,p2_x,p2_y,...
-
-    Args:
-        tracker_file: Path to the YOLO tracker output file (all_persons_positions.csv)
-        save_directory: Directory to save the converted file (if None, saves in the same directory)
-
-    Returns:
-        Path to the converted file
-    """
+def convert_yolo_tracker_to_pixel_format(tracker_file, save_directory=None, chunk_size=10000):
     print(f"Converting YOLO tracker file: {tracker_file}")
-
+    
     try:
-        # Read the YOLO tracker file
-        df = pd.read_csv(tracker_file)
-
-        # Create a new DataFrame for the pixel format
-        new_df = pd.DataFrame()
-        new_df["frame"] = df["Frame"]
-
-        # Find all unique person IDs in the file
-        person_columns = [col for col in df.columns if col.startswith("ID_")]
-
-        # Create dictionary to store person data by ID
-        # This preserves the ID numbering in the output file
-        person_data = {}
-
-        # Extract each person's data
-        for col in person_columns:
-            person_id = col.split("_")[1]  # Extract the ID number
-            x_col = f"X_{person_id}"
-            y_col = f"Y_{person_id}"
-
-            if x_col in df.columns and y_col in df.columns:
-                # Store this person's data with their original ID
-                person_data[int(person_id)] = {"x": df[x_col], "y": df[y_col]}
-
-        # Sort the person IDs to ensure consistent ordering
-        sorted_ids = sorted(person_data.keys())
-
-        # Add each person's coordinates to the new DataFrame
-        for idx, person_id in enumerate(sorted_ids):
-            marker_idx = idx + 1  # Marker indices start at 1
-            new_df[f"p{marker_idx}_x"] = person_data[person_id]["x"]
-            new_df[f"p{marker_idx}_y"] = person_data[person_id]["y"]
-
-        # Determine the output file path
+        # Configuração do diretório de saída
         if save_directory is None:
             save_directory = os.path.dirname(tracker_file)
-
         if not os.path.exists(save_directory):
             os.makedirs(save_directory)
-
+            
         base_name = os.path.splitext(os.path.basename(tracker_file))[0]
         output_file = os.path.join(save_directory, f"{base_name}_pixelformat.csv")
-
-        # Save the new DataFrame
-        new_df.to_csv(output_file, index=False)
-        print(f"Converted file saved to: {output_file}")
+        
+        # Primeira passagem: identificar IDs únicos
+        print("Analyzing file structure...")
+        column_names = pd.read_csv(tracker_file, nrows=1).columns
+        person_ids = sorted([
+            int(col.split('_')[1]) 
+            for col in column_names 
+            if col.startswith("ID_")
+        ])
+        
+        # Processar o arquivo em chunks
+        print(f"Processing file in chunks of {chunk_size} rows...")
+        first_chunk = True
+        
+        # Usar chunked reading para processar o arquivo
+        for chunk_number, chunk in enumerate(pd.read_csv(tracker_file, chunksize=chunk_size)):
+            print(f"Processing chunk {chunk_number + 1}...")
+            
+            # Criar todos os dados em um dicionário primeiro
+            data = {'frame': chunk["Frame"]}
+            
+            # Processar dados de cada pessoa
+            for idx, person_id in enumerate(person_ids):
+                x_col = f"X_{person_id}"
+                y_col = f"Y_{person_id}"
+                
+                if x_col in chunk.columns and y_col in chunk.columns:
+                    data[f"p{idx+1}_x"] = chunk[x_col]
+                    data[f"p{idx+1}_y"] = chunk[y_col]
+                else:
+                    data[f"p{idx+1}_x"] = np.nan
+                    data[f"p{idx+1}_y"] = np.nan
+            
+            # Criar o DataFrame de uma vez só com todas as colunas
+            new_chunk = pd.DataFrame(data)
+            
+            # Escrever chunk no arquivo
+            mode = 'w' if first_chunk else 'a'
+            header = first_chunk
+            new_chunk.to_csv(output_file, 
+                           mode=mode, 
+                           header=header, 
+                           index=False,
+                           float_format='%.3f')
+            
+            first_chunk = False
+            
+            # Liberar memória
+            del new_chunk
+            del data
+            gc.collect()
+        
+        print(f"Conversion completed. File saved to: {output_file}")
         return output_file
-
+        
     except Exception as e:
         print(f"Error converting YOLO tracker file: {e}")
         return None
@@ -1188,12 +1253,8 @@ def convert_yolo_tracker_to_pixel_format(tracker_file, save_directory=None):
 def batch_convert_yolo_tracker(directory_path=None):
     """
     Batch converts all YOLO tracker files in a directory to pixel format.
-
-    Args:
-        directory_path: Directory containing YOLO tracker files
     """
     if directory_path is None:
-        # Open a file dialog to select the directory
         directory_path = filedialog.askdirectory(
             title="Select Directory with YOLO Tracker Files"
         )
@@ -1204,40 +1265,73 @@ def batch_convert_yolo_tracker(directory_path=None):
 
     # Find all potential YOLO tracker files
     potential_files = [
-        f
-        for f in os.listdir(directory_path)
+        f for f in os.listdir(directory_path)
         if f.endswith(".csv") and ("all_persons_positions" in f or "person" in f)
     ]
 
     if not potential_files:
         print("No YOLO tracker files found in the directory.")
-        messagebox.showwarning(
-            "No Files Found", "No YOLO tracker files found in the directory."
-        )
+        messagebox.showwarning("No Files Found", 
+                             "No YOLO tracker files found in the directory.")
         return
 
-    # Create a timestamp directory to save the converted files
+    # Create output directory
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     save_directory = os.path.join(directory_path, f"Convert_YOLO_to_Pixel_{timestamp}")
     os.makedirs(save_directory, exist_ok=True)
 
-    # Convert each file
+    # Process each file
     converted_files = []
     errors = []
-
-    for file_name in potential_files:
+    
+    # Ask for chunk size
+    try:
+        chunk_size = simpledialog.askinteger(
+            "Chunk Size",
+            "Enter chunk size for processing (larger files need smaller chunks):\n" +
+            "Recommended:\n" +
+            "- Small files: 10000\n" +
+            "- Medium files: 5000\n" +
+            "- Large files: 1000\n" +
+            "- Very large files: 500",
+            initialvalue=5000,
+            minvalue=100,
+            maxvalue=50000
+        )
+        
+        if chunk_size is None:
+            chunk_size = 5000  # Default value if dialog is cancelled
+    except:
+        chunk_size = 5000  # Fallback value
+    
+    total_files = len(potential_files)
+    for idx, file_name in enumerate(potential_files, 1):
         try:
+            print(f"\nProcessing file {idx}/{total_files}: {file_name}")
             file_path = os.path.join(directory_path, file_name)
+            
+            # Get file size in MB
+            file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
+            print(f"File size: {file_size_mb:.2f} MB")
+            
             result_path = convert_yolo_tracker_to_pixel_format(
-                file_path, save_directory
+                file_path, 
+                save_directory,
+                chunk_size=chunk_size
             )
+            
             if result_path:
                 converted_files.append(file_name)
+                print(f"Successfully converted: {file_name}")
+            
         except Exception as e:
             print(f"Error processing {file_name}: {e}")
             errors.append((file_name, str(e)))
+        
+        # Force garbage collection
+        gc.collect()
 
-    # Show summary message
+    # Show summary
     if converted_files:
         success_message = (
             f"Conversion completed for {len(converted_files)} file(s).\n"
@@ -1250,11 +1344,15 @@ def batch_convert_yolo_tracker(directory_path=None):
                 + "\n".join(f"{name}: {error}" for name, error in errors)
             )
             print(error_message)
+            success_message += error_message
+        messagebox.showinfo("Conversion Complete", success_message)
     elif errors:
-        error_message = f"All files failed to convert.\nErrors:\n" + "\n".join(
-            f"{name}: {error}" for name, error in errors
+        error_message = (
+            f"All files failed to convert.\nErrors:\n"
+            + "\n".join(f"{name}: {error}" for name, error in errors)
         )
         print(error_message)
+        messagebox.showerror("Conversion Failed", error_message)
 
 
 def rearrange_data_in_directory():

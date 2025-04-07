@@ -4,8 +4,8 @@ vaila.py
 ===============================================================================
 Author: Paulo R. P. Santiago
 Date:  7 October 2024
-Update: 03 April 2025
-Version updated: 0.4.5
+Update: 07 April 2025
+Version updated: 0.4.6
 Python Version: 3.12.9
 
 Description:
@@ -171,7 +171,7 @@ except ImportError as e:
 
 
 text = r"""
-version: 03.Apr.2025 (Python 3.12.9)
+version: 07.Apr.2025 (Python 3.12.9)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -246,7 +246,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 03.Apr.2025 (Python 3.12.9)")
+        self.title("vailá - 07.Apr.2025 (Python 3.12.9)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -734,7 +734,7 @@ class Vaila(tk.Tk):
             row4_frame,
             text="MP Angles",
             width=button_width,
-            command=self.show_vaila_message,
+            command=self.mp_angles_calculation,
         )
 
         # B4_r4_c5 - vailá
@@ -1565,11 +1565,11 @@ class Vaila(tk.Tk):
         mphands.run_mphands()
 
     # B_r4_c4 - MP Angles
-    def mp_angles(self):
+    def mp_angles_calculation(self):
         """Runs the MP Angles module."""
-        from vaila import mp_angles
+        from vaila import mpangles
 
-        mp_angles.run_mp_angles()
+        mpangles.run_mp_angles()
 
     def reorder_csv_data(self):
         """Runs the Reorder CSV Data module.
