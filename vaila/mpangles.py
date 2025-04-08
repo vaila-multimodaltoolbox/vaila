@@ -6,8 +6,8 @@ Author: Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 31 March 2025
-Update Date: 03 April 2025
-Version: 0.0.1
+Update Date: 08 April 2025
+Version: 0.0.2
 Python Version: 3.12.9
 
 Description:
@@ -27,13 +27,11 @@ Key Features:
    - Uses dot product and cross product for angle calculation
 
 3. Supported Angles:
-   - Upper arm angles (shoulder to elbow)
-   - Forearm angles (elbow to wrist)
-   - Elbow angles (between upper arm and forearm)
-   - Thigh angles (hip to knee)
-   - Shank angles (knee to ankle)
-   - Knee angles (between thigh and shank)
-   - Trunk angle (mid-shoulders to mid-hips)
+    - Elbow angle (between upper arm and forearm)
+    - Shoulder angle (between trunk and upper arm)
+    - Hip angle (between trunk and thigh)
+    - Knee angle (between thigh and shank)
+    - Ankle angle (between shank and foot)
 
 Usage:
 ------
@@ -64,6 +62,8 @@ import argparse
 from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox
+import cv2
+import mediapipe as mp
 
 def select_directory():
     """
@@ -318,9 +318,9 @@ def compute_midpoint(p1, p2):
         p2: Second point (2D vector)
         
     Returns:
-        Midpoint as a 2D vector
+        Midpoint as a numpy array
     """
-    return [(p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2]
+    return np.array([(p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2])
 
 
 def compute_hip_angle(hip, knee, trunk_vector):
@@ -443,6 +443,134 @@ def compute_shoulder_angle(shoulder, elbow, trunk_vector):
     return angle_deg
 
 
+def compute_elbow_angle(shoulder, elbow, wrist):
+    """
+    Compute the elbow angle using forearm vector (wrist-elbow) and upper arm vector (shoulder-elbow).
+    
+    Args:
+        shoulder: Shoulder point (2D vector)
+        elbow: Elbow point (2D vector)
+        wrist: Wrist point (2D vector)
+        
+    Returns:
+        Elbow angle in degrees
+    """
+    # Calculate forearm vector (wrist to elbow)
+    forearm_vector = np.array(wrist) - np.array(elbow)
+    
+    # Calculate upper arm vector (shoulder to elbow)
+    upper_arm_vector = np.array(shoulder) - np.array(elbow)
+    
+    # Normalize vectors
+    forearm_norm = np.linalg.norm(forearm_vector)
+    upper_arm_norm = np.linalg.norm(upper_arm_vector)
+    
+    if forearm_norm == 0 or upper_arm_norm == 0:
+        return 0.0
+    
+    forearm_normalized = forearm_vector / forearm_norm
+    upper_arm_normalized = upper_arm_vector / upper_arm_norm
+    
+    # Calculate dot product
+    dot_product = np.dot(forearm_normalized, upper_arm_normalized)
+    
+    # Clamp dot product to valid range for arccos
+    dot_product = np.clip(dot_product, -1.0, 1.0)
+    
+    # Calculate angle in radians
+    angle_rad = np.arccos(dot_product)
+    
+    # Convert to degrees
+    angle_deg = np.degrees(angle_rad)
+    
+    return angle_deg
+
+
+def compute_neck_angle(nose, mid_shoulder, trunk_vector):
+    """
+    Compute the neck angle using head-nose vector (nose-mid_shoulder) and trunk vector.
+    
+    Args:
+        nose: Nose point (2D vector)
+        mid_shoulder: Mid shoulder point (2D vector)
+        trunk_vector: Normalized trunk vector (2D)
+        
+    Returns:
+        Neck angle in degrees
+    """
+    # Calculate head-nose vector (nose to mid_shoulder)
+    headnose_vector = np.array(nose) - np.array(mid_shoulder)
+    
+    # Normalize head-nose vector
+    headnose_norm = np.linalg.norm(headnose_vector)
+    
+    if headnose_norm == 0:
+        return 0.0
+    
+    headnose_normalized = headnose_vector / headnose_norm
+    
+    # Calculate dot product
+    dot_product = np.dot(headnose_normalized, trunk_vector)
+    
+    # Clamp dot product to valid range for arccos
+    dot_product = np.clip(dot_product, -1.0, 1.0)
+    
+    # Calculate angle in radians
+    angle_rad = np.arccos(dot_product)
+    
+    # Convert to degrees
+    angle_deg = np.degrees(angle_rad)
+    
+    return angle_deg
+
+
+def compute_wrist_angle(elbow, wrist, pinky, index):
+    """
+    Compute the wrist angle using hand vector (mid_hand-wrist) and forearm vector (elbow-wrist).
+    
+    Args:
+        elbow: Elbow point (2D vector)
+        wrist: Wrist point (2D vector)
+        pinky: Pinky finger point (2D vector)
+        index: Index finger point (2D vector)
+        
+    Returns:
+        Wrist angle in degrees
+    """
+    # Calculate mid_hand point from pinky and index
+    mid_hand = compute_midpoint(pinky, index)
+    
+    # Calculate hand vector (mid_hand to wrist)
+    hand_vector = np.array(mid_hand) - np.array(wrist)
+    
+    # Calculate forearm vector (elbow to wrist)
+    forearm_vector = np.array(elbow) - np.array(wrist)
+    
+    # Normalize vectors
+    hand_norm = np.linalg.norm(hand_vector)
+    forearm_norm = np.linalg.norm(forearm_vector)
+    
+    if hand_norm == 0 or forearm_norm == 0:
+        return 0.0
+    
+    hand_normalized = hand_vector / hand_norm
+    forearm_normalized = forearm_vector / forearm_norm
+    
+    # Calculate dot product
+    dot_product = np.dot(hand_normalized, forearm_normalized)
+    
+    # Clamp dot product to valid range for arccos
+    dot_product = np.clip(dot_product, -1.0, 1.0)
+    
+    # Calculate angle in radians
+    angle_rad = np.arccos(dot_product)
+    
+    # Convert to degrees
+    angle_deg = np.degrees(angle_rad)
+    
+    return angle_deg
+
+
 def process_angles(input_csv, output_csv, segments=None):
     """
     Process landmark data and compute specified angles.
@@ -495,7 +623,7 @@ def process_angles(input_csv, output_csv, segments=None):
         
         # Right side angles
         right_elbow_angles = np.array([
-            compute_relative_angle(shoulder, elbow, wrist)
+            compute_elbow_angle(shoulder, elbow, wrist)
             for shoulder, elbow, wrist in zip(right_shoulder, right_elbow, right_wrist)
         ])
         
@@ -521,7 +649,7 @@ def process_angles(input_csv, output_csv, segments=None):
         
         # Left side angles
         left_elbow_angles = np.array([
-            compute_relative_angle(shoulder, elbow, wrist)
+            compute_elbow_angle(shoulder, elbow, wrist)
             for shoulder, elbow, wrist in zip(left_shoulder, left_elbow, left_wrist)
         ])
         
@@ -545,21 +673,50 @@ def process_angles(input_csv, output_csv, segments=None):
             for knee, ankle, foot_index, heel in zip(left_knee, left_ankle, left_foot_index, left_heel)
         ])
         
+        # Extract nose landmark
+        nose = get_vector_landmark(df, "nose")
+        
+        # Calculate neck angles
+        neck_angles = np.array([
+            compute_neck_angle(n, m_shoulder, trunk_vector)
+            for n, m_shoulder, trunk_vector in zip(nose, mid_shoulder, trunk_vectors)
+        ])
+        
+        # Extract additional landmarks for wrist angle
+        right_pinky = get_vector_landmark(df, "right_pinky")
+        right_index = get_vector_landmark(df, "right_index")
+        left_pinky = get_vector_landmark(df, "left_pinky")
+        left_index = get_vector_landmark(df, "left_index")
+        
+        # Calculate wrist angles
+        right_wrist_angles = np.array([
+            compute_wrist_angle(elbow, wrist, pinky, index)
+            for elbow, wrist, pinky, index in zip(right_elbow, right_wrist, right_pinky, right_index)
+        ])
+        
+        left_wrist_angles = np.array([
+            compute_wrist_angle(elbow, wrist, pinky, index)
+            for elbow, wrist, pinky, index in zip(left_elbow, left_wrist, left_pinky, left_index)
+        ])
+        
         # Create output DataFrame
         angles_df = pd.DataFrame({
             'frame_index': df.iloc[:, 0],
+            'neck_rel': neck_angles,  # Added neck angle
             # Right side angles
             'right_elbow_rel': right_elbow_angles,
             'right_shoulder_rel': right_shoulder_angles,
             'right_hip_rel': right_hip_angles,
             'right_knee_rel': right_knee_angles,
             'right_ankle_rel': right_ankle_angles,
+            'right_wrist_rel': right_wrist_angles,  # Added wrist angle
             # Left side angles
             'left_elbow_rel': left_elbow_angles,
             'left_shoulder_rel': left_shoulder_angles,
             'left_hip_rel': left_hip_angles,
             'left_knee_rel': left_knee_angles,
-            'left_ankle_rel': left_ankle_angles
+            'left_ankle_rel': left_ankle_angles,
+            'left_wrist_rel': left_wrist_angles  # Added wrist angle
         })
         
         # Save to CSV
@@ -571,44 +728,331 @@ def process_angles(input_csv, output_csv, segments=None):
         print(f"Error processing angles: {str(e)}")
         raise
 
+def draw_skeleton_and_angles(frame, landmarks, angles):
+    """
+    Draw skeleton segments, joints and angle values on the frame.
+    
+    Args:
+        frame: Video frame (numpy array)
+        landmarks: Dictionary containing landmark coordinates
+        angles: Dictionary containing angle values
+    """
+    height, width = frame.shape[:2]
+    
+    # Colors
+    RED = (0, 0, 255)       # Right side
+    BLUE = (255, 0, 0)      # Left side
+    GREEN = (0, 255, 0)     # Joints
+    WHITE = (255, 255, 255)  # Text
+    
+    # Draw segments
+    # Right side (in RED)
+    cv2.line(frame, tuple(landmarks['right_shoulder'].astype(int)), tuple(landmarks['right_elbow'].astype(int)), RED, 2)
+    cv2.line(frame, tuple(landmarks['right_elbow'].astype(int)), tuple(landmarks['right_wrist'].astype(int)), RED, 2)
+    cv2.line(frame, tuple(landmarks['right_hip'].astype(int)), tuple(landmarks['right_knee'].astype(int)), RED, 2)
+    cv2.line(frame, tuple(landmarks['right_knee'].astype(int)), tuple(landmarks['right_ankle'].astype(int)), RED, 2)
+    cv2.line(frame, tuple(landmarks['right_heel'].astype(int)), tuple(landmarks['right_foot_index'].astype(int)), RED, 2)
+    
+    # Left side (in BLUE)
+    cv2.line(frame, tuple(landmarks['left_shoulder'].astype(int)), tuple(landmarks['left_elbow'].astype(int)), BLUE, 2)
+    cv2.line(frame, tuple(landmarks['left_elbow'].astype(int)), tuple(landmarks['left_wrist'].astype(int)), BLUE, 2)
+    cv2.line(frame, tuple(landmarks['left_hip'].astype(int)), tuple(landmarks['left_knee'].astype(int)), BLUE, 2)
+    cv2.line(frame, tuple(landmarks['left_knee'].astype(int)), tuple(landmarks['left_ankle'].astype(int)), BLUE, 2)
+    cv2.line(frame, tuple(landmarks['left_heel'].astype(int)), tuple(landmarks['left_foot_index'].astype(int)), BLUE, 2)
+    
+    # Draw trunk and neck
+    cv2.line(frame, tuple(landmarks['mid_shoulder'].astype(int)), tuple(landmarks['mid_hip'].astype(int)), WHITE, 2)
+    cv2.line(frame, tuple(landmarks['nose'].astype(int)), tuple(landmarks['mid_shoulder'].astype(int)), WHITE, 2)  # Neck segment
+    
+    # Draw joints (circles)
+    joint_radius = 4
+    for landmark in landmarks.values():
+        cv2.circle(frame, tuple(landmark.astype(int)), joint_radius, GREEN, -1)
+    
+    # Add angle values with larger font
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = 0.7  # Aumentado de 0.5 para 0.7
+    thickness = 2    # Aumentado de 1 para 2
+    
+    # Neck angle (centralizado no topo)
+    cv2.putText(frame, f"Neck: {angles['neck']:.1f}", 
+                (width//2 - 50, 30), font, font_scale, WHITE, thickness)
+    
+    # Right side angles (in RED)
+    cv2.putText(frame, f"R Shoulder: {angles['right_shoulder']:.1f}", 
+                (10, 30), font, font_scale, RED, thickness)
+    cv2.putText(frame, f"R Elbow: {angles['right_elbow']:.1f}", 
+                (10, 60), font, font_scale, RED, thickness)
+    cv2.putText(frame, f"R Hip: {angles['right_hip']:.1f}", 
+                (10, 90), font, font_scale, RED, thickness)
+    cv2.putText(frame, f"R Knee: {angles['right_knee']:.1f}", 
+                (10, 120), font, font_scale, RED, thickness)
+    cv2.putText(frame, f"R Ankle: {angles['right_ankle']:.1f}", 
+                (10, 150), font, font_scale, RED, thickness)
+    cv2.putText(frame, f"R Wrist: {angles['right_wrist']:.1f}", 
+                (10, 180), font, font_scale, RED, thickness)
+    
+    # Left side angles (in BLUE)
+    cv2.putText(frame, f"L Shoulder: {angles['left_shoulder']:.1f}", 
+                (width-200, 30), font, font_scale, BLUE, thickness)
+    cv2.putText(frame, f"L Elbow: {angles['left_elbow']:.1f}", 
+                (width-200, 60), font, font_scale, BLUE, thickness)
+    cv2.putText(frame, f"L Hip: {angles['left_hip']:.1f}", 
+                (width-200, 90), font, font_scale, BLUE, thickness)
+    cv2.putText(frame, f"L Knee: {angles['left_knee']:.1f}", 
+                (width-200, 120), font, font_scale, BLUE, thickness)
+    cv2.putText(frame, f"L Ankle: {angles['left_ankle']:.1f}", 
+                (width-200, 150), font, font_scale, BLUE, thickness)
+    cv2.putText(frame, f"L Wrist: {angles['left_wrist']:.1f}", 
+                (width-200, 180), font, font_scale, BLUE, thickness)
+    
+    return frame
+
+def process_video_with_visualization(video_path, csv_path, output_dir):
+    """
+    Process video file and create visualization with angles using coordinates from CSV.
+    
+    Args:
+        video_path: Path to input video file
+        csv_path: Path to CSV file with pixel coordinates
+        output_dir: Directory to save output files
+    """
+    # Create output directory if it doesn't exist
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Read CSV file with coordinates
+    try:
+        df = pd.read_csv(csv_path)
+        print(f"Reading coordinates from: {csv_path}")
+    except Exception as e:
+        print(f"Error reading CSV file: {str(e)}")
+        return
+    
+    # Open video file
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        print(f"Error: Could not open video file {video_path}")
+        return
+    
+    # Get video properties
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = int(cap.get(cv2.CAP_PROP_FPS))
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    
+    # Create video writer
+    output_video_path = os.path.join(output_dir, f"visualization_{os.path.basename(video_path)}")
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(output_video_path, fourcc, fps, (width, height))
+    
+    frame_count = 0
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            break
+        
+        if frame_count >= len(df):
+            break
+            
+        # Get landmarks from CSV for current frame
+        landmarks = {}
+        
+        # Add nose landmark
+        landmarks['nose'] = np.array(get_vector_landmark(df.iloc[frame_count:frame_count+1], "nose")[0])
+        
+        # Right side landmarks
+        landmarks['right_shoulder'] = np.array(get_vector_landmark(df.iloc[frame_count:frame_count+1], "right_shoulder")[0])
+        landmarks['right_elbow'] = np.array(get_vector_landmark(df.iloc[frame_count:frame_count+1], "right_elbow")[0])
+        landmarks['right_wrist'] = np.array(get_vector_landmark(df.iloc[frame_count:frame_count+1], "right_wrist")[0])
+        landmarks['right_hip'] = np.array(get_vector_landmark(df.iloc[frame_count:frame_count+1], "right_hip")[0])
+        landmarks['right_knee'] = np.array(get_vector_landmark(df.iloc[frame_count:frame_count+1], "right_knee")[0])
+        landmarks['right_ankle'] = np.array(get_vector_landmark(df.iloc[frame_count:frame_count+1], "right_ankle")[0])
+        landmarks['right_foot_index'] = np.array(get_vector_landmark(df.iloc[frame_count:frame_count+1], "right_foot_index")[0])
+        landmarks['right_heel'] = np.array(get_vector_landmark(df.iloc[frame_count:frame_count+1], "right_heel")[0])
+        
+        # Left side landmarks
+        landmarks['left_shoulder'] = np.array(get_vector_landmark(df.iloc[frame_count:frame_count+1], "left_shoulder")[0])
+        landmarks['left_elbow'] = np.array(get_vector_landmark(df.iloc[frame_count:frame_count+1], "left_elbow")[0])
+        landmarks['left_wrist'] = np.array(get_vector_landmark(df.iloc[frame_count:frame_count+1], "left_wrist")[0])
+        landmarks['left_hip'] = np.array(get_vector_landmark(df.iloc[frame_count:frame_count+1], "left_hip")[0])
+        landmarks['left_knee'] = np.array(get_vector_landmark(df.iloc[frame_count:frame_count+1], "left_knee")[0])
+        landmarks['left_ankle'] = np.array(get_vector_landmark(df.iloc[frame_count:frame_count+1], "left_ankle")[0])
+        landmarks['left_foot_index'] = np.array(get_vector_landmark(df.iloc[frame_count:frame_count+1], "left_foot_index")[0])
+        landmarks['left_heel'] = np.array(get_vector_landmark(df.iloc[frame_count:frame_count+1], "left_heel")[0])
+        
+        # Calculate midpoints
+        landmarks['mid_hip'] = compute_midpoint(landmarks['left_hip'], landmarks['right_hip'])
+        landmarks['mid_shoulder'] = compute_midpoint(landmarks['left_shoulder'], landmarks['right_shoulder'])
+        
+        # Calculate trunk vector
+        trunk_vector = np.array(landmarks['mid_hip']) - np.array(landmarks['mid_shoulder'])
+        trunk_norm = np.linalg.norm(trunk_vector)
+        if trunk_norm > 0:
+            trunk_vector = trunk_vector / trunk_norm
+        
+        # Calculate angles
+        angles = {}
+        
+        # Neck angle
+        angles['neck'] = compute_neck_angle(
+            landmarks['nose'], landmarks['mid_shoulder'], trunk_vector)
+            
+        # Right side angles
+        angles['right_shoulder'] = compute_shoulder_angle(
+            landmarks['right_shoulder'], landmarks['right_elbow'], trunk_vector)
+        angles['right_elbow'] = compute_elbow_angle(
+            landmarks['right_shoulder'], landmarks['right_elbow'], landmarks['right_wrist'])
+        angles['right_hip'] = compute_hip_angle(
+            landmarks['right_hip'], landmarks['right_knee'], trunk_vector)
+        angles['right_knee'] = compute_knee_angle(
+            landmarks['right_hip'], landmarks['right_knee'], landmarks['right_ankle'])
+        angles['right_ankle'] = compute_ankle_angle(
+            landmarks['right_knee'], landmarks['right_ankle'], 
+            landmarks['right_foot_index'], landmarks['right_heel'])
+        
+        # Left side angles
+        angles['left_shoulder'] = compute_shoulder_angle(
+            landmarks['left_shoulder'], landmarks['left_elbow'], trunk_vector)
+        angles['left_elbow'] = compute_elbow_angle(
+            landmarks['left_shoulder'], landmarks['left_elbow'], landmarks['left_wrist'])
+        angles['left_hip'] = compute_hip_angle(
+            landmarks['left_hip'], landmarks['left_knee'], trunk_vector)
+        angles['left_knee'] = compute_knee_angle(
+            landmarks['left_hip'], landmarks['left_knee'], landmarks['left_ankle'])
+        angles['left_ankle'] = compute_ankle_angle(
+            landmarks['left_knee'], landmarks['left_ankle'], 
+            landmarks['left_foot_index'], landmarks['left_heel'])
+        
+        # Get additional landmarks for wrist angle
+        landmarks['right_pinky'] = np.array(get_vector_landmark(df.iloc[frame_count:frame_count+1], "right_pinky")[0])
+        landmarks['right_index'] = np.array(get_vector_landmark(df.iloc[frame_count:frame_count+1], "right_index")[0])
+        landmarks['left_pinky'] = np.array(get_vector_landmark(df.iloc[frame_count:frame_count+1], "left_pinky")[0])
+        landmarks['left_index'] = np.array(get_vector_landmark(df.iloc[frame_count:frame_count+1], "left_index")[0])
+        
+        # Calculate wrist angles
+        angles['right_wrist'] = compute_wrist_angle(
+            landmarks['right_elbow'], landmarks['right_wrist'], 
+            landmarks['right_pinky'], landmarks['right_index'])
+        angles['left_wrist'] = compute_wrist_angle(
+            landmarks['left_elbow'], landmarks['left_wrist'], 
+            landmarks['left_pinky'], landmarks['left_index'])
+        
+        # Draw visualization
+        frame = draw_skeleton_and_angles(frame, landmarks, angles)
+        
+        # Write frame
+        out.write(frame)
+        
+        # Show progress
+        frame_count += 1
+        if frame_count % 30 == 0:
+            print(f"Processing frame {frame_count}/{total_frames} ({frame_count/total_frames*100:.1f}%)")
+    
+    # Release resources
+    cap.release()
+    out.release()
+    
+    print(f"Video processing complete. Output saved to: {output_video_path}")
+
+def select_video_file():
+    """
+    Opens a dialog to select a video file.
+    
+    Returns:
+        str or None: Path to selected video file
+    """
+    root = tk.Tk()
+    root.withdraw()
+    
+    file_path = filedialog.askopenfilename(
+        title="Select Video File",
+        filetypes=[
+            ("Video files", "*.mp4 *.avi *.mov"),
+            ("All files", "*.*")
+        ]
+    )
+    
+    if file_path:
+        return file_path
+    return None
+
+def select_csv_file():
+    """
+    Opens a dialog to select a CSV file with coordinates.
+    
+    Returns:
+        str or None: Path to selected CSV file
+    """
+    root = tk.Tk()
+    root.withdraw()
+    
+    file_path = filedialog.askopenfilename(
+        title="Select CSV File with Coordinates",
+        filetypes=[
+            ("CSV files", "*.csv"),
+            ("All files", "*.*")
+        ]
+    )
+    
+    if file_path:
+        return file_path
+    return None
+
 def run_mp_angles():
-    """Runs the MP Angles module with directory selection for batch processing."""
+    """Runs the MP Angles module with options for CSV or video processing."""
     print("\nStarting MP Angles module...")
-    print(f"Running script: {os.path.basename(__file__)}")
-    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
-
-    # Select directory containing CSV files
-    input_dir = select_directory()
-    if not input_dir:
-        print("No input directory selected. Exiting.")
-        return
-
-    # Process all CSV files in the directory
-    processed_files = process_directory(input_dir)
-    if not processed_files:
-        print("No files were processed. Exiting.")
-        return
-
-    # Process each file in the directory
-    for csv_file, file_info in processed_files.items():
-        try:
-            input_path = os.path.join(input_dir, csv_file)
-            output_path = file_info['output_path']
+    
+    # Ask user what type of processing they want
+    root = tk.Tk()
+    root.withdraw()
+    
+    process_type = messagebox.askquestion(
+        "Processing Type",
+        "Do you want to process a video file?\n\n" +
+        "Yes: Process video with visualization\n" +
+        "No: Process CSV files"
+    )
+    
+    if process_type == 'yes':
+        # First select CSV file with coordinates
+        csv_path = select_csv_file()
+        if not csv_path:
+            print("No CSV file selected. Exiting.")
+            return
+        
+        # Then select video file for visualization
+        video_path = select_video_file()
+        if not video_path:
+            print("No video file selected. Exiting.")
+            return
             
-            print(f"\nProcessing file: {csv_file}")
-            print(f"Output will be saved to: {output_path}")
+        output_dir = os.path.join(os.path.dirname(video_path), "processed_video")
+        process_video_with_visualization(video_path, csv_path, output_dir)
+        
+    else:
+        # CSV processing (existing functionality)
+        input_dir = select_directory()
+        if not input_dir:
+            print("No input directory selected. Exiting.")
+            return
             
-            # Process angles for all segments
-            process_angles(input_path, output_path)
+        processed_files = process_directory(input_dir)
+        if not processed_files:
+            print("No files were processed. Exiting.")
+            return
             
-            print(f"Successfully processed: {csv_file}")
-            
-        except Exception as e:
-            print(f"Error processing {csv_file}: {str(e)}")
-            continue
-
+        # Process each file in the directory
+        for csv_file, file_info in processed_files.items():
+            try:
+                input_path = os.path.join(input_dir, csv_file)
+                output_path = file_info['output_path']
+                process_angles(input_path, output_path)
+                print(f"Successfully processed: {csv_file}")
+            except Exception as e:
+                print(f"Error processing {csv_file}: {str(e)}")
+                continue
+    
     print("\nProcessing complete!")
-    print(f"Output files are saved in: {os.path.dirname(output_path)}")
 
 def main():
     """
