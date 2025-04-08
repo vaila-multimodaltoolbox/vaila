@@ -66,6 +66,7 @@ from scipy.interpolate import UnivariateSpline
 import tkinter as tk
 from rich import print
 from statsmodels.tsa.arima.model import ARIMA
+from .filter_utils import butter_filter  # Importar a função do filter_utils.py
 
 
 class InterpolationConfigDialog(tk.simpledialog.Dialog):
@@ -1360,92 +1361,6 @@ def detect_float_format(original_path):
         return "%.6f"
 
 
-# Scripts to filter/smooth data
-def butter_filter(
-    data,
-    fs,
-    filter_type="low",
-    cutoff=None,
-    lowcut=None,
-    highcut=None,
-    order=4,
-    padding=True,
-):
-    """
-    Applies a Butterworth filter (low-pass or band-pass) to the input data.
-
-    Parameters:
-    - data: array-like
-        The input signal to be filtered. Can be 1D or multidimensional. Filtering is applied along the first axis.
-    - fs: float
-        The sampling frequency of the signal.
-    - filter_type: str, default='low'
-        The type of filter to apply: 'low' for low-pass or 'band' for band-pass.
-    - cutoff: float, optional
-        The cutoff frequency for a low-pass filter.
-    - lowcut: float, optional
-        The lower cutoff frequency for a band-pass filter.
-    - highcut: float, optional
-        The upper cutoff frequency for a band-pass filter.
-    - order: int, default=4
-        The order of the Butterworth filter.
-    - padding: bool, default=True
-        Whether to pad the signal to mitigate edge effects.
-
-    Returns:
-    - filtered_data: array-like
-        The filtered signal.
-    """
-    # Check filter type and set parameters
-    nyq = 0.5 * fs  # Nyquist frequency
-    if filter_type == "low":
-        if cutoff is None:
-            raise ValueError("Cutoff frequency must be provided for low-pass filter.")
-        normal_cutoff = cutoff / nyq
-        sos = butter(order, normal_cutoff, btype="low", analog=False, output="sos")
-    elif filter_type == "band":
-        if lowcut is None or highcut is None:
-            raise ValueError(
-                "Lowcut and highcut frequencies must be provided for band-pass filter."
-            )
-        low = lowcut / nyq
-        high = highcut / nyq
-        sos = butter(order, [low, high], btype="band", analog=False, output="sos")
-    else:
-        raise ValueError(
-            "Unsupported filter type. Use 'low' for low-pass or 'band' for band-pass."
-        )
-
-    data = np.asarray(data)
-    axis = 0  # Filtering along the first axis (rows)
-
-    # Apply padding if needed to handle edge effects
-    if padding:
-        data_len = data.shape[axis]
-        # Ensure padding length is suitable for data length
-        max_padlen = data_len - 1
-        padlen = min(int(fs), max_padlen, 15)
-
-        if data_len <= padlen:
-            raise ValueError(
-                f"The length of the input data ({data_len}) must be greater than the padding length ({padlen})."
-            )
-
-        # Pad the data along the specified axis
-        pad_width = [(0, 0)] * data.ndim
-        pad_width[axis] = (padlen, padlen)
-        padded_data = np.pad(data, pad_width=pad_width, mode="reflect")
-        filtered_padded_data = sosfiltfilt(sos, padded_data, axis=axis, padlen=0)
-        # Remove padding
-        idx = [slice(None)] * data.ndim
-        idx[axis] = slice(padlen, -padlen)
-        filtered_data = filtered_padded_data[tuple(idx)]
-    else:
-        filtered_data = sosfiltfilt(sos, data, axis=axis, padlen=0)
-
-    return filtered_data
-
-
 def savgol_smooth(data, window_length, polyorder):
     """
     Applies the Savitzky-Golay filter to the data.
@@ -2018,12 +1933,40 @@ def process_file(file_path, dest_dir, config):
 
                     elif config["smooth_method"] == "butterworth":
                         params = config["smooth_params"]
-                        df[col] = butter_filter(
-                            df[col].values, fs=params["fs"], cutoff=params["cutoff"]
-                        )
-                        print(
-                            f"Applied Butterworth filter with cutoff={params['cutoff']}Hz, fs={params['fs']}Hz"
-                        )
+                        try:
+                            data = df[col].values
+                            if np.isnan(data).any():
+                                print(f"Warning: Column {col} contains NaN values. Interpolating before filtering...")
+                                data = pd.Series(data).interpolate(method='linear').values
+                            
+                            fs = float(params["fs"])
+                            cutoff = float(params["cutoff"])
+                            
+                            # Garantir que a frequência de corte seja razoável
+                            if cutoff >= fs/2:
+                                cutoff = fs/2 - 1
+                                print(f"Warning: Adjusted cutoff frequency to {cutoff} Hz")
+                            
+                            # Usar a função butter_filter do filter_utils.py
+                            filtered = butter_filter(
+                                data,
+                                fs=fs,
+                                filter_type="low",
+                                cutoff=cutoff,
+                                order=4,
+                                padding=True
+                            )
+                            
+                            if not np.array_equal(filtered, data):  # Verificar se houve mudança
+                                df[col] = filtered
+                                print(f"Successfully filtered column {col}")
+                            else:
+                                print(f"Warning: No change detected after filtering column {col}")
+                                
+                        except Exception as e:
+                            print(f"Error filtering column {col}: {str(e)}")
+                            # Manter dados originais em caso de erro
+                            print("Keeping original data for this column")
 
                     elif config["smooth_method"] == "splines":
                         params = config["smooth_params"]
