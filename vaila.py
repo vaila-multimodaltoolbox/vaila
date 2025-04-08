@@ -204,7 +204,7 @@ B2_r2_c4 - GNSS/GPS       B2_r2_c5 - MEG/EEG
 B3_r3_c1 - HR/ECG         B3_r3_c2 - Markerless_MP_Yolo  B3_r3_c3 - vailá_and_jump
 B3_r3_c4 - Cube2D         B3_r3_c5 - Animal Open Field 
 B3_r4_c1 - Tracker        B3_r4_c2 - ML Walkway       B3_r4_c3 - Markerless Hands
-B3_r4_c4 - MP Angles          B3_r4_c5 - vailá
+B3_r4_c4 - MP Angles      B3_r4_c5 - Markerless Live
 
 ============================== Tools Available (Frame C) ===================
 -> C_A: Data Files
@@ -737,12 +737,12 @@ class Vaila(tk.Tk):
             command=self.mp_angles_calculation,
         )
 
-        # B4_r4_c5 - vailá
-        vaila_btn7 = tk.Button(
+        # B4_r4_c5 - Markerless Live
+        markerlesslive_btn = tk.Button(
             row4_frame,
-            text="vailá",
+            text="Markerless Live",
             width=button_width,
-            command=self.show_vaila_message,
+            command=self.markerless_live,
         )
 
         # Pack row4 buttons
@@ -750,7 +750,7 @@ class Vaila(tk.Tk):
         mlwalkway_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         mphands_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         mpangles_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
-        vaila_btn7.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        markerlesslive_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
 
         ## VVVVVVVVVVVVVVV TOOLS BUTTONS VVVVVVVVVVVVVVVV
         # Tools Frame
@@ -1339,7 +1339,7 @@ class Vaila(tk.Tk):
         root = tk.Tk()
         root.withdraw()
 
-        # Simples diálogo de escolha
+        # Simple choice dialog
         choices = {
             "1": "Standard (Faster, single-person)",
             "2": "Advanced (Slower, multi-person with YOLO)",
@@ -1370,7 +1370,7 @@ class Vaila(tk.Tk):
         root = tk.Tk()
         root.withdraw()
 
-        # Simples diálogo de escolha
+        # Simple choice dialog
         choices = {
             "1": "Standard (Faster, single-person)",
             "2": "Advanced (Slower, multi-person with YOLO)",
@@ -1404,7 +1404,7 @@ class Vaila(tk.Tk):
         two joints. The module will then calculate the coupling angle between the two
         joints and save the result in a CSV file.
         """
-        # Importar diretamente do arquivo run_vector_coding.py
+        # Import directly from the run_vector_coding.py file
         from vaila.run_vector_coding import run_vector_coding
 
         run_vector_coding()
@@ -1570,6 +1570,13 @@ class Vaila(tk.Tk):
         from vaila import mpangles
 
         mpangles.run_mp_angles()
+    
+    # B_r4_c5 - Markerless Live
+    def markerless_live(self):
+        """Runs the Markerless Live module."""
+        from vaila import markerless_live
+
+        markerless_live.run_markerless_live()
 
     def reorder_csv_data(self):
         """Runs the Reorder CSV Data module.
