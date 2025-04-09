@@ -340,7 +340,7 @@ class ColumnReorderGUI(tk.Tk):
         self.directory_path = directory_path
         self.rearranged_path = os.path.join(directory_path, "data_rearranged")
         self.history = []
-        
+
         # Verificar o tamanho do arquivo antes de carregar
         if self.file_names == ["Empty"]:
             self.is_large_file = False
@@ -349,10 +349,14 @@ class ColumnReorderGUI(tk.Tk):
             base_file_name = file_names[0]
             full_path = os.path.join(directory_path, base_file_name)
             file_size_mb = os.path.getsize(full_path) / (1024 * 1024)
-            self.is_large_file = file_size_mb > 100  # Arquivos maiores que 100MB são considerados grandes
-            
+            self.is_large_file = (
+                file_size_mb > 100
+            )  # Arquivos maiores que 100MB são considerados grandes
+
             if self.is_large_file:
-                print(f"Large file detected ({file_size_mb:.2f} MB). Loading in simplified mode...")
+                print(
+                    f"Large file detected ({file_size_mb:.2f} MB). Loading in simplified mode..."
+                )
                 self.setup_large_file_gui(full_path)
             else:
                 self.setup_normal_gui(full_path)
@@ -379,19 +383,21 @@ class ColumnReorderGUI(tk.Tk):
         try:
             # Ler apenas o cabeçalho e as primeiras linhas
             print("Reading file headers...")
-            self.df = pd.read_csv(file_path, nrows=5)  # Ler apenas 5 linhas para exemplo
+            self.df = pd.read_csv(
+                file_path, nrows=5
+            )  # Ler apenas 5 linhas para exemplo
             self.max_decimal_places = 3  # Valor padrão para arquivos grandes
             self.scientific_notation = False
-            
+
             # Mostrar aviso sobre modo simplificado
             messagebox.showinfo(
                 "Large File Mode",
                 "File is too large for full preview. Running in simplified mode.\n"
-                "Only headers and first 5 rows will be shown."
+                "Only headers and first 5 rows will be shown.",
             )
-            
+
             self.setup_gui(is_large_file=True)
-            
+
         except Exception as e:
             print(f"Error loading large file: {e}")
             self.setup_empty_gui()
@@ -400,7 +406,9 @@ class ColumnReorderGUI(tk.Tk):
         """Configuração normal para arquivos pequenos"""
         try:
             self.df = pd.read_csv(file_path)
-            self.max_decimal_places, self.scientific_notation = detect_precision_and_notation(file_path)
+            self.max_decimal_places, self.scientific_notation = (
+                detect_precision_and_notation(file_path)
+            )
             self.setup_gui(is_large_file=False)
         except pd.errors.ParserError:
             print("Parser error detected. Standardizing header...")
@@ -421,8 +429,7 @@ class ColumnReorderGUI(tk.Tk):
         scrollable_frame = tk.Frame(canvas)
 
         scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+            "<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
         )
 
         canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
@@ -437,7 +444,7 @@ class ColumnReorderGUI(tk.Tk):
                 scrollable_frame,
                 text="⚠️ Large File Mode: Limited Preview Available ⚠️",
                 font=("default", 12, "bold"),
-                fg="red"
+                fg="red",
             )
             warning_label.grid(row=0, column=0, columnspan=3, pady=5)
 
@@ -448,24 +455,30 @@ class ColumnReorderGUI(tk.Tk):
             "Press Ctrl+Z to undo.\nPress Esc to save and exit."
         )
         if is_large_file:
-            instructions_text += "\nLarge File Mode: Changes will be applied to the entire file."
-        
+            instructions_text += (
+                "\nLarge File Mode: Changes will be applied to the entire file."
+            )
+
         self.instructions = tk.Label(
-            scrollable_frame,
-            text=instructions_text,
-            font=("default", 10)
+            scrollable_frame, text=instructions_text, font=("default", 10)
         )
         self.instructions.grid(row=1, column=0, columnspan=3, pady=10, sticky="n")
 
         # Resto da configuração da GUI permanece o mesmo
         self.header_frame = tk.Frame(scrollable_frame)
-        self.header_frame.grid(row=2, column=0, columnspan=2, pady=10, padx=10, sticky="nsew")
+        self.header_frame.grid(
+            row=2, column=0, columnspan=2, pady=10, padx=10, sticky="nsew"
+        )
 
         # Labels para número e nome
-        self.number_label = tk.Label(self.header_frame, text="Number", font=("default", 12, "bold"))
+        self.number_label = tk.Label(
+            self.header_frame, text="Number", font=("default", 12, "bold")
+        )
         self.number_label.grid(row=0, column=0, padx=(10, 5), pady=(10, 0))
 
-        self.name_label = tk.Label(self.header_frame, text="Name", font=("default", 12, "bold"))
+        self.name_label = tk.Label(
+            self.header_frame, text="Name", font=("default", 12, "bold")
+        )
         self.name_label.grid(row=0, column=1, padx=(5, 10), pady=(10, 0))
 
         # Mostrar shape com informação adicional para arquivos grandes
@@ -473,20 +486,26 @@ class ColumnReorderGUI(tk.Tk):
             shape_text = f"Shape: {self.df.shape[0]} rows (showing first 5) × {self.df.shape[1]} columns"
         else:
             shape_text = f"Shape: {self.df.shape}"
-        
-        self.shape_label = tk.Label(self.header_frame, text=shape_text, font=("default", 12))
+
+        self.shape_label = tk.Label(
+            self.header_frame, text=shape_text, font=("default", 12)
+        )
         self.shape_label.grid(row=0, column=2, padx=(5, 10), pady=(10, 0))
 
         # Listboxes
-        self.order_listbox = tk.Listbox(self.header_frame, selectmode=tk.MULTIPLE, width=5, height=30)
+        self.order_listbox = tk.Listbox(
+            self.header_frame, selectmode=tk.MULTIPLE, width=5, height=30
+        )
         self.order_listbox.grid(row=1, column=0, padx=(10, 5), pady=10, sticky="ns")
 
-        self.header_listbox = tk.Listbox(self.header_frame, selectmode=tk.MULTIPLE, width=50, height=30)
+        self.header_listbox = tk.Listbox(
+            self.header_frame, selectmode=tk.MULTIPLE, width=50, height=30
+        )
         self.header_listbox.grid(row=1, column=1, padx=(5, 10), pady=10, sticky="ns")
 
         # Atualizar listboxes
         self.update_listbox()
-        
+
         # Adicionar frame de botões
         button_frame = tk.Frame(self.header_frame)
         button_frame.grid(row=1, column=2, padx=10, pady=10, sticky="ns")
@@ -1178,73 +1197,73 @@ def batch_convert_dvideo(directory_path):
     print(f"All files have been converted and saved to {save_directory}")
 
 
-def convert_yolo_tracker_to_pixel_format(tracker_file, save_directory=None, chunk_size=10000):
+def convert_yolo_tracker_to_pixel_format(
+    tracker_file, save_directory=None, chunk_size=10000
+):
     print(f"Converting YOLO tracker file: {tracker_file}")
-    
+
     try:
         # Configuração do diretório de saída
         if save_directory is None:
             save_directory = os.path.dirname(tracker_file)
         if not os.path.exists(save_directory):
             os.makedirs(save_directory)
-            
+
         base_name = os.path.splitext(os.path.basename(tracker_file))[0]
         output_file = os.path.join(save_directory, f"{base_name}_pixelformat.csv")
-        
+
         # Primeira passagem: identificar IDs únicos
         print("Analyzing file structure...")
         column_names = pd.read_csv(tracker_file, nrows=1).columns
-        person_ids = sorted([
-            int(col.split('_')[1]) 
-            for col in column_names 
-            if col.startswith("ID_")
-        ])
-        
+        person_ids = sorted(
+            [int(col.split("_")[1]) for col in column_names if col.startswith("ID_")]
+        )
+
         # Processar o arquivo em chunks
         print(f"Processing file in chunks of {chunk_size} rows...")
         first_chunk = True
-        
+
         # Usar chunked reading para processar o arquivo
-        for chunk_number, chunk in enumerate(pd.read_csv(tracker_file, chunksize=chunk_size)):
+        for chunk_number, chunk in enumerate(
+            pd.read_csv(tracker_file, chunksize=chunk_size)
+        ):
             print(f"Processing chunk {chunk_number + 1}...")
-            
+
             # Criar todos os dados em um dicionário primeiro
-            data = {'frame': chunk["Frame"]}
-            
+            data = {"frame": chunk["Frame"]}
+
             # Processar dados de cada pessoa
             for idx, person_id in enumerate(person_ids):
                 x_col = f"X_{person_id}"
                 y_col = f"Y_{person_id}"
-                
+
                 if x_col in chunk.columns and y_col in chunk.columns:
                     data[f"p{idx+1}_x"] = chunk[x_col]
                     data[f"p{idx+1}_y"] = chunk[y_col]
                 else:
                     data[f"p{idx+1}_x"] = np.nan
                     data[f"p{idx+1}_y"] = np.nan
-            
+
             # Criar o DataFrame de uma vez só com todas as colunas
             new_chunk = pd.DataFrame(data)
-            
+
             # Escrever chunk no arquivo
-            mode = 'w' if first_chunk else 'a'
+            mode = "w" if first_chunk else "a"
             header = first_chunk
-            new_chunk.to_csv(output_file, 
-                           mode=mode, 
-                           header=header, 
-                           index=False,
-                           float_format='%.3f')
-            
+            new_chunk.to_csv(
+                output_file, mode=mode, header=header, index=False, float_format="%.3f"
+            )
+
             first_chunk = False
-            
+
             # Liberar memória
             del new_chunk
             del data
             gc.collect()
-        
+
         print(f"Conversion completed. File saved to: {output_file}")
         return output_file
-        
+
     except Exception as e:
         print(f"Error converting YOLO tracker file: {e}")
         return None
@@ -1265,14 +1284,16 @@ def batch_convert_yolo_tracker(directory_path=None):
 
     # Find all potential YOLO tracker files
     potential_files = [
-        f for f in os.listdir(directory_path)
+        f
+        for f in os.listdir(directory_path)
         if f.endswith(".csv") and ("all_persons_positions" in f or "person" in f)
     ]
 
     if not potential_files:
         print("No YOLO tracker files found in the directory.")
-        messagebox.showwarning("No Files Found", 
-                             "No YOLO tracker files found in the directory.")
+        messagebox.showwarning(
+            "No Files Found", "No YOLO tracker files found in the directory."
+        )
         return
 
     # Create output directory
@@ -1283,51 +1304,49 @@ def batch_convert_yolo_tracker(directory_path=None):
     # Process each file
     converted_files = []
     errors = []
-    
+
     # Ask for chunk size
     try:
         chunk_size = simpledialog.askinteger(
             "Chunk Size",
-            "Enter chunk size for processing (larger files need smaller chunks):\n" +
-            "Recommended:\n" +
-            "- Small files: 10000\n" +
-            "- Medium files: 5000\n" +
-            "- Large files: 1000\n" +
-            "- Very large files: 500",
+            "Enter chunk size for processing (larger files need smaller chunks):\n"
+            + "Recommended:\n"
+            + "- Small files: 10000\n"
+            + "- Medium files: 5000\n"
+            + "- Large files: 1000\n"
+            + "- Very large files: 500",
             initialvalue=5000,
             minvalue=100,
-            maxvalue=50000
+            maxvalue=50000,
         )
-        
+
         if chunk_size is None:
             chunk_size = 5000  # Default value if dialog is cancelled
     except:
         chunk_size = 5000  # Fallback value
-    
+
     total_files = len(potential_files)
     for idx, file_name in enumerate(potential_files, 1):
         try:
             print(f"\nProcessing file {idx}/{total_files}: {file_name}")
             file_path = os.path.join(directory_path, file_name)
-            
+
             # Get file size in MB
             file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
             print(f"File size: {file_size_mb:.2f} MB")
-            
+
             result_path = convert_yolo_tracker_to_pixel_format(
-                file_path, 
-                save_directory,
-                chunk_size=chunk_size
+                file_path, save_directory, chunk_size=chunk_size
             )
-            
+
             if result_path:
                 converted_files.append(file_name)
                 print(f"Successfully converted: {file_name}")
-            
+
         except Exception as e:
             print(f"Error processing {file_name}: {e}")
             errors.append((file_name, str(e)))
-        
+
         # Force garbage collection
         gc.collect()
 
@@ -1347,9 +1366,8 @@ def batch_convert_yolo_tracker(directory_path=None):
             success_message += error_message
         messagebox.showinfo("Conversion Complete", success_message)
     elif errors:
-        error_message = (
-            f"All files failed to convert.\nErrors:\n"
-            + "\n".join(f"{name}: {error}" for name, error in errors)
+        error_message = f"All files failed to convert.\nErrors:\n" + "\n".join(
+            f"{name}: {error}" for name, error in errors
         )
         print(error_message)
         messagebox.showerror("Conversion Failed", error_message)
