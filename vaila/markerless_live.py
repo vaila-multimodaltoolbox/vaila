@@ -1,6 +1,6 @@
 """
 Script: markerless_live.py
-Author: José Moser (https://moserjose.vercel.app/)
+Author: Moser José (https://moserjose.com/),  Prof. Dr. Paulo Santiago
 Version: 0.0.2
 Created: April 9, 2025
 Last Updated: April 9, 2025
@@ -51,7 +51,6 @@ Requirements:
 - Ultralytics YOLO
 - NumPy
 - Matplotlib
-- Pandas
 - Tkinter
 
 Output:
@@ -85,10 +84,8 @@ import time
 import csv
 from datetime import datetime
 import matplotlib.pyplot as plt
-import argparse
 import mediapipe as mp
 import os
-import pandas as pd
 import tkinter as tk
 from tkinter import messagebox, simpledialog, filedialog
 
@@ -148,25 +145,11 @@ def list_available_cameras():
 
     return available_cameras
 
-
-# Configuration settings
-# Camera settings will be set dynamically based on user selection
-CAMERA_DEVICE = None
-CAMERA_FPS = None
-CAMERA_WIDTH = None
-CAMERA_HEIGHT = None
-
 # Detection settings
-CONFIDENCE_THRESHOLD = 0.5  # Minimum confidence for YOLO detections
 BUFFER_SIZE = 100  # Number of frames to keep in the angle buffer
 
 # Output settings
 SAVE_DATA = True
-OUTPUT_DIR = "output"  # Directory to save output files
-
-# Default engine
-ENGINE = "yolo"  # Options: "yolo" or "mediapipe"
-
 
 # ===== CODE FROM ANGLE_CALCULATOR.PY =====
 class AngleCalculator:
@@ -1052,20 +1035,20 @@ class MovementAnalyzer:
         if self.angle_buffer and "angles" in self.angle_buffer[-1]:
             angles = self.angle_buffer[-1]["angles"]
 
-            # Configurações de texto
+            # Text configurations
             font = cv2.FONT_HERSHEY_SIMPLEX
             font_scale = 0.8
             font_thickness = 2
             font_color = (255, 255, 255)
             bg_color = (0, 0, 0)
 
-            # Calcular tamanho do texto para o fundo
+            # Calculate text size for background
             max_text_width = 0
             for joint, angle in angles.items():
-                # Garantir que o angle seja um número e usar formatação apropriada
+                # Ensure that the angle is a number and use appropriate formatting
                 if isinstance(angle, (int, float)):
                     text = (
-                        f"{joint}: {angle:0.1f}°"  # Formato fixo com uma casa decimal
+                        f"{joint}: {angle:0.1f}°"  # Fixed format with a decimal place
                     )
                 else:
                     text = f"{joint}: N/A"
