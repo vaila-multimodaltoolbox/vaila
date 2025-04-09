@@ -1563,21 +1563,22 @@ def kalman_smooth(data, n_iter=5, mode=1):
                 )
 
                 # Observation matrix: observe x and y positions
-                observation_matrix = np.array([
-                    [1, 0, 0, 0, 0, 0],  # observe x
-                    [0, 1, 0, 0, 0, 0]   # observe y
-                ])
-                
+                observation_matrix = np.array(
+                    [[1, 0, 0, 0, 0, 0], [0, 1, 0, 0, 0, 0]]  # observe x  # observe y
+                )
+
                 # Initialize state mean with first observation and zero velocities/accelerations
-                initial_state_mean = np.array([
-                    data[0, j],    # initial x
-                    data[0, j+1],  # initial y
-                    0,             # initial vx
-                    0,             # initial vy
-                    0,             # initial ax
-                    0              # initial ay
-                ])
-                
+                initial_state_mean = np.array(
+                    [
+                        data[0, j],  # initial x
+                        data[0, j + 1],  # initial y
+                        0,  # initial vx
+                        0,  # initial vy
+                        0,  # initial ax
+                        0,  # initial ay
+                    ]
+                )
+
                 # Initialize state covariance with high uncertainty in velocities and accelerations
                 initial_state_covariance = np.array(
                     [
@@ -1620,11 +1621,13 @@ def kalman_smooth(data, n_iter=5, mode=1):
                 )
 
                 # Prepare observations for the x,y pair
-                observations = np.column_stack([data[:, j], data[:, j+1]])
-                
+                observations = np.column_stack([data[:, j], data[:, j + 1]])
+
                 # Apply EM algorithm and smoothing
-                smoothed_state_means, _ = kf.em(observations, n_iter=n_iter).smooth(observations)
-                
+                smoothed_state_means, _ = kf.em(observations, n_iter=n_iter).smooth(
+                    observations
+                )
+
                 # Extract x,y positions from smoothed state means
                 filtered_data[:, j] = (
                     alpha * smoothed_state_means[:, 0] + (1 - alpha) * data[:, j]
@@ -1792,7 +1795,7 @@ def process_file(file_path, dest_dir, config):
                     gap_ends = []
                     in_gap = False
                     gap_start = 0
-                    
+
                     for i in range(len(df)):
                         if df[col].isna().iloc[i] and not in_gap:
                             in_gap = True
@@ -1804,7 +1807,7 @@ def process_file(file_path, dest_dir, config):
                             if gap_size > max_gap:
                                 gap_starts.append(gap_start)
                                 gap_ends.append(gap_end)
-                    
+
                     # Handle gap at the end of the data
                     if in_gap:
                         gap_end = len(df)
@@ -1812,29 +1815,35 @@ def process_file(file_path, dest_dir, config):
                         if gap_size > max_gap:
                             gap_starts.append(gap_start)
                             gap_ends.append(gap_end)
-                    
+
                     # Create a copy of the column for interpolation
                     interpolated = df[col].copy()
-                    
+
                     # Apply interpolation only to gaps smaller than max_gap
                     if config["interp_method"] == "linear":
-                        interpolated = interpolated.interpolate(method="linear", limit_direction="both")
+                        interpolated = interpolated.interpolate(
+                            method="linear", limit_direction="both"
+                        )
                     elif config["interp_method"] == "nearest":
-                        interpolated = interpolated.interpolate(method="nearest", limit_direction="both")
+                        interpolated = interpolated.interpolate(
+                            method="nearest", limit_direction="both"
+                        )
                     elif config["interp_method"] == "cubic":
-                        interpolated = interpolated.interpolate(method="cubic", limit_direction="both")
+                        interpolated = interpolated.interpolate(
+                            method="cubic", limit_direction="both"
+                        )
                     elif config["interp_method"] == "kalman":
                         # For Kalman, we need to handle the entire column
                         # We'll apply it after this block
                         pass
-                    
+
                     # Restore NaN values for gaps larger than max_gap
                     for start, end in zip(gap_starts, gap_ends):
                         interpolated.iloc[start:end] = np.nan
-                    
+
                     # Update the column with interpolated values
                     df[col] = interpolated
-                    
+
                     # Apply Kalman filter if selected
                     if config["interp_method"] == "kalman":
                         # Apply Kalman filter to the entire column
@@ -1851,25 +1860,33 @@ def process_file(file_path, dest_dir, config):
                                 n_dim_obs=1,
                                 n_dim_state=2,
                             )
-                            
+
                             # Get non-NaN values for training
                             valid_data = df[col].dropna().values.reshape(-1, 1)
                             if len(valid_data) > 0:
                                 # Train the filter
                                 kf = kf.em(valid_data, n_iter=5)
-                                
+
                                 # Apply smoothing
-                                smoothed_state_means, _ = kf.smooth(df[col].values.reshape(-1, 1))
+                                smoothed_state_means, _ = kf.smooth(
+                                    df[col].values.reshape(-1, 1)
+                                )
                                 df[col] = smoothed_state_means[:, 0]
                         except Exception as e:
                             print(f"Error applying Kalman filter: {str(e)}")
                 else:  # No gap size limit
                     if config["interp_method"] == "linear":
-                        df[col] = df[col].interpolate(method="linear", limit_direction="both")
+                        df[col] = df[col].interpolate(
+                            method="linear", limit_direction="both"
+                        )
                     elif config["interp_method"] == "nearest":
-                        df[col] = df[col].interpolate(method="nearest", limit_direction="both")
+                        df[col] = df[col].interpolate(
+                            method="nearest", limit_direction="both"
+                        )
                     elif config["interp_method"] == "cubic":
-                        df[col] = df[col].interpolate(method="cubic", limit_direction="both")
+                        df[col] = df[col].interpolate(
+                            method="cubic", limit_direction="both"
+                        )
                     elif config["interp_method"] == "kalman":
                         try:
                             kf = KalmanFilter(
@@ -1882,15 +1899,17 @@ def process_file(file_path, dest_dir, config):
                                 n_dim_obs=1,
                                 n_dim_state=2,
                             )
-                            
+
                             # Get non-NaN values for training
                             valid_data = df[col].dropna().values.reshape(-1, 1)
                             if len(valid_data) > 0:
                                 # Train the filter
                                 kf = kf.em(valid_data, n_iter=5)
-                                
+
                                 # Apply smoothing
-                                smoothed_state_means, _ = kf.smooth(df[col].values.reshape(-1, 1))
+                                smoothed_state_means, _ = kf.smooth(
+                                    df[col].values.reshape(-1, 1)
+                                )
                                 df[col] = smoothed_state_means[:, 0]
                         except Exception as e:
                             print(f"Error applying Kalman filter: {str(e)}")
@@ -1936,17 +1955,23 @@ def process_file(file_path, dest_dir, config):
                         try:
                             data = df[col].values
                             if np.isnan(data).any():
-                                print(f"Warning: Column {col} contains NaN values. Interpolating before filtering...")
-                                data = pd.Series(data).interpolate(method='linear').values
-                            
+                                print(
+                                    f"Warning: Column {col} contains NaN values. Interpolating before filtering..."
+                                )
+                                data = (
+                                    pd.Series(data).interpolate(method="linear").values
+                                )
+
                             fs = float(params["fs"])
                             cutoff = float(params["cutoff"])
-                            
+
                             # Garantir que a frequência de corte seja razoável
-                            if cutoff >= fs/2:
-                                cutoff = fs/2 - 1
-                                print(f"Warning: Adjusted cutoff frequency to {cutoff} Hz")
-                            
+                            if cutoff >= fs / 2:
+                                cutoff = fs / 2 - 1
+                                print(
+                                    f"Warning: Adjusted cutoff frequency to {cutoff} Hz"
+                                )
+
                             # Usar a função butter_filter do filter_utils.py
                             filtered = butter_filter(
                                 data,
@@ -1954,15 +1979,19 @@ def process_file(file_path, dest_dir, config):
                                 filter_type="low",
                                 cutoff=cutoff,
                                 order=4,
-                                padding=True
+                                padding=True,
                             )
-                            
-                            if not np.array_equal(filtered, data):  # Verificar se houve mudança
+
+                            if not np.array_equal(
+                                filtered, data
+                            ):  # Verificar se houve mudança
                                 df[col] = filtered
                                 print(f"Successfully filtered column {col}")
                             else:
-                                print(f"Warning: No change detected after filtering column {col}")
-                                
+                                print(
+                                    f"Warning: No change detected after filtering column {col}"
+                                )
+
                         except Exception as e:
                             print(f"Error filtering column {col}: {str(e)}")
                             # Manter dados originais em caso de erro
