@@ -52,7 +52,7 @@ def save_cuts_to_txt(video_path, cuts):
     video_name = Path(video_path).stem
     txt_path = Path(video_path).parent / f"{video_name}_cuts.txt"
 
-    with open(txt_path, "w") as f:
+    with open(txt_path, "w", encoding="utf-8") as f:
         f.write(f"Cuts for video: {video_name}\n")
         f.write(f"Created: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
         f.write("-" * 50 + "\n")
@@ -69,7 +69,7 @@ def load_cuts_from_txt(video_path):
 
     cuts = []
     if txt_path.exists():
-        with open(txt_path, "r") as f:
+        with open(txt_path, "r", encoding="utf-8") as f:
             lines = f.readlines()[3:]  # Skip header lines
             for line in lines:
                 if line.strip():
