@@ -296,7 +296,7 @@ def compute_absolute_angle(p_proximal, p_distal, format_360=False):
     dx = p_distal[0] - p_proximal[0]
     dy = p_distal[1] - p_proximal[1]
     angle = np.degrees(np.arctan2(dy, -dx))
-    
+
     # Format angle based on user preference
     if format_360:
         absolute_angle = angle % 360  # [0, 360) format
@@ -1054,10 +1054,14 @@ def process_angles(input_csv, output_csv, segments=None, format_360=False):
                     compute_absolute_angle(right_knee[i], right_ankle[i], format_360)
                 )
                 right_foot_abs_angles.append(
-                    compute_absolute_angle(right_heel[i], right_foot_index[i], format_360)
+                    compute_absolute_angle(
+                        right_heel[i], right_foot_index[i], format_360
+                    )
                 )
                 right_upperarm_abs_angles.append(
-                    compute_absolute_angle(right_shoulder[i], right_elbow[i], format_360)
+                    compute_absolute_angle(
+                        right_shoulder[i], right_elbow[i], format_360
+                    )
                 )
                 right_forearm_abs_angles.append(
                     compute_absolute_angle(right_elbow[i], right_wrist[i], format_360)
@@ -1066,7 +1070,9 @@ def process_angles(input_csv, output_csv, segments=None, format_360=False):
                 try:
                     right_hand_mid = compute_midpoint(right_pinky[i], right_index[i])
                     right_hand_abs_angles.append(
-                        compute_absolute_angle(right_wrist[i], right_hand_mid, format_360)
+                        compute_absolute_angle(
+                            right_wrist[i], right_hand_mid, format_360
+                        )
                     )
                 except:
                     right_hand_abs_angles.append(np.nan)
@@ -1173,7 +1179,7 @@ def process_angles(input_csv, output_csv, segments=None, format_360=False):
 
         # Criar dicionários para os ângulos na ordem desejada
         relative_angles_dict = {
-                "frame_index": df.iloc[:, 0],
+            "frame_index": df.iloc[:, 0],
             # Ângulos centrais
             "neck": neck_angles,
             "trunk": trunk_angles,
@@ -1683,7 +1689,9 @@ def draw_skeleton_and_angles(frame, landmarks, angles, absolute_angles):
     return frame
 
 
-def process_video_with_visualization(video_path, csv_path, output_dir, format_360=False):
+def process_video_with_visualization(
+    video_path, csv_path, output_dir, format_360=False
+):
     """
     Process video file and create visualization with both relative and absolute angles.
     """
@@ -1919,7 +1927,9 @@ def process_video_with_visualization(video_path, csv_path, output_dir, format_36
                     landmarks["left_hip"], landmarks["left_knee"], trunk_vector
                 )
                 angles["left_knee"] = compute_knee_angle(
-                    landmarks["left_hip"], landmarks["left_knee"], landmarks["left_ankle"]
+                    landmarks["left_hip"],
+                    landmarks["left_knee"],
+                    landmarks["left_ankle"],
                 )
                 angles["left_ankle"] = compute_ankle_angle(
                     landmarks["left_knee"],
@@ -2185,16 +2195,16 @@ def run_mp_angles():
         "Angle Format",
         "Choose the angle format for absolute angles:\n\n"
         + "Yes: 0 to 360 degrees format\n"
-        + "No: -180 to +180 degrees format"
+        + "No: -180 to +180 degrees format",
     )
-    
+
     # Converter para boolean
-    use_format_360 = (angle_format == "yes")
-    
+    use_format_360 = angle_format == "yes"
+
     # Armazenar a escolha em uma variável global para uso em todo o código
     global ANGLE_FORMAT_360
     ANGLE_FORMAT_360 = use_format_360
-    
+
     format_text = "0 to 360°" if use_format_360 else "-180 to +180°"
     print(f"Selected angle format: {format_text}")
 
@@ -2219,8 +2229,12 @@ def run_mp_angles():
             return
 
         timestamp = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
-        output_dir = os.path.join(os.path.dirname(video_path), f"angles_video_{timestamp}")
-        process_video_with_visualization(video_path, csv_path, output_dir, format_360=use_format_360)
+        output_dir = os.path.join(
+            os.path.dirname(video_path), f"angles_video_{timestamp}"
+        )
+        process_video_with_visualization(
+            video_path, csv_path, output_dir, format_360=use_format_360
+        )
 
     else:
         # CSV processing (existing functionality)
@@ -2239,11 +2253,11 @@ def run_mp_angles():
             try:
                 input_path = os.path.join(input_dir, csv_file)
                 output_path = file_info["output_path"]
-                
+
                 # Processar e salvar ângulos relativos e absolutos de uma vez
                 process_angles(input_path, output_path, format_360=use_format_360)
                 print(f"Successfully processed angles: {csv_file}")
-                
+
             except Exception as e:
                 print(f"Error processing {csv_file}: {str(e)}")
                 continue
