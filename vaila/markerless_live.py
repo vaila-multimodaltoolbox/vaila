@@ -3,7 +3,7 @@ Script: markerless_live.py
 Author: Moser José (https://moserjose.com/),  Prof. Dr. Paulo Santiago
 Version: 0.0.2
 Created: April 9, 2025
-Last Updated: April 9, 2025
+Last Updated: April 11, 2025
 
 Description:
 This script performs real-time pose estimation and angle calculation using either YOLO or
