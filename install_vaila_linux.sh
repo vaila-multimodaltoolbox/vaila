@@ -18,8 +18,9 @@
 #   - Ensure Conda is installed and accessible from the command line before running.    #
 #                                                                                       #
 # Author: Prof. Dr. Paulo R. P. Santiago                                                #
-# Date: September 17, 2024                                                              #
-# Version: 1.2                                                                          #
+# Date: September 17, 2024
+# Updated: April 11, 2025
+# Version: 1.3                                                                          #
 # OS: Ubuntu Linux                                                                      #
 #########################################################################################
 
@@ -36,7 +37,7 @@ CONDA_BASE=$(conda info --base)
 
 # Check for missing dependencies
 echo "Verifying system dependencies..."
-for pkg in python3 pip git curl wget ffmpeg rsync pkg-config libcairo2-dev; do
+for pkg in python3 pip git curl wget ffmpeg rsync pkg-config libcairo2-dev python3-dev; do
     if ! dpkg -l | grep -q " $pkg "; then
         echo "Installing $pkg..."
         sudo apt install -y $pkg
@@ -163,11 +164,11 @@ conda activate vaila
 
 # Install Cairo dependencies and pycairo
 echo "Installing Cairo dependencies..."
-sudo apt install -y pkg-config libcairo2-dev
+sudo apt install libcairo2-dev pkg-config python3-dev -y
 
-# Install pycairo with force reinstall and no cache
+# Install pycairo explicitly
 echo "Installing pycairo..."
-pip install --force-reinstall --no-cache-dir pycairo
+pip install pycairo
 
 # Install moviepy using pip
 echo "Installing moviepy..."
