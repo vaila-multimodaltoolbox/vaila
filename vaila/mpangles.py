@@ -6,8 +6,8 @@ Author: Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 31 March 2025
-Update Date: 09 April 2025
-Version: 0.1.0
+Update Date: 11 April 2025
+Version: 0.1.1
 Python Version: 3.12.9
 
 Description:
@@ -24,7 +24,7 @@ Key Features:
 
 2. Relative Angles:
    - Computes angles between connected segments
-   - Uses dot product and cross product for angle calculation
+   - Uses arctan2 for dot product angle calculation
 
 3. Supported Angles:
     - Elbow angle (between upper arm and forearm)
@@ -32,6 +32,9 @@ Key Features:
     - Hip angle (between trunk and thigh)
     - Knee angle (between thigh and shank)
     - Ankle angle (between shank and foot)
+    - Wrist angle (between hand and forearm)
+    - Neck angle (between mid_shoulder and mid_ear)
+    - Trunk angle (between mid_shoulder and mid_hip)
 
 Usage:
 ------
@@ -57,13 +60,10 @@ import os
 from rich import print
 import pandas as pd
 import numpy as np
-import sys
-import argparse
 from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox
 import cv2
-import mediapipe as mp
 
 
 def select_directory():
@@ -231,7 +231,7 @@ def get_vector_landmark(data, landmark):
         "right_index",
         "left_thumb",
         "right_thumb",
-        "left_hip", 
+        "left_hip",
         "right_hip",
         "left_knee",
         "right_knee",
@@ -269,8 +269,8 @@ def compute_midpoint(p1, p2):
     Compute the midpoint between two 2D points.
 
     Args:
-        p1: First point (2D vector)
-        p2: Second point (2D vector)
+        p1: First point (2D or 3D vector)
+        p2: Second point (2D or 3D vector)
 
     Returns:
         Midpoint as a numpy array
@@ -280,35 +280,68 @@ def compute_midpoint(p1, p2):
 
 def compute_absolute_angle(p_proximal, p_distal):
     """
-    One involves placing a coordinate system at the proximal end
-    point of the segment. The angle is then measured 
-    counter-clockwise from the right horizontal. 
+    Calculate the absolute angle (in degrees) between two points by converting pixel
+    coordinates (where y increases downward) to a Cartesian coordinate system (with y
+    increasing upward).
 
-    Args:
-        p_proximal (list): [x_proximal, y_proximal] coordinates of first point corresponding to the proximal segment
-        p_distal (list): [x_distal, y_distal] coordinates of second point corresponding to the distal segment
+    The computation steps are as follows:
+
+    1. Compute the differences in coordinates:
+       - dx = p_distal[0] - p_proximal[0]
+       - dy = p_distal[1] - p_proximal[1]
+       Note: In pixel coordinates the y-axis is positive downwards.
+
+    2. Calculate the angle using np.arctan2:
+       - np.arctan2(dy, -dx) is used instead of np.arctan2(dy, dx) to adjust for the
+         reversed x-direction required by your convention. This step returns an angle in
+         radians which is then converted to degrees via np.degrees.
+
+    3. Map the resulting angle to the range [0, 360):
+       - The modulo operator (%) returns the remainder of the division.
+       - Thus, using angle % 360 ensures that any negative angle (e.g. -10° becomes 350°)
+         or any angle greater than 360 is wrapped into the [0, 360) interval.
 
     Returns:
-        float: Angle in degrees between -180 and 180
+        absolute_angle (float): The computed absolute angle in degrees, within the range
+                                [0, 360).
     """
-
-    # Inverter o cálculo do y para considerar a origem no canto superior esquerdo
-    absolute_angle = np.degrees(np.arctan2(p_proximal[1] - p_distal[1], p_distal[0] - p_proximal[0]))
+    dx = p_distal[0] - p_proximal[0]
+    dy = p_distal[1] - p_proximal[1]
+    angle = np.degrees(np.arctan2(dy, -dx))
+    absolute_angle = angle % 360
 
     return absolute_angle
 
 
 def compute_relative_angle(a, b, c):
     """
-    Compute the angle between three points.
+    Compute the angle (in degrees) between two vectors defined by three points.
 
-    Args:
-        a: First point (2D or 3D vector)
-        b: Middle point (2D or 3D vector)
-        c: Third point (2D or 3D vector)
+    This function calculates the angle at the middle point "b" between the vector from b to a
+    and the vector from b to c. In other words, it computes the angle ∠ABC.
+
+    The steps involved are:
+
+    1. Convert the input points to NumPy arrays (if they are not already) and compute the vectors:
+       - vector_ab = a - b, which points from b to a.
+       - vector_cb = c - b, which points from b to c.
+
+    2. Normalize both vectors by computing their Euclidean norms (lengths). If either norm is
+       zero (i.e., if b coincides with a or c), the function returns 0.0 degrees to avoid
+       division by zero.
+
+    3. Calculate the dot product of the two normalized vectors.
+
+    4. Clamp the dot product to the range [-1.0, 1.0] using np.clip to safeguard against
+       possible floating-point inaccuracies that could take the value slightly outside this
+       domain.
+
+    5. Compute the angle (in radians) using np.arccos of the clamped dot product.
+
+    6. Convert the angle from radians to degrees.
 
     Returns:
-        Angle in degrees
+        angle_deg (float): The computed relative angle in degrees.
     """
     # Calculate vectors
     vector_ab = np.array(a) - np.array(b)
@@ -557,10 +590,10 @@ def compute_neck_angle(mid_ear, mid_shoulder, trunk_vector):
     Returns:
         Neck angle in degrees
     """
-    # Calculate head-nose vector (nose to mid_shoulder)
+    # Calculate head vector (mid_shoulder to mid_ear)
     head_vector = np.array(mid_ear) - np.array(mid_shoulder)
 
-    # Normalize head-nose vector
+    # Normalize head vector
     head_norm = np.linalg.norm(head_vector)
 
     if head_norm == 0:
@@ -625,9 +658,9 @@ def compute_wrist_angle(elbow, wrist, pinky, index):
     angle_rad = np.arccos(dot_product)
 
     # Convert to degrees
-    angle_deg = np.degrees(angle_rad)
+    wrist_angle_deg = np.degrees(angle_rad)
 
-    return angle_deg
+    return wrist_angle_deg
 
 
 def process_absolute_angles(input_csv, output_csv):
@@ -657,7 +690,6 @@ def process_absolute_angles(input_csv, output_csv):
         right_index = get_vector_landmark(df, "right_index")
         right_ear = get_vector_landmark(df, "right_ear")
 
-
         # Left side landmarks
         left_shoulder = get_vector_landmark(df, "left_shoulder")
         left_elbow = get_vector_landmark(df, "left_elbow")
@@ -671,28 +703,111 @@ def process_absolute_angles(input_csv, output_csv):
         left_index = get_vector_landmark(df, "left_index")
         left_ear = get_vector_landmark(df, "left_ear")
 
-        # Get nose and calculate midpoints
-        mid_ear = [compute_midpoint(l, r) for l, r in zip(left_ear, right_ear)]
-        mid_shoulder = [compute_midpoint(l, r) for l, r in zip(left_shoulder, right_shoulder)]
-        mid_hip = [compute_midpoint(l, r) for l, r in zip(left_hip, right_hip)]
+        # Get landmarks and calculate midpoints
+        mid_ear = [
+            compute_midpoint(left, right) for left, right in zip(left_ear, right_ear)
+        ]
+        mid_shoulder = [
+            compute_midpoint(left, right)
+            for left, right in zip(left_shoulder, right_shoulder)
+        ]
+        mid_hip = [
+            compute_midpoint(left, right) for left, right in zip(left_hip, right_hip)
+        ]
 
         # Calculate absolute angles for segments
-        right_thigh_angles = np.array([compute_absolute_angle(hip, knee) for hip, knee in zip(right_hip, right_knee)])
-        right_shank_angles = np.array([compute_absolute_angle(knee, ankle) for knee, ankle in zip(right_knee, right_ankle)])
-        right_foot_angles = np.array([compute_absolute_angle(heel, foot_index) for heel, foot_index in zip(right_heel, right_foot_index)])
-        right_upperarm_angles = np.array([compute_absolute_angle(shoulder, elbow) for shoulder, elbow in zip(right_shoulder, right_elbow)])
-        right_forearm_angles = np.array([compute_absolute_angle(elbow, wrist) for elbow, wrist in zip(right_elbow, right_wrist)])
-        right_hand_angles = np.array([compute_absolute_angle(wrist, mid_hand) for wrist, mid_hand in zip(right_wrist, [compute_midpoint(p, i) for p, i in zip(right_pinky, right_index)])])
+        right_thigh_angles = np.array(
+            [
+                compute_absolute_angle(hip, knee)
+                for hip, knee in zip(right_hip, right_knee)
+            ]
+        )
+        right_shank_angles = np.array(
+            [
+                compute_absolute_angle(knee, ankle)
+                for knee, ankle in zip(right_knee, right_ankle)
+            ]
+        )
+        right_foot_angles = np.array(
+            [
+                compute_absolute_angle(heel, foot_index)
+                for heel, foot_index in zip(right_heel, right_foot_index)
+            ]
+        )
+        right_upperarm_angles = np.array(
+            [
+                compute_absolute_angle(shoulder, elbow)
+                for shoulder, elbow in zip(right_shoulder, right_elbow)
+            ]
+        )
+        right_forearm_angles = np.array(
+            [
+                compute_absolute_angle(elbow, wrist)
+                for elbow, wrist in zip(right_elbow, right_wrist)
+            ]
+        )
+        right_hand_angles = np.array(
+            [
+                compute_absolute_angle(wrist, mid_hand)
+                for wrist, mid_hand in zip(
+                    right_wrist,
+                    [compute_midpoint(p, i) for p, i in zip(right_pinky, right_index)],
+                )
+            ]
+        )
 
-        left_thigh_angles = np.array([compute_absolute_angle(hip, knee) for hip, knee in zip(left_hip, left_knee)])
-        left_shank_angles = np.array([compute_absolute_angle(knee, ankle) for knee, ankle in zip(left_knee, left_ankle)])
-        left_foot_angles = np.array([compute_absolute_angle(heel, foot_index) for heel, foot_index in zip(left_heel, left_foot_index)])
-        left_upperarm_angles = np.array([compute_absolute_angle(shoulder, elbow) for shoulder, elbow in zip(left_shoulder, left_elbow)])
-        left_forearm_angles = np.array([compute_absolute_angle(elbow, wrist) for elbow, wrist in zip(left_elbow, left_wrist)])
-        left_hand_angles = np.array([compute_absolute_angle(wrist, mid) for wrist, mid in zip(left_wrist, [compute_midpoint(p, i) for p, i in zip(left_pinky, left_index)])])
+        left_thigh_angles = np.array(
+            [
+                compute_absolute_angle(hip, knee)
+                for hip, knee in zip(left_hip, left_knee)
+            ]
+        )
+        left_shank_angles = np.array(
+            [
+                compute_absolute_angle(knee, ankle)
+                for knee, ankle in zip(left_knee, left_ankle)
+            ]
+        )
+        left_foot_angles = np.array(
+            [
+                compute_absolute_angle(heel, foot_index)
+                for heel, foot_index in zip(left_heel, left_foot_index)
+            ]
+        )
+        left_upperarm_angles = np.array(
+            [
+                compute_absolute_angle(shoulder, elbow)
+                for shoulder, elbow in zip(left_shoulder, left_elbow)
+            ]
+        )
+        left_forearm_angles = np.array(
+            [
+                compute_absolute_angle(elbow, wrist)
+                for elbow, wrist in zip(left_elbow, left_wrist)
+            ]
+        )
+        left_hand_angles = np.array(
+            [
+                compute_absolute_angle(wrist, mid)
+                for wrist, mid in zip(
+                    left_wrist,
+                    [compute_midpoint(p, i) for p, i in zip(left_pinky, left_index)],
+                )
+            ]
+        )
 
-        trunk_angles = np.array([compute_absolute_angle(h, s) for h, s in zip(mid_shoulder, mid_hip)])
-        neck_angles = np.array([compute_absolute_angle(s, n) for s, n in zip(mid_ear, mid_shoulder)])
+        trunk_angles = np.array(
+            [
+                compute_absolute_angle(shoulder, hip)
+                for shoulder, hip in zip(mid_shoulder, mid_hip)
+            ]
+        )
+        neck_angles = np.array(
+            [
+                compute_absolute_angle(ear, shoulder)
+                for ear, shoulder in zip(mid_ear, mid_shoulder)
+            ]
+        )
 
         # Create landmarks dictionary
         landmarks = {
@@ -741,12 +856,14 @@ def process_absolute_angles(input_csv, output_csv):
             "left_hand_abs": left_hand_angles,
             # Central segments
             "trunk_abs": trunk_angles,
-            "neck_abs": neck_angles
+            "neck_abs": neck_angles,
         }
 
         # Create DataFrame with angles
         angles_df = pd.DataFrame(angles)
-        angles_df.insert(0, "frame_index", df.iloc[:, 0])  # Add frame index as first column
+        angles_df.insert(
+            0, "frame_index", df.iloc[:, 0]
+        )  # Add frame index as first column
 
         # Save to CSV
         angles_df.to_csv(output_csv, index=False, float_format="%.2f")
@@ -802,11 +919,17 @@ def process_angles(input_csv, output_csv, segments=None):
         left_index = get_vector_landmark(df, "left_index")
         left_ear = get_vector_landmark(df, "left_ear")
 
-        # Get nose and calculate midpoints
-        nose = get_vector_landmark(df, "nose")
-        mid_ear = [compute_midpoint(l, r) for l, r in zip(left_ear, right_ear)]
-        mid_shoulder = [compute_midpoint(l, r) for l, r in zip(left_shoulder, right_shoulder)]
-        mid_hip = [compute_midpoint(l, r) for l, r in zip(left_hip, right_hip)]
+        # Get landmarks and calculate midpoints
+        mid_ear = [
+            compute_midpoint(left, right) for left, right in zip(left_ear, right_ear)
+        ]
+        mid_shoulder = [
+            compute_midpoint(left, right)
+            for left, right in zip(left_shoulder, right_shoulder)
+        ]
+        mid_hip = [
+            compute_midpoint(left, right) for left, right in zip(left_hip, right_hip)
+        ]
 
         # Calculate trunk vectors for all frames
         trunk_vectors = []
@@ -854,164 +977,268 @@ def process_angles(input_csv, output_csv, segments=None):
             try:
                 # Relative angles
                 # Right side
-                right_shoulder_angles.append(compute_shoulder_angle(right_shoulder[i], right_elbow[i], trunk_vectors[i]))
-                right_elbow_angles.append(compute_elbow_angle(right_shoulder[i], right_elbow[i], right_wrist[i]))
-                right_hip_angles.append(compute_hip_angle(right_hip[i], right_knee[i], trunk_vectors[i]))
-                right_knee_angles.append(compute_knee_angle(right_hip[i], right_knee[i], right_ankle[i]))
-                right_ankle_angles.append(compute_ankle_angle(right_knee[i], right_ankle[i], right_foot_index[i], right_heel[i]))
+                right_shoulder_angles.append(
+                    compute_shoulder_angle(
+                        right_shoulder[i], right_elbow[i], trunk_vectors[i]
+                    )
+                )
+                right_elbow_angles.append(
+                    compute_elbow_angle(
+                        right_shoulder[i], right_elbow[i], right_wrist[i]
+                    )
+                )
+                right_hip_angles.append(
+                    compute_hip_angle(right_hip[i], right_knee[i], trunk_vectors[i])
+                )
+                right_knee_angles.append(
+                    compute_knee_angle(right_hip[i], right_knee[i], right_ankle[i])
+                )
+                right_ankle_angles.append(
+                    compute_ankle_angle(
+                        right_knee[i],
+                        right_ankle[i],
+                        right_foot_index[i],
+                        right_heel[i],
+                    )
+                )
                 try:
-                    right_wrist_angles.append(compute_wrist_angle(right_elbow[i], right_wrist[i], right_pinky[i], right_index[i]))
+                    right_wrist_angles.append(
+                        compute_wrist_angle(
+                            right_elbow[i],
+                            right_wrist[i],
+                            right_pinky[i],
+                            right_index[i],
+                        )
+                    )
                 except:
-                    right_wrist_angles.append(0)
+                    right_wrist_angles.append(np.nan)
 
                 # Left side
-                left_shoulder_angles.append(compute_shoulder_angle(left_shoulder[i], left_elbow[i], trunk_vectors[i]))
-                left_elbow_angles.append(compute_elbow_angle(left_shoulder[i], left_elbow[i], left_wrist[i]))
-                left_hip_angles.append(compute_hip_angle(left_hip[i], left_knee[i], trunk_vectors[i]))
-                left_knee_angles.append(compute_knee_angle(left_hip[i], left_knee[i], left_ankle[i]))
-                left_ankle_angles.append(compute_ankle_angle(left_knee[i], left_ankle[i], left_foot_index[i], left_heel[i]))
+                left_shoulder_angles.append(
+                    compute_shoulder_angle(
+                        left_shoulder[i], left_elbow[i], trunk_vectors[i]
+                    )
+                )
+                left_elbow_angles.append(
+                    compute_elbow_angle(left_shoulder[i], left_elbow[i], left_wrist[i])
+                )
+                left_hip_angles.append(
+                    compute_hip_angle(left_hip[i], left_knee[i], trunk_vectors[i])
+                )
+                left_knee_angles.append(
+                    compute_knee_angle(left_hip[i], left_knee[i], left_ankle[i])
+                )
+                left_ankle_angles.append(
+                    compute_ankle_angle(
+                        left_knee[i], left_ankle[i], left_foot_index[i], left_heel[i]
+                    )
+                )
                 try:
-                    left_wrist_angles.append(compute_wrist_angle(left_elbow[i], left_wrist[i], left_pinky[i], left_index[i]))
+                    left_wrist_angles.append(
+                        compute_wrist_angle(
+                            left_elbow[i], left_wrist[i], left_pinky[i], left_index[i]
+                        )
+                    )
                 except:
-                    left_wrist_angles.append(0)
+                    left_wrist_angles.append(np.nan)
 
                 # Central segments relative angles
-                neck_angles.append(compute_neck_angle(mid_ear[i], mid_shoulder[i], trunk_vectors[i]))
-                trunk_angles.append(compute_relative_angle(mid_shoulder[i], mid_hip[i], mid_shoulder[i]))
+                neck_angles.append(
+                    compute_neck_angle(mid_ear[i], mid_shoulder[i], trunk_vectors[i])
+                )
+                trunk_angles.append(
+                    compute_relative_angle(mid_shoulder[i], mid_hip[i], mid_shoulder[i])
+                )
 
                 # Absolute angles
-                right_thigh_abs_angles.append(compute_absolute_angle(right_hip[i], right_knee[i]))
-                right_shank_abs_angles.append(compute_absolute_angle(right_knee[i], right_ankle[i]))
-                right_foot_abs_angles.append(compute_absolute_angle(right_heel[i], right_foot_index[i]))
-                right_upperarm_abs_angles.append(compute_absolute_angle(right_shoulder[i], right_elbow[i]))
-                right_forearm_abs_angles.append(compute_absolute_angle(right_elbow[i], right_wrist[i]))
-                
+                right_thigh_abs_angles.append(
+                    compute_absolute_angle(right_hip[i], right_knee[i])
+                )
+                right_shank_abs_angles.append(
+                    compute_absolute_angle(right_knee[i], right_ankle[i])
+                )
+                right_foot_abs_angles.append(
+                    compute_absolute_angle(right_heel[i], right_foot_index[i])
+                )
+                right_upperarm_abs_angles.append(
+                    compute_absolute_angle(right_shoulder[i], right_elbow[i])
+                )
+                right_forearm_abs_angles.append(
+                    compute_absolute_angle(right_elbow[i], right_wrist[i])
+                )
+
                 try:
                     right_hand_mid = compute_midpoint(right_pinky[i], right_index[i])
-                    right_hand_abs_angles.append(compute_absolute_angle(right_wrist[i], right_hand_mid))
+                    right_hand_abs_angles.append(
+                        compute_absolute_angle(right_wrist[i], right_hand_mid)
+                    )
                 except:
-                    right_hand_abs_angles.append(0)
+                    right_hand_abs_angles.append(np.nan)
 
-                left_thigh_abs_angles.append(compute_absolute_angle(left_hip[i], left_knee[i]))
-                left_shank_abs_angles.append(compute_absolute_angle(left_knee[i], left_ankle[i]))
-                left_foot_abs_angles.append(compute_absolute_angle(left_heel[i], left_foot_index[i]))
-                left_upperarm_abs_angles.append(compute_absolute_angle(left_shoulder[i], left_elbow[i]))
-                left_forearm_abs_angles.append(compute_absolute_angle(left_elbow[i], left_wrist[i]))
-                
+                left_thigh_abs_angles.append(
+                    compute_absolute_angle(left_hip[i], left_knee[i])
+                )
+                left_shank_abs_angles.append(
+                    compute_absolute_angle(left_knee[i], left_ankle[i])
+                )
+                left_foot_abs_angles.append(
+                    compute_absolute_angle(left_heel[i], left_foot_index[i])
+                )
+                left_upperarm_abs_angles.append(
+                    compute_absolute_angle(left_shoulder[i], left_elbow[i])
+                )
+                left_forearm_abs_angles.append(
+                    compute_absolute_angle(left_elbow[i], left_wrist[i])
+                )
+
                 try:
                     left_hand_mid = compute_midpoint(left_pinky[i], left_index[i])
-                    left_hand_abs_angles.append(compute_absolute_angle(left_wrist[i], left_hand_mid))
+                    left_hand_abs_angles.append(
+                        compute_absolute_angle(left_wrist[i], left_hand_mid)
+                    )
                 except:
-                    left_hand_abs_angles.append(0)
+                    left_hand_abs_angles.append(np.nan)
 
-                trunk_abs_angles.append(compute_absolute_angle(mid_hip[i], mid_shoulder[i]))
-                neck_abs_angles.append(compute_absolute_angle(mid_shoulder[i], mid_ear[i]))
+                trunk_abs_angles.append(
+                    compute_absolute_angle(mid_shoulder[i], mid_hip[i])
+                )
+                neck_abs_angles.append(
+                    compute_absolute_angle(mid_ear[i], mid_shoulder[i])
+                )
 
                 # Show progress
                 frame_count += 1
                 if frame_count % 30 == 0:
-                    print(f"Processing frame {frame_count}/{total_frames} ({frame_count/total_frames*100:.1f}%)")
+                    print(
+                        f"Processing frame {frame_count}/{total_frames} ({frame_count/total_frames*100:.1f}%)"
+                    )
             except Exception as e:
                 print(f"Error processing frame {i}: {str(e)}")
                 # Fill with zeros if there's an error
                 # Relative angles
                 if len(right_shoulder_angles) <= i:
-                    right_shoulder_angles.append(0)
+                    right_shoulder_angles.append(np.nan)
                 if len(right_elbow_angles) <= i:
-                    right_elbow_angles.append(0)
+                    right_elbow_angles.append(np.nan)
                 if len(right_hip_angles) <= i:
-                    right_hip_angles.append(0)
+                    right_hip_angles.append(np.nan)
                 if len(right_knee_angles) <= i:
-                    right_knee_angles.append(0)
+                    right_knee_angles.append(np.nan)
                 if len(right_ankle_angles) <= i:
-                    right_ankle_angles.append(0)
+                    right_ankle_angles.append(np.nan)
                 if len(right_wrist_angles) <= i:
-                    right_wrist_angles.append(0)
+                    right_wrist_angles.append(np.nan)
                 if len(left_shoulder_angles) <= i:
-                    left_shoulder_angles.append(0)
+                    left_shoulder_angles.append(np.nan)
                 if len(left_elbow_angles) <= i:
-                    left_elbow_angles.append(0)
+                    left_elbow_angles.append(np.nan)
                 if len(left_hip_angles) <= i:
-                    left_hip_angles.append(0)
+                    left_hip_angles.append(np.nan)
                 if len(left_knee_angles) <= i:
-                    left_knee_angles.append(0)
+                    left_knee_angles.append(np.nan)
                 if len(left_ankle_angles) <= i:
-                    left_ankle_angles.append(0)
+                    left_ankle_angles.append(np.nan)
                 if len(left_wrist_angles) <= i:
-                    left_wrist_angles.append(0)
+                    left_wrist_angles.append(np.nan)
                 if len(neck_angles) <= i:
-                    neck_angles.append(0)
+                    neck_angles.append(np.nan)
                 if len(trunk_angles) <= i:
-                    trunk_angles.append(0)
+                    trunk_angles.append(np.nan)
 
                 # Absolute angles
                 if len(right_thigh_abs_angles) <= i:
-                    right_thigh_abs_angles.append(0)
+                    right_thigh_abs_angles.append(np.nan)
                 if len(right_shank_abs_angles) <= i:
-                    right_shank_abs_angles.append(0)
+                    right_shank_abs_angles.append(np.nan)
                 if len(right_foot_abs_angles) <= i:
-                    right_foot_abs_angles.append(0)
+                    right_foot_abs_angles.append(np.nan)
                 if len(right_upperarm_abs_angles) <= i:
-                    right_upperarm_abs_angles.append(0)
+                    right_upperarm_abs_angles.append(np.nan)
                 if len(right_forearm_abs_angles) <= i:
-                    right_forearm_abs_angles.append(0)
+                    right_forearm_abs_angles.append(np.nan)
                 if len(right_hand_abs_angles) <= i:
-                    right_hand_abs_angles.append(0)
+                    right_hand_abs_angles.append(np.nan)
                 if len(left_thigh_abs_angles) <= i:
-                    left_thigh_abs_angles.append(0)
+                    left_thigh_abs_angles.append(np.nan)
                 if len(left_shank_abs_angles) <= i:
-                    left_shank_abs_angles.append(0)
+                    left_shank_abs_angles.append(np.nan)
                 if len(left_foot_abs_angles) <= i:
-                    left_foot_abs_angles.append(0)
+                    left_foot_abs_angles.append(np.nan)
                 if len(left_upperarm_abs_angles) <= i:
-                    left_upperarm_abs_angles.append(0)
+                    left_upperarm_abs_angles.append(np.nan)
                 if len(left_forearm_abs_angles) <= i:
-                    left_forearm_abs_angles.append(0)
+                    left_forearm_abs_angles.append(np.nan)
                 if len(left_hand_abs_angles) <= i:
-                    left_hand_abs_angles.append(0)
+                    left_hand_abs_angles.append(np.nan)
                 if len(trunk_abs_angles) <= i:
-                    trunk_abs_angles.append(0)
+                    trunk_abs_angles.append(np.nan)
                 if len(neck_abs_angles) <= i:
-                    neck_abs_angles.append(0)
+                    neck_abs_angles.append(np.nan)
 
-        # Create DataFrame with both relative and absolute angles
-        angles_df = pd.DataFrame({
+        # Criar dicionários para os ângulos na ordem desejada
+        relative_angles_dict = {
             "frame_index": df.iloc[:, 0],
-            # Relative angles
+            # Ângulos centrais
+            "neck": neck_angles,
+            "trunk": trunk_angles,
+            # Lado direito
             "right_shoulder": right_shoulder_angles,
             "right_elbow": right_elbow_angles,
+            "right_wrist": right_wrist_angles,
             "right_hip": right_hip_angles,
             "right_knee": right_knee_angles,
             "right_ankle": right_ankle_angles,
-            "right_wrist": right_wrist_angles,
+            # Lado esquerdo
             "left_shoulder": left_shoulder_angles,
             "left_elbow": left_elbow_angles,
+            "left_wrist": left_wrist_angles,
             "left_hip": left_hip_angles,
             "left_knee": left_knee_angles,
             "left_ankle": left_ankle_angles,
-            "left_wrist": left_wrist_angles,
-            "neck": neck_angles,
-            "trunk": trunk_angles,
-            # Absolute angles
-            "right_thigh_abs": right_thigh_abs_angles,
-            "right_shank_abs": right_shank_abs_angles,
-            "right_foot_abs": right_foot_abs_angles,
+        }
+
+        absolute_angles_dict = {
+            "frame_index": df.iloc[:, 0],
+            # Ângulos centrais
+            "neck_abs": neck_abs_angles,
+            "trunk_abs": trunk_abs_angles,
+            # Lado direito
             "right_upperarm_abs": right_upperarm_abs_angles,
             "right_forearm_abs": right_forearm_abs_angles,
             "right_hand_abs": right_hand_abs_angles,
-            "left_thigh_abs": left_thigh_abs_angles,
-            "left_shank_abs": left_shank_abs_angles,
-            "left_foot_abs": left_foot_abs_angles,
+            "right_thigh_abs": right_thigh_abs_angles,
+            "right_shank_abs": right_shank_abs_angles,
+            "right_foot_abs": right_foot_abs_angles,
+            # Lado esquerdo
             "left_upperarm_abs": left_upperarm_abs_angles,
             "left_forearm_abs": left_forearm_abs_angles,
             "left_hand_abs": left_hand_abs_angles,
-            "trunk_abs": trunk_abs_angles,
-            "neck_abs": neck_abs_angles
-        })
+            "left_thigh_abs": left_thigh_abs_angles,
+            "left_shank_abs": left_shank_abs_angles,
+            "left_foot_abs": left_foot_abs_angles,
+        }
 
-        # Save to CSV
-        angles_df.to_csv(output_csv, index=False, float_format="%.2f")
-        print(f"\nAngles saved to: {output_csv}")
+        # Criar DataFrames separados
+        relative_angles_df = pd.DataFrame(relative_angles_dict)
+        absolute_angles_df = pd.DataFrame(absolute_angles_dict)
+
+        # Gerar nomes para os arquivos de saída
+        output_basename = os.path.splitext(output_csv)[0]
+        relative_output_path = f"{output_basename}_rel.csv"
+        absolute_output_path = f"{output_basename}_abs.csv"
+
+        # Salvar CSVs com os ângulos ordenados
+        relative_angles_df.to_csv(
+            relative_output_path, index=False, float_format="%.2f"
+        )
+        absolute_angles_df.to_csv(
+            absolute_output_path, index=False, float_format="%.2f"
+        )
+
+        print(f"\nÂngulos relativos salvos em: {relative_output_path}")
+        print(f"Ângulos absolutos salvos em: {absolute_output_path}")
+
+        # Não é necessário salvar o output_csv original, já que estamos criando dois arquivos específicos
 
     except Exception as e:
         print(f"Error processing angles: {str(e)}")
@@ -1025,11 +1252,21 @@ def draw_skeleton_and_angles(frame, landmarks, angles, absolute_angles):
     height, width = frame.shape[:2]
 
     # Colors
-    RED = (0, 0, 255)     # Right side
-    BLUE = (255, 0, 0)    # Left side
-    GREEN = (0, 255, 0)   # Joints
+    RED = (0, 0, 255)  # Right side
+    BLUE = (255, 0, 0)  # Left side
+    GREEN = (0, 255, 0)  # Joints
     WHITE = (255, 255, 255)  # Text
-    YELLOW = (0, 255, 255)   # Absolute angles
+    YELLOW = (0, 255, 255)  # Absolute angles
+
+    # Calculate mid_hand points
+    right_mid_hand = compute_midpoint(
+        landmarks["right_pinky"], landmarks["right_index"]
+    )
+    left_mid_hand = compute_midpoint(landmarks["left_pinky"], landmarks["left_index"])
+
+    # Add mid_hand to landmarks dictionary
+    landmarks["right_mid_hand"] = right_mid_hand
+    landmarks["left_mid_hand"] = left_mid_hand
 
     # Draw segments
     # Right side (in RED)
@@ -1044,6 +1281,14 @@ def draw_skeleton_and_angles(frame, landmarks, angles, absolute_angles):
         frame,
         tuple(landmarks["right_elbow"].astype(int)),
         tuple(landmarks["right_wrist"].astype(int)),
+        RED,
+        2,
+    )
+    # Add line from right wrist to right mid_hand
+    cv2.line(
+        frame,
+        tuple(landmarks["right_wrist"].astype(int)),
+        tuple(landmarks["right_mid_hand"].astype(int)),
         RED,
         2,
     )
@@ -1081,6 +1326,14 @@ def draw_skeleton_and_angles(frame, landmarks, angles, absolute_angles):
         frame,
         tuple(landmarks["left_elbow"].astype(int)),
         tuple(landmarks["left_wrist"].astype(int)),
+        BLUE,
+        2,
+    )
+    # Add line from left wrist to left mid_hand
+    cv2.line(
+        frame,
+        tuple(landmarks["left_wrist"].astype(int)),
+        tuple(landmarks["left_mid_hand"].astype(int)),
         BLUE,
         2,
     )
@@ -1122,10 +1375,11 @@ def draw_skeleton_and_angles(frame, landmarks, angles, absolute_angles):
         2,
     )  # Neck segment
 
-    # Draw joints (circles)
+    # Draw joints (circles) - exclude nose
     joint_radius = 4
-    for landmark in landmarks.values():
-        cv2.circle(frame, tuple(landmark.astype(int)), joint_radius, GREEN, -1)
+    for landmark_name, landmark in landmarks.items():
+        if landmark_name != "nose":  # Skip nose landmark
+            cv2.circle(frame, tuple(landmark.astype(int)), joint_radius, GREEN, -1)
 
     # Font settings
     font = cv2.FONT_HERSHEY_SIMPLEX
@@ -1134,109 +1388,301 @@ def draw_skeleton_and_angles(frame, landmarks, angles, absolute_angles):
 
     # Vertical spacing for text
     line_height = 30
-    
+
     # Margins and positioning
     left_margin = 10
-    right_margin = width - 300  # Aumentado a margem direita para evitar corte do texto
+    right_margin = width - 300
     center_x = width // 2 - 50
 
-    # Definir y_offset para a posição dos ângulos
+    # Reordenação dos ângulos relativos centrais
     y_offset = line_height
+    cv2.putText(
+        frame,
+        f"Neck Rel: {angles['neck']:.1f}",
+        (center_x - 200, y_offset),
+        font,
+        font_scale,
+        WHITE,
+        thickness,
+    )
+    cv2.putText(
+        frame,
+        f"Trunk Rel: {angles['trunk']:.1f}",
+        (center_x + 100, y_offset),
+        font,
+        font_scale,
+        WHITE,
+        thickness,
+    )
 
-    # Desenhar ângulos relativos lado a lado horizontalmente (na mesma linha)
-    cv2.putText(frame, f"Neck Rel: {angles['neck']:.1f}", 
-                (center_x - 200, y_offset), font, font_scale, WHITE, thickness)
-    cv2.putText(frame, f"Trunk Rel: {angles['trunk']:.1f}", 
-                (center_x + 100, y_offset), font, font_scale, WHITE, thickness)  # Movido para direita (+100)
-
-    # Desenhar ângulos absolutos lado a lado horizontalmente (na linha abaixo)
+    # Reordenação dos ângulos absolutos centrais
     y_offset += line_height
-    cv2.putText(frame, f"Neck Abs: {absolute_angles['neck_abs']:.1f}", 
-                (center_x - 200, y_offset), font, font_scale, YELLOW, thickness)
-    cv2.putText(frame, f"Trunk Abs: {absolute_angles['trunk_abs']:.1f}", 
-                (center_x + 100, y_offset), font, font_scale, YELLOW, thickness)  # Aumentei a distância para +100
+    cv2.putText(
+        frame,
+        f"Neck Abs: {absolute_angles['neck_abs']:.1f}",
+        (center_x - 200, y_offset),
+        font,
+        font_scale,
+        YELLOW,
+        thickness,
+    )
+    cv2.putText(
+        frame,
+        f"Trunk Abs: {absolute_angles['trunk_abs']:.1f}",
+        (center_x + 100, y_offset),
+        font,
+        font_scale,
+        YELLOW,
+        thickness,
+    )
 
-    # Right side relative angles (in RED)
+    # Right side relative angles (in RED) na nova ordem
     y_offset = line_height
-    cv2.putText(frame, f"R Shoulder Rel: {angles['right_shoulder']:.1f}", 
-                (left_margin, y_offset), font, font_scale, RED, thickness)
+    cv2.putText(
+        frame,
+        f"R Shoulder Rel: {angles['right_shoulder']:.1f}",
+        (left_margin, y_offset),
+        font,
+        font_scale,
+        RED,
+        thickness,
+    )
     y_offset += line_height
-    cv2.putText(frame, f"R Elbow Rel: {angles['right_elbow']:.1f}", 
-                (left_margin, y_offset), font, font_scale, RED, thickness)
+    cv2.putText(
+        frame,
+        f"R Elbow Rel: {angles['right_elbow']:.1f}",
+        (left_margin, y_offset),
+        font,
+        font_scale,
+        RED,
+        thickness,
+    )
     y_offset += line_height
-    cv2.putText(frame, f"R Hip Rel: {angles['right_hip']:.1f}", 
-                (left_margin, y_offset), font, font_scale, RED, thickness)
+    cv2.putText(
+        frame,
+        f"R Wrist Rel: {angles['right_wrist']:.1f}",
+        (left_margin, y_offset),
+        font,
+        font_scale,
+        RED,
+        thickness,
+    )
     y_offset += line_height
-    cv2.putText(frame, f"R Knee Rel: {angles['right_knee']:.1f}", 
-                (left_margin, y_offset), font, font_scale, RED, thickness)
+    cv2.putText(
+        frame,
+        f"R Hip Rel: {angles['right_hip']:.1f}",
+        (left_margin, y_offset),
+        font,
+        font_scale,
+        RED,
+        thickness,
+    )
     y_offset += line_height
-    cv2.putText(frame, f"R Ankle Rel: {angles['right_ankle']:.1f}", 
-                (left_margin, y_offset), font, font_scale, RED, thickness)
+    cv2.putText(
+        frame,
+        f"R Knee Rel: {angles['right_knee']:.1f}",
+        (left_margin, y_offset),
+        font,
+        font_scale,
+        RED,
+        thickness,
+    )
     y_offset += line_height
-    cv2.putText(frame, f"R Wrist Rel: {angles['right_wrist']:.1f}", 
-                (left_margin, y_offset), font, font_scale, RED, thickness)
+    cv2.putText(
+        frame,
+        f"R Ankle Rel: {angles['right_ankle']:.1f}",
+        (left_margin, y_offset),
+        font,
+        font_scale,
+        RED,
+        thickness,
+    )
 
-    # Left side relative angles (in BLUE) - ajustada a posição para a direita
+    # Left side relative angles (in BLUE) na nova ordem
     y_offset = line_height
-    cv2.putText(frame, f"L Shoulder Rel: {angles['left_shoulder']:.1f}", 
-                (right_margin, y_offset), font, font_scale, BLUE, thickness)
+    cv2.putText(
+        frame,
+        f"L Shoulder Rel: {angles['left_shoulder']:.1f}",
+        (right_margin, y_offset),
+        font,
+        font_scale,
+        BLUE,
+        thickness,
+    )
     y_offset += line_height
-    cv2.putText(frame, f"L Elbow Rel: {angles['left_elbow']:.1f}", 
-                (right_margin, y_offset), font, font_scale, BLUE, thickness)
+    cv2.putText(
+        frame,
+        f"L Elbow Rel: {angles['left_elbow']:.1f}",
+        (right_margin, y_offset),
+        font,
+        font_scale,
+        BLUE,
+        thickness,
+    )
     y_offset += line_height
-    cv2.putText(frame, f"L Hip Rel: {angles['left_hip']:.1f}", 
-                (right_margin, y_offset), font, font_scale, BLUE, thickness)
+    cv2.putText(
+        frame,
+        f"L Wrist Rel: {angles['left_wrist']:.1f}",
+        (right_margin, y_offset),
+        font,
+        font_scale,
+        BLUE,
+        thickness,
+    )
     y_offset += line_height
-    cv2.putText(frame, f"L Knee Rel: {angles['left_knee']:.1f}", 
-                (right_margin, y_offset), font, font_scale, BLUE, thickness)
+    cv2.putText(
+        frame,
+        f"L Hip Rel: {angles['left_hip']:.1f}",
+        (right_margin, y_offset),
+        font,
+        font_scale,
+        BLUE,
+        thickness,
+    )
     y_offset += line_height
-    cv2.putText(frame, f"L Ankle Rel: {angles['left_ankle']:.1f}", 
-                (right_margin, y_offset), font, font_scale, BLUE, thickness)
+    cv2.putText(
+        frame,
+        f"L Knee Rel: {angles['left_knee']:.1f}",
+        (right_margin, y_offset),
+        font,
+        font_scale,
+        BLUE,
+        thickness,
+    )
     y_offset += line_height
-    cv2.putText(frame, f"L Wrist Rel: {angles['left_wrist']:.1f}", 
-                (right_margin, y_offset), font, font_scale, BLUE, thickness)
+    cv2.putText(
+        frame,
+        f"L Ankle Rel: {angles['left_ankle']:.1f}",
+        (right_margin, y_offset),
+        font,
+        font_scale,
+        BLUE,
+        thickness,
+    )
 
-    # Absolute angles - mantendo a mesma estrutura de posicionamento
-    y_offset_abs = height - 210  # Start from bottom with margin
-
-    # Right side absolute angles (in RED)
-    cv2.putText(frame, f"R Thigh Abs: {absolute_angles['right_thigh_abs']:.1f}", 
-                (left_margin, y_offset_abs), font, font_scale, RED, thickness)
-    y_offset_abs += line_height
-    cv2.putText(frame, f"R Shank Abs: {absolute_angles['right_shank_abs']:.1f}", 
-                (left_margin, y_offset_abs), font, font_scale, RED, thickness)
-    y_offset_abs += line_height
-    cv2.putText(frame, f"R Foot Abs: {absolute_angles['right_foot_abs']:.1f}", 
-                (left_margin, y_offset_abs), font, font_scale, RED, thickness)
-    y_offset_abs += line_height
-    cv2.putText(frame, f"R UpperArm Abs: {absolute_angles['right_upperarm_abs']:.1f}", 
-                (left_margin, y_offset_abs), font, font_scale, RED, thickness)
-    y_offset_abs += line_height
-    cv2.putText(frame, f"R Forearm Abs: {absolute_angles['right_forearm_abs']:.1f}", 
-                (left_margin, y_offset_abs), font, font_scale, RED, thickness)
-    y_offset_abs += line_height
-    cv2.putText(frame, f"R Hand Abs: {absolute_angles['right_hand_abs']:.1f}", 
-                (left_margin, y_offset_abs), font, font_scale, RED, thickness)
-
-    # Left side absolute angles (in BLUE) - ajustada a posição para a direita
+    # Right side absolute angles (in RED) na nova ordem
     y_offset_abs = height - 210
-    cv2.putText(frame, f"L Thigh Abs: {absolute_angles['left_thigh_abs']:.1f}", 
-                (right_margin, y_offset_abs), font, font_scale, BLUE, thickness)
+    cv2.putText(
+        frame,
+        f"R UpperArm Abs: {absolute_angles['right_upperarm_abs']:.1f}",
+        (left_margin, y_offset_abs),
+        font,
+        font_scale,
+        RED,
+        thickness,
+    )
     y_offset_abs += line_height
-    cv2.putText(frame, f"L Shank Abs: {absolute_angles['left_shank_abs']:.1f}", 
-                (right_margin, y_offset_abs), font, font_scale, BLUE, thickness)
+    cv2.putText(
+        frame,
+        f"R Forearm Abs: {absolute_angles['right_forearm_abs']:.1f}",
+        (left_margin, y_offset_abs),
+        font,
+        font_scale,
+        RED,
+        thickness,
+    )
     y_offset_abs += line_height
-    cv2.putText(frame, f"L Foot Abs: {absolute_angles['left_foot_abs']:.1f}", 
-                (right_margin, y_offset_abs), font, font_scale, BLUE, thickness)
+    cv2.putText(
+        frame,
+        f"R Hand Abs: {absolute_angles['right_hand_abs']:.1f}",
+        (left_margin, y_offset_abs),
+        font,
+        font_scale,
+        RED,
+        thickness,
+    )
     y_offset_abs += line_height
-    cv2.putText(frame, f"L UpperArm Abs: {absolute_angles['left_upperarm_abs']:.1f}", 
-                (right_margin, y_offset_abs), font, font_scale, BLUE, thickness)
+    cv2.putText(
+        frame,
+        f"R Thigh Abs: {absolute_angles['right_thigh_abs']:.1f}",
+        (left_margin, y_offset_abs),
+        font,
+        font_scale,
+        RED,
+        thickness,
+    )
     y_offset_abs += line_height
-    cv2.putText(frame, f"L Forearm Abs: {absolute_angles['left_forearm_abs']:.1f}", 
-                (right_margin, y_offset_abs), font, font_scale, BLUE, thickness)
+    cv2.putText(
+        frame,
+        f"R Shank Abs: {absolute_angles['right_shank_abs']:.1f}",
+        (left_margin, y_offset_abs),
+        font,
+        font_scale,
+        RED,
+        thickness,
+    )
     y_offset_abs += line_height
-    cv2.putText(frame, f"L Hand Abs: {absolute_angles['left_hand_abs']:.1f}", 
-                (right_margin, y_offset_abs), font, font_scale, BLUE, thickness)
+    cv2.putText(
+        frame,
+        f"R Foot Abs: {absolute_angles['right_foot_abs']:.1f}",
+        (left_margin, y_offset_abs),
+        font,
+        font_scale,
+        RED,
+        thickness,
+    )
+
+    # Left side absolute angles (in BLUE) na nova ordem
+    y_offset_abs = height - 210
+    cv2.putText(
+        frame,
+        f"L UpperArm Abs: {absolute_angles['left_upperarm_abs']:.1f}",
+        (right_margin, y_offset_abs),
+        font,
+        font_scale,
+        BLUE,
+        thickness,
+    )
+    y_offset_abs += line_height
+    cv2.putText(
+        frame,
+        f"L Forearm Abs: {absolute_angles['left_forearm_abs']:.1f}",
+        (right_margin, y_offset_abs),
+        font,
+        font_scale,
+        BLUE,
+        thickness,
+    )
+    y_offset_abs += line_height
+    cv2.putText(
+        frame,
+        f"L Hand Abs: {absolute_angles['left_hand_abs']:.1f}",
+        (right_margin, y_offset_abs),
+        font,
+        font_scale,
+        BLUE,
+        thickness,
+    )
+    y_offset_abs += line_height
+    cv2.putText(
+        frame,
+        f"L Thigh Abs: {absolute_angles['left_thigh_abs']:.1f}",
+        (right_margin, y_offset_abs),
+        font,
+        font_scale,
+        BLUE,
+        thickness,
+    )
+    y_offset_abs += line_height
+    cv2.putText(
+        frame,
+        f"L Shank Abs: {absolute_angles['left_shank_abs']:.1f}",
+        (right_margin, y_offset_abs),
+        font,
+        font_scale,
+        BLUE,
+        thickness,
+    )
+    y_offset_abs += line_height
+    cv2.putText(
+        frame,
+        f"L Foot Abs: {absolute_angles['left_foot_abs']:.1f}",
+        (right_margin, y_offset_abs),
+        font,
+        font_scale,
+        BLUE,
+        thickness,
+    )
 
     return frame
 
@@ -1271,11 +1717,18 @@ def process_video_with_visualization(video_path, csv_path, output_dir):
     print(f"Video properties: {width}x{height} @ {fps}fps, {total_frames} frames")
 
     # Create video writer
-    output_video_path = os.path.join(output_dir, f"visualization_{os.path.basename(video_path)}")
+    output_video_path = os.path.join(
+        output_dir, f"angles_{os.path.basename(video_path)}"
+    )
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     out = cv2.VideoWriter(output_video_path, fourcc, fps, (width, height))
 
     frame_count = 0
+
+    # Initialize lists to store angles for CSV
+    relative_angles_list = []
+    absolute_angles_list = []
+
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
@@ -1411,42 +1864,92 @@ def process_video_with_visualization(video_path, csv_path, output_dir):
             "left_wrist": 0,
             # Central segments
             "neck": 0,
-            "trunk": 0
+            "trunk": 0,
         }
 
         # Calculate trunk vector
         try:
-            trunk_vector = np.array(landmarks["mid_hip"]) - np.array(landmarks["mid_shoulder"])
+            trunk_vector = np.array(landmarks["mid_hip"]) - np.array(
+                landmarks["mid_shoulder"]
+            )
             trunk_norm = np.linalg.norm(trunk_vector)
             if trunk_norm > 0:
                 trunk_vector = trunk_vector / trunk_norm
-            
+
             # Calculate relative angles
             # Right side
-            angles["right_shoulder"] = compute_shoulder_angle(landmarks["right_shoulder"], landmarks["right_elbow"], trunk_vector)
-            angles["right_elbow"] = compute_elbow_angle(landmarks["right_shoulder"], landmarks["right_elbow"], landmarks["right_wrist"])
-            angles["right_hip"] = compute_hip_angle(landmarks["right_hip"], landmarks["right_knee"], trunk_vector)
-            angles["right_knee"] = compute_knee_angle(landmarks["right_hip"], landmarks["right_knee"], landmarks["right_ankle"])
-            angles["right_ankle"] = compute_ankle_angle(landmarks["right_knee"], landmarks["right_ankle"], landmarks["right_foot_index"], landmarks["right_heel"])
+            angles["right_shoulder"] = compute_shoulder_angle(
+                landmarks["right_shoulder"], landmarks["right_elbow"], trunk_vector
+            )
+            angles["right_elbow"] = compute_elbow_angle(
+                landmarks["right_shoulder"],
+                landmarks["right_elbow"],
+                landmarks["right_wrist"],
+            )
+            angles["right_hip"] = compute_hip_angle(
+                landmarks["right_hip"], landmarks["right_knee"], trunk_vector
+            )
+            angles["right_knee"] = compute_knee_angle(
+                landmarks["right_hip"],
+                landmarks["right_knee"],
+                landmarks["right_ankle"],
+            )
+            angles["right_ankle"] = compute_ankle_angle(
+                landmarks["right_knee"],
+                landmarks["right_ankle"],
+                landmarks["right_foot_index"],
+                landmarks["right_heel"],
+            )
             try:
-                angles["right_wrist"] = compute_wrist_angle(landmarks["right_elbow"], landmarks["right_wrist"], landmarks["right_pinky"], landmarks["right_index"])
+                angles["right_wrist"] = compute_wrist_angle(
+                    landmarks["right_elbow"],
+                    landmarks["right_wrist"],
+                    landmarks["right_pinky"],
+                    landmarks["right_index"],
+                )
             except:
                 angles["right_wrist"] = 0
 
             # Left side
-            angles["left_shoulder"] = compute_shoulder_angle(landmarks["left_shoulder"], landmarks["left_elbow"], trunk_vector)
-            angles["left_elbow"] = compute_elbow_angle(landmarks["left_shoulder"], landmarks["left_elbow"], landmarks["left_wrist"])
-            angles["left_hip"] = compute_hip_angle(landmarks["left_hip"], landmarks["left_knee"], trunk_vector)
-            angles["left_knee"] = compute_knee_angle(landmarks["left_hip"], landmarks["left_knee"], landmarks["left_ankle"])
-            angles["left_ankle"] = compute_ankle_angle(landmarks["left_knee"], landmarks["left_ankle"], landmarks["left_foot_index"], landmarks["left_heel"])
+            angles["left_shoulder"] = compute_shoulder_angle(
+                landmarks["left_shoulder"], landmarks["left_elbow"], trunk_vector
+            )
+            angles["left_elbow"] = compute_elbow_angle(
+                landmarks["left_shoulder"],
+                landmarks["left_elbow"],
+                landmarks["left_wrist"],
+            )
+            angles["left_hip"] = compute_hip_angle(
+                landmarks["left_hip"], landmarks["left_knee"], trunk_vector
+            )
+            angles["left_knee"] = compute_knee_angle(
+                landmarks["left_hip"], landmarks["left_knee"], landmarks["left_ankle"]
+            )
+            angles["left_ankle"] = compute_ankle_angle(
+                landmarks["left_knee"],
+                landmarks["left_ankle"],
+                landmarks["left_foot_index"],
+                landmarks["left_heel"],
+            )
             try:
-                angles["left_wrist"] = compute_wrist_angle(landmarks["left_elbow"], landmarks["left_wrist"], landmarks["left_pinky"], landmarks["left_index"])
+                angles["left_wrist"] = compute_wrist_angle(
+                    landmarks["left_elbow"],
+                    landmarks["left_wrist"],
+                    landmarks["left_pinky"],
+                    landmarks["left_index"],
+                )
             except:
                 angles["left_wrist"] = 0
 
             # Central segments relative angles
-            angles["neck"] = compute_neck_angle(landmarks["mid_ear"], landmarks["mid_shoulder"], trunk_vector)
-            angles["trunk"] = compute_relative_angle(landmarks["mid_shoulder"], landmarks["mid_hip"], landmarks["mid_shoulder"])
+            angles["neck"] = compute_neck_angle(
+                landmarks["mid_ear"], landmarks["mid_shoulder"], trunk_vector
+            )
+            angles["trunk"] = compute_relative_angle(
+                landmarks["mid_shoulder"],
+                landmarks["mid_hip"],
+                landmarks["mid_shoulder"],
+            )
         except Exception as e:
             print(f"Error calculating relative angles: {str(e)}")
 
@@ -1468,39 +1971,75 @@ def process_video_with_visualization(video_path, csv_path, output_dir):
             "left_hand_abs": 0,
             # Central segments
             "trunk_abs": 0,
-            "neck_abs": 0
+            "neck_abs": 0,
         }
 
         try:
             # Calculate absolute angles
-            absolute_angles["right_thigh_abs"] = compute_absolute_angle(landmarks["right_hip"], landmarks["right_knee"])
-            absolute_angles["right_shank_abs"] = compute_absolute_angle(landmarks["right_knee"], landmarks["right_ankle"])
-            absolute_angles["right_foot_abs"] = compute_absolute_angle(landmarks["right_heel"], landmarks["right_foot_index"])
-            absolute_angles["right_upperarm_abs"] = compute_absolute_angle(landmarks["right_shoulder"], landmarks["right_elbow"])
-            absolute_angles["right_forearm_abs"] = compute_absolute_angle(landmarks["right_elbow"], landmarks["right_wrist"])
-            
+            absolute_angles["right_thigh_abs"] = compute_absolute_angle(
+                landmarks["right_hip"], landmarks["right_knee"]
+            )
+            absolute_angles["right_shank_abs"] = compute_absolute_angle(
+                landmarks["right_knee"], landmarks["right_ankle"]
+            )
+            absolute_angles["right_foot_abs"] = compute_absolute_angle(
+                landmarks["right_heel"], landmarks["right_foot_index"]
+            )
+            absolute_angles["right_upperarm_abs"] = compute_absolute_angle(
+                landmarks["right_shoulder"], landmarks["right_elbow"]
+            )
+            absolute_angles["right_forearm_abs"] = compute_absolute_angle(
+                landmarks["right_elbow"], landmarks["right_wrist"]
+            )
+
             try:
-                right_hand_mid = compute_midpoint(landmarks["right_pinky"], landmarks["right_index"])
-                absolute_angles["right_hand_abs"] = compute_absolute_angle(landmarks["right_wrist"], right_hand_mid)
+                right_hand_mid = compute_midpoint(
+                    landmarks["right_pinky"], landmarks["right_index"]
+                )
+                absolute_angles["right_hand_abs"] = compute_absolute_angle(
+                    landmarks["right_wrist"], right_hand_mid
+                )
             except:
                 absolute_angles["right_hand_abs"] = 0
 
-            absolute_angles["left_thigh_abs"] = compute_absolute_angle(landmarks["left_hip"], landmarks["left_knee"])
-            absolute_angles["left_shank_abs"] = compute_absolute_angle(landmarks["left_knee"], landmarks["left_ankle"])
-            absolute_angles["left_foot_abs"] = compute_absolute_angle(landmarks["left_heel"], landmarks["left_foot_index"])
-            absolute_angles["left_upperarm_abs"] = compute_absolute_angle(landmarks["left_shoulder"], landmarks["left_elbow"])
-            absolute_angles["left_forearm_abs"] = compute_absolute_angle(landmarks["left_elbow"], landmarks["left_wrist"])
-            
+            absolute_angles["left_thigh_abs"] = compute_absolute_angle(
+                landmarks["left_hip"], landmarks["left_knee"]
+            )
+            absolute_angles["left_shank_abs"] = compute_absolute_angle(
+                landmarks["left_knee"], landmarks["left_ankle"]
+            )
+            absolute_angles["left_foot_abs"] = compute_absolute_angle(
+                landmarks["left_heel"], landmarks["left_foot_index"]
+            )
+            absolute_angles["left_upperarm_abs"] = compute_absolute_angle(
+                landmarks["left_shoulder"], landmarks["left_elbow"]
+            )
+            absolute_angles["left_forearm_abs"] = compute_absolute_angle(
+                landmarks["left_elbow"], landmarks["left_wrist"]
+            )
+
             try:
-                left_hand_mid = compute_midpoint(landmarks["left_pinky"], landmarks["left_index"])
-                absolute_angles["left_hand_abs"] = compute_absolute_angle(landmarks["left_wrist"], left_hand_mid)
+                left_hand_mid = compute_midpoint(
+                    landmarks["left_pinky"], landmarks["left_index"]
+                )
+                absolute_angles["left_hand_abs"] = compute_absolute_angle(
+                    landmarks["left_wrist"], left_hand_mid
+                )
             except:
                 absolute_angles["left_hand_abs"] = 0
 
-            absolute_angles["trunk_abs"] = compute_absolute_angle(landmarks["mid_hip"], landmarks["mid_shoulder"])
-            absolute_angles["neck_abs"] = compute_absolute_angle(landmarks["mid_shoulder"], landmarks["nose"])
+            absolute_angles["trunk_abs"] = compute_absolute_angle(
+                landmarks["mid_shoulder"], landmarks["mid_hip"]
+            )
+            absolute_angles["neck_abs"] = compute_absolute_angle(
+                landmarks["mid_ear"], landmarks["mid_shoulder"]
+            )
         except Exception as e:
             print(f"Error calculating absolute angles: {str(e)}")
+
+        # Salve os ângulos relativos e absolutos nas listas
+        relative_angles_list.append(angles)
+        absolute_angles_list.append(absolute_angles)
 
         # Draw visualization with both relative and absolute angles
         frame = draw_skeleton_and_angles(frame, landmarks, angles, absolute_angles)
@@ -1519,7 +2058,79 @@ def process_video_with_visualization(video_path, csv_path, output_dir):
     cap.release()
     out.release()
 
+    # Save relative and absolute angles to CSV
+    video_basename = os.path.splitext(os.path.basename(video_path))[0]
+
+    # Reorganize relative angles in the desired order
+    relative_angles_list_ordered = []
+    for angles_dict in relative_angles_list:
+        ordered_dict = {
+            "neck": angles_dict["neck"],
+            "trunk": angles_dict["trunk"],
+            # Right side
+            "right_shoulder": angles_dict["right_shoulder"],
+            "right_elbow": angles_dict["right_elbow"],
+            "right_wrist": angles_dict["right_wrist"],
+            "right_hip": angles_dict["right_hip"],
+            "right_knee": angles_dict["right_knee"],
+            "right_ankle": angles_dict["right_ankle"],
+            # Left side
+            "left_shoulder": angles_dict["left_shoulder"],
+            "left_elbow": angles_dict["left_elbow"],
+            "left_wrist": angles_dict["left_wrist"],
+            "left_hip": angles_dict["left_hip"],
+            "left_knee": angles_dict["left_knee"],
+            "left_ankle": angles_dict["left_ankle"],
+        }
+        relative_angles_list_ordered.append(ordered_dict)
+
+    # Reorganize absolute angles in the desired order
+    absolute_angles_list_ordered = []
+    for angles_dict in absolute_angles_list:
+        ordered_dict = {
+            "neck_abs": angles_dict["neck_abs"],
+            "trunk_abs": angles_dict["trunk_abs"],
+            # Right side
+            "right_upperarm_abs": angles_dict["right_upperarm_abs"],
+            "right_forearm_abs": angles_dict["right_forearm_abs"],
+            "right_hand_abs": angles_dict["right_hand_abs"],
+            "right_thigh_abs": angles_dict["right_thigh_abs"],
+            "right_shank_abs": angles_dict["right_shank_abs"],
+            "right_foot_abs": angles_dict["right_foot_abs"],
+            # Left side
+            "left_upperarm_abs": angles_dict["left_upperarm_abs"],
+            "left_forearm_abs": angles_dict["left_forearm_abs"],
+            "left_hand_abs": angles_dict["left_hand_abs"],
+            "left_thigh_abs": angles_dict["left_thigh_abs"],
+            "left_shank_abs": angles_dict["left_shank_abs"],
+            "left_foot_abs": angles_dict["left_foot_abs"],
+        }
+        absolute_angles_list_ordered.append(ordered_dict)
+
+    # Create DataFrames with the ordered angles
+    relative_angles_df = pd.DataFrame(relative_angles_list_ordered)
+    absolute_angles_df = pd.DataFrame(absolute_angles_list_ordered)
+
+    # Create a frame index for both DataFrames
+    frame_index = np.arange(len(relative_angles_df))
+
+    # Insert the frame index as the first column
+    relative_angles_df.insert(0, "frame", frame_index)
+    absolute_angles_df.insert(0, "frame", frame_index)
+
+    relative_angles_csv_path = os.path.join(output_dir, f"{video_basename}_rel.csv")
+    absolute_angles_csv_path = os.path.join(output_dir, f"{video_basename}_abs.csv")
+
+    relative_angles_df.to_csv(
+        relative_angles_csv_path, index=False, float_format="%.2f"
+    )
+    absolute_angles_df.to_csv(
+        absolute_angles_csv_path, index=False, float_format="%.2f"
+    )
+
     print(f"Video processing complete. Output saved to: {output_video_path}")
+    print(f"Relative angles saved to: {relative_angles_csv_path}")
+    print(f"Absolute angles saved to: {absolute_angles_csv_path}")
 
 
 def select_video_file():
@@ -1534,7 +2145,10 @@ def select_video_file():
 
     file_path = filedialog.askopenfilename(
         title="Select Video File",
-        filetypes=[("Video files", "*.mp4 *.avi *.mov"), ("All files", "*.*")],
+        filetypes=[
+            ("Video files", "*.mp4 *.avi *.mov *.mkv *.MP4 *.AVI *.MOV *.MKV"),
+            ("All files", "*.*"),
+        ],
     )
 
     if file_path:
@@ -1590,7 +2204,10 @@ def run_mp_angles():
             print("No video file selected. Exiting.")
             return
 
-        output_dir = os.path.join(os.path.dirname(video_path), "angles_video")
+        timestamp = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
+        output_dir = os.path.join(
+            os.path.dirname(video_path), f"angles_video_{timestamp}"
+        )
         process_video_with_visualization(video_path, csv_path, output_dir)
 
     else:
@@ -1610,11 +2227,11 @@ def run_mp_angles():
             try:
                 input_path = os.path.join(input_dir, csv_file)
                 output_path = file_info["output_path"]
-                
+
                 # Processar e salvar ângulos relativos e absolutos de uma vez
                 process_angles(input_path, output_path)
                 print(f"Successfully processed angles: {csv_file}")
-                
+
             except Exception as e:
                 print(f"Error processing {csv_file}: {str(e)}")
                 continue
