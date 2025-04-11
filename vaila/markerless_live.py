@@ -3,7 +3,7 @@ Script: markerless_live.py
 Author: Moser José (https://moserjose.com/),  Prof. Dr. Paulo Santiago
 Version: 0.0.2
 Created: April 9, 2025
-Last Updated: April 9, 2025
+Last Updated: April 11, 2025
 
 Description:
 This script performs real-time pose estimation and angle calculation using either YOLO or
@@ -145,13 +145,11 @@ def list_available_cameras():
 
     return available_cameras
 
-
 # Detection settings
 BUFFER_SIZE = 100  # Number of frames to keep in the angle buffer
 
 # Output settings
 SAVE_DATA = True
-
 
 # ===== CODE FROM ANGLE_CALCULATOR.PY =====
 class AngleCalculator:
