@@ -419,6 +419,7 @@ def process_video(video_path, output_dir, pose_config):
     # Close resources from first step
     cap.release()
     pose.close()
+    cv2.destroyAllWindows()
 
     # Save CSVs with processed landmarks
     with open(output_file_path, "w") as f_norm, open(
@@ -576,6 +577,12 @@ def process_videos_in_directory():
         output_dir = output_base / video_file.stem
         output_dir.mkdir(parents=True, exist_ok=True)
         process_video(video_file, output_dir, pose_config)
+        
+        # Liberar memória explicitamente
+        import gc
+        gc.collect()
+        # Pequena pausa para permitir liberação completa
+        time.sleep(1)
 
 
 if __name__ == "__main__":
