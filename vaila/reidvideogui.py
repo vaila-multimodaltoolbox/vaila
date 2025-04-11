@@ -26,7 +26,7 @@ import sys
 import numpy as np
 import pandas as pd
 import cv2
-from tkinter import Tk, filedialog, messagebox
+from tkinter import Tk, filedialog
 
 # Garantir que o Qt encontre seus plugins
 import sys
