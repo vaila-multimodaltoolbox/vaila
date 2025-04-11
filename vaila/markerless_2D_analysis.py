@@ -98,6 +98,10 @@ from collections import deque
 from scipy.signal import savgol_filter
 import copy
 from mediapipe.framework.formats import landmark_pb2
+# Importações para verificação de GPU
+import importlib.util
+import subprocess
+import sys
 
 landmark_names = [
     "nose",
@@ -338,15 +342,30 @@ def process_video(video_path, output_dir, pose_config):
     output_pixel_file_path = output_dir / f"{video_path.stem}_mp_pixel.csv"
 
     # Initialize MediaPipe
-    pose = mp.solutions.pose.Pose(
-        static_image_mode=pose_config["static_image_mode"],
-        min_detection_confidence=pose_config["min_detection_confidence"],
-        min_tracking_confidence=pose_config["min_tracking_confidence"],
-        model_complexity=pose_config["model_complexity"],
-        enable_segmentation=pose_config["enable_segmentation"],
-        smooth_segmentation=pose_config["smooth_segmentation"],
-        smooth_landmarks=True,
-    )
+    if use_gpu:
+        # Com GPU - configuração específica para MediaPipe com aceleração de GPU
+        pose = mp.solutions.pose.Pose(
+            static_image_mode=pose_config["static_image_mode"],
+            min_detection_confidence=pose_config["min_detection_confidence"],
+            min_tracking_confidence=pose_config["min_tracking_confidence"],
+            model_complexity=pose_config["model_complexity"],
+            enable_segmentation=pose_config["enable_segmentation"],
+            smooth_segmentation=pose_config["smooth_segmentation"],
+            smooth_landmarks=True,
+        )
+        print("MediaPipe inicializado com suporte a GPU!")
+    else:
+        # Sem GPU - configuração padrão
+        pose = mp.solutions.pose.Pose(
+            static_image_mode=pose_config["static_image_mode"],
+            min_detection_confidence=pose_config["min_detection_confidence"],
+            min_tracking_confidence=pose_config["min_tracking_confidence"],
+            model_complexity=pose_config["model_complexity"],
+            enable_segmentation=pose_config["enable_segmentation"],
+            smooth_segmentation=pose_config["smooth_segmentation"],
+            smooth_landmarks=True,
+        )
+        print("MediaPipe inicializado com CPU")
 
     # Prepare headers for CSV
     headers = ["frame_index"] + [
@@ -587,3 +606,90 @@ def process_videos_in_directory():
 
 if __name__ == "__main__":
     process_videos_in_directory()
+
+# Função para verificar se o TensorFlow está instalado e suporta GPU
+def check_tensorflow_gpu():
+    # Verificar se TensorFlow está instalado
+    if importlib.util.find_spec("tensorflow") is None:
+        print("TensorFlow não está instalado. Usando MediaPipe com CPU.")
+        return False
+    
+    try:
+        import tensorflow as tf
+        # Verificar versão do TensorFlow
+        print(f"TensorFlow versão: {tf.__version__}")
+        
+        # Verificar GPUs disponíveis
+        gpus = tf.config.list_physical_devices('GPU')
+        if not gpus:
+            print("Nenhuma GPU encontrada. Usando MediaPipe com CPU.")
+            return False
+        
+        print(f"GPUs disponíveis: {len(gpus)}")
+        for gpu in gpus:
+            print(f"  {gpu.name}")
+        
+        # Configurar memória da GPU
+        for gpu in gpus:
+            try:
+                tf.config.experimental.set_memory_growth(gpu, True)
+            except RuntimeError as e:
+                print(f"Erro ao configurar memória da GPU: {e}")
+        
+        return True
+    except Exception as e:
+        print(f"Erro ao verificar GPU com TensorFlow: {e}")
+        return False
+
+# Função para verificar se CUDA está disponível
+def check_cuda_available():
+    try:
+        # Verificar se OpenCV foi compilado com CUDA
+        cv_cuda = cv2.cuda.getCudaEnabledDeviceCount() > 0
+        
+        # Em Linux, também podemos verificar com o comando nvidia-smi
+        if platform.system() == "Linux":
+            try:
+                nvidia_smi = subprocess.run(
+                    ["nvidia-smi"], 
+                    stdout=subprocess.PIPE, 
+                    stderr=subprocess.PIPE,
+                    timeout=3
+                )
+                nvidia_available = nvidia_smi.returncode == 0
+            except:
+                nvidia_available = False
+            
+            if nvidia_available:
+                # Executar nvidia-smi para obter informações sobre as GPUs
+                try:
+                    gpu_info = subprocess.run(
+                        ["nvidia-smi", "--query-gpu=name,memory.total,memory.free", "--format=csv"],
+                        stdout=subprocess.PIPE,
+                        timeout=3
+                    )
+                    print("Informações da GPU NVIDIA:")
+                    print(gpu_info.stdout.decode("utf-8"))
+                except:
+                    pass
+        else:
+            nvidia_available = False
+            
+        return cv_cuda or nvidia_available
+    except Exception as e:
+        print(f"Erro ao verificar CUDA: {e}")
+        return False
+
+# Verificar suporte a GPU e configurar ambiente
+use_gpu = False
+if check_cuda_available():
+    print("CUDA está disponível no sistema")
+    if check_tensorflow_gpu():
+        print("MediaPipe será executado com aceleração GPU")
+        os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+        os.environ["TF_FORCE_GPU_ALLOW_GROWTH"] = "true"
+        use_gpu = True
+    else:
+        print("CUDA está disponível, mas TensorFlow não suporta GPU. Usando CPU.")
+else:
+    print("CUDA não está disponível. MediaPipe será executado com CPU.")
