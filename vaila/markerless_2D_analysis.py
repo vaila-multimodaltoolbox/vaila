@@ -93,7 +93,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 from pathlib import Path
 import platform
-import numpy as np  # Adicionado para trabalhar com NaN
+import numpy as np  # Added to work with NaN
 from collections import deque
 from scipy.signal import savgol_filter
 import copy
@@ -210,16 +210,16 @@ def apply_temporal_filter(landmarks_history, window=5):
     if len(landmarks_history) < window:
         return landmarks_history[-1]
 
-    # Certifique-se de que window é ímpar
+    # Ensure window is odd
     if window % 2 == 0:
         window -= 1
 
     filtered_landmarks = []
     for i in range(len(landmarks_history[0])):
-        # Extrair histórico para este landmark
+        # Extract history for this landmark
         landmark_data = [frame[i] for frame in landmarks_history]
 
-        # Filtrar cada dimensão separadamente
+        # Filter each dimension separately
         filtered_coords = []
         for dim in range(3):  # x, y, z
             values = [lm[dim] for lm in landmark_data if not np.isnan(lm[dim])]
@@ -238,22 +238,22 @@ def apply_temporal_filter(landmarks_history, window=5):
 
 
 def estimate_occluded_landmarks(landmarks, landmarks_history=None):
-    """Estima posições de landmarks ocultos com base em restrições anatômicas"""
+    """Estimates occluded landmark positions based on anatomical constraints"""
     estimated = landmarks.copy()
 
-    # Só prosseguir se temos alguns landmarks visíveis
+    # Only proceed if we have some visible landmarks
     if all(np.isnan(lm[0]) for lm in landmarks):
         return landmarks
 
-    # 1. Regras de simetria bilateral
-    # Se um lado estiver visível mas o outro não, usar simetria
+    # 1. Bilateral symmetry rules
+    # If one side is visible but the other is not, use symmetry
     pairs = [
-        (11, 12),  # ombros
-        (13, 14),  # cotovelos
-        (15, 16),  # pulsos
-        (23, 24),  # quadris
-        (25, 26),  # joelhos
-        (27, 28),  # tornozelos
+        (11, 12),  # shoulders
+        (13, 14),  # elbows
+        (15, 16),  # wrists
+        (23, 24),  # hips
+        (25, 26),  # knees
+        (27, 28),  # ankles
     ]
 
     for left_idx, right_idx in pairs:
@@ -261,8 +261,8 @@ def estimate_occluded_landmarks(landmarks, landmarks_history=None):
         right_visible = not np.isnan(landmarks[right_idx][0])
 
         if left_visible and not right_visible:
-            # Simetria espelhada no eixo X (invertendo o centro)
-            if not np.isnan(landmarks[0][0]):  # Se o nariz estiver visível
+            # Mirror symmetry in the X axis (inverting the center)
+            if not np.isnan(landmarks[0][0]):  # If the nose is visible
                 center_x = landmarks[0][0]
                 offset_x = landmarks[left_idx][0] - center_x
                 estimated[right_idx][0] = center_x - offset_x
@@ -270,7 +270,7 @@ def estimate_occluded_landmarks(landmarks, landmarks_history=None):
                 estimated[right_idx][2] = landmarks[left_idx][2]
 
         elif right_visible and not left_visible:
-            # Mesma lógica, mas para o outro lado
+            # Same logic, but for the other side
             if not np.isnan(landmarks[0][0]):
                 center_x = landmarks[0][0]
                 offset_x = landmarks[right_idx][0] - center_x
@@ -278,14 +278,14 @@ def estimate_occluded_landmarks(landmarks, landmarks_history=None):
                 estimated[left_idx][1] = landmarks[right_idx][1]
                 estimated[left_idx][2] = landmarks[right_idx][2]
 
-    # 2. Regras de continuidade de membros
-    # Se ombro e pulso estiverem visíveis mas cotovelo não, estimar posição do cotovelo
+    # 2. Continuity rules for limbs
+    # If shoulder and wrist are visible but elbow is not, estimate elbow position
     if (
         not np.isnan(landmarks[11][0])
         and not np.isnan(landmarks[15][0])
         and np.isnan(landmarks[13][0])
     ):
-        # Cotovelo esquerdo: interpolação simples entre ombro e pulso
+        # Left elbow: simple interpolation between shoulder and wrist
         estimated[13][0] = (landmarks[11][0] + landmarks[15][0]) / 2
         estimated[13][1] = (landmarks[11][1] + landmarks[15][1]) / 2
         estimated[13][2] = (landmarks[11][2] + landmarks[15][2]) / 2
@@ -295,16 +295,16 @@ def estimate_occluded_landmarks(landmarks, landmarks_history=None):
         and not np.isnan(landmarks[16][0])
         and np.isnan(landmarks[14][0])
     ):
-        # Cotovelo direito: interpolação simples
+        # Right elbow: simple interpolation
         estimated[14][0] = (landmarks[12][0] + landmarks[16][0]) / 2
         estimated[14][1] = (landmarks[12][1] + landmarks[16][1]) / 2
         estimated[14][2] = (landmarks[12][2] + landmarks[16][2]) / 2
 
-    # 3. Usar histórico de landmarks se disponível
+    # 3. Ustory if avihetry if aailabe
     if landmarks_history and len(landmarks_history) > 0:
         for i, landmark in enumerate(estimated):
             if np.isnan(landmark[0]):
-                # Procurar o último valor válido no histórico
+                # Search for the last valid value in the history
                 for past_frame in reversed(landmarks_history):
                     if not np.isnan(past_frame[i][0]):
                         estimated[i] = past_frame[i]
@@ -320,7 +320,7 @@ def process_video(video_path, output_dir, pose_config):
     print(f"Processing video: {video_path}")
     start_time = time.time()
 
-    # Configuração inicial
+    # Initial configuration
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
         print(f"Failed to open video: {video_path}")
@@ -331,13 +331,13 @@ def process_video(video_path, output_dir, pose_config):
     fps = cap.get(cv2.CAP_PROP_FPS)
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-    # Preparar diretórios e arquivos de saída
+    # Prepare directories and output files
     output_dir.mkdir(parents=True, exist_ok=True)
     output_video_path = output_dir / f"{video_path.stem}_mp.mp4"
     output_file_path = output_dir / f"{video_path.stem}_mp_norm.csv"
     output_pixel_file_path = output_dir / f"{video_path.stem}_mp_pixel.csv"
 
-    # Inicializar MediaPipe
+    # Initialize MediaPipe
     pose = mp.solutions.pose.Pose(
         static_image_mode=pose_config["static_image_mode"],
         min_detection_confidence=pose_config["min_detection_confidence"],
@@ -348,27 +348,27 @@ def process_video(video_path, output_dir, pose_config):
         smooth_landmarks=True,
     )
 
-    # Preparar cabeçalhos para CSV
+    # Prepare headers for CSV
     headers = ["frame_index"] + [
         f"{name}_x,{name}_y,{name}_z" for name in landmark_names
     ]
 
-    # Listas para armazenar landmarks
+    # Lists to store landmarks
     normalized_landmarks_list = []
     pixel_landmarks_list = []
     frames_with_missing_data = []
     landmarks_history = deque(maxlen=10)
 
-    print(f"\nEtapa 1/2: Processando landmarks (total frames: {total_frames})")
+    print(f"\nStep 1/2: Processing landmarks (total frames: {total_frames})")
 
-    # ETAPA 1: Processar o vídeo e gerar os CSVs
+    # Step 1: Process the video and generate the CSVs
     frame_count = 0
     while cap.isOpened():
         success, frame = cap.read()
         if not success:
             break
 
-        # Mostrar progresso
+        # Show progress
         if frame_count % 30 == 0:
             progress = (frame_count / total_frames) * 100
             print(
@@ -376,7 +376,7 @@ def process_video(video_path, output_dir, pose_config):
                 end="",
             )
 
-        # Processar frame com MediaPipe
+        # Process frame with MediaPipe
         results = pose.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
 
         if results.pose_landmarks:
@@ -385,20 +385,20 @@ def process_video(video_path, output_dir, pose_config):
                 for landmark in results.pose_landmarks.landmark
             ]
 
-            # Estimar landmarks ocultos
+            # Estimate occluded landmarks
             if pose_config.get("estimate_occluded", False):
                 landmarks = estimate_occluded_landmarks(
                     landmarks, list(landmarks_history)
                 )
 
-            # Adicionar ao histórico
+            # Add to history
             landmarks_history.append(landmarks)
 
-            # Aplicar filtragem temporal
+            # Apply temporal filtering
             if pose_config.get("apply_filtering", False) and len(landmarks_history) > 3:
                 landmarks = apply_temporal_filter(list(landmarks_history))
 
-            # Guardar landmarks processados
+            # Save processed landmarks
             normalized_landmarks_list.append(landmarks)
 
             pixel_landmarks = [
@@ -407,7 +407,7 @@ def process_video(video_path, output_dir, pose_config):
             ]
             pixel_landmarks_list.append(pixel_landmarks)
         else:
-            # Inserir NaN para frames sem detecção
+            # Insert NaN for frames without detection
             num_landmarks = len(landmark_names)
             nan_landmarks = [[np.nan, np.nan, np.nan] for _ in range(num_landmarks)]
             normalized_landmarks_list.append(nan_landmarks)
@@ -416,11 +416,12 @@ def process_video(video_path, output_dir, pose_config):
 
         frame_count += 1
 
-    # Fechar recursos da primeira etapa
+    # Close resources from first step
     cap.release()
     pose.close()
+    cv2.destroyAllWindows()
 
-    # Salvar CSVs com landmarks processados
+    # Save CSVs with processed landmarks
     with open(output_file_path, "w") as f_norm, open(
         output_pixel_file_path, "w"
     ) as f_pixel:
@@ -450,9 +451,9 @@ def process_video(video_path, output_dir, pose_config):
             f_norm.write(f"{frame_idx}," + landmarks_norm_str + "\n")
             f_pixel.write(f"{frame_idx}," + landmarks_pixel_str + "\n")
 
-    print(f"\n\nEtapa 2/2: Gerando vídeo com landmarks processados")
+    print(f"\n\nStep 2/2: Generating video with processed landmarks")
 
-    # ETAPA 2: Gerar o vídeo usando os landmarks processados
+    # Step 2: Generate the video using the processed landmarks
     cap = cv2.VideoCapture(str(video_path))
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     out = cv2.VideoWriter(str(output_video_path), fourcc, fps, (width, height))
@@ -477,25 +478,25 @@ def process_video(video_path, output_dir, pose_config):
                 f"\rGerando vídeo {frame_idx}/{total_frames} ({progress:.1f}%)", end=""
             )
 
-        # Obter landmarks processados para este frame
+        # Get processed landmarks for this frame
         if frame_idx < len(pixel_landmarks_list):
             landmarks_px = pixel_landmarks_list[frame_idx]
 
-            # Desenhar landmarks usando os dados processados
+            # Draw landmarks using processed data
             if not all(np.isnan(lm[0]) for lm in landmarks_px):
-                # Criar um objeto PoseLandmarkList para desenho
+                # Create a PoseLandmarkList object for drawing
                 landmark_proto = landmark_pb2.NormalizedLandmarkList()
 
                 for i, lm in enumerate(landmarks_px):
                     landmark = landmark_proto.landmark.add()
-                    landmark.x = lm[0] / width  # Normalizar para 0-1
-                    landmark.y = lm[1] / height  # Normalizar para 0-1
+                    landmark.x = lm[0] / width  # Normalize to 0-1
+                    landmark.y = lm[1] / height  # Normalize to 0-1
                     landmark.z = lm[2] if not np.isnan(lm[2]) else 0
                     landmark.visibility = (
-                        1.0  # Visibilidade máxima para todos os pontos processados
+                        1.0  # Maximum visibility for all processed points
                     )
 
-                # Desenhar landmarks
+                # Draw landmarks
                 mp_drawing.draw_landmarks(
                     frame,
                     landmark_proto,
@@ -507,11 +508,11 @@ def process_video(video_path, output_dir, pose_config):
         out.write(frame)
         frame_idx += 1
 
-    # Fechar recursos
+    # Close resources
     cap.release()
     out.release()
 
-    # Criar log
+    # Create log
     end_time = time.time()
     execution_time = end_time - start_time
 
@@ -576,6 +577,12 @@ def process_videos_in_directory():
         output_dir = output_base / video_file.stem
         output_dir.mkdir(parents=True, exist_ok=True)
         process_video(video_file, output_dir, pose_config)
+        
+        # Liberar memória explicitamente
+        import gc
+        gc.collect()
+        # Pequena pausa para permitir liberação completa
+        time.sleep(1)
 
 
 if __name__ == "__main__":
