@@ -3,8 +3,9 @@
     Description: Installs or updates the vailá - Multimodal Toolbox on Windows 11,
                  setting up the Conda environment, configuring MediaPipe, and
                  ensuring all dependencies are properly installed.
-    Creation Date: 2024-12-17
-    Author: Paulo R. P. Santiago & David Williams
+    Creation Date: 17 December 2024
+    Updated Date: 10 April 2025
+    Author: Paulo R. P. Santiago (USP) & David Williams (UNF)
 #>
 
 # Check for administrative privileges
@@ -272,53 +273,6 @@ $startMenuShortcut.WorkingDirectory = "$vailaProgramPath"
 $startMenuShortcut.Save()
 
 Write-Output "Start Menu shortcut for 'vaila' created at $startMenuShortcutPath."
-
-# Install and enable OpenSSH Client and Server
-Write-Output "Checking if OpenSSH is installed..."
-$sshClientInstalled = Get-WindowsCapability -Online | Where-Object Name -like 'OpenSSH.Client*' | Select-Object -ExpandProperty State
-$sshServerInstalled = Get-WindowsCapability -Online | Where-Object Name -like 'OpenSSH.Server*' | Select-Object -ExpandProperty State
-
-# Install OpenSSH Client if not already installed
-if ($sshClientInstalled -ne "Installed") {
-    Write-Output "Installing OpenSSH Client..."
-    Try {
-        Add-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0
-        Write-Output "OpenSSH Client installed successfully."
-    } Catch {
-        Write-Warning "Failed to install OpenSSH Client. Error: $_"
-    }
-} else {
-    Write-Output "OpenSSH Client is already installed."
-}
-
-# Install OpenSSH Server if not already installed
-if ($sshServerInstalled -ne "Installed") {
-    Write-Output "Installing OpenSSH Server..."
-    Try {
-        Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0
-        Write-Output "OpenSSH Server installed successfully."
-    } Catch {
-        Write-Warning "Failed to install OpenSSH Server. Error: $_"
-    }
-}
-
-# Configure and start OpenSSH Server
-if ((Get-WindowsCapability -Online | Where-Object Name -like 'OpenSSH.Server*' | Select-Object -ExpandProperty State) -eq "Installed") {
-    Write-Output "Configuring OpenSSH Server..."
-    Try {
-        # Start the service
-        Start-Service sshd
-        # Set it to start automatically
-        Set-Service -Name sshd -StartupType 'Automatic'
-        # Confirm the Firewall rule is configured
-        if (!(Get-NetFirewallRule -Name "OpenSSH-Server-In-TCP" -ErrorAction SilentlyContinue | Select-Object Name, Enabled)) {
-            New-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -DisplayName 'OpenSSH Server (sshd)' -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 22
-        }
-        Write-Output "OpenSSH Server configured and started successfully."
-    } Catch {
-        Write-Warning "Failed to configure OpenSSH Server. Error: $_"
-    }
-}
 
 Write-Output "Installation and configuration of 'vaila' completed successfully!"
 
