@@ -33,7 +33,6 @@ dependencies:
   - notebook
   - dask
   - distributed
-  - flask
   - lxml
   - pyzmq
   - sqlalchemy
@@ -62,7 +61,6 @@ dependencies:
       - python-dotenv
       - pygame
       - imufusion
-      - PyQt5
       - tenacity
       - retrying
       - watchdog
