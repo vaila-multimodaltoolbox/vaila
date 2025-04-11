@@ -49,17 +49,31 @@ from pathlib import Path
 
 def save_cuts_to_txt(video_path, cuts):
     """Save cuts information to a text file."""
-    video_name = Path(video_path).stem
-    txt_path = Path(video_path).parent / f"{video_name}_cuts.txt"
+    try:
+        video_name = Path(video_path).stem
+        txt_path = Path(video_path).parent / f"{video_name}_cuts.txt"
 
-    with open(txt_path, "w", encoding="utf-8") as f:
-        f.write(f"Cuts for video: {video_name}\n")
-        f.write(f"Created: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        f.write("-" * 50 + "\n")
-        for i, (start, end) in enumerate(cuts, 1):
-            f.write(f"Cut {i}: Frame {start} to {end}\n")
+        with open(str(txt_path), "w", encoding="utf-8", errors="replace") as f:
+            f.write(f"Cuts for video: {video_name}\n")
+            f.write(f"Created: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write("-" * 50 + "\n")
+            for i, (start, end) in enumerate(cuts, 1):
+                f.write(f"Cut {i}: Frame {start} to {end}\n")
 
-    return txt_path
+        return txt_path
+    except UnicodeEncodeError:
+        # Fallback para nomes com caracteres especiais
+        safe_name = "".join(c if c.isalnum() or c in "._- " else "_" for c in video_name)
+        txt_path = Path(video_path).parent / f"{safe_name}_cuts.txt"
+        
+        with open(str(txt_path), "w", encoding="utf-8", errors="replace") as f:
+            f.write(f"Cuts for video: {video_name}\n")
+            f.write(f"Created: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write("-" * 50 + "\n")
+            for i, (start, end) in enumerate(cuts, 1):
+                f.write(f"Cut {i}: Frame {start} to {end}\n")
+                
+        return txt_path
 
 
 def load_cuts_from_txt(video_path):
