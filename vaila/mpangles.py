@@ -278,37 +278,30 @@ def compute_midpoint(p1, p2):
     return (np.array(p1) + np.array(p2)) / 2
 
 
-def compute_absolute_angle(p_proximal, p_distal):
+def compute_absolute_angle(p_proximal, p_distal, format_360=False):
     """
-    Calculate the absolute angle (in degrees) between two points by converting pixel
-    coordinates (where y increases downward) to a Cartesian coordinate system (with y
-    increasing upward).
+    Calculate the absolute angle (in degrees) between two points.
 
-    The computation steps are as follows:
-
-    1. Compute the differences in coordinates:
-       - dx = p_distal[0] - p_proximal[0]
-       - dy = p_distal[1] - p_proximal[1]
-       Note: In pixel coordinates the y-axis is positive downwards.
-
-    2. Calculate the angle using np.arctan2:
-       - np.arctan2(dy, -dx) is used instead of np.arctan2(dy, dx) to adjust for the
-         reversed x-direction required by your convention. This step returns an angle in
-         radians which is then converted to degrees via np.degrees.
-
-    3. Map the resulting angle to the range [0, 360):
-       - The modulo operator (%) returns the remainder of the division.
-       - Thus, using angle % 360 ensures that any negative angle (e.g. -10° becomes 350°)
-         or any angle greater than 360 is wrapped into the [0, 360) interval.
+    Args:
+        p_proximal: Proximal point (x, y)
+        p_distal: Distal point (x, y)
+        format_360: Boolean to control the angle format:
+                   - True: returns angle in [0, 360) degree range
+                   - False: returns angle in [-180, 180) degree range (default)
 
     Returns:
-        absolute_angle (float): The computed absolute angle in degrees, within the range
-                                [0, 360).
+        absolute_angle (float): The computed absolute angle in degrees, formatted
+                               according to the format_360 parameter.
     """
     dx = p_distal[0] - p_proximal[0]
     dy = p_distal[1] - p_proximal[1]
     angle = np.degrees(np.arctan2(dy, -dx))
-    absolute_angle = angle % 360
+    
+    # Format angle based on user preference
+    if format_360:
+        absolute_angle = angle % 360  # [0, 360) format
+    else:
+        absolute_angle = (angle + 180) % 360 - 180  # [-180, 180) format
 
     return absolute_angle
 
@@ -874,7 +867,7 @@ def process_absolute_angles(input_csv, output_csv):
         raise
 
 
-def process_angles(input_csv, output_csv, segments=None):
+def process_angles(input_csv, output_csv, segments=None, format_360=False):
     """
     Process landmark data and compute specified angles.
 
@@ -882,6 +875,9 @@ def process_angles(input_csv, output_csv, segments=None):
         input_csv (str): Path to input CSV file
         output_csv (str): Path to output CSV file
         segments (list): List of segments to analyze (default: all)
+        format_360: Boolean to control the angle format:
+                   - True: returns angle in [0, 360) degree range
+                   - False: returns angle in [-180, 180) degree range (default)
     """
     try:
         # Read CSV file
@@ -1052,58 +1048,58 @@ def process_angles(input_csv, output_csv, segments=None):
 
                 # Absolute angles
                 right_thigh_abs_angles.append(
-                    compute_absolute_angle(right_hip[i], right_knee[i])
+                    compute_absolute_angle(right_hip[i], right_knee[i], format_360)
                 )
                 right_shank_abs_angles.append(
-                    compute_absolute_angle(right_knee[i], right_ankle[i])
+                    compute_absolute_angle(right_knee[i], right_ankle[i], format_360)
                 )
                 right_foot_abs_angles.append(
-                    compute_absolute_angle(right_heel[i], right_foot_index[i])
+                    compute_absolute_angle(right_heel[i], right_foot_index[i], format_360)
                 )
                 right_upperarm_abs_angles.append(
-                    compute_absolute_angle(right_shoulder[i], right_elbow[i])
+                    compute_absolute_angle(right_shoulder[i], right_elbow[i], format_360)
                 )
                 right_forearm_abs_angles.append(
-                    compute_absolute_angle(right_elbow[i], right_wrist[i])
+                    compute_absolute_angle(right_elbow[i], right_wrist[i], format_360)
                 )
 
                 try:
                     right_hand_mid = compute_midpoint(right_pinky[i], right_index[i])
                     right_hand_abs_angles.append(
-                        compute_absolute_angle(right_wrist[i], right_hand_mid)
+                        compute_absolute_angle(right_wrist[i], right_hand_mid, format_360)
                     )
                 except:
                     right_hand_abs_angles.append(np.nan)
 
                 left_thigh_abs_angles.append(
-                    compute_absolute_angle(left_hip[i], left_knee[i])
+                    compute_absolute_angle(left_hip[i], left_knee[i], format_360)
                 )
                 left_shank_abs_angles.append(
-                    compute_absolute_angle(left_knee[i], left_ankle[i])
+                    compute_absolute_angle(left_knee[i], left_ankle[i], format_360)
                 )
                 left_foot_abs_angles.append(
-                    compute_absolute_angle(left_heel[i], left_foot_index[i])
+                    compute_absolute_angle(left_heel[i], left_foot_index[i], format_360)
                 )
                 left_upperarm_abs_angles.append(
-                    compute_absolute_angle(left_shoulder[i], left_elbow[i])
+                    compute_absolute_angle(left_shoulder[i], left_elbow[i], format_360)
                 )
                 left_forearm_abs_angles.append(
-                    compute_absolute_angle(left_elbow[i], left_wrist[i])
+                    compute_absolute_angle(left_elbow[i], left_wrist[i], format_360)
                 )
 
                 try:
                     left_hand_mid = compute_midpoint(left_pinky[i], left_index[i])
                     left_hand_abs_angles.append(
-                        compute_absolute_angle(left_wrist[i], left_hand_mid)
+                        compute_absolute_angle(left_wrist[i], left_hand_mid, format_360)
                     )
                 except:
                     left_hand_abs_angles.append(np.nan)
 
                 trunk_abs_angles.append(
-                    compute_absolute_angle(mid_shoulder[i], mid_hip[i])
+                    compute_absolute_angle(mid_shoulder[i], mid_hip[i], format_360)
                 )
                 neck_abs_angles.append(
-                    compute_absolute_angle(mid_ear[i], mid_shoulder[i])
+                    compute_absolute_angle(mid_ear[i], mid_shoulder[i], format_360)
                 )
 
                 # Show progress
@@ -1177,7 +1173,7 @@ def process_angles(input_csv, output_csv, segments=None):
 
         # Criar dicionários para os ângulos na ordem desejada
         relative_angles_dict = {
-            "frame_index": df.iloc[:, 0],
+                "frame_index": df.iloc[:, 0],
             # Ângulos centrais
             "neck": neck_angles,
             "trunk": trunk_angles,
@@ -1687,7 +1683,7 @@ def draw_skeleton_and_angles(frame, landmarks, angles, absolute_angles):
     return frame
 
 
-def process_video_with_visualization(video_path, csv_path, output_dir):
+def process_video_with_visualization(video_path, csv_path, output_dir, format_360=False):
     """
     Process video file and create visualization with both relative and absolute angles.
     """
@@ -1876,80 +1872,80 @@ def process_video_with_visualization(video_path, csv_path, output_dir):
             if trunk_norm > 0:
                 trunk_vector = trunk_vector / trunk_norm
 
-            # Calculate relative angles
-            # Right side
-            angles["right_shoulder"] = compute_shoulder_angle(
-                landmarks["right_shoulder"], landmarks["right_elbow"], trunk_vector
-            )
-            angles["right_elbow"] = compute_elbow_angle(
-                landmarks["right_shoulder"],
-                landmarks["right_elbow"],
-                landmarks["right_wrist"],
-            )
-            angles["right_hip"] = compute_hip_angle(
-                landmarks["right_hip"], landmarks["right_knee"], trunk_vector
-            )
-            angles["right_knee"] = compute_knee_angle(
-                landmarks["right_hip"],
-                landmarks["right_knee"],
-                landmarks["right_ankle"],
-            )
-            angles["right_ankle"] = compute_ankle_angle(
-                landmarks["right_knee"],
-                landmarks["right_ankle"],
-                landmarks["right_foot_index"],
-                landmarks["right_heel"],
-            )
-            try:
-                angles["right_wrist"] = compute_wrist_angle(
+                # Calculate relative angles
+                # Right side
+                angles["right_shoulder"] = compute_shoulder_angle(
+                    landmarks["right_shoulder"], landmarks["right_elbow"], trunk_vector
+                )
+                angles["right_elbow"] = compute_elbow_angle(
+                    landmarks["right_shoulder"],
                     landmarks["right_elbow"],
                     landmarks["right_wrist"],
-                    landmarks["right_pinky"],
-                    landmarks["right_index"],
                 )
-            except:
-                angles["right_wrist"] = 0
+                angles["right_hip"] = compute_hip_angle(
+                    landmarks["right_hip"], landmarks["right_knee"], trunk_vector
+                )
+                angles["right_knee"] = compute_knee_angle(
+                    landmarks["right_hip"],
+                    landmarks["right_knee"],
+                    landmarks["right_ankle"],
+                )
+                angles["right_ankle"] = compute_ankle_angle(
+                    landmarks["right_knee"],
+                    landmarks["right_ankle"],
+                    landmarks["right_foot_index"],
+                    landmarks["right_heel"],
+                )
+                try:
+                    angles["right_wrist"] = compute_wrist_angle(
+                        landmarks["right_elbow"],
+                        landmarks["right_wrist"],
+                        landmarks["right_pinky"],
+                        landmarks["right_index"],
+                    )
+                except:
+                    angles["right_wrist"] = 0
 
-            # Left side
-            angles["left_shoulder"] = compute_shoulder_angle(
-                landmarks["left_shoulder"], landmarks["left_elbow"], trunk_vector
-            )
-            angles["left_elbow"] = compute_elbow_angle(
-                landmarks["left_shoulder"],
-                landmarks["left_elbow"],
-                landmarks["left_wrist"],
-            )
-            angles["left_hip"] = compute_hip_angle(
-                landmarks["left_hip"], landmarks["left_knee"], trunk_vector
-            )
-            angles["left_knee"] = compute_knee_angle(
-                landmarks["left_hip"], landmarks["left_knee"], landmarks["left_ankle"]
-            )
-            angles["left_ankle"] = compute_ankle_angle(
-                landmarks["left_knee"],
-                landmarks["left_ankle"],
-                landmarks["left_foot_index"],
-                landmarks["left_heel"],
-            )
-            try:
-                angles["left_wrist"] = compute_wrist_angle(
+                # Left side
+                angles["left_shoulder"] = compute_shoulder_angle(
+                    landmarks["left_shoulder"], landmarks["left_elbow"], trunk_vector
+                )
+                angles["left_elbow"] = compute_elbow_angle(
+                    landmarks["left_shoulder"],
                     landmarks["left_elbow"],
                     landmarks["left_wrist"],
-                    landmarks["left_pinky"],
-                    landmarks["left_index"],
                 )
-            except:
-                angles["left_wrist"] = 0
+                angles["left_hip"] = compute_hip_angle(
+                    landmarks["left_hip"], landmarks["left_knee"], trunk_vector
+                )
+                angles["left_knee"] = compute_knee_angle(
+                    landmarks["left_hip"], landmarks["left_knee"], landmarks["left_ankle"]
+                )
+                angles["left_ankle"] = compute_ankle_angle(
+                    landmarks["left_knee"],
+                    landmarks["left_ankle"],
+                    landmarks["left_foot_index"],
+                    landmarks["left_heel"],
+                )
+                try:
+                    angles["left_wrist"] = compute_wrist_angle(
+                        landmarks["left_elbow"],
+                        landmarks["left_wrist"],
+                        landmarks["left_pinky"],
+                        landmarks["left_index"],
+                    )
+                except:
+                    angles["left_wrist"] = 0
 
-            # Central segments relative angles
-            angles["neck"] = compute_neck_angle(
-                landmarks["mid_ear"], landmarks["mid_shoulder"], trunk_vector
-            )
-            angles["trunk"] = compute_relative_angle(
-                landmarks["mid_shoulder"],
-                landmarks["mid_hip"],
-                landmarks["mid_shoulder"],
-            )
+                # Central segments relative angles
+                angles["neck"] = compute_neck_angle(
+                    landmarks["mid_ear"], landmarks["mid_shoulder"], trunk_vector
+                )
+                angles["trunk"] = compute_relative_angle(
+                    landmarks["mid_shoulder"],
+                    landmarks["mid_hip"],
+                    landmarks["mid_shoulder"],
+                )
         except Exception as e:
             print(f"Error calculating relative angles: {str(e)}")
 
@@ -1977,19 +1973,19 @@ def process_video_with_visualization(video_path, csv_path, output_dir):
         try:
             # Calculate absolute angles
             absolute_angles["right_thigh_abs"] = compute_absolute_angle(
-                landmarks["right_hip"], landmarks["right_knee"]
+                landmarks["right_hip"], landmarks["right_knee"], format_360
             )
             absolute_angles["right_shank_abs"] = compute_absolute_angle(
-                landmarks["right_knee"], landmarks["right_ankle"]
+                landmarks["right_knee"], landmarks["right_ankle"], format_360
             )
             absolute_angles["right_foot_abs"] = compute_absolute_angle(
-                landmarks["right_heel"], landmarks["right_foot_index"]
+                landmarks["right_heel"], landmarks["right_foot_index"], format_360
             )
             absolute_angles["right_upperarm_abs"] = compute_absolute_angle(
-                landmarks["right_shoulder"], landmarks["right_elbow"]
+                landmarks["right_shoulder"], landmarks["right_elbow"], format_360
             )
             absolute_angles["right_forearm_abs"] = compute_absolute_angle(
-                landmarks["right_elbow"], landmarks["right_wrist"]
+                landmarks["right_elbow"], landmarks["right_wrist"], format_360
             )
 
             try:
@@ -1997,25 +1993,25 @@ def process_video_with_visualization(video_path, csv_path, output_dir):
                     landmarks["right_pinky"], landmarks["right_index"]
                 )
                 absolute_angles["right_hand_abs"] = compute_absolute_angle(
-                    landmarks["right_wrist"], right_hand_mid
+                    landmarks["right_wrist"], right_hand_mid, format_360
                 )
             except:
                 absolute_angles["right_hand_abs"] = 0
 
             absolute_angles["left_thigh_abs"] = compute_absolute_angle(
-                landmarks["left_hip"], landmarks["left_knee"]
+                landmarks["left_hip"], landmarks["left_knee"], format_360
             )
             absolute_angles["left_shank_abs"] = compute_absolute_angle(
-                landmarks["left_knee"], landmarks["left_ankle"]
+                landmarks["left_knee"], landmarks["left_ankle"], format_360
             )
             absolute_angles["left_foot_abs"] = compute_absolute_angle(
-                landmarks["left_heel"], landmarks["left_foot_index"]
+                landmarks["left_heel"], landmarks["left_foot_index"], format_360
             )
             absolute_angles["left_upperarm_abs"] = compute_absolute_angle(
-                landmarks["left_shoulder"], landmarks["left_elbow"]
+                landmarks["left_shoulder"], landmarks["left_elbow"], format_360
             )
             absolute_angles["left_forearm_abs"] = compute_absolute_angle(
-                landmarks["left_elbow"], landmarks["left_wrist"]
+                landmarks["left_elbow"], landmarks["left_wrist"], format_360
             )
 
             try:
@@ -2023,16 +2019,16 @@ def process_video_with_visualization(video_path, csv_path, output_dir):
                     landmarks["left_pinky"], landmarks["left_index"]
                 )
                 absolute_angles["left_hand_abs"] = compute_absolute_angle(
-                    landmarks["left_wrist"], left_hand_mid
+                    landmarks["left_wrist"], left_hand_mid, format_360
                 )
             except:
                 absolute_angles["left_hand_abs"] = 0
 
             absolute_angles["trunk_abs"] = compute_absolute_angle(
-                landmarks["mid_shoulder"], landmarks["mid_hip"]
+                landmarks["mid_shoulder"], landmarks["mid_hip"], format_360
             )
             absolute_angles["neck_abs"] = compute_absolute_angle(
-                landmarks["mid_ear"], landmarks["mid_shoulder"]
+                landmarks["mid_ear"], landmarks["mid_shoulder"], format_360
             )
         except Exception as e:
             print(f"Error calculating absolute angles: {str(e)}")
@@ -2184,6 +2180,24 @@ def run_mp_angles():
     root = tk.Tk()
     root.withdraw()
 
+    # Primeiro perguntar sobre o formato do ângulo
+    angle_format = messagebox.askquestion(
+        "Angle Format",
+        "Choose the angle format for absolute angles:\n\n"
+        + "Yes: 0 to 360 degrees format\n"
+        + "No: -180 to +180 degrees format"
+    )
+    
+    # Converter para boolean
+    use_format_360 = (angle_format == "yes")
+    
+    # Armazenar a escolha em uma variável global para uso em todo o código
+    global ANGLE_FORMAT_360
+    ANGLE_FORMAT_360 = use_format_360
+    
+    format_text = "0 to 360°" if use_format_360 else "-180 to +180°"
+    print(f"Selected angle format: {format_text}")
+
     process_type = messagebox.askquestion(
         "Processing Type",
         "Do you want to process a video file?\n\n"
@@ -2205,10 +2219,8 @@ def run_mp_angles():
             return
 
         timestamp = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
-        output_dir = os.path.join(
-            os.path.dirname(video_path), f"angles_video_{timestamp}"
-        )
-        process_video_with_visualization(video_path, csv_path, output_dir)
+        output_dir = os.path.join(os.path.dirname(video_path), f"angles_video_{timestamp}")
+        process_video_with_visualization(video_path, csv_path, output_dir, format_360=use_format_360)
 
     else:
         # CSV processing (existing functionality)
@@ -2227,11 +2239,11 @@ def run_mp_angles():
             try:
                 input_path = os.path.join(input_dir, csv_file)
                 output_path = file_info["output_path"]
-
+                
                 # Processar e salvar ângulos relativos e absolutos de uma vez
-                process_angles(input_path, output_path)
+                process_angles(input_path, output_path, format_360=use_format_360)
                 print(f"Successfully processed angles: {csv_file}")
-
+                
             except Exception as e:
                 print(f"Error processing {csv_file}: {str(e)}")
                 continue
