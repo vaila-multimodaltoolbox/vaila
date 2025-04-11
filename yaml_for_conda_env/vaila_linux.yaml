@@ -41,7 +41,6 @@ dependencies:
   - notebook
   - dask
   - distributed
-  - flask
   - lxml
   - pyzmq
   - sqlalchemy
@@ -70,7 +69,6 @@ dependencies:
       - openpyxl
       - pygame
       - imufusion
-      - PyQt5
       - PySide6
       - tenacity
       - retrying
