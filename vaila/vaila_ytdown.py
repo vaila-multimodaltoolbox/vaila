@@ -489,14 +489,30 @@ if TKINTER_AVAILABLE:
         def __init__(self, root):
             self.root = root
             self.root.title("vailá YOUTUBE DOWNLOADER")
-            self.root.geometry("1024x960")
-            self.root.minsize(800, 800)
+            self.root.geometry("800x720")  # Reduzir o tamanho inicial da janela
+            self.root.minsize(700, 600)  # Ajustar o tamanho mínimo da janela
 
             # Create downloader instance
             self.downloader = YTDownloader()
 
-            # Main frame
-            main_frame = ttk.Frame(root, padding=15)
+            # Main frame with scrollbar
+            canvas = tk.Canvas(root)
+            scrollbar = ttk.Scrollbar(root, orient="vertical", command=canvas.yview)
+            scrollable_frame = ttk.Frame(canvas)
+
+            scrollable_frame.bind(
+                "<Configure>",
+                lambda e: canvas.configure(scrollregion=canvas.bbox("all")),
+            )
+
+            canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+            canvas.configure(yscrollcommand=scrollbar.set)
+
+            canvas.pack(side="left", fill="both", expand=True)
+            scrollbar.pack(side="right", fill="y")
+
+            # Main frame content
+            main_frame = ttk.Frame(scrollable_frame, padding=15)
             main_frame.pack(fill=tk.BOTH, expand=True)
 
             # Criar um frame para o título
@@ -561,7 +577,9 @@ if TKINTER_AVAILABLE:
             log_frame = ttk.LabelFrame(main_frame, text="Log", padding=10)
             log_frame.pack(fill=tk.BOTH, expand=True, pady=10)
 
-            self.log_text = tk.Text(log_frame, height=10, width=80, wrap=tk.WORD)
+            self.log_text = tk.Text(
+                log_frame, height=5, width=80, wrap=tk.WORD
+            )  # Reduzir a altura do log
             self.log_text.pack(fill=tk.BOTH, expand=True)
 
             # Load URL file section

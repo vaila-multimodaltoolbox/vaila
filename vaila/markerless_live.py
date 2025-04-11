@@ -145,11 +145,13 @@ def list_available_cameras():
 
     return available_cameras
 
+
 # Detection settings
 BUFFER_SIZE = 100  # Number of frames to keep in the angle buffer
 
 # Output settings
 SAVE_DATA = True
+
 
 # ===== CODE FROM ANGLE_CALCULATOR.PY =====
 class AngleCalculator:
