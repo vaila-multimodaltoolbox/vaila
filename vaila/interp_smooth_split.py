@@ -1754,20 +1754,18 @@ def process_file(file_path, dest_dir, config):
             pad_len = int(len(df) * padding_percent / 100)
             print(f"Applying padding of {pad_len} frames")
 
-            # Create frames for padding
-            pad_before = pd.DataFrame(
-                {first_col: range(min_frame - pad_len, min_frame)}
-            )
-            pad_after = pd.DataFrame(
-                {first_col: range(max_frame + 1, max_frame + pad_len + 1)}
-            )
+            # Criar frames para padding
+            pad_before = pd.DataFrame({first_col: range(min_frame - pad_len, min_frame)})
+            pad_after = pd.DataFrame({first_col: range(max_frame + 1, max_frame + pad_len + 1)})
 
-            # Add empty columns in paddings
+            # Em vez de preencher com NaN, preencher com os valores das bordas
             for col in df.columns[1:]:
-                pad_before[col] = np.nan
-                pad_after[col] = np.nan
+                # Usar o valor do primeiro registro para o padding inicial
+                pad_before[col] = df[col].iloc[0]
+                # Usar o valor do último registro para o padding final
+                pad_after[col] = df[col].iloc[-1]
 
-            # Concatenate with padding
+            # Concatenar com padding
             df = pd.concat([pad_before, df, pad_after]).reset_index(drop=True)
             print(f"Shape after padding: {df.shape}")
 
