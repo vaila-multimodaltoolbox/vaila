@@ -628,7 +628,7 @@ def get_video_path():
     return video_path
 
 
-def main():
+def run_cutvideo():
     # Print the directory and name of the script being executed
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
@@ -670,4 +670,4 @@ def cleanup_resources():
 
 
 if __name__ == "__main__":
-    main()
+    run_cutvideo()

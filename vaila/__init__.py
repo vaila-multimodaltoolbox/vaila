@@ -31,7 +31,7 @@ from .rearrange_data import rearrange_data_in_directory
 from .readc3d_export import convert_c3d_to_csv
 from .modifylabref import modify_lab_coords, get_labcoord_angles
 from .numberframes import count_frames_in_videos
-from .batchcut import batch_cut_videos, cut_videos
+from .batchcut import batch_cut_videos
 from .drawboxe import run_drawboxe
 from . import cluster_analysis
 from . import imu_analysis
@@ -61,8 +61,8 @@ from .rec2d import main as rec2d
 from .rec2d_one_dlt2d import main as rec2d_one_dlt2d
 from .vaila_manifest import show_vaila_message
 from .emg_labiocom import run_emg_gui
-from .vailaplot2d import plot_2d
-from .vailaplot3d import plot_3d
+from .vailaplot2d import run_plot_2d as plot_2d
+from .vailaplot3d import run_plot_3d as plot_3d
 from .mergestack import merge_csv_files, stack_csv_files
 from .videoprocessor import process_videos_gui
 from .sync_flash import get_median_brightness
@@ -95,8 +95,8 @@ __all__ = [
     "rearrange_data_in_directory",
     "count_frames_in_videos",
     "batch_cut_videos",
-    "cut_videos",
     "run_drawboxe",
+    "cutvideo",
     "compress_videos_h264_gui",
     "compress_videos_h265_gui",
     "convert_c3d_to_csv",

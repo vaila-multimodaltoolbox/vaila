@@ -428,7 +428,7 @@ def select_headers_gui(headers):
     return selected_headers
 
 
-def plot_2d():
+def run_plot_2d():
     select_plot_type()
     messagebox.showinfo(
         "Plotting Completed", "All selected plots have been successfully generated."
@@ -436,4 +436,4 @@ def plot_2d():
 
 
 if __name__ == "__main__":
-    plot_2d()
+    run_plot_2d()
