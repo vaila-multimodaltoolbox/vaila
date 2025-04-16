@@ -22,9 +22,9 @@ selected_headers = []
 plot_type = None
 
 
-def plot_3d():
+def run_plot_3d():
     print("vailá e faça")
 
 
 if __name__ == "__main__":
-    plot_3d()
+    run_plot_3d()
