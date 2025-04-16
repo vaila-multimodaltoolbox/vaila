@@ -51,7 +51,7 @@ How to Execute:
 5. The script will process the videos and save the outputs in the specified output directory.
 
 Requirements:
-- Python 3.11.9
+- Python 3.12.9
 - OpenCV (`pip install opencv-python`)
 - MediaPipe (`pip install mediapipe`)
 - Tkinter (usually included with Python installations)
@@ -475,7 +475,7 @@ def process_video(video_path, output_dir, pose_config):
         if frame_idx % 30 == 0:
             progress = (frame_idx / total_frames) * 100
             print(
-                f"\rGerando vídeo {frame_idx}/{total_frames} ({progress:.1f}%)", end=""
+                f"\rGenerating video {frame_idx}/{total_frames} ({progress:.1f}%)", end=""
             )
 
         # Get processed landmarks for this frame
@@ -578,10 +578,10 @@ def process_videos_in_directory():
         output_dir.mkdir(parents=True, exist_ok=True)
         process_video(video_file, output_dir, pose_config)
         
-        # Liberar memória explicitamente
+        # Release memory
         import gc
         gc.collect()
-        # Pequena pausa para permitir liberação completa
+        # Small pause to allow complete memory release
         time.sleep(1)
 
 

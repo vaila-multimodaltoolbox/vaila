@@ -4,8 +4,8 @@ vaila.py
 ===============================================================================
 Author: Paulo R. P. Santiago
 Date:  7 October 2024
-Update: 15 April 2025
-Version updated: 0.5.3
+Update: 16 April 2025
+Version updated: 0.6.0
 Python Version: 3.12.9
 
 Description:
@@ -177,7 +177,7 @@ except ImportError as e:
 
 
 text = r"""
-version: 15.Apr.2025 (Python 3.12.9)
+version: 16.Apr.2025 (Python 3.12.9)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -256,7 +256,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 15.Apr.2025 (Python 3.12.9)")
+        self.title("vailá - 16.Apr.2025 (Python 3.12.9)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -1428,7 +1428,7 @@ class Vaila(tk.Tk):
         if choice == "1":
             from vaila.markerless_2D_analysis import process_videos_in_directory
         else:
-            from vaila.markerless2d_analysis_v2 import process_videos_in_directory
+            from vaila.markerless2d_analysis_v2 import process_videos_in_directory  # Fixed module name
 
         process_videos_in_directory()
 
