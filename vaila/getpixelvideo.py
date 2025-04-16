@@ -1565,7 +1565,7 @@ def get_video_path():
     return video_path
 
 
-def main():
+def run_getpixelvideo():
     # Print the script version and directory
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
@@ -1597,4 +1597,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    run_getpixelvideo()
