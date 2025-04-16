@@ -166,9 +166,20 @@ conda activate vaila
 echo "Installing Cairo dependencies..."
 sudo apt install libcairo2-dev pkg-config python3-dev -y
 
-# Install pycairo explicitly
-echo "Installing pycairo..."
-pip install pycairo
+# First try normal installation of pycairo
+echo "Trying normal installation of pycairo..."
+if pip install pycairo; then
+    echo "Normal pycairo installation succeeded."
+else
+    echo "Normal pycairo installation failed. Trying with force-reinstall option..."
+    pip install --force-reinstall --no-cache-dir pycairo
+    
+    if [ $? -eq 0 ]; then
+        echo "Forced pycairo installation succeeded."
+    else
+        echo "Warning: pycairo installation failed. This may cause issues with the application."
+    fi
+fi
 
 # Install moviepy using pip
 echo "Installing moviepy..."
