@@ -629,7 +629,7 @@ class Vaila(tk.Tk):
 
         # B2_r2_c2 - EMG
         emg_analysis_btn = tk.Button(
-            row2_frame, text="EMG", width=button_width, command=self.emg_analysis
+            row2_frame, text="EMG", width=button_width, command=self.emg_analysis,
         )
 
         # B2_r2_c3 - Force Plate
@@ -1221,14 +1221,13 @@ class Vaila(tk.Tk):
 
     # Class definition
     def show_vaila_message(self):
-        """Display a message with information about vailá
+        """Runs the Vaila message module.
 
-        This function creates a new window and displays a message with
-        information about vailá, including the name, version and a short
-        description. The window is non-modal and stays open until the user
-        closes it.
+        This function runs the Vaila message module, which can be used to
+        display a message about the Vaila application.
 
         """
+        from vaila.vaila_manifest import show_vaila_message
         show_vaila_message()
 
     # A First FRAME Block
@@ -1240,6 +1239,7 @@ class Vaila(tk.Tk):
         to rename and will ask for the text to replace and the replacement text.
 
         """
+        from vaila.filemanager import rename_files
         rename_files()
 
     # A_r1_c2
@@ -1250,6 +1250,7 @@ class Vaila(tk.Tk):
         import. The selected file will be copied to the current working directory.
 
         """
+        from vaila.filemanager import import_file
         import_file()
 
     # A_r1_c3
@@ -1261,6 +1262,7 @@ class Vaila(tk.Tk):
         current working directory to the destination directory.
 
         """
+        from vaila.filemanager import export_file
         export_file()
 
     # A_r1_c4
@@ -1272,6 +1274,7 @@ class Vaila(tk.Tk):
         destination directory.
 
         """
+        from vaila.filemanager import copy_file
         copy_file()
 
     # A_r1_c5
@@ -1283,52 +1286,40 @@ class Vaila(tk.Tk):
         destination directory.
 
         """
+        from vaila.filemanager import move_file
         move_file()
 
     # A_r1_c6
     def remove_file(self):
-        """Remove files or directories based on extension, directory name, or filename pattern.
+        """Remove files from a directory.
 
-        This function will prompt the user to select a root directory, file extension, directory
-        name pattern, or filename pattern. The files or directories matching the selected
-        criteria will then be removed from the root directory.
-
-        The function includes safeguards to avoid the accidental removal of critical system
-        files by confirming patterns and offering multiple user confirmations.
+        This function will prompt the user to select a directory and files to remove.
+        The selected files will be removed from the directory.
 
         """
+        from vaila.filemanager import remove_file
         remove_file()
 
     # A_r1_c7
     def tree_file(self):
-        """Generate a tree structure of files in the source directory, matching a specific file extension.
+        """Generate a tree structure of files in a directory.
 
-        This function will prompt the user to select a source directory and a file extension.
-        The function will then generate a tree structure of files in the source directory,
-        matching the selected file extension.
-
-        The tree structure will be saved to a text file in the source directory, with
-        the filename in the format "tree_<timestamp>.txt".
-
-        This function is useful for generating reports or summaries of directory contents.
+        This function will prompt the user to select a directory and will generate a
+        tree structure of the files in the directory.
 
         """
+        from vaila.filemanager import tree_file
         tree_file()
 
     # A_r1_c8
     def find_file(self):
-        """Search the source directory for files matching a pattern and extension.
+        """Find files in a directory.
 
-        This function will prompt the user to select a source directory, a file extension,
-        and a pattern to search for. The function will then search the source directory
-        for files matching the selected extension and pattern.
-
-        The results of the search will be saved to a text file, which includes the count
-        and total size of matched files. This function is useful for quickly locating
-        specific files in large datasets.
+        This function will prompt the user to select a directory and will find files
+        in the directory.
 
         """
-
+        from vaila.filemanager import find_file
         find_file()
 
     # A_r1_c9
@@ -1344,61 +1335,38 @@ class Vaila(tk.Tk):
         organize the transferred files.
 
         """
+        from vaila.filemanager import transfer_file
         transfer_file()
 
     # B Second FRAME Block
     # B_r1_c1
     def imu_analysis(self):
-        """Runs the IMU analysis module.
+        """Analyze IMU data.
 
-        This function runs the IMU analysis module, which can be used to analyze
-        Inertial Measurement Unit (IMU) data stored in CSV or C3D format. The
-        analysis will process and interpret motion data from wearable IMU sensors.
-
-        The user will be prompted to select the file type (CSV or C3D), the sample
-        rate, and the output directory. The user may also select specific headers for
-        processing or, if no selection is made, the module will automatically use the
-        first 18 columns (or channels).
-
-        The module will then process the selected files, calculate tilt angles and
-        Euler angles, and generate graphs and CSV files with the processed results.
+        This function will analyze IMU data from a file.
 
         """
+        from vaila import imu_analysis
         imu_analysis.analyze_imu_data()
 
     # B_r1_c2
     def cluster_analysis(self):
-        """Runs the Cluster Analysis module.
+        """Analyze cluster data.
 
-        This function runs the Cluster Analysis module, which can be used to analyze
-        cluster marker data stored in CSV format. The analysis will process and interpret
-        motion data collected from marker-based motion capture systems.
-
-        The user will be prompted to select the sample rate and the configuration for the
-        trunk and pelvis. Optionally, provide anatomical position data for comparison.
-
-        The module will then process the selected files, calculate Euler angles and
-        orthonormal bases for the clusters, and generate graphs and CSV files with the
-        processed results.
+        This function will analyze cluster data from a file.
 
         """
+        from vaila import cluster_analysis
         cluster_analysis.analyze_cluster_data()
 
     # B_r1_c3
     def mocap_analysis(self):
-        """Runs the Full Body Motion Capture Analysis module.
+        """Analyze motion capture data.
 
-        This function runs the Full Body Motion Capture Analysis module, which can be
-        used to analyze full-body motion capture data in C3D format. The analysis will
-        process the data captured by motion capture systems that track full-body
-        movements.
-
-        The user will be prompted to select the directory containing the C3D files, and
-        the output directory. The module will then process the selected files,
-        calculate Euler angles and orthonormal bases for the full body, and generate
-        graphs and CSV files with the processed results.
+        This function will analyze motion capture data from a file.
 
         """
+        from vaila import mocap_analysis
         mocap_analysis.analyze_mocap_fullbody_data()
 
     # B_r1_c4
@@ -1482,34 +1450,22 @@ class Vaila(tk.Tk):
 
     # B_r2_c2
     def emg_analysis(self):
-        """Runs the EMG Analysis module.
+        """Analyze EMG data.
 
-        This function runs the EMG Analysis module, which can be used to analyze EMG data
-        from CSV files. It processes the EMG data to extract relevant metrics such as
-        RMS, median frequency, and maximum PSD. The module will then generate CSV files
-        with the processed results and plots of the EMG signals.
-
-        The user will be prompted to select the directory containing the EMG CSV files
-        and input the sampling rate and start and end indices for analysis.
+        This function will analyze EMG data from a file.
 
         """
+        from vaila import emg_labiocom
         emg_labiocom.run_emg_gui()
 
     # B_r2_c3
     def force_analysis(self):
-        """Runs the Force Analysis module.
+        """Analyze force plate data.
 
-        This function runs the Force Analysis module, which can be used to analyze
-        force data from CSV files. It processes the force data to extract relevant
-        metrics such as peak forces, impulses, and rate of force development.
-        The module will then generate CSV files with the processed results and
-        plots of the force signals.
-
-        The user will be prompted to select the directory containing the force CSV
-        files, input the sampling rate and start and end indices for analysis, and
-        choose the type of force analysis to perform.
+        This function will analyze force plate data from a file.
 
         """
+        from vaila import forceplate_analysis
         forceplate_analysis.run_force_analysis()
 
     # B_r2_c4
@@ -1558,13 +1514,14 @@ class Vaila(tk.Tk):
 
     # B_r3_c2
     def cube2d_kinematics(self):
-        """Runs the Cube2D Kinematics module.
+        """Run the 2D Cube Kinematics module.
 
-        This function runs the Cube2D Kinematics module, which can be used to analyze
-        Cube2D kinematics data from CSV files. It processes the Cube2D kinematics data
-        to extract relevant metrics such as speed, distance, and time.
+        This function runs the 2D Cube Kinematics module, which can be used to analyze
+        2D kinematics of a cube. The analysis will process the data and generate
+        graphs and CSV files with the processed results.
 
         """
+        from vaila import cube2d_kinematics
         cube2d_kinematics.run_cube2d_kinematics()
 
     # B_r3_c3
@@ -1594,19 +1551,14 @@ class Vaila(tk.Tk):
 
     # B_r3_c5
     def animal_open_field(self):
-        """Runs the Animal Open Field module.
+        """Run the Animal Open Field Analysis module.
 
-        This function runs the Animal Open Field module, which can be used to analyze
-        animal open field data from CSV files. It processes the animal open field data
-        to extract relevant metrics such as speed, distance, and time. The module will
-        then generate CSV files with the processed results and plots of the animal
-        open field signals.
-
-        The user will be prompted to select the directory containing the animal open
-        field CSV files and input the sampling rate and start and end indices for
-        analysis.
+        This function runs the Animal Open Field Analysis module, which can be used to analyze
+        animal movement data in an open field test. The analysis will process the data and generate
+        graphs and CSV files with the processed results.
 
         """
+        from vaila import animal_open_field
         animal_open_field.run_animal_open_field()
 
     # B_r4_c1
@@ -1660,7 +1612,8 @@ class Vaila(tk.Tk):
         The user will be prompted to select the directory containing the CSV files.
 
         """
-        rearrange_data_in_directory()  # Edit CSV
+        from vaila import rearrange_data
+        rearrange_data.rearrange_data_in_directory()  # Edit CSV
 
     # C_A_r1_c2
     def convert_c3d_csv(self):
@@ -1818,6 +1771,7 @@ class Vaila(tk.Tk):
         indices for analysis.
 
         """
+        from vaila.extractpng import VideoProcessor
         processor = VideoProcessor()
         processor.run()
 
@@ -1831,6 +1785,7 @@ class Vaila(tk.Tk):
         input the list of time intervals for analysis.
 
         """
+        from vaila import cut_videos
         cut_videos()
 
     # C_B_r1_c3
@@ -1843,7 +1798,8 @@ class Vaila(tk.Tk):
         input the coordinates for the box.
 
         """
-        run_drawboxe()
+        from vaila import drawboxe
+        drawboxe.run_drawboxe()
 
     # C_B_r2_c1
     def compress_videos_h264_gui(self):
@@ -1854,7 +1810,8 @@ class Vaila(tk.Tk):
         the video files and input the sample rate and start and end indices for analysis.
 
         """
-        compress_videos_h264_gui()
+        from vaila import compress_videos_h264
+        compress_videos_h264.compress_videos_h264_gui()
 
     # C_B_r2_c2
     def compress_videos_h265_gui(self):
@@ -1865,7 +1822,8 @@ class Vaila(tk.Tk):
         the video files and input the sample rate and start and end indices for analysis.
 
         """
-        compress_videos_h265_gui()
+        from vaila import compress_videos_h265
+        compress_videos_h265.compress_videos_h265_gui()
 
     # C_B_r2_c3
     def sync_videos(self):
@@ -1878,7 +1836,8 @@ class Vaila(tk.Tk):
         analysis.
 
         """
-        sync_videos()
+        from vaila import syncvid
+        syncvid.sync_videos()
 
     # C_B_r3_c1
     def getpixelvideo(self):
@@ -1890,7 +1849,8 @@ class Vaila(tk.Tk):
         and sample rate for analysis.
 
         """
-        getpixelvideo()
+        from vaila import getpixelvideo
+        getpixelvideo.getpixelvideo()
 
     # C_B_r3_c2
     def count_frames_in_videos(self):
@@ -1902,7 +1862,8 @@ class Vaila(tk.Tk):
         sample rate and start and end indices for analysis.
 
         """
-        count_frames_in_videos()
+        from vaila import count_frames_in_videos
+        count_frames_in_videos.count_frames_in_videos()
 
     # C_B_r3_c3
     def process_videos_gui(self):
@@ -1910,11 +1871,11 @@ class Vaila(tk.Tk):
 
         This function runs the video processing module, which can be used to
         process video files. The module will prompt the user to select the
-        directory containing the video files and input the sample rate and start
-        and end indices for analysis.
+        directory containing the video files and input the processing parameters.
 
         """
-        process_videos_gui()
+        from vaila import videoprocessor
+        videoprocessor.process_videos_gui()
 
     # C_B_r4_c1
     def run_distortvideo(self):
@@ -1976,18 +1937,13 @@ class Vaila(tk.Tk):
     def cut_video(self):
         """Runs the video cutting module.
 
-        This function runs the video cutting module, which allows users to mark
-        start and end frames for cutting/trimming videos. The module provides
-        frame-by-frame navigation and saves each cut segment as a new video file.
+        This function runs the video cutting module, which can be used to
+        cut a video file. The module will prompt the user to select the video
+        file and input the start and end times for cutting.
 
-        Controls:
-        - Space: Play/Pause
-        - Right/Left Arrow: Navigate frames
-        - S: Mark start frame
-        - E: Mark end frame
-        - ESC: Save and exit
         """
-        cutvideo.main()
+        from vaila import cutvideo
+        cutvideo.run_cutvideo()
 
     def resize_video(self):
         """Runs the video resizing module.
@@ -2040,46 +1996,26 @@ class Vaila(tk.Tk):
 
     # C_C_r1_c1
     def show_c3d_data(self):
-        """Runs the C3D visualizer.
+        """Runs the C3D file viewer module.
 
-        Opens a dialog for the user to choose between:
-          1. Matplotlib based visualizer (showc3d.py)
-          2. Open3D based visualizer (viewc3d.py)
+        This function runs the C3D file viewer module, which can be used to
+        view C3D files. The module will prompt the user to select the C3D file
+        to view.
+
         """
-        # Create a dialog window to choose the visualizer
-        dialog = Toplevel(self)
-        dialog.title("Selecione o Visualizador C3D")
-        dialog.geometry("300x150")
-
-        Label(dialog, text="Escolha o visualizador C3D:", pady=10).pack()
-
-        Button(
-            dialog,
-            text="Matplotlib Visualizer",
-            command=lambda: [show_c3d(), dialog.destroy()],
-        ).pack(pady=5)
-
-        Button(
-            dialog,
-            text="Open3D Visualizer",
-            command=lambda: [viewc3d.main(), dialog.destroy()],
-        ).pack(pady=5)
-
-        Button(dialog, text="Cancelar", command=dialog.destroy).pack(pady=10)
-
-        dialog.transient(self)
-        dialog.grab_set()
-        self.wait_window(dialog)
+        from vaila.showc3d import show_c3d
+        show_c3d()
 
     # C_C_r1_c2
     def show_csv_file(self):
-        """Runs the show_csv_file module.
+        """Runs the CSV file viewer module.
 
-        This function runs the show_csv_file module, which can be used to
-        visualize data from CSV files using Dash and Plotly, with column
-        selection interface and line animation.
+        This function runs the CSV file viewer module, which can be used to
+        view CSV files. The module will prompt the user to select the CSV file
+        to view.
 
         """
+        from vaila.readcsv import show_csv
         show_csv()
 
     # C_C_r1_c3
@@ -2091,18 +2027,20 @@ class Vaila(tk.Tk):
         interface and line animation.
 
         """
-        plot_2d()
+        from vaila import vailaplot2d
+        vailaplot2d.run_plot_2d()
 
     # C_C_r2_c2
     def plot_3d_data(self):
-        """Runs the plot_3d_data module.
+        """Runs the 3D data plotting module.
 
-        This function runs the plot_3d_data module, which can be used to
-        visualize data from CSV files using Matplotlib, with column selection
-        interface and 3D animation.
+        This function runs the 3D data plotting module, which can be used to
+        plot 3D data from CSV files. The module will prompt the user to select
+        the CSV file and input the plotting parameters.
 
         """
-        plot_3d()
+        from vaila import vailaplot3d
+        vailaplot3d.run_plot_3d()
 
     # C_C_r3_c1
     def draw_soccerfield(self):
@@ -2212,6 +2150,26 @@ class Vaila(tk.Tk):
         """
         self.destroy()
         os.kill(os.getpid(), signal.SIGTERM)
+
+    def plot_2d(self):
+        """Runs the 2D plotting module.
+
+        This function runs the 2D plotting module, which can be used to
+        create 2D plots from data files.
+
+        """
+        from vaila.vailaplot2d import run_plot_2d
+        run_plot_2d()
+
+    def plot_3d(self):
+        """Runs the 3D plotting module.
+
+        This function runs the 3D plotting module, which can be used to
+        create 3D plots from data files.
+
+        """
+        from vaila.vailaplot3d import run_plot_3d
+        run_plot_3d()
 
 
 if __name__ == "__main__":
