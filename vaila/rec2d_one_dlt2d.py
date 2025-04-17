@@ -76,7 +76,7 @@ def process_files_in_directory(dlt_params, directory):
     print(f"Reconstructed 2D coordinates saved to {output_dir}")
 
 
-def main():
+def run_rec2d_one_dlt2d():
     # Print the directory and name of the script being executed
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
@@ -109,4 +109,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    run_rec2d_one_dlt2d()
