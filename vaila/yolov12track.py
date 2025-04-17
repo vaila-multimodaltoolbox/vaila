@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 18 February 2025
-Update Date: 31 March 2025
-Version: 0.0.4
+Update Date: 17 April 2025
+Version: 0.1.0
 
 Description:
     This script performs object detection and tracking on video files using the YOLO model v12.
@@ -20,7 +20,7 @@ Description:
 
 Usage:
     Run the script from the command line by passing the path to a video file as an argument:
-        python yolov12track.py /path/to/video.mp4
+            python yolov12track.py
 
 Requirements:
     - Python 3.x
@@ -43,6 +43,7 @@ Change History:
 Notes:
     - Ensure that all dependencies are installed.
     - Since the script uses a graphical interface (Tkinter) for model selection and configuration, a GUI-enabled environment is required.
+    - If the ReID model is not found, the script will download it from the internet.
 
 """
 
@@ -64,8 +65,12 @@ import colorsys
 import pkg_resources
 import glob
 import pandas as pd
+from boxmot import BotSort
 
-# Garantir que o BoxMOT possa ser encontrado
+
+print(f"Running script: {os.path.basename(__file__)}")
+print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+# Ensure BoxMOT can be found
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 # Configure to avoid library conflicts
@@ -276,7 +281,7 @@ class TrackerConfigDialog(tk.simpledialog.Dialog):
         )
         label.pack()
 
-    def hide_help(self, event=None):
+    def hide_help(self):
         if self.tooltip is not None:
             self.tooltip.destroy()
             self.tooltip = None
@@ -407,7 +412,7 @@ class ReidModelSelectorDialog(tk.simpledialog.Dialog):
 
 class ClassSelectorDialog(tk.simpledialog.Dialog):
     def body(self, master):
-        # Lista de classes COCO padrão usada pelo YOLO
+        # Default COCO classes used by YOLO
         self.coco_classes = {
             0: "person",
             1: "bicycle",
@@ -491,16 +496,16 @@ class ClassSelectorDialog(tk.simpledialog.Dialog):
             79: "toothbrush",
         }
 
-        # Frame para a lista de classes
+        # Frame for the list of classes
         classes_frame = tk.Frame(master)
         classes_frame.pack(fill="both", expand=True, padx=10, pady=5)
 
-        # Label e scrollbar para a lista de classes
-        tk.Label(classes_frame, text="Classes disponíveis:").grid(
+        # Label and scrollbar for the list of classes
+        tk.Label(classes_frame, text="Available classes:").grid(
             row=0, column=0, sticky="w"
         )
 
-        # Crie um widget Text com scrollbar para mostrar as classes
+        # Create a Text widget with scrollbar to display the classes
         self.classes_text = tk.Text(classes_frame, width=40, height=15)
         scrollbar = tk.Scrollbar(classes_frame, command=self.classes_text.yview)
         self.classes_text.config(yscrollcommand=scrollbar.set)
@@ -508,67 +513,67 @@ class ClassSelectorDialog(tk.simpledialog.Dialog):
         self.classes_text.grid(row=1, column=0, sticky="nsew")
         scrollbar.grid(row=1, column=1, sticky="ns")
 
-        # Preencha o widget Text com a lista de classes
+        # Fill the Text widget with the list of classes
         for class_id, class_name in self.coco_classes.items():
             self.classes_text.insert(tk.END, f"{class_id}: {class_name}\n")
 
-        self.classes_text.config(state="disabled")  # Torna o texto somente leitura
+        self.classes_text.config(state="disabled")  # Make the text read-only
 
-        # Frame para entrada das classes selecionadas
+        # Frame for the selected classes input
         input_frame = tk.Frame(master)
         input_frame.pack(fill="x", padx=10, pady=10)
 
         tk.Label(
             input_frame,
-            text="Digite as classes desejadas (números separados por vírgula):",
+            text="Enter the classes you want to track (numbers separated by commas):",
         ).pack(anchor="w")
 
-        # Campo de entrada para as classes selecionadas
+        # Input field for the selected classes
         self.classes_entry = tk.Entry(input_frame, width=40)
         self.classes_entry.pack(fill="x", pady=5)
-        self.classes_entry.insert(0, "0, 32")  # Valor padrão: pessoa e bola esportiva
+        self.classes_entry.insert(0, "0, 32")  # Default: person and sports ball
 
-        # Adicione exemplos e instruções
+        # Add examples and instructions
         tk.Label(
             input_frame,
-            text="Exemplos:\n- '0' para rastrear apenas pessoas\n- '0, 2, 5, 7' para pessoas, carros, ônibus e trens\n- Deixe vazio para rastrear todas as classes",
+            text="Examples:\n- '0' to track only people\n- '0, 2, 5, 7' to track people, cars, buses and trains\n- Leave empty to track all classes",
             justify="left",
         ).pack(anchor="w", pady=5)
 
         return self.classes_entry
 
     def validate(self):
-        # Valide a entrada do usuário
+        # Validate user input
         try:
-            # Se estiver vazio, aceite (significando todas as classes)
+            # If empty, accept (meaning all classes)
             if not self.classes_entry.get().strip():
                 return True
 
-            # Verifique se a entrada pode ser convertida em lista de inteiros
+            # Check if the input can be converted to a list of integers
             classes_input = self.classes_entry.get().replace(" ", "")
             if classes_input:
                 class_ids = [int(x) for x in classes_input.split(",")]
 
-                # Verifique se todos os IDs são válidos
+                # Check if all IDs are valid
                 for class_id in class_ids:
                     if class_id < 0 or class_id > 79:
                         messagebox.showwarning(
-                            "Aviso",
-                            f"Classe ID {class_id} fora do intervalo válido (0-79)",
+                            "Warning",
+                            f"Class ID {class_id} out of valid range (0-79)",
                         )
                         return False
             return True
         except ValueError:
             messagebox.showwarning(
-                "Aviso", "Formato inválido. Use números separados por vírgula."
+                "Warning", "Invalid format. Use numbers separated by commas."
             )
             return False
 
     def apply(self):
-        # Processe a entrada e retorne a lista de classes
+        # Process the input and return the list of classes
         classes_input = self.classes_entry.get().strip().replace(" ", "")
         if not classes_input:
-            self.result = None  # Nenhuma classe específica significa todas as classes
+            self.result = None  # No specific class means all classes
         else:
             self.result = [int(x) for x in classes_input.split(",")]
 
@@ -625,11 +630,11 @@ def process_video(input_file: str):
 
 def get_color_for_id_improved(tracker_id):
     """Generate a distinct color for each tracker ID using HSV color space."""
-    # Use diferentes números primos para criar maior variação no matiz
+    # Use different prime numbers to create greater variation in hue
     prime_factors = [79, 83, 89, 97, 101, 103, 107, 109, 113, 127]
     h = ((tracker_id * prime_factors[tracker_id % len(prime_factors)]) % 359) / 359.0
 
-    # Maior variação de saturação e valor baseados no ID
+    # Greater variation in saturation and value based on the ID
     s_values = [0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95, 1.0]
     v_values = [0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95, 1.0]
 
@@ -867,9 +872,6 @@ def run_yolov12track():
         return
     tracker_name = tracker_dialog.result
 
-    # Remova todas as partes de ReID, não são necessárias para os trackers padrão
-    reid_required = False
-
     # Build the full path for the model
     models_dir = os.path.join(os.path.dirname(__file__), "models")
     os.makedirs(models_dir, exist_ok=True)
@@ -898,18 +900,52 @@ def run_yolov12track():
     # Initialize the YOLO model
     model = YOLO(model_path)
 
-    # Selecionar classes para rastreamento
+    # Select classes for tracking
     class_dialog = ClassSelectorDialog(
-        root, title="Selecionar Classes para Rastreamento"
+        root, title="Select Classes for Tracking"
     )
     if not hasattr(class_dialog, "result"):
         return
 
     target_classes = class_dialog.result
 
+    # Before initializing BotSort
+    print("Checking if we are ready to initialize BotSort...")
+
+    # Initialize BotSort
+    print(f"Initializing BotSort")
+    
+    # Try create reid_weights if osnet_x0_25_msmt17.pt does not exist, download it from the internet https://huggingface.co/paulosantiago/osnet_x0_25_msmt17/resolve/main/osnet_x0_25_msmt17.pt
+    reid_weights_path = os.path.join(models_dir, "osnet_x0_25_msmt17.pt")
+    if not os.path.exists(reid_weights_path):
+        print("Downloading ReID model...")
+        try:
+            import requests
+            url = "https://huggingface.co/paulosantiago/osnet_x0_25_msmt17/resolve/main/osnet_x0_25_msmt17.pt"
+            response = requests.get(url)
+            with open(reid_weights_path, 'wb') as f:
+                f.write(response.content)
+            print(f"ReID model downloaded successfully to {reid_weights_path}")
+        except Exception as e:
+            print(f"Failed to download ReID model: {str(e)}")
+            messagebox.showerror("Error", f"Failed to download ReID model: {str(e)}")
+            return
+    
+    reid_weights = Path(models_dir) / "osnet_x0_25_msmt17.pt"
+    
+    device = "cuda" if torch.cuda.is_available() else "cpu"  # Use GPU if available
+    half = True  # Use reduced precision
+    if not reid_weights.exists():
+        print(f"ReID model not found at: {reid_weights}")
+    try:
+        tracker = BotSort(reid_weights=str(reid_weights), device=device, half=half)
+        print("BotSort initialized successfully.")
+    except Exception as e:
+        print(f"Error initializing BotSort: {e}")
+
     # Process each video in the directory
     for video_file in os.listdir(video_dir):
-        if video_file.endswith((".mp4", ".avi", ".mov")):
+        if video_file.endswith((".mp4", ".avi", ".mov", ".mkv", ".MP4", ".AVI", ".MOV", ".MKV")):
             video_path = os.path.join(video_dir, video_file)
             video_name = os.path.splitext(os.path.basename(video_path))[0]
 
