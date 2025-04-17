@@ -149,20 +149,14 @@ try:
         VideoProcessor,
         compress_videos_h264_gui,
         compress_videos_h265_gui,
-        cut_videos,
         show_csv,
-        rec2d,
-        rec2d_one_dlt2d,
         show_vaila_message,
         emg_labiocom,
         plot_2d,
         plot_3d,
         process_videos_gui,
         animal_open_field,
-        vaila_lensdistortvideo,
-        vaila_datdistort,
         cube2d_kinematics,
-        cutvideo,
         viewc3d,
     )
 
@@ -1688,7 +1682,9 @@ class Vaila(tk.Tk):
         input the sample rate and start and end indices for analysis.
 
         """
-        rec2d_one_dlt2d()
+        from vaila import rec2d_one_dlt2d
+
+        rec2d_one_dlt2d.run_rec2d_one_dlt2d()
 
     # C_A_r2_c3 - for multi dlts in rows
     def rec2d(self):
@@ -1701,7 +1697,8 @@ class Vaila(tk.Tk):
         input the sample rate and start and end indices for analysis.
 
         """
-        rec2d()
+        from vaila import rec2d
+        rec2d.run_rec2d()
 
     # C_A_r3_c1
     def run_dlt3d(self):
@@ -1783,8 +1780,8 @@ class Vaila(tk.Tk):
         input the list of time intervals for analysis.
 
         """
-        from vaila import cut_videos
-        cut_videos()
+        from vaila import cutvideo
+        cutvideo.run_cutvideo()
 
     # C_B_r1_c3
     def draw_box(self):
