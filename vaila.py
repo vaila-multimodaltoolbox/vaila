@@ -4,8 +4,8 @@ vaila.py
 ===============================================================================
 Author: Paulo R. P. Santiago
 Date:  7 October 2024
-Update: 16 April 2025
-Version updated: 0.6.1
+Update: 17 April 2025
+Version updated: 0.6.2
 Python Version: 3.12.9
 
 Description:
@@ -164,7 +164,6 @@ try:
         vaila_datdistort,
         cube2d_kinematics,
         cutvideo,
-        vaila_distortvideo_gui,
         viewc3d,
     )
 
@@ -176,7 +175,7 @@ except ImportError as e:
 
 
 text = r"""
-version: 16.Apr.2025 (Python 3.12.9)
+vailá - 17.Apr.2025 v0.6.2 (Python 3.12.9)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -255,7 +254,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 16.Apr.2025 v0.6.1 (Python 3.12.9)")
+        self.title("vailá - 17.Apr.2025 v0.6.2 (Python 3.12.9)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -1880,51 +1879,56 @@ class Vaila(tk.Tk):
     def run_distortvideo(self):
         """Runs the Lens Distortion Correction Module.
 
-        This method provides options to correct lens distortion in either videos or CSV coordinate files.
-        It opens a dialog for the user to choose between:
-        1. Video distortion correction (vaila_lensdistortvideo)
-        2. CSV/DAT coordinate distortion correction (vaila_datdistort)
-        3. Interactive Distortion Correction (vaila_distortvideo_gui)
-
-        Both options use the same camera calibration parameters loaded from a CSV file to perform
-        the corrections.
+        This method provides options to correct lens distortion in either videos or CSV/DAT coordinate files,
+        or via an interactive GUI. All use the same camera calibration parameters.
         """
+        # bring in everything we need
+        from tkinter import Toplevel, Label, Button
+        from vaila import (
+            vaila_lensdistortvideo,
+            vaila_distortvideo_gui,
+            vaila_datdistort,
+        )
+
         # Create dialog window
         dialog = Toplevel(self)
         dialog.title("Choose Distortion Correction Type")
-        dialog.geometry("300x300")  # Aumentado para acomodar a nova opção
+        dialog.geometry("300x300")  # enlarged for the third option
 
-        # Add descriptive label
+        # Descriptive label
         Label(dialog, text="Select the type of distortion correction:", pady=10).pack()
 
-        # Add button for Video Correction
+        # Video Correction
         Button(
             dialog,
             text="Video Correction",
-            command=lambda: [
+            command=lambda: (
                 vaila_lensdistortvideo.run_distortvideo(),
                 dialog.destroy(),
-            ],
+            ),
         ).pack(pady=5)
 
-        # Add button for Interactive Distortion Correction
+        # Interactive GUI Correction
         Button(
             dialog,
             text="Interactive Distortion Correction",
-            command=lambda: [
+            command=lambda: (
                 vaila_distortvideo_gui.run_distortvideo_gui(),
                 dialog.destroy(),
-            ],
+            ),
         ).pack(pady=5)
 
-        # Add button for CSV Coordinates Distortion Correction
+        # CSV/DAT Coordinates Correction
         Button(
             dialog,
-            text="CSV Coordinates Distortion Correction",
-            command=lambda: [vaila_datdistort.run_datdistort(), dialog.destroy()],
+            text="CSV/DAT Coordinates Correction",
+            command=lambda: (
+                vaila_datdistort.run_datdistort(),
+                dialog.destroy(),
+            ),
         ).pack(pady=5)
 
-        # Add cancel button
+        # Cancel button
         Button(dialog, text="Cancel", command=dialog.destroy).pack(pady=10)
 
         # Make dialog modal
