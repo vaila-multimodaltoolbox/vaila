@@ -43,6 +43,7 @@ Change History:
 Notes:
     - Ensure that all dependencies are installed.
     - Since the script uses a graphical interface (Tkinter) for model selection and configuration, a GUI-enabled environment is required.
+    - If the ReID model is not found, the script will download it from the internet.
 
 """
 
