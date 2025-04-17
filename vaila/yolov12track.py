@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 18 February 2025
-Update Date: 31 March 2025
-Version: 0.0.4
+Update Date: 17 April 2025
+Version: 0.0.5
 
 Description:
     This script performs object detection and tracking on video files using the YOLO model v12.
@@ -64,7 +64,11 @@ import colorsys
 import pkg_resources
 import glob
 import pandas as pd
+from boxmot import BotSort
 
+
+print(f"Running script: {os.path.basename(__file__)}")
+print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
 # Garantir que o BoxMOT possa ser encontrado
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
@@ -907,9 +911,25 @@ def run_yolov12track():
 
     target_classes = class_dialog.result
 
+    # Antes da inicialização do BotSort
+    print("Verificando se estamos prontos para inicializar o BotSort...")
+
+    # Initialize BotSort
+    print(f"Initializing BotSort")
+    reid_weights = "models/osnet_x0_25_msmt17.pt"  # Path to the ReID model
+    device = "cuda" if torch.cuda.is_available() else "cpu"  # Use GPU if available
+    half = True  # Use reduced precision
+    if not os.path.exists(reid_weights):
+        print(f"ReID model not found at: {reid_weights}")
+    try:
+        tracker = BotSort(reid_weights=reid_weights, device=device, half=half)
+        print("BotSort initialized successfully.")
+    except Exception as e:
+        print(f"Error initializing BotSort: {e}")
+
     # Process each video in the directory
     for video_file in os.listdir(video_dir):
-        if video_file.endswith((".mp4", ".avi", ".mov")):
+        if video_file.endswith((".mp4", ".avi", ".mov", ".mkv", ".MP4", ".AVI", ".MOV", ".MKV")):
             video_path = os.path.join(video_dir, video_file)
             video_name = os.path.splitext(os.path.basename(video_path))[0]
 
