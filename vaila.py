@@ -5,7 +5,7 @@ vaila.py
 Author: Paulo R. P. Santiago
 Date:  7 October 2024
 Update: 17 April 2025
-Version updated: 0.6.2
+Version updated: 0.6.3
 Python Version: 3.12.9
 
 Description:
@@ -168,7 +168,7 @@ except ImportError as e:
 
 
 text = r"""
-vailá - 17.Apr.2025 v0.6.2 (Python 3.12.9)
+vailá - 17.Apr.2025 v0.6.3 (Python 3.12.9)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -247,7 +247,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 17.Apr.2025 v0.6.2 (Python 3.12.9)")
+        self.title("vailá - 17.Apr.2025 v0.6.3 (Python 3.12.9)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -1555,14 +1555,13 @@ class Vaila(tk.Tk):
     # B_r4_c1
     def tracker(self):
         """Runs the yolov12track analysis."""
-        if TRACKING_AVAILABLE:
-            print("Running tracker analysis...")
-            yolov12track.run_yolov12track()
-        else:
-            messagebox.showwarning(
-                "Feature Unavailable",
-                "Tracking features are not available. Please install required packages (boxmot).",
-            )
+        print(f"Running tracker analysis {os.path.dirname(os.path.abspath(__file__))}")
+        print(f"Running tracker analysis {os.path.basename(__file__)}")
+        print(f"B_r4_c1 - def tracker on code line number 1556")
+        print("Running tracker analysis...")
+        from vaila import yolov12track
+        yolov12track.run_yolov12track()
+
 
     # B_r4_c2 - ML Walkway
     def ml_walkway(self):
