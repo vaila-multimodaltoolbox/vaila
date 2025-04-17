@@ -151,7 +151,6 @@ try:
         compress_videos_h265_gui,
         cut_videos,
         show_csv,
-        dlt2d,
         rec2d,
         rec2d_one_dlt2d,
         show_vaila_message,
@@ -1675,7 +1674,8 @@ class Vaila(tk.Tk):
         input the sample rate and start and end indices for analysis.
 
         """
-        dlt2d()
+        from vaila import dlt2d
+        dlt2d.run_dlt2d()
 
     # C_A_r2_c2
     def rec2d_one_dlt2d(self):
