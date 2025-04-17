@@ -307,7 +307,7 @@ def save_dlt_parameters(output_file, dlt_params):
     print(f"DLT parameters saved to {output_file}")
 
 
-def main():
+def run_dlt2d():
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
     print("Starting DLT2D calculation...")
@@ -350,4 +350,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    run_dlt2d()
