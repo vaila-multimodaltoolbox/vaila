@@ -87,7 +87,7 @@ def process_files_in_directory(dlt_params_df, directory):
     print(f"Reconstructed 2D coordinates saved to {output_dir}")
 
 
-def main():
+def run_rec2d():
     root = Tk()
     root.withdraw()
 
@@ -109,4 +109,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    run_rec2d()
