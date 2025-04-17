@@ -55,8 +55,6 @@ from .compress_videos_h264 import compress_videos_h264_gui
 from .compress_videos_h265 import compress_videos_h265_gui
 from .extractpng import VideoProcessor
 from .readcsv_export import create_c3d_from_csv, convert_csv_to_c3d
-from .rec2d import main as rec2d
-from .rec2d_one_dlt2d import main as rec2d_one_dlt2d
 from .vaila_manifest import show_vaila_message
 from .emg_labiocom import run_emg_gui
 from .vailaplot2d import run_plot_2d as plot_2d
@@ -94,7 +92,6 @@ __all__ = [
     "count_frames_in_videos",
     "batch_cut_videos",
     "run_drawboxe",
-    "cutvideo",
     "compress_videos_h264_gui",
     "compress_videos_h265_gui",
     "convert_c3d_to_csv",
@@ -127,8 +124,6 @@ __all__ = [
     "get_csv_headers",
     "select_headers_gui",
     "getpixelvideo",
-    "rec2d",
-    "rec2d_one_dlt2d",
     "show_vaila_message",
     "run_emg_gui",
     "plot_2d",
