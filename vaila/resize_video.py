@@ -10,16 +10,17 @@ This script provides tools for improving pose detection in videos:
 
 Version:
 --------
-0.3.0
-date: 2025-02-27
+0.4.0
+Create: 27 April 2025
+update: 19 April 2025
 
 Author:
 -------
-Prof. PhD. Paulo Santiago
+Prof. PhD. Paulo R. P. Santiago
 
 License:
 --------
-This code is licensed under the MIT License.
+This code is licensed under the GNU General Public License v3.0.
 
 Dependencies:
 -------------
@@ -39,6 +40,7 @@ import numpy as np
 import json
 import glob
 import pandas as pd
+from rich import print
 
 
 def get_video_info(video_path):
@@ -229,83 +231,102 @@ def convert_coordinates(x, y, metadata):
     return original_x, original_y
 
 
-def convert_mediapipe_coordinates(
-    pixel_csv_path, metadata_path, output_csv_path, progress_callback=None
-):
+def convert_coordinates_by_format(df, metadata, format_type, progress_callback=None):
     """
-    Convert MediaPipe pixel coordinates from processed video back to original video.
-
+    Convert coordinates based on the input format type
+    
     Args:
-        pixel_csv_path (str): Path to MediaPipe pixel coordinates CSV file
-        metadata_path (str): Path to video processing metadata JSON file
-        output_csv_path (str): Path to save the converted coordinates CSV file
-        progress_callback (function, optional): Function to call with progress updates
+        df: pandas DataFrame with the input data
+        metadata: video processing metadata
+        format_type: str, one of 'mediapipe', 'yolo', or 'vaila'
+        progress_callback: function for progress updates
+    """
+    converted_df = df.copy()
+    
+    if format_type == "mediapipe":
+        # Existing MediaPipe processing
+        coord_columns = [col for col in df.columns[1:] if col.endswith('_x') or col.endswith('_y')]
+        
+        for col in coord_columns:
+            if col.endswith('_x'):
+                x_col = col
+                y_col = col.replace('_x', '_y')
+                
+                for idx, row in df.iterrows():
+                    if pd.notna(row[x_col]) and pd.notna(row[y_col]):
+                        orig_x, orig_y = convert_coordinates(row[x_col], row[y_col], metadata)
+                        converted_df.at[idx, x_col] = orig_x
+                        converted_df.at[idx, y_col] = orig_y
+                        
+    elif format_type == "yolo":
+        # Process YOLOv12 format (id, x, y, rgb columns)
+        person_ids = [col.split('_')[1] for col in df.columns if col.startswith('ID_')]
+        
+        for pid in person_ids:
+            x_col = f'X_{pid}'
+            y_col = f'Y_{pid}'
+            
+            for idx, row in df.iterrows():
+                if pd.notna(row[x_col]) and pd.notna(row[y_col]):
+                    orig_x, orig_y = convert_coordinates(row[x_col], row[y_col], metadata)
+                    converted_df.at[idx, x_col] = orig_x
+                    converted_df.at[idx, y_col] = orig_y
+                    
+    elif format_type == "vaila":
+        # Process Vailá format (simple x, y columns)
+        x_columns = [col for col in df.columns if col.lower().endswith('x')]
+        
+        for x_col in x_columns:
+            base = x_col[:-1]  # Remove 'x' from the end
+            y_col = base + 'y'
+            
+            if y_col in df.columns:
+                for idx, row in df.iterrows():
+                    if pd.notna(row[x_col]) and pd.notna(row[y_col]):
+                        orig_x, orig_y = convert_coordinates(row[x_col], row[y_col], metadata)
+                        converted_df.at[idx, x_col] = orig_x
+                        converted_df.at[idx, y_col] = orig_y
+    
+    return converted_df
 
-    Returns:
-        bool: True if conversion was successful, False otherwise
+
+def convert_mediapipe_coordinates(pixel_csv_path, metadata_path, output_csv_path, format_type, progress_callback=None):
+    """
+    Convert coordinates from processed video back to original video.
+    
+    Args:
+        pixel_csv_path: Path to input coordinates CSV file
+        metadata_path: Path to video processing metadata JSON file
+        output_csv_path: Path to save the converted coordinates CSV file
+        format_type: str, one of 'mediapipe', 'yolo', or 'vaila'
+        progress_callback: Function to call with progress updates
     """
     try:
         # Load metadata
-        with open(metadata_path, "r") as f:
+        with open(metadata_path, 'r') as f:
             metadata = json.load(f)
-
+            
         if progress_callback:
-            progress_callback(
-                f"Loaded metadata from: {os.path.basename(metadata_path)}"
-            )
-
-        # Load MediaPipe CSV file
+            progress_callback(f"Loaded metadata from: {os.path.basename(metadata_path)}")
+            
+        # Load CSV file
         df = pd.read_csv(pixel_csv_path)
-
+        
         if progress_callback:
-            progress_callback(
-                f"Loaded MediaPipe data: {os.path.basename(pixel_csv_path)}"
-            )
-            progress_callback(f"Found {len(df)} frames with landmarks")
-
-        # Make a copy of the DataFrame for the converted coordinates
-        converted_df = df.copy()
-
-        # Detect coordinate columns (should be pairs of x,y columns)
-        # Skip the first column which is usually 'frame'
-        columns = df.columns[1:]
-        coord_columns = []
-
-        for col in columns:
-            if col.endswith("_x") or col.endswith("_y"):
-                coord_columns.append(col)
-
-        if progress_callback:
-            progress_callback(f"Found {len(coord_columns)} coordinate columns")
-
-        # Convert each coordinate column
-        for col in coord_columns:
-            if col.endswith("_x"):
-                x_col = col
-                y_col = col.replace("_x", "_y")
-
-                # Process each row
-                for idx, row in df.iterrows():
-                    if pd.notna(row[x_col]) and pd.notna(row[y_col]):
-                        # Convert coordinates
-                        orig_x, orig_y = convert_coordinates(
-                            row[x_col], row[y_col], metadata
-                        )
-
-                        # Store in converted DataFrame
-                        converted_df.at[idx, x_col] = orig_x
-                        converted_df.at[idx, y_col] = orig_y
-
+            progress_callback(f"Loaded data file: {os.path.basename(pixel_csv_path)}")
+            progress_callback(f"Found {len(df)} frames")
+            
+        # Convert coordinates based on format
+        converted_df = convert_coordinates_by_format(df, metadata, format_type, progress_callback)
+        
         # Save converted DataFrame
         converted_df.to_csv(output_csv_path, index=False)
-
+        
         if progress_callback:
-            progress_callback(
-                f"Converted coordinates saved to: {os.path.basename(output_csv_path)}"
-            )
-
+            progress_callback(f"Converted coordinates saved to: {os.path.basename(output_csv_path)}")
+            
         return True
-
+        
     except Exception as e:
         error_msg = f"Error converting coordinates: {str(e)}"
         print(error_msg)
@@ -607,10 +628,24 @@ converting MediaPipe coordinates back to the original video dimensions."""
 
     def convert_mediapipe_coordinates_gui(root, status_var):
         """GUI for converting MediaPipe coordinates to original video space"""
-        # Create new window for conversion
         convert_window = tk.Toplevel(root)
-        convert_window.title("Convert MediaPipe Coordinates")
-        convert_window.geometry("800x450")
+        convert_window.title("Convert Coordinates")
+        convert_window.geometry("800x500")  # Made slightly taller for the new options
+
+        # Add format selection
+        format_frame = Frame(convert_window, padx=10, pady=5)
+        format_frame.pack(fill=tk.X)
+        
+        Label(format_frame, text="Select Input Format:").pack(anchor=tk.W)
+        
+        format_var = StringVar(value="mediapipe")  # Default format
+        
+        Radiobutton(format_frame, text="MediaPipe Format (landmarks)", 
+                    variable=format_var, value="mediapipe").pack(anchor=tk.W)
+        Radiobutton(format_frame, text="YOLOv12 Format (id, x, y, rgb)", 
+                    variable=format_var, value="yolo").pack(anchor=tk.W)
+        Radiobutton(format_frame, text="Vailá Format (x, y)", 
+                    variable=format_var, value="vaila").pack(anchor=tk.W)
 
         # Variables for file paths
         metadata_path_var = StringVar(value="No file selected")
@@ -681,6 +716,7 @@ converting MediaPipe coordinates back to the original video dimensions."""
                 metadata_path_var.get(),
                 pixel_csv_path_var.get(),
                 output_path_var.get(),
+                format_var,
                 update_progress,
                 status_var,
             ),
@@ -725,9 +761,7 @@ converting MediaPipe coordinates back to the original video dimensions."""
                     f"Output will be saved to: {os.path.basename(file_path)}"
                 )
 
-        def start_conversion(
-            metadata_path, pixel_csv_path, output_path, progress_callback, status_var
-        ):
+        def start_conversion(metadata_path, pixel_csv_path, output_path, format_var, progress_callback, status_var):
             """Start the coordinate conversion process"""
             if metadata_path == "No file selected":
                 messagebox.showerror("Error", "Please select a metadata JSON file")
@@ -743,17 +777,20 @@ converting MediaPipe coordinates back to the original video dimensions."""
                 messagebox.showerror("Error", "Please specify an output CSV file")
                 return
 
-            # Create a thread to run the conversion
             def conversion_thread():
                 try:
                     progress_callback("Starting coordinate conversion...")
                     status_var.set("Converting coordinates...")
-
-                    # Run the conversion
+                    
+                    # Run the conversion with the selected format
                     result = convert_mediapipe_coordinates(
-                        pixel_csv_path, metadata_path, output_path, progress_callback
+                        pixel_csv_path, 
+                        metadata_path, 
+                        output_path,
+                        format_var.get(),  # Pass the selected format
+                        progress_callback
                     )
-
+                    
                     if result:
                         progress_callback("\nConversion completed successfully!")
                         progress_callback(
@@ -780,7 +817,6 @@ converting MediaPipe coordinates back to the original video dimensions."""
                     progress_callback(error_msg)
                     status_var.set("Error during conversion")
 
-            # Start the thread
             thread = threading.Thread(target=conversion_thread)
             thread.daemon = True
             thread.start()
