@@ -94,6 +94,7 @@ import tempfile
 from datetime import datetime
 import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog
+from rich import print
 
 # Variáveis globais
 success_count = 0
