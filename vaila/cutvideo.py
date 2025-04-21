@@ -4,8 +4,8 @@ Video Cutting Tool - cutvideo.py
 ================================================================================
 Author: Prof. Dr. Paulo R. P. Santiago
 Date: 24 January 2025
-Updated: 31 March 2025
-Version: 0.0.4
+Updated: 19 April 2025
+Version: 0.0.5
 Python Version: 3.12.9
 
 Description:
@@ -45,6 +45,7 @@ import cv2
 import datetime
 from tkinter import Tk, filedialog, messagebox
 from pathlib import Path
+from rich import print
 
 
 def save_cuts_to_txt(video_path, cuts):
@@ -60,7 +61,7 @@ def save_cuts_to_txt(video_path, cuts):
             )
             f.write("-" * 50 + "\n")
             for i, (start, end) in enumerate(cuts, 1):
-                f.write(f"Cut {i}: Frame {start} to {end}\n")
+                f.write(f"Cut {i}: Frame {start + 1} to {end + 1}\n")
 
         return txt_path
     except UnicodeEncodeError:
@@ -77,7 +78,7 @@ def save_cuts_to_txt(video_path, cuts):
             )
             f.write("-" * 50 + "\n")
             for i, (start, end) in enumerate(cuts, 1):
-                f.write(f"Cut {i}: Frame {start} to {end}\n")
+                f.write(f"Cut {i}: Frame {start + 1} to {end + 1}\n")
 
         return txt_path
 
@@ -195,7 +196,7 @@ def play_video_with_cuts(video_path):
         # Draw current cut information
         if current_start is not None:
             cut_text = font.render(
-                f"Current Cut Start: {current_start}", True, (0, 255, 0)
+                f"Current Cut Start: {current_start + 1}", True, (0, 255, 0)
             )
             slider_surface.blit(cut_text, (10, 50))
 
@@ -565,38 +566,34 @@ def play_video_with_cuts(video_path):
                     frame_count = max(frame_count - 60, 0)
                 elif event.key == pygame.K_s and paused:
                     current_start = frame_count
-                    print(
-                        f"Start frame marked: {frame_count}"
-                    )  # Feedback apenas no terminal
+                    print(f"Start frame marked: {frame_count + 1}")
                 elif event.key == pygame.K_e and paused and current_start is not None:
                     if frame_count > current_start:
                         cuts.append((current_start, frame_count))
-                        print(
-                            f"Cut marked: {current_start} to {frame_count}"
-                        )  # Feedback apenas no terminal
+                        print(f"Cut marked: {current_start + 1} to {frame_count + 1}")
                         current_start = None
                     else:
                         print(
                             "Error: End frame must be after start frame!"
-                        )  # Feedback apenas no terminal
+                        )
                 elif event.key == pygame.K_r:  # Reset current cut
                     current_start = None
-                    print("Current cut reset")  # Mudado para terminal
+                    print("Current cut reset")
                 elif event.key == pygame.K_DELETE:  # Delete last cut
                     if cuts:
                         cuts.pop()
-                        print("Last cut removed")  # Mudado para terminal
+                        print("Last cut removed")
                 elif event.key == pygame.K_l:  # List all cuts
                     if cuts:
                         cuts_info = "\n".join(
                             [
-                                f"Cut {i+1}: Frame {start} to {end}"
+                                f"Cut {i+1}: Frame {start + 1} to {end + 1}"
                                 for i, (start, end) in enumerate(cuts)
                             ]
                         )
                         messagebox.showinfo(
                             "Cuts List", cuts_info
-                        )  # Mantém a janela apenas para listar
+                        )
                     else:
                         messagebox.showinfo("Cuts List", "No cuts marked yet")
             elif event.type == pygame.MOUSEBUTTONDOWN:
@@ -628,6 +625,26 @@ def get_video_path():
     return video_path
 
 
+def cleanup_resources():
+    """Ensure all resources are properly released without killing the main process."""
+    # Close OpenCV windows but don't destroy all windows globally
+    try:
+        cap = cv2.VideoCapture(0)  # Dummy capture to reset OpenCV state
+        cap.release()
+    except:
+        pass
+
+    # Close pygame display but don't fully quit pygame
+    if pygame.get_init():
+        pygame.display.quit()
+
+    # Don't create a new Tkinter root window
+    # This was causing problems by creating new instances
+
+    # Don't force garbage collection - this can cause lockups
+    # Let Python handle memory cleanup naturally
+
+
 def run_cutvideo():
     # Print the directory and name of the script being executed
     print(f"Running script: {os.path.basename(__file__)}")
@@ -647,26 +664,6 @@ def run_cutvideo():
         # Clean up resources more gently
         cleanup_resources()
         print("Video cutting process completed")
-
-
-def cleanup_resources():
-    """Ensure all resources are properly released without killing the main process."""
-    # Close OpenCV windows but don't destroy all windows globally
-    try:
-        cap = cv2.VideoCapture(0)  # Dummy capture to reset OpenCV state
-        cap.release()
-    except:
-        pass
-
-    # Close pygame display but don't fully quit pygame
-    if pygame.get_init():
-        pygame.display.quit()
-
-    # Don't create a new Tkinter root window
-    # This was causing problems by creating new instances
-
-    # Don't force garbage collection - this can cause lockups
-    # Let Python handle memory cleanup naturally
 
 
 if __name__ == "__main__":
