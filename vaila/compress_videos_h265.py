@@ -98,6 +98,7 @@ import tempfile
 from datetime import datetime
 import tkinter as tk
 from tkinter import filedialog, messagebox
+from rich import print
 
 # Global variables for success and failure counts
 success_count = 0
