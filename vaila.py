@@ -4,8 +4,8 @@ vaila.py
 ===============================================================================
 Author: Paulo R. P. Santiago
 Date:  7 October 2024
-Update: 17 April 2025
-Version updated: 0.6.3
+Update: 20 April 2025
+Version updated: 0.6.5
 Python Version: 3.12.9
 
 Description:
@@ -168,7 +168,7 @@ except ImportError as e:
 
 
 text = r"""
-vailá - 17.Apr.2025 v0.6.3 (Python 3.12.9)
+vailá - 20.Apr.2025 v0.6.5 (Python 3.12.9)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -247,7 +247,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 17.Apr.2025 v0.6.3 (Python 3.12.9)")
+        self.title("vailá - 20.Apr.2025 v0.6.5 (Python 3.12.9)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -1856,8 +1856,8 @@ class Vaila(tk.Tk):
         sample rate and start and end indices for analysis.
 
         """
-        from vaila import count_frames_in_videos
-        count_frames_in_videos.count_frames_in_videos()
+        from vaila import numberframes
+        numberframes.count_frames_in_videos()
 
     # C_B_r3_c3
     def process_videos_gui(self):
