@@ -4,9 +4,10 @@ numberframes.py
 Description:
 This script allows users to analyze video files within a selected directory and extract metadata such as frame count, frame rate (FPS), resolution, codec, and duration. The script generates a summary of this information, displays it in a user-friendly graphical interface, and saves the metadata to text files. The "basic" file contains essential metadata, while the "full" file includes all possible metadata extracted using `ffprobe`.
 
-Version: 1.2
-Last Updated: August 25, 2024
-Author: Prof. Paulo Santiago
+Version: 0.3
+Created: 25 April 2024
+Last Updated: 19 April 2025
+Author: Prof. Paulo R. P. Santiago
 
 Dependencies:
 - Python 3.x
@@ -148,47 +149,6 @@ def get_video_info(video_path):
         return None
 
 
-def count_frames_in_videos():
-    print(f"Running script: {os.path.basename(__file__)}")
-    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
-    print("Starting video frame counting...")
-
-    root = tk.Tk()
-    root.withdraw()
-
-    directory_path = filedialog.askdirectory(
-        title="Select the directory containing videos"
-    )
-    if not directory_path:
-        messagebox.showerror("Error", "No directory selected.")
-        return
-
-    video_files = sorted(
-        [
-            f
-            for f in os.listdir(directory_path)
-            if f.lower().endswith((".mp4", ".avi", ".mov", ".mkv"))
-        ]
-    )
-    video_infos = []
-    for video_file in video_files:
-        video_path = os.path.join(directory_path, video_file)
-        video_info = get_video_info(video_path)
-        if video_info is not None:
-            video_infos.append(video_info)
-        else:
-            video_infos.append(
-                {"file_name": video_file, "error": "Error retrieving video info"}
-            )
-
-    output_basic_file = save_basic_metadata_to_file(video_infos, directory_path)
-    output_full_file = save_full_metadata_to_file(directory_path, video_files)
-
-    print(f"Basic metadata saved to: {output_basic_file}")
-    print(f"Full metadata saved to: {output_full_file}")
-    display_video_info(video_infos, output_basic_file)
-
-
 def display_video_info(video_infos, output_file):
     def on_closing():
         root.destroy()
@@ -300,6 +260,47 @@ def show_save_success_message(output_file):
         "Save Success", f"Metadata successfully saved!\n\nOutput file: {output_file}"
     )
 
+
+
+def count_frames_in_videos():
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    print("Starting video frame counting...")
+
+    root = tk.Tk()
+    root.withdraw()
+
+    directory_path = filedialog.askdirectory(
+        title="Select the directory containing videos"
+    )
+    if not directory_path:
+        messagebox.showerror("Error", "No directory selected.")
+        return
+
+    video_files = sorted(
+        [
+            f
+            for f in os.listdir(directory_path)
+            if f.lower().endswith((".mp4", ".avi", ".mov", ".mkv"))
+        ]
+    )
+    video_infos = []
+    for video_file in video_files:
+        video_path = os.path.join(directory_path, video_file)
+        video_info = get_video_info(video_path)
+        if video_info is not None:
+            video_infos.append(video_info)
+        else:
+            video_infos.append(
+                {"file_name": video_file, "error": "Error retrieving video info"}
+            )
+
+    output_basic_file = save_basic_metadata_to_file(video_infos, directory_path)
+    output_full_file = save_full_metadata_to_file(directory_path, video_files)
+
+    print(f"Basic metadata saved to: {output_basic_file}")
+    print(f"Full metadata saved to: {output_full_file}")
+    display_video_info(video_infos, output_basic_file)
 
 if __name__ == "__main__":
     count_frames_in_videos()
