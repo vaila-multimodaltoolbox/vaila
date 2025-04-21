@@ -30,7 +30,6 @@ from .readcsv import (
 from .rearrange_data import rearrange_data_in_directory
 from .readc3d_export import convert_c3d_to_csv
 from .modifylabref import modify_lab_coords, get_labcoord_angles
-from .numberframes import count_frames_in_videos
 from .batchcut import batch_cut_videos
 from .drawboxe import run_drawboxe
 from . import cluster_analysis
