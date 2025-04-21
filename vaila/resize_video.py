@@ -6,13 +6,13 @@ Description:
 This script provides tools for improving pose detection in videos:
 1. Batch resize videos to higher resolutions (2x-8x)
 2. Crop specific regions of interest and resize them
-3. Convert MediaPipe pixel coordinates back to original video coordinates
+3. Convert MediaPipe, YOLO, and vailá pixel coordinates back to original video coordinates
 
 Version:
 --------
-0.4.0
+0.4.1
 Create: 27 April 2025
-update: 19 April 2025
+update: 20 April 2025
 
 Author:
 -------
@@ -232,60 +232,148 @@ def convert_coordinates(x, y, metadata):
 
 
 def convert_coordinates_by_format(df, metadata, format_type, progress_callback=None):
-    """
-    Convert coordinates based on the input format type
-    
-    Args:
-        df: pandas DataFrame with the input data
-        metadata: video processing metadata
-        format_type: str, one of 'mediapipe', 'yolo', or 'vaila'
-        progress_callback: function for progress updates
-    """
+    """Convert coordinates based on the input format type"""
+    # Criar uma cópia do DataFrame com colunas float64 para coordenadas
     converted_df = df.copy()
     
-    if format_type == "mediapipe":
-        # Existing MediaPipe processing
-        coord_columns = [col for col in df.columns[1:] if col.endswith('_x') or col.endswith('_y')]
+    # Converter todas as colunas de coordenadas para float64 antes de qualquer processamento
+    coord_suffixes = ['x', 'y', 'X', 'Y', '_x', '_y']
+    for col in converted_df.columns:
+        if any(col.endswith(suffix) for suffix in coord_suffixes):
+            try:
+                converted_df[col] = converted_df[col].astype('float64')
+                if progress_callback:
+                    progress_callback(f"Converted column {col} to float64")
+            except Exception as e:
+                if progress_callback:
+                    progress_callback(f"Warning: Could not convert column {col}: {str(e)}")
+    
+    # Debug the format type explicitly
+    if progress_callback:
+        progress_callback(f"USING FORMAT TYPE: '{format_type}'")
+        progress_callback(f"First few columns found: {df.columns[:5].tolist()}")
         
+        # Check for YOLO format columns
+        yolo_id_cols = [col for col in df.columns if col.startswith('ID_')]
+        if yolo_id_cols:
+            progress_callback(f"Found YOLO ID columns: {yolo_id_cols}")
+            
+        # Check for typical MediaPipe columns  
+        mediapipe_cols = [col for col in df.columns if col.endswith('_x') or col.endswith('_y')]
+        if mediapipe_cols:
+            progress_callback(f"Found MediaPipe-like columns: {mediapipe_cols[:5]}" + 
+                             (f" (showing 5/{len(mediapipe_cols)})" if len(mediapipe_cols) > 5 else ""))
+            
+        # Check for potential vailá columns
+        vaila_cols = [col for col in df.columns if col.lower().endswith('x') or col.lower().endswith('y')]
+        vaila_cols = [col for col in vaila_cols if col not in mediapipe_cols]
+        if vaila_cols:
+            progress_callback(f"Found possible vailá columns: {vaila_cols}")
+    
+    # Process based on the explicitly specified format type
+    if format_type == "mediapipe":
+        if progress_callback:
+            progress_callback("Processing using MediaPipe format...")
+            
+        coord_columns = [col for col in df.columns if col.endswith('_x') or col.endswith('_y')]
+        if progress_callback:
+            progress_callback(f"Found {len(coord_columns)} coordinate columns")
+        
+        processed = 0
         for col in coord_columns:
             if col.endswith('_x'):
                 x_col = col
                 y_col = col.replace('_x', '_y')
                 
-                for idx, row in df.iterrows():
-                    if pd.notna(row[x_col]) and pd.notna(row[y_col]):
-                        orig_x, orig_y = convert_coordinates(row[x_col], row[y_col], metadata)
-                        converted_df.at[idx, x_col] = orig_x
-                        converted_df.at[idx, y_col] = orig_y
-                        
+                if y_col in df.columns:
+                    for idx, row in df.iterrows():
+                        if pd.notna(row[x_col]) and pd.notna(row[y_col]):
+                            orig_x, orig_y = convert_coordinates(row[x_col], row[y_col], metadata)
+                            converted_df.at[idx, x_col] = orig_x
+                            converted_df.at[idx, y_col] = orig_y
+                    processed += 1
+                    
+                    if processed % 10 == 0 and progress_callback:
+                        progress_callback(f"Processed {processed} coordinate pairs")
+        
+        if progress_callback:
+            progress_callback(f"Total coordinate pairs processed: {processed}")
+    
     elif format_type == "yolo":
-        # Process YOLOv12 format (id, x, y, rgb columns)
+        if progress_callback:
+            progress_callback("Processing using YOLOv12 format...")
+            
         person_ids = [col.split('_')[1] for col in df.columns if col.startswith('ID_')]
+        if progress_callback:
+            progress_callback(f"Found {len(person_ids)} person IDs")
         
         for pid in person_ids:
             x_col = f'X_{pid}'
             y_col = f'Y_{pid}'
             
-            for idx, row in df.iterrows():
-                if pd.notna(row[x_col]) and pd.notna(row[y_col]):
-                    orig_x, orig_y = convert_coordinates(row[x_col], row[y_col], metadata)
-                    converted_df.at[idx, x_col] = orig_x
-                    converted_df.at[idx, y_col] = orig_y
-                    
-    elif format_type == "vaila":
-        # Process Vailá format (simple x, y columns)
-        x_columns = [col for col in df.columns if col.lower().endswith('x')]
-        
-        for x_col in x_columns:
-            base = x_col[:-1]  # Remove 'x' from the end
-            y_col = base + 'y'
-            
-            if y_col in df.columns:
+            if x_col in df.columns and y_col in df.columns:
+                if progress_callback:
+                    progress_callback(f"Processing person ID: {pid}")
+                
                 for idx, row in df.iterrows():
-                    if pd.notna(row[x_col]) and pd.notna(row[y_col]):
-                        orig_x, orig_y = convert_coordinates(row[x_col], row[y_col], metadata)
+                    # Only convert non-empty values (NaN or empty string)
+                    x_val = row[x_col]
+                    y_val = row[y_col]
+                    
+                    # Handle different possible types of missing values 
+                    if pd.notna(x_val) and pd.notna(y_val) and x_val != "" and y_val != "":
+                        orig_x, orig_y = convert_coordinates(float(x_val), float(y_val), metadata)
                         converted_df.at[idx, x_col] = orig_x
                         converted_df.at[idx, y_col] = orig_y
+    
+    elif format_type == "vaila":
+        if progress_callback:
+            progress_callback("Processing using vailá format...")
+            
+        # Find all column names that end with 'x' (case insensitive)
+        x_columns = [col for col in df.columns if col.lower().endswith('x')]
+        if progress_callback:
+            progress_callback(f"Found {len(x_columns)} x-coordinate columns")
+        
+        processed = 0
+        for x_col in x_columns:
+            # Get the base name by removing the 'x' at the end
+            base = x_col[:-1]
+            # Try both 'y' and 'Y' as possible suffix
+            possible_y_cols = [base + 'y', base + 'Y']
+            
+            # Find the corresponding y column
+            y_col = None
+            for possible_y in possible_y_cols:
+                if possible_y in df.columns:
+                    y_col = possible_y
+                    break
+            
+            if y_col:
+                if progress_callback:
+                    progress_callback(f"Processing coordinate pair: {x_col} and {y_col}")
+                
+                for idx, row in df.iterrows():
+                    if pd.notna(row[x_col]) and pd.notna(row[y_col]):
+                        try:
+                            orig_x, orig_y = convert_coordinates(float(row[x_col]), float(row[y_col]), metadata)
+                            converted_df.at[idx, x_col] = orig_x
+                            converted_df.at[idx, y_col] = orig_y
+                        except (ValueError, TypeError):
+                            # Skip if conversion to float fails
+                            pass
+                
+                processed += 1
+                if progress_callback:
+                    progress_callback(f"Processed coordinate pair: {x_col}/{y_col}")
+        
+        if progress_callback:
+            progress_callback(f"Total coordinate pairs processed: {processed}")
+    
+    else:
+        if progress_callback:
+            progress_callback(f"Unknown format type: {format_type}, falling back to MediaPipe format")
+        # Fall back to MediaPipe processing
     
     return converted_df
 
@@ -604,16 +692,16 @@ converting MediaPipe coordinates back to the original video dimensions."""
         height=2,
     ).pack(pady=5)
 
-    # Convert MediaPipe coordinates button
+    # Revert MediaPipe, YOLO or vailá coordinates button
     Button(
         buttons_frame,
-        text="Convert MediaPipe Coordinates",
-        command=lambda: convert_mediapipe_coordinates_gui(root, status_var),
+        text="Revert Coordinates to Original Video (MediaPipe, YOLO or vailá)",
+        command=lambda: revert_coordinates_gui(root, status_var),
         bg="#FFC107",
         fg="black",
         font=("Arial", 11),
-        width=30,
-        height=2,
+        width=50,
+        height=3,
     ).pack(pady=5)
 
     def select_input_dir(var):
@@ -626,26 +714,82 @@ converting MediaPipe coordinates back to the original video dimensions."""
         if directory:
             var.set(directory)
 
-    def convert_mediapipe_coordinates_gui(root, status_var):
-        """GUI for converting MediaPipe coordinates to original video space"""
+    def revert_coordinates_gui(root, status_var):
+        """GUI for reverting MediaPipe, YOLO or vailá coordinates to original video space"""
         convert_window = tk.Toplevel(root)
-        convert_window.title("Convert Coordinates")
-        convert_window.geometry("800x500")  # Made slightly taller for the new options
+        convert_window.title("Revert Coordinates")
+        convert_window.geometry("800x800")
 
-        # Add format selection
+        # Add format selection with improved UI
         format_frame = Frame(convert_window, padx=10, pady=5)
         format_frame.pack(fill=tk.X)
-        
-        Label(format_frame, text="Select Input Format:").pack(anchor=tk.W)
-        
-        format_var = StringVar(value="mediapipe")  # Default format
-        
-        Radiobutton(format_frame, text="MediaPipe Format (landmarks)", 
-                    variable=format_var, value="mediapipe").pack(anchor=tk.W)
-        Radiobutton(format_frame, text="YOLOv12 Format (id, x, y, rgb)", 
-                    variable=format_var, value="yolo").pack(anchor=tk.W)
-        Radiobutton(format_frame, text="Vailá Format (x, y)", 
-                    variable=format_var, value="vaila").pack(anchor=tk.W)
+
+        # Create a labeled frame for format selection
+        format_label_frame = tk.LabelFrame(format_frame, text="File Format Selection", padx=10, pady=10)
+        format_label_frame.pack(fill=tk.X, padx=5, pady=5)
+
+        format_description = """
+        Select the format of your coordinate file by clicking one of the buttons below:
+        • MediaPipe Format: for landmarks with _x and _y columns
+        • YOLOv12 Format: for ID_n, X_n, Y_n, RGB_n columns
+        • vailá Format: for simple x, y columns
+        """
+        Label(format_label_frame, text=format_description, justify=tk.LEFT).pack(anchor=tk.W, pady=5)
+
+        # Variável para armazenar o formato escolhido
+        selected_format_type = ["mediapipe"]  # Use lista para que possa ser modificada de dentro das funções
+
+        # Um frame para os botões específicos de formato
+        format_buttons_frame = Frame(format_label_frame, padx=10, pady=5)
+        format_buttons_frame.pack(fill=tk.X)
+
+        # Botões específicos para cada formato
+        Button(
+            format_buttons_frame,
+            text="MediaPipe Format",
+            command=lambda: set_format_and_highlight(0, "mediapipe"),
+            bg="#E3F2FD",
+            width=20,
+        ).pack(side=tk.LEFT, padx=5)
+
+        Button(
+            format_buttons_frame,
+            text="YOLOv12 Format",
+            command=lambda: set_format_and_highlight(1, "yolo"),
+            width=20,
+        ).pack(side=tk.LEFT, padx=5)
+
+        Button(
+            format_buttons_frame,
+            text="vailá Format",
+            command=lambda: set_format_and_highlight(2, "vaila"),
+            width=20,
+        ).pack(side=tk.LEFT, padx=5)
+
+        def set_format_and_highlight(format_num, format_type):
+            """Definir o formato e destacar o botão selecionado"""
+            selected_format_type[0] = format_type
+            update_progress(f"Format selected: {format_type}")
+            
+            # Atualizar os botões
+            for i, btn in enumerate(format_buttons_frame.winfo_children()):
+                if i == format_num:
+                    btn.config(bg="#4CAF50", fg="white")  # Destacar o selecionado
+                else:
+                    btn.config(bg="SystemButtonFace", fg="black")  # Restaurar os outros
+
+        # Progress text
+        progress_frame = Frame(convert_window, padx=10, pady=10)
+        progress_frame.pack(fill=tk.BOTH, expand=True)
+
+        progress_text = tk.Text(progress_frame, height=15, width=70)
+        progress_text.pack(fill=tk.BOTH, expand=True)
+
+        # Function to update progress text
+        def update_progress(message):
+            progress_text.insert(tk.END, message + "\n")
+            progress_text.see(tk.END)
+            convert_window.update()
 
         # Variables for file paths
         metadata_path_var = StringVar(value="No file selected")
@@ -669,8 +813,8 @@ converting MediaPipe coordinates back to the original video dimensions."""
             command=lambda: select_metadata_file(metadata_path_var),
         ).grid(row=0, column=2, padx=5)
 
-        # MediaPipe CSV file selection
-        Label(file_frame, text="2. Select MediaPipe Pixel CSV:").grid(
+        # Input CSV file selection (renamed from MediaPipe-specific label)
+        Label(file_frame, text="2. Select Coordinates CSV File:").grid(
             row=1, column=0, sticky=tk.W
         )
         Label(file_frame, textvariable=pixel_csv_path_var, width=40).grid(
@@ -683,7 +827,7 @@ converting MediaPipe coordinates back to the original video dimensions."""
         ).grid(row=1, column=2, padx=5)
 
         # Output CSV file selection
-        Label(file_frame, text="3. Output Converted CSV:").grid(
+        Label(file_frame, text="3. Output Reverted CSV:").grid(
             row=2, column=0, sticky=tk.W
         )
         Label(file_frame, textvariable=output_path_var, width=40).grid(
@@ -695,36 +839,23 @@ converting MediaPipe coordinates back to the original video dimensions."""
             command=lambda: select_output_csv_file(output_path_var),
         ).grid(row=2, column=2, padx=5)
 
-        # Progress text
-        progress_frame = Frame(convert_window, padx=10, pady=10)
-        progress_frame.pack(fill=tk.BOTH, expand=True)
-
-        progress_text = tk.Text(progress_frame, height=15, width=70)
-        progress_text.pack(fill=tk.BOTH, expand=True)
-
-        # Function to update progress text
-        def update_progress(message):
-            progress_text.insert(tk.END, message + "\n")
-            progress_text.see(tk.END)
-            convert_window.update()
-
-        # Convert button
+        # Revert button
         Button(
             convert_window,
-            text="Convert Coordinates",
-            command=lambda: start_conversion(
+            text="Revert Coordinates",
+            command=lambda: start_conversion_with_explicit_type(
                 metadata_path_var.get(),
                 pixel_csv_path_var.get(),
                 output_path_var.get(),
-                format_var,
                 update_progress,
                 status_var,
+                convert_window,
             ),
             bg="#FF5722",
             fg="white",
             font=("Arial", 11, "bold"),
-            width=15,
-            height=2,
+            width=20,
+            height=3,
         ).pack(pady=10)
 
         def select_metadata_file(var):
@@ -761,33 +892,37 @@ converting MediaPipe coordinates back to the original video dimensions."""
                     f"Output will be saved to: {os.path.basename(file_path)}"
                 )
 
-        def start_conversion(metadata_path, pixel_csv_path, output_path, format_var, progress_callback, status_var):
-            """Start the coordinate conversion process"""
+        def start_conversion_with_explicit_type(metadata_path, pixel_csv_path, output_path, progress_callback, status_var, convert_window):
+            """Start the coordinate conversion process with selected format type"""
             if metadata_path == "No file selected":
                 messagebox.showerror("Error", "Please select a metadata JSON file")
                 return
 
             if pixel_csv_path == "No file selected":
                 messagebox.showerror(
-                    "Error", "Please select a MediaPipe pixel CSV file"
+                    "Error", "Please select a coordinates CSV file"
                 )
                 return
 
             if output_path == "No file selected":
                 messagebox.showerror("Error", "Please specify an output CSV file")
                 return
-
+            
+            format_type = selected_format_type[0]
+            progress_callback(f"Using format: {format_type}")
+            
             def conversion_thread():
                 try:
-                    progress_callback("Starting coordinate conversion...")
-                    status_var.set("Converting coordinates...")
+                    progress_callback("=" * 50)
+                    progress_callback(f"Starting coordinate conversion with format: {format_type}")
+                    status_var.set(f"Converting coordinates using {format_type} format...")
                     
-                    # Run the conversion with the selected format
+                    # Run the conversion with the selected format type
                     result = convert_mediapipe_coordinates(
                         pixel_csv_path, 
                         metadata_path, 
                         output_path,
-                        format_var.get(),  # Pass the selected format
+                        format_type,
                         progress_callback
                     )
                     
@@ -803,7 +938,7 @@ converting MediaPipe coordinates back to the original video dimensions."""
                             0,
                             lambda: messagebox.showinfo(
                                 "Success",
-                                f"Coordinates successfully converted and saved to:\n{output_path}",
+                                f"Coordinates successfully converted with {format_type} format and saved to:\n{output_path}",
                             ),
                         )
                     else:
@@ -817,6 +952,7 @@ converting MediaPipe coordinates back to the original video dimensions."""
                     progress_callback(error_msg)
                     status_var.set("Error during conversion")
 
+            # Start the conversion in a separate thread
             thread = threading.Thread(target=conversion_thread)
             thread.daemon = True
             thread.start()
