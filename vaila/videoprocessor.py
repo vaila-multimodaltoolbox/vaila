@@ -46,6 +46,7 @@ Installation of FFmpeg (for video processing):
 import os
 import time
 import subprocess
+import json
 from tkinter import filedialog, messagebox, simpledialog
 import tqdm
 
@@ -551,7 +552,7 @@ def process_videos_split(
                 f"{os.path.splitext(os.path.basename(video_path))[0]}_2half.mp4",
             )
 
-            # Obter informações detalhadas do vídeo
+            # Obter informações detalhadas do vídeo - FIXED: using a more reliable approach
             ffprobe_info_command = [
                 "ffprobe",
                 "-v",
@@ -559,37 +560,42 @@ def process_videos_split(
                 "-select_streams",
                 "v:0",
                 "-show_entries",
-                "stream=r_frame_rate,width,height",
+                "stream=width,height,r_frame_rate",
                 "-show_entries",
                 "format=duration",
                 "-of",
-                "csv=p=0",
+                "json",
                 video_path,
             ]
 
             try:
-                video_info = (
-                    subprocess.run(
-                        ffprobe_info_command,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE,
-                        text=True,
-                    )
-                    .stdout.strip()
-                    .split(",")
+                video_info_result = subprocess.run(
+                    ffprobe_info_command,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
                 )
-
-                frame_rate = eval(video_info[0])  # Convert "30000/1001" to float
-                width = int(video_info[1])
-                height = int(video_info[2])
-                duration = float(video_info[3])
+                video_info = json.loads(video_info_result.stdout)
+                
+                # Extract values from the JSON structure
+                width = int(video_info["streams"][0]["width"])
+                height = int(video_info["streams"][0]["height"])
+                frame_rate_str = video_info["streams"][0]["r_frame_rate"]
+                duration = float(video_info["format"]["duration"])
+                
+                # Convert frame rate from string format (e.g. "30000/1001")
+                if "/" in frame_rate_str:
+                    num, den = map(int, frame_rate_str.split("/"))
+                    frame_rate = num / den
+                else:
+                    frame_rate = float(frame_rate_str)
 
                 # Calcular informações do vídeo resultante
                 half_duration = duration / 2
                 second_half_duration = duration - half_duration
 
                 print(
-                    f"Video info: {width}x{height}, {frame_rate} fps, {duration:.2f}s, {total_frames} frames"
+                    f"Video info: {width}x{height}, {frame_rate:.2f} fps, {duration:.2f}s, {total_frames} frames"
                 )
 
             except Exception as e:
@@ -600,17 +606,48 @@ def process_videos_split(
                 half_duration = 0
                 second_half_duration = 0
 
-            # Command to extract the second half of the video by frames
+            # Detect hardware encoder - FIXED: using the same hardware detection as in merge
+            encoder_info = detect_hardware_encoder()
+            encoder = encoder_info["encoder"]
+            quality_param = encoder_info["quality_param"]
+            quality_values = encoder_info["quality_values"]
+            
+            # Use medium quality
+            quality = "medium"
+            preset_value = quality_values[quality]
+            
+            # Convert numerical presets for libx264
+            if encoder == "libx264":
+                preset_map = {
+                    "p1": "ultrafast",
+                    "p2": "veryfast",
+                    "p3": "faster",
+                    "p4": "fast",
+                    "p5": "medium",
+                    "p6": "slow",
+                    "p7": "slower",
+                    "p8": "veryslow",
+                    "p9": "placebo",
+                }
+                preset_value = preset_map.get(preset_value, "medium")
+            
+            print(f"Using encoder: {encoder} with {quality_param}={preset_value}")
+
+            # Command to extract the second half of the video by frames - FIXED: better encoding settings
             ffmpeg_command = [
                 "ffmpeg",
                 "-i",
                 video_path,
                 "-vf",
-                f"select='gte(n,{half_frame})'",  # Select frames starting from the half
+                f"select='gte(n,{half_frame})',setpts=N/FR/TB",  # Fixed: use setpts to correct timestamps
                 "-vsync",
-                "vfr",
+                "0",  # Changed from vfr to 0 for better compatibility
                 "-c:v",
-                "libx264",
+                encoder,
+                f"-{quality_param}",
+                preset_value,
+                "-pix_fmt",
+                "yuv420p",  # Standard pixel format for maximum compatibility
                 "-threads",
                 "4",
                 output_video,
@@ -634,7 +671,7 @@ def process_videos_split(
                 log_file.write(f"ORIGINAL VIDEO DETAILS\n")
                 log_file.write(f"---------------------\n")
                 log_file.write(f"Resolution: {width} x {height}\n")
-                log_file.write(f"Frame Rate: {frame_rate} fps\n")
+                log_file.write(f"Frame Rate: {frame_rate if isinstance(frame_rate, str) else frame_rate:.2f} fps\n")
                 log_file.write(f"Duration: {duration:.2f} seconds\n")
                 log_file.write(f"Total Frames: {total_frames}\n\n")
 
@@ -654,7 +691,9 @@ def process_videos_split(
                 log_file.write(f"-------------------\n")
                 log_file.write(f"Total Frames: {total_frames - half_frame}\n")
                 log_file.write(f"Total Duration: {second_half_duration:.2f} seconds\n")
-                log_file.write(f"Encoder: libx264\n")
+                log_file.write(f"Encoder: {encoder}\n")
+                log_file.write(f"Encoding Parameters: {quality_param}={preset_value}\n")
+                log_file.write(f"Pixel Format: yuv420p\n")
 
                 # Adicionar tamanho do arquivo
                 output_size_mb = os.path.getsize(output_video) / (1024 * 1024)
