@@ -475,7 +475,8 @@ def process_video(video_path, output_dir, pose_config):
         if frame_idx % 30 == 0:
             progress = (frame_idx / total_frames) * 100
             print(
-                f"\rGenerating video {frame_idx}/{total_frames} ({progress:.1f}%)", end=""
+                f"\rGenerating video {frame_idx}/{total_frames} ({progress:.1f}%)",
+                end="",
             )
 
         # Get processed landmarks for this frame
@@ -577,9 +578,10 @@ def process_videos_in_directory():
         output_dir = output_base / video_file.stem
         output_dir.mkdir(parents=True, exist_ok=True)
         process_video(video_file, output_dir, pose_config)
-        
+
         # Release memory
         import gc
+
         gc.collect()
         # Small pause to allow complete memory release
         time.sleep(1)

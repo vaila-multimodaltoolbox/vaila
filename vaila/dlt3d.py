@@ -228,9 +228,9 @@ def main():
         # Create a template with header for 25 points with _x, _y, _z (default value 0.0)
         template_data = {"frame": [0]}
         for i in range(1, num_points + 1):
-            template_data[f"p{i}_x"] = [0.0]
-            template_data[f"p{i}_y"] = [0.0]
-            template_data[f"p{i}_z"] = [0.0]
+            template_data[f"p{i}_x"] = [0]
+            template_data[f"p{i}_y"] = [0]
+            template_data[f"p{i}_z"] = [0]
         template_df = pd.DataFrame(template_data)
         template_df.to_csv(real_file, index=False)
         messagebox.showinfo("Success", f"REF3D template created: {real_file}")

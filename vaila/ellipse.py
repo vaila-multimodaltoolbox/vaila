@@ -87,7 +87,7 @@ from matplotlib.colors import LinearSegmentedColormap
 import numpy as np
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
-from matplotlib.colors import LinearSegmentedColormap
+from matplotlib.colors import LinearSegmentedColormap, Normalize
 
 
 def plot_ellipse_pca(data, confidence=0.95):
@@ -215,7 +215,7 @@ def plot_cop_pathway_with_ellipse(
     plt.gca().set_aspect("equal", adjustable="box")
 
     # Add colorbar for time progression
-    sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=0, vmax=len(cop_x)))
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=Normalize(vmin=0, vmax=len(cop_x)))
     sm.set_array([])
     cbar = plt.colorbar(
         sm, ax=plt.gca(), orientation="vertical", fraction=0.046, pad=0.04

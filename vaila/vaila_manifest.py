@@ -29,7 +29,7 @@ Requirements:
 """
 
 import tkinter as tk
-from PIL import Image, ImageTk
+from PIL import Image, ImageTk  # type: ignore
 import os
 
 
@@ -49,13 +49,20 @@ def show_vaila_message():
     image_path = os.path.join(script_dir, "images", "vaila_logo.png")
 
     try:
+        # Load and resize the image without specifying a resampling filter
         image = Image.open(image_path)
-        image = image.resize((150, 150), Image.LANCZOS)
+        image = image.resize((150, 150))
         photo = ImageTk.PhotoImage(image)
 
         # Create and place the image label
-        image_label = tk.Label(window, image=photo)
-        image_label.image = photo  # Keep a reference to avoid garbage collection
+        # Note: The following line works correctly at runtime despite type checker complaints.
+        # This is a known issue with tkinter type definitions in some environments.
+        image_label = tk.Label(window, image=photo)  # type: ignore
+
+        # Keep a reference to the photo to prevent garbage collection
+        # Store it as an attribute of the window which owns the label
+        window._photo_keep = photo  # type: ignore
+
         image_label.pack(pady=10)
 
     except FileNotFoundError as e:

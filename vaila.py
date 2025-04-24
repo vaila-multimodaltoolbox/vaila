@@ -4,8 +4,8 @@ vaila.py
 ===============================================================================
 Author: Paulo R. P. Santiago
 Date:  7 October 2024
-Update: 20 April 2025
-Version updated: 0.6.5
+Update: 24 April 2025
+Version updated: 0.6.7
 Python Version: 3.12.9
 
 Description:
@@ -102,73 +102,35 @@ Visit the project repository: https://github.com/vaila-multimodaltoolbox
 ===============================================================================
 """
 
+# Standard library imports
 import os
 import signal
 import platform
 import subprocess
-from rich import print
+import sys
+import webbrowser
+from typing import Optional
+
+# Third-party imports
 import tkinter as tk
 from tkinter import messagebox, filedialog, ttk, Toplevel, Label, Button, simpledialog
 from PIL import Image, ImageTk
-import webbrowser
-import sys
 
-# Conditionally import AppKit only for macOS
-if platform.system() == "Darwin":
+# Conditionally import platform-specific functionality
+# Define a global variable to track if AppKit is available
+# This is used to set the application name in the dock for macOS
+APPKIT_AVAILABLE = False
+if platform.system() == "Darwin":  # macOS
     try:
-        from AppKit import NSBundle
-
-        NSBundle.mainBundle().infoDictionary()["CFBundleName"] = "Vaila"
+        import AppKit  # macOS only ignore this line in other OS
+        APPKIT_AVAILABLE = True
     except ImportError:
         # Silently continue if AppKit is not available
+        print("AppKit not available. Application name in dock might not be set correctly.")
         pass
 
-# Conditionally import tracking-related modules
-try:
-    from vaila import (
-        cluster_analysis,
-        imu_analysis,
-        mocap_analysis,
-        forceplate_analysis,
-        convert_c3d_to_csv,
-        convert_csv_to_c3d,
-        rearrange_data_in_directory,
-        run_drawboxe,
-        count_frames_in_videos,
-        import_file,
-        export_file,
-        copy_file,
-        move_file,
-        remove_file,
-        rename_files,
-        tree_file,
-        find_file,
-        transfer_file,
-        show_c3d,
-        sync_videos,
-        VideoProcessor,
-        compress_videos_h264_gui,
-        compress_videos_h265_gui,
-        show_csv,
-        show_vaila_message,
-        emg_labiocom,
-        plot_2d,
-        plot_3d,
-        process_videos_gui,
-        animal_open_field,
-        cube2d_kinematics,
-        viewc3d,
-    )
-
-    TRACKING_AVAILABLE = True
-    from vaila import yolov12track
-except ImportError as e:
-    print(f"Warning: Some tracking features will not be available: {e}")
-    TRACKING_AVAILABLE = False
-
-
 text = r"""
-vailá - 20.Apr.2025 v0.6.5 (Python 3.12.9)
+vailá - 24.Apr.2025 v0.6.7 (Python 3.12.9)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -247,7 +209,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 20.Apr.2025 v0.6.5 (Python 3.12.9)")
+        self.title("vailá - 24.Apr.2025 v0.6.7 (Python 3.12.9)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -264,19 +226,18 @@ class Vaila(tk.Tk):
             self.iconbitmap(icon_path_ico)  # Set .ico file for Windows
         else:
             # Set .png icon for macOS and Linux
-            img = Image.open(icon_path_png)
-            img = ImageTk.PhotoImage(img)
-            self.iconphoto(True, img)
+            try:
+                icon = tk.PhotoImage(file=icon_path_png)
+                self.iconphoto(True, icon)
+            except Exception as e:
+                print(f"Could not set icon: {e}")
 
         # For macOS, set the application name in the dock if AppKit is available
-        if platform.system() == "Darwin":  # macOS
+        if platform.system() == "Darwin" and APPKIT_AVAILABLE:  # macOS with AppKit
             try:
-                from AppKit import NSBundle
-
-                NSBundle.mainBundle().infoDictionary()["CFBundleName"] = "Vaila"
-            except ImportError:
-                # Silently continue if AppKit is not available
-                pass
+                AppKit.NSBundle.mainBundle().infoDictionary()["CFBundleName"] = "vailá"
+            except Exception as e:
+                print(f"Could not set application name: {e}")
 
         # Call method to create the widgets
         self.create_widgets()
@@ -318,11 +279,18 @@ class Vaila(tk.Tk):
             os.path.dirname(__file__), "vaila", "images", "vaila_logo.png"
         )
         preto_image = Image.open(image_path_preto)
-        preto_image = preto_image.resize((87, 87), Image.LANCZOS)
+
+        # Resize the image in the most compatible way
+        preto_image = preto_image.resize((87, 87))  # Use default filter
+
+        # Create and keep a reference to the PhotoImage
         preto_photo = ImageTk.PhotoImage(preto_image)
 
-        preto_label = tk.Label(header_frame, image=preto_photo)
-        preto_label.image = preto_photo
+        # Create the label with the image
+        preto_label = tk.Label(header_frame, image=preto_photo)  # type: ignore
+        self._preto_photo = (
+            preto_photo  # Store as instance attribute to prevent garbage collection
+        )
         preto_label.pack(side="left", padx=10)
 
         header_label = tk.Label(
@@ -620,7 +588,10 @@ class Vaila(tk.Tk):
 
         # B2_r2_c2 - EMG
         emg_analysis_btn = tk.Button(
-            row2_frame, text="EMG", width=button_width, command=self.emg_analysis,
+            row2_frame,
+            text="EMG",
+            width=button_width,
+            command=self.emg_analysis,
         )
 
         # B2_r2_c3 - Force Plate
@@ -1219,6 +1190,7 @@ class Vaila(tk.Tk):
 
         """
         from vaila.vaila_manifest import show_vaila_message
+
         show_vaila_message()
 
     # A First FRAME Block
@@ -1231,6 +1203,7 @@ class Vaila(tk.Tk):
 
         """
         from vaila.filemanager import rename_files
+
         rename_files()
 
     # A_r1_c2
@@ -1242,6 +1215,7 @@ class Vaila(tk.Tk):
 
         """
         from vaila.filemanager import import_file
+
         import_file()
 
     # A_r1_c3
@@ -1254,6 +1228,7 @@ class Vaila(tk.Tk):
 
         """
         from vaila.filemanager import export_file
+
         export_file()
 
     # A_r1_c4
@@ -1266,6 +1241,7 @@ class Vaila(tk.Tk):
 
         """
         from vaila.filemanager import copy_file
+
         copy_file()
 
     # A_r1_c5
@@ -1278,6 +1254,7 @@ class Vaila(tk.Tk):
 
         """
         from vaila.filemanager import move_file
+
         move_file()
 
     # A_r1_c6
@@ -1289,6 +1266,7 @@ class Vaila(tk.Tk):
 
         """
         from vaila.filemanager import remove_file
+
         remove_file()
 
     # A_r1_c7
@@ -1300,6 +1278,7 @@ class Vaila(tk.Tk):
 
         """
         from vaila.filemanager import tree_file
+
         tree_file()
 
     # A_r1_c8
@@ -1311,6 +1290,7 @@ class Vaila(tk.Tk):
 
         """
         from vaila.filemanager import find_file
+
         find_file()
 
     # A_r1_c9
@@ -1327,6 +1307,7 @@ class Vaila(tk.Tk):
 
         """
         from vaila.filemanager import transfer_file
+
         transfer_file()
 
     # B Second FRAME Block
@@ -1338,6 +1319,7 @@ class Vaila(tk.Tk):
 
         """
         from vaila import imu_analysis
+
         imu_analysis.analyze_imu_data()
 
     # B_r1_c2
@@ -1348,6 +1330,7 @@ class Vaila(tk.Tk):
 
         """
         from vaila import cluster_analysis
+
         cluster_analysis.analyze_cluster_data()
 
     # B_r1_c3
@@ -1358,6 +1341,7 @@ class Vaila(tk.Tk):
 
         """
         from vaila import mocap_analysis
+
         mocap_analysis.analyze_mocap_fullbody_data()
 
     # B_r1_c4
@@ -1387,7 +1371,9 @@ class Vaila(tk.Tk):
         if choice == "1":
             from vaila.markerless_2D_analysis import process_videos_in_directory
         else:
-            from vaila.markerless2d_analysis_v2 import process_videos_in_directory  # Fixed module name
+            from vaila.markerless2d_analysis_v2 import (
+                process_videos_in_directory,
+            )  # Fixed module name
 
         process_videos_in_directory()
 
@@ -1447,6 +1433,7 @@ class Vaila(tk.Tk):
 
         """
         from vaila import emg_labiocom
+
         emg_labiocom.run_emg_gui()
 
     # B_r2_c3
@@ -1457,6 +1444,7 @@ class Vaila(tk.Tk):
 
         """
         from vaila import forceplate_analysis
+
         forceplate_analysis.run_force_analysis()
 
     # B_r2_c4
@@ -1483,6 +1471,8 @@ class Vaila(tk.Tk):
         files and input the sampling rate and start and end indices for analysis.
 
         """
+        from vaila.vaila_manifest import show_vaila_message
+
         show_vaila_message()
         # eeg_analysis.run_eeg_analysis()
 
@@ -1500,6 +1490,8 @@ class Vaila(tk.Tk):
         files and input the sampling rate and start and end indices for analysis.
 
         """
+        from vaila.vaila_manifest import show_vaila_message
+
         show_vaila_message()
         # hr_analysis.run_hr_analysis()
 
@@ -1513,6 +1505,7 @@ class Vaila(tk.Tk):
 
         """
         from vaila import cube2d_kinematics
+
         cube2d_kinematics.run_cube2d_kinematics()
 
     # B_r3_c3
@@ -1550,6 +1543,7 @@ class Vaila(tk.Tk):
 
         """
         from vaila import animal_open_field
+
         animal_open_field.run_animal_open_field()
 
     # B_r4_c1
@@ -1560,8 +1554,8 @@ class Vaila(tk.Tk):
         print(f"B_r4_c1 - def tracker on code line number 1556")
         print("Running tracker analysis...")
         from vaila import yolov12track
-        yolov12track.run_yolov12track()
 
+        yolov12track.run_yolov12track()
 
     # B_r4_c2 - ML Walkway
     def ml_walkway(self):
@@ -1603,11 +1597,12 @@ class Vaila(tk.Tk):
 
         """
         from vaila import rearrange_data
+
         rearrange_data.rearrange_data_in_directory()  # Edit CSV
 
     # C_A_r1_c2
     def convert_c3d_csv(self):
-        # Cria uma nova janela para a escolha da ação
+        # Create a new window for the action choice
         """Runs the Convert C3D/CSV module.
 
         This function runs the Convert C3D/CSV module, which can be used to convert
@@ -1618,13 +1613,17 @@ class Vaila(tk.Tk):
         The user will be prompted to select the directory containing the C3D files.
 
         """
+        print(f"C_A_r1_c2 - def convert_c3d_csv on code line number 1589")
+        from vaila import convert_c3d_to_csv
+        from vaila import convert_csv_to_c3d
+
         window = Toplevel()
         window.title("Choose Action")
-        # Mensagem para o usuário
+        # Message to the user
         label = Label(window, text="Which conversion would you like to perform?")
         label.pack(pady=10)
 
-        # Botão para C3D -> CSV
+        # Button for C3D -> CSV
         button_c3d_to_csv = Button(
             window,
             text="C3D -> CSV",
@@ -1632,7 +1631,7 @@ class Vaila(tk.Tk):
         )
         button_c3d_to_csv.pack(side="left", padx=20, pady=20)
 
-        # Botão para CSV -> C3D
+        # Button for CSV -> C3D
         button_csv_to_c3d = Button(
             window,
             text="CSV -> C3D",
@@ -1668,6 +1667,7 @@ class Vaila(tk.Tk):
 
         """
         from vaila import dlt2d
+
         dlt2d.run_dlt2d()
 
     # C_A_r2_c2
@@ -1697,6 +1697,7 @@ class Vaila(tk.Tk):
 
         """
         from vaila import rec2d
+
         rec2d.run_rec2d()
 
     # C_A_r3_c1
@@ -1766,6 +1767,7 @@ class Vaila(tk.Tk):
 
         """
         from vaila.extractpng import VideoProcessor
+
         processor = VideoProcessor()
         processor.run()
 
@@ -1780,6 +1782,7 @@ class Vaila(tk.Tk):
 
         """
         from vaila import cutvideo
+
         cutvideo.run_cutvideo()
 
     # C_B_r1_c3
@@ -1793,6 +1796,7 @@ class Vaila(tk.Tk):
 
         """
         from vaila import drawboxe
+
         drawboxe.run_drawboxe()
 
     # C_B_r2_c1
@@ -1805,6 +1809,7 @@ class Vaila(tk.Tk):
 
         """
         from vaila import compress_videos_h264
+
         compress_videos_h264.compress_videos_h264_gui()
 
     # C_B_r2_c2
@@ -1817,6 +1822,7 @@ class Vaila(tk.Tk):
 
         """
         from vaila import compress_videos_h265
+
         compress_videos_h265.compress_videos_h265_gui()
 
     # C_B_r2_c3
@@ -1831,6 +1837,7 @@ class Vaila(tk.Tk):
 
         """
         from vaila import syncvid
+
         syncvid.sync_videos()
 
     # C_B_r3_c1
@@ -1844,6 +1851,7 @@ class Vaila(tk.Tk):
 
         """
         from vaila import getpixelvideo
+
         getpixelvideo.run_getpixelvideo()
 
     # C_B_r3_c2
@@ -1857,6 +1865,7 @@ class Vaila(tk.Tk):
 
         """
         from vaila import numberframes
+
         numberframes.count_frames_in_videos()
 
     # C_B_r3_c3
@@ -1869,6 +1878,7 @@ class Vaila(tk.Tk):
 
         """
         from vaila import videoprocessor
+
         videoprocessor.process_videos_gui()
 
     # C_B_r4_c1
@@ -1878,6 +1888,7 @@ class Vaila(tk.Tk):
         This method provides options to correct lens distortion in either videos or CSV/DAT coordinate files,
         or via an interactive GUI. All use the same camera calibration parameters.
         """
+        print(f"C_B_r4_c1 - def run_distortvideo on code line number 1846")
         # bring in everything we need
         from tkinter import Toplevel, Label, Button
         from vaila import (
@@ -1942,6 +1953,7 @@ class Vaila(tk.Tk):
 
         """
         from vaila import cutvideo
+
         cutvideo.run_cutvideo()
 
     def resize_video(self):
@@ -2003,6 +2015,7 @@ class Vaila(tk.Tk):
 
         """
         from vaila.showc3d import show_c3d
+
         show_c3d()
 
     # C_C_r1_c2
@@ -2015,6 +2028,7 @@ class Vaila(tk.Tk):
 
         """
         from vaila.readcsv import show_csv
+
         show_csv()
 
     # C_C_r1_c3
@@ -2027,6 +2041,7 @@ class Vaila(tk.Tk):
 
         """
         from vaila import vailaplot2d
+
         vailaplot2d.run_plot_2d()
 
     # C_C_r2_c2
@@ -2039,6 +2054,7 @@ class Vaila(tk.Tk):
 
         """
         from vaila import vailaplot3d
+
         vailaplot3d.run_plot_3d()
 
     # C_C_r3_c1
@@ -2158,6 +2174,7 @@ class Vaila(tk.Tk):
 
         """
         from vaila.vailaplot2d import run_plot_2d
+
         run_plot_2d()
 
     def plot_3d(self):
@@ -2168,6 +2185,7 @@ class Vaila(tk.Tk):
 
         """
         from vaila.vailaplot3d import run_plot_3d
+
         run_plot_3d()
 
 
