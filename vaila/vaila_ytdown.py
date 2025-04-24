@@ -329,19 +329,21 @@ class YTDownloader:
         console.print(f"[blue]Downloading audio only (MP3) for: {url}[/blue]")
 
         def progress_hook(d):
-             if d['status'] == 'downloading':
-                 if self.progress_callback:
-                     self.progress_callback(d)
-                 p = d.get('_percent_str', '0%')
-                 size = d.get('_total_bytes_str', 'Unknown')
-                 speed = d.get('_speed_str', 'Unknown speed')
-                 eta = d.get('_eta_str', 'Unknown')
-                 status_msg = f"\rDownloading Audio: {p} of {size} at {speed}, ETA: {eta}"
-                 console.print(status_msg, end="")
-             elif d['status'] == 'finished':
-                 console.print("\nAudio download complete. Converting to MP3...")
-                 if self.status_callback:
-                     self.status_callback("Converting audio to MP3...")
+            if d["status"] == "downloading":
+                if self.progress_callback:
+                    self.progress_callback(d)
+                p = d.get("_percent_str", "0%")
+                size = d.get("_total_bytes_str", "Unknown")
+                speed = d.get("_speed_str", "Unknown speed")
+                eta = d.get("_eta_str", "Unknown")
+                status_msg = (
+                    f"\rDownloading Audio: {p} of {size} at {speed}, ETA: {eta}"
+                )
+                console.print(status_msg, end="")
+            elif d["status"] == "finished":
+                console.print("\nAudio download complete. Converting to MP3...")
+                if self.status_callback:
+                    self.status_callback("Converting audio to MP3...")
 
         outtmpl = os.path.join(
             save_dir,
@@ -349,39 +351,47 @@ class YTDownloader:
         )
 
         ydl_opts = {
-            'format': 'bestaudio/best',
-            'outtmpl': outtmpl,
-            'progress_hooks': [progress_hook],
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192', # Pode ajustar a qualidade (ex: '320')
-            }],
-            'writethumbnail': False,
-            'writeinfojson': False, # Pode querer manter True para ter info
-            'no_check_certificate': True,
+            "format": "bestaudio/best",
+            "outtmpl": outtmpl,
+            "progress_hooks": [progress_hook],
+            "postprocessors": [
+                {
+                    "key": "FFmpegExtractAudio",
+                    "preferredcodec": "mp3",
+                    "preferredquality": "192",  # Pode ajustar a qualidade (ex: '320')
+                }
+            ],
+            "writethumbnail": False,
+            "writeinfojson": False,  # Pode querer manter True para ter info
+            "no_check_certificate": True,
         }
 
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=True)
                 self.current_video_title = info.get("title", "Unknown")
-                
+
                 # yt-dlp geralmente ajusta a extensão no post-processing
                 # mas podemos tentar obter o nome final se necessário
                 actual_filename = ydl.prepare_filename(info)
                 # Corrige a extensão para .mp3 se o prepare_filename não o fez
                 base, _ = os.path.splitext(actual_filename)
                 actual_filename_mp3 = base + ".mp3"
-                
+
                 # Renomeia se o arquivo final não for .mp3 (caso raro)
-                if os.path.exists(actual_filename) and not os.path.exists(actual_filename_mp3):
-                     try:
-                         os.rename(actual_filename, actual_filename_mp3)
-                         actual_filename = actual_filename_mp3
-                     except OSError as e:
-                         console.print(f"[yellow]Warning: Could not rename output file to .mp3: {e}[/yellow]")
-                         actual_filename = actual_filename # Mantém o nome original se falhar
+                if os.path.exists(actual_filename) and not os.path.exists(
+                    actual_filename_mp3
+                ):
+                    try:
+                        os.rename(actual_filename, actual_filename_mp3)
+                        actual_filename = actual_filename_mp3
+                    except OSError as e:
+                        console.print(
+                            f"[yellow]Warning: Could not rename output file to .mp3: {e}[/yellow]"
+                        )
+                        actual_filename = (
+                            actual_filename  # Mantém o nome original se falhar
+                        )
 
                 console.print(
                     f"\n[green]Audio download successful:[/green] {self.current_video_title}"
@@ -518,17 +528,23 @@ class YTDownloader:
             f.write(
                 f"Batch download started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
             )
-            f.write(f"Download type: {'Audio (MP3)' if audio_only else 'Video (Highest FPS)'}\n")
+            f.write(
+                f"Download type: {'Audio (MP3)' if audio_only else 'Video (Highest FPS)'}\n"
+            )
             f.write(f"Total URLs: {len(urls)}\n\n")
             f.write("Results:\n")
             f.write("-" * 60 + "\n")
 
         content_type = "audio tracks" if audio_only else "videos"
-        console.print(f"[bold]Starting batch download of {len(urls)} {content_type}[/bold]")
+        console.print(
+            f"[bold]Starting batch download of {len(urls)} {content_type}[/bold]"
+        )
         console.print(f"[bold]Output directory:[/bold] {batch_dir}")
-        
+
         if not audio_only:
-            console.print(f"[bold]Priority:[/bold] Highest FPS available for each video")
+            console.print(
+                f"[bold]Priority:[/bold] Highest FPS available for each video"
+            )
 
         success_count = 0
         fail_count = 0
@@ -560,7 +576,9 @@ class YTDownloader:
             except Exception as e:
                 error_msg = str(e)
                 content_type = "audio" if audio_only else "video"
-                console.print(f"[red]Error downloading {content_type} {i}: {error_msg}[/red]")
+                console.print(
+                    f"[red]Error downloading {content_type} {i}: {error_msg}[/red]"
+                )
 
                 # Log error
                 with open(log_file, "a", encoding="utf-8") as f:
@@ -584,7 +602,7 @@ class YTDownloader:
         messagebox.showinfo(
             "Batch Download Complete",
             f"All videos have been downloaded to:\n{batch_dir}",
-            parent=self.root
+            parent=self.root,
         )
 
         return batch_dir
@@ -738,7 +756,9 @@ if TKINTER_AVAILABLE:
                     timestamp = datetime.now().strftime("%H:%M:%S")
                     self.log_text.insert(tk.END, f"[{timestamp}] {message}\n")
                     self.log_text.see(tk.END)  # Scroll to the end
-                print(f"[LOG] {message}")  # Sempre imprimir no console, independente do widget
+                print(
+                    f"[LOG] {message}"
+                )  # Sempre imprimir no console, independente do widget
             except Exception as e:
                 print(f"[LOG ERROR] Couldn't log to UI: {str(e)}")
                 print(f"[LOG] {message}")  # Garantir que a mensagem é impressa
@@ -757,13 +777,13 @@ if TKINTER_AVAILABLE:
                 self.root.focus_force()
                 # Breve pausa para garantir que a janela principal esteja visível
                 self.root.update()
-                
+
                 directory = filedialog.askdirectory(
                     initialdir=os.path.expanduser("~"),
                     title="Select folder to save videos",
-                    parent=self.root  # Explicitamente definir a janela pai
+                    parent=self.root,  # Explicitamente definir a janela pai
                 )
-                
+
                 if directory:
                     # Atualiza a variável e força a atualização da interface
                     self.output_dir_var.set(directory)
@@ -789,14 +809,14 @@ if TKINTER_AVAILABLE:
                 self.root.focus_force()
                 # Breve pausa para garantir que a janela principal esteja visível
                 self.root.update()
-                
+
                 file_path = filedialog.askopenfilename(
                     initialdir=os.path.expanduser("~"),
                     title="Select file with YouTube URLs",
                     filetypes=(("Text files", "*.txt"), ("All files", "*.*")),
-                    parent=self.root  # Explicitamente definir a janela pai
+                    parent=self.root,  # Explicitamente definir a janela pai
                 )
-                
+
                 if not file_path:
                     return
 
@@ -809,26 +829,30 @@ if TKINTER_AVAILABLE:
                     self.root.lift()
                     self.root.focus_force()
                     self.root.update()
-                    messagebox.showwarning("Warning", "No URLs found in the file", parent=self.root)
+                    messagebox.showwarning(
+                        "Warning", "No URLs found in the file", parent=self.root
+                    )
                     return
 
                 # Trazer a janela para frente antes dos próximos diálogos
                 self.root.lift()
                 self.root.focus_force()
                 self.root.update()
-                
+
                 # Ask user for download type
                 download_type = messagebox.askquestion(
                     "Download Type",
                     "Do you want to download as MP3 audio files?\n\n"
                     "Select 'Yes' for MP3 audio only.\n"
                     "Select 'No' for video with highest FPS.",
-                    icon='question',
-                    parent=self.root
+                    icon="question",
+                    parent=self.root,
                 )
-                
-                audio_only = (download_type == 'yes')
-                content_type = "MP3 audio tracks" if audio_only else "videos with highest FPS"
+
+                audio_only = download_type == "yes"
+                content_type = (
+                    "MP3 audio tracks" if audio_only else "videos with highest FPS"
+                )
 
                 # Trazer a janela para frente antes do próximo diálogo
                 self.root.lift()
@@ -839,8 +863,10 @@ if TKINTER_AVAILABLE:
                 confirm = messagebox.askyesno(
                     "Confirm Batch Download",
                     f"Do you want to download {len(urls)} {content_type}?\n\n"
-                    f"First 3 URLs:\n" + "\n".join(urls[:3]) + ("\n..." if len(urls) > 3 else ""),
-                    parent=self.root
+                    f"First 3 URLs:\n"
+                    + "\n".join(urls[:3])
+                    + ("\n..." if len(urls) > 3 else ""),
+                    parent=self.root,
                 )
 
                 if not confirm:
@@ -946,7 +972,7 @@ if TKINTER_AVAILABLE:
                 messagebox.showinfo(
                     "Batch Download Complete",
                     f"All videos have been downloaded to:\n{batch_dir}",
-                    parent=self.root
+                    parent=self.root,
                 )
 
                 # Adicionar esta linha para limpar recursos após conclusão
@@ -965,6 +991,7 @@ if TKINTER_AVAILABLE:
 
                 # Força o coletor de lixo para liberar recursos
                 import gc
+
                 gc.collect()
 
                 # Atualizar a interface se ainda existir
@@ -983,9 +1010,7 @@ if TKINTER_AVAILABLE:
 
 def run_ytdown():
     """Main entry point for the script."""
-    parser = argparse.ArgumentParser(
-        description="Download YouTube videos or audio"
-    )
+    parser = argparse.ArgumentParser(description="Download YouTube videos or audio")
     parser.add_argument("-u", "--url", help="YouTube video or playlist URL")
     parser.add_argument(
         "-f", "--file", help="Text file with YouTube URLs (one per line)"
@@ -1016,8 +1041,12 @@ def run_ytdown():
         if args.file:
             try:
                 content_type = "MP3 audio" if args.audio_only else "videos"
-                console.print(f"\n[bold]Loading URLs from file to download {content_type}:[/bold] {args.file}")
-                downloader.download_from_file(args.file, output_dir=args.output, audio_only=args.audio_only)
+                console.print(
+                    f"\n[bold]Loading URLs from file to download {content_type}:[/bold] {args.file}"
+                )
+                downloader.download_from_file(
+                    args.file, output_dir=args.output, audio_only=args.audio_only
+                )
             except Exception as e:
                 console.print(f"[bold red]Error:[/bold red] {str(e)}")
                 sys.exit(1)
@@ -1031,9 +1060,7 @@ def run_ytdown():
                     url = url[1:]
 
                 if args.audio_only:
-                    console.print(
-                        f"\n[green]Starting audio download (MP3)...[/green]"
-                    )
+                    console.print(f"\n[green]Starting audio download (MP3)...[/green]")
                     console.print(f"[bold]URL:[/bold] {url}")
                     downloader.download_audio(url, output_dir=args.output)
                 else:
@@ -1073,8 +1100,8 @@ def run_ytdown():
         try:
             root = tk.Tk()
             # Fazer com que a janela sempre fique no topo
-            root.attributes('-topmost', True)
-            
+            root.attributes("-topmost", True)
+
             # Add custom style for better visibility
             style = ttk.Style()
             style.configure("TButton", font=("Arial", 10))
@@ -1086,7 +1113,7 @@ def run_ytdown():
 
             # Após criar os componentes, podemos desligar o topmost
             # para permitir que o usuário alterne entre janelas se quiser
-            root.after(1000, lambda: root.attributes('-topmost', False))
+            root.after(1000, lambda: root.attributes("-topmost", False))
 
             # If URL was provided, pre-fill it
             if args.url:
