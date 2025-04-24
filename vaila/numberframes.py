@@ -261,7 +261,6 @@ def show_save_success_message(output_file):
     )
 
 
-
 def count_frames_in_videos():
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
@@ -301,6 +300,7 @@ def count_frames_in_videos():
     print(f"Basic metadata saved to: {output_basic_file}")
     print(f"Full metadata saved to: {output_full_file}")
     display_video_info(video_infos, output_basic_file)
+
 
 if __name__ == "__main__":
     count_frames_in_videos()
