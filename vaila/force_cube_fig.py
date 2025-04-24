@@ -128,6 +128,7 @@ from tkinter import (
     messagebox,
     simpledialog,
 )
+from matplotlib.ticker import FuncFormatter
 
 
 # Print the directory and name of the script being executed
@@ -257,9 +258,7 @@ def process_file(
                     print(f"An error occurred: {e}")
 
         # If all attempts fail, raise an error
-        raise UnicodeDecodeError(
-            f"Failed to read the file {file_path} with the provided encodings and delimiters."
-        )
+        raise UnicodeDecodeError('utf-8', b'', 0, 1, 'Failed to decode file')
 
     # Load the file using the new load_csv_file function
     df = load_csv_file(file_path)
@@ -383,9 +382,7 @@ def select_headers_and_load_data(file_path):
                     print(f"An error occurred: {e}")
 
         # If all encoding and delimiter attempts fail, raise an error
-        raise UnicodeDecodeError(
-            f"Failed to read the file {file_path} with the provided encodings and delimiters."
-        )
+        raise UnicodeDecodeError('utf-8', b'', 0, 1, f"Failed to read the file {file_path} with the provided encodings and delimiters.")
 
     headers, df = get_csv_headers(file_path)
     selected_headers = []
@@ -1146,7 +1143,7 @@ def makefig3(
 
             # Optional: you can format ticks to show more clearly or with specific precision
             ax3[i].get_xaxis().set_major_formatter(
-                plt.FuncFormatter(lambda x, _: f"{x:.2f}")
+                FuncFormatter(lambda x, _: f"{x:.2f}")
             )
 
             # Preenchendo a área sob a curva
@@ -1563,7 +1560,7 @@ def makefig4(
 
             # Optional: you can format ticks to show more clearly or with specific precision
             ax4[i].get_xaxis().set_major_formatter(
-                plt.FuncFormatter(lambda x, _: f"{x:.2f}")
+                FuncFormatter(lambda x, _: f"{x:.2f}")
             )
 
             # Preenchendo a área sob a curva
@@ -1863,7 +1860,7 @@ def run_statistics(data2stats, filename, output_dir, timestamp, generate_profile
     return results_stats, None if generate_profile.lower() != "yes" else profile
 
 
-def main():
+def run_force_cube_fig():
     """
     Main function to handle batch processing of CSV files.
     """
@@ -1922,9 +1919,5 @@ def main():
 
 
 if __name__ == "__main__":
-    # Print the directory and name of the script being executed
-    print(f"vailá running script : {os.path.basename(__file__)}")
-    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
-
     # Run the main function
-    main()
+    run_force_cube_fig()

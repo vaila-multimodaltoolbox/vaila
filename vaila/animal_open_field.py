@@ -76,6 +76,8 @@ Changelog:
 import os
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.colors
+import matplotlib.patches
 from matplotlib.colors import LinearSegmentedColormap
 import seaborn as sns
 from tkinter import (
@@ -424,7 +426,7 @@ def plot_pathway(x, y, time_vector, total_distance, output_dir, base_name):
     # Add a colorbar for the pathway progression
     sm = plt.cm.ScalarMappable(
         cmap=cmap,
-        norm=plt.Normalize(vmin=time_in_minutes.min(), vmax=time_in_minutes.max()),
+        norm=matplotlib.colors.Normalize(vmin=time_in_minutes.min(), vmax=time_in_minutes.max()),
     )
     sm.set_array([])
     cbar = plt.colorbar(sm, ax=ax, orientation="vertical", fraction=0.046, pad=0.04)
@@ -550,7 +552,7 @@ def plot_center_and_border_heatmap(x, y, output_dir, base_name, center_border_re
 
         # Add a rectangle for the center zone
         center_zone = define_center_zone()
-        rect = plt.Rectangle(
+        rect = matplotlib.patches.Rectangle(
             (center_zone["xmin"], center_zone["ymin"]),
             center_zone["xmax"] - center_zone["xmin"],
             center_zone["ymax"] - center_zone["ymin"],

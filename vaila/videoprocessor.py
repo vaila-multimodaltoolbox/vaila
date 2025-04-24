@@ -247,7 +247,11 @@ def process_videos_merge(
     quality_num = simpledialog.askinteger(
         "Quality Level", quality_msg, minvalue=1, maxvalue=9, initialvalue=5
     )
-
+    
+    # Handle case where user cancels dialog
+    if quality_num is None:
+        quality_num = 5  # Default to medium quality
+    
     # Map the number to a quality setting - moved outside the loop
     if quality_num <= 3:
         quality = "fast"
@@ -680,14 +684,17 @@ def process_videos_gui():
         return
 
     # Ask user to select one of the three options
-    operation = (
-        simpledialog.askstring(
-            "Operation",
-            "Enter operation:\n'm' for merge (original+reverse)\n's' for split (keep second half)\n'multi' for multi-video merge",
-        )
-        .strip()
-        .lower()
+    operation_input = simpledialog.askstring(
+        "Operation",
+        "Enter operation:\n'm' for merge (original+reverse)\n's' for split (keep second half)\n'multi' for multi-video merge",
     )
+    
+    # Check if user cancelled the dialog
+    if operation_input is None:
+        messagebox.showerror("Error", "No operation selected.")
+        return
+        
+    operation = operation_input.strip().lower()
 
     if not operation or operation not in ["m", "s", "multi"]:
         messagebox.showerror(

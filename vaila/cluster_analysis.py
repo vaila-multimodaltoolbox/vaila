@@ -313,8 +313,12 @@ def analyze_cluster_data():
 
         print(f"Data shape: {data.shape}")
 
-        # Create time vector
-        time = np.linspace(0, len(data) / sample_rate, len(data))
+        if sample_rate is None:
+            messagebox.showerror("Error", "Sample rate must be provided.")
+            return
+        
+        # Create time vector with validated sample_rate
+        time = np.linspace(0, len(data) / float(sample_rate), len(data))
         print(f"Time vector created with length: {len(time)}")
 
         # Insert time column in the data in the first column
@@ -335,13 +339,16 @@ def analyze_cluster_data():
 
         print("Points extracted for clusters")
 
-        blab = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
+        if cluster1_config is None or cluster2_config is None:
+            messagebox.showerror("Error", "Cluster configurations must be provided.")
+            return
 
+        # Now use the validated configurations
         cluster1_base, orig_cluster1 = createortbase(
-            cluster1_p1, cluster1_p2, cluster1_p3, cluster1_config
+            cluster1_p1, cluster1_p2, cluster1_p3, str(cluster1_config)
         )
         cluster2_base, orig_cluster2 = createortbase(
-            cluster2_p1, cluster2_p2, cluster2_p3, cluster2_config
+            cluster2_p1, cluster2_p2, cluster2_p3, str(cluster2_config)
         )
 
         print("Orthonormal bases created")
@@ -363,6 +370,7 @@ def analyze_cluster_data():
             matplotlib_figs.append(fig_matplotlib)
             plt.show()
 
+        blab = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])  # Lab coordinate system basis
         cluster1_rotmat = calcmatrot(cluster1_base, blab)
         cluster2_rotmat = calcmatrot(cluster2_base, blab)
 

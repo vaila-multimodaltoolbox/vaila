@@ -82,7 +82,7 @@ def apply_boxes_directly_to_video(input_path, output_path, coordinates, selectio
     height = int(vidcap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = vidcap.get(cv2.CAP_PROP_FPS)
 
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    fourcc = cv2.VideoWriter.fourcc(*"mp4v")
     out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
 
     frame_count = 0
@@ -114,13 +114,15 @@ def apply_boxes_directly_to_video(input_path, output_path, coordinates, selectio
                     cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 0), -1)
 
             elif shape_type == "trapezoid":
-                pts = np.array(coords, np.int32)
+                pts = np.array(coords, np.int32).reshape((-1, 1, 2))  # Reshape to the correct format
                 if mode == "inside":
-                    cv2.fillPoly(frame, [pts], (0, 0, 0))
+                    mask = np.zeros(frame.shape[:2], dtype=np.uint8)
+                    cv2.fillPoly(mask, [pts], (255, 255, 255))  # Fill the polygon in the mask
+                    frame = cv2.bitwise_and(frame, frame, mask=mask)  # Apply mask to the image
                 elif mode == "outside":
                     mask = np.zeros(frame.shape[:2], dtype=np.uint8)
-                    cv2.fillPoly(mask, [pts], 255)
-                    frame = cv2.bitwise_and(frame, frame, mask=mask)
+                    cv2.fillPoly(mask, [pts], (255, 255, 255))  # Fill the polygon in the mask
+                    frame = cv2.bitwise_and(frame, frame, mask=mask)  # Apply mask to the image
 
         out.write(frame)
         frame_count += 1
@@ -161,13 +163,15 @@ def apply_boxes_to_frames(frames_dir, coordinates, selections, frame_intervals):
                             # Desenhar diretamente o retângulo preenchido
                             cv2.rectangle(img, (x1, y1), (x2, y2), (0, 0, 0), -1)
                     elif shape_type == "trapezoid":
-                        pts = np.array(coords, np.int32)
+                        pts = np.array(coords, np.int32).reshape((-1, 1, 2))  # Reshape to the correct format
                         if mode == "inside":
-                            cv2.fillPoly(img, [pts], (0, 0, 0))
+                            mask = np.zeros(img.shape[:2], dtype=np.uint8)
+                            cv2.fillPoly(mask, [pts], (255, 255, 255))  # Fill the polygon in the mask
+                            img = cv2.bitwise_and(img, img, mask=mask)  # Apply mask to the image
                         elif mode == "outside":
                             mask = np.zeros(img.shape[:2], dtype=np.uint8)
-                            cv2.fillPoly(mask, [pts], 255)
-                            img = cv2.bitwise_and(img, img, mask=mask)
+                            cv2.fillPoly(mask, [pts], (255, 255, 255))  # Fill the polygon in the mask
+                            img = cv2.bitwise_and(img, img, mask=mask)  # Apply mask to the image
 
                 cv2.imwrite(frame_path, img)
 

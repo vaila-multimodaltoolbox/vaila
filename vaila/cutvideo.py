@@ -402,7 +402,7 @@ def play_video_with_cuts(video_path):
                         )
                         out = cv2.VideoWriter(
                             str(output_path),
-                            cv2.VideoWriter_fourcc(*"mp4v"),
+                            cv2.VideoWriter.fourcc(*"mp4v"),
                             fps,
                             (width, height),
                         )
@@ -463,7 +463,7 @@ def play_video_with_cuts(video_path):
                 )
                 out = cv2.VideoWriter(
                     str(output_path),
-                    cv2.VideoWriter_fourcc(*"mp4v"),
+                    cv2.VideoWriter.fourcc(*"mp4v"),
                     fps,
                     (width, height),
                 )
@@ -573,9 +573,7 @@ def play_video_with_cuts(video_path):
                         print(f"Cut marked: {current_start + 1} to {frame_count + 1}")
                         current_start = None
                     else:
-                        print(
-                            "Error: End frame must be after start frame!"
-                        )
+                        print("Error: End frame must be after start frame!")
                 elif event.key == pygame.K_r:  # Reset current cut
                     current_start = None
                     print("Current cut reset")
@@ -591,9 +589,7 @@ def play_video_with_cuts(video_path):
                                 for i, (start, end) in enumerate(cuts)
                             ]
                         )
-                        messagebox.showinfo(
-                            "Cuts List", cuts_info
-                        )
+                        messagebox.showinfo("Cuts List", cuts_info)
                     else:
                         messagebox.showinfo("Cuts List", "No cuts marked yet")
             elif event.type == pygame.MOUSEBUTTONDOWN:
