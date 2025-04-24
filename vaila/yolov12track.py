@@ -901,9 +901,7 @@ def run_yolov12track():
     model = YOLO(model_path)
 
     # Select classes for tracking
-    class_dialog = ClassSelectorDialog(
-        root, title="Select Classes for Tracking"
-    )
+    class_dialog = ClassSelectorDialog(root, title="Select Classes for Tracking")
     if not hasattr(class_dialog, "result"):
         return
 
@@ -914,25 +912,26 @@ def run_yolov12track():
 
     # Initialize BotSort
     print(f"Initializing BotSort")
-    
+
     # Try create reid_weights if osnet_x0_25_msmt17.pt does not exist, download it from the internet https://huggingface.co/paulosantiago/osnet_x0_25_msmt17/resolve/main/osnet_x0_25_msmt17.pt
     reid_weights_path = os.path.join(models_dir, "osnet_x0_25_msmt17.pt")
     if not os.path.exists(reid_weights_path):
         print("Downloading ReID model...")
         try:
             import requests
+
             url = "https://huggingface.co/paulosantiago/osnet_x0_25_msmt17/resolve/main/osnet_x0_25_msmt17.pt"
             response = requests.get(url)
-            with open(reid_weights_path, 'wb') as f:
+            with open(reid_weights_path, "wb") as f:
                 f.write(response.content)
             print(f"ReID model downloaded successfully to {reid_weights_path}")
         except Exception as e:
             print(f"Failed to download ReID model: {str(e)}")
             messagebox.showerror("Error", f"Failed to download ReID model: {str(e)}")
             return
-    
+
     reid_weights = Path(models_dir) / "osnet_x0_25_msmt17.pt"
-    
+
     device = "cuda" if torch.cuda.is_available() else "cpu"  # Use GPU if available
     half = True  # Use reduced precision
     if not reid_weights.exists():
@@ -945,7 +944,9 @@ def run_yolov12track():
 
     # Process each video in the directory
     for video_file in os.listdir(video_dir):
-        if video_file.endswith((".mp4", ".avi", ".mov", ".mkv", ".MP4", ".AVI", ".MOV", ".MKV")):
+        if video_file.endswith(
+            (".mp4", ".avi", ".mov", ".mkv", ".MP4", ".AVI", ".MOV", ".MKV")
+        ):
             video_path = os.path.join(video_dir, video_file)
             video_name = os.path.splitext(os.path.basename(video_path))[0]
 
