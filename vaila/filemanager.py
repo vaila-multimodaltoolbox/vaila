@@ -830,9 +830,12 @@ def transfer_file():
         )
 
         # Create an SCP client
-        with SCPClient(
-            ssh.get_transport(), compress=True
-        ) as scp:  # Compression enabled
+        transport = ssh.get_transport()
+        if transport is None:
+            messagebox.showerror("Error", "SSH transport is not available.")
+            return
+
+        with SCPClient(transport) as scp:  # Use the valid transport
 
             if transfer_type == "upload":
                 # Upload the file or directory

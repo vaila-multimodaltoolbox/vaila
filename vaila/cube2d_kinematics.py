@@ -74,7 +74,7 @@ import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from matplotlib.colors import LinearSegmentedColormap
+from matplotlib.colors import LinearSegmentedColormap, Normalize
 import seaborn as sns
 from tkinter import (
     Tk,
@@ -263,8 +263,8 @@ def plot_pathway_with_quadrants(x, y, quadrants_df, time_vector):
 
         # Adicionar o número do quadrante
         ax.text(
-            center_x,
-            center_y,
+            float(center_x),
+            float(center_y),
             str(int(quad["quadrant"])),
             ha="center",
             va="center",
@@ -275,8 +275,8 @@ def plot_pathway_with_quadrants(x, y, quadrants_df, time_vector):
     # Criar o gradiente de cores para o caminho
     points = np.array([x, y]).T.reshape(-1, 1, 2)
     segments = np.concatenate([points[:-1], points[1:]], axis=1)
-    norm = plt.Normalize(0, 1)
-    lc = LineCollection(segments, cmap="plasma", norm=norm)
+    norm = Normalize(0, 1)
+    lc = LineCollection(segments.tolist(), cmap="plasma", norm=norm)
     lc.set_array(np.linspace(0, 1, len(time_vector)))
     lc.set_linewidth(2)
     line = ax.add_collection(lc)
@@ -317,7 +317,8 @@ def process_all_files(file_paths, quadrants, output_dir):
             print(f"Invalid input: {e}. Please enter a valid positive number.")
 
     for file_path in file_paths:
-        process_file(file_path, quadrants, output_dir, fs)
+        base_name = os.path.splitext(os.path.basename(file_path))[0]
+        process_file(file_path, quadrants, output_dir, fs, base_name)
 
 
 def process_file(file_path, quadrants_df, output_dir, fs, base_name):

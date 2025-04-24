@@ -6,8 +6,8 @@ Author: Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 14 October 2024
-Update Date: 01 April 2025
-Version: 0.0.2
+Update Date: 22 April 2025
+Version: 0.0.3
 Python Version: 3.12.9
 
 Description:
@@ -61,15 +61,16 @@ from pykalman import KalmanFilter
 from scipy.signal import savgol_filter, butter, filtfilt, sosfiltfilt, firwin
 from scipy.interpolate import CubicSpline
 from statsmodels.nonparametric.smoothers_lowess import lowess
-from tkinter import filedialog, messagebox, Toplevel, Button, Label
+from tkinter import filedialog, messagebox, Toplevel, Button, Label, simpledialog
 from scipy.interpolate import UnivariateSpline
 import tkinter as tk
 from rich import print
 from statsmodels.tsa.arima.model import ARIMA
 from .filter_utils import butter_filter  # Importar a função do filter_utils.py
+import sys  # Adicione esta linha
 
 
-class InterpolationConfigDialog(tk.simpledialog.Dialog):
+class InterpolationConfigDialog(simpledialog.Dialog):
     def __init__(self, parent):
         # Initialize StringVar variables with default values before calling parent constructor
         self.savgol_window = tk.StringVar(value="7")  # Default window length
@@ -1227,7 +1228,9 @@ def generate_report(dest_dir, config, processed_files):
 
                     # Calculate percentage differences for first 10 values
                     differences = np.abs(
-                        (processed_values - original_values) / original_values * 100
+                        (np.array(processed_values) - np.array(original_values))
+                        / np.array(original_values)
+                        * 100
                     )
 
                     f.write(f"File {idx}: {file_info['original_filename']}\n")
@@ -1262,7 +1265,9 @@ def generate_report(dest_dir, config, processed_files):
 
                     # Calculate differences for all values
                     all_differences = np.abs(
-                        (all_processed - all_original) / all_original * 100
+                        (np.array(all_processed) - np.array(all_original))
+                        / np.array(all_original)
+                        * 100
                     )
 
                     # Calculate statistics
@@ -1310,7 +1315,7 @@ def generate_report(dest_dir, config, processed_files):
         f.write("-" * 80 + "\n")
         f.write(f"Total Files Processed: {len(processed_files)}\n")
         f.write(f"Output Directory: {dest_dir}\n")
-        f.write(f"Python Version: {os.sys.version.split()[0]}\n")
+        f.write(f"Python Version: {sys.version.split()[0]}\n")
         f.write(f"Processing Completed at: {timestamp}\n\n")
 
         # Instructions for the user
@@ -1493,18 +1498,8 @@ def spline_smooth(data, s=1.0):
 
 
 def kalman_smooth(data, n_iter=5, mode=1):
-    """
-    Applies Kalman smoothing to the data.
-
-    Parameters:
-    - data: array-like, 1D or 2D array
-    - n_iter: int, number of EM iterations
-    - mode: int, 1 for 1D processing or 2 for 2D processing
-
-    Returns:
-    - filtered_data: array-like, smoothed data
-    """
-    data = np.asarray(data)
+    alpha = 0.7  # Definir alpha aqui
+    data = np.asarray(data)  # Garantir que é um array numpy
 
     # Handle 1D data
     if data.ndim == 1:
@@ -1534,7 +1529,6 @@ def kalman_smooth(data, n_iter=5, mode=1):
                 smoothed_state_means, _ = kf.em(
                     data[:, j : j + 1], n_iter=n_iter
                 ).smooth(data[:, j : j + 1])
-                alpha = 0.7  # Smoothing factor
                 filtered_data[:, j] = (
                     alpha * smoothed_state_means[:, 0] + (1 - alpha) * data[:, j]
                 )
@@ -1755,8 +1749,12 @@ def process_file(file_path, dest_dir, config):
             print(f"Applying padding of {pad_len} frames")
 
             # Criar frames para padding
-            pad_before = pd.DataFrame({first_col: range(min_frame - pad_len, min_frame)})
-            pad_after = pd.DataFrame({first_col: range(max_frame + 1, max_frame + pad_len + 1)})
+            pad_before = pd.DataFrame(
+                {first_col: range(min_frame - pad_len, min_frame)}
+            )
+            pad_after = pd.DataFrame(
+                {first_col: range(max_frame + 1, max_frame + pad_len + 1)}
+            )
 
             # Em vez de preencher com NaN, preencher com os valores das bordas
             for col in df.columns[1:]:
@@ -1860,15 +1858,20 @@ def process_file(file_path, dest_dir, config):
                             )
 
                             # Get non-NaN values for training
-                            valid_data = df[col].dropna().values.reshape(-1, 1)
+                            valid_data = np.array(df[col].dropna().values).reshape(
+                                -1, 1
+                            )
                             if len(valid_data) > 0:
                                 # Train the filter
                                 kf = kf.em(valid_data, n_iter=5)
 
                                 # Apply smoothing
-                                smoothed_state_means, _ = kf.smooth(
-                                    df[col].values.reshape(-1, 1)
-                                )
+                                # Convert to numpy array and handle NaN values
+                                data = df[col].to_numpy()
+                                # Reshape for Kalman filter
+                                data_reshaped = data.reshape(-1, 1)
+                                # Apply smoothing
+                                smoothed_state_means, _ = kf.smooth(data_reshaped)
                                 df[col] = smoothed_state_means[:, 0]
                         except Exception as e:
                             print(f"Error applying Kalman filter: {str(e)}")
@@ -1899,15 +1902,20 @@ def process_file(file_path, dest_dir, config):
                             )
 
                             # Get non-NaN values for training
-                            valid_data = df[col].dropna().values.reshape(-1, 1)
+                            valid_data = np.array(df[col].dropna().values).reshape(
+                                -1, 1
+                            )
                             if len(valid_data) > 0:
                                 # Train the filter
                                 kf = kf.em(valid_data, n_iter=5)
 
                                 # Apply smoothing
-                                smoothed_state_means, _ = kf.smooth(
-                                    df[col].values.reshape(-1, 1)
-                                )
+                                # Convert to numpy array and handle NaN values
+                                data = df[col].to_numpy()
+                                # Reshape for Kalman filter
+                                data_reshaped = data.reshape(-1, 1)
+                                # Apply smoothing
+                                smoothed_state_means, _ = kf.smooth(data_reshaped)
                                 df[col] = smoothed_state_means[:, 0]
                         except Exception as e:
                             print(f"Error applying Kalman filter: {str(e)}")
@@ -1951,7 +1959,9 @@ def process_file(file_path, dest_dir, config):
                     elif config["smooth_method"] == "butterworth":
                         params = config["smooth_params"]
                         try:
-                            data = df[col].values
+                            data = df[
+                                col
+                            ].to_numpy()  # Use to_numpy() instead of .values
                             if np.isnan(data).any():
                                 print(
                                     f"Warning: Column {col} contains NaN values. Interpolating before filtering..."
@@ -1981,7 +1991,7 @@ def process_file(file_path, dest_dir, config):
                             )
 
                             if not np.array_equal(
-                                filtered, data
+                                np.array(filtered), np.array(data)
                             ):  # Verificar se houve mudança
                                 df[col] = filtered
                                 print(f"Successfully filtered column {col}")

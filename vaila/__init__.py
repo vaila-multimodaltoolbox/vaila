@@ -54,7 +54,6 @@ from .compress_videos_h264 import compress_videos_h264_gui
 from .compress_videos_h265 import compress_videos_h265_gui
 from .extractpng import VideoProcessor
 from .readcsv_export import create_c3d_from_csv, convert_csv_to_c3d
-from .vaila_manifest import show_vaila_message
 from .emg_labiocom import run_emg_gui
 from .vailaplot2d import run_plot_2d as plot_2d
 from .vailaplot3d import run_plot_3d as plot_3d
@@ -88,7 +87,6 @@ __all__ = [
     "headersidx",
     "reshapedata",
     "rearrange_data_in_directory",
-    "count_frames_in_videos",
     "batch_cut_videos",
     "run_drawboxe",
     "compress_videos_h264_gui",
@@ -100,11 +98,9 @@ __all__ = [
     "get_labcoord_angles",
     "cluster_analysis",
     "imu_analysis",
-    "markerless_2D_analysis",
     "markerless_3D_analysis",
     "mocap_analysis",
     "forceplate_analysis",
-    "gnss_analysis",
     "import_file",
     "export_file",
     "copy_file",
@@ -115,15 +111,12 @@ __all__ = [
     "find_file",
     "transfer_file",
     "show_c3d",
-    "vector_coding",
     "sync_videos",
     "VideoProcessor",
     "select_file",
     "show_csv",
     "get_csv_headers",
     "select_headers_gui",
-    "getpixelvideo",
-    "show_vaila_message",
     "run_emg_gui",
     "plot_2d",
     "plot_3d",
