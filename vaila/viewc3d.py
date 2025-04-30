@@ -255,7 +255,7 @@ def run_viewc3d():
         "Mouse: [Left Drag: Rotate, Middle/Right Drag: Pan, Mouse Wheel: Zoom]"
     )
 
-    vis = o3d.visualization.VisualizerWithKeyCallback()
+    vis = o3d.visualization.Visualizer()
     vis.create_window(window_name=window_title)
 
     # Create a sphere for each selected marker and paint them in orange
