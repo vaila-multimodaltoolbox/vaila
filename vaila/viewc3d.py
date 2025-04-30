@@ -231,7 +231,7 @@ def create_ground_grid(x_min=-1, x_max=5, y_min=-1, y_max=6, spacing=1.0):
     return grid
 
 
-def main():
+def run_viewc3d():
     # Load data from the C3D file, including FPS and marker labels
     points, filepath, fps, marker_labels = load_c3d_file()
     num_frames, total_markers, _ = points.shape
@@ -378,4 +378,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    run_viewc3d()
