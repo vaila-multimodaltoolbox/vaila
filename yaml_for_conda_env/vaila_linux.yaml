@@ -45,6 +45,7 @@ dependencies:
   - pyzmq
   - sqlalchemy
   - toml
+  - flask
   - pip
   - pip:
       - absl-py
@@ -58,7 +59,6 @@ dependencies:
       - plotly
       - protobuf
       - opencv-contrib-python
-      - flask
       - Werkzeug
       - itsdangerous
       - jax
