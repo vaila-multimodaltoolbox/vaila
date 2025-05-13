@@ -4,9 +4,9 @@ numberframes.py
 Description:
 This script allows users to analyze video files within a selected directory and extract metadata such as frame count, frame rate (FPS), resolution, codec, and duration. The script generates a summary of this information, displays it in a user-friendly graphical interface, and saves the metadata to text files. The "basic" file contains essential metadata, while the "full" file includes all possible metadata extracted using `ffprobe`.
 
-Version: 0.3
+Version: 0.5
 Created: 25 April 2024
-Last Updated: 19 April 2025
+Last Updated: 10 May 2025
 Author: Prof. Paulo R. P. Santiago
 
 Dependencies:
@@ -34,7 +34,6 @@ def get_video_info(video_path):
     """
     Extract video metadata using ffprobe.
     """
-    # Print the directory and name of the script being executed
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
 
@@ -56,7 +55,7 @@ def get_video_info(video_path):
             ).stdout.strip()
         )
 
-        # 2. Obter resolução
+        # 2. Obter resolução - CORRIGIDO E MAIS ROBUSTO
         resolution_cmd = [
             "ffprobe",
             "-v",
@@ -66,21 +65,64 @@ def get_video_info(video_path):
             "-show_entries",
             "stream=width,height",
             "-of",
-            "default=noprint_wrappers=1:nokey=1",
+            "csv=s=x:p=0",
             video_path,
         ]
-        resolution = (
-            subprocess.run(
-                resolution_cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-            )
-            .stdout.strip()
-            .split("\n")
-        )
-        width = int(resolution[0])
-        height = int(resolution[1])
+        resolution_output_str = subprocess.run(
+            resolution_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+        ).stdout.strip()
+
+        width, height = None, None
+
+        if resolution_output_str:
+            # Processa a primeira linha não vazia da saída que parece ser uma resolução WxH
+            first_parsable_line = ""
+            for line in resolution_output_str.splitlines():
+                stripped_line = line.strip()
+                if stripped_line:  # Encontrou a primeira linha não vazia
+                    first_parsable_line = stripped_line
+                    break
+            
+            if first_parsable_line and 'x' in first_parsable_line:
+                try:
+                    w_str, h_str = first_parsable_line.split('x')
+                    width = int(w_str)
+                    height = int(h_str)
+                except ValueError:
+                    # A primeira linha não pôde ser parseada como WxH, limpamos para tentar o fallback
+                    width, height = None, None
+                    print(f"Warning: Failed to parse resolution '{first_parsable_line}' from {video_path} using csv format.")
+            else:
+                 print(f"Warning: CSV output for resolution from {video_path} was not in 'WxH' format. Raw: '{resolution_output_str}'.")
+
+        # Se a tentativa primária falhou (width ou height ainda é None)
+        if width is None or height is None:
+            print(f"Attempting fallback: getting width and height separately for {video_path}.")
+            width_cmd_fallback = [
+                "ffprobe", "-v", "error", "-select_streams", "v:0",
+                "-show_entries", "stream=width", "-of", "default=noprint_wrappers=1:nokey=1", video_path
+            ]
+            height_cmd_fallback = [
+                "ffprobe", "-v", "error", "-select_streams", "v:0",
+                "-show_entries", "stream=height", "-of", "default=noprint_wrappers=1:nokey=1", video_path
+            ]
+
+            width_str_fb = subprocess.run(width_cmd_fallback, stdout=subprocess.PIPE, text=True).stdout.strip()
+            height_str_fb = subprocess.run(height_cmd_fallback, stdout=subprocess.PIPE, text=True).stdout.strip()
+
+            if width_str_fb and height_str_fb:
+                try:
+                    # Pega a primeira linha da saída de cada comando
+                    width = int(width_str_fb.splitlines()[0].strip())
+                    height = int(height_str_fb.splitlines()[0].strip())
+                except (ValueError, IndexError) as e_fb:
+                    detailed_error = f"Error parsing fallback width/height for {video_path}. W_out: '{width_str_fb}', H_out: '{height_str_fb}'. Error: {e_fb}"
+                    print(detailed_error)
+                    raise ValueError(detailed_error) from e_fb
+            else:
+                final_error_msg = f"Fallback ffprobe calls for width/height yielded insufficient results for {video_path}. W_out: '{width_str_fb}', H_out: '{height_str_fb}'"
+                print(final_error_msg)
+                raise ValueError(final_error_msg)
 
         # 3. Obter número de frames
         frames_cmd = [
@@ -120,11 +162,6 @@ def get_video_info(video_path):
         ).stdout.strip()
         frame_rate = eval(fps_str)  # Convert "30000/1001" to float
 
-        # Calcular informações do vídeo resultante
-        merged_frames = total_frames * 2
-        merged_duration = duration * 2
-        reverse_start_frame = total_frames
-
         print(
             f"Video info: {width}x{height}, {frame_rate} fps, {duration:.2f}s, {total_frames} frames"
         )
@@ -138,15 +175,11 @@ def get_video_info(video_path):
         }
 
     except Exception as e:
-        print(f"Warning: Could not get detailed video info: {e}")
-        width = height = "Unknown"
-        duration = "Unknown"
-        frame_rate = "Unknown"
-        total_frames = "Unknown"
-        merged_frames = "Unknown"
-        merged_duration = "Unknown"
-        reverse_start_frame = "Unknown"
-        return None
+        print(f"Warning: Could not get detailed video info for {video_path}: {e}")
+        return {
+            "file_name": os.path.basename(video_path),
+            "error": f"Error retrieving video info: {str(e)}"
+        }
 
 
 def display_video_info(video_infos, output_file):
