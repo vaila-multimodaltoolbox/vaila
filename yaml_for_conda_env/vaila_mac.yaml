@@ -1,5 +1,6 @@
 # vailá - Multimodal Toolbox
-# Last updated: 21 March 2025
+# Created: 21 March 2025
+# Last updated: 10 May 2025
 # © Paulo Santiago, Guilherme Cesar, Ligia Mochida, Bruno Bedo
 # https://github.com/vaila-multimodaltoolbox/vaila
 # Please see AUTHORS for contributors.
@@ -41,6 +42,7 @@ dependencies:
   - flask
   - pip
   - pip:
+      - einops
       - absl-py
       - bcrypt
       - blinker
