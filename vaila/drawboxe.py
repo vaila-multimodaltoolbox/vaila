@@ -8,10 +8,9 @@ obtained from clicks on an image. It also supports extracting frames and
 applying boxes to specific frame intervals or directly to videos. The script
 can be used for batch processing of videos in a directory.
 
-Version:
---------
-0.0.3
-date: 2025-02-28
+Version: 0.0.4
+created: 2025-02-28
+updated: 2025-05-13
 
 Author:
 -------
@@ -71,9 +70,50 @@ def save_first_frame(video_path, frame_path):
 
 
 def extract_frames(video_path, frames_dir):
-    os.makedirs(frames_dir, exist_ok=True)
-    command = ["ffmpeg", "-i", video_path, os.path.join(frames_dir, "frame_%09d.png")]
-    subprocess.run(command, check=True)
+    try:
+        os.makedirs(frames_dir, exist_ok=True)
+        
+        # Normalizar caminhos para o sistema operacional atual
+        video_path = os.path.normpath(os.path.abspath(video_path))
+        frames_dir = os.path.normpath(os.path.abspath(frames_dir))
+        
+        # Construir o comando ffmpeg de forma compatível com o sistema operacional
+        if os.name == 'nt':  # Windows
+            command = [
+                "ffmpeg",
+                "-i",
+                video_path,
+                os.path.join(frames_dir, "frame_%09d.png")
+            ]
+            # No Windows, usar shell=True para lidar com caminhos com espaços
+            result = subprocess.run(
+                command,
+                check=True,
+                capture_output=True,
+                text=True,
+                shell=True
+            )
+        else:  # Linux/Mac
+            command = [
+                "ffmpeg",
+                "-i",
+                video_path,
+                os.path.join(frames_dir, "frame_%09d.png")
+            ]
+            # No Linux/Mac, não precisamos de shell=True
+            result = subprocess.run(
+                command,
+                check=True,
+                capture_output=True,
+                text=True
+            )
+        
+    except subprocess.CalledProcessError as e:
+        print(f"Error running ffmpeg: {e.stderr}")
+        raise
+    except Exception as e:
+        print(f"Error extracting frames: {str(e)}")
+        raise
 
 
 def apply_boxes_directly_to_video(input_path, output_path, coordinates, selections):
@@ -338,20 +378,46 @@ def run_drawboxe():
     root = tk.Tk()
     root.withdraw()
 
+    # Configurar o diálogo para usar o estilo nativo do sistema operacional
+    if os.name == 'nt':  # Windows
+        initial_dir = os.path.expanduser("~")
+    elif os.name == 'posix':  # Linux/Mac
+        initial_dir = os.path.expanduser("~")
+    else:
+        initial_dir = os.getcwd()
+
     video_directory = filedialog.askdirectory(
-        title="Select the directory containing videos"
+        title="Select the directory containing videos",
+        initialdir=initial_dir
     )
+    
     if not video_directory:
         messagebox.showerror("Error", "No directory selected.")
         return
 
-    video_files = sorted(
-        [
-            f
-            for f in os.listdir(video_directory)
-            if f.lower().endswith((".mp4", ".avi", ".mov", ".mkv"))
-        ]
-    )
+    # Normalizar o caminho para o sistema operacional atual
+    video_directory = os.path.normpath(os.path.abspath(video_directory))
+    
+    # Verificar se o diretório existe
+    if not os.path.exists(video_directory):
+        messagebox.showerror("Error", f"Directory does not exist: {video_directory}")
+        return
+
+    # Listar arquivos de vídeo
+    try:
+        video_files = sorted(
+            [
+                f
+                for f in os.listdir(video_directory)
+                if f.lower().endswith((".mp4", ".avi", ".mov", ".mkv"))
+            ]
+        )
+    except PermissionError:
+        messagebox.showerror("Error", f"Permission denied to access directory: {video_directory}")
+        return
+    except Exception as e:
+        messagebox.showerror("Error", f"Error accessing directory: {str(e)}")
+        return
 
     if not video_files:
         messagebox.showerror("Error", "No video files found in the selected directory.")
