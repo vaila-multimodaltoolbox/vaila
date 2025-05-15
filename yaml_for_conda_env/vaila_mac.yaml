@@ -76,7 +76,6 @@ dependencies:
       - spm1d
       - ydata_profiling
       - 'xonsh[full]'
-      - ultralytics
       - boxmot
       - open3d
       - glfw
@@ -87,3 +86,4 @@ dependencies:
       - tensorflow
       - tensorflow-metal
       - yt-dlp
+      - ultralytics==8.3.135
