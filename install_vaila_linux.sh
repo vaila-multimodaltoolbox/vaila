@@ -112,7 +112,7 @@ Name=vaila
 Comment=Multimodal Toolbox
 Exec=$RUN_SCRIPT
 Icon=$VAILA_HOME/docs/images/vaila.png
-Terminal=false
+Terminal=true
 Type=Application
 Categories=Utility;
 EOF
