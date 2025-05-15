@@ -184,7 +184,7 @@ def run_force_cube_analysis():
     try:
         from . import force_cube_fig
 
-        force_cube_fig.main()
+        force_cube_fig.run_force_cube_fig()
     except ImportError as e:
         print(f"Error importing force_cube_fig: {e}")
 

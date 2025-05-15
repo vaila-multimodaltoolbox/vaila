@@ -6,8 +6,8 @@ Author: Prof. Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 24 Oct 2024
-Update Date: 31 March 2025
-Version: 0.0.2
+Update Date: 01 May 2025
+Version: 0.0.3
 Python Version: 3.12.9
 
 Description:
@@ -52,6 +52,45 @@ Usage:
 Example:
 --------
 $ python vaila_and_jump.py
+
+Input File Format:
+-----------------
+The input CSV files should have the following format:
+
+1. Time-of-flight based format:
+   mass(kg), time_of_flight(s), contact_time(s)[optional]
+   
+   Example:
+   ```
+   mass_kg,time_of_flight_s,contact_time_s
+   75.0,0.45,0.22
+   80.2,0.42,0.25
+   65.5,0.48,0.20
+   ```
+
+2. Jump-height based format:
+   mass(kg), height(m), contact_time(s)[optional]
+   
+   Example:
+   ```
+   mass_kg,heigth_m,contact_time_s
+   75.0,0.25,0.22
+   80.2,0.22,0.25
+   65.5,0.28,0.20
+   ```
+
+Output:
+-------
+The script generates a CSV file with the following columns:
+- height_m: Jump height in meters
+- liftoff_force_N: Liftoff force in Newtons (if contact time is provided)
+- velocity_m/s: Takeoff velocity in meters per second
+- potential_energy_J: Potential energy in Joules
+- kinetic_energy_J: Kinetic energy in Joules
+- average_power_W: Average power in Watts (if contact time is provided)
+- relative_power_W/kg: Power relative to body mass (if contact time is provided)
+- jump_performance_index: Jump Performance Index (if both time of flight and contact time are available)
+- total_time_s: Total time in seconds (if both time of flight and contact time are available)
 
 Notes:
 ------
@@ -198,36 +237,59 @@ def calculate_liftoff_force(mass, velocity, contact_time, gravity=9.81):
     return liftoff_force
 
 
+def calculate_time_of_flight(height, gravity=9.81):
+    """
+    Calculate the time of flight from the jump height.
+    
+    Args:
+        height (float): The jump height in meters.
+        gravity (float, optional): The gravitational acceleration. Default is 9.81 m/s^2.
+        
+    Returns:
+        float: The time of flight in seconds.
+    """
+    return math.sqrt(8 * height / gravity)
+
+
 def process_jump_data(input_file, output_dir, use_time_of_flight):
     """
     Process the jump data from an input file and save results to the output directory.
-
-    Args:
-        input_file (str): The path to the input CSV file.
-        output_dir (str): The path to the output directory.
-        use_time_of_flight (bool): Whether to use time of flight data.
     """
     try:
-        # Read data from the input file (assumed to be CSV format)
+        # Read data from the input file
         data = pd.read_csv(input_file)
         results = []
-
+        
+        # Auto-detect column names
+        columns = list(data.columns)
+        
+        # Look for appropriate columns by name pattern
+        mass_col = next((col for col in columns if 'mass' in col.lower()), columns[0])
+        
+        if use_time_of_flight:
+            value_col = next((col for col in columns if 'time' in col.lower() and 'contact' not in col.lower()), columns[1])
+        else:
+            value_col = next((col for col in columns if 'height' in col.lower() or 'heigth' in col.lower()), columns[1])
+            
+        contact_col = next((col for col in columns if 'contact' in col.lower()), None)
+        
+        print(f"Using columns: Mass={mass_col}, {'Time' if use_time_of_flight else 'Height'}={value_col}, Contact={contact_col}")
+        
         for index, row in data.iterrows():
-            # Assuming the columns are in the following order:
-            # Column 0: mass, Column 1: time_of_flight or height, Column 2: contact_time (optional)
-            mass = row[0]
-            second_value = row[1]
-            contact_time = row[2] if len(row) > 2 else None
-
+            # Get values using detected column names
+            mass = row[mass_col]
+            second_value = row[value_col]
+            contact_time = row[contact_col] if contact_col else None
+            
             # Determine height based on whether we are using time_of_flight or height directly
             if use_time_of_flight:
                 # Calculate height based on time_of_flight
                 time_of_flight = second_value
                 height = calculate_jump_height(time_of_flight)
             else:
-                # Use height directly
+                # Use height directly and calculate time_of_flight from it
                 height = second_value
-                time_of_flight = None
+                time_of_flight = calculate_time_of_flight(height)
 
             # Perform calculations
             velocity = calculate_velocity(height)
@@ -342,19 +404,31 @@ def vaila_and_jump():
         messagebox.showwarning("Warning", "No target directory selected.")
         return
 
-    # Ask if the data is based on time of flight or height
-    use_time_of_flight = messagebox.askyesno(
-        "Data Type",
-        "Are the files based on time of flight data? (Select 'No' if based on jump height)",
+    # Use a dialog box with more descriptive options
+    data_type_options = ["Time of Flight Data", "Jump Height Data"]
+    data_type = simpledialog.askinteger(
+        "Select Data Type",
+        "Select the type of data in your CSV files:\n\n1. Time of Flight Data\n2. Jump Height Data",
+        minvalue=1, maxvalue=2
     )
+    
+    if data_type is None:  # User cancelled
+        messagebox.showwarning("Warning", "No data type selected. Exiting.")
+        return
+    
+    use_time_of_flight = (data_type == 1)
 
     # Perform the analysis for all .csv files in the selected directory
     process_all_files_in_directory(target_dir, use_time_of_flight)
 
     root.destroy()
-    messagebox.showinfo(
-        "Success", "All .csv files have been processed and results saved."
-    )
+    
+    # Show more detailed success message
+    msg = "All CSV files have been processed and results saved.\n\n"
+    msg += f"Input data type: {'Time of Flight' if use_time_of_flight else 'Jump Height'}\n"
+    msg += f"Output directory: {os.path.join(target_dir, 'vaila_verticaljump_*')}"
+    
+    messagebox.showinfo("Success", msg)
 
 
 if __name__ == "__main__":
