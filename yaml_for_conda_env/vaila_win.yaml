@@ -97,4 +97,4 @@ dependencies:
       - simplekml
       - folium
       - yt-dlp
-      - ultralytics
+      - ultralytics==8.3.135
