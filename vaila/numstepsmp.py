@@ -6,6 +6,14 @@ Descrição:
     e calcula o número de passos com base na posição dos pés usando dados
     do MediaPipe.
 
+Author:
+    Paulo Roberto Pereira Santiago
+
+Created:
+    14 May 2025
+Updated:
+    15 May 2025
+
 Uso:
     python numstepsmp.py
 

@@ -1,7 +1,12 @@
 """
-Script Name: rearrange_data.py
-Version: 2024-08-10 14:30:00
-Author: Paulo Santiago
+rearrange_data.py
+
+Created: 08 Oct 2024
+Updated: 15 May 2025
+
+Version: 0.0.2
+
+Author: Paulo Roberto Pereira Santiago
 
 Description:
 -------------
@@ -13,7 +18,7 @@ It includes functions for:
 - Detecting precision and scientific notation in the data.
 - Converting units between various metric systems.
 - Modifying lab reference systems.
-
+- Saving the second half of each CSV file.
 Features:
 ---------
 - Batch processing of CSV files.
@@ -21,18 +26,21 @@ Features:
 - MediaPipe data conversion to a compatible format for pixel coordinate visualization.
 - Flexible unit conversion and custom lab reference adjustments.
 - User-friendly interface with options for saving intermediate and final processed data.
+- Saving the second half of each CSV file.
 
 Changelog:
 ----------
 - 2024-08-10: Added functionality to batch convert MediaPipe CSV files and save them in a new directory.
 - 2024-08-10: Implemented automatic directory creation for saving converted MediaPipe data.
 - 2024-07-31: Initial version with core functionalities for CSV reordering and unit conversion.
+- 2025-05-15: Added functionality to save the second half of each CSV file.
 
 Usage:
 ------
 - Run the script to launch a GUI for reordering CSV columns.
 - Use the "Convert MediaPipe" button to batch convert MediaPipe CSV files to a compatible format.
 - Save the processed files in a timestamped directory.
+- Use the "Save 2nd Half CSV" button to save the second half of each CSV file.
 
 Requirements:
 -------------
@@ -40,6 +48,8 @@ Requirements:
 - pandas
 - numpy
 - tkinter
+
+License: GNU General Public License v3.0
 """
 
 import os
@@ -574,6 +584,14 @@ class ColumnReorderGUI(tk.Tk):
             command=lambda: batch_convert_kinovea(self.directory_path),
         )
         kinovea_button.grid(row=9, column=0, padx=5, pady=5, sticky="n")
+
+        # Save 2nd Half button
+        second_half_button = tk.Button(
+            button_frame,
+            text="Save 2nd Half CSV",
+            command=self.save_second_half
+        )
+        second_half_button.grid(row=10, column=0, padx=5, pady=5, sticky="n")
 
         # Configurar bindings
         self.setup_bindings()
@@ -1132,6 +1150,38 @@ class ColumnReorderGUI(tk.Tk):
             )
             if save_path:
                 stack_csv_files(base_file, stack_file, save_path, stack_position)
+
+    def save_second_half(self):
+        """Save the second half of each CSV file into `self.rearranged_path`."""
+        # Cria o diretório de saída, se necessário
+        if not os.path.exists(self.rearranged_path):
+            os.makedirs(self.rearranged_path)
+
+        # Processa cada arquivo CSV
+        for file_name in self.file_names:
+            if file_name == "Empty" or not file_name.lower().endswith('.csv'):
+                continue
+            file_path = os.path.join(self.directory_path, file_name)
+            df = pd.read_csv(file_path)
+            half_idx = len(df) // 2
+            second_half = df.iloc[half_idx:].reset_index(drop=True)
+            
+            # Reset the first column (assumed to be frame numbers) to start from 0
+            if len(second_half.columns) > 0:
+                first_col = second_half.columns[0]
+                second_half[first_col] = range(len(second_half))
+
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            base = os.path.splitext(file_name)[0]
+            new_name = f"{base}_{timestamp}_2ndhalf.csv"
+            new_path = os.path.join(self.rearranged_path, new_name)
+
+            second_half.to_csv(new_path, index=False)
+        
+        messagebox.showinfo(
+            "Success",
+            f"Second half of CSV files saved in: {self.rearranged_path}"
+        )
 
 
 def convert_dvideo_to_vaila(file_path, save_directory):
