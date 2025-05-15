@@ -296,13 +296,33 @@ class Vaila(tk.Tk):
         )
         preto_label.pack(side="left", padx=10)
 
-        header_label = tk.Label(
+        # Label clickable 'vailá'
+        vaila_click = tk.Label(
             header_frame,
-            text="vailá - Multimodal Toolbox",
-            font=font,  # Correct font adjustment
+            text="vailá",
+            font=("default", self.font_size, "italic"),
+            fg="blue",
+            cursor="hand2",
+        )
+        vaila_click.pack(side="left")
+        # When clicked, open the execution directory
+        vaila_click.bind(
+            "<Button-1>",
+            lambda e: (
+                os.startfile(os.getcwd())
+                if platform.system() == "Windows"
+                else subprocess.Popen(["xdg-open", os.getcwd()])
+            ),
+        )
+
+        # Static label restante
+        toolbox_label = tk.Label(
+            header_frame,
+            text=" - Multimodal Toolbox",
+            font=font,
             anchor="center",
         )
-        header_label.pack(side="left")
+        toolbox_label.pack(side="left")
 
         # Subheader with hyperlink for "vailá"
         subheader_frame = tk.Frame(self)
