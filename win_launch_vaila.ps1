@@ -66,4 +66,3 @@ if (Test-Path $scriptPath) {
 # Inform the user that execution has completed
 Write-Host "vailá toolbox execution complete." -ForegroundColor Green
 Read-Host "Press Enter to exit..."
-
