@@ -19,9 +19,9 @@
 #                                                                                       #
 # Author: Prof. Dr. Paulo R. P. Santiago                                                #
 # Date: September 17, 2024
-# Updated: April 11, 2025
-# Version: 1.3                                                                          #
-# OS: Ubuntu Linux                                                                      #
+# Updated: May 15, 2025
+# Version: 0.1.4                                                                          #
+# OS: Ubuntu, Kubuntu, Linux Mint, Pop_OS!, Zorin OS, etc.                                  #
 #########################################################################################
 
 echo "Starting installation of vaila - Multimodal Toolbox on Linux..."
@@ -98,6 +98,10 @@ cat <<EOF > "$RUN_SCRIPT"
 source "$CONDA_BASE/etc/profile.d/conda.sh"
 conda activate vaila
 python3 "$VAILA_HOME/vaila.py"
+# Keep terminal open after execution
+echo
+echo "Program finished. Press Enter to close this window..."
+read
 EOF
 
 # Make the run_vaila.sh script executable
@@ -198,3 +202,9 @@ fi
 echo "vaila Launcher created and available in the Applications menu!"
 echo "Installation and setup completed."
 echo " "
+
+# Verify and install x-terminal-emulator if necessary
+if ! command -v x-terminal-emulator &> /dev/null; then
+    echo "Installing terminal utility..."
+    sudo apt install -y x-terminal-emulator
+fi
