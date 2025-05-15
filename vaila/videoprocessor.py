@@ -552,7 +552,7 @@ def process_videos_split(
                 f"{os.path.splitext(os.path.basename(video_path))[0]}_2half.mp4",
             )
 
-            # Obter informações detalhadas do vídeo - FIXED: using a more reliable approach
+            # Obter informações detalhadas do vídeo
             ffprobe_info_command = [
                 "ffprobe",
                 "-v",
@@ -606,48 +606,32 @@ def process_videos_split(
                 half_duration = 0
                 second_half_duration = 0
 
-            # Detect hardware encoder - FIXED: using the same hardware detection as in merge
+            # Detect hardware encoder but FORCE libx264 for split operation
             encoder_info = detect_hardware_encoder()
-            encoder = encoder_info["encoder"]
-            quality_param = encoder_info["quality_param"]
-            quality_values = encoder_info["quality_values"]
             
-            # Use medium quality
-            quality = "medium"
-            preset_value = quality_values[quality]
-            
-            # Convert numerical presets for libx264
-            if encoder == "libx264":
-                preset_map = {
-                    "p1": "ultrafast",
-                    "p2": "veryfast",
-                    "p3": "faster",
-                    "p4": "fast",
-                    "p5": "medium",
-                    "p6": "slow",
-                    "p7": "slower",
-                    "p8": "veryslow",
-                    "p9": "placebo",
-                }
-                preset_value = preset_map.get(preset_value, "medium")
+            # Force libx264 for split operation to avoid compatibility issues
+            print("Split mode: forcing software encoder (libx264)")
+            encoder = "libx264"
+            quality_param = "preset"
+            preset_value = "medium"  # Use medium preset for a good balance
             
             print(f"Using encoder: {encoder} with {quality_param}={preset_value}")
 
-            # Command to extract the second half of the video by frames - FIXED: better encoding settings
+            # Command to extract the second half of the video by frames
             ffmpeg_command = [
                 "ffmpeg",
                 "-i",
                 video_path,
                 "-vf",
-                f"select='gte(n,{half_frame})',setpts=N/FR/TB",  # Fixed: use setpts to correct timestamps
+                f"select='gte(n,{half_frame})',setpts=N/FR/TB",
                 "-vsync",
-                "0",  # Changed from vfr to 0 for better compatibility
+                "0",
                 "-c:v",
                 encoder,
                 f"-{quality_param}",
                 preset_value,
                 "-pix_fmt",
-                "yuv420p",  # Standard pixel format for maximum compatibility
+                "yuv420p",  # libx264 works well with yuv420p
                 "-threads",
                 "4",
                 output_video,
