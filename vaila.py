@@ -1197,13 +1197,43 @@ class Vaila(tk.Tk):
         help_btn.pack(side="left", padx=5)
         exit_btn.pack(side="left", padx=5)
 
-        license_label = tk.Label(
-            scrollable_frame,
-            text="© 2025 vailá - Multimodal Toolbox. Licensed under the GNU Lesser General Public License v3.0.",
+        # Create a frame for the license label
+        license_frame = tk.Frame(scrollable_frame)
+        license_frame.pack(pady=5)
+
+        # Label for the license text
+        license_text = tk.Label(
+            license_frame,
+            text="© 2025 ",
             font=("default", 11),
             anchor="center",
         )
-        license_label.pack(pady=5)
+        license_text.pack(side="left")
+
+        # Label clicável 'vailá'
+        vaila_click = tk.Label(
+            license_frame,
+            text="vailá",
+            font=("default", 11, "italic"),  # Set font to italic
+            fg="blue",
+            cursor="hand2",
+        )
+        vaila_click.pack(side="left")
+
+        # Ao clicar, abre o link especificado
+        vaila_click.bind(
+            "<Button-1>",
+            lambda e: webbrowser.open("https://doi.org/10.48550/arXiv.2410.07238")  # Open the link
+        )
+
+        # Static label for the rest of the license text
+        license_static = tk.Label(
+            license_frame,
+            text=" - Multimodal Toolbox. Licensed under the GNU Lesser General Public License v3.0.",
+            font=("default", 11),
+            anchor="center",
+        )
+        license_static.pack(side="left")
 
     # Class definition
     def show_vaila_message(self):
