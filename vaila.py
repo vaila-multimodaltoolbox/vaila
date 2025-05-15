@@ -4,8 +4,8 @@ vaila.py
 ===============================================================================
 Author: Paulo R. P. Santiago
 Date:  7 October 2024
-Update: 13 May 2025
-Version updated: 0.6.11
+Update: 14 May 2025
+Version updated: 0.6.12
 Python Version: 3.12.9
 
 Description:
@@ -80,6 +80,9 @@ Key Features:
 14. **Relative Angles** (New Feature):
     - Provides a script to calculate relative angles between body segments.
 
+15. **Ultrasound** (New Feature):
+    - Provides a script to analyze ultrasound data from images.
+
 Usage:
 ------
 - Run this script to launch the main graphical user interface (GUI) built with
@@ -130,7 +133,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 13.May.2025 v0.6.11 (Python 3.12.9)
+vailá - 14.May.2025 v0.6.12 (Python 3.12.9)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -166,7 +169,7 @@ B3_r3_c4 - Cube2D         B3_r3_c5 - Animal Open Field
 B3_r4_c1 - Tracker        B3_r4_c2 - ML Walkway      B3_r4_c3 - Markerless Hands
 B3_r4_c4 - MP Angles      B3_r4_c5 - Markerless Live
 
-B3_r5_c1 - vailá          B3_r5_c2 - vailá           B3_r5_c3 - vailá
+B3_r5_c1 - Ultrasound     B3_r5_c2 - vailá           B3_r5_c3 - vailá
 B3_r5_c4 - vailá          B3_r5_c5 - vailá
 
 ============================== Tools Available (Frame C) ===================
@@ -174,7 +177,7 @@ B3_r5_c4 - vailá          B3_r5_c5 - vailá
 C_A_r1_c1 - Edit CSV      C_A_r1_c2 - C3D <--> CSV   C_A_r1_c3 - Smooth_Fill_Split
 C_A_r2_c1 - Make DLT2D    C_A_r2_c2 - Rec2D 1DLT     C_A_r2_c3 - Rec2D MultiDLT
 C_A_r3_c1 - Make DLT3D    C_A_r3_c2 - Rec3D 1DLT     C_A_r3_c3 - Rec3D MultiDLT
-C_A_r4_c1 - ReID Marker  C_A_r4_c2 - vailá          C_A_r4_c3 - vailá
+C_A_r4_c1 - ReID Marker   C_A_r4_c2 - vailá          C_A_r4_c3 - vailá
 
 -> C_B: Video and Image
 C_B_r1_c1 - Video<-->PNG  C_B_r1_c2 - Cut Videos    C_B_r1_c3 - Draw Box
@@ -209,7 +212,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 13.May.2025 v0.6.11 (Python 3.12.9)")
+        self.title("vailá - 14.May.2025 v0.6.12 (Python 3.12.9)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -497,7 +500,7 @@ class Vaila(tk.Tk):
             - MP Angles
             - Markerless Live
             B5:
-            - vailá
+            - Ultrasound
             - vailá
             - vailá
             - vailá
@@ -525,6 +528,7 @@ class Vaila(tk.Tk):
         # VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV
         ## Insert the buttons for each Multimodal Toolbox Analysis
         # Buttons for each Multimodal Toolbox Analysis
+        # B - Multimodal Analysis Buttons
         # B1_r1_c1 - IMU
         row1_frame = tk.Frame(analysis_frame)
         row1_frame.pack(fill="x")
@@ -734,16 +738,16 @@ class Vaila(tk.Tk):
         mpangles_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         markerlesslive_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
 
-        # B5 - Quinta linha de botões vailá
+        # B5 - Fifth row of buttons (Ultrasound, vailá, vailá, vailá, vailá)
         row5_frame = tk.Frame(analysis_frame)
         row5_frame.pack(fill="x")
 
-        # B5_r5_c1 - vailá
-        vaila_btn1 = tk.Button(
+        # B5_r5_c1 - Ultrasound
+        ultrasound_btn = tk.Button(
             row5_frame,
-            text="vailá",
+            text="Ultrasound",
             width=button_width,
-            command=self.show_vaila_message,
+            command=self.ultrasound,
         )
 
         # B5_r5_c2 - vailá
@@ -779,7 +783,7 @@ class Vaila(tk.Tk):
         )
 
         # Pack row5 buttons
-        vaila_btn1.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        ultrasound_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         vaila_btn2.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         vaila_btn3.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         vaila_btn4.pack(side="left", expand=True, fill="x", padx=2, pady=2)
@@ -1584,6 +1588,13 @@ class Vaila(tk.Tk):
         from vaila import markerless_live
 
         markerless_live.run_markerless_live()
+
+    # B_r5_c1 - Ultrasound
+    def ultrasound(self):
+        """Runs the Ultrasound module."""
+        from vaila import usound_biomec1
+
+        usound_biomec1.run_usound()
 
     def reorder_csv_data(self):
         """Runs the Reorder CSV Data module.
