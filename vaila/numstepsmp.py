@@ -1091,7 +1091,7 @@ def extract_gait_features(df, foot_strikes, participant=None, trial=None):
             "participant": participant,
             "trial": trial,
             "step_block": i+1,
-            "side": side_end,
+            "side": side_start,
             "start_frame": start,
             "end_frame": end,
             "duration_frames": end - start,
