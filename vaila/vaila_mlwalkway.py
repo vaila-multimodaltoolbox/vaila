@@ -34,9 +34,9 @@ This module creates a new window with buttons for:
 
 
 def run_process_gait_features():
-    from vaila.process_gait_features import run_process_gait_features
+    from vaila.numstepsmp import run_numsteps_gui
 
-    run_process_gait_features()
+    run_numsteps_gui()
 
 
 def run_ml_models_training():
