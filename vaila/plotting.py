@@ -70,7 +70,11 @@ import os
 import matplotlib.pyplot as plt
 import plotly.graph_objs as go
 from plotly.subplots import make_subplots
+from rich import print
+from pathlib import Path
 
+print(f"Running script: {Path(__file__).name}")
+print(f"Script directory: {Path(__file__).parent.resolve()}")
 
 def get_colors():
     # Print the directory and name of the script being executed
