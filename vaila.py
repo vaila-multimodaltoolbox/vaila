@@ -4,8 +4,8 @@ vaila.py
 ===============================================================================
 Author: Paulo R. P. Santiago
 Date:  7 October 2024
-Update: 18 May 2025
-Version updated: 0.6.15
+Update: 19 May 2025
+Version updated: 0.6.16
 Python Version: 3.12.9
 
 Description:
@@ -133,7 +133,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 18.May.2025 v0.6.15 (Python 3.12.9)
+vailá - 19.May.2025 v0.6.16 (Python 3.12.9)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -1602,14 +1602,14 @@ class Vaila(tk.Tk):
 
     # B_r4_c1
     def tracker(self):
-        """Runs the YOLO tracking analysis."""
+        """Runs the specified YOLO tracking analysis."""
         print(f"Running tracker analysis {os.path.dirname(os.path.abspath(__file__))}")
         print(f"Running tracker analysis {os.path.basename(__file__)}")
         
-        # Create a dialog window for user to choose tracker version
+        # Create a dialog window for tracking version selection
         dialog = tk.Toplevel(self)
-        dialog.title("Select YOLO Tracker Version")
-        dialog.geometry("300x200")
+        dialog.title("Select YOLO Version")
+        dialog.geometry("400x220")
         dialog.transient(self)  # Make dialog modal
         dialog.grab_set()
         
@@ -1630,7 +1630,7 @@ class Vaila(tk.Tk):
                 from vaila import yolov12track
                 yolov12track.run_yolov12track()
             except Exception as e:
-                messagebox.showerror("Error Running YOLOv12", f"Error: {str(e)}\n\nPlease check if numpy is properly installed.")
+                messagebox.showerror("Error Running YOLOv12", f"Error: {str(e)}")
         
         def use_yolov11():
             dialog.destroy()
