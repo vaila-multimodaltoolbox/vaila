@@ -86,4 +86,4 @@ dependencies:
       - tensorflow
       - tensorflow-metal
       - yt-dlp
-      - ultralytics==8.3.135
+      - ultralytics==8.3.122

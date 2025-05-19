@@ -135,13 +135,12 @@ If ($psInstalled) {
 
 # Install Chocolatey
 Write-Output "Installing Chocolatey package manager..."
-Try {
+if (-Not (Get-Command choco -ErrorAction SilentlyContinue)) {
+    Write-Output "Instalando Chocolatey..."
     Set-ExecutionPolicy Bypass -Scope Process -Force
     [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
     Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
     Write-Output "Chocolatey installed successfully."
-} Catch {
-    Write-Warning "Failed to install Chocolatey. Error: $_"
 }
 
 # Install rsync via Chocolatey
@@ -227,7 +226,7 @@ If (Test-Path $wtPath) {
 }
 
 # Grant full permissions only to the site-packages directory
-$vailaSitePackagesDir = "C:\ProgramData\anaconda3\envs\vaila\Lib\site-packages"
+$vailaSitePackagesDir = Join-Path $condaPath "envs\vaila\Lib\site-packages"
 Write-Output "Adjusting permissions on site-packages directory '$vailaSitePackagesDir' to allow read, write, and execute access..."
 If (Test-Path $vailaSitePackagesDir) {
     Try {
@@ -287,3 +286,15 @@ Write-Output "5. Type 'python vaila.py' and press Enter."
 
 Write-Output "Thank you for using vailá - Multimodal Toolbox!"
 Pause
+
+$osVersion = [System.Environment]::OSVersion.Version
+if ($osVersion.Major -lt 10) {
+    Write-Warning "Este script requer Windows 10 ou superior."
+    Exit
+}
+
+$drive = Get-PSDrive C
+if ($drive.Free -lt 10GB) {
+    Write-Warning "Espaço insuficiente em disco. Necessário pelo menos 10GB livres."
+    Exit
+}
