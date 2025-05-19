@@ -95,4 +95,4 @@ dependencies:
       - folium
       - yt-dlp
       - mediapipe
-      - ultralytics==8.3.135
+      - ultralytics==8.3.122

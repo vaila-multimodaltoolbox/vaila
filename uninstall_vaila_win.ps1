@@ -108,7 +108,7 @@ If (Test-Path $commonStartMenuVailaLnk) {
     Write-Output "Common Start Menu shortcut removed."
     
     $commonStartMenuVailaFolder = Join-Path $commonStartMenuPrograms "vaila"
-    if (Test-Path $commonStartMenuVailaFolder -and (Get-ChildItem $commonStartMenuVailaFolder | Measure-Object).Count -eq 0) {
+    if ((Test-Path $commonStartMenuVailaFolder) -and ((Get-ChildItem $commonStartMenuVailaFolder | Measure-Object).Count -eq 0)) {
         Write-Output "Removing empty common Start Menu folder..."
         Remove-Item $commonStartMenuVailaFolder -Force
         Write-Output "Common Start Menu folder removed."
@@ -127,7 +127,7 @@ If (Test-Path $userStartMenuVailaLnk) {
     Write-Output "User Start Menu shortcut removed."
     
     $userStartMenuVailaFolder = Join-Path $userStartMenuPrograms "vaila"
-    if (Test-Path $userStartMenuVailaFolder -and (Get-ChildItem $userStartMenuVailaFolder | Measure-Object).Count -eq 0) {
+    if ((Test-Path $userStartMenuVailaFolder) -and ((Get-ChildItem $userStartMenuVailaFolder | Measure-Object).Count -eq 0)) {
         Write-Output "Removing empty user Start Menu folder..."
         Remove-Item $userStartMenuVailaFolder -Force
         Write-Output "User Start Menu folder removed."
