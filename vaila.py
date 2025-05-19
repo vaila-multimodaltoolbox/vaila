@@ -4,8 +4,8 @@ vaila.py
 ===============================================================================
 Author: Paulo R. P. Santiago
 Date:  7 October 2024
-Update: 16 May 2025
-Version updated: 0.6.14
+Update: 19 May 2025
+Version updated: 0.6.16
 Python Version: 3.12.9
 
 Description:
@@ -133,7 +133,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 16.May.2025 v0.6.14 (Python 3.12.9)
+vailá - 19.May.2025 v0.6.16 (Python 3.12.9)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -146,7 +146,7 @@ Mocap fullbody_c3d           Markerless_3D      Markerless_2D_MP and YOLO
    IMU_csv --> |       vailá - multimodal toolbox      | <-- Cluster_csv
 Open Field --> +---------------------------------------+ <-- Force Plate
               ^                   |                    ^ <-- YOLOv12 and MediaPipe
-        EMG__/                    v                     \__Tracker YOLOv12
+        EMG__/                    v                     \__Tracker YOLOv11 or YOLOv12
                +--------------------------------------+
                | Results: Processed Data and Figures  | 
                +--------------------------------------+
@@ -212,7 +212,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 16.May.2025 v0.6.14 (Python 3.12.9)")
+        self.title("vailá - 19.May.2025 v0.6.16 (Python 3.12.9)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -1602,14 +1602,59 @@ class Vaila(tk.Tk):
 
     # B_r4_c1
     def tracker(self):
-        """Runs the yolov12track analysis."""
+        """Runs the specified YOLO tracking analysis."""
         print(f"Running tracker analysis {os.path.dirname(os.path.abspath(__file__))}")
         print(f"Running tracker analysis {os.path.basename(__file__)}")
-        print(f"B_r4_c1 - def tracker on code line number 1556")
-        print("Running tracker analysis...")
-        from vaila import yolov12track
-
-        yolov12track.run_yolov12track()
+        
+        # Create a dialog window for tracking version selection
+        dialog = tk.Toplevel(self)
+        dialog.title("Select YOLO Version")
+        dialog.geometry("400x220")
+        dialog.transient(self)  # Make dialog modal
+        dialog.grab_set()
+        
+        tk.Label(dialog, text="Select YOLO tracker version to use:", pady=15).pack()
+        
+        def use_yolov12():
+            dialog.destroy()
+            try:
+                # Import inside function to avoid early loading
+                import sys
+                # Add the site-packages path first to ensure proper numpy loading
+                site_packages = os.path.join(os.path.dirname(sys.executable), "Lib", "site-packages")
+                if site_packages not in sys.path:
+                    sys.path.insert(0, site_packages)
+                    
+                # Now import and ensure numpy is properly loaded first
+                import numpy as np
+                from vaila import yolov12track
+                yolov12track.run_yolov12track()
+            except Exception as e:
+                messagebox.showerror("Error Running YOLOv12", f"Error: {str(e)}")
+        
+        def use_yolov11():
+            dialog.destroy()
+            try:
+                # Import inside function to avoid early loading
+                import sys
+                # Add the site-packages path first to ensure proper numpy loading
+                site_packages = os.path.join(os.path.dirname(sys.executable), "Lib", "site-packages")
+                if site_packages not in sys.path:
+                    sys.path.insert(0, site_packages)
+                    
+                # Now import and ensure numpy is properly loaded first
+                import numpy as np
+                from vaila import yolov11track
+                yolov11track.run_yolov11track()
+            except Exception as e:
+                messagebox.showerror("Error Running YOLOv11", f"Error: {str(e)}\n\nPlease check if numpy is properly installed.")
+        
+        tk.Button(dialog, text="YOLOv12 Tracker", command=use_yolov12, width=20).pack(pady=10)
+        tk.Button(dialog, text="YOLOv11 Tracker", command=use_yolov11, width=20).pack(pady=10)
+        tk.Button(dialog, text="Cancel", command=dialog.destroy, width=10).pack(pady=10)
+        
+        # Wait for the dialog to be closed
+        self.wait_window(dialog)
 
     # B_r4_c2 - ML Walkway
     def ml_walkway(self):
