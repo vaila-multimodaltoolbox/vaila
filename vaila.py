@@ -2,7 +2,7 @@
 ===============================================================================
 vaila.py
 ===============================================================================
-Author: Paulo R. P. Santiago
+Author: Prof. Paulo R. P. Santiago
 Date:  7 October 2024
 Update: 19 May 2025
 Version updated: 0.6.16
