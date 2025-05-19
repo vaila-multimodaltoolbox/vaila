@@ -1,6 +1,6 @@
 """
 Project: vailá
-Script: yolov12track.py
+Script: yolov11track.py
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
@@ -10,7 +10,7 @@ Update Date: 17 April 2025
 Version: 0.1.0
 
 Description:
-    This script performs object detection and tracking on video files using the YOLO model v12.
+    This script performs object detection and tracking on video files using the YOLO model v11.
     It integrates multiple features, including:
       - Object detection and tracking using the Ultralytics YOLO library.
       - A graphical interface (Tkinter) for dynamic parameter configuration.
@@ -20,7 +20,7 @@ Description:
 
 Usage:
     Run the script from the command line by passing the path to a video file as an argument:
-            python yolov12track.py
+            python yolov11track.py
 
 Requirements:
     - Python 3.x
@@ -311,29 +311,29 @@ class ModelSelectorDialog(tk.simpledialog.Dialog):
     def body(self, master):
         models = [
             # Object Detection explanation: https://docs.ultralytics.com/tasks/detect/
-            ("yolo12n.pt", "Detection - Nano (fastest)"),
-            ("yolo12s.pt", "Detection - Small"),
-            ("yolo12m.pt", "Detection - Medium"),
-            ("yolo12l.pt", "Detection - Large"),
-            ("yolo12x.pt", "Detection - XLarge (most accurate)"),
+            ("yolo11n.pt", "Detection - Nano (fastest)"),
+            ("yolo11s.pt", "Detection - Small"),
+            ("yolo11m.pt", "Detection - Medium"),
+            ("yolo11l.pt", "Detection - Large"),
+            ("yolo11x.pt", "Detection - XLarge (most accurate)"),
             # Pose Estimation explanation: https://docs.ultralytics.com/tasks/pose/
-            ("yolo12n-pose.pt", "Pose - Nano (fastest)"),
-            ("yolo12s-pose.pt", "Pose - Small"),
-            ("yolo12m-pose.pt", "Pose - Medium"),
-            ("yolo12l-pose.pt", "Pose - Large"),
-            ("yolo12x-pose.pt", "Pose - XLarge (most accurate)"),
+            ("yolo11n-pose.pt", "Pose - Nano (fastest)"),
+            ("yolo11s-pose.pt", "Pose - Small"),
+            ("yolo11m-pose.pt", "Pose - Medium"),
+            ("yolo11l-pose.pt", "Pose - Large"),
+            ("yolo11x-pose.pt", "Pose - XLarge (most accurate)"),
             # Segmentation explanation: https://docs.ultralytics.com/tasks/segment/
-            ("yolo12n-seg.pt", "Segmentation - Nano"),
-            ("yolo12s-seg.pt", "Segmentation - Small"),
-            ("yolo12m-seg.pt", "Segmentation - Medium"),
-            ("yolo12l-seg.pt", "Segmentation - Large"),
-            ("yolo12x-seg.pt", "Segmentation - XLarge"),
+            ("yolo11n-seg.pt", "Segmentation - Nano"),
+            ("yolo11s-seg.pt", "Segmentation - Small"),
+            ("yolo11m-seg.pt", "Segmentation - Medium"),
+            ("yolo11l-seg.pt", "Segmentation - Large"),
+            ("yolo11x-seg.pt", "Segmentation - XLarge"),
             # OBB (Oriented Bounding Box) explanation: https://docs.ultralytics.com/tasks/obb/
-            ("yolo12n-obb.pt", "OBB - Nano"),
-            ("yolo12s-obb.pt", "OBB - Small"),
-            ("yolo12m-obb.pt", "OBB - Medium"),
-            ("yolo12l-obb.pt", "OBB - Large"),
-            ("yolo12x-obb.pt", "OBB - XLarge"),
+            ("yolo11n-obb.pt", "OBB - Nano"),
+            ("yolo11s-obb.pt", "OBB - Small"),
+            ("yolo11m-obb.pt", "OBB - Medium"),
+            ("yolo11l-obb.pt", "OBB - Large"),
+            ("yolo11x-obb.pt", "OBB - XLarge"),
         ]
 
         self.listbox = tk.Listbox(master, width=50, height=15)
@@ -839,7 +839,7 @@ def create_combined_person_csv(output_dir):
     return output_file
 
 
-def run_yolov12track():
+def run_yolov11track():
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
 
@@ -937,7 +937,7 @@ def run_yolov12track():
     if not reid_weights.exists():
         print(f"ReID model not found at: {reid_weights}")
     try:
-        tracker = BotSort(reid_weights=reid_weights, device=device, half=half)
+        tracker = BotSort(reid_weights=str(reid_weights), device=device, half=half)
         print("BotSort initialized successfully.")
     except Exception as e:
         print(f"Error initializing BotSort: {e}")
@@ -1124,7 +1124,7 @@ def run_yolov12track():
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python yolov12track.py [video_file]")
+        print("Usage: python yolov11track.py [video_file]")
         sys.exit(1)
 
     video_file = sys.argv[1]
