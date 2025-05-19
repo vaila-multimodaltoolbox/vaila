@@ -937,7 +937,7 @@ def run_yolov12track():
     if not reid_weights.exists():
         print(f"ReID model not found at: {reid_weights}")
     try:
-        tracker = BotSort(reid_weights=str(reid_weights), device=device, half=half)
+        tracker = BotSort(reid_weights=reid_weights, device=device, half=half)
         print("BotSort initialized successfully.")
     except Exception as e:
         print(f"Error initializing BotSort: {e}")
