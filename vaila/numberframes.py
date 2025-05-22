@@ -82,33 +82,59 @@ def get_video_info(video_path):
                 if stripped_line:  # Encontrou a primeira linha não vazia
                     first_parsable_line = stripped_line
                     break
-            
-            if first_parsable_line and 'x' in first_parsable_line:
+
+            if first_parsable_line and "x" in first_parsable_line:
                 try:
-                    w_str, h_str = first_parsable_line.split('x')
+                    w_str, h_str = first_parsable_line.split("x")
                     width = int(w_str)
                     height = int(h_str)
                 except ValueError:
                     # A primeira linha não pôde ser parseada como WxH, limpamos para tentar o fallback
                     width, height = None, None
-                    print(f"Warning: Failed to parse resolution '{first_parsable_line}' from {video_path} using csv format.")
+                    print(
+                        f"Warning: Failed to parse resolution '{first_parsable_line}' from {video_path} using csv format."
+                    )
             else:
-                 print(f"Warning: CSV output for resolution from {video_path} was not in 'WxH' format. Raw: '{resolution_output_str}'.")
+                print(
+                    f"Warning: CSV output for resolution from {video_path} was not in 'WxH' format. Raw: '{resolution_output_str}'."
+                )
 
         # Se a tentativa primária falhou (width ou height ainda é None)
         if width is None or height is None:
-            print(f"Attempting fallback: getting width and height separately for {video_path}.")
+            print(
+                f"Attempting fallback: getting width and height separately for {video_path}."
+            )
             width_cmd_fallback = [
-                "ffprobe", "-v", "error", "-select_streams", "v:0",
-                "-show_entries", "stream=width", "-of", "default=noprint_wrappers=1:nokey=1", video_path
+                "ffprobe",
+                "-v",
+                "error",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "stream=width",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                video_path,
             ]
             height_cmd_fallback = [
-                "ffprobe", "-v", "error", "-select_streams", "v:0",
-                "-show_entries", "stream=height", "-of", "default=noprint_wrappers=1:nokey=1", video_path
+                "ffprobe",
+                "-v",
+                "error",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "stream=height",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                video_path,
             ]
 
-            width_str_fb = subprocess.run(width_cmd_fallback, stdout=subprocess.PIPE, text=True).stdout.strip()
-            height_str_fb = subprocess.run(height_cmd_fallback, stdout=subprocess.PIPE, text=True).stdout.strip()
+            width_str_fb = subprocess.run(
+                width_cmd_fallback, stdout=subprocess.PIPE, text=True
+            ).stdout.strip()
+            height_str_fb = subprocess.run(
+                height_cmd_fallback, stdout=subprocess.PIPE, text=True
+            ).stdout.strip()
 
             if width_str_fb and height_str_fb:
                 try:
@@ -178,7 +204,7 @@ def get_video_info(video_path):
         print(f"Warning: Could not get detailed video info for {video_path}: {e}")
         return {
             "file_name": os.path.basename(video_path),
-            "error": f"Error retrieving video info: {str(e)}"
+            "error": f"Error retrieving video info: {str(e)}",
         }
 
 

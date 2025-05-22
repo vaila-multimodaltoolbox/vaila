@@ -426,7 +426,9 @@ def plot_pathway(x, y, time_vector, total_distance, output_dir, base_name):
     # Add a colorbar for the pathway progression
     sm = plt.cm.ScalarMappable(
         cmap=cmap,
-        norm=matplotlib.colors.Normalize(vmin=time_in_minutes.min(), vmax=time_in_minutes.max()),
+        norm=matplotlib.colors.Normalize(
+            vmin=time_in_minutes.min(), vmax=time_in_minutes.max()
+        ),
     )
     sm.set_array([])
     cbar = plt.colorbar(sm, ax=ax, orientation="vertical", fraction=0.046, pad=0.04)

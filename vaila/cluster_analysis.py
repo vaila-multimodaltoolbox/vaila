@@ -316,7 +316,7 @@ def analyze_cluster_data():
         if sample_rate is None:
             messagebox.showerror("Error", "Sample rate must be provided.")
             return
-        
+
         # Create time vector with validated sample_rate
         time = np.linspace(0, len(data) / float(sample_rate), len(data))
         print(f"Time vector created with length: {len(time)}")
@@ -370,7 +370,9 @@ def analyze_cluster_data():
             matplotlib_figs.append(fig_matplotlib)
             plt.show()
 
-        blab = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])  # Lab coordinate system basis
+        blab = np.array(
+            [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+        )  # Lab coordinate system basis
         cluster1_rotmat = calcmatrot(cluster1_base, blab)
         cluster2_rotmat = calcmatrot(cluster2_base, blab)
 
