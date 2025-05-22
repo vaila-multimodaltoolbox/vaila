@@ -258,7 +258,7 @@ def process_file(
                     print(f"An error occurred: {e}")
 
         # If all attempts fail, raise an error
-        raise UnicodeDecodeError('utf-8', b'', 0, 1, 'Failed to decode file')
+        raise UnicodeDecodeError("utf-8", b"", 0, 1, "Failed to decode file")
 
     # Load the file using the new load_csv_file function
     df = load_csv_file(file_path)
@@ -382,7 +382,13 @@ def select_headers_and_load_data(file_path):
                     print(f"An error occurred: {e}")
 
         # If all encoding and delimiter attempts fail, raise an error
-        raise UnicodeDecodeError('utf-8', b'', 0, 1, f"Failed to read the file {file_path} with the provided encodings and delimiters.")
+        raise UnicodeDecodeError(
+            "utf-8",
+            b"",
+            0,
+            1,
+            f"Failed to read the file {file_path} with the provided encodings and delimiters.",
+        )
 
     headers, df = get_csv_headers(file_path)
     selected_headers = []

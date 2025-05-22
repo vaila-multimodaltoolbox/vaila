@@ -587,9 +587,7 @@ class ColumnReorderGUI(tk.Tk):
 
         # Save 2nd Half button
         second_half_button = tk.Button(
-            button_frame,
-            text="Save 2nd Half CSV",
-            command=self.save_second_half
+            button_frame, text="Save 2nd Half CSV", command=self.save_second_half
         )
         second_half_button.grid(row=10, column=0, padx=5, pady=5, sticky="n")
 
@@ -1159,28 +1157,27 @@ class ColumnReorderGUI(tk.Tk):
 
         # Processa cada arquivo CSV
         for file_name in self.file_names:
-            if file_name == "Empty" or not file_name.lower().endswith('.csv'):
+            if file_name == "Empty" or not file_name.lower().endswith(".csv"):
                 continue
             file_path = os.path.join(self.directory_path, file_name)
             df = pd.read_csv(file_path)
             half_idx = len(df) // 2
             second_half = df.iloc[half_idx:].reset_index(drop=True)
-            
+
             # Reset the first column (assumed to be frame numbers) to start from 0
             if len(second_half.columns) > 0:
                 first_col = second_half.columns[0]
                 second_half[first_col] = range(len(second_half))
 
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             base = os.path.splitext(file_name)[0]
             new_name = f"{base}_{timestamp}_2ndhalf.csv"
             new_path = os.path.join(self.rearranged_path, new_name)
 
             second_half.to_csv(new_path, index=False)
-        
+
         messagebox.showinfo(
-            "Success",
-            f"Second half of CSV files saved in: {self.rearranged_path}"
+            "Success", f"Second half of CSV files saved in: {self.rearranged_path}"
         )
 
 

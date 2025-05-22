@@ -248,11 +248,11 @@ def process_videos_merge(
     quality_num = simpledialog.askinteger(
         "Quality Level", quality_msg, minvalue=1, maxvalue=9, initialvalue=5
     )
-    
+
     # Handle case where user cancels dialog
     if quality_num is None:
         quality_num = 5  # Default to medium quality
-    
+
     # Map the number to a quality setting - moved outside the loop
     if quality_num <= 3:
         quality = "fast"
@@ -576,13 +576,13 @@ def process_videos_split(
                     text=True,
                 )
                 video_info = json.loads(video_info_result.stdout)
-                
+
                 # Extract values from the JSON structure
                 width = int(video_info["streams"][0]["width"])
                 height = int(video_info["streams"][0]["height"])
                 frame_rate_str = video_info["streams"][0]["r_frame_rate"]
                 duration = float(video_info["format"]["duration"])
-                
+
                 # Convert frame rate from string format (e.g. "30000/1001")
                 if "/" in frame_rate_str:
                     num, den = map(int, frame_rate_str.split("/"))
@@ -608,13 +608,13 @@ def process_videos_split(
 
             # Detect hardware encoder but FORCE libx264 for split operation
             encoder_info = detect_hardware_encoder()
-            
+
             # Force libx264 for split operation to avoid compatibility issues
             print("Split mode: forcing software encoder (libx264)")
             encoder = "libx264"
             quality_param = "preset"
             preset_value = "medium"  # Use medium preset for a good balance
-            
+
             print(f"Using encoder: {encoder} with {quality_param}={preset_value}")
 
             # Command to extract the second half of the video by frames
@@ -655,7 +655,9 @@ def process_videos_split(
                 log_file.write(f"ORIGINAL VIDEO DETAILS\n")
                 log_file.write(f"---------------------\n")
                 log_file.write(f"Resolution: {width} x {height}\n")
-                log_file.write(f"Frame Rate: {frame_rate if isinstance(frame_rate, str) else frame_rate:.2f} fps\n")
+                log_file.write(
+                    f"Frame Rate: {frame_rate if isinstance(frame_rate, str) else frame_rate:.2f} fps\n"
+                )
                 log_file.write(f"Duration: {duration:.2f} seconds\n")
                 log_file.write(f"Total Frames: {total_frames}\n\n")
 
@@ -711,12 +713,12 @@ def process_videos_gui():
         "Operation",
         "Enter operation:\n'm' for merge (original+reverse)\n's' for split (keep second half)\n'multi' for multi-video merge",
     )
-    
+
     # Check if user cancelled the dialog
     if operation_input is None:
         messagebox.showerror("Error", "No operation selected.")
         return
-        
+
     operation = operation_input.strip().lower()
 
     if not operation or operation not in ["m", "s", "multi"]:

@@ -649,19 +649,22 @@ def run_cutvideo():
 
     # Platform-specific adjustments
     import platform
+
     if platform.system() == "Linux":
         try:
             # Check if we're on Linux and if NVIDIA drivers are present
             has_nvidia = os.path.exists("/proc/driver/nvidia")
             if has_nvidia:
                 print("NVIDIA GPU detected, applying OpenGL compatibility settings")
-            
+
             # Set OpenGL to software rendering as a fallback for Mesa/OpenGL issues on Linux
-            os.environ['LIBGL_ALWAYS_SOFTWARE'] = '1'
-            os.environ['SDL_VIDEODRIVER'] = 'x11'
+            os.environ["LIBGL_ALWAYS_SOFTWARE"] = "1"
+            os.environ["SDL_VIDEODRIVER"] = "x11"
         except Exception as e:
             print(f"Note: Could not set GPU compatibility mode: {e}")
-            print("If you experience graphics issues, try running: export LIBGL_ALWAYS_SOFTWARE=1")
+            print(
+                "If you experience graphics issues, try running: export LIBGL_ALWAYS_SOFTWARE=1"
+            )
 
     video_path = get_video_path()
     if not video_path:
@@ -672,7 +675,7 @@ def run_cutvideo():
         play_video_with_cuts(video_path)
     except Exception as e:
         print(f"Error in cutvideo: {e}")
-        
+
         # More helpful error message for Linux users
         if platform.system() == "Linux":
             print("\nPossible Linux graphics driver issue detected.")
