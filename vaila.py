@@ -4,8 +4,8 @@ vaila.py
 ===============================================================================
 Author: Prof. Paulo R. P. Santiago
 Date:  7 October 2024
-Update: 21 May 2025
-Version updated: 0.6.17
+Update: 22 May 2025
+Version updated: 0.6.18
 Python Version: 3.12.9
 
 Description:
@@ -126,14 +126,17 @@ APPKIT_AVAILABLE = False
 if platform.system() == "Darwin":  # macOS
     try:
         import AppKit  # macOS only ignore this line in other OS
+
         APPKIT_AVAILABLE = True
     except ImportError:
         # Silently continue if AppKit is not available
-        print("AppKit not available. Application name in dock might not be set correctly.")
+        print(
+            "AppKit not available. Application name in dock might not be set correctly."
+        )
         pass
 
 text = r"""
-vailá - 21.May.2025 v0.6.17 (Python 3.12.9)
+vailá - 22.May.2025 v0.6.18 (Python 3.12.9)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -212,7 +215,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 21.May.2025 v0.6.17 (Python 3.12.9)")
+        self.title("vailá - 22.May.2025 v0.6.18 (Python 3.12.9)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -1223,7 +1226,9 @@ class Vaila(tk.Tk):
         # Ao clicar, abre o link especificado
         vaila_click.bind(
             "<Button-1>",
-            lambda e: webbrowser.open("https://doi.org/10.48550/arXiv.2410.07238")  # Open the link
+            lambda e: webbrowser.open(
+                "https://doi.org/10.48550/arXiv.2410.07238"
+            ),  # Open the link
         )
 
         # Static label for the rest of the license text
@@ -1605,54 +1610,69 @@ class Vaila(tk.Tk):
         """Runs the specified YOLO tracking analysis."""
         print(f"Running tracker analysis {os.path.dirname(os.path.abspath(__file__))}")
         print(f"Running tracker analysis {os.path.basename(__file__)}")
-        
+
         # Create a dialog window for tracking version selection
         dialog = tk.Toplevel(self)
         dialog.title("Select YOLO Version")
         dialog.geometry("400x220")
         dialog.transient(self)  # Make dialog modal
         dialog.grab_set()
-        
+
         tk.Label(dialog, text="Select YOLO tracker version to use:", pady=15).pack()
-        
+
         def use_yolov12():
             dialog.destroy()
             try:
                 # Import inside function to avoid early loading
                 import sys
+
                 # Add the site-packages path first to ensure proper numpy loading
-                site_packages = os.path.join(os.path.dirname(sys.executable), "Lib", "site-packages")
+                site_packages = os.path.join(
+                    os.path.dirname(sys.executable), "Lib", "site-packages"
+                )
                 if site_packages not in sys.path:
                     sys.path.insert(0, site_packages)
-                    
+
                 # Now import and ensure numpy is properly loaded first
                 import numpy as np
                 from vaila import yolov12track
+
                 yolov12track.run_yolov12track()
             except Exception as e:
                 messagebox.showerror("Error Running YOLOv12", f"Error: {str(e)}")
-        
+
         def use_yolov11():
             dialog.destroy()
             try:
                 # Import inside function to avoid early loading
                 import sys
+
                 # Add the site-packages path first to ensure proper numpy loading
-                site_packages = os.path.join(os.path.dirname(sys.executable), "Lib", "site-packages")
+                site_packages = os.path.join(
+                    os.path.dirname(sys.executable), "Lib", "site-packages"
+                )
                 if site_packages not in sys.path:
                     sys.path.insert(0, site_packages)
-                    
+
                 # Now import and ensure numpy is properly loaded first
                 import numpy as np
                 from vaila import yolov11track
+
                 yolov11track.run_yolov11track()
             except Exception as e:
-                messagebox.showerror("Error Running YOLOv11", f"Error: {str(e)}\n\nPlease check if numpy is properly installed.")
-        
-        tk.Button(dialog, text="YOLOv12 Tracker", command=use_yolov12, width=20).pack(pady=10)
-        tk.Button(dialog, text="YOLOv11 Tracker", command=use_yolov11, width=20).pack(pady=10)
+                messagebox.showerror(
+                    "Error Running YOLOv11",
+                    f"Error: {str(e)}\n\nPlease check if numpy is properly installed.",
+                )
+
+        tk.Button(dialog, text="YOLOv12 Tracker", command=use_yolov12, width=20).pack(
+            pady=10
+        )
+        tk.Button(dialog, text="YOLOv11 Tracker", command=use_yolov11, width=20).pack(
+            pady=10
+        )
         tk.Button(dialog, text="Cancel", command=dialog.destroy, width=10).pack(pady=10)
-        
+
         # Wait for the dialog to be closed
         self.wait_window(dialog)
 

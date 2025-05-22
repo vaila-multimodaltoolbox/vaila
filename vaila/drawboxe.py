@@ -30,6 +30,7 @@ Dependencies:
 - tkinter
 
 """
+
 import numpy as np
 import os
 import subprocess
@@ -42,6 +43,7 @@ import time
 import shutil
 import datetime
 
+
 def save_first_frame(video_path, frame_path):
     vidcap = cv2.VideoCapture(video_path)
     success, image = vidcap.read()
@@ -49,16 +51,29 @@ def save_first_frame(video_path, frame_path):
         cv2.imwrite(frame_path, image)
     vidcap.release()
 
+
 def extract_frames(video_path, frames_dir):
     try:
         os.makedirs(frames_dir, exist_ok=True)
         video_path = os.path.normpath(os.path.abspath(video_path))
         frames_dir = os.path.normpath(os.path.abspath(frames_dir))
-        if os.name == 'nt':
-            command = ["ffmpeg", "-i", video_path, os.path.join(frames_dir, "frame_%09d.png")]
-            result = subprocess.run(command, check=True, capture_output=True, text=True, shell=True)
+        if os.name == "nt":
+            command = [
+                "ffmpeg",
+                "-i",
+                video_path,
+                os.path.join(frames_dir, "frame_%09d.png"),
+            ]
+            result = subprocess.run(
+                command, check=True, capture_output=True, text=True, shell=True
+            )
         else:
-            command = ["ffmpeg", "-i", video_path, os.path.join(frames_dir, "frame_%09d.png")]
+            command = [
+                "ffmpeg",
+                "-i",
+                video_path,
+                os.path.join(frames_dir, "frame_%09d.png"),
+            ]
             result = subprocess.run(command, check=True, capture_output=True, text=True)
     except subprocess.CalledProcessError as e:
         print(f"Error running ffmpeg: {e.stderr}")
@@ -66,6 +81,7 @@ def extract_frames(video_path, frames_dir):
     except Exception as e:
         print(f"Error extracting frames: {str(e)}")
         raise
+
 
 def apply_boxes_directly_to_video(input_path, output_path, coordinates, selections):
     vidcap = cv2.VideoCapture(input_path)
@@ -105,11 +121,15 @@ def apply_boxes_directly_to_video(input_path, output_path, coordinates, selectio
             frame = cv2.bitwise_and(frame, frame, mask=mask_all)
         out.write(frame)
         frame_count += 1
-        print(f"Processed {frame_count}/{total_frames} frames for {os.path.basename(input_path)}", end="\r")
+        print(
+            f"Processed {frame_count}/{total_frames} frames for {os.path.basename(input_path)}",
+            end="\r",
+        )
     print(f"\nCompleted processing: {os.path.basename(input_path)}")
     print(f"Saved to: {output_path}")
     out.release()
     vidcap.release()
+
 
 def apply_boxes_to_frames(frames_dir, coordinates, selections, frame_intervals):
     for filename in sorted(os.listdir(frames_dir)):
@@ -143,9 +163,20 @@ def apply_boxes_to_frames(frames_dir, coordinates, selections, frame_intervals):
                     img = cv2.bitwise_and(img, img, mask=mask_all)
                 cv2.imwrite(frame_path, img)
 
+
 def reassemble_video(frames_dir, output_path, fps):
-    command = ["ffmpeg", "-framerate", str(fps), "-i", os.path.join(frames_dir, "frame_%09d.png"), "-c:v", "libx264", output_path]
+    command = [
+        "ffmpeg",
+        "-framerate",
+        str(fps),
+        "-i",
+        os.path.join(frames_dir, "frame_%09d.png"),
+        "-c:v",
+        "libx264",
+        output_path,
+    ]
     subprocess.run(command, check=True)
+
 
 def clean_up(directory):
     for filename in os.listdir(directory):
@@ -153,28 +184,32 @@ def clean_up(directory):
         os.remove(file_path)
     os.rmdir(directory)
 
+
 def get_box_coordinates(image_path):
     img = plt.imread(image_path)
     fig, ax = plt.subplots()
     selection_mode = {"mode": "inside", "shape": "rectangle"}
+
     def update_title():
         shape_text = (
             "trapezoid" if selection_mode["shape"] == "trapezoid" else "rectangle"
         )
         ax.set_title(
-            f'Color Guide:\n'
-            f'Rectangle: Red (inside) / Blue (outside)\n'
-            f'Trapezoid: Green (inside) / Yellow (outside)\n'
+            f"Color Guide:\n"
+            f"Rectangle: Red (inside) / Blue (outside)\n"
+            f"Trapezoid: Green (inside) / Yellow (outside)\n"
             f'Current mode: {selection_mode["mode"]}, Shape: {shape_text}\n'
             'Click to select corners. Press "e" to toggle mode, "t" to toggle shape, Enter to finish.'
         )
         fig.canvas.draw()
+
     ax.imshow(img)
     update_title()
     points = []
     shapes = []
     selections = []
     temp_points = []
+
     def on_key(event):
         if event.key == "e":
             selection_mode["mode"] = (
@@ -189,6 +224,7 @@ def get_box_coordinates(image_path):
             update_title()
         elif event.key == "enter":
             plt.close()
+
     def on_click(event):
         nonlocal points, shapes, selections, temp_points
         if event.button == 3:
@@ -243,6 +279,7 @@ def get_box_coordinates(image_path):
                     selections.append((selection_mode["mode"], "trapezoid"))
                     temp_points.clear()
                     plt.draw()
+
     fig.canvas.mpl_connect("button_press_event", on_click)
     fig.canvas.mpl_connect("key_press_event", on_key)
     plt.show()
@@ -257,6 +294,7 @@ def get_box_coordinates(image_path):
             boxes.append(box_points)
     return boxes, selections
 
+
 def load_frame_intervals(file_path):
     intervals = []
     with open(file_path, "r") as file:
@@ -265,24 +303,25 @@ def load_frame_intervals(file_path):
             intervals.append((start, end))
     return intervals
 
+
 def show_feedback_message():
     print("vailá!")
     time.sleep(2)
+
 
 def run_drawboxe():
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
     root = tk.Tk()
     root.withdraw()
-    if os.name == 'nt':
+    if os.name == "nt":
         initial_dir = os.path.expanduser("~")
-    elif os.name == 'posix':
+    elif os.name == "posix":
         initial_dir = os.path.expanduser("~")
     else:
         initial_dir = os.getcwd()
     video_directory = filedialog.askdirectory(
-        title="Select the directory containing videos",
-        initialdir=initial_dir
+        title="Select the directory containing videos", initialdir=initial_dir
     )
     if not video_directory:
         messagebox.showerror("Error", "No directory selected.")
@@ -300,7 +339,9 @@ def run_drawboxe():
             ]
         )
     except PermissionError:
-        messagebox.showerror("Error", f"Permission denied to access directory: {video_directory}")
+        messagebox.showerror(
+            "Error", f"Permission denied to access directory: {video_directory}"
+        )
         return
     except Exception as e:
         messagebox.showerror("Error", f"Error accessing directory: {str(e)}")
@@ -355,6 +396,7 @@ def run_drawboxe():
     show_feedback_message()
     print("All videos processed and saved to the output directory.")
     messagebox.showinfo("Completed", "All videos have been processed successfully!")
+
 
 if __name__ == "__main__":
     run_drawboxe()
