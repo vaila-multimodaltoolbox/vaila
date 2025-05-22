@@ -225,11 +225,17 @@ def process_files_in_directory(directory):
 
         data = read_csv_full(file_path)
         if selected_column not in data.columns:
-            messagebox.showerror("Error", f"Column '{selected_column}' not found in the data.")
+            messagebox.showerror(
+                "Error", f"Column '{selected_column}' not found in the data."
+            )
             return  # Exit if the column is not found
 
-        target_column_index = data.columns.get_loc(selected_column)  # Get the index of the selected column
-        indices = makefig1(data.iloc[:, target_column_index])  # Access the column safely
+        target_column_index = data.columns.get_loc(
+            selected_column
+        )  # Get the index of the selected column
+        indices = makefig1(
+            data.iloc[:, target_column_index]
+        )  # Access the column safely
         if indices:  # Only if points were selected
             modified_data = replace_segments(data, indices, target_column_index)
             new_filename = os.path.join(

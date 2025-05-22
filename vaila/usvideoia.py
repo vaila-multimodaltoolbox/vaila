@@ -5,7 +5,7 @@ Module to provide Video Super-Resolution (VSR) upscale functionality as a standa
 that can be imported into resize_video.py or run directly.
 
 Created by: Paulo Roberto Pereira Santiago
-Email: paulosantiago@usp.br 
+Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 09 May 2025
 Updated: 09 May 2025
@@ -19,7 +19,7 @@ Usage:
     This module can be imported into resize_video.py or run directly.
     Directly: python usvideoia.py
     Import: from vaila import usvideoia
-    usvideoia.run_usvideoia()   
+    usvideoia.run_usvideoia()
 
 Dependencies:
     - mmagic
@@ -45,6 +45,7 @@ from einops import rearrange
 from mmagic.apis import init_model, inference_video
 from mmagic.utils import register_all_modules
 
+
 # ----------------------------
 # Helpers de I/O de vídeo
 # ----------------------------
@@ -54,11 +55,13 @@ def extract_frames(video_path, temp_dir, fps=30):
     idx = 0
     while True:
         ret, frame = cap.read()
-        if not ret: break
+        if not ret:
+            break
         cv2.imwrite(f"{temp_dir}/{idx:05d}.png", frame)
         idx += 1
     cap.release()
     return idx
+
 
 def reconstruct_video(frames_dir, out_path, fps=30):
     files = sorted(Path(frames_dir).glob("*.png"))
@@ -69,6 +72,7 @@ def reconstruct_video(frames_dir, out_path, fps=30):
         frame = cv2.imread(str(f))
         writer.write(frame)
     writer.release()
+
 
 # ----------------------------
 # Inferência VSR com MMagic
@@ -91,25 +95,29 @@ def vsr_inference(
     # 2) Processa em janelas deslizantes de 5 frames
     idxs = list(range(num_frames))
     pad = 2
-    padded = [max(0, i) for i in idxs[:pad]] + idxs + [min(num_frames-1, i) for i in idxs[-pad:]]
-    
+    padded = (
+        [max(0, i) for i in idxs[:pad]]
+        + idxs
+        + [min(num_frames - 1, i) for i in idxs[-pad:]]
+    )
+
     for i in tqdm(range(num_frames), desc="VSR Inference"):
         # constrói janelinha
-        window = padded[i:i+5]
+        window = padded[i : i + 5]
         # carrega frames
         frames = []
         for j in window:
             img = cv2.imread(f"{in_frames}/{j:05d}.png")
             frames.append(img)
-        
+
         # inferência com MMagic
         with torch.no_grad():
             sr = model.inference(frames)
-        
+
         # salva frame super-resolvido
-        sr_img = sr.squeeze(0).cpu().clamp(0,1)
-        sr_img = rearrange(sr_img, 'c h w -> h w c').numpy() * 255
-        sr_img = cv2.cvtColor(sr_img.astype('uint8'), cv2.COLOR_RGB2BGR)
+        sr_img = sr.squeeze(0).cpu().clamp(0, 1)
+        sr_img = rearrange(sr_img, "c h w -> h w c").numpy() * 255
+        sr_img = cv2.cvtColor(sr_img.astype("uint8"), cv2.COLOR_RGB2BGR)
         cv2.imwrite(f"{sr_frames}/{i:05d}.png", sr_img)
 
     # 3) Reconstrói vídeo
@@ -119,26 +127,28 @@ def vsr_inference(
     shutil.rmtree(temp)
     print(f"Upscaled salvo em {out_path}")
 
+
 # ----------------------------
 # Entry Point
 # ----------------------------
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input_dir",  "-i", required=True, type=Path)
+    parser.add_argument("--input_dir", "-i", required=True, type=Path)
     parser.add_argument("--output_dir", "-o", required=True, type=Path)
-    parser.add_argument("--config",     "-c", required=True, type=str)
+    parser.add_argument("--config", "-c", required=True, type=str)
     parser.add_argument("--checkpoint", "-k", required=True, type=str)
-    parser.add_argument("--device",     "-d", default="cpu")
+    parser.add_argument("--device", "-d", default="cpu")
     args = parser.parse_args()
 
     # Registra todos os módulos MMagic
     register_all_modules()
-    
+
     # Inicializa o modelo
     device = torch.device(args.device)
     model = init_model(args.config, args.checkpoint, device=device)
 
     vsr_inference(args.input_dir, args.output_dir, model, device)
+
 
 if __name__ == "__main__":
     main()
