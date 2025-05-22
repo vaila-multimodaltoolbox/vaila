@@ -30,12 +30,19 @@ from datetime import datetime
 import tkinter as tk
 from tkinter import filedialog, messagebox
 from rich import print
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
+from rich.progress import (
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    BarColumn,
+    TimeElapsedColumn,
+)
 from pathlib import Path
 
 # Global counters
 success_count = 0
 failure_count = 0
+
 
 def find_ts_videos(directory: str) -> list:
     """Return a list of all .ts files in the given directory."""
@@ -44,6 +51,7 @@ def find_ts_videos(directory: str) -> list:
         for f in os.listdir(directory)
         if f.lower().endswith(".ts")
     ]
+
 
 def run_convert_ts_to_mp4(input_dir: str, output_dir: str):
     """Convert each .ts file in input_dir to .mp4 without audio, saving into output_dir."""
@@ -79,17 +87,25 @@ def run_convert_ts_to_mp4(input_dir: str, output_dir: str):
                 continue
 
             cmd = [
-                "ffmpeg", "-y",
-                "-i", ts_path,
-                "-c:v", "copy",  # Copy video stream without re-encoding
-                "-an",           # Remove audio
-                "-movflags", "+faststart",  # Enable fast start for web playback
-                mp4_path
+                "ffmpeg",
+                "-y",
+                "-i",
+                ts_path,
+                "-c:v",
+                "copy",  # Copy video stream without re-encoding
+                "-an",  # Remove audio
+                "-movflags",
+                "+faststart",  # Enable fast start for web playback
+                mp4_path,
             ]
 
             try:
-                print(f"[cyan]Converting:[/cyan] {os.path.basename(ts_path)} → {base}.mp4")
-                subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                print(
+                    f"[cyan]Converting:[/cyan] {os.path.basename(ts_path)} → {base}.mp4"
+                )
+                subprocess.run(
+                    cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+                )
                 success_count += 1
             except subprocess.CalledProcessError as e:
                 print(f"[red]Failed:[/red] {os.path.basename(ts_path)}")
@@ -101,14 +117,14 @@ def run_convert_ts_to_mp4(input_dir: str, output_dir: str):
 
             progress.advance(task)
 
+
 def convert_ts_to_mp4_gui():
     """Main GUI for directory selection and conversion process."""
     root = tk.Tk()
     root.withdraw()  # hide main window
 
     messagebox.showinfo(
-        "Select Folder",
-        "Select the directory containing .ts videos to convert."
+        "Select Folder", "Select the directory containing .ts videos to convert."
     )
     input_dir = filedialog.askdirectory(title="Select .ts Videos Directory")
     if not input_dir:
@@ -127,8 +143,9 @@ def convert_ts_to_mp4_gui():
         f"Finished converting videos.\n\n"
         f"Succeeded: {success_count}\n"
         f"Failed: {failure_count}\n\n"
-        f"Converted files are in:\n{output_dir}"
+        f"Converted files are in:\n{output_dir}",
     )
+
 
 if __name__ == "__main__":
     convert_ts_to_mp4_gui()
