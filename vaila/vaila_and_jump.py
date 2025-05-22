@@ -6,8 +6,8 @@ Author: Prof. Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 24 Oct 2024
-Update Date: 01 May 2025
-Version: 0.0.3
+Update Date: 21 May 2025
+Version: 0.0.4
 Python Version: 3.12.9
 
 Description:
@@ -27,10 +27,10 @@ Features:
 - Supports two calculation modes:
   - Based on time of flight (calculates jump height)
   - Based on measured jump height (uses the height directly)
-- Processes MediaPipe pose estimation data:
-  - Automatically inverts y-coordinates for proper biomechanical analysis
-  - Converts normalized coordinates to meters using shank length as reference
-  - Calculates center of gravity (CG) position for accurate jump height
+  - Processes MediaPipe (in vailá) pose estimation data:
+    - Automatically inverts y-coordinates for proper biomechanical analysis
+    - Converts normalized coordinates to meters using shank length as reference
+    - Calculates center of gravity (CG) position for accurate jump height
 - Calculates various metrics for each jump:
   - Force
   - Liftoff Force (Thrust)
@@ -117,6 +117,10 @@ Notes:
 ------
 - Ensure that all necessary libraries are installed.
 - For accurate results, the MediaPipe landmark detection should be of good quality.
+
+License:
+--------
+This script is licensed under the GNU General Public License v3.0.
 ===============================================================================
 """
 
