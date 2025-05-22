@@ -17,11 +17,20 @@ performing biomechanical calculations based on either the time of flight or the
 jump height. The results are saved in a new output directory with a timestamp
 for each processed file.
 
+For MediaPipe data, the script automatically inverts y-coordinates (1.0 - y) to 
+transform from screen coordinates (where y increases downward) to biomechanical
+coordinates (where y increases upward). This allows proper visualization and 
+analysis of the jumping motion.
+
 Features:
 ---------
 - Supports two calculation modes:
   - Based on time of flight (calculates jump height)
   - Based on measured jump height (uses the height directly)
+- Processes MediaPipe pose estimation data:
+  - Automatically inverts y-coordinates for proper biomechanical analysis
+  - Converts normalized coordinates to meters using shank length as reference
+  - Calculates center of gravity (CG) position for accurate jump height
 - Calculates various metrics for each jump:
   - Force
   - Liftoff Force (Thrust)
@@ -34,18 +43,22 @@ Features:
   - Total time (if time of flight and contact time are available)
 - Processes all .csv files in the selected directory.
 - Saves the results in a new output directory named "vaila_verticaljump_<timestamp>".
+- Generates visualizations and HTML reports for data analysis.
 
 Dependencies:
 -------------
 - Python 3.x
 - pandas
-- math
+- numpy
+- matplotlib
 - tkinter
+- math
+- datetime
 
 Usage:
 ------
 - Run the script, select the target directory containing .csv files, and specify
-  whether the data is based on time of flight or jump height.
+  whether the data is based on time of flight, jump height, or MediaPipe data.
 - The script will process each .csv file, performing calculations and saving
   the results in a new directory.
 
@@ -55,7 +68,7 @@ $ python vaila_and_jump.py
 
 Input File Format:
 -----------------
-The input CSV files should have the following format:
+The input CSV files should have one of the following formats:
 
 1. Time-of-flight based format:
    mass(kg), time_of_flight(s), contact_time(s)[optional]
@@ -79,26 +92,31 @@ The input CSV files should have the following format:
    65.5,0.28,0.20
    ```
 
+3. MediaPipe pose estimation format:
+   CSV file with MediaPipe pose landmark coordinates
+   (frame_index, nose_x, nose_y, nose_z, left_eye_inner_x, etc.)
+
+Coordinate System:
+-----------------
+For MediaPipe data, coordinates are transformed to use the following system:
+- Origin: Bottom-left corner
+- X-axis: Increases from left to right
+- Y-axis: Increases from bottom to top (inverted from screen coordinates)
+- Z-axis: Increases from back to front
+
 Output:
 -------
-The script generates a CSV file with the following columns:
-- height_m: Jump height in meters
-- liftoff_force_N: Liftoff force in Newtons (if contact time is provided)
-- velocity_m/s: Takeoff velocity in meters per second
-- potential_energy_J: Potential energy in Joules
-- kinetic_energy_J: Kinetic energy in Joules
-- average_power_W: Average power in Watts (if contact time is provided)
-- relative_power_W/kg: Power relative to body mass (if contact time is provided)
-- jump_performance_index: Jump Performance Index (if both time of flight and contact time are available)
-- total_time_s: Total time in seconds (if both time of flight and contact time are available)
+The script generates various output files:
+- CSV files with jump metrics
+- Full processed data with all original and calculated values
+- Calibrated data in meters with proper coordinate orientation
+- Visualizations of the jump performance
+- HTML report summarizing all analysis
 
 Notes:
 ------
-- The .csv files are expected to have the following columns in order:
-  - Column 0: mass
-  - Column 1: time of flight or jump height, depending on the selected mode
-  - Column 2 (optional): contact time
 - Ensure that all necessary libraries are installed.
+- For accurate results, the MediaPipe landmark detection should be of good quality.
 ===============================================================================
 """
 
@@ -346,16 +364,18 @@ def generate_jump_plots(data, results, output_dir, base_name):
     frames = data.index.values if 'frame_index' not in data.columns else data['frame_index']
     time_seconds = frames / results['fps']
     
-    # Plot CG position
-    plt.plot(time_seconds, data['cg_y_m'], 'b-', linewidth=2, label='Center of Gravity (Y)')
+    # Plot NORMALIZED CG position
+    plt.plot(time_seconds, data['cg_y_normalized'], 'b-', linewidth=2, label='Center of Gravity (normalized)')
     
-    # Plot feet position if available
+    # Plot NORMALIZED feet position if available
     if 'left_foot_index_y_m' in data.columns:
-        plt.plot(time_seconds, data['left_foot_index_y_m'], 'g-', 
-                 linewidth=1.5, label='Left Foot')
+        normalized_left_foot = data['left_foot_index_y_m'] - data['reference_cg_y']
+        plt.plot(time_seconds, normalized_left_foot, 'g-', 
+                 linewidth=1.5, label='Left Foot (normalized)')
     if 'right_foot_index_y_m' in data.columns:
-        plt.plot(time_seconds, data['right_foot_index_y_m'], 'r-', 
-                 linewidth=1.5, label='Right Foot')
+        normalized_right_foot = data['right_foot_index_y_m'] - data['reference_cg_y']
+        plt.plot(time_seconds, normalized_right_foot, 'r-', 
+                 linewidth=1.5, label='Right Foot (normalized)')
     
     # Mark important frames
     takeoff_time = time_seconds[results['takeoff_frame']]
@@ -367,15 +387,13 @@ def generate_jump_plots(data, results, output_dir, base_name):
     plt.axvline(x=max_height_time, color='r', linestyle='--', label='Max Height')
     plt.axvline(x=landing_time, color='k', linestyle='--', label='Landing')
     
-    # Add baseline
-    if 'cg_y_m_baseline' in data.columns:
-        baseline = data['cg_y_m_baseline'].iloc[0]
-        plt.axhline(y=baseline, color='gray', linestyle='-', label='CG Baseline')
+    # Add reference line (zero)
+    plt.axhline(y=0, color='gray', linestyle='-', label='Initial CG Position (reference)')
     
     # Add labels and title
     plt.xlabel('Time (seconds)')
-    plt.ylabel('Position (meters)')
-    plt.title('Jump Analysis - CG and Feet Positions')
+    plt.ylabel('Position (meters from initial CG) - Up is positive')
+    plt.title('Jump Analysis - Normalized CG and Feet Positions')
     plt.legend(loc='best')
     plt.grid(True)
     
@@ -398,13 +416,13 @@ def generate_jump_plots(data, results, output_dir, base_name):
     plt.axvspan(flight_start, max_height_time, alpha=0.2, color='lightgreen', label='Ascent')
     plt.axvspan(max_height_time, flight_end, alpha=0.2, color='salmon', label='Descent')
     
-    # Plot CG path
-    plt.plot(time_seconds, data['cg_y_m'], 'b-', linewidth=2.5, label='CG Path')
+    # Plot NORMALIZED CG path
+    plt.plot(time_seconds, data['cg_y_normalized'], 'b-', linewidth=2.5, label='CG Path (normalized)')
     
-    # Mark max height
-    max_height_value = data['cg_y_m'].iloc[results['max_height_frame']]
+    # Mark max height using normalized value
+    max_height_value = data['cg_y_normalized'].iloc[results['max_height_frame']]
     plt.scatter([max_height_time], [max_height_value], color='red', s=100, 
-                marker='o', label=f'Max Height: {results["height_m"]:.3f}m')
+                marker='o', label=f'Max Height: {results["height_m"]:.3f}m from initial CG')
     
     # Add annotations
     plt.annotate(f"Flight Time: {results['flight_time_s']:.3f}s",
@@ -421,8 +439,8 @@ def generate_jump_plots(data, results, output_dir, base_name):
     
     # Add labels and title
     plt.xlabel('Time (seconds)')
-    plt.ylabel('Position (meters)')
-    plt.title('Jump Phases Analysis')
+    plt.ylabel('Position (meters from initial CG)')
+    plt.title('Jump Phases Analysis - Normalized from Initial CG Position')
     plt.legend(loc='best')
     plt.grid(True)
     
@@ -502,6 +520,12 @@ def generate_html_report(data, results, plot_files, output_dir, base_name):
                 height: auto;
                 box-shadow: 0 4px 8px rgba(0,0,0,0.1);
             }}
+            .note {{
+                background-color: #f8f9fa;
+                border-left: 4px solid #4caf50;
+                padding: 15px;
+                margin: 20px 0;
+            }}
             .footer {{
                 margin-top: 50px;
                 border-top: 1px solid #ddd;
@@ -516,6 +540,21 @@ def generate_html_report(data, results, plot_files, output_dir, base_name):
         <h1>Jump Analysis Report</h1>
         <p><strong>Subject:</strong> {base_name}</p>
         <p><strong>Date:</strong> {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>
+        
+        <div class="note">
+            <h3>Coordinate System</h3>
+            <p>This analysis uses a biomechanical coordinate system where:</p>
+            <ul>
+                <li>Origin is at the bottom left</li>
+                <li>X-axis: positive to the right</li>
+                <li>Y-axis: positive upward</li>
+                <li>Z-axis: positive forward</li>
+            </ul>
+            <p>MediaPipe coordinates were transformed to match this convention, and all measurements are in meters.</p>
+            <p><strong>Important:</strong> Jump height is measured relative to the initial center of gravity (CG) position,
+            which is calculated as the average CG position during the first 10 frames. This reference position is set as zero,
+            so all vertical measurements represent displacement from this initial position.</p>
+        </div>
         
         <h2>Jump Metrics</h2>
         <table>
@@ -532,7 +571,7 @@ def generate_html_report(data, results, plot_files, output_dir, base_name):
             <tr>
                 <td>Jump Height</td>
                 <td>{results["height_m"]}</td>
-                <td>m</td>
+                <td>m (from initial CG position)</td>
             </tr>
             <tr>
                 <td>Flight Time</td>
@@ -597,7 +636,7 @@ def generate_html_report(data, results, plot_files, output_dir, base_name):
     # Close the HTML content
     html_content += """
         <div class="footer">
-            <p>Generated by VAILA - Vertical Jump Analysis Tool</p>
+            <p>Generated by vailá - Vertical Jump Analysis Tool</p>
         </div>
     </body>
     </html>
@@ -615,17 +654,25 @@ def process_mediapipe_data(input_file, output_dir):
     """
     try:
         data = pd.read_csv(input_file)
+        
+        # Invert all y coordinates (1.0 - y) to fix orientation
+        for col in [c for c in data.columns if c.endswith('_y')]:
+            data[col] = 1.0 - data[col]
+            
         results = {}
         
         # Solicitar massa e FPS
         root = Tk()
         root.withdraw()
+        root.attributes('-topmost', True)  # Force dialogs to be on top
         
         mass = simpledialog.askfloat(
             "Mass Input", 
             "Enter the subject's mass (kg):",
+            parent=root,  # Set parent window
             minvalue=20.0, maxvalue=200.0
         )
+        root.lift()  # Bring window to the front
         
         if mass is None:
             print(f"Processing cancelled for {input_file} - no mass provided.")
@@ -634,8 +681,10 @@ def process_mediapipe_data(input_file, output_dir):
         fps = simpledialog.askinteger(
             "FPS Input", 
             "Enter the video FPS (frames per second):",
+            parent=root,  # Set parent window
             minvalue=1, maxvalue=240
         )
+        root.lift()  # Bring window to the front
         
         if fps is None:
             fps = 30
@@ -645,28 +694,18 @@ def process_mediapipe_data(input_file, output_dir):
         comprimento_shank_real = simpledialog.askfloat(
             "Scale Factor",
             "Enter the approximate shank length in meters (e.g., 0.4):",
+            parent=root,  # Set parent window
             minvalue=0.1, maxvalue=1.0
         )
+        root.lift()  # Bring window to the front
         if comprimento_shank_real is None:
             comprimento_shank_real = 0.4  # Valor padrão
         
-        # Calcular o fator de conversão
+        # Calcular o fator de conversão para pixels normalizados -> metros
         fator_conversao = calc_fator_convert_mediapipe(data, comprimento_shank_real)
+        print(f"Conversion factor: {fator_conversao:.6f} m/unit")
         
-        # Encontrar altura máxima da imagem para inverter o eixo Y
-        # Pode ser estimada como 1.0 para dados normalizados
-        altura_imagem = 1.0
-        
-        # Inverter todas as coordenadas Y para o sistema natural (Y cresce para cima)
-        y_columns = [col for col in data.columns if col.endswith('_y')]
-        new_data = pd.DataFrame()
-        for col in y_columns:
-            new_data[f"{col}_natural"] = altura_imagem - data[col]
-        
-        # Depois, adicione todas as colunas de uma vez
-        data = pd.concat([data, new_data], axis=1)
-        
-        # Processamento para calcular o CG
+        # Processamento para calcular o CG (já em metros)
         cg_x_m_list = []
         cg_y_m_list = []
         
@@ -686,13 +725,52 @@ def process_mediapipe_data(input_file, output_dir):
         data['cg_x_m'] = cg_x_m_list
         data['cg_y_m'] = cg_y_m_list
         
-        # Calcular baseline dos pés e CG em metros
+        # Converter todas as coordenadas para metros
+        cols_to_convert = {}
+        
+        # Converter coordenadas x
+        for col in [c for c in data.columns if c.endswith('_x')]:
+            base_name = col[:-2]
+            cols_to_convert[f"{base_name}_x_m"] = data[col] * fator_conversao
+        
+        # Converter coordenadas y
+        for col in [c for c in data.columns if c.endswith('_y')]:
+            base_name = col[:-2]
+            cols_to_convert[f"{base_name}_y_m"] = data[col] * fator_conversao
+        
+        # Converter coordenadas z
+        for col in [c for c in data.columns if c.endswith('_z')]:
+            base_name = col[:-2]
+            cols_to_convert[f"{base_name}_z_m"] = data[col] * fator_conversao
+        
+        # Adicionar todas as colunas convertidas de uma vez
+        conv_df = pd.DataFrame(cols_to_convert)
+        data = pd.concat([data, conv_df], axis=1)
+        
+        # Calcular a referência (médias dos primeiros 10 frames)
         n_baseline_frames = 10
+        
+        # Calcular referência para o CG (será usada como zero)
+        cg_y_ref = data['cg_y_m'].iloc[:n_baseline_frames].mean()
+        
+        # Add this block to create relative versions of all y-coordinates
+        print("Creating relative coordinates referenced to initial CG position...")
+        for col in [c for c in data.columns if c.endswith('_y_m')]:
+            data[f"{col}_rel"] = data[col] - cg_y_ref
+            print(f"  Created {col}_rel column")
 
-        # Usar pés se disponíveis
+        # Optional: Create relative z-coordinates if needed (uncomment if you want this)
+        # for col in [c for c in data.columns if c.endswith('_z_m')]:
+        #     data[f"{col}_rel"] = data[col] - data['cg_z_m'].iloc[:n_baseline_frames].mean()
+        #     print(f"  Created {col}_rel column")
+
+        # Normalizar CG para que a referência seja zero
+        data['cg_y_normalized'] = data['cg_y_m'] - cg_y_ref
+        
+        # Calcular baseline para os pés
         has_left_foot = 'left_foot_index_y_m' in data.columns
         has_right_foot = 'right_foot_index_y_m' in data.columns
-
+        
         if has_left_foot and has_right_foot:
             feet_y_values = (data['left_foot_index_y_m'] + data['right_foot_index_y_m']) / 2
         elif has_left_foot:
@@ -709,71 +787,38 @@ def process_mediapipe_data(input_file, output_dir):
                 feet_y_values = data['right_ankle_y_m']
             else:
                 feet_y_values = data['cg_y_m'] * 0.8  # Estimativa
-
+        
         feet_baseline = feet_y_values.iloc[:n_baseline_frames].mean()
-        cg_y_m_baseline = data['cg_y_m'].iloc[:n_baseline_frames].mean()
-
-        # Preparar dicionários para novas colunas
-        new_columns = {}
-
-        # Converter coordenadas x
-        x_columns = [col for col in data.columns if col.endswith('_x')]
-        for col in x_columns:
-            base_name = col[:-2]  # Remove _x
-            new_columns[f"{base_name}_x_m"] = data[col] * fator_conversao
-
-        # Converter coordenadas y_natural
-        y_natural_columns = [col for col in data.columns if col.endswith('_y_natural')]
-        for col in y_natural_columns:
-            base_name = col[:-9]  # Remove _y_natural
-            new_columns[f"{base_name}_y_m"] = data[col] * fator_conversao
-
-        # Converter coordenadas z
-        z_columns = [col for col in data.columns if col.endswith('_z') and '_z_m' not in col]
-        for col in z_columns:
-            base_name = col[:-2]  # Remove _z
-            new_columns[f"{base_name}_z_m"] = data[col] * fator_conversao
-
-        # Adicionar outras colunas necessárias
-        new_columns['mass_kg'] = mass
-        new_columns['fps'] = fps
-        new_columns['feet_baseline'] = feet_baseline
-        new_columns['cg_y_m_baseline'] = cg_y_m_baseline
-
-        # Adicionar todas as novas colunas de uma vez
-        data = pd.concat([data, pd.DataFrame(new_columns)], axis=1)
         
-        # Calcular altura do salto usando a componente vertical (cg_y_m)
-        # Com sistema natural, valores MAIORES de cg_y_m representam posições mais altas
-        jump_height = data['cg_y_m'].max() - cg_y_m_baseline
+        # Adicionar informações básicas
+        data['mass_kg'] = mass
+        data['fps'] = fps
+        data['reference_cg_y'] = cg_y_ref
+        data['reference_feet_y'] = feet_baseline
         
-        # Corrigir a identificação dos frames importantes
-        # O ponto mais alto do salto é quando o CG está no valor MÍNIMO (não máximo)
-        max_height_frame = data['cg_y_m'].idxmin()  # Frame no ponto mais alto (vale no gráfico)
-
-        # Procurar o takeoff: movimento para baixo antes do ponto mais alto
-        pre_max_mask = data.index < max_height_frame
-        # Buscar pelo frame onde o CG começa a diminuir significativamente abaixo da baseline
-        pre_takeoff_mask = pre_max_mask & (data['cg_y_m'] < (cg_y_m_baseline - 0.03))
-        if pre_takeoff_mask.any():
-            takeoff_frame = data.index[pre_takeoff_mask].min()
-        else:
-            # Estimativa: alguns frames antes do ponto mais alto
-            takeoff_frame = max(0, max_height_frame - 10)
-
-        # Procurar o landing: movimento para cima após o ponto mais alto
-        post_max_mask = data.index > max_height_frame
-        # Buscar pelo frame onde o CG retorna para perto da baseline
-        post_landing_mask = post_max_mask & (data['cg_y_m'] > (cg_y_m_baseline - 0.03))
-        if post_landing_mask.any():
-            landing_frame = data.index[post_landing_mask].min()
-        else:
-            # Estimativa: alguns frames após o ponto mais alto
-            landing_frame = min(len(data) - 1, max_height_frame + 10)
-
+        # Identificar o ponto mais baixo (agachamento) - antes do salto
+        squat_frame = data['cg_y_normalized'].idxmin()
+        
+        # Identificar o ponto mais alto (salto) - agora será realmente o máximo
+        max_height_frame = data['cg_y_normalized'].idxmax()
+        
+        # Calcular a altura do salto em relação à posição de referência
+        jump_height = data['cg_y_normalized'].iloc[max_height_frame]
+        
+        # Identificar takeoff: o primeiro frame após o agachamento onde o CG se eleva acima de zero
+        takeoff_candidates = data.index[(data.index > squat_frame) & 
+                                       (data.index < max_height_frame) & 
+                                       (data['cg_y_normalized'] > 0)]
+        takeoff_frame = takeoff_candidates.min() if len(takeoff_candidates) > 0 else squat_frame
+        
+        # Identificar landing: o primeiro frame após o ponto mais alto onde o CG volta a zero ou abaixo
+        landing_candidates = data.index[(data.index > max_height_frame) & 
+                                       (data['cg_y_normalized'] < 0)]
+        landing_frame = landing_candidates.min() if len(landing_candidates) > 0 else len(data) - 1
+        
         # Calcular o tempo de voo
         flight_time = (landing_frame - takeoff_frame) / fps
-
+        
         # Calcular métricas do salto
         velocity = calculate_velocity(jump_height)
         potential_energy = calculate_potential_energy(mass, jump_height)
@@ -788,6 +833,7 @@ def process_mediapipe_data(input_file, output_dir):
             "velocity_m/s": round(velocity, 3),
             "potential_energy_J": round(potential_energy, 3),
             "kinetic_energy_J": round(kinetic_energy, 3),
+            "squat_frame": squat_frame,
             "max_height_frame": max_height_frame,
             "takeoff_frame": takeoff_frame,
             "landing_frame": landing_frame,
@@ -805,6 +851,48 @@ def process_mediapipe_data(input_file, output_dir):
         output_data_file = os.path.join(output_dir, f"{base_name}_processed_{timestamp}.csv")
         data.to_csv(output_data_file, index=False)
         
+        # 1. Identificar todas as colunas originais (mantendo a ordem do arquivo lido)
+        orig_cols = list(pd.read_csv(input_file, nrows=1).columns)
+
+        # 2. Para cada coluna original terminando com _x, _y, _z, adicionar sua versão _x_m, _y_m, _z_m
+        orig_m_cols = []
+        for col in orig_cols:
+            if col.endswith(('_x', '_y', '_z')):
+                orig_m_cols.append(f"{col[:-2]}_x_m" if col.endswith('_x') else
+                                   f"{col[:-2]}_y_m" if col.endswith('_y') else
+                                   f"{col[:-2]}_z_m")
+            else:
+                # Se não é coordenada, mantém se existir (ex: frame_index)
+                if col in data.columns:
+                    orig_m_cols.append(col)
+
+        # 3. Colunas novas: relativas ao CG inicial (_rel) e as normalizadas (cg_y_normalized etc)
+        rel_cols = [c for c in data.columns if c.endswith('_rel')]
+        norm_cols = [c for c in data.columns if 'normalized' in c]
+        metadata_cols = ['mass_kg', 'fps', 'reference_cg_y', 'reference_feet_y']
+
+        # 4. Montar a lista final de colunas, mantendo todas as originais (agora em metros), e só depois as novas
+        final_cols = []
+        for col in orig_cols:
+            if col.endswith(('_x', '_y', '_z')):
+                metr = f"{col[:-2]}_x_m" if col.endswith('_x') else \
+                       f"{col[:-2]}_y_m" if col.endswith('_y') else \
+                       f"{col[:-2]}_z_m"
+                if metr in data.columns:
+                    final_cols.append(metr)
+            else:
+                # frame_index ou outras colunas não coordenadas
+                if col in data.columns:
+                    final_cols.append(col)
+        # Adiciona as novas ao final
+        final_cols += rel_cols + norm_cols + metadata_cols
+
+        # 5. Salvar o arquivo calibrado com a ordem correta das colunas
+        calibrated_data = data[final_cols].copy()
+        output_calibrated_file = os.path.join(output_dir, f"{base_name}_calibrated_{timestamp}.csv")
+        calibrated_data.to_csv(output_calibrated_file, index=False)
+        print(f"Calibrated data saved (ordered, all original headers first, then _rel and normalized): {output_calibrated_file}")
+        
         # Salvar métricas do salto
         output_metrics_file = os.path.join(output_dir, f"{base_name}_jump_metrics_{timestamp}.csv")
         results_df.to_csv(output_metrics_file, index=False)
@@ -813,9 +901,9 @@ def process_mediapipe_data(input_file, output_dir):
         plot_files = generate_jump_plots(data, results, output_dir, base_name)
         
         # Gerar gráfico diagnóstico
-        diagnostic_plot = generate_diagnostic_plot(
-            data, feet_baseline, cg_y_m_baseline, 
-            takeoff_frame, landing_frame, max_height_frame,
+        diagnostic_plot = generate_normalized_diagnostic_plot(
+            data, 
+            takeoff_frame, landing_frame, max_height_frame, squat_frame,
             fps, output_dir, base_name
         )
         
@@ -827,15 +915,19 @@ def process_mediapipe_data(input_file, output_dir):
         
         print(f"Jump metrics saved at: {output_metrics_file}")
         print(f"Complete data saved at: {output_data_file}")
+        print(f"Calibrated data (in meters) saved at: {output_calibrated_file}")
         print(f"Jump analysis plots saved in: {output_dir}")
         print(f"HTML report generated: {report_path}")
         
         # Imprimir informações de diagnóstico
-        print(f"Diagnostic info:")
-        print(f"  Max height frame (vale): {max_height_frame} (time: {max_height_frame/fps:.3f}s)")
-        print(f"  Takeoff frame: {takeoff_frame} (time: {takeoff_frame/fps:.3f}s)")
-        print(f"  Landing frame: {landing_frame} (time: {landing_frame/fps:.3f}s)")
-        print(f"  Flight time: {flight_time:.3f}s")
+        print(f"Diagnostic info (with corrected orientation):")
+        print(f"  Reference CG position: {cg_y_ref:.3f} m (set as zero reference for normalized values)")
+        print(f"  Squat frame (lowest): {squat_frame} (time: {squat_frame/fps:.3f} s)")
+        print(f"  Takeoff frame: {takeoff_frame} (time: {takeoff_frame/fps:.3f} s)")
+        print(f"  Max height frame (highest): {max_height_frame} (time: {max_height_frame/fps:.3f} s)")
+        print(f"  Landing frame: {landing_frame} (time: {landing_frame/fps:.3f} s)")
+        print(f"  Flight time: {flight_time:.3f} s")
+        print(f"  Jump height: {jump_height:.3f} m (from initial CG position)")
         
         return True
         
@@ -996,6 +1088,8 @@ def calcula_cg_frame(df, fator):
         "head": 0.081, "trunk": 0.497, "upperarm": 0.028, "forearm": 0.016, "hand": 0.006,
         "thigh": 0.100, "shank": 0.047, "foot": 0.014
     }
+    # Nota: Coordenadas y já foram invertidas (1.0 - y) no início do processamento
+    
     # Cabeça: ponto médio entre eyes e shoulders
     head_prox_x, head_prox_y = ponto_medio(df, "left_eye", "right_eye")
     head_dist_x, head_dist_y = ponto_medio(df, "left_shoulder", "right_shoulder")
@@ -1060,8 +1154,8 @@ def calcula_cg_frame(df, fator):
 def altura_salto_mediapipe(df, comprimento_shank_real):
     fator = calc_fator_convert_mediapipe(df, comprimento_shank_real)
     cg_x, cg_y = calcula_cg_frame(df, fator)
-    # Atenção: y cresce para baixo, então menor valor é o ponto mais alto!
-    altura_salto = abs(cg_y.iloc[0] - cg_y.min())
+    # Agora y cresce para cima, então o maior valor é o ponto mais alto!
+    altura_salto = cg_y.max() - cg_y.iloc[:10].mean()
     return altura_salto, cg_x, cg_y
 
 def process_all_files_in_directory(target_dir, use_time_of_flight):
@@ -1097,9 +1191,14 @@ def vaila_and_jump():
     print(f"Script directory: {Path(__file__).parent.resolve()}")
     root = Tk()
     root.withdraw()
-    target_dir = filedialog.askdirectory(title="Select the target directory containing .csv files")
+    root.attributes('-topmost', True)  # Force dialogs to be on top
+    
+    target_dir = filedialog.askdirectory(title="Select the target directory containing .csv files", parent=root)
+    root.lift()  # Bring window to the front
+    
     if not target_dir:
-        messagebox.showwarning("Warning", "No target directory selected.")
+        messagebox.showwarning("Warning", "No target directory selected.", parent=root)
+        root.destroy()
         return
 
     # Agora com opção 3!
@@ -1109,10 +1208,14 @@ def vaila_and_jump():
         "1. Time of Flight Data\n"
         "2. Jump Height Data\n"
         "3. MediaPipe Ankle Data",
+        parent=root,  # Set parent window
         minvalue=1, maxvalue=3
     )
+    root.lift()  # Bring window to the front
+    
     if data_type is None:
-        messagebox.showwarning("Warning", "No data type selected. Exiting.")
+        messagebox.showwarning("Warning", "No data type selected. Exiting.", parent=root)
+        root.destroy()
         return
 
     if data_type == 1 or data_type == 2:
@@ -1120,7 +1223,7 @@ def vaila_and_jump():
         process_all_files_in_directory(target_dir, use_time_of_flight)
     elif data_type == 3:
         process_all_mediapipe_files(target_dir)
-    root.destroy()
+    
     msg = "All CSV files have been processed and results saved.\n\n"
     if data_type == 1:
         msg += f"Input data type: Time of Flight\n"
@@ -1129,29 +1232,18 @@ def vaila_and_jump():
     else:
         msg += f"Input data type: MediaPipe Ankle\n"
     msg += f"Output directory: {os.path.join(target_dir, 'vaila_verticaljump_*')}"
-    messagebox.showinfo("Success", msg)
+    messagebox.showinfo("Success", msg, parent=root)
+    
+    root.destroy()
 
 
 if __name__ == "__main__":
     vaila_and_jump()
 
-def generate_diagnostic_plot(data, feet_baseline, cg_baseline, takeoff_frame, landing_frame, max_height_frame, fps, output_dir, base_name):
+def generate_normalized_diagnostic_plot(data, takeoff_frame, landing_frame, max_height_frame, squat_frame, fps, output_dir, base_name):
     """
-    Generate a detailed diagnostic plot showing all CG components and jump phases.
-    
-    Args:
-        data (pd.DataFrame): DataFrame with processed data
-        feet_baseline (float): Baseline value for feet position
-        cg_baseline (float): Baseline value for CG position
-        takeoff_frame (int): Frame where takeoff is detected
-        landing_frame (int): Frame where landing is detected
-        max_height_frame (int): Frame where maximum height is reached
-        fps (int): Frames per second
-        output_dir (str): Directory to save the plot
-        base_name (str): Base name for the output file
-    
-    Returns:
-        str: Path to the generated plot file
+    Generate a diagnostic plot showing the normalized CG position and jump phases.
+    With corrected orientation: y increases upward, so jump appears as a peak.
     """
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     
@@ -1160,52 +1252,58 @@ def generate_diagnostic_plot(data, feet_baseline, cg_baseline, takeoff_frame, la
     # Convert frames to time
     time = data.index / fps
     
-    # Plot CG trajectory
-    ax.plot(time, data['cg_y_m'], 'b-', linewidth=2, label='CG_Y (m)')
+    # Plot normalized CG trajectory
+    ax.plot(time, data['cg_y_normalized'], 'b-', linewidth=2, label='CG Position (normalized m)')
     
     # Plot feet positions
     if 'left_foot_index_y_m' in data.columns:
-        ax.plot(time, data['left_foot_index_y_m'], 'g-', linewidth=1, alpha=0.7, label='Left Foot Y (m)')
+        normalized_left_foot = data['left_foot_index_y_m'] - data['reference_cg_y']
+        ax.plot(time, normalized_left_foot, 'g-', linewidth=1, alpha=0.7, label='Left Foot (normalized)')
     if 'right_foot_index_y_m' in data.columns:
-        ax.plot(time, data['right_foot_index_y_m'], 'r-', linewidth=1, alpha=0.7, label='Right Foot Y (m)')
+        normalized_right_foot = data['right_foot_index_y_m'] - data['reference_cg_y']
+        ax.plot(time, normalized_right_foot, 'r-', linewidth=1, alpha=0.7, label='Right Foot (normalized)')
     
-    # Plot baselines
-    ax.axhline(y=cg_baseline, color='blue', linestyle='--', alpha=0.7, label=f'CG Baseline: {cg_baseline:.3f}m')
-    ax.axhline(y=feet_baseline, color='green', linestyle='--', alpha=0.7, label=f'Feet Baseline: {feet_baseline:.3f}m')
+    # Plot reference line (zero)
+    ax.axhline(y=0, color='gray', linestyle='-', label='Reference Position')
     
-    # Mark takeoff and landing points
+    # Mark important frames
+    squat_time = squat_frame / fps
     takeoff_time = takeoff_frame / fps
     landing_time = landing_frame / fps
     max_height_time = max_height_frame / fps
     
-    ax.axvline(x=takeoff_time, color='purple', linestyle='-', label=f'Takeoff (Frame {takeoff_frame}, {takeoff_time:.3f}s)')
-    ax.axvline(x=landing_time, color='orange', linestyle='-', label=f'Landing (Frame {landing_frame}, {landing_time:.3f}s)')
-    ax.axvline(x=max_height_time, color='red', linestyle='-', label=f'Max Height (Frame {max_height_frame}, {max_height_time:.3f}s)')
+    ax.axvline(x=squat_time, color='brown', linestyle='-', label=f'Squat (Frame {squat_frame})')
+    ax.axvline(x=takeoff_time, color='purple', linestyle='-', label=f'Takeoff (Frame {takeoff_frame})')
+    ax.axvline(x=landing_time, color='orange', linestyle='-', label=f'Landing (Frame {landing_frame})')
+    ax.axvline(x=max_height_time, color='red', linestyle='-', label=f'Max Height (Frame {max_height_frame})')
     
     # Shade the flight phase
-    ax.axvspan(takeoff_time, landing_time, alpha=0.2, color='yellow', label=f'Flight Phase: {landing_time-takeoff_time:.3f}s')
+    ax.axvspan(takeoff_time, landing_time, alpha=0.2, color='yellow', label=f'Flight Phase: {landing_time-takeoff_time:.3f} s')
+    
+    # Add annotations
+    jump_height = data['cg_y_normalized'].iloc[max_height_frame]
+    ax.annotate(f"Jump Height: {jump_height:.3f} m (from initial CG position)", 
+                xy=(max_height_time, jump_height),
+                xytext=(max_height_time, jump_height*0.8),
+                arrowprops=dict(facecolor='black', shrink=0.05),
+                ha='center')
     
     # Add frame numbers at regular intervals
-    frames_to_show = np.arange(0, len(data), 10)
+    frames_to_show = np.arange(0, len(data), 20)
+    # Position frame numbers at bottom of plot
+    y_pos = min(data['cg_y_normalized']) - 0.05
     for frame in frames_to_show:
-        ax.text(frame/fps, data['cg_y_m'].min() - 0.02, f"{frame}", fontsize=8, ha='center')
-    
-    # Add annotations for key details
-    flight_time = (landing_frame - takeoff_frame) / fps
-    ax.annotate(f"Flight Time: {flight_time:.3f}s ({landing_frame-takeoff_frame} frames)", 
-                xy=(0.5, 0.05), xycoords='figure fraction',
-                bbox=dict(boxstyle="round,pad=0.3", fc="yellow", alpha=0.3),
-                ha='center')
+        ax.text(frame/fps, y_pos, f"{frame}", fontsize=8, ha='center')
     
     # Set labels and title
     ax.set_xlabel('Time (seconds)')
-    ax.set_ylabel('Position (meters)')
-    ax.set_title('Jump Analysis - Diagnostic Plot')
+    ax.set_ylabel('Position (meters from reference) - Up is positive')
+    ax.set_title('Jump Analysis - Normalized CG Position (Corrected Orientation)')
     ax.grid(True, alpha=0.3)
     ax.legend(loc='upper right')
     
     # Save plot
-    plot_path = os.path.join(output_dir, f"{base_name}_diagnostic_{timestamp}.png")
+    plot_path = os.path.join(output_dir, f"{base_name}_normalized_diagnostic_{timestamp}.png")
     plt.savefig(plot_path, dpi=300, bbox_inches='tight')
     plt.close()
     
