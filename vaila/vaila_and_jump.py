@@ -120,7 +120,7 @@ Notes:
 
 License:
 --------
-This script is licensed under the GNU General Public License v3.0.
+This script is licensed under the GNU General Public License v3.0. 
 ===============================================================================
 """
 
