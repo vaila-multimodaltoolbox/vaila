@@ -182,11 +182,9 @@ class YTDownloader:
         save_dir = os.path.join(self.output_dir, f"vaila_ytdownload_{timestamp}")
         os.makedirs(save_dir, exist_ok=True)
 
-        # Format spec that prioritizes FPS over resolution
-        # The 'fps>30' filter will prioritize videos with FPS greater than 30
-        # When multiple high FPS versions exist, it will choose the one with best resolution
-        format_spec = "bestvideo[fps>30]+bestaudio/bestvideo+bestaudio/best"
-        console.print(f"[blue]Prioritizing highest FPS available[/blue]")
+        # Format spec: Let yt-dlp decide best quality available (default behavior)
+        format_spec = "bestvideo+bestaudio/best"
+        console.print(f"[blue]Downloading best available quality (video+audio)[/blue]")
 
         # Progress hook for download updates
         def progress_hook(d):
@@ -912,9 +910,9 @@ if TKINTER_AVAILABLE:
                             # Download as video with the existing code
                             # ... código existente para download de vídeo ...
 
-                            # Format specification for highest FPS
+                            # Format specification for best quality
                             format_spec = (
-                                "bestvideo[fps>30]+bestaudio/bestvideo+bestaudio/best"
+                                "bestvideo+bestaudio/best"
                             )
 
                             # Download options
@@ -942,7 +940,7 @@ if TKINTER_AVAILABLE:
                                         f"Resolution: {info.get('width', 'unknown')}x{info.get('height', 'unknown')}\n"
                                     )
                                     f.write(f"FPS: {info.get('fps', 'unknown')}\n")
-                                    f.write(f"Priority: Highest FPS available\n")
+                                    f.write(f"Priority: Best overall quality\n")
 
                                 # Log success
                                 with open(log_file, "a", encoding="utf-8") as f:
