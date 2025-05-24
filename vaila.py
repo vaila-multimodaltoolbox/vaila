@@ -4,8 +4,8 @@ vaila.py
 ===============================================================================
 Author: Prof. Paulo R. P. Santiago
 Date:  7 October 2024
-Update: 22 May 2025
-Version updated: 0.6.18
+Update: 24 May 2025
+Version updated: 0.6.19
 Python Version: 3.12.9
 
 Description:
@@ -136,7 +136,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 22.May.2025 v0.6.18 (Python 3.12.9)
+vailá - 24.May.2025 v0.6.19 (Python 3.12.9)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -215,7 +215,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 22.May.2025 v0.6.18 (Python 3.12.9)")
+        self.title("vailá - 24.May.2025 v0.6.19 (Python 3.12.9)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -1605,17 +1605,21 @@ class Vaila(tk.Tk):
 
         animal_open_field.run_animal_open_field()
 
-    # B_r4_c1
+     # B_r4_c1
     def tracker(self):
         """Runs the specified YOLO tracking analysis."""
         print(f"Running tracker analysis {os.path.dirname(os.path.abspath(__file__))}")
         print(f"Running tracker analysis {os.path.basename(__file__)}")
+        # print number of this line of code
+        # Esta linha não vai funcionar como esperado para mostrar a linha exata do código
+        # Mas pode ser removida ou apenas exibir o nome do arquivo.
+        print("Line number: 1616") # Melhor assim, ou remova
 
         # Create a dialog window for tracking version selection
         dialog = tk.Toplevel(self)
         dialog.title("Select YOLO Version")
-        dialog.geometry("400x220")
-        dialog.transient(self)  # Make dialog modal
+        dialog.geometry("400x320")
+        dialog.transient(self)   # Make dialog modal
         dialog.grab_set()
 
         tk.Label(dialog, text="Select YOLO tracker version to use:", pady=15).pack()
@@ -1633,8 +1637,6 @@ class Vaila(tk.Tk):
                 if site_packages not in sys.path:
                     sys.path.insert(0, site_packages)
 
-                # Now import and ensure numpy is properly loaded first
-                import numpy as np
                 from vaila import yolov12track
 
                 yolov12track.run_yolov12track()
@@ -1654,21 +1656,31 @@ class Vaila(tk.Tk):
                 if site_packages not in sys.path:
                     sys.path.insert(0, site_packages)
 
-                # Now import and ensure numpy is properly loaded first
-                import numpy as np
                 from vaila import yolov11track
 
                 yolov11track.run_yolov11track()
             except Exception as e:
                 messagebox.showerror(
                     "Error Running YOLOv11",
-                    f"Error: {str(e)}\n\nPlease check if numpy is properly installed.",
+                    f"Error: {str(e)}",
                 )
+
+        def use_train_yolov11():
+            dialog.destroy()
+            try:
+                import sys
+                from vaila import yolotrain
+                yolotrain.run_yolotrain_gui()
+            except Exception as e:
+                messagebox.showerror("Error in YOLO Training", f"Error: {str(e)}")
 
         tk.Button(dialog, text="YOLOv12 Tracker", command=use_yolov12, width=20).pack(
             pady=10
         )
         tk.Button(dialog, text="YOLOv11 Tracker", command=use_yolov11, width=20).pack(
+            pady=10
+        )
+        tk.Button(dialog, text="Train YOLO", command=use_train_yolov11, width=20).pack(
             pady=10
         )
         tk.Button(dialog, text="Cancel", command=dialog.destroy, width=10).pack(pady=10)
