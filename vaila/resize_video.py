@@ -463,19 +463,17 @@ def convert_mediapipe_coordinates(
 
 
 class ROISelector:
-    """Class to select a region of interest on a video frame"""
+    """Class to select a region of interest on a video frame with interactive adjustment"""
 
     def __init__(self, video_path):
         self.video_path = video_path
         self.roi = None
         self.roi_selected = False
-        self.drawing = False
-        self.ix, self.iy = -1, -1
         self.frame = None
         self.scale = 1.0
 
     def select_roi(self):
-        """Open a window to select ROI on the first frame"""
+        """Open a window to select ROI on the first frame with interactive adjustment"""
         # Open video
         cap = cv2.VideoCapture(self.video_path)
         if not cap.isOpened():
@@ -495,6 +493,7 @@ class ROISelector:
         # Scale down if too large for display
         max_display_width = 1280
         max_display_height = 720
+        display_frame = self.frame.copy()
 
         if width > max_display_width or height > max_display_height:
             # Calculate scale factor
@@ -508,110 +507,36 @@ class ROISelector:
             display_frame = cv2.resize(self.frame, (display_width, display_height))
         else:
             self.scale = 1.0
-            display_frame = self.frame.copy()
 
-        # Create window and set mouse callback
-        window_name = (
-            "Select Region of Interest (ROI) - Press Enter when done, ESC to cancel"
-        )
-        cv2.namedWindow(window_name)
-        cv2.setMouseCallback(window_name, self.draw_rectangle, param=display_frame)
-
-        # Display instructions
-        font = cv2.FONT_HERSHEY_SIMPLEX
-        cv2.putText(
-            display_frame,
-            "Click and drag to select ROI",
-            (10, 30),
-            font,
-            0.7,
-            (0, 255, 0),
-            2,
-        )
-        cv2.putText(
-            display_frame,
-            "Press Enter to confirm, ESC to cancel",
-            (10, 60),
-            font,
-            0.7,
-            (0, 255, 0),
-            2,
-        )
-
-        while True:
-            # Display the image
-            cv2.imshow(window_name, display_frame)
-
-            # Wait for key press
-            key = cv2.waitKey(1) & 0xFF
-
-            # Enter key - confirm selection
-            if key == 13 and self.roi_selected and self.roi is not None:
-                # Convert the ROI coordinates back to original scale
-                x, y, w, h = self.roi
-                x = int(x / self.scale)
-                y = int(y / self.scale)
-                w = int(w / self.scale)
-                h = int(h / self.scale)
-                self.roi = (x, y, w, h)
-                break
-
-            # Escape key - cancel
-            if key == 27:
-                self.roi = None
-                break
-
-        # Clean up
-        cv2.destroyAllWindows()
+        # Create window with instructions
+        window_name = "Select ROI - Adjust as needed, then press ENTER to confirm (ESC to cancel)"
+        
+        # Use OpenCV's built-in selectROI function which allows interactive adjustment
+        roi = cv2.selectROI(window_name, display_frame, showCrosshair=True, fromCenter=False)
+        
+        # Clean up window
+        cv2.destroyWindow(window_name)
         cap.release()
-
+        
+        # Check if selection was canceled (all zeros)
+        if sum(roi) == 0:
+            print("ROI selection canceled")
+            self.roi = None
+            self.roi_selected = False
+            return None
+            
+        # Convert the ROI coordinates back to original scale
+        x, y, w, h = roi
+        x = int(x / self.scale)
+        y = int(y / self.scale)
+        w = int(w / self.scale)
+        h = int(h / self.scale)
+        
+        self.roi = (x, y, w, h)
+        self.roi_selected = True
+        print(f"ROI selected: x={x}, y={y}, w={w}, h={h}")
+        
         return self.roi
-
-    def draw_rectangle(self, event, x, y, flags, param):
-        """Mouse callback function for ROI selection"""
-        img = param.copy()
-
-        # Mouse left button down - start drawing
-        if event == cv2.EVENT_LBUTTONDOWN:
-            self.drawing = True
-            self.ix, self.iy = x, y
-
-        # Mouse move while button down - update rectangle
-        elif event == cv2.EVENT_MOUSEMOVE and self.drawing:
-            # Draw rectangle on display image
-            cv2.rectangle(img, (self.ix, self.iy), (x, y), (0, 255, 0), 2)
-            cv2.imshow(
-                "Select Region of Interest (ROI) - Press Enter when done, ESC to cancel",
-                img,
-            )
-
-        # Mouse left button up - finish drawing
-        elif event == cv2.EVENT_LBUTTONUP:
-            self.drawing = False
-            # Ensure we have a valid rectangle (width and height > 0)
-            roi_x = min(self.ix, x)
-            roi_y = min(self.iy, y)
-            roi_w = abs(x - self.ix)
-            roi_h = abs(y - self.iy)
-
-            if roi_w > 0 and roi_h > 0:
-                self.roi = (roi_x, roi_y, roi_w, roi_h)
-                self.roi_selected = True
-
-                # Draw final rectangle
-                cv2.rectangle(
-                    img, (roi_x, roi_y), (roi_x + roi_w, roi_y + roi_h), (0, 255, 0), 2
-                )
-
-                # Add ROI dimensions
-                font = cv2.FONT_HERSHEY_SIMPLEX
-                text = f"ROI: {roi_w}x{roi_h}"
-                cv2.putText(img, text, (roi_x, roi_y - 10), font, 0.7, (0, 255, 0), 2)
-
-                cv2.imshow(
-                    "Select Region of Interest (ROI) - Press Enter when done, ESC to cancel",
-                    img,
-                )
 
 
 def validate_scale_factor(value, status_var):
