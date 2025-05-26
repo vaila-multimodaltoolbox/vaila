@@ -6,8 +6,8 @@ Author: Prof. Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 24 Oct 2024
-Update Date: 21 May 2025
-Version: 0.0.4
+Update Date: 26 May 2025
+Version: 0.0.5
 Python Version: 3.12.9
 
 Description:
@@ -351,36 +351,53 @@ def identify_jump_phases(data, feet_baseline, cg_baseline, fps):
 def generate_jump_plots(data, results, output_dir, base_name):
     plot_files = []
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    
+
     # Acessando variáveis do dicionário results
     fps = results["fps"]
     takeoff_frame = results["takeoff_frame"]
     max_power = results.get("max_power_W", None)
     time_max_power = results.get("time_max_power_s", None)
     power_takeoff = results.get("power_takeoff_W", None)
-    
+
     # Plot de potência instantânea
     plt.figure(figsize=(12, 6))
-    plt.plot(data.index / fps, data["power"], label="Potência instantânea (W)", color='purple')
-    
+    plt.plot(
+        data.index / fps,
+        data["power"],
+        label="Potência instantânea (W)",
+        color="purple",
+    )
+
     if takeoff_frame is not None:
-        plt.axvline(takeoff_frame / fps, color='g', linestyle='--', label='Takeoff')
-    
+        plt.axvline(takeoff_frame / fps, color="g", linestyle="--", label="Takeoff")
+
     if max_power is not None and time_max_power is not None:
-        plt.axvline(time_max_power, color='orange', linestyle=':', label='Máx. Potência')
-        plt.scatter(time_max_power, max_power, color='orange', zorder=5, label='Máx. Potência')
-    
+        plt.axvline(
+            time_max_power, color="orange", linestyle=":", label="Máx. Potência"
+        )
+        plt.scatter(
+            time_max_power, max_power, color="orange", zorder=5, label="Máx. Potência"
+        )
+
     if power_takeoff is not None and takeoff_frame is not None:
-        plt.scatter(takeoff_frame / fps, power_takeoff, color='g', zorder=5, label='Potência Takeoff')
-    
+        plt.scatter(
+            takeoff_frame / fps,
+            power_takeoff,
+            color="g",
+            zorder=5,
+            label="Potência Takeoff",
+        )
+
     plt.xlabel("Tempo (s)")
     plt.ylabel("Potência (W)")
     plt.title("Potência instantânea durante o salto")
     plt.legend()
     plt.grid(True)
-    
+
     # Salvando o gráfico
-    power_plot_path = os.path.join(output_dir, f"{base_name}_power_curve_{timestamp}.png")
+    power_plot_path = os.path.join(
+        output_dir, f"{base_name}_power_curve_{timestamp}.png"
+    )
     plt.savefig(power_plot_path, dpi=300, bbox_inches="tight")
     plt.close()
     plot_files.append(power_plot_path)
@@ -670,7 +687,7 @@ def generate_html_report(data, results, plot_files, output_dir, base_name):
 def process_mediapipe_data(input_file, output_dir):
     """
     Process MediaPipe data and generate visualizations and report.
-    
+
     Args:
         input_file (str): Path to the input CSV file
         output_dir (str): Path to the output directory
@@ -900,8 +917,14 @@ def process_mediapipe_data(input_file, output_dir):
         power_takeoff = force * abs(vel_takeoff)  # Potência no instante do takeoff
 
         # 2. Potência média durante a fase de propulsão
-        propulsion_time = (takeoff_frame - squat_frame) / fps  # Tempo de propulsão em segundos
-        power_avg_propulsion = (potential_energy + kinetic_energy) / propulsion_time if propulsion_time > 0 else 0
+        propulsion_time = (
+            takeoff_frame - squat_frame
+        ) / fps  # Tempo de propulsão em segundos
+        power_avg_propulsion = (
+            (potential_energy + kinetic_energy) / propulsion_time
+            if propulsion_time > 0
+            else 0
+        )
 
         # Prepare results
         results = {
@@ -909,7 +932,9 @@ def process_mediapipe_data(input_file, output_dir):
             "mass_kg": mass,
             "fps": fps,
             "flight_time_s": round(flight_time, 3),
-            "velocity_m/s": round(vel_takeoff, 3),  # Actual velocity of the CG at takeoff
+            "velocity_m/s": round(
+                vel_takeoff, 3
+            ),  # Actual velocity of the CG at takeoff
             "potential_energy_J": round(potential_energy, 3),
             "kinetic_energy_J": round(kinetic_energy, 3),
             "power_takeoff_W": round(power_takeoff, 3),  # Nova métrica
@@ -1024,7 +1049,7 @@ def process_mediapipe_data(input_file, output_dir):
         plot_files.append(diagnostic_plot)
 
         # --- Cálculo de potência frame a frame na fase de propulsão ---
-        dt = 1/fps
+        dt = 1 / fps
         # Cálculo de velocidade (derivada central)
         vel_cg = np.gradient(data["cg_y_m"], dt)
         data["cg_vy"] = vel_cg
