@@ -911,9 +911,7 @@ if TKINTER_AVAILABLE:
                             # ... código existente para download de vídeo ...
 
                             # Format specification for best quality
-                            format_spec = (
-                                "bestvideo+bestaudio/best"
-                            )
+                            format_spec = "bestvideo+bestaudio/best"
 
                             # Download options
                             ydl_opts = {
