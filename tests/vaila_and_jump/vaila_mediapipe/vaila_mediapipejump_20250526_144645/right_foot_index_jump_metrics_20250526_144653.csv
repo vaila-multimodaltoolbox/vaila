@@ -1,0 +1,2 @@
+height_m,mass_kg,fps,flight_time_s,velocity_m/s,potential_energy_J,kinetic_energy_J,power_takeoff_W,power_avg_propulsion_W,propulsion_time_s,squat_frame,max_height_frame,takeoff_frame,landing_frame,conversion_factor
+0.374,90.0,30,0.533,2.278,330.513,233.483,2011.097,1409.99,0.4,88,107,100,116,3.825755
