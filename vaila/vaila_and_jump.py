@@ -405,6 +405,220 @@ def generate_jump_plots(data, results, output_dir, base_name):
     return plot_files
 
 
+def plot_jump_phases_analysis(data, takeoff_frame, max_height_frame, landing_frame, fps, output_dir, base_name):
+    """
+    Generate a visualization showing jump phases with colored regions.
+    
+    Args:
+        data (pd.DataFrame): The jump data
+        takeoff_frame (int): Frame where takeoff occurs
+        max_height_frame (int): Frame where maximum height is reached
+        landing_frame (int): Frame where landing occurs
+        fps (int): Frames per second
+        output_dir (str): Directory to save the output
+        base_name (str): Base name for the output file
+        
+    Returns:
+        str: Path to the saved plot
+    """
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    # Create figure
+    fig, ax = plt.subplots(figsize=(14, 8))
+    
+    # Convert frames to time
+    time = data.index / fps
+    
+    # Plot CG path
+    ax.plot(
+        time,
+        data["cg_y_normalized"],
+        "b-",
+        linewidth=3,
+        label="CG Path (normalized)",
+    )
+    
+    # Calculate key times
+    takeoff_time = takeoff_frame / fps
+    max_height_time = max_height_frame / fps
+    landing_time = landing_frame / fps
+    
+    # Color the flight phase with a light blue background
+    ax.axvspan(
+        takeoff_time,
+        landing_time,
+        alpha=0.15,
+        color="lightblue",
+        label="Flight Phase",
+    )
+    
+    # Color the ascent with a light green background
+    ax.axvspan(
+        takeoff_time,
+        max_height_time,
+        alpha=0.15,
+        color="lightgreen",
+        label="Ascent",
+    )
+    
+    # Color the descent with a light red background
+    ax.axvspan(
+        max_height_time,
+        landing_time,
+        alpha=0.15,
+        color="mistyrose",
+        label="Descent",
+    )
+    
+    # Mark the highest point
+    max_height = data["cg_y_normalized"].iloc[max_height_frame]
+    ax.plot(
+        max_height_time,
+        max_height,
+        "ro",
+        markersize=10,
+        label=f"Max Height: {max_height:.3f}m from initial CG",
+    )
+    
+    # Calculate and add flight time and velocity annotations
+    flight_time = landing_time - takeoff_time
+    velocity = calculate_velocity(max_height)
+    
+    # Add text annotations in boxes
+    bbox_props = dict(boxstyle="round,pad=0.5", fc="yellow", alpha=0.7)
+    ax.text(
+        max_height_time + 0.1,
+        max_height * 0.8,
+        f"Flight Time: {flight_time:.3f}s",
+        ha="center",
+        va="center",
+        bbox=bbox_props,
+    )
+    ax.text(
+        max_height_time + 0.1,
+        max_height * 0.6,
+        f"Velocity: {velocity:.2f} m/s",
+        ha="center",
+        va="center",
+        bbox=bbox_props,
+    )
+    
+    # Set labels and title
+    ax.set_xlabel("Time (seconds)")
+    ax.set_ylabel("Position (meters from initial CG)")
+    ax.set_title("Jump Phases Analysis - Normalized from Initial CG Position")
+    ax.grid(True)
+    ax.legend(loc="upper left")
+    
+    # Save the plot
+    plot_path = os.path.join(
+        output_dir, f"{base_name}_jump_phases_analysis_{timestamp}.png"
+    )
+    plt.savefig(plot_path, dpi=300, bbox_inches="tight")
+    plt.close()
+    
+    return plot_path
+
+
+def plot_jump_cg_feet_analysis(data, takeoff_frame, max_height_frame, landing_frame, fps, output_dir, base_name):
+    """
+    Generate a visualization showing CG and feet positions with phase markers.
+    
+    Args:
+        data (pd.DataFrame): The jump data
+        takeoff_frame (int): Frame where takeoff occurs
+        max_height_frame (int): Frame where maximum height is reached
+        landing_frame (int): Frame where landing occurs
+        fps (int): Frames per second
+        output_dir (str): Directory to save the output
+        base_name (str): Base name for the output file
+        
+    Returns:
+        str: Path to the saved plot
+    """
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    # Create figure
+    fig, ax = plt.subplots(figsize=(14, 8))
+    
+    # Convert frames to time
+    time = data.index / fps
+    
+    # Plot CG path
+    ax.plot(
+        time,
+        data["cg_y_normalized"],
+        "b-",
+        linewidth=2,
+        label="Center of Gravity (normalized)",
+    )
+    
+    # Plot feet positions if available
+    if "left_foot_index_y_m" in data.columns:
+        normalized_left_foot = data["left_foot_index_y_m"] - data["reference_cg_y"]
+        ax.plot(
+            time,
+            normalized_left_foot,
+            "g-",
+            linewidth=2,
+            label="Left Foot (normalized)",
+        )
+    
+    if "right_foot_index_y_m" in data.columns:
+        normalized_right_foot = data["right_foot_index_y_m"] - data["reference_cg_y"]
+        ax.plot(
+            time,
+            normalized_right_foot,
+            "r-",
+            linewidth=2,
+            label="Right Foot (normalized)",
+        )
+    
+    # Calculate key times
+    takeoff_time = takeoff_frame / fps
+    max_height_time = max_height_frame / fps
+    landing_time = landing_frame / fps
+    
+    # Mark the phases with vertical lines
+    ax.axvline(
+        x=takeoff_time,
+        color="green",
+        linestyle="--",
+        label="Takeoff",
+    )
+    ax.axvline(
+        x=max_height_time,
+        color="red",
+        linestyle="--",
+        label="Max Height",
+    )
+    ax.axvline(
+        x=landing_time,
+        color="black",
+        linestyle="--",
+        label="Landing",
+    )
+    
+    # Add reference line for initial CG position
+    ax.axhline(y=0, color="gray", linestyle="-", label="Initial CG Position (reference)")
+    
+    # Set labels and title
+    ax.set_xlabel("Time (seconds)")
+    ax.set_ylabel("Position (meters from initial CG) - Up is positive")
+    ax.set_title("Jump Analysis - Normalized CG and Feet Positions")
+    ax.grid(True)
+    ax.legend(loc="upper left")
+    
+    # Save the plot
+    plot_path = os.path.join(
+        output_dir, f"{base_name}_cg_feet_analysis_{timestamp}.png"
+    )
+    plt.savefig(plot_path, dpi=300, bbox_inches="tight")
+    plt.close()
+    
+    return plot_path
+
+
 def generate_html_report(data, results, plot_files, output_dir, base_name):
     """
     Generate an HTML report with jump metrics and plots.
@@ -1047,6 +1261,30 @@ def process_mediapipe_data(input_file, output_dir):
             base_name,
         )
         plot_files.append(diagnostic_plot)
+        
+        # 4. Generate jump phases analysis plot
+        phases_plot = plot_jump_phases_analysis(
+            data,
+            takeoff_frame,
+            max_height_frame,
+            landing_frame,
+            fps,
+            output_dir,
+            base_name,
+        )
+        plot_files.append(phases_plot)
+        
+        # 5. Generate CG and feet positions analysis plot
+        cg_feet_plot = plot_jump_cg_feet_analysis(
+            data,
+            takeoff_frame,
+            max_height_frame,
+            landing_frame,
+            fps,
+            output_dir,
+            base_name,
+        )
+        plot_files.append(cg_feet_plot)
 
         # --- Cálculo de potência frame a frame na fase de propulsão ---
         dt = 1 / fps
@@ -1709,21 +1947,31 @@ def plot_jump_stickfigures_with_cg(
         colors = ["black", "red", "blue", "green", "purple"]
     if body_segments is None:
         body_segments = [
+            # Legs
             ("left_ankle", "left_knee"),
             ("left_knee", "left_hip"),
             ("right_ankle", "right_knee"),
             ("right_knee", "right_hip"),
+            # Feet (new)
+            ("left_heel", "left_foot_index"),
+            ("right_heel", "right_foot_index"),
+            # Pelvis & Trunk
             ("left_hip", "right_hip"),
             ("left_shoulder", "right_shoulder"),
             ("left_hip", "left_shoulder"),
             ("right_hip", "right_shoulder"),
+            # Arms
             ("left_shoulder", "left_elbow"),
             ("left_elbow", "left_wrist"),
             ("right_shoulder", "right_elbow"),
             ("right_elbow", "right_wrist"),
-            ("left_shoulder", "nose"),
-            ("right_shoulder", "nose"),
+            # Removing direct connections to nose
+            # ("left_shoulder", "nose"),
+            # ("right_shoulder", "nose"),
         ]
+        
+        # Add special handling for shoulders midpoint to nose (neck/head)
+        # We'll calculate and add this segment during plotting
 
     # Check which segments are available with the current suffix
     available_segments = []
@@ -1792,6 +2040,8 @@ def plot_jump_stickfigures_with_cg(
     # Plot stick figures and CG at key moments
     for idx, (frame, label, color) in enumerate(zip(frames_plot, labels_plot, colors)):
         row = df.iloc[frame]
+        
+        # Plot regular segments
         for start, end in body_segments:
             x_start = f"{start}_x{suffix}"
             y_start = f"{start}_y{suffix}"
@@ -1808,6 +2058,34 @@ def plot_jump_stickfigures_with_cg(
                         color=color,
                         lw=2,
                     )
+        
+        # Add neck segment from shoulders midpoint to nose
+        left_shoulder_x = f"left_shoulder_x{suffix}"
+        left_shoulder_y = f"left_shoulder_y{suffix}"
+        right_shoulder_x = f"right_shoulder_x{suffix}"
+        right_shoulder_y = f"right_shoulder_y{suffix}"
+        nose_x = f"nose_x{suffix}"
+        nose_y = f"nose_y{suffix}"
+        
+        if all(col in row.index for col in [
+            left_shoulder_x, left_shoulder_y, right_shoulder_x, right_shoulder_y,
+            nose_x, nose_y
+        ]):
+            if not any(pd.isna(row[col]) for col in [
+                left_shoulder_x, left_shoulder_y, right_shoulder_x, right_shoulder_y,
+                nose_x, nose_y
+            ]):
+                # Calculate shoulders midpoint
+                mid_shoulder_x = (row[left_shoulder_x] + row[right_shoulder_x]) / 2
+                mid_shoulder_y = (row[left_shoulder_y] + row[right_shoulder_y]) / 2
+                
+                # Plot line from midpoint to nose
+                plt.plot(
+                    [mid_shoulder_x, row[nose_x]],
+                    [mid_shoulder_y, row[nose_y]],
+                    color=color,
+                    lw=2,
+                )
 
         plt.plot(
             row[cg_x_col],
@@ -1931,21 +2209,30 @@ def plot_jump_stickfigures_subplot(
 
     if body_segments is None:
         body_segments = [
+            # Legs
             ("left_ankle", "left_knee"),
             ("left_knee", "left_hip"),
             ("right_ankle", "right_knee"),
             ("right_knee", "right_hip"),
+            # Feet (new)
+            ("left_heel", "left_foot_index"),
+            ("right_heel", "right_foot_index"),
+            # Pelvis & Trunk
             ("left_hip", "right_hip"),
             ("left_shoulder", "right_shoulder"),
             ("left_hip", "left_shoulder"),
             ("right_hip", "right_shoulder"),
+            # Arms
             ("left_shoulder", "left_elbow"),
             ("left_elbow", "left_wrist"),
             ("right_shoulder", "right_elbow"),
             ("right_elbow", "right_wrist"),
-            ("left_shoulder", "nose"),
-            ("right_shoulder", "nose"),
+            # Removing direct connections to nose
+            # ("left_shoulder", "nose"),
+            # ("right_shoulder", "nose"),
         ]
+        
+        # Note: We'll add special handling for shoulder midpoint to nose (neck/head)
 
     # Check which segments are available with the current suffix
     available_segments = []
@@ -2094,6 +2381,34 @@ def plot_jump_stickfigures_subplot(
                         color=color,
                         lw=2,
                     )
+        
+        # Add neck segment from shoulders midpoint to nose
+        left_shoulder_x = f"left_shoulder_x{suffix}"
+        left_shoulder_y = f"left_shoulder_y{suffix}"
+        right_shoulder_x = f"right_shoulder_x{suffix}"
+        right_shoulder_y = f"right_shoulder_y{suffix}"
+        nose_x = f"nose_x{suffix}"
+        nose_y = f"nose_y{suffix}"
+        
+        if all(col in row.index for col in [
+            left_shoulder_x, left_shoulder_y, right_shoulder_x, right_shoulder_y,
+            nose_x, nose_y
+        ]):
+            if not any(pd.isna(row[col]) for col in [
+                left_shoulder_x, left_shoulder_y, right_shoulder_x, right_shoulder_y,
+                nose_x, nose_y
+            ]):
+                # Calculate shoulders midpoint
+                mid_shoulder_x = (row[left_shoulder_x] + row[right_shoulder_x]) / 2
+                mid_shoulder_y = (row[left_shoulder_y] + row[right_shoulder_y]) / 2
+                
+                # Plot line from midpoint to nose
+                ax.plot(
+                    [mid_shoulder_x, row[nose_x]],
+                    [mid_shoulder_y, row[nose_y]],
+                    color=color,
+                    lw=2,
+                )
 
         # Plot the CG with a distinct marker
         if cg_x_col in row and cg_y_col in row:
