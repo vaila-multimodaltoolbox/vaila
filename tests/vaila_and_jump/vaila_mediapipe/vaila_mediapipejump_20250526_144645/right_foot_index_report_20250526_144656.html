@@ -1,0 +1,259 @@
+
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Jump Analysis Report - right_foot_index</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                line-height: 1.6;
+                max-width: 1200px;
+                margin: 0 auto;
+                padding: 20px;
+                color: #333;
+            }
+            h1 {
+                color: #2c3e50;
+                border-bottom: 2px solid #3498db;
+                padding-bottom: 10px;
+            }
+            h2 {
+                color: #2980b9;
+                margin-top: 30px;
+            }
+            table {
+                border-collapse: collapse;
+                width: 100%;
+                margin: 20px 0;
+            }
+            th, td {
+                border: 1px solid #ddd;
+                padding: 12px;
+                text-align: left;
+            }
+            th {
+                background-color: #f2f2f2;
+            }
+            tr:nth-child(even) {
+                background-color: #f9f9f9;
+            }
+            .img-container {
+                text-align: center;
+                margin: 30px 0;
+            }
+            .img-container img {
+                max-width: 100%;
+                height: auto;
+                box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            }
+            .note {
+                background-color: #f8f9fa;
+                border-left: 4px solid #4caf50;
+                padding: 15px;
+                margin: 20px 0;
+            }
+            .footer {
+                margin-top: 50px;
+                border-top: 1px solid #ddd;
+                padding-top: 20px;
+                color: #7f8c8d;
+                font-size: 0.9em;
+                text-align: center;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>Jump Analysis Report</h1>
+        <p><strong>Subject:</strong> right_foot_index</p>
+        <p><strong>Date:</strong> 2025-05-26 14:46:56</p>
+        
+        <div class="note">
+            <h3>Coordinate System</h3>
+            <p>This analysis uses a biomechanical coordinate system where:</p>
+            <ul>
+                <li>Origin is at the bottom left</li>
+                <li>X-axis: positive to the right</li>
+                <li>Y-axis: positive upward</li>
+                <li>Z-axis: positive forward</li>
+            </ul>
+            <p>MediaPipe coordinates were transformed to match this convention, and all measurements are in meters.</p>
+            <p><strong>Important:</strong> Jump height is measured relative to the initial center of gravity (CG) position,
+            which is calculated as the average CG position during the first 10 frames. This reference position is set as zero,
+            so all vertical measurements represent displacement from this initial position.</p>
+            <h3>Cálculo Biomecânico da Potência no Salto Vertical</h3>
+            <p>
+            Neste relatório, foram estimadas três métricas de potência com base no movimento do centro de massa (CG) durante o salto vertical:
+            </p>
+            
+            <h4>1. Potência Instantânea</h4>
+            <p>
+              Calculada em cada instante da fase de propulsão:<br>
+              <span style="font-family: 'Consolas', monospace;">
+                P(t) = F(t) · v(t)
+              </span><br>
+              Onde:
+              <ul>
+                <li>
+                  F(t) = m · [a(t) + g] 
+                  <br>
+                  (força vertical total: massa multiplicada pela soma da aceleração vertical do CG e gravidade)
+                </li>
+                <li>
+                  v(t) = velocidade vertical do CG no tempo t
+                </li>
+              </ul>
+              A potência instantânea é apresentada em Watts (W) e seu valor máximo representa o pico de potência durante o salto.
+            </p>
+            
+            <h4>2. Potência no Takeoff</h4>
+            <p>
+              Calculada no instante de decolagem:<br>
+              <span style="font-family: 'Consolas', monospace;">
+                P<sub>takeoff</sub> = F<sub>takeoff</sub> · v<sub>takeoff</sub>
+              </span><br>
+              Considerando os valores de força e velocidade no exato momento em que o CG perde contato com o solo.
+            </p>
+            
+            <h4>3. Potência Média na Propulsão</h4>
+            <p>
+              Calculada por:<br>
+              <span style="font-family: 'Consolas', monospace;">
+                P<sub>média</sub> = (E<sub>cinética</sub> + E<sub>potencial</sub>) / Δt
+              </span><br>
+              Onde:
+              <ul>
+                <li>
+                  E<sub>cinética</sub> = ½ · m · v² (energia cinética no takeoff)
+                </li>
+                <li>
+                  E<sub>potencial</sub> = m · g · h (energia potencial na altura máxima)
+                </li>
+                <li>
+                  Δt = tempo entre o início da propulsão (squat) e o takeoff
+                </li>
+              </ul>
+              Representa a eficiência média do movimento durante a fase propulsiva.
+            </p>
+            
+            <h4>Referências Científicas</h4>
+            <ul>
+              <li>Samozino, P., Morin, J. B., Hintzy, F., & Belli, A. (2008). A simple method for measuring force, velocity and power output during squat jump. Journal of Biomechanics, 41(14), 2940-2945.</li>
+              <li>Aragón-Vargas, L. F., & Gross, M. M. (1997). Kinesiological factors in vertical jump performance: differences among individuals. Journal of Applied Biomechanics, 13(1), 24-44.</li>
+              <li>Harman, E. A., Rosenstein, M. T., Frykman, P. N., & Rosenstein, R. M. (1991). Estimation of human power output from vertical jump. Journal of Applied Sport Science Research, 5(3), 116-120.</li>
+              <li>Sayers, S. P., Harackiewicz, D. V., Harman, E. A., Frykman, P. N., & Rosenstein, M. T. (1999). Cross-validation of three jump power equations. Medicine & Science in Sports & Exercise, 31(4), 572-577.</li>
+            </ul>
+        </div>
+        
+        <h2>Jump Metrics</h2>
+        <table>
+            <tr>
+                <th>Metric</th>
+                <th>Value</th>
+                <th>Unit</th>
+            </tr>
+            <tr>
+                <td>Mass</td>
+                <td>90.0</td>
+                <td>kg</td>
+            </tr>
+            <tr>
+                <td>Jump Height</td>
+                <td>0.374</td>
+                <td>m (from initial CG position)</td>
+            </tr>
+            <tr>
+                <td>Flight Time</td>
+                <td>0.533</td>
+                <td>s</td>
+            </tr>
+            <tr>
+                <td>Takeoff Velocity</td>
+                <td>2.278</td>
+                <td>m/s</td>
+            </tr>
+            <tr>
+                <td>Potential Energy</td>
+                <td>330.513</td>
+                <td>J</td>
+            </tr>
+            <tr>
+                <td>Kinetic Energy</td>
+                <td>233.483</td>
+                <td>J</td>
+            </tr>
+            <tr>
+                <td>Potência Máxima (Propulsão)</td>
+                <td>3341.547</td>
+                <td>W</td>
+            </tr>
+            <tr>
+                <td>Potência no Takeoff</td>
+                <td>2011.097</td>
+                <td>W</td>
+            </tr>
+            <tr>
+                <td>Potência Média (Propulsão)</td>
+                <td>1409.99</td>
+                <td>W</td>
+            </tr>
+            <tr>
+                <td>Tempo de Propulsão</td>
+                <td>0.4</td>
+                <td>s</td>
+            </tr>
+        </table>
+        
+        <h2>Jump Phase Frames</h2>
+        <table>
+            <tr>
+                <th>Phase</th>
+                <th>Frame</th>
+                <th>Time (s)</th>
+            </tr>
+            <tr>
+                <td>Takeoff</td>
+                <td>100</td>
+                <td>3.333</td>
+            </tr>
+            <tr>
+                <td>Maximum Height</td>
+                <td>107</td>
+                <td>3.567</td>
+            </tr>
+            <tr>
+                <td>Landing</td>
+                <td>116</td>
+                <td>3.867</td>
+            </tr>
+        </table>
+        
+        <h2>Jump Analysis Visualizations</h2>
+    
+        <div class="img-container">
+            <img src="right_foot_index_stickfigures_phases_20250526_144653.png" alt="Jump analysis plot">
+            <p><em>right_foot_index_stickfigures_phases_20250526_144653.png</em></p>
+        </div>
+        
+        <div class="img-container">
+            <img src="right_foot_index_stickfigures_cg_20250526_144653.png" alt="Jump analysis plot">
+            <p><em>right_foot_index_stickfigures_cg_20250526_144653.png</em></p>
+        </div>
+        
+        <div class="img-container">
+            <img src="right_foot_index_normalized_diagnostic_20250526_144655.png" alt="Jump analysis plot">
+            <p><em>right_foot_index_normalized_diagnostic_20250526_144655.png</em></p>
+        </div>
+        
+        <div class="img-container">
+            <img src="right_foot_index_power_curve_20250526_144655.png" alt="Jump analysis plot">
+            <p><em>right_foot_index_power_curve_20250526_144655.png</em></p>
+        </div>
+        
+        <div class="footer">
+            <p>Generated by vailá - Vertical Jump Analysis Tool</p>
+        </div>
+    </body>
+    </html>
+    

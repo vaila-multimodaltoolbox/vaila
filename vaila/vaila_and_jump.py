@@ -349,157 +349,41 @@ def identify_jump_phases(data, feet_baseline, cg_baseline, fps):
 
 
 def generate_jump_plots(data, results, output_dir, base_name):
-    """
-    Generate time series plots for CG and feet position data.
-
-    Args:
-        data (pd.DataFrame): DataFrame with processed data
-        results (dict): Dictionary with jump metrics
-        output_dir (str): Directory to save the plots
-        base_name (str): Base name for the output files
-
-    Returns:
-        list: Paths to the generated plot files
-    """
     plot_files = []
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
-    # 1. Create time series plot of CG and feet positions
-    plt.figure(figsize=(12, 8))
-
-    # Add frame numbers on x-axis
-    frames = (
-        data.index.values if "frame_index" not in data.columns else data["frame_index"]
-    )
-    time_seconds = frames / results["fps"]
-
-    # Plot NORMALIZED CG position
-    plt.plot(
-        time_seconds,
-        data["cg_y_normalized"],
-        "b-",
-        linewidth=2,
-        label="Center of Gravity (normalized)",
-    )
-
-    # Plot NORMALIZED feet position if available
-    if "left_foot_index_y_m" in data.columns:
-        normalized_left_foot = data["left_foot_index_y_m"] - data["reference_cg_y"]
-        plt.plot(
-            time_seconds,
-            normalized_left_foot,
-            "g-",
-            linewidth=1.5,
-            label="Left Foot (normalized)",
-        )
-    if "right_foot_index_y_m" in data.columns:
-        normalized_right_foot = data["right_foot_index_y_m"] - data["reference_cg_y"]
-        plt.plot(
-            time_seconds,
-            normalized_right_foot,
-            "r-",
-            linewidth=1.5,
-            label="Right Foot (normalized)",
-        )
-
-    # Mark important frames
-    takeoff_time = time_seconds[results["takeoff_frame"]]
-    max_height_time = time_seconds[results["max_height_frame"]]
-    landing_time = time_seconds[results["landing_frame"]]
-
-    # Mark takeoff, max height, and landing points
-    plt.axvline(x=takeoff_time, color="g", linestyle="--", label="Takeoff")
-    plt.axvline(x=max_height_time, color="r", linestyle="--", label="Max Height")
-    plt.axvline(x=landing_time, color="k", linestyle="--", label="Landing")
-
-    # Add reference line (zero)
-    plt.axhline(
-        y=0, color="gray", linestyle="-", label="Initial CG Position (reference)"
-    )
-
-    # Add labels and title
-    plt.xlabel("Time (seconds)")
-    plt.ylabel("Position (meters from initial CG) - Up is positive")
-    plt.title("Jump Analysis - Normalized CG and Feet Positions")
-    plt.legend(loc="best")
-    plt.grid(True)
-
-    # Save plot
-    ts_plot_path = os.path.join(output_dir, f"{base_name}_time_series_{timestamp}.png")
-    plt.savefig(ts_plot_path, dpi=300, bbox_inches="tight")
-    plot_files.append(ts_plot_path)
-    plt.close()
-
-    # 2. Create a jump phases visualization
+    
+    # Acessando variáveis do dicionário results
+    fps = results["fps"]
+    takeoff_frame = results["takeoff_frame"]
+    max_power = results.get("max_power_W", None)
+    time_max_power = results.get("time_max_power_s", None)
+    power_takeoff = results.get("power_takeoff_W", None)
+    
+    # Plot de potência instantânea
     plt.figure(figsize=(12, 6))
-
-    # Create flight phase rectangle
-    flight_start = takeoff_time
-    flight_end = landing_time
-    flight_duration = flight_end - flight_start
-
-    # Plot rectangles for each phase
-    plt.axvspan(
-        flight_start, flight_end, alpha=0.2, color="skyblue", label="Flight Phase"
-    )
-    plt.axvspan(
-        flight_start, max_height_time, alpha=0.2, color="lightgreen", label="Ascent"
-    )
-    plt.axvspan(max_height_time, flight_end, alpha=0.2, color="salmon", label="Descent")
-
-    # Plot NORMALIZED CG path
-    plt.plot(
-        time_seconds,
-        data["cg_y_normalized"],
-        "b-",
-        linewidth=2.5,
-        label="CG Path (normalized)",
-    )
-
-    # Mark max height using normalized value
-    max_height_value = data["cg_y_normalized"].iloc[results["max_height_frame"]]
-    plt.scatter(
-        [max_height_time],
-        [max_height_value],
-        color="red",
-        s=100,
-        marker="o",
-        label=f'Max Height: {results["height_m"]:.3f}m from initial CG',
-    )
-
-    # Add annotations
-    plt.annotate(
-        f"Flight Time: {results['flight_time_s']:.3f}s",
-        xy=(flight_start + flight_duration / 2, max_height_value - 0.05),
-        xytext=(flight_start + flight_duration / 2, max_height_value - 0.1),
-        ha="center",
-        va="center",
-        bbox=dict(boxstyle="round,pad=0.5", fc="yellow", alpha=0.3),
-    )
-
-    plt.annotate(
-        f"Velocity: {results['velocity_m/s']:.2f} m/s",
-        xy=(flight_start, max_height_value - 0.15),
-        xytext=(flight_start, max_height_value - 0.15),
-        ha="left",
-        va="center",
-        bbox=dict(boxstyle="round,pad=0.5", fc="yellow", alpha=0.3),
-    )
-
-    # Add labels and title
-    plt.xlabel("Time (seconds)")
-    plt.ylabel("Position (meters from initial CG)")
-    plt.title("Jump Phases Analysis - Normalized from Initial CG Position")
-    plt.legend(loc="best")
+    plt.plot(data.index / fps, data["power"], label="Potência instantânea (W)", color='purple')
+    
+    if takeoff_frame is not None:
+        plt.axvline(takeoff_frame / fps, color='g', linestyle='--', label='Takeoff')
+    
+    if max_power is not None and time_max_power is not None:
+        plt.axvline(time_max_power, color='orange', linestyle=':', label='Máx. Potência')
+        plt.scatter(time_max_power, max_power, color='orange', zorder=5, label='Máx. Potência')
+    
+    if power_takeoff is not None and takeoff_frame is not None:
+        plt.scatter(takeoff_frame / fps, power_takeoff, color='g', zorder=5, label='Potência Takeoff')
+    
+    plt.xlabel("Tempo (s)")
+    plt.ylabel("Potência (W)")
+    plt.title("Potência instantânea durante o salto")
+    plt.legend()
     plt.grid(True)
-
-    # Save plot
-    phases_plot_path = os.path.join(
-        output_dir, f"{base_name}_jump_phases_{timestamp}.png"
-    )
-    plt.savefig(phases_plot_path, dpi=300, bbox_inches="tight")
-    plot_files.append(phases_plot_path)
+    
+    # Salvando o gráfico
+    power_plot_path = os.path.join(output_dir, f"{base_name}_power_curve_{timestamp}.png")
+    plt.savefig(power_plot_path, dpi=300, bbox_inches="tight")
     plt.close()
+    plot_files.append(power_plot_path)
 
     return plot_files
 
@@ -606,6 +490,68 @@ def generate_html_report(data, results, plot_files, output_dir, base_name):
             <p><strong>Important:</strong> Jump height is measured relative to the initial center of gravity (CG) position,
             which is calculated as the average CG position during the first 10 frames. This reference position is set as zero,
             so all vertical measurements represent displacement from this initial position.</p>
+            <h3>Cálculo Biomecânico da Potência no Salto Vertical</h3>
+            <p>
+            Neste relatório, foram estimadas três métricas de potência com base no movimento do centro de massa (CG) durante o salto vertical:
+            </p>
+            
+            <h4>1. Potência Instantânea</h4>
+            <p>
+              Calculada em cada instante da fase de propulsão:<br>
+              <span style="font-family: 'Consolas', monospace;">
+                P(t) = F(t) · v(t)
+              </span><br>
+              Onde:
+              <ul>
+                <li>
+                  F(t) = m · [a(t) + g] 
+                  <br>
+                  (força vertical total: massa multiplicada pela soma da aceleração vertical do CG e gravidade)
+                </li>
+                <li>
+                  v(t) = velocidade vertical do CG no tempo t
+                </li>
+              </ul>
+              A potência instantânea é apresentada em Watts (W) e seu valor máximo representa o pico de potência durante o salto.
+            </p>
+            
+            <h4>2. Potência no Takeoff</h4>
+            <p>
+              Calculada no instante de decolagem:<br>
+              <span style="font-family: 'Consolas', monospace;">
+                P<sub>takeoff</sub> = F<sub>takeoff</sub> · v<sub>takeoff</sub>
+              </span><br>
+              Considerando os valores de força e velocidade no exato momento em que o CG perde contato com o solo.
+            </p>
+            
+            <h4>3. Potência Média na Propulsão</h4>
+            <p>
+              Calculada por:<br>
+              <span style="font-family: 'Consolas', monospace;">
+                P<sub>média</sub> = (E<sub>cinética</sub> + E<sub>potencial</sub>) / Δt
+              </span><br>
+              Onde:
+              <ul>
+                <li>
+                  E<sub>cinética</sub> = ½ · m · v² (energia cinética no takeoff)
+                </li>
+                <li>
+                  E<sub>potencial</sub> = m · g · h (energia potencial na altura máxima)
+                </li>
+                <li>
+                  Δt = tempo entre o início da propulsão (squat) e o takeoff
+                </li>
+              </ul>
+              Representa a eficiência média do movimento durante a fase propulsiva.
+            </p>
+            
+            <h4>Referências Científicas</h4>
+            <ul>
+              <li>Samozino, P., Morin, J. B., Hintzy, F., & Belli, A. (2008). A simple method for measuring force, velocity and power output during squat jump. Journal of Biomechanics, 41(14), 2940-2945.</li>
+              <li>Aragón-Vargas, L. F., & Gross, M. M. (1997). Kinesiological factors in vertical jump performance: differences among individuals. Journal of Applied Biomechanics, 13(1), 24-44.</li>
+              <li>Harman, E. A., Rosenstein, M. T., Frykman, P. N., & Rosenstein, R. M. (1991). Estimation of human power output from vertical jump. Journal of Applied Sport Science Research, 5(3), 116-120.</li>
+              <li>Sayers, S. P., Harackiewicz, D. V., Harman, E. A., Frykman, P. N., & Rosenstein, M. T. (1999). Cross-validation of three jump power equations. Medicine & Science in Sports & Exercise, 31(4), 572-577.</li>
+            </ul>
         </div>
         
         <h2>Jump Metrics</h2>
@@ -644,6 +590,26 @@ def generate_html_report(data, results, plot_files, output_dir, base_name):
                 <td>Kinetic Energy</td>
                 <td>{results["kinetic_energy_J"]}</td>
                 <td>J</td>
+            </tr>
+            <tr>
+                <td>Potência Máxima (Propulsão)</td>
+                <td>{results.get("max_power_W", "—")}</td>
+                <td>W</td>
+            </tr>
+            <tr>
+                <td>Potência no Takeoff</td>
+                <td>{results.get("power_takeoff_W", "—")}</td>
+                <td>W</td>
+            </tr>
+            <tr>
+                <td>Potência Média (Propulsão)</td>
+                <td>{results.get("power_avg_propulsion_W", "—")}</td>
+                <td>W</td>
+            </tr>
+            <tr>
+                <td>Tempo de Propulsão</td>
+                <td>{results.get("propulsion_time_s", "—")}</td>
+                <td>s</td>
             </tr>
         </table>
         
@@ -704,15 +670,20 @@ def generate_html_report(data, results, plot_files, output_dir, base_name):
 def process_mediapipe_data(input_file, output_dir):
     """
     Process MediaPipe data and generate visualizations and report.
+    
+    Args:
+        input_file (str): Path to the input CSV file
+        output_dir (str): Path to the output directory
     """
     try:
+        # Carrega o arquivo .csv
         data = pd.read_csv(input_file)
+        results = {}
+        base_name = os.path.splitext(os.path.basename(input_file))[0]
 
         # Invert all y coordinates (1.0 - y) to fix orientation
         for col in [c for c in data.columns if c.endswith("_y")]:
             data[col] = 1.0 - data[col]
-
-        results = {}
 
         # Request mass and FPS
         root = Tk()
@@ -923,17 +894,27 @@ def process_mediapipe_data(input_file, output_dir):
         # Calculate jump metrics
         velocity = calculate_velocity(jump_height)
 
+        # ======= NEW: Calculate Power =======
+        # 1. Potência instantânea no takeoff (W)
+        force = mass * 9.81  # Força peso em N
+        power_takeoff = force * abs(vel_takeoff)  # Potência no instante do takeoff
+
+        # 2. Potência média durante a fase de propulsão
+        propulsion_time = (takeoff_frame - squat_frame) / fps  # Tempo de propulsão em segundos
+        power_avg_propulsion = (potential_energy + kinetic_energy) / propulsion_time if propulsion_time > 0 else 0
+
         # Prepare results
         results = {
             "height_m": round(jump_height, 3),
             "mass_kg": mass,
             "fps": fps,
             "flight_time_s": round(flight_time, 3),
-            "velocity_m/s": round(
-                vel_takeoff, 3
-            ),  # Actual velocity of the CG at takeoff
+            "velocity_m/s": round(vel_takeoff, 3),  # Actual velocity of the CG at takeoff
             "potential_energy_J": round(potential_energy, 3),
             "kinetic_energy_J": round(kinetic_energy, 3),
+            "power_takeoff_W": round(power_takeoff, 3),  # Nova métrica
+            "power_avg_propulsion_W": round(power_avg_propulsion, 3),  # Nova métrica
+            "propulsion_time_s": round(propulsion_time, 3),  # Nova métrica
             "squat_frame": squat_frame,
             "max_height_frame": max_height_frame,
             "takeoff_frame": takeoff_frame,
@@ -944,16 +925,14 @@ def process_mediapipe_data(input_file, output_dir):
         # Save results in DataFrame
         results_df = pd.DataFrame([results])
 
-        # Generate base name for files
+        # Generate timestamp for files
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        base_name = os.path.splitext(os.path.basename(input_file))[0]
 
         # Não é necessário salvar o arquivo processed, pois é redundante
         # output_data_file = os.path.join(output_dir, f"{base_name}_processed_{timestamp}.csv")
-        # data.to_csv(output_data_file, index=False)
 
         # 1. Identify all original columns (keeping the order of the read file)
-        orig_cols = list(pd.read_csv(input_file, nrows=1).columns)
+        orig_cols = list(data.columns)
 
         # 2. For each original column ending with _x, _y, _z, add its _x_m, _y_m, _z_m version
         orig_m_cols = []
@@ -1031,11 +1010,7 @@ def process_mediapipe_data(input_file, output_dir):
         plot_jump_stickfigures_with_cg(output_calibrated_file, stickfig_output_file)
         plot_files.append(stickfig_output_file)
 
-        # 3. Generate other jump plots (time series, phases, etc.)
-        other_plot_files = generate_jump_plots(data, results, output_dir, base_name)
-        plot_files.extend(other_plot_files)
-
-        # 4. Generate diagnostic plot and add it
+        # 3. Generate diagnostic plot and add it
         diagnostic_plot = generate_normalized_diagnostic_plot(
             data,
             takeoff_frame,
@@ -1047,6 +1022,40 @@ def process_mediapipe_data(input_file, output_dir):
             base_name,
         )
         plot_files.append(diagnostic_plot)
+
+        # --- Cálculo de potência frame a frame na fase de propulsão ---
+        dt = 1/fps
+        # Cálculo de velocidade (derivada central)
+        vel_cg = np.gradient(data["cg_y_m"], dt)
+        data["cg_vy"] = vel_cg
+
+        # Cálculo de aceleração (segunda derivada)
+        acc_cg = np.gradient(vel_cg, dt)
+        data["cg_ay"] = acc_cg
+
+        # Força vertical total: F = m * (a + g)
+        force_vertical = mass * (acc_cg + 9.81)
+        data["force_vertical"] = force_vertical
+
+        # Potência instantânea: P = F * v
+        power = force_vertical * vel_cg
+        data["power"] = power
+
+        # Potência máxima durante a propulsão (do squat até o takeoff)
+        propulsion_frames = range(squat_frame, takeoff_frame + 1)
+        power_propulsion = power[propulsion_frames]
+        max_power = np.max(power_propulsion)
+        idx_max_power = propulsion_frames.start + np.argmax(power_propulsion)
+        time_max_power = idx_max_power / fps
+
+        # Adicione ao dicionário de resultados
+        results["max_power_W"] = round(max_power, 3)
+        results["frame_max_power"] = int(idx_max_power)
+        results["time_max_power_s"] = round(time_max_power, 3)
+
+        # 4. Generate other jump plots (time series, phases, etc.)
+        other_plot_files = generate_jump_plots(data, results, output_dir, base_name)
+        plot_files.extend(other_plot_files)
 
         # 5. Generate HTML report with all plots
         output_metrics_file = os.path.join(
