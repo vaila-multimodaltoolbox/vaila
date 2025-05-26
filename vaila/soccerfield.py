@@ -89,16 +89,21 @@ def plot_field(df, show_reference_points=True):
     Returns:
         fig, ax: Matplotlib figure and axes with the drawn field
     """
-    # Define the margin around the field (2 meters)
+    # Determine field dimensions from DataFrame
+    min_x, max_x = df['x'].min(), df['x'].max()
+    min_y, max_y = df['y'].min(), df['y'].max()
+    field_width = max_x - min_x
+    field_height = max_y - min_y
+    
+    # Define the margin around the field
     margin = 2
 
+    # Use existing figsize, aspect ratio and dynamic limits will scale content
     fig, ax = plt.subplots(
         figsize=(10.5 + 0.4, 6.8 + 0.4)
-    )  # Increasing slightly to accommodate the margin
-    ax.set_xlim(
-        -margin - 1, 105 + margin + 1
-    )  # Expanding the limits to include the margin
-    ax.set_ylim(-margin - 1, 68 + margin + 1)
+    )  
+    ax.set_xlim(min_x - margin -1, max_x + margin + 1)
+    ax.set_ylim(min_y - margin -1, max_y + margin + 1)
     ax.set_aspect("equal")
     ax.axis("off")
 
@@ -108,33 +113,30 @@ def plot_field(df, show_reference_points=True):
         for _, row in df.iterrows()
     }
 
-    # Draw extended area (including 2m margin around the field)
+    # Draw extended area (including margin around the field)
     draw_rectangle(
         ax,
-        (
-            points["bottom_left_corner"][0] - margin,
-            points["bottom_left_corner"][1] - margin,
-        ),
-        105 + 2 * margin,
-        68 + 2 * margin,
+        (min_x - margin, min_y - margin),
+        field_width + 2 * margin,
+        field_height + 2 * margin,
         edgecolor="none",
         facecolor="green",
         zorder=0,
     )
 
-    # Draw the main playing surface with slightly darker green to differentiate
+    # Draw the main playing surface with slightly darker green
     draw_rectangle(
         ax,
-        points["bottom_left_corner"][0:2],
-        105,
-        68,
+        (min_x, min_y), # Use min_x, min_y from DataFrame
+        field_width,    # Use calculated field_width
+        field_height,   # Use calculated field_height
         edgecolor="none",
-        facecolor="forestgreen",  # Slightly darker green
+        facecolor="forestgreen",
         zorder=0.5,
     )
 
     # Draw perimeter lines (12cm = 0.12m width)
-    # To maintain the proportion, we will use linewidth=2 to represent the 12cm
+    # These use named points, should adapt if points are correct in CSV
 
     # Left sideline
     draw_line(
@@ -186,126 +188,145 @@ def plot_field(df, show_reference_points=True):
         zorder=1,
     )
 
-    # Center circle
+    # Center circle - radius derived from points
+    center_circle_radius = abs(points["center_circle_top_intersection"][1] - points["center_field"][1])
     draw_circle(
         ax,
         points["center_field"][0:2],
-        9.15,
+        center_circle_radius,
         edgecolor="white",
         facecolor="none",
         linewidth=2,
         zorder=1,
     )
 
-    # Center spot
+    # Center spot - fixed small radius
+    center_spot_radius = 0.2 
     draw_circle(
         ax,
         points["center_field"][0:2],
-        0.2,
+        center_spot_radius,
         edgecolor="white",
         facecolor="white",
         linewidth=2,
         zorder=1,
     )
 
-    # Left penalty area
+    # Left penalty area - dimensions from points
+    lp_bottom_left = points["left_penalty_area_bottom_left"]
+    lp_width = points["left_penalty_area_top_left"][0] - points["left_penalty_area_bottom_left"][0]
+    lp_height = points["left_penalty_area_bottom_right"][1] - points["left_penalty_area_bottom_left"][1]
     draw_rectangle(
         ax,
-        points["left_penalty_area_bottom_left"][0:2],
-        16.5,
-        40.3,
+        lp_bottom_left[0:2],
+        lp_width,
+        lp_height,
         edgecolor="white",
         facecolor="none",
         linewidth=2,
         zorder=1,
     )
 
-    # Left goal area
+    # Left goal area - dimensions from points
+    lg_bottom_left = points["left_goal_area_bottom_left"]
+    lg_width = points["left_goal_area_top_left"][0] - points["left_goal_area_bottom_left"][0]
+    lg_height = points["left_goal_area_bottom_right"][1] - points["left_goal_area_bottom_left"][1]
     draw_rectangle(
         ax,
-        points["left_goal_area_bottom_left"][0:2],
-        5.5,
-        18.32,
+        lg_bottom_left[0:2],
+        lg_width,
+        lg_height,
         edgecolor="white",
         facecolor="none",
         linewidth=2,
         zorder=1,
     )
 
-    # Left penalty spot
+    # Left penalty spot - fixed small radius
     draw_circle(
         ax,
         points["left_penalty_spot"][0:2],
-        0.2,
+        0.2, # Standard penalty spot radius
         edgecolor="white",
         facecolor="white",
         linewidth=2,
         zorder=1,
     )
 
-    # Left penalty arc - desenha APENAS a parte FORA da grande área
-    # Para o arco esquerdo, usamos os limites reais para garantir que nada da meia lua
-    # com x < 16.5 seja desenhado (dentro da grande área)
+    # Left penalty arc - fully dynamic
+    l_arc_center = points["left_penalty_spot"][0:2]
+    # Calculate radius from spot to one of the intersection points
+    l_arc_radius = math.hypot(points["left_penalty_arc_left_intersection"][0] - l_arc_center[0],
+                               points["left_penalty_arc_left_intersection"][1] - l_arc_center[1])
+    
+    # Intersection line x-coordinate
+    l_intersect_x = points["left_penalty_arc_left_intersection"][0] # Assumes both intersection points share this x
 
-    # Calculando os ângulos exatos onde a circunferência cruza a linha x=16.5
-    left_pen_x = points["left_penalty_spot"][0]  # 11.0
-    left_pen_y = points["left_penalty_spot"][1]  # 34.0
-    radius = 9.15
+    # Determine angles using the provided intersection points
+    # Ensure y-coordinates define bottom and top correctly for angle calculation
+    y_intersect_1_l = points["left_penalty_arc_left_intersection"][1]
+    y_intersect_2_l = points["left_penalty_arc_right_intersection"][1]
 
-    # Encontrar o ângulo exato onde x=16.5 na circunferência
-    # A equação da circunferência é: (x-x0)² + (y-y0)² = r²
-    # Para x=16.5: (16.5-11.0)² + (y-34.0)² = 9.15²
-    # Resolvendo para y: (y-34.0)² = 9.15² - (16.5-11.0)²
-    # Ângulo theta = atan2(y-y0, x-x0)
+    # Sort y_coords to ensure bottom_angle corresponds to lower y and top_angle to higher y for the arc segment
+    l_y_for_bottom_angle = min(y_intersect_1_l, y_intersect_2_l)
+    l_y_for_top_angle = max(y_intersect_1_l, y_intersect_2_l)
+    
+    l_bottom_angle = math.degrees(math.atan2(l_y_for_bottom_angle - l_arc_center[1], l_intersect_x - l_arc_center[0]))
+    l_top_angle = math.degrees(math.atan2(l_y_for_top_angle - l_arc_center[1], l_intersect_x - l_arc_center[0]))
 
-    dx = 16.5 - left_pen_x  # 5.5
-    dy = math.sqrt(
-        radius**2 - dx**2
-    )  # Distância vertical do centro ao ponto de interseção
-
-    # Dois pontos de interseção: (16.5, 34.0+dy) e (16.5, 34.0-dy)
-    top_y = left_pen_y + dy
-    bottom_y = left_pen_y - dy
-
-    # Calculando os ângulos exatos (em graus)
-    top_angle = math.degrees(math.atan2(top_y - left_pen_y, 16.5 - left_pen_x))
-    bottom_angle = math.degrees(math.atan2(bottom_y - left_pen_y, 16.5 - left_pen_x))
-
-    # Normalizando os ângulos para o intervalo 0-360
-    if top_angle < 0:
-        top_angle += 360
-    if bottom_angle < 0:
-        bottom_angle += 360
-
+    # Normalizing the angles for correct Arc drawing
+    # No explicit normalization needed if relying on atan2 range and Arc interpretation.
+    # Matplotlib's Arc draws counter-clockwise from theta1 to theta2.
+    # For the left arc, the segment should be from the angle corresponding to the lower y-intersection point
+    # to the angle corresponding to the higher y-intersection point.
+    
+    # Original code logic: theta1=bottom_angle, theta2=top_angle
+    # Ensure correct order for drawing the visible segment.
+    # After atan2, l_bottom_angle might be > l_top_angle if crossing 0/360 (e.g. 330 and 30)
+    # We need the smaller sweep. The default ordering usually works if intersection points are consistent.
+    if abs(l_top_angle - l_bottom_angle) > 180: # If it's the major arc, swap them
+         if l_bottom_angle < l_top_angle:
+             l_bottom_angle += 360
+         else:
+             l_top_angle += 360
+    
+    # The original fixed code had bottom_angle potentially > top_angle after normalization (e.g., 315 and 45).
+    # For Arc, theta1 to theta2 counter-clockwise. For left penalty arc, this implies bottom_angle is theta1.
     draw_arc(
         ax,
-        points["left_penalty_spot"][0:2],
-        9.15,
-        theta1=bottom_angle,  # Ângulo exato inferior
-        theta2=top_angle,  # Ângulo exato superior
+        l_arc_center,
+        l_arc_radius,
+        theta1=l_bottom_angle, 
+        theta2=l_top_angle, 
         edgecolor="white",
         linewidth=2,
         zorder=1,
     )
 
-    # Right penalty area
+    # Right penalty area - dimensions from points
+    rp_anchor = points["right_penalty_area_top_left"] # This point is (xmin_box, ymin_box) for this box
+    rp_width = points["right_penalty_area_bottom_right"][0] - points["right_penalty_area_top_left"][0]
+    rp_height = points["right_penalty_area_top_right"][1] - points["right_penalty_area_top_left"][1]
     draw_rectangle(
         ax,
-        points["right_penalty_area_top_left"][0:2],
-        16.5,
-        40.3,
+        rp_anchor[0:2],
+        rp_width,
+        rp_height,
         edgecolor="white",
         facecolor="none",
         linewidth=2,
         zorder=1,
     )
 
-    # Right goal area
+    # Right goal area - dimensions from points
+    rg_anchor = points["right_goal_area_top_left"] # This point is (xmin_box, ymin_box)
+    rg_width = points["right_goal_area_bottom_right"][0] - points["right_goal_area_top_left"][0]
+    rg_height = points["right_goal_area_top_right"][1] - points["right_goal_area_top_left"][1]
     draw_rectangle(
         ax,
-        points["right_goal_area_top_left"][0:2],
-        5.5,
-        18.32,
+        rg_anchor[0:2],
+        rg_width,
+        rg_height,
         edgecolor="white",
         facecolor="none",
         linewidth=2,
@@ -316,51 +337,45 @@ def plot_field(df, show_reference_points=True):
     draw_circle(
         ax,
         points["right_penalty_spot"][0:2],
-        0.2,
+        0.2, # Standard penalty spot radius
         edgecolor="white",
         facecolor="white",
         linewidth=2,
         zorder=1,
     )
 
-    # Right penalty arc - desenha APENAS a parte FORA da grande área
-    # Para o arco direito, usamos os limites reais para garantir que nada da meia lua
-    # com x > 88.5 seja desenhado (dentro da grande área)
+    # Right penalty arc - fully dynamic
+    r_arc_center = points["right_penalty_spot"][0:2]
+    r_arc_radius = math.hypot(points["right_penalty_arc_left_intersection"][0] - r_arc_center[0],
+                               points["right_penalty_arc_left_intersection"][1] - r_arc_center[1])
+    r_intersect_x = points["right_penalty_arc_left_intersection"][0]
 
-    # Calculando os ângulos exatos onde a circunferência cruza a linha x=88.5
-    right_pen_x = points["right_penalty_spot"][0]  # 94.0
-    right_pen_y = points["right_penalty_spot"][1]  # 34.0
+    y_intersect_1_r = points["right_penalty_arc_left_intersection"][1]
+    y_intersect_2_r = points["right_penalty_arc_right_intersection"][1]
+    
+    # For the right arc, angles are on the left side of the circle (typically 90 to 270 degrees)
+    # The "top" intersection point (larger y) will have a smaller angle (e.g., 135 deg)
+    # The "bottom" intersection point (smaller y) will have a larger angle (e.g., 225 deg)
+    r_y_for_top_angle = max(y_intersect_1_r, y_intersect_2_r) # Corresponds to theta1 in original right arc
+    r_y_for_bottom_angle = min(y_intersect_1_r, y_intersect_2_r) # Corresponds to theta2 in original right arc
 
-    # Encontrar o ângulo exato onde x=88.5 na circunferência
-    dx = 88.5 - right_pen_x  # -5.5
-    dy = math.sqrt(
-        radius**2 - dx**2
-    )  # Distância vertical do centro ao ponto de interseção
+    r_top_angle_calc = math.degrees(math.atan2(r_y_for_top_angle - r_arc_center[1], r_intersect_x - r_arc_center[0]))
+    r_bottom_angle_calc = math.degrees(math.atan2(r_y_for_bottom_angle - r_arc_center[1], r_intersect_x - r_arc_center[0]))
 
-    # Dois pontos de interseção: (88.5, 34.0+dy) e (88.5, 34.0-dy)
-    right_top_y = right_pen_y + dy
-    right_bottom_y = right_pen_y - dy
-
-    # Calculando os ângulos exatos (em graus)
-    right_top_angle = math.degrees(
-        math.atan2(right_top_y - right_pen_y, 88.5 - right_pen_x)
-    )
-    right_bottom_angle = math.degrees(
-        math.atan2(right_bottom_y - right_pen_y, 88.5 - right_pen_x)
-    )
-
-    # Normalizando os ângulos para o intervalo 0-360
-    if right_top_angle < 0:
-        right_top_angle += 360
-    if right_bottom_angle < 0:
-        right_bottom_angle += 360
+    # Original code logic: theta1=top_angle, theta2=bottom_angle
+    # Ensure correct order for drawing the visible segment.
+    if abs(r_bottom_angle_calc - r_top_angle_calc) > 180: # If it's the major arc, swap them
+         if r_top_angle_calc < r_bottom_angle_calc:
+             r_top_angle_calc += 360
+         else:
+             r_bottom_angle_calc += 360
 
     draw_arc(
         ax,
-        points["right_penalty_spot"][0:2],
-        9.15,
-        theta1=right_top_angle,  # Ângulo exato superior
-        theta2=right_bottom_angle,  # Ângulo exato inferior
+        r_arc_center,
+        r_arc_radius,
+        theta1=r_top_angle_calc, # Theta1 is the angle for the "upper" intersection point of the arc segment
+        theta2=r_bottom_angle_calc, # Theta2 is the angle for the "lower" intersection point
         edgecolor="white",
         linewidth=2,
         zorder=1,
@@ -389,21 +404,28 @@ def plot_field(df, show_reference_points=True):
     # Add point numbers to the field for reference (only if enabled)
     if show_reference_points:
         for name, (x, y, num) in points.items():
+            # Adjust text offset slightly based on field size for better visibility, or keep fixed.
+            # Using a fixed offset for now.
+            text_offset_x = field_width * 0.005 
+            text_offset_y = field_height * 0.005
+            # Ensure a minimum offset if field is very small, but 0.5 was quite large.
+            # Let's try a smaller fixed offset, e.g., 0.2 or relate to margin
+            offset = 0.2  # Smaller fixed offset
             ax.text(
-                x + 0.5,
-                y + 0.5,
+                x + offset, # Was x + 0.5
+                y + offset, # Was y + 0.5
                 str(num),
                 color="black",
                 fontsize=8,
                 weight="bold",
-                bbox=dict(facecolor="white", alpha=0.7, boxstyle="round"),
+                bbox=dict(facecolor="white", alpha=0.7, boxstyle="round", pad=0.2), # added pad
                 zorder=10,
             )
 
     return fig, ax
 
 
-def load_and_plot_markers(field_ax, csv_path, canvas, selected_markers=None):
+def load_and_plot_markers(field_ax, csv_path, canvas, manual_marker_artists_ref, frame_markers_ref, current_frame_ref, selected_markers=None):
     """
     Loads data from a CSV file and plots numbered markers with paths.
     All frames are plotted on the same image (hold on).
@@ -412,8 +434,31 @@ def load_and_plot_markers(field_ax, csv_path, canvas, selected_markers=None):
         field_ax: Matplotlib axes of the field
         csv_path: Path to the CSV file with x,y coordinates
         canvas: Matplotlib canvas for updates
+        manual_marker_artists_ref: Reference to the list of manual marker artists
+        frame_markers_ref: Reference to the dictionary of frame markers
+        current_frame_ref: Reference to the list containing the current frame number
         selected_markers: List of marker names to display (None for all)
     """
+    
+    # --- BEGIN MODIFICATION: Clear previous markers (CSV and manual) ---
+    if field_ax:
+        artists_to_remove = []
+        for artist in field_ax.get_children():
+            if hasattr(artist, "get_zorder"):
+                z_order = artist.get_zorder()
+                # Z-orders for CSV markers are 50, 51, 52. Manual are >= 100.
+                if (z_order >= 50 and z_order < 100) or z_order >= 100:
+                    artists_to_remove.append(artist)
+        
+        for artist in artists_to_remove:
+            artist.remove()
+
+    # Clear manual marker data structures as well, since CSV selection takes precedence
+    manual_marker_artists_ref.clear()
+    frame_markers_ref.clear()
+    current_frame_ref[0] = 0
+    # --- END MODIFICATION ---
+
     # Load CSV
     markers_df = pd.read_csv(csv_path)
 
@@ -422,15 +467,6 @@ def load_and_plot_markers(field_ax, csv_path, canvas, selected_markers=None):
 
     # Data cleaning - convert empty strings to NaN
     markers_df = markers_df.replace("", np.nan)
-
-    # Clear previous markers - modificar para preservar pontos de referência (zorder=10)
-    for artist in field_ax.get_children():
-        if (
-            hasattr(artist, "get_zorder")
-            and artist.get_zorder() > 10
-            and artist.get_zorder() < 100
-        ):
-            artist.remove()
 
     # Identify all coordinate columns (except 'frame')
     cols = markers_df.columns
@@ -617,6 +653,9 @@ def run_soccerfield():
                     current_ax[0],
                     current_markers_csv[0],
                     current_canvas[0],
+                    manual_marker_artists,
+                    frame_markers,
+                    current_frame,
                     selected_markers[0],
                 )
                 # Enable the marker selection button
@@ -657,6 +696,9 @@ def run_soccerfield():
                 current_ax[0],
                 current_markers_csv[0],
                 current_canvas[0],
+                manual_marker_artists,
+                frame_markers,
+                current_frame,
                 selected_markers[0],
             )
 
@@ -689,7 +731,15 @@ def run_soccerfield():
             selected_markers[0] = None
 
             # Use stored canvas
-            load_and_plot_markers(current_ax[0], csv_path, current_canvas[0])
+            load_and_plot_markers(
+                current_ax[0],
+                csv_path,
+                current_canvas[0],
+                manual_marker_artists,
+                frame_markers,
+                current_frame,
+                selected_markers[0],
+            )
 
             # Enable the marker selection button
             select_markers_button.config(state=tk.NORMAL)
@@ -701,122 +751,85 @@ def run_soccerfield():
             traceback.print_exc()
 
     def open_marker_selection_dialog():
-        """Opens a dialog to select which markers to display"""
-        if (
-            not hasattr(current_ax[0], "_all_marker_names")
-            or not current_ax[0]._all_marker_names
-        ):
-            print("No markers available to select.")
+        """Opens a dialog to select markers using Listbox (multi-select)"""
+        import pandas as pd
+
+        if not current_markers_csv[0] or not os.path.exists(current_markers_csv[0]):
+            messagebox.showerror("Error", "No marker CSV loaded. Load a CSV first.")
             return
 
-        # Create a new top-level window
+        markers_df = pd.read_csv(current_markers_csv[0])
+        marker_names = sorted({col.split("_")[0] for col in markers_df.columns if "_x" in col or "_y" in col})
+
+        if not marker_names:
+            messagebox.showerror("Error", "No markers found in the loaded CSV.")
+            return
+
         select_window = tk.Toplevel(root)
         select_window.title("Select Markers to Display")
         select_window.geometry("300x400")
 
-        # Add a frame with scrollbar for many markers
         frame = Frame(select_window)
         frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
         scrollbar = tk.Scrollbar(frame)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-        # Canvas for scrolling
-        canvas = tk.Canvas(frame, yscrollcommand=scrollbar.set)
-        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        listbox = tk.Listbox(frame, selectmode=tk.MULTIPLE, yscrollcommand=scrollbar.set)
+        listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.config(command=listbox.yview)
 
-        scrollbar.config(command=canvas.yview)
+        # Add markers to listbox
+        for marker in marker_names:
+            listbox.insert(tk.END, marker)
 
-        # Frame inside canvas for checkboxes
-        checkbox_frame = Frame(canvas)
-        canvas.create_window((0, 0), window=checkbox_frame, anchor=tk.NW)
+        # Set initial selection (previous selection or all)
+        initial_selection = selected_markers[0] if selected_markers[0] else marker_names
+        for i, marker in enumerate(marker_names):
+            if marker in initial_selection:
+                listbox.selection_set(i)
 
-        # Dictionary to store checkbox variables
-        checkbox_vars = {}
-
-        # Create a label at the top
-        tk.Label(
-            checkbox_frame,
-            text="Select markers to display:",
-            font=("Arial", 12, "bold"),
-        ).grid(row=0, column=0, sticky=tk.W, pady=(0, 10))
-
-        # Create checkboxes for all markers
-        for i, marker in enumerate(current_ax[0]._all_marker_names):
-            var = tk.IntVar(value=1)  # Default checked
-            checkbox_vars[marker] = var
-
-            tk.Checkbutton(checkbox_frame, text=f"Marker {marker}", variable=var).grid(
-                row=i + 1, column=0, sticky=tk.W
-            )
-
-        # Update canvas scroll region
-        checkbox_frame.update_idletasks()
-        canvas.config(scrollregion=canvas.bbox(tk.ALL))
-
-        # Buttons frame
         button_frame = Frame(select_window)
         button_frame.pack(fill=tk.X, padx=10, pady=10)
 
         def select_all():
-            for var in checkbox_vars.values():
-                var.set(1)
+            listbox.select_set(0, tk.END)
 
         def deselect_all():
-            for var in checkbox_vars.values():
-                var.set(0)
+            listbox.selection_clear(0, tk.END)
 
         def apply_selection():
-            # Get list of selected markers
-            selected = [
-                marker for marker, var in checkbox_vars.items() if var.get() == 1
-            ]
-
-            if not selected:
-                print("Warning: No markers selected, showing all markers.")
-                selected_markers[0] = None
+            selections = [listbox.get(i) for i in listbox.curselection()]
+            if not selections:
+                selected_markers[0] = None  # Muda de [] para None
+                messagebox.showinfo("Info", "No markers selected. None will be displayed.")
             else:
-                selected_markers[0] = selected
+                selected_markers[0] = selections
+                print(f"Markers selected: {selections}")
 
-            # Replot with selected markers
-            if current_markers_csv[0]:
-                load_and_plot_markers(
-                    current_ax[0],
-                    current_markers_csv[0],
-                    current_canvas[0],
-                    selected_markers[0],
-                )
-
+            # Redraw with selected markers only
+            load_and_plot_markers(
+                current_ax[0],
+                current_markers_csv[0],
+                current_canvas[0],
+                manual_marker_artists,
+                frame_markers,
+                current_frame,
+                selected_markers[0] if selected_markers[0] else []
+            )
+            current_canvas[0].draw()
             select_window.destroy()
 
-        # Add buttons
-        tk.Button(
-            button_frame,
-            text="Select All",
-            command=select_all,
-            bg="white",
-            fg="black",
-            padx=5,
-            pady=2,
-        ).pack(side=tk.LEFT, padx=5)
-        tk.Button(
-            button_frame,
-            text="Deselect All",
-            command=deselect_all,
-            bg="white",
-            fg="black",
-            padx=5,
-            pady=2,
-        ).pack(side=tk.LEFT, padx=5)
-        tk.Button(
-            button_frame,
-            text="Apply",
-            command=apply_selection,
-            bg="white",
-            fg="black",
-            padx=20,
-            pady=2,
-        ).pack(side=tk.RIGHT, padx=5)
+        # Buttons
+        tk.Button(button_frame, text="Select All", command=select_all, 
+                  bg="#4CAF50", fg="white").pack(side=tk.LEFT, padx=5, pady=5)
+        tk.Button(button_frame, text="Deselect All", command=deselect_all, 
+                  bg="#f44336", fg="white").pack(side=tk.LEFT, padx=5, pady=5)
+        tk.Button(button_frame, text="Apply", command=apply_selection, 
+                  bg="#2196F3", fg="white").pack(side=tk.RIGHT, padx=5, pady=5)
+
+        select_window.transient(root)
+        select_window.grab_set()
 
     def toggle_manual_marker_mode():
         """Toggle the manual marker creation mode"""
@@ -1058,31 +1071,43 @@ def run_soccerfield():
         root.bind("<Control-s>", save_markers_csv)
 
     def clear_all_markers():
-        """Clear all manually created markers"""
+        """Clear all markers (manual and loaded from CSV) from the plot."""
         if current_ax[0] is None:
             return
 
         try:
-            # Remove all marker artists from the plot
-            for circle, text, _, _, _, _ in manual_marker_artists:
-                circle.remove()
-                text.remove()
+            # Remove visual artists from the plot
+            artists_to_remove = []
+            for artist in current_ax[0].get_children():
+                if hasattr(artist, "get_zorder"):
+                    z_order = artist.get_zorder()
+                    # Check for CSV markers (zorder 50-52) or manual markers (zorder >= 100)
+                    if (z_order >= 50 and z_order < 100) or z_order >= 100:
+                        artists_to_remove.append(artist)
+            
+            for artist in artists_to_remove:
+                artist.remove()
 
-            # Clear the lists and dictionaries
+            # Clear manual marker data structures
             manual_marker_artists.clear()
             frame_markers.clear()
+            current_frame[0] = 0  # Reset frame counter for manual markers
 
-            # Reset frame counter
-            current_frame[0] = 0
+            # Reset CSV loaded state
+            current_markers_csv[0] = None
+            selected_markers[0] = None
+            if 'select_markers_button' in locals() or 'select_markers_button' in globals():
+                 select_markers_button.config(state=tk.DISABLED)
+
 
             # Update the canvas
-            current_canvas[0].draw()
-            print("All markers cleared")
+            if current_canvas[0]:
+                current_canvas[0].draw()
+                print("All markers (manual and loaded from CSV) cleared.")
 
         except Exception as e:
-            print(f"Error clearing markers: {e}")
+            print(f"Error clearing all markers: {e}")
             import traceback
-
             traceback.print_exc()
 
     def show_help_dialog():
