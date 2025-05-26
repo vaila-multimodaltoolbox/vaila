@@ -508,34 +508,125 @@ class ROISelector:
         else:
             self.scale = 1.0
 
-        # Create window with instructions
-        window_name = "Select ROI - Adjust as needed, then press ENTER to confirm (ESC to cancel)"
-        
-        # Use OpenCV's built-in selectROI function which allows interactive adjustment
-        roi = cv2.selectROI(window_name, display_frame, showCrosshair=True, fromCenter=False)
+        # ROI selection variables
+        roi_box = [0, 0, 0, 0]  # [x0, y0, x1, y1]
+        drawing = False
+        roi_selected = False
+        frame_copy = display_frame.copy()
+
+        def mouse_callback(event, x, y, flags, param):
+            nonlocal drawing, roi_box, roi_selected, frame_copy
+
+            if event == cv2.EVENT_LBUTTONDOWN:
+                drawing = True
+                roi_box[0], roi_box[1] = x, y
+                roi_box[2], roi_box[3] = x, y
+
+            elif event == cv2.EVENT_MOUSEMOVE:
+                if drawing:
+                    frame_display = frame_copy.copy()
+                    roi_box[2], roi_box[3] = x, y
+                    
+                    # Calculate ROI dimensions
+                    roi_width = abs(roi_box[2] - roi_box[0])
+                    roi_height = abs(roi_box[3] - roi_box[1])
+                    
+                    # Draw rectangle
+                    cv2.rectangle(frame_display, 
+                                (roi_box[0], roi_box[1]), 
+                                (roi_box[2], roi_box[3]), 
+                                (0, 255, 0), 2)
+                    
+                    # Show resolution text
+                    resolution_text = f"{roi_width}x{roi_height} px"
+                    text_x = min(roi_box[0], roi_box[2])
+                    text_y = min(roi_box[1], roi_box[3]) - 10
+                    
+                    # Add black background to text for better visibility
+                    (text_width, text_height), _ = cv2.getTextSize(
+                        resolution_text, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2)
+                    cv2.rectangle(frame_display,
+                                (text_x, text_y - text_height),
+                                (text_x + text_width, text_y + 5),
+                                (0, 0, 0), -1)
+                    
+                    # Draw text
+                    cv2.putText(frame_display, resolution_text,
+                              (text_x, text_y), 
+                              cv2.FONT_HERSHEY_SIMPLEX, 
+                              0.7, (0, 255, 0), 2)
+                    
+                    cv2.imshow(window_name, frame_display)
+
+            elif event == cv2.EVENT_LBUTTONUP:
+                drawing = False
+                roi_selected = True
+                
+                # Update final display
+                frame_display = frame_copy.copy()
+                roi_width = abs(roi_box[2] - roi_box[0])
+                roi_height = abs(roi_box[3] - roi_box[1])
+                
+                cv2.rectangle(frame_display, 
+                            (roi_box[0], roi_box[1]), 
+                            (roi_box[2], roi_box[3]), 
+                            (0, 255, 0), 2)
+                
+                resolution_text = f"{roi_width}x{roi_height} px"
+                text_x = min(roi_box[0], roi_box[2])
+                text_y = min(roi_box[1], roi_box[3]) - 10
+                
+                # Add black background to text
+                (text_width, text_height), _ = cv2.getTextSize(
+                    resolution_text, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2)
+                cv2.rectangle(frame_display,
+                            (text_x, text_y - text_height),
+                            (text_x + text_width, text_y + 5),
+                            (0, 0, 0), -1)
+                
+                cv2.putText(frame_display, resolution_text,
+                          (text_x, text_y), 
+                          cv2.FONT_HERSHEY_SIMPLEX, 
+                          0.7, (0, 255, 0), 2)
+                
+                cv2.imshow(window_name, frame_display)
+
+        # Create window and set mouse callback
+        window_name = "Select ROI - Press ENTER to confirm (ESC to cancel)"
+        cv2.namedWindow(window_name)
+        cv2.setMouseCallback(window_name, mouse_callback)
+        cv2.imshow(window_name, display_frame)
+
+        # Wait for user input
+        while True:
+            key = cv2.waitKey(1) & 0xFF
+            if key == 13:  # ENTER key
+                if roi_selected:  # Only accept if ROI was actually drawn
+                    break
+            elif key == 27:  # ESC key
+                roi_box = [0, 0, 0, 0]
+                break
         
         # Clean up window
         cv2.destroyWindow(window_name)
         cap.release()
         
-        # Check if selection was canceled (all zeros)
-        if sum(roi) == 0:
+        # Convert ROI coordinates back to original scale if needed
+        if sum(roi_box) == 0:  # Check if selection was canceled
             print("ROI selection canceled")
             self.roi = None
             self.roi_selected = False
             return None
             
-        # Convert the ROI coordinates back to original scale
-        x, y, w, h = roi
-        x = int(x / self.scale)
-        y = int(y / self.scale)
-        w = int(w / self.scale)
-        h = int(h / self.scale)
+        # Get coordinates in correct order
+        x = int(min(roi_box[0], roi_box[2]) / self.scale)
+        y = int(min(roi_box[1], roi_box[3]) / self.scale)
+        w = int(abs(roi_box[2] - roi_box[0]) / self.scale)
+        h = int(abs(roi_box[3] - roi_box[1]) / self.scale)
         
         self.roi = (x, y, w, h)
         self.roi_selected = True
         print(f"ROI selected: x={x}, y={y}, w={w}, h={h}")
-        
         return self.roi
 
 
