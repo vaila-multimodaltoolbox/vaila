@@ -693,6 +693,12 @@ def generate_html_report(data, results, plot_files, output_dir, base_name):
                 padding: 15px;
                 margin: 20px 0;
             }}
+            .references {{
+                margin-top: 50px;
+                background-color: #f8f9fa;
+                border-left: 4px solid #3498db;
+                padding: 15px;
+            }}
             .footer {{
                 margin-top: 50px;
                 border-top: 1px solid #ddd;
@@ -775,14 +781,6 @@ def generate_html_report(data, results, plot_files, output_dir, base_name):
               </ul>
               Representa a eficiência média do movimento durante a fase propulsiva.
             </p>
-            
-            <h4>Referências Científicas</h4>
-            <ul>
-              <li>Samozino, P., Morin, J. B., Hintzy, F., & Belli, A. (2008). A simple method for measuring force, velocity and power output during squat jump. Journal of Biomechanics, 41(14), 2940-2945.</li>
-              <li>Aragón-Vargas, L. F., & Gross, M. M. (1997). Kinesiological factors in vertical jump performance: differences among individuals. Journal of Applied Biomechanics, 13(1), 24-44.</li>
-              <li>Harman, E. A., Rosenstein, M. T., Frykman, P. N., & Rosenstein, R. M. (1991). Estimation of human power output from vertical jump. Journal of Applied Sport Science Research, 5(3), 116-120.</li>
-              <li>Sayers, S. P., Harackiewicz, D. V., Harman, E. A., Frykman, P. N., & Rosenstein, M. T. (1999). Cross-validation of three jump power equations. Medicine & Science in Sports & Exercise, 31(4), 572-577.</li>
-            </ul>
         </div>
         
         <h2>Jump Metrics</h2>
@@ -881,6 +879,19 @@ def generate_html_report(data, results, plot_files, output_dir, base_name):
             <p><em>{plot_filename}</em></p>
         </div>
         """
+
+    # Add references section at the end
+    html_content += """
+        <div class="references">
+            <h2>References</h2>
+            <ul>
+              <li>Samozino, P., Morin, J. B., Hintzy, F., & Belli, A. (2008). A simple method for measuring force, velocity and power output during squat jump. Journal of Biomechanics, 41(14), 2940-2945.</li>
+              <li>Aragón-Vargas, L. F., & Gross, M. M. (1997). Kinesiological factors in vertical jump performance: differences among individuals. Journal of Applied Biomechanics, 13(1), 24-44.</li>
+              <li>Harman, E. A., Rosenstein, M. T., Frykman, P. N., & Rosenstein, R. M. (1991). Estimation of human power output from vertical jump. Journal of Applied Sport Science Research, 5(3), 116-120.</li>
+              <li>Sayers, S. P., Harackiewicz, D. V., Harman, E. A., Frykman, P. N., & Rosenstein, M. T. (1999). Cross-validation of three jump power equations. Medicine & Science in Sports & Exercise, 31(4), 572-577.</li>
+            </ul>
+        </div>
+    """
 
     # Close the HTML content
     html_content += """
