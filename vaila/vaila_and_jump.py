@@ -765,7 +765,7 @@ def generate_html_report(data, results, plot_files, output_dir, base_name):
             <p>
               Calculada por:<br>
               <span style="font-family: 'Consolas', monospace;">
-                P<sub>média</sub> = (E<sub>cinética</sub> + E<sub>potencial</sub>) / Δt
+                P<sub>média</sub> = (E<sub>cinética</sub> + E<sub>potencial</sub>) / t
               </span><br>
               Onde:
               <ul>
@@ -776,7 +776,7 @@ def generate_html_report(data, results, plot_files, output_dir, base_name):
                   E<sub>potencial</sub> = m · g · h (energia potencial na altura máxima)
                 </li>
                 <li>
-                  Δt = tempo entre o início da propulsão (squat) e o takeoff
+                  t = tempo entre o início da propulsão (squat) e o takeoff
                 </li>
               </ul>
               Representa a eficiência média do movimento durante a fase propulsiva.
@@ -902,8 +902,8 @@ def generate_html_report(data, results, plot_files, output_dir, base_name):
     </html>
     """
 
-    # Write the HTML file
-    with open(report_path, "w") as f:
+    # Write the HTML file with UTF-8 encoding
+    with open(report_path, "w", encoding="utf-8") as f:
         f.write(html_content)
 
     return report_path
