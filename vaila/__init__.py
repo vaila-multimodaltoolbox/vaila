@@ -14,7 +14,6 @@ Changelog:
 Author: Prof. Paulo Santiago
 """
 
-from .ellipse import plot_ellipse_pca, plot_cop_pathway_with_ellipse
 from .data_processing import read_cluster_csv, read_mocap_csv
 from .filter_utils import butter_filter
 from .plotting import plot_orthonormal_bases
@@ -74,8 +73,6 @@ from .spectral_features import (
 )
 
 __all__ = [
-    "plot_ellipse_pca",
-    "plot_cop_pathway_with_ellipse",
     "read_cluster_csv",
     "read_mocap_csv",
     "butter_filter",
