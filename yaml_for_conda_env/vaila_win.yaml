@@ -95,4 +95,7 @@ dependencies:
       - simplekml
       - folium
       - yt-dlp
+      - neurokit2
+      - biosppy
+      - entropy
       - ultralytics==8.3.122
