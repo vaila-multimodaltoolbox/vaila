@@ -53,7 +53,6 @@ from .compress_videos_h264 import compress_videos_h264_gui
 from .compress_videos_h265 import compress_videos_h265_gui
 from .extractpng import VideoProcessor
 from .readcsv_export import create_c3d_from_csv, convert_csv_to_c3d
-from .emg_labiocom import run_emg_gui
 from .vailaplot2d import run_plot_2d as plot_2d
 from .vailaplot3d import run_plot_3d as plot_3d
 from .mergestack import merge_csv_files, stack_csv_files
@@ -114,7 +113,6 @@ __all__ = [
     "show_csv",
     "get_csv_headers",
     "select_headers_gui",
-    "run_emg_gui",
     "plot_2d",
     "plot_3d",
     "merge_csv_files",
