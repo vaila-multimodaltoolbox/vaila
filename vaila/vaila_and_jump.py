@@ -6,8 +6,8 @@ Author: Prof. Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 24 Oct 2024
-Update Date: 27 May 2025
-Version: 0.0.6
+Update Date: 30 May 2025
+Version: 0.0.7
 Python Version: 3.12.9
 
 Description:
@@ -956,7 +956,7 @@ def generate_html_report(data, results, plot_files, output_dir, base_name):
             </tr>
             <tr>
                 <td>Flight Time</td>
-                <td>{results["flight_time_s"]}</td>
+                <td>{results["flight_time_s"]:.3f}</td>
                 <td>s</td>
             </tr>
             <tr>
@@ -991,7 +991,17 @@ def generate_html_report(data, results, plot_files, output_dir, base_name):
             </tr>
             <tr>
                 <td>Propulsion Time</td>
-                <td>{results.get("propulsion_time_s", "—")}</td>
+                <td>{results.get("propulsion_time_s", "—"):.3f}</td>
+                <td>s</td>
+            </tr>
+            <tr>
+                <td>Ascent Time</td>
+                <td>{results.get("ascent_time_s", "—"):.3f}</td>
+                <td>s</td>
+            </tr>
+            <tr>
+                <td>Descent Time</td>
+                <td>{results.get("descent_time_s", "—"):.3f}</td>
                 <td>s</td>
             </tr>
         </table>
@@ -1006,20 +1016,20 @@ def generate_html_report(data, results, plot_files, output_dir, base_name):
             </tr>
             <tr>
                 <td>Takeoff Time</td>
-                <td>{results.get("left_takeoff_time_s", "N/A")}</td>
-                <td>{results.get("right_takeoff_time_s", "N/A")}</td>
+                <td>{results.get("left_takeoff_time_s", "N/A"):.3f}</td>
+                <td>{results.get("right_takeoff_time_s", "N/A"):.3f}</td>
                 <td>{round(abs(results.get("left_takeoff_time_s", 0) - results.get("right_takeoff_time_s", 0)), 3) if results.get("left_takeoff_time_s") and results.get("right_takeoff_time_s") else "N/A"}</td>
             </tr>
             <tr>
                 <td>Landing Time</td>
-                <td>{results.get("left_landing_time_s", "N/A")}</td>
-                <td>{results.get("right_landing_time_s", "N/A")}</td>
+                <td>{results.get("left_landing_time_s", "N/A"):.3f}</td>
+                <td>{results.get("right_landing_time_s", "N/A"):.3f}</td>
                 <td>{round(abs(results.get("left_landing_time_s", 0) - results.get("right_landing_time_s", 0)), 3) if results.get("left_landing_time_s") and results.get("right_landing_time_s") else "N/A"}</td>
             </tr>
             <tr>
                 <td>Max Height</td>
-                <td>{results.get("height_left_foot_m", "N/A")}</td>
-                <td>{results.get("height_right_foot_m", "N/A")}</td>
+                <td>{results.get("height_left_foot_m", "N/A"):.3f}</td>
+                <td>{results.get("height_right_foot_m", "N/A"):.3f}</td>
                 <td>{round(abs(results.get("height_left_foot_m", 0) - results.get("height_right_foot_m", 0)), 3) if results.get("height_left_foot_m") and results.get("height_right_foot_m") else "N/A"}</td>
             </tr>
         </table>
@@ -1331,7 +1341,7 @@ def process_mediapipe_data(input_file, output_dir):
             "mass_kg": mass,
             "fps": fps,
             "conversion_factor": round(conversion_factor, 6),
-            "flight_time_s": jump_phase_results.get("flight_time_s", 0),
+            "flight_time_s": round(jump_phase_results.get("flight_time_s", 0), 3),
             "velocity_m/s": round(velocity_takeoff, 3),
             "potential_energy_J": round(potential_energy, 3),
             "kinetic_energy_J": round(kinetic_energy, 3),
@@ -1340,22 +1350,22 @@ def process_mediapipe_data(input_file, output_dir):
             "max_power_W": round(max_power, 3),
             "frame_max_power": int(idx_max_power),
             "time_max_power_s": round(time_max_power, 3),
-            "takeoff_frame": takeoff_frame,
-            "max_height_frame": jump_phase_results.get("max_height_frame"),
-            "landing_frame": jump_phase_results.get("landing_frame"),
+            "takeoff_frame": int(takeoff_frame),
+            "max_height_frame": int(jump_phase_results.get("max_height_frame")),
+            "landing_frame": int(jump_phase_results.get("landing_frame")),
             "propulsion_time_s": round(propulsion_time, 3),
             "ascent_time_s": round(jump_phase_results.get("ascent_time_s", 0), 3),
             "descent_time_s": round(jump_phase_results.get("descent_time_s", 0), 3),
             "squat_depth_m": round(jump_phase_results.get("squat_depth_m", 0), 3),
             "height_cg_method_m": round(jump_phase_results.get("height_cg_method_m", 0), 3),
             "height_flight_time_method_m": round(jump_phase_results.get("height_flight_time_method_m", 0), 3),
-            "height_left_foot_m": round(jump_phase_results.get("height_left_foot_m", 0), 3) if jump_phase_results.get("height_left_foot_m") is not None else None,
-            "height_right_foot_m": round(jump_phase_results.get("height_right_foot_m", 0), 3) if jump_phase_results.get("height_right_foot_m") is not None else None,
-            "height_avg_feet_m": round(jump_phase_results.get("height_avg_feet_m", 0), 3) if jump_phase_results.get("height_avg_feet_m") is not None else None,
-            "left_takeoff_time_s": jump_phase_results.get("left_takeoff_time_s"),
-            "right_takeoff_time_s": jump_phase_results.get("right_takeoff_time_s"),
-            "left_landing_time_s": jump_phase_results.get("left_landing_time_s"),
-            "right_landing_time_s": jump_phase_results.get("right_landing_time_s"),
+            "height_left_foot_m": round(jump_phase_results.get("height_left_foot_m", 0), 3),
+            "height_right_foot_m": round(jump_phase_results.get("height_right_foot_m", 0), 3),
+            "height_avg_feet_m": round(jump_phase_results.get("height_avg_feet_m", 0), 3),
+            "left_takeoff_time_s": round(jump_phase_results.get("left_takeoff_time_s", 0), 3),
+            "right_takeoff_time_s": round(jump_phase_results.get("right_takeoff_time_s", 0), 3),
+            "left_landing_time_s": round(jump_phase_results.get("left_landing_time_s", 0), 3),
+            "right_landing_time_s": round(jump_phase_results.get("right_landing_time_s", 0), 3),
         }
 
         # Collect all relevant data for the database (complete CSV)
@@ -1426,7 +1436,7 @@ def process_mediapipe_data(input_file, output_dir):
         output_db_file = os.path.join(
             output_dir, f"{base_name}_jump_database_{timestamp}.csv"
         )
-        pd.DataFrame([db_row]).to_csv(output_db_file, index=False, float_format="%.6f")
+        pd.DataFrame([db_row]).to_csv(output_db_file, index=False, float_format="%.3f")
         print(f"Jump database row saved: {output_db_file}")
 
         # Generate plots
