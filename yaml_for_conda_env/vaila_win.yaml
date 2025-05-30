@@ -98,4 +98,4 @@ dependencies:
       - neurokit2
       - biosppy
       - entropy
-      - ultralytics==8.3.146
+      - ultralytics==8.3.122
