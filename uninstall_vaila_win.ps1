@@ -5,14 +5,15 @@
                  AppData\Local\vaila, removing FFmpeg if installed,
                  removing vaila profiles from Windows Terminal, and deleting
                  Start Menu and Desktop shortcuts.
-    Creation Date: 2024-12-10
+    Creation Date: 10 Jan 2025
+    Last Update: 31 May 2025
     Author: Paulo R. P. Santiago
 #>
 
 # Check for administrative privileges
 If (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator"))
 {
-    Write-Warning "Este script precisa ser executado como Administrador."
+    Write-Warning "This script needs to be run as an Administrator."
     Exit
 }
 
@@ -39,6 +40,27 @@ If ($envExists) {
 } Else {
     Write-Output "'vaila' Conda environment does not exist."
 }
+
+# ------------------------ NEW BLOCK: Conda Cleanup ------------------------
+Write-Output "Checking and removing possible pinned conda versions..."
+Try {
+    conda config --remove-key pinned_packages
+    Write-Output "Pinned version removed (if it existed)."
+} Catch {
+    Write-Output "No pinned version found or error removing."
+}
+
+Write-Output "Cleaning conda cache..."
+Try {
+    conda clean --all -y
+    Write-Output "Conda cache cleaned."
+} Catch {
+    Write-Warning "Unable to clean conda cache."
+}
+
+$condaVersion = conda --version
+Write-Output "Current conda version: $condaVersion"
+# ---------------------------------------------------------------------------
 
 # Uninstall FFmpeg if installed by the script
 Write-Output "Checking if FFmpeg is installed..."
