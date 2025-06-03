@@ -4,8 +4,8 @@ vailaplot2d.py
 ================================================================================
 Author: Prof. Paulo Santiago
 Created: 23 September 2024
-Updated: 01 April 2025
-Version: 0.1.0
+Updated: 03 June 2025
+Version: 0.0.2
 
 Description:
 ------------

@@ -20,6 +20,7 @@ import numpy as np
 import time
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider, Button as MplButton
+from rich import print
 
 
 ###############################################################################
@@ -406,8 +407,11 @@ def read_csv_generic(file_path):
 ###############################################################################
 def show_csv():
     """
-    Função principal para carregar o CSV, efetuar a seleção dos marcadores e plotar os dados.
+    Main function to load the CSV, select the markers and plot the data.
     """
+    # Print the directory and name of the script being executed
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
     root = tk.Tk()
     root.withdraw()
     file_path = select_file()
@@ -422,27 +426,27 @@ def show_csv():
         root.destroy()
         return
 
-    # Lista os marcadores disponíveis
+    # List the available markers
     available_markers = list(valid_markers.keys())
-    print("Marcadores disponíveis:")
+    print("Available markers:")
     for marker in available_markers:
         print(marker)
 
-    # Permite que o usuário selecione os marcadores a serem visualizados (seleção múltipla)
+    # Allow the user to select the markers to be visualized (multiple selection)
     selected_markers = select_markers_csv(available_markers)
     if not selected_markers:
-        messagebox.showwarning("Aviso", "Nenhum marcador selecionado.")
+        messagebox.showwarning("Warning", "No markers selected.")
         return
 
-    # Constrói um array de pontos com forma (num_frames, num_markers, 3)
-    # para os marcadores selecionados usando os dados em marker_data.
+    # Build an array of points with shape (num_frames, num_markers, 3)
+    # for the selected markers using the data in marker_data.
     points = np.stack([marker_data[marker] for marker in selected_markers], axis=1)
     num_frames = points.shape[0]
     num_markers = points.shape[1]
 
     file_name = os.path.basename(file_path)
 
-    # Cria a figura 3D com os marcadores do frame inicial (frame 0)
+    # Create the 3D figure with the initial frame (frame 0) markers
     fig = plt.figure(figsize=(10, 8))
     ax = fig.add_axes([0.0, 0.12, 1.0, 0.88], projection="3d")
     scat = ax.scatter(points[0, :, 0], points[0, :, 1], points[0, :, 2], c="blue", s=20)
@@ -454,22 +458,22 @@ def show_csv():
         f"C3D CSV Viewer | File: {file_name} | Markers: {len(selected_markers)}/{len(available_markers)} | Frames: {num_frames}"
     )
 
-    # Define limites fixos para a visualização:
+    # Define fixed limits for the visualization:
     ax.set_xlim([-1, 5])
     ax.set_ylim([-1, 5])
     ax.set_zlim([0, 2])
 
-    # Define o aspecto igual para evitar distorções
+    # Define the equal aspect to avoid distortions
     ax.set_aspect("equal")
 
-    # Cria um slider para controle do frame, posicionado na parte inferior
+    # Create a slider for frame control, positioned at the bottom
     ax_frame = fig.add_axes([0.25, 0.02, 0.5, 0.04])
     slider_frame = Slider(ax_frame, "Frame", 0, num_frames - 1, valinit=0, valfmt="%d")
 
     current_frame = [0]
 
     def update_frame(val):
-        # Atualiza o scatter plot com os novos pontos do frame selecionado.
+        # Update the scatter plot with the new points of the selected frame.
         frame = int(slider_frame.val) if isinstance(val, float) else int(val)
         current_frame[0] = frame
         new_positions = points[frame]
@@ -482,7 +486,7 @@ def show_csv():
 
     slider_frame.on_changed(update_frame)
 
-    # Variáveis para controle de reprodução automática
+    # Variables for automatic playback control
     playing = [False]
     timer = [None]
 
@@ -495,7 +499,7 @@ def show_csv():
         if not playing[0]:
             playing[0] = True
             btn_play.label.set_text("Pause")
-            timer[0] = fig.canvas.new_timer(interval=1000 / 30)  # Assumindo 30 fps
+            timer[0] = fig.canvas.new_timer(interval=1000 / 30)  # Assuming 30 fps
             try:
                 timer[0].single_shot = False
             except AttributeError:

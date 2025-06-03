@@ -34,6 +34,8 @@ from statsmodels.tsa.arima.model import ARIMA
 import warnings
 import shutil  # Para operações de diretório
 from tkinter import ttk
+import matplotlib
+matplotlib.use('TkAgg')  # Força backend interativo
 
 
 def load_markers_file():
@@ -299,6 +301,15 @@ def visualize_markers(df, marker_ids=None):
     if df is None:
         return
 
+    if len(df.columns) == 0 or len(df) == 0:
+        messagebox.showerror(
+            "Error", "The data file appears to be empty or malformed."
+        )
+        return
+
+    frame_col = df.columns[0]
+    frames = df[frame_col].values
+
     # Detect all markers in the file
     all_markers = detect_markers(df)
 
@@ -314,8 +325,6 @@ def visualize_markers(df, marker_ids=None):
             "Error", "The data file appears to be empty or missing the 'frame' column."
         )
         return
-
-    frames = df["frame"].values
 
     # Set up the figure with subplots
     fig = plt.figure(figsize=(16, 10))
@@ -465,608 +474,806 @@ def visualize_markers(df, marker_ids=None):
     ]
 
 
-def advanced_reid_gui():
-    # Load file
-    df, file_path = load_markers_file()
-    if df is None:
+def detect_markers_dynamic(df, coord_cols):
+    """Detect markers dynamically based on selected coordinate columns."""
+    markers = {}
+    
+    # Group columns by marker
+    for col in coord_cols:
+        # Try to extract marker name and coordinate type
+        parts = col.split('_')
+        if len(parts) >= 2:
+            marker_name = '_'.join(parts[:-1])  # Everything except last part
+            coord_type = parts[-1].lower()  # x, y, z, etc.
+        else:
+            # If no underscore, try to detect pattern
+            # Look for patterns like "p1x", "marker1x", etc.
+            import re
+            match = re.match(r'([a-zA-Z]+\d+)([xyz])$', col.lower())
+            if match:
+                marker_name = match.group(1)
+                coord_type = match.group(2)
+            else:
+                # Fallback: use column name as marker name
+                marker_name = col
+                coord_type = 'unknown'
+        
+        if marker_name not in markers:
+            markers[marker_name] = {}
+        markers[marker_name][coord_type] = col
+    
+    return markers
+
+
+def get_marker_coords_dynamic(df, marker_info, coord_types=['x', 'y', 'z']):
+    """Get coordinates of a marker dynamically based on available coordinate types."""
+    coords = {}
+    for coord_type in coord_types:
+        if coord_type in marker_info:
+            col_name = marker_info[coord_type]
+            if col_name in df.columns:
+                coords[coord_type] = df[col_name].values
+    return coords
+
+
+def detect_gaps_dynamic(coords_dict, min_gap_size=3):
+    """Detect gaps in a marker's trajectory for multiple coordinates."""
+    if not coords_dict:
+        return []
+    
+    # Get the length from any coordinate
+    length = len(list(coords_dict.values())[0])
+    gaps = []
+    current_gap = None
+    
+    for i in range(length):
+        # Check if any coordinate is missing at this frame
+        is_missing = any(
+            pd.isna(coords[i]) or coords[i] == ""
+            for coords in coords_dict.values()
+        )
+        
+        if is_missing and current_gap is None:
+            current_gap = [i, i]
+        elif is_missing and current_gap is not None:
+            current_gap[1] = i
+        elif not is_missing and current_gap is not None:
+            if current_gap[1] - current_gap[0] + 1 >= min_gap_size:
+                gaps.append(current_gap)
+            current_gap = None
+    
+    if current_gap is not None and current_gap[1] - current_gap[0] + 1 >= min_gap_size:
+        gaps.append(current_gap)
+    
+    return gaps
+
+
+def visualize_markers_dynamic(df, frame_col, coord_cols, marker_ids=None):
+    """Visualize marker trajectories for analysis with dynamic coordinate support."""
+    if df is None or len(df) == 0:
+        messagebox.showerror("Error", "The data file appears to be empty.")
         return
+    
+    frames = df[frame_col].values
+    markers = detect_markers_dynamic(df, coord_cols)
+    
+    if not markers:
+        messagebox.showerror("Error", "No markers detected in the selected columns.")
+        return
+    
+    # Determine dimensions (how many coordinate types we have)
+    all_coord_types = set()
+    for marker_info in markers.values():
+        all_coord_types.update(marker_info.keys())
+    
+    coord_types = sorted([ct for ct in ['x', 'y', 'z'] if ct in all_coord_types])
+    n_dims = len(coord_types)
+    
+    if n_dims < 2:
+        messagebox.showerror("Error", "Need at least 2 coordinate dimensions (x, y).")
+        return
+    
+    # Create a Tkinter window for marker selection with scrollbar
+    marker_select_root = tk.Toplevel()
+    marker_select_root.title("Select Markers")
+    marker_select_root.geometry("300x400")
+    marker_select_root.grab_set()
+    
+    marker_names = list(markers.keys())
+    marker_vars = {}
+    
+    tk.Label(marker_select_root, text="Select Markers to Display:", font=("Arial", 10, "bold")).pack(pady=5)
+    
+    # Create scrollable frame
+    canvas = tk.Canvas(marker_select_root, height=300)
+    scrollbar = tk.Scrollbar(marker_select_root, orient="vertical", command=canvas.yview)
+    scrollable_frame = tk.Frame(canvas)
+    
+    scrollable_frame.bind(
+        "<Configure>",
+        lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+    )
+    
+    canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+    canvas.configure(yscrollcommand=scrollbar.set)
+    
+    # Create checkboxes for all markers
+    for marker_name in marker_names:
+        var = tk.BooleanVar(value=True)
+        tk.Checkbutton(scrollable_frame, text=marker_name, variable=var).pack(anchor="w", padx=20)
+        marker_vars[marker_name] = var
+    
+    canvas.pack(side="left", fill="both", expand=True, padx=(20,0))
+    scrollbar.pack(side="right", fill="y")
+    
+    # Add Select All/None buttons
+    button_frame = tk.Frame(marker_select_root)
+    button_frame.pack(pady=10)
+    
+    def select_all():
+        for var in marker_vars.values():
+            var.set(True)
+    
+    def select_none():
+        for var in marker_vars.values():
+            var.set(False)
+    
+    tk.Button(button_frame, text="Select All", command=select_all).pack(side="left", padx=5)
+    tk.Button(button_frame, text="Select None", command=select_none).pack(side="left", padx=5)
+    
+    # Function to show the plot with selected markers
+    selected_markers = []
+    
+    def on_ok():
+        nonlocal selected_markers
+        selected_markers = [name for name, var in marker_vars.items() if var.get()]
+        if not selected_markers:
+            messagebox.showwarning("Warning", "Please select at least one marker.")
+            return
+        marker_select_root.destroy()
+    
+    def on_cancel():
+        marker_select_root.destroy()
+    
+    tk.Button(marker_select_root, text="OK", command=on_ok).pack(pady=5)
+    tk.Button(marker_select_root, text="Cancel", command=on_cancel).pack(pady=5)
+    
+    marker_select_root.wait_window()
+    
+    if not selected_markers:  # User cancelled or closed without selecting
+        return []
+    
+    # Now create the plot with matplotlib
+    fig = plt.figure(figsize=(16, 4 * n_dims))
+    axes = []
+    
+    for i in range(n_dims):
+        ax = plt.subplot(n_dims, 1, i + 1)
+        axes.append(ax)
+        ax.set_title(f"{coord_types[i].upper()} Coordinates of Markers")
+        ax.set_xlabel("Frame")
+        ax.set_ylabel(f"{coord_types[i].upper()} Position")
+        ax.grid(True)
+    
+    plt.subplots_adjust(left=0.1, bottom=0.15, right=0.95, top=0.95, hspace=0.4)  # Ajustar right para usar mais espaço
+    
+    # Dictionary to store plot lines
+    lines = {coord_type: {} for coord_type in coord_types}
+    
+    # Add frame range slider
+    frames_slider_ax = plt.axes([0.3, 0.05, 0.5, 0.03])
+    frames_range = RangeSlider(
+        frames_slider_ax, "Frames", 0, len(df) - 1, valinit=(0, len(df) - 1)
+    )
+    
+    def update_plot():
+        # Clear current axes
+        for ax in axes:
+            ax.clear()
+            ax.grid(True)
+        
+        # Set up axes labels
+        for i, coord_type in enumerate(coord_types):
+            axes[i].set_title(f"{coord_type.upper()} Coordinates of Markers")
+            axes[i].set_xlabel("Frame")
+            axes[i].set_ylabel(f"{coord_type.upper()} Position")
+        
+        # Plot selected markers (without labels)
+        for marker_name in selected_markers:
+            marker_info = markers[marker_name]
+            coords = get_marker_coords_dynamic(df, marker_info, coord_types)
+            
+            for i, coord_type in enumerate(coord_types):
+                if coord_type in coords:
+                    axes[i].plot(frames, coords[coord_type])  # Removido o label
+        
+        # Show frame range with vertical lines
+        start_frame, end_frame = frames_range.val
+        start_var.set(int(start_frame))
+        end_var.set(int(end_frame))
+        
+        for ax in axes:
+            ax.axvline(start_frame, color='r', linestyle='--')
+            ax.axvline(end_frame, color='r', linestyle='--')
+            ax.set_xlim(0, len(df) - 1)
+            # Removido if visible_markers: ax.legend(loc='upper right')
+        
+        fig.canvas.draw_idle()
+    
+    # Add close button
+    close_button_ax = plt.axes([0.85, 0.05, 0.1, 0.04])
+    close_button = Button(close_button_ax, "Close")
+    
+    def on_close(event):
+        plt.close(fig)
+    
+    # Connect callbacks
+    frames_range.on_changed(lambda val: update_plot())
+    close_button.on_clicked(on_close)
+    
+    # Initial plot
+    update_plot()
+    plt.show()
+    
+    return selected_markers
 
-    # Add variables for tracking history and temp files
-    latest_temp_file = file_path
-    temp_history = []
 
-    # Detect markers
-    all_markers = detect_markers(df)
-    frames = df["frame"].values
+def select_columns_dialog(df):
+    """Dialog to select frame and coordinate columns."""
+    import tkinter as tk
+    from tkinter import ttk
+    
+    root = tk.Toplevel()
+    root.title("Select Columns")
+    root.geometry("600x600")  # Aumentar largura para acomodar múltiplas colunas
+    root.grab_set()
+    
+    result = {'cancelled': True}
+    
+    # Frame column selection
+    tk.Label(root, text="Select Frame Column:", font=("Arial", 12, "bold")).pack(pady=10)
+    frame_var = tk.StringVar(value=df.columns[0])
+    frame_combo = ttk.Combobox(root, textvariable=frame_var, values=list(df.columns), state="readonly", width=40)
+    frame_combo.pack(pady=5)
+    
+    # Coordinate columns selection with scrollbar and multiple columns
+    tk.Label(root, text="Select Coordinate Columns:", font=("Arial", 12, "bold")).pack(pady=(20,5))
+    
+    # Create main container with scrollbar
+    main_container = tk.Frame(root)
+    main_container.pack(fill="both", expand=True, padx=20, pady=5)
+    
+    # Create canvas and scrollbar
+    canvas = tk.Canvas(main_container, height=350)
+    scrollbar = tk.Scrollbar(main_container, orient="vertical", command=canvas.yview)
+    scrollable_frame = tk.Frame(canvas)
+    
+    scrollable_frame.bind(
+        "<Configure>",
+        lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+    )
+    
+    canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+    canvas.configure(yscrollcommand=scrollbar.set)
+    
+    # Create coordinate column checkboxes in multiple columns
+    coord_vars = {}
+    coordinate_columns = [col for col in df.columns if col != df.columns[0]]  # Skip frame column
+    
+    # Calculate number of columns (max 4 columns)
+    total_cols = len(coordinate_columns)
+    num_columns = min(4, max(1, total_cols // 10))  # At least 1, max 4 columns
+    items_per_column = (total_cols + num_columns - 1) // num_columns  # Ceiling division
+    
+    # Create grid of checkboxes
+    for i, col in enumerate(coordinate_columns):
+        row = i % items_per_column
+        column = i // items_per_column
+        
+        var = tk.BooleanVar()
+        # Auto-select if column looks like coordinates
+        if any(col.lower().endswith(suffix) for suffix in ['_x', '_y', '_z', 'x', 'y', 'z']):
+            var.set(True)
+        
+        checkbox = tk.Checkbutton(
+            scrollable_frame, 
+            text=col, 
+            variable=var, 
+            font=("Arial", 9),
+            anchor="w",
+            width=25  # Fixed width for consistent column alignment
+        )
+        checkbox.grid(row=row, column=column, sticky="w", padx=10, pady=1)
+        coord_vars[col] = var
+    
+    canvas.pack(side="left", fill="both", expand=True)
+    scrollbar.pack(side="right", fill="y")
+    
+    # Add Select All/None buttons for coordinates
+    coord_buttons_frame = tk.Frame(root)
+    coord_buttons_frame.pack(pady=10)
+    
+    def select_all_coords():
+        for var in coord_vars.values():
+            var.set(True)
+    
+    def select_none_coords():
+        for var in coord_vars.values():
+            var.set(False)
+    
+    def auto_select_coords():
+        """Auto-select columns that look like coordinates"""
+        for col, var in coord_vars.items():
+            if any(col.lower().endswith(suffix) for suffix in ['_x', '_y', '_z', 'x', 'y', 'z']):
+                var.set(True)
+            else:
+                var.set(False)
+    
+    tk.Button(coord_buttons_frame, text="Select All", command=select_all_coords, width=12).pack(side="left", padx=5)
+    tk.Button(coord_buttons_frame, text="Select None", command=select_none_coords, width=12).pack(side="left", padx=5)
+    tk.Button(coord_buttons_frame, text="Auto Select", command=auto_select_coords, width=12).pack(side="left", padx=5)
+    
+    # Info label
+    info_label = tk.Label(root, text="Auto Select will choose columns ending with _x, _y, _z, x, y, z", 
+                         font=("Arial", 8), fg="gray")
+    info_label.pack(pady=5)
+    
+    # Buttons
+    def on_ok():
+        selected_coords = [col for col, var in coord_vars.items() if var.get()]
+        if len(selected_coords) < 2:
+            messagebox.showerror("Error", "Select at least 2 coordinate columns!")
+            return
+        result.update({
+            'cancelled': False,
+            'frame_col': frame_var.get(),
+            'coord_cols': selected_coords
+        })
+        root.destroy()
+    
+    def on_cancel():
+        root.destroy()
+    
+    button_frame = tk.Frame(root)
+    button_frame.pack(pady=15)
+    tk.Button(button_frame, text="OK", command=on_ok, width=15, font=("Arial", 10, "bold")).pack(side="left", padx=10)
+    tk.Button(button_frame, text="Cancel", command=on_cancel, width=15).pack(side="left", padx=10)
+    
+    # Enable mouse wheel scrolling
+    def on_mousewheel(event):
+        canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+    
+    canvas.bind("<MouseWheel>", on_mousewheel)
+    
+    root.wait_window()
+    return result
 
-    # Set up the interface with a larger figure for better visibility
-    fig = plt.figure(figsize=(18, 10))
 
-    # Create subplots for X and Y coordinates
-    ax1 = plt.subplot2grid((2, 1), (0, 0))
-    ax2 = plt.subplot2grid((2, 1), (1, 0))
+def create_gui_menu():
+    """Create main GUI menu for the application."""
 
-    plt.subplots_adjust(
-        left=0.2, bottom=0.3, right=0.85, top=0.95
-    )  # Aumentei o bottom para dar mais espaço
+    # Print the script version and directory
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    root = Tk()
+    root.title("Marker Re-identification Tool")
+    root.geometry("1000x500")  # Aumentar ainda mais a largura e altura
 
-    ax1.set_title("X Coordinates of Markers")
-    ax1.set_xlabel("Frame")
-    ax1.set_ylabel("X Position")
-    ax1.grid(True)
+    # Set up main frame with padding
+    main_frame = Frame(root, padx=30, pady=30)
+    main_frame.pack(expand=True)
 
-    ax2.set_title("Y Coordinates of Markers")
-    ax2.set_xlabel("Frame")
-    ax2.set_ylabel("Y Position")
-    ax2.grid(True)
+    # Title label
+    title_label = Label(
+        main_frame, text="Marker Re-identification Tool", font=("Arial", 24, "bold")
+    )
+    title_label.grid(row=0, column=0, pady=(0, 30), columnspan=3)  # 3 colunas agora
 
-    # Create areas for buttons and controls
-    fill_button_ax = plt.axes([0.3, 0.1, 0.12, 0.04])
-    merge_button_ax = plt.axes([0.44, 0.1, 0.12, 0.04])
-    swap_button_ax = plt.axes([0.58, 0.1, 0.12, 0.04])
-    delete_button_ax = plt.axes([0.72, 0.1, 0.12, 0.04])
+    # Description
+    desc_label = Label(main_frame, text="Select an option:", font=("Arial", 16))
+    desc_label.grid(row=1, column=0, pady=(0, 20), sticky="w", columnspan=3)
 
-    # Areas for marker selection - REDUCED WIDTH from 0.18 to 0.12
-    markers_checkbox_ax = plt.axes([0.04, 0.25, 0.12, 0.65])
+    # Buttons for the different options - organized in 3 columns
+    btn_width = 25
+    btn_height = 3
+    font_size = ("Arial", 11)
 
-    # Slider for frame range selection
+    # Function to load file and then proceed with selected action
+    def load_and_process(action_type):
+        """Load file once and then proceed with the selected action"""
+        root.destroy()
+        
+        # Load file only once
+        df, file_path = load_markers_file()
+        if df is None:
+            return
+        
+        # Select columns dialog
+        column_config = select_columns_dialog(df)
+        if column_config.get('cancelled', False):
+            return
+        
+        frame_col = column_config['frame_col']
+        coord_cols = column_config['coord_cols']
+        
+        # Proceed with the selected action
+        if action_type == "interactive":
+            advanced_reid_gui_with_data(df, file_path, frame_col, coord_cols)
+        elif action_type == "visualize":
+            visualize_markers_dynamic(df, frame_col, coord_cols)
+        elif action_type == "arima":
+            auto_fill_gaps_arima_with_data(df, file_path)
+
+    # Row 1 - Main functions
+    option1_btn = TkButton(
+        main_frame,
+        text="Interactive\nRe-identification",
+        width=btn_width,
+        height=btn_height,
+        font=font_size,
+        command=lambda: load_and_process("interactive"),
+    )
+    option1_btn.grid(row=2, column=0, padx=15, pady=15)
+
+    option2_btn = TkButton(
+        main_frame,
+        text="Auto Fill Gaps\n(ARIMA)",
+        width=btn_width,
+        height=btn_height,
+        font=font_size,
+        command=lambda: load_and_process("arima"),
+    )
+    option2_btn.grid(row=2, column=1, padx=15, pady=15)
+
+    option3_btn = TkButton(
+        main_frame,
+        text="Visualize\nMarkers",
+        width=btn_width,
+        height=btn_height,
+        font=font_size,
+        command=lambda: load_and_process("visualize"),
+    )
+    option3_btn.grid(row=2, column=2, padx=15, pady=15)
+
+    # Row 2 - Additional functions
+    option4_btn = TkButton(
+        main_frame,
+        text="Batch Processing\n(Coming Soon)",
+        width=btn_width,
+        height=btn_height,
+        font=font_size,
+        state="disabled",  # Disabled for now
+        command=lambda: print("Batch Processing selected"),
+    )
+    option4_btn.grid(row=3, column=0, padx=15, pady=15)
+
+    option5_btn = TkButton(
+        main_frame,
+        text="Export Analysis\n(Coming Soon)",
+        width=btn_width,
+        height=btn_height,
+        font=font_size,
+        state="disabled",  # Disabled for now
+        command=lambda: print("Export Analysis selected"),
+    )
+    option5_btn.grid(row=3, column=1, padx=15, pady=15)
+
+    option6_btn = TkButton(
+        main_frame,
+        text="Settings\n(Coming Soon)",
+        width=btn_width,
+        height=btn_height,
+        font=font_size,
+        state="disabled",  # Disabled for now
+        command=lambda: print("Settings selected"),
+    )
+    option6_btn.grid(row=3, column=2, padx=15, pady=15)
+
+    # Exit button - spanning all columns
+    exit_btn = TkButton(
+        main_frame, 
+        text="Exit", 
+        width=btn_width, 
+        height=2, 
+        font=font_size,
+        command=root.destroy
+    )
+    exit_btn.grid(row=4, column=0, columnspan=3, pady=30)
+
+    # Version and info
+    info_frame = Frame(main_frame)
+    info_frame.grid(row=5, column=0, columnspan=3, pady=(20, 0))
+
+    version_label = Label(info_frame, text="Version 0.1.0", font=("Arial", 10))
+    version_label.pack()
+
+    author_label = Label(info_frame, text="Paulo R. P. Santiago", font=("Arial", 9), fg="gray")
+    author_label.pack()
+
+    root.mainloop()
+
+
+def advanced_reid_gui_with_data(df, file_path, frame_col, coord_cols):
+    """Advanced re-identification GUI with pre-loaded data."""
+    if len(df.columns) == 0 or len(df) == 0:
+        messagebox.showerror("Error", "The data file appears to be empty or malformed.")
+        return
+    
+    frames = df[frame_col].values
+    
+    # Detect markers dynamically
+    markers = detect_markers_dynamic(df, coord_cols)
+    marker_names = list(markers.keys())
+    
+    # Determine coordinate types available
+    all_coord_types = set()
+    for marker_info in markers.values():
+        all_coord_types.update(marker_info.keys())
+    coord_types = sorted([ct for ct in ['x', 'y', 'z'] if ct in all_coord_types])
+    n_dims = len(coord_types)
+    
+    # Add variables for tracking changes
+    original_df = df.copy()
+    df_history = [df.copy()]
+    
+    # Set up the interface with dynamic subplot configuration
+    fig = plt.figure(figsize=(20, 4 * n_dims + 6))  # Aumentar a largura e altura
+    axes = []
+    
+    for i in range(n_dims):
+        ax = plt.subplot(n_dims, 1, i + 1)
+        axes.append(ax)
+        ax.set_title(f"{coord_types[i].upper()} Coordinates of Markers")
+        ax.set_xlabel("Frame")
+        ax.set_ylabel(f"{coord_types[i].upper()} Position")
+        ax.grid(True)
+    
+    plt.subplots_adjust(left=0.2, bottom=0.3, right=0.85, top=0.95, hspace=0.4)
+    
+    # Create a Tkinter window for marker selection with scrollbar
+    marker_select_root = tk.Toplevel()
+    marker_select_root.title("Select Markers")
+    marker_select_root.geometry("400x700")  # Aumentar largura
+    
+    marker_vars = {}
+    
+    tk.Label(marker_select_root, text="Select Markers:", font=("Arial", 12, "bold")).pack(pady=5)
+    
+    # Create scrollable frame with multiple columns for markers
+    main_container = tk.Frame(marker_select_root)
+    main_container.pack(fill="both", expand=True, padx=20, pady=5)
+    
+    canvas = tk.Canvas(main_container, height=400)
+    scrollbar = tk.Scrollbar(main_container, orient="vertical", command=canvas.yview)
+    scrollable_frame = tk.Frame(canvas)
+    
+    scrollable_frame.bind(
+        "<Configure>",
+        lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+    )
+    
+    canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+    canvas.configure(yscrollcommand=scrollbar.set)
+    
+    # Organize markers in multiple columns (max 3 columns)
+    total_markers = len(marker_names)
+    num_columns = min(3, max(1, total_markers // 15))  # At least 1, max 3 columns
+    items_per_column = (total_markers + num_columns - 1) // num_columns
+    
+    # Create checkboxes for all markers in grid layout
+    for i, marker_name in enumerate(marker_names):
+        row = i % items_per_column
+        column = i // items_per_column
+        
+        var = tk.BooleanVar(value=True)
+        checkbox = tk.Checkbutton(
+            scrollable_frame, 
+            text=marker_name, 
+            variable=var, 
+            font=("Arial", 9),
+            anchor="w",
+            width=20
+        )
+        checkbox.grid(row=row, column=column, sticky="w", padx=10, pady=1)
+        marker_vars[marker_name] = var
+    
+    canvas.pack(side="left", fill="both", expand=True)
+    scrollbar.pack(side="right", fill="y")
+    
+    # Add Select All/None buttons
+    button_frame = tk.Frame(marker_select_root)
+    button_frame.pack(pady=10)
+    
+    def select_all():
+        for var in marker_vars.values():
+            var.set(True)
+        update_plot()
+    
+    def select_none():
+        for var in marker_vars.values():
+            var.set(False)
+        update_plot()
+    
+    tk.Button(button_frame, text="Select All", command=select_all, width=12).pack(side="left", padx=5)
+    tk.Button(button_frame, text="Select None", command=select_none, width=12).pack(side="left", padx=5)
+    
+    # Add controls in multiple columns
+    controls_frame = tk.Frame(marker_select_root)
+    controls_frame.pack(pady=10, fill="x")
+    
+    # Organize buttons in a grid (2 columns)
+    tk.Button(controls_frame, text="Fill Gaps", command=lambda: on_fill_gaps(), width=12).grid(row=0, column=0, padx=5, pady=5)
+    tk.Button(controls_frame, text="Merge Markers", command=lambda: on_merge_markers(), width=12).grid(row=0, column=1, padx=5, pady=5)
+    tk.Button(controls_frame, text="Swap Markers", command=lambda: on_swap_markers(), width=12).grid(row=1, column=0, padx=5, pady=5)
+    tk.Button(controls_frame, text="Delete Marker", command=lambda: on_delete_marker(), width=12).grid(row=1, column=1, padx=5, pady=5)
+    
+    # Frame range selection with Tkinter
+    range_frame = tk.Frame(marker_select_root)
+    range_frame.pack(pady=10, fill="x")
+    
+    tk.Label(range_frame, text="Frame Range:", font=("Arial", 10, "bold")).pack()
+    
+    range_entry_frame = tk.Frame(range_frame)
+    range_entry_frame.pack(pady=5)
+    
+    tk.Label(range_entry_frame, text="Start:").grid(row=0, column=0, padx=5)
+    start_var = tk.IntVar(value=0)
+    start_entry = tk.Entry(range_entry_frame, textvariable=start_var, width=8)
+    start_entry.grid(row=0, column=1, padx=5)
+    
+    tk.Label(range_entry_frame, text="End:").grid(row=0, column=2, padx=5)
+    end_var = tk.IntVar(value=len(df)-1)
+    end_entry = tk.Entry(range_entry_frame, textvariable=end_var, width=8)
+    end_entry.grid(row=0, column=3, padx=5)
+    
+    def update_range():
+        try:
+            start = start_var.get()
+            end = end_var.get()
+            if 0 <= start < end <= len(df):
+                frames_range.set_val((start, end))
+                update_plot()
+            else:
+                messagebox.showerror("Error", f"Range must be between 0 and {len(df)-1}")
+        except:
+            messagebox.showerror("Error", "Please enter valid numbers")
+    
+    tk.Button(range_entry_frame, text="Apply", command=update_range).grid(row=0, column=4, padx=5)
+    
+    # Save and exit buttons
+    save_frame = tk.Frame(marker_select_root)
+    save_frame.pack(pady=20)
+    
+    tk.Button(save_frame, text="Save Changes", command=lambda: on_save(), width=15).pack(side="left", padx=10)
+    tk.Button(save_frame, text="Exit", command=lambda: on_close(), width=15).pack(side="left", padx=10)
+    
+    # Create sliders for the frame range in matplotlib
     frames_slider_ax = plt.axes([0.3, 0.15, 0.5, 0.03])
     frames_range = RangeSlider(
         frames_slider_ax, "Frames", 0, len(df) - 1, valinit=(0, len(df) - 1)
     )
-
-    # Save and close buttons
-    save_button_ax = plt.axes([0.3, 0.05, 0.15, 0.04])
-    close_button_ax = plt.axes([0.5, 0.05, 0.15, 0.04])
-
-    # Add select all/none buttons - REDUCED WIDTH from 0.08 to 0.05
-    select_all_ax = plt.axes([0.04, 0.2, 0.05, 0.03])
-    select_none_ax = plt.axes([0.10, 0.2, 0.05, 0.03])
-
-    # Add undo button
-    undo_button_ax = plt.axes([0.68, 0.05, 0.12, 0.04])
-
-    # Add help button
-    help_button_ax = plt.axes([0.04, 0.05, 0.08, 0.03])
-
-    # Create interactive controls
-    marker_selection = CheckButtons(
-        markers_checkbox_ax,
-        [f"Marker {m}" for m in all_markers],
-        [True] * len(all_markers),
-    )
-
-    fill_button = Button(fill_button_ax, "Fill Gaps")
-    merge_button = Button(merge_button_ax, "Merge Markers")
-    swap_button = Button(swap_button_ax, "Swap Markers")
-    delete_button = Button(delete_button_ax, "Delete Marker")
-    save_button = Button(save_button_ax, "Save Changes and Exit")
-    close_button = Button(close_button_ax, "Close")
-
-    select_all_button = Button(select_all_ax, "All")
-    select_none_button = Button(select_none_ax, "None")
-    undo_button = Button(undo_button_ax, "Undo")
-    help_button = Button(help_button_ax, "Help")
-
-    # Dictionary to store plot lines
-    lines_x = {}
-    lines_y = {}
-
-    # Track operations performed
-    operations_log = {
-        "fill_gaps": [],
-        "merge_markers": [],
-        "swap_markers": [],
-        "delete_markers": [],
-        "removed_markers": [],
-    }
-
-    def create_temp_dir(original_path):
-        """Create a temporary directory for storing edit files."""
-        base_dir = os.path.dirname(original_path)
-        base_name = os.path.basename(original_path).split(".")[0]
-        temp_dir = os.path.join(base_dir, f"{base_name}_temp")
-
-        # Create directory if it doesn't exist
-        if not os.path.exists(temp_dir):
-            os.makedirs(temp_dir)
-
-        return temp_dir
-
-    def create_temp_file(df, original_path, suffix="_temp"):
-        """Create a temporary file with current changes."""
-        temp_dir = create_temp_dir(original_path)
-        base_name = os.path.basename(original_path).split(".")[0]
-        ext = os.path.splitext(original_path)[1]
-        timestamp = pd.Timestamp.now().strftime("%Y%m%d%H%M%S")
-        temp_path = os.path.join(temp_dir, f"{base_name}{suffix}_{timestamp}{ext}")
-
-        df.to_csv(temp_path, index=False)
-        print(f"Temporary file created: {temp_path}")
-        return temp_path
-
-    def clear_temp_dir(original_path):
-        """Remove the temporary directory and its files."""
-        temp_dir = create_temp_dir(original_path)
-        if os.path.exists(temp_dir):
-            import shutil
-
-            shutil.rmtree(temp_dir)
-            print(f"Temporary directory removed: {temp_dir}")
-
-    # Function to update plot based on checkbox selection
+    
+    # Function to get selected markers
+    def get_selected_markers():
+        return [name for name, var in marker_vars.items() if var.get()]
+    
+    # Define the update plot function
     def update_plot():
-        # Get current checkbox states
-        checked = marker_selection.get_status()
-        visible_markers = [
-            all_markers[i] for i, checked_state in enumerate(checked) if checked_state
-        ]
-
+        # Get selected markers
+        visible_markers = get_selected_markers()
+        
         # Clear current axes
-        ax1.clear()
-        ax2.clear()
-
-        # Set up axes labels and grids
-        ax1.set_title("X Coordinates of Markers")
-        ax1.set_xlabel("Frame")
-        ax1.set_ylabel("X Position")
-        ax1.grid(True)
-
-        ax2.set_title("Y Coordinates of Markers")
-        ax2.set_xlabel("Frame")
-        ax2.set_ylabel("Y Position")
-        ax2.grid(True)
-
-        # Plot only selected markers
-        for marker_id in visible_markers:
-            x_values, y_values = get_marker_coords(df, marker_id)
-            if x_values is not None and y_values is not None:
-                lines_x[marker_id] = ax1.plot(
-                    frames, x_values, label=f"Marker {marker_id}"
-                )[0]
-                lines_y[marker_id] = ax2.plot(
-                    frames, y_values, label=f"Marker {marker_id}"
-                )[0]
-
+        for ax in axes:
+            ax.clear()
+            ax.grid(True)
+        
+        # Set up axes labels
+        for i, coord_type in enumerate(coord_types):
+            axes[i].set_title(f"{coord_type.upper()} Coordinates of Markers")
+            axes[i].set_xlabel("Frame")
+            axes[i].set_ylabel(f"{coord_type.upper()} Position")
+        
+        # Plot only selected markers (without labels)
+        for marker_name in visible_markers:
+            marker_info = markers[marker_name]
+            coords = get_marker_coords_dynamic(df, marker_info, coord_types)
+            
+            for i, coord_type in enumerate(coord_types):
+                if coord_type in coords:
+                    axes[i].plot(frames, coords[coord_type])  # Removido o label
+        
         # Show frame range with vertical lines
         start_frame, end_frame = frames_range.val
-        ax1.axvline(start_frame, color="r", linestyle="--")
-        ax1.axvline(end_frame, color="r", linestyle="--")
-        ax2.axvline(start_frame, color="r", linestyle="--")
-        ax2.axvline(end_frame, color="r", linestyle="--")
-
-        ax1.set_xlim(0, len(df) - 1)
-        ax2.set_xlim(0, len(df) - 1)
-
-        # Place legend outside the plot to avoid overlap
-        if visible_markers and any(
-            marker_id in lines_x for marker_id in visible_markers
-        ):
-            handles1 = [lines_x[m] for m in visible_markers if m in lines_x]
-            handles2 = [lines_y[m] for m in visible_markers if m in lines_y]
-
-            if handles1:
-                ax1.legend(
-                    handles=handles1,
-                    loc="upper left",
-                    bbox_to_anchor=(1.05, 1),
-                    borderaxespad=0,
-                )
-            if handles2:
-                ax2.legend(
-                    handles=handles2,
-                    loc="upper left",
-                    bbox_to_anchor=(1.05, 1),
-                    borderaxespad=0,
-                )
-
+        start_var.set(int(start_frame))
+        end_var.set(int(end_frame))
+        
+        for ax in axes:
+            ax.axvline(start_frame, color='r', linestyle='--')
+            ax.axvline(end_frame, color='r', linestyle='--')
+            ax.set_xlim(0, len(df) - 1)
+            # Removido if visible_markers: ax.legend(loc='upper right')
+        
         fig.canvas.draw_idle()
-
-    # Get selected markers
-    def get_selected_markers():
-        checked = marker_selection.get_status()
-        return [
-            all_markers[i] for i, checked_state in enumerate(checked) if checked_state
-        ]
-
-    # Connect callbacks
-    def on_marker_select(event):
-        update_plot()
-
-    def on_fill_gaps(event):
-        nonlocal latest_temp_file, df
-
+    
+    # Define callback functions
+    def on_fill_gaps():
         selected_markers = get_selected_markers()
         if not selected_markers:
+            messagebox.showinfo("Info", "Please select at least one marker to fill gaps.")
             return
-
-        # Backup para operação de desfazer
-        temp_history.append(df.copy())
-
-        # Para cada marcador selecionado
-        for marker_id in selected_markers:
-            x_col = f"p{marker_id}_x"
-            y_col = f"p{marker_id}_y"
-
-            if x_col not in df.columns or y_col not in df.columns:
-                continue
-
-            x_values = df[x_col].values.copy()
-            y_values = df[y_col].values.copy()
-
-            # Detectar gaps
-            gaps = detect_gaps(x_values, y_values)
-            if not gaps:
-                print(f"Marker {marker_id}: No gaps detected")
-                continue
-
-            # Analisar características dos dados para configurar Kalman
-            valid_indices = ~(pd.isna(x_values) | pd.isna(y_values))
-            data_length = np.sum(valid_indices)
-
-            # Preparar arrays para resultados
-            x_filled = x_values.copy()
-            y_filled = y_values.copy()
-
-            # Processar cada gap
-            for gap_start, gap_end in gaps:
-                gap_size = gap_end - gap_start + 1
-
-                # Escolher método baseado no tamanho do gap e dados disponíveis
-                if gap_size <= 5:
-                    # Gaps pequenos: interpolação linear simples
-                    before_idx = gap_start - 1
-                    after_idx = gap_end + 1
-
-                    while before_idx >= 0 and (
-                        pd.isna(x_values[before_idx]) or pd.isna(y_values[before_idx])
-                    ):
-                        before_idx -= 1
-
-                    while after_idx < len(x_values) and (
-                        pd.isna(x_values[after_idx]) or pd.isna(y_values[after_idx])
-                    ):
-                        after_idx += 1
-
-                    if before_idx >= 0 and after_idx < len(x_values):
-                        frames = [before_idx, after_idx]
-                        x_known = [x_values[before_idx], x_values[after_idx]]
-                        y_known = [y_values[before_idx], y_values[after_idx]]
-
-                        x_interp = np.interp(
-                            range(gap_start, gap_end + 1), frames, x_known
-                        )
-                        y_interp = np.interp(
-                            range(gap_start, gap_end + 1), frames, y_known
-                        )
-
-                        for i, idx in enumerate(range(gap_start, gap_end + 1)):
-                            x_filled[idx] = x_interp[i]
-                            y_filled[idx] = y_interp[i]
-                else:
-                    # Gaps maiores: Kalman filter com parâmetros estimados
-                    # Coletar contexto antes e depois do gap
-                    before_points = []
-                    after_points = []
-
-                    # Pontos antes do gap (até 20)
-                    i = gap_start - 1
-                    count = 0
-                    while i >= 0 and count < 20:
-                        if not pd.isna(x_values[i]) and not pd.isna(y_values[i]):
-                            before_points.insert(0, (i, x_values[i], y_values[i]))
-                            count += 1
-                        i -= 1
-
-                    # Pontos depois do gap (até 20)
-                    i = gap_end + 1
-                    count = 0
-                    while i < len(x_values) and count < 20:
-                        if not pd.isna(x_values[i]) and not pd.isna(y_values[i]):
-                            after_points.append((i, x_values[i], y_values[i]))
-                            count += 1
-                        i += 1
-
-                    # Verificar se temos contexto suficiente
-                    if len(before_points) >= 3 and len(after_points) >= 3:
-                        # Implementação simples de Kalman
-                        # Estimar velocidade média dos pontos de contexto
-                        if len(before_points) > 1:
-                            dx_before = (before_points[-1][1] - before_points[0][1]) / (
-                                before_points[-1][0] - before_points[0][0]
-                            )
-                            dy_before = (before_points[-1][2] - before_points[0][2]) / (
-                                before_points[-1][0] - before_points[0][0]
-                            )
-                        else:
-                            dx_before = 0
-                            dy_before = 0
-
-                        if len(after_points) > 1:
-                            dx_after = (after_points[-1][1] - after_points[0][1]) / (
-                                after_points[-1][0] - after_points[0][0]
-                            )
-                            dy_after = (after_points[-1][2] - after_points[0][2]) / (
-                                after_points[-1][0] - after_points[0][0]
-                            )
-                        else:
-                            dx_after = 0
-                            dy_after = 0
-
-                        # Média ponderada das velocidades
-                        dx = (dx_before + dx_after) / 2
-                        dy = (dy_before + dy_after) / 2
-
-                        # Ponto inicial
-                        x_start = before_points[-1][1]
-                        y_start = before_points[-1][2]
-
-                        # Predição linear com ajuste para o ponto final
-                        x_end = after_points[0][1]
-                        y_end = after_points[0][2]
-
-                        # Ajustar para combinar o ponto final
-                        for i, idx in enumerate(range(gap_start, gap_end + 1)):
-                            t = i / gap_size  # Fator de interpolação (0 a 1)
-                            # Combinação de predição linear e correção para o ponto final
-                            x_filled[idx] = (
-                                x_start + dx * i * (1 - t) + (x_end - x_start) * t
-                            )
-                            y_filled[idx] = (
-                                y_start + dy * i * (1 - t) + (y_end - y_start) * t
-                            )
-                    else:
-                        # Fallback para interpolação linear se não tivermos contexto suficiente
-                        before_idx = gap_start - 1
-                        after_idx = gap_end + 1
-
-                        while before_idx >= 0 and (
-                            pd.isna(x_values[before_idx])
-                            or pd.isna(y_values[before_idx])
-                        ):
-                            before_idx -= 1
-
-                        while after_idx < len(x_values) and (
-                            pd.isna(x_values[after_idx]) or pd.isna(y_values[after_idx])
-                        ):
-                            after_idx += 1
-
-                        if before_idx >= 0 and after_idx < len(x_values):
-                            frames = [before_idx, after_idx]
-                            x_known = [x_values[before_idx], x_values[after_idx]]
-                            y_known = [y_values[before_idx], y_values[after_idx]]
-
-                            x_interp = np.interp(
-                                range(gap_start, gap_end + 1), frames, x_known
-                            )
-                            y_interp = np.interp(
-                                range(gap_start, gap_end + 1), frames, y_known
-                            )
-
-                            for i, idx in enumerate(range(gap_start, gap_end + 1)):
-                                x_filled[idx] = x_interp[i]
-                                y_filled[idx] = y_interp[i]
-
-            # Atualizar o DataFrame com valores preenchidos
-            df[x_col] = x_filled
-            df[y_col] = y_filled
-            print(f"Filled gaps intelligently for marker {marker_id}")
-
-            # Registrar operação
-            operations_log["fill_gaps"].append(
-                {
-                    "marker_id": marker_id,
-                    "method": "intelligent_kalman",
-                    "timestamp": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S"),
-                }
-            )
-
-        # Criar arquivo temporário
-        latest_temp_file = create_temp_file(df, file_path)
-
-        # Carregar dados do arquivo temporário
-        df_temp = pd.read_csv(latest_temp_file)
-        df = df_temp
-
-        # Atualizar o gráfico
+        
+        # Save current state to history
+        df_history.append(df.copy())
+        
+        # Get frame range
+        start_frame, end_frame = [int(val) for val in frames_range.val]
+        
+        # Fill gaps for each selected marker
+        for marker_name in selected_markers:
+            marker_info = markers[marker_name]
+            for coord_type in coord_types:
+                if coord_type in marker_info:
+                    col_name = marker_info[coord_type]
+                    values = df[col_name].values.copy()
+                    
+                    # Simple linear interpolation on the selected range
+                    values_range = values[start_frame:end_frame + 1]
+                    interpolated = pd.Series(values_range).interpolate(method='linear').values
+                    values[start_frame:end_frame + 1] = interpolated
+                    df[col_name] = values
+        
         update_plot()
-
-        messagebox.showinfo(
-            "Processo Concluído",
-            f"Preenchimento inteligente de gaps concluído para {len(selected_markers)} marcador(es).",
-        )
-
-    def on_merge_markers(event):
-        nonlocal latest_temp_file, df
-
-        selected_markers = get_selected_markers()
-
-        if len(selected_markers) < 2:
+        messagebox.showinfo("Complete", f"Gaps filled for {len(selected_markers)} marker(s).")
+    
+    def on_merge_markers():
+        # TODO: Implement marker merging functionality
+        messagebox.showinfo("Info", "Merge Markers function not yet implemented.")
+    
+    def on_swap_markers():
+        # TODO: Implement marker swapping functionality
+        messagebox.showinfo("Info", "Swap Markers function not yet implemented.")
+    
+    def on_delete_marker():
+        # TODO: Implement marker deletion functionality
+        messagebox.showinfo("Info", "Delete Marker function not yet implemented.")
+    
+    def on_save():
+        if not messagebox.askyesno("Save Changes", "Save changes to a new file?"):
             return
-
-        # Backup para operação de desfazer
-        temp_history.append(df.copy())
-
-        # Use o marcador com o menor ID como o destino (a ser mantido)
-        source_id = min(selected_markers)
-        # Todos os outros marcadores selecionados serão fontes (a serem mesclados e removidos)
-        sources = [m for m in selected_markers if m != source_id]
-
-        start_frame, end_frame = map(int, frames_range.val)
-
-        # Obter colunas do alvo (o que será mantido)
-        target_x_col = f"p{source_id}_x"
-        target_y_col = f"p{source_id}_y"
-
-        # Processar cada marcador fonte (a ser removido)
-        for source_id_to_remove in sources:
-            source_x_col = f"p{source_id_to_remove}_x"
-            source_y_col = f"p{source_id_to_remove}_y"
-
-            # Transferir TODAS as coordenadas válidas da fonte para o alvo
-            for i in range(start_frame, end_frame + 1):
-                # Verificar se a fonte tem dados válidos neste quadro
-                source_x_valid = not (
-                    pd.isna(df.at[i, source_x_col]) or df.at[i, source_x_col] == ""
-                )
-                source_y_valid = not (
-                    pd.isna(df.at[i, source_y_col]) or df.at[i, source_y_col] == ""
-                )
-
-                if source_x_valid and source_y_valid:
-                    # Transferir dados da fonte para o alvo
-                    df.at[i, target_x_col] = df.at[i, source_x_col]
-                    df.at[i, target_y_col] = df.at[i, source_y_col]
-
-            # Adicionar à lista de marcadores para remover ao salvar
-            if source_id_to_remove not in operations_log["removed_markers"]:
-                operations_log["removed_markers"].append(source_id_to_remove)
-
-            # Registrar a operação
-            operations_log["merge_markers"].append(
-                {
-                    "target_id": source_id,  # O marcador que estamos mantendo
-                    "source_id": source_id_to_remove,  # O marcador sendo mesclado e removido
-                    "frame_range": [start_frame, end_frame],
-                    "timestamp": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S"),
-                }
-            )
-
-        # REMOVER OS MARCADORES APÓS A TRANSFERÊNCIA DE DADOS
-        columns_to_remove = []
-        for marker_id in sources:
-            columns_to_remove.append(f"p{marker_id}_x")
-            columns_to_remove.append(f"p{marker_id}_y")
-
-        df = df.drop(columns=columns_to_remove)
-
-        # Criar arquivo temporário
-        latest_temp_file = create_temp_file(df, file_path)
-
-        # Carregar dados do arquivo temporário para atualizar o gráfico
-        df_temp = pd.read_csv(latest_temp_file)
-        df = df_temp  # Atualizar o DataFrame com dados do arquivo temporário
-
-        update_plot()
-
-    def on_swap_markers(event):
-        nonlocal latest_temp_file, df
-
-        selected_markers = get_selected_markers()
-
-        if len(selected_markers) != 2:
-            print(
-                "Erro: Por favor, selecione exatamente dois marcadores para trocar dados."
-            )
-            return
-
-        marker_id1, marker_id2 = selected_markers
-
-        # Backup para operação de desfazer
-        temp_history.append(df.copy())
-
-        # Trocar dados entre os dois marcadores selecionados
-        df = swap_markers(df, marker_id1, marker_id2, (0, len(df) - 1))
-
-        # Criar arquivo temporário
-        latest_temp_file = create_temp_file(df, file_path)
-
-        # Carregar dados do arquivo temporário para atualizar o gráfico
-        df_temp = pd.read_csv(latest_temp_file)
-        df = df_temp  # Atualizar o DataFrame com dados do arquivo temporário
-
-        update_plot()
-
-    def on_delete_markers(event):
-        nonlocal latest_temp_file, df
-
-        selected_markers = get_selected_markers()
-
-        if not selected_markers:
-            return
-
-        # Backup para operação de desfazer
-        temp_history.append(df.copy())
-
-        # Remover marcadores selecionados
-        df = df.drop(
-            columns=[f"p{m}_x" for m in selected_markers]
-            + [f"p{m}_y" for m in selected_markers]
-        )
-
-        # Criar arquivo temporário
-        latest_temp_file = create_temp_file(df, file_path)
-
-        # Carregar dados do arquivo temporário para atualizar o gráfico
-        df_temp = pd.read_csv(latest_temp_file)
-        df = df_temp  # Atualizar o DataFrame com dados do arquivo temporário
-
-        update_plot()
-
-    def on_save(event):
-        nonlocal latest_temp_file, df
-
-        # Salvar o arquivo final com as modificações
-        save_markers_file(df, file_path)
-        print(f"Arquivo final salvo com modificações")
-
-        # Limpar diretório temporário
-        clear_temp_dir(file_path)
-
-        # Fechar a janela
-        plt.close(fig)
-
-    def on_close(event):
-        # Limpar diretório temporário antes de fechar
-        clear_temp_dir(file_path)
-        plt.close(fig)  # Close the figure when done
-
-    def on_undo(event):
-        nonlocal latest_temp_file, df
-
-        if temp_history:
-            df = temp_history.pop()
-            latest_temp_file = create_temp_file(df, file_path)
-            update_plot()
-        else:
-            print("Não há mais operações para desfazer.")
-
-    def open_help(event):
-        import webbrowser
-
-        webbrowser.open("https://vaila.readthedocs.io/en/latest/")
-
-    def select_all(event):
-        for i in range(len(all_markers)):
-            if not marker_selection.get_status()[i]:
-                marker_selection.set_active(i)
-        update_plot()
-
-    def select_none(event):
-        for i in range(len(all_markers)):
-            if marker_selection.get_status()[i]:
-                marker_selection.set_active(i)
-        update_plot()
-
-    # Connect callbacks
-    marker_selection.on_clicked(on_marker_select)
+            
+        new_file = save_markers_file(df, file_path)
+        messagebox.showinfo("Success", f"Changes saved to: {new_file}")
+    
+    def on_close():
+        if df.equals(original_df) or messagebox.askyesno("Discard Changes", "Discard changes and exit?"):
+            marker_select_root.destroy()
+            plt.close(fig)
+    
+    # Connect matplotlib callbacks
     frames_range.on_changed(lambda val: update_plot())
-    fill_button.on_clicked(on_fill_gaps)
-    merge_button.on_clicked(on_merge_markers)
-    swap_button.on_clicked(on_swap_markers)
-    delete_button.on_clicked(on_delete_markers)
-    save_button.on_clicked(on_save)
-    close_button.on_clicked(on_close)
-    select_all_button.on_clicked(select_all)
-    select_none_button.on_clicked(select_none)
-    undo_button.on_clicked(on_undo)
-    help_button.on_clicked(open_help)
-
-    # Initialize plot
+    
+    # Enable mouse wheel scrolling
+    def on_mousewheel(event):
+        canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+    
+    canvas.bind("<MouseWheel>", on_mousewheel)
+    
+    # Set callback for window close
+    marker_select_root.protocol("WM_DELETE_WINDOW", on_close)
+    
+    # Initial plot
     update_plot()
-
-    plt.tight_layout(rect=[0.2, 0.25, 0.85, 1])  # Adjust layout
     plt.show()
+    
+    # This will keep the Tkinter window running alongside matplotlib
+    marker_select_root.mainloop()
+
+
+def auto_fill_gaps_arima_with_data(df, file_path):
+    """ARIMA gap filling with pre-loaded data."""
+    # Use the existing auto_fill_gaps_arima but modify to accept data
+    # For now, just call the original function
+    auto_fill_gaps_arima()
 
 
 def fill_gaps_arima(df, marker_id, max_gap_size=30, order=(1, 1, 1)):
@@ -1261,6 +1468,15 @@ def auto_fill_gaps_arima():
     df, file_path = load_markers_file()
     if df is None:
         return
+
+    if len(df.columns) == 0 or len(df) == 0:
+        messagebox.showerror(
+            "Error", "The data file appears to be empty or malformed."
+        )
+        return
+
+    frame_col = df.columns[0]
+    frames = df[frame_col].values
 
     markers = detect_markers(df)
     total_filled = 0
@@ -1631,67 +1847,6 @@ def auto_fill_gaps_arima():
     help_all_button.pack(pady=10)
 
     arima_params_window.mainloop()
-
-
-def create_gui_menu():
-    """Create main GUI menu for the application."""
-
-    # Print the script version and directory
-    print(f"Running script: {os.path.basename(__file__)}")
-    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
-    root = Tk()
-    root.title("Marker Re-identification Tool")
-    root.geometry("500x300")  # Reduced height since we're removing an option
-
-    # Set up frame for buttons
-    frame = Frame(root, padx=20, pady=20)
-    frame.pack(expand=True)
-
-    # Title label
-    title_label = Label(
-        frame, text="Marker Re-identification Tool", font=("Arial", 16, "bold")
-    )
-    title_label.grid(row=0, column=0, pady=(0, 20))
-
-    # Description
-    desc_label = Label(frame, text="Select an option:", font=("Arial", 12))
-    desc_label.grid(row=1, column=0, pady=(0, 20), sticky="w")
-
-    # Buttons for the different options
-    btn_width = 30
-    btn_height = 2
-
-    # Interactive Re-identification button
-    option1_btn = TkButton(
-        frame,
-        text="Interactive Re-identification",
-        width=btn_width,
-        height=btn_height,
-        command=lambda: [root.destroy(), advanced_reid_gui()],
-    )
-    option1_btn.grid(row=2, column=0, pady=10)
-
-    # Auto Fill Gaps (ARIMA) button
-    option2_btn = TkButton(
-        frame,
-        text="Auto Fill Gaps (ARIMA)",
-        width=btn_width,
-        height=btn_height,
-        command=lambda: [root.destroy(), auto_fill_gaps_arima()],
-    )
-    option2_btn.grid(row=3, column=0, pady=10)
-
-    # Exit button - row changed from 5 to 4 since we removed an option
-    option4_btn = TkButton(
-        frame, text="Exit", width=btn_width, height=btn_height, command=root.destroy
-    )
-    option4_btn.grid(row=4, column=0, pady=10)
-
-    # Version info - row changed from 6 to 5
-    version_label = Label(frame, text="Version 0.1.0", font=("Arial", 8))
-    version_label.grid(row=5, column=0, pady=(20, 0))
-
-    root.mainloop()
 
 
 if __name__ == "__main__":
