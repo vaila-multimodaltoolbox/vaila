@@ -110,9 +110,10 @@ cat <<EOF > "${APP_PATH}/Contents/Info.plist"
 EOF
 
 # Create the executable script for the app, using osascript to open in terminal
+CONDA_BASE=$(conda info --base)
 cat <<EOF > "${APP_PATH}/Contents/MacOS/run_vaila.sh"
 #!/bin/zsh
-osascript -e 'tell application "Terminal" to do script "source ${HOME}/anaconda3/etc/profile.d/conda.sh && conda activate vaila && python3 ${HOME}/vaila/vaila.py"'
+osascript -e "tell application \"Terminal\" to do script \"source ${CONDA_BASE}/etc/profile.d/conda.sh && conda activate vaila && python3 ${HOME}/vaila/vaila.py\""
 EOF
 
 # Make the executable script runnable
