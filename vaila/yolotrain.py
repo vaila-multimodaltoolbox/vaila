@@ -24,7 +24,7 @@ Requirements:
     - Additional dependencies as imported (numpy, csv, etc.)
 
 License:
-    This project is licensed under the terms of the MIT License (or another applicable license).
+    This project is licensed under the terms of GNU General Public License v3.0.
 
 Change History:
     - First version.

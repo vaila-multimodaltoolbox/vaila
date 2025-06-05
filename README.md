@@ -81,7 +81,7 @@ Com *vailá*, você é convidado a explorar, experimentar e criar sem restriçõ
 
 ### Prerequisites
 
-- **Conda**: Ensure that [Anaconda](https://www.anaconda.com/download/success) is installed and accessible from the command line.
+- **Conda**: Ensure that either [Anaconda](https://www.anaconda.com/download/success) or [Miniconda](https://docs.conda.io/en/latest/miniconda.html) is installed and accessible from the command line.
 
 - **FFmpeg**: Required for video processing functionalities.
 
@@ -108,9 +108,11 @@ cd vaila
 
 If you need any further adjustments or have additional requests, feel free to let me know!
 
-### 1. **Install Anaconda**
-   - Download and install [Anaconda](https://www.anaconda.com/download/success).
-   - REMEMBER install "Admin for all users" [Anaconda install](https://www.anaconda.com/docs/getting-started/anaconda/advanced-install/multi-user)
+### 1. **Install Anaconda or Miniconda**
+   - Download and install either:
+     - **[Anaconda](https://www.anaconda.com/download/success)** (full distribution with many pre-installed packages)
+     - **[Miniconda](https://docs.conda.io/en/latest/miniconda.html)** (minimal installer with just conda, Python, and essential packages)
+   - For Anaconda: REMEMBER to install "Admin for all users" [Anaconda install](https://www.anaconda.com/docs/getting-started/anaconda/advanced-install/multi-user)
    - Ensure that **Conda** is accessible from the terminal after installation.
 
 ### 2. **Download *vailá***
@@ -124,7 +126,7 @@ If you need any further adjustments or have additional requests, feel free to le
      - **Included the Reminder**: Added a note in both the **Download *vailá*** section and the **Important Notes** section to remind users to rename the directory from `vaila-main` to `vaila` if they downloaded the zip file.
 
 ### 3. **Run the Installation Script**
-   - Open **PowerShell** (with Anaconda initialized) or **Anaconda PowerShell Prompt**.
+   - Open **PowerShell** (with Anaconda/Miniconda initialized) or **Anaconda/Miniconda PowerShell Prompt**.
    - Navigate to the directory where *vailá* was downloaded or extracted.
    - Execute the installation script:
      ```powershell
@@ -148,9 +150,10 @@ If you need any further adjustments or have additional requests, feel free to le
        - **Start Menu shortcut**: A shortcut will be added to the Windows Start Menu.
 
 ### ⚠️ **Important Notes**
-   - Ensure **Conda** is accessible from the command line before running the script.
+   - Ensure **Conda** (from either Anaconda or Miniconda installation) is accessible from the command line before running the script.
    - The installation script requires administrative privileges to install system components.
    - The installation script dynamically configures paths, so no manual adjustments are necessary for user-specific directories.
+   - **Miniconda users**: The script will work perfectly with Miniconda - it automatically detects your conda installation path.
 
 ### 5. **Launching *vailá***
    - After installation, you can launch *vailá*:
@@ -165,6 +168,8 @@ If you need any further adjustments or have additional requests, feel free to le
 ---
 
 ## 🟠 For Linux:
+
+**Note**: These scripts work with both Anaconda and Miniconda installations.
 
 1. **Make the installation script executable**:
 
@@ -188,11 +193,14 @@ sudo chmod +x install_vaila_linux.sh
 3. **Notes**:
 
 - Run the script as your regular user, not with sudo.
-- Ensure that Conda is added to your PATH and accessible from the command line.
+- Ensure that Conda (Anaconda or Miniconda) is added to your PATH and accessible from the command line.
+- The script automatically detects your conda installation directory.
 
 ---
 
 ## ⚪ For macOS:
+
+**Note**: These scripts work with both Anaconda and Miniconda installations.
 
 1. **Make the installation script executable**:
 
@@ -217,7 +225,8 @@ sudo chmod +x install_vaila_mac.sh
 3. **Notes**:
   
 - You may be prompted for your password when the script uses sudo to create the symbolic link.
-- Ensure that Conda is added to your PATH and accessible from the command line.
+- Ensure that Conda (Anaconda or Miniconda) is added to your PATH and accessible from the command line.
+- **Important for Miniconda users**: The macOS script currently has a hardcoded path that assumes Anaconda installation. This will be fixed in the next update to automatically detect conda installation paths.
 
 
 ---
@@ -243,13 +252,13 @@ and run command:
 
 - 🔵 Windows
 
-- Click on the `vaila` icon in the Applications menu or use the shortcut in desktop or Windows Terminal.
+- Click on the `vailá` icon in the Applications menu or use the shortcut in desktop or Windows Terminal.
 
-- Windows: **From the Windows Terminal (Anaconda in path) or use Anaconda PowerShell**
+- Windows: **From the Windows Terminal (Anaconda/Miniconda in path) or use Anaconda/Miniconda PowerShell**
 
-1. Open Anaconda Prompt or Anaconda Powershell Prompt (Anaconda Powershell is recommended) and run command:
+1. Open Anaconda Prompt, Miniconda Prompt, or Anaconda/Miniconda Powershell Prompt (PowerShell is recommended) and run command:
 
-```Anaconda Powershell
+```Anaconda/Miniconda Powershell
 conda activate vaila
 python vaila.py
 ```
@@ -262,7 +271,7 @@ python vaila.py
 
 - From the Applications Menu:
   
-  - Look for `vaila` in your applications menu and launch it by clicking on the icon. 
+  - Look for `vailá` in your applications menu and launch it by clicking on the icon. 
 
 --- 
 
@@ -299,7 +308,7 @@ sudo chmod +x ~/vaila/mac_launch_vaila.sh
 #### Notes for 🟠 Linux and ⚪ macOS 
 
 - **Ensure Conda is in the Correct Location**:
-  - The launch scripts assume that Conda is installed in `~/anaconda3`. 
+  - The launch scripts assume that Conda is installed in `~/anaconda3` or `~/miniconda3`. 
   - If Conda is installed elsewhere, update the `source` command in the scripts to point to the correct location.
 
 - **Verify Paths**:
@@ -354,7 +363,7 @@ sudo chmod +x uninstall_vaila_mac.sh
 
 ## For Uninstallation on Windows
 
-1. **Run the uninstallation script as Administrator in Anaconda PowerShell Prompt**:
+1. **Run the uninstallation script as Administrator in Anaconda/Miniconda PowerShell Prompt**:
 
 - PowerShell Script:
   ```powershell
@@ -374,7 +383,7 @@ sudo chmod +x uninstall_vaila_mac.sh
 
 - If the Windows Terminal profile is not removed automatically (e.g., when using the `uninstall_vaila_win.ps1` script), you may need to remove it manually:
 
-```Anaconda PowerShell Prompt
+```Anaconda/Miniconda PowerShell Prompt
 conda remove -n vaila --all
 ```
 

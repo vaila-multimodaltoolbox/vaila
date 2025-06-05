@@ -4,8 +4,8 @@ vaila.py
 ===============================================================================
 Author: Prof. Paulo R. P. Santiago
 Date:  7 October 2024
-Update: 3 June 2025
-Version updated: 0.6.25
+Update: 5 June 2025
+Version updated: 0.6.26
 Python Version: 3.12.9
 
 Description:
@@ -136,7 +136,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 2.June.2025 v0.6.24 (Python 3.12.9)
+vailá - 5.June.2025 v0.6.26 (Python 3.12.9)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -172,7 +172,7 @@ B3_r3_c4 - Cube2D         B3_r3_c5 - Animal Open Field
 B3_r4_c1 - Tracker        B3_r4_c2 - ML Walkway      B3_r4_c3 - Markerless Hands
 B3_r4_c4 - MP Angles      B3_r4_c5 - Markerless Live
 
-B3_r5_c1 - Ultrasound     B3_r5_c2 - vailá           B3_r5_c3 - vailá
+B3_r5_c1 - Ultrasound     B3_r5_c2 - Brainstorm      B3_r5_c3 - vailá
 B3_r5_c4 - vailá          B3_r5_c5 - vailá
 
 ============================== Tools Available (Frame C) ===================
@@ -215,7 +215,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 2.June.2025 v0.6.24 (Python 3.12.9)")
+        self.title("vailá - 5.June.2025 v0.6.26 (Python 3.12.9)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -524,7 +524,7 @@ class Vaila(tk.Tk):
             - Markerless Live
             B5:
             - Ultrasound
-            - vailá
+            - Brainstorm
             - vailá
             - vailá
             - vailá
@@ -773,12 +773,12 @@ class Vaila(tk.Tk):
             command=self.ultrasound,
         )
 
-        # B5_r5_c2 - vailá
-        vaila_btn2 = tk.Button(
+        # B5_r5_c2 - Brainstorm
+        brainstorm_btn = tk.Button(
             row5_frame,
-            text="vailá",
+            text="Brainstorm",
             width=button_width,
-            command=self.show_vaila_message,
+            command=self.brainstorm,
         )
 
         # B5_r5_c3 - vailá
@@ -807,7 +807,7 @@ class Vaila(tk.Tk):
 
         # Pack row5 buttons
         ultrasound_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
-        vaila_btn2.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        brainstorm_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         vaila_btn3.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         vaila_btn4.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         vaila_btn5.pack(side="left", expand=True, fill="x", padx=2, pady=2)
@@ -1114,7 +1114,7 @@ class Vaila(tk.Tk):
 
         # C_C_r1_c2 - Visualization: Show CSV
         show_csv_btn = tk.Button(
-            tools_col3, text="Show CSV", command=self.show_csv_file, width=button_width
+            tools_col3, text="Show CSV 3D", command=self.show_csv_file, width=button_width
         )
 
         # C_C_r2_c1 - Visualization: Plot 2D
@@ -1724,6 +1724,14 @@ class Vaila(tk.Tk):
 
         usound_biomec1.run_usound()
 
+    # B_r5_c2 - Brainstorm
+    def brainstorm(self):
+        """Runs the Brainstorm module."""
+        from vaila import brainstorm
+
+        brainstorm.run_brainstorm()
+
+    # C_r1_c1
     def reorder_csv_data(self):
         """Runs the Reorder CSV Data module.
 
