@@ -101,4 +101,6 @@ dependencies:
       - SpeechRecognition
       - sounddevice
       - soundfile
+      - openai
+      - MIDIUtil
       - ultralytics==8.3.146
