@@ -103,4 +103,7 @@ dependencies:
       - soundfile
       - openai
       - MIDIUtil
+      - mido
+      - pyttsx3
+      - gtts
       - ultralytics==8.3.150
