@@ -89,4 +89,9 @@ dependencies:
       - neurokit2
       - biosppy
       - entropy
+      - SpeechRecognition
+      - sounddevice
+      - soundfile
+      - openai
+      - MIDIUtil
       - ultralytics==8.3.150
