@@ -70,6 +70,19 @@ try:
 except ImportError:
     SUBPROCESS_AVAILABLE = False
 
+# Optional imports for Text-to-Speech
+try:
+    import pyttsx3
+    PYTTSX3_AVAILABLE = True
+except ImportError:
+    PYTTSX3_AVAILABLE = False
+
+try:
+    from gtts import gTTS
+    GTTS_AVAILABLE = True
+except ImportError:
+    GTTS_AVAILABLE = False
+
 # Global variables
 AUDIO_FILE = "audio.wav"
 TRANSCRIBED_TEXT = ""
@@ -193,6 +206,8 @@ class BrainstormApp:
                  bg="#FF9800", fg="white", font=("Arial", 10, "bold")).pack(side="left", padx=5)
         tk.Button(audio_buttons, text="Load Transcription", command=self.load_transcription,
                  bg="#795548", fg="white", font=("Arial", 10, "bold")).pack(side="left", padx=5)
+        tk.Button(audio_buttons, text="Batch Transcribe", command=self.batch_transcribe,
+                 bg="#9C27B0", fg="white", font=("Arial", 10, "bold")).pack(side="left", padx=5)
         
         # Status label
         self.status_label = tk.Label(audio_frame, text="Ready to record...", fg="green")
@@ -206,6 +221,8 @@ class BrainstormApp:
         text_header.pack(fill="x", pady=5)
         
         tk.Label(text_header, text="Edit your transcribed text or write a custom prompt:").pack(side="left", anchor="w")
+        tk.Button(text_header, text="Text to Audio", command=self.text_to_audio,
+                 bg="#FF9800", fg="white", font=("Arial", 9)).pack(side="right", padx=5)
         tk.Button(text_header, text="Save Text", command=self.save_transcription_edits,
                  bg="#4CAF50", fg="white", font=("Arial", 9)).pack(side="right", padx=5)
         
@@ -430,6 +447,153 @@ class BrainstormApp:
         except Exception as e:
             self.show_message("error", "Error", f"Failed to save text: {str(e)}")
 
+    def text_to_audio(self):
+        """Convert text to audio using TTS."""
+        # Ensure session directory exists
+        if not self.session_dir:
+            self.create_new_session()
+            
+        text = self.text_display.get("1.0", tk.END).strip()
+        if not text:
+            self.show_message("warning", "Warning", "No text to convert to audio.")
+            return
+            
+        try:
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            audio_file = f"{self.session_dir}/audio/tts_audio_{timestamp}.wav"
+            
+            # Try different TTS methods
+            tts_success = False
+            
+            # Method 1: Try pyttsx3 (offline)
+            if PYTTSX3_AVAILABLE and self._try_pyttsx3_tts(text, audio_file):
+                tts_success = True
+                method = "pyttsx3 (offline)"
+            else:
+                # Method 2: Try gTTS (online)
+                if GTTS_AVAILABLE and self._try_gtts_tts(text, audio_file):
+                    tts_success = True
+                    method = "Google TTS (online)"
+                else:
+                    # Method 3: Try Windows SAPI (Windows only)
+                    if self._try_windows_sapi_tts(text, audio_file):
+                        tts_success = True
+                        method = "Windows SAPI"
+            
+            if tts_success:
+                self.status_label.config(text=f"TTS audio saved: {os.path.basename(audio_file)}", fg="green")
+                self.show_message("info", "TTS Success", f"Audio generated successfully!\nMethod: {method}\nFile: {audio_file}")
+            else:
+                self.show_message("error", "TTS Failed", "Could not generate audio. Please install pyttsx3 or gtts:\npip install pyttsx3 gtts")
+                
+        except Exception as e:
+            self.show_message("error", "TTS Error", f"Failed to generate audio: {str(e)}")
+
+    def _try_pyttsx3_tts(self, text, audio_file):
+        """Try pyttsx3 for TTS conversion."""
+        try:
+            engine = pyttsx3.init()
+            
+            # Configure voice settings
+            rate = engine.getProperty('rate')
+            engine.setProperty('rate', rate - 50)  # Slower speech
+            
+            volume = engine.getProperty('volume')
+            engine.setProperty('volume', 0.9)
+            
+            # Save to file
+            engine.save_to_file(text, audio_file)
+            engine.runAndWait()
+            
+            return os.path.exists(audio_file)
+            
+        except Exception:
+            return False
+
+    def _try_gtts_tts(self, text, audio_file):
+        """Try Google TTS for conversion."""
+        try:
+            # Detect language (simple heuristic)
+            portuguese_words = ["o", "a", "de", "para", "com", "em", "um", "uma", "que", "do", "da"]
+            spanish_words = ["el", "la", "de", "para", "con", "en", "un", "una", "que", "del", "de la"]
+            
+            text_lower = text.lower()
+            pt_count = sum(1 for word in portuguese_words if word in text_lower)
+            es_count = sum(1 for word in spanish_words if word in text_lower)
+            
+            if pt_count > es_count and pt_count > 2:
+                lang = 'pt'
+            elif es_count > 2:
+                lang = 'es'
+            else:
+                lang = 'en'
+            
+            tts = gTTS(text=text, lang=lang, slow=False)
+            
+            # gTTS saves as MP3, so we need to convert or save with .mp3 extension
+            mp3_file = audio_file.replace('.wav', '.mp3')
+            tts.save(mp3_file)
+            
+            # If we want WAV, convert using ffmpeg (if available)
+            if os.path.exists(mp3_file):
+                try:
+                    import subprocess
+                    result = subprocess.run(["ffmpeg", "-i", mp3_file, audio_file, "-y"], 
+                                          capture_output=True, timeout=10)
+                    if result.returncode == 0:
+                        os.remove(mp3_file)  # Remove MP3 after conversion
+                        return True
+                    else:
+                        # Keep MP3 if WAV conversion failed
+                        return True
+                except:
+                    # Keep MP3 if ffmpeg not available
+                    return True
+            
+            return False
+            
+        except Exception:
+            return False
+
+    def _try_windows_sapi_tts(self, text, audio_file):
+        """Try Windows SAPI for TTS (Windows only)."""
+        try:
+            import subprocess
+            import tempfile
+            
+            # Create a VBS script to use Windows SAPI
+            vbs_script = f"""
+Dim objVoice, objFile
+Set objVoice = CreateObject("SAPI.SpVoice")
+Set objFile = CreateObject("SAPI.SpFileStream")
+
+objFile.Open "{audio_file}", 3
+Set objVoice.AudioOutputStream = objFile
+
+objVoice.Speak "{text.replace('"', '""')}"
+
+objFile.Close
+Set objFile = Nothing
+Set objVoice = Nothing
+"""
+            
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.vbs', delete=False) as f:
+                f.write(vbs_script)
+                vbs_file = f.name
+            
+            try:
+                result = subprocess.run(["cscript", "//NoLogo", vbs_file], 
+                                      capture_output=True, timeout=30)
+                os.unlink(vbs_file)
+                return result.returncode == 0 and os.path.exists(audio_file)
+            except:
+                if os.path.exists(vbs_file):
+                    os.unlink(vbs_file)
+                return False
+                
+        except Exception:
+            return False
+
     def transcribe_audio(self):
         """Transcribe the recorded audio and save to txt file."""
         if not os.path.exists(AUDIO_FILE):
@@ -483,6 +647,144 @@ class BrainstormApp:
         except Exception as e:
             self.status_label.config(text=f"Transcription error: {str(e)}", fg="red")
             self.show_message("error", "Transcription Error", str(e))
+
+    def batch_transcribe(self):
+        """Transcribe multiple audio files from a selected directory."""
+        # Bring window to front before showing dialog
+        self.root.lift()
+        self.root.attributes('-topmost', True)
+        self.root.update()
+        
+        directory = filedialog.askdirectory(
+            title="Select Directory with Audio Files",
+            parent=self.root
+        )
+        
+        if not directory:
+            return
+            
+        # Ensure session directory exists
+        if not self.session_dir:
+            self.create_new_session()
+            
+        try:
+            # Find all audio files in the directory
+            audio_extensions = ['.wav', '.mp3', '.m4a', '.flac', '.ogg', '.aac']
+            audio_files = []
+            
+            for ext in audio_extensions:
+                audio_files.extend(Path(directory).glob(f"*{ext}"))
+                audio_files.extend(Path(directory).glob(f"*{ext.upper()}"))
+            
+            if not audio_files:
+                self.show_message("warning", "No Audio Files", "No audio files found in the selected directory.")
+                return
+            
+            # Ask user for confirmation
+            confirmed = self.show_message("yesno", "Batch Transcription", 
+                                        f"Found {len(audio_files)} audio files.\n\nProceed with batch transcription?\n\nThis may take several minutes...")
+            
+            if not confirmed:
+                return
+            
+            # Create batch transcription directory
+            batch_timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            batch_dir = f"{self.session_dir}/text/batch_transcription_{batch_timestamp}"
+            Path(batch_dir).mkdir(exist_ok=True)
+            
+            # Initialize recognizer
+            r = sr.Recognizer()
+            
+            # Process each file
+            successful = 0
+            failed = 0
+            results_summary = []
+            
+            for i, audio_file in enumerate(audio_files):
+                try:
+                    # Update status
+                    progress = f"({i+1}/{len(audio_files)})"
+                    filename = os.path.basename(audio_file)
+                    self.status_label.config(text=f"Transcribing {progress}: {filename}", fg="orange")
+                    self.root.update()
+                    
+                    # Transcribe the file
+                    with sr.AudioFile(str(audio_file)) as source:
+                        audio = r.record(source)
+                    
+                    # Try multiple languages
+                    languages = ["pt-BR", "en-US", "es-ES"]
+                    text = None
+                    detected_lang = None
+                    
+                    for lang in languages:
+                        try:
+                            text = r.recognize_google(audio, language=lang)
+                            detected_lang = lang
+                            break
+                        except sr.UnknownValueError:
+                            continue
+                    
+                    if text:
+                        # Save transcription
+                        base_name = os.path.splitext(filename)[0]
+                        output_file = f"{batch_dir}/{base_name}_transcription.txt"
+                        
+                        with open(output_file, 'w', encoding='utf-8') as f:
+                            f.write(f"Original file: {filename}\n")
+                            f.write(f"Detected language: {detected_lang}\n")
+                            f.write(f"Transcription date: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                            f.write("-" * 50 + "\n\n")
+                            f.write(text)
+                        
+                        successful += 1
+                        results_summary.append(f"✅ {filename} -> {base_name}_transcription.txt")
+                    else:
+                        failed += 1
+                        results_summary.append(f"❌ {filename} -> Could not understand audio")
+                        
+                except Exception as e:
+                    failed += 1
+                    results_summary.append(f"❌ {filename} -> Error: {str(e)}")
+            
+            # Create summary report
+            summary_content = f"""Batch Transcription Report
+Generated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+Source Directory: {directory}
+Output Directory: {batch_dir}
+
+Summary:
+- Total files processed: {len(audio_files)}
+- Successful transcriptions: {successful}
+- Failed transcriptions: {failed}
+
+Results:
+{chr(10).join(results_summary)}
+
+Files saved in: {batch_dir}
+"""
+            
+            # Save summary
+            summary_file = f"{batch_dir}/batch_summary.txt"
+            with open(summary_file, 'w', encoding='utf-8') as f:
+                f.write(summary_content)
+            
+            # Update status and show results
+            self.status_label.config(text=f"Batch completed: {successful} success, {failed} failed", fg="green")
+            
+            # Show summary in text display
+            self.text_display.delete("1.0", tk.END)
+            self.text_display.insert(tk.END, summary_content)
+            
+            self.show_message("info", "Batch Transcription Complete", 
+                            f"Batch transcription completed!\n\n"
+                            f"✅ Successful: {successful}\n"
+                            f"❌ Failed: {failed}\n\n"
+                            f"Files saved in:\n{batch_dir}")
+            
+        except Exception as e:
+            self.status_label.config(text=f"Batch transcription error: {str(e)}", fg="red")
+            self.show_message("error", "Batch Transcription Error", f"Failed to process batch transcription:\n{str(e)}")
 
     def generate_music(self):
         """Generate Python music code based on the transcription file."""
