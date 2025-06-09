@@ -3,9 +3,10 @@
 cube2d_kinematics.py
 ===============================================================================
 Author: Prof. Dr. Paulo Roberto Pereira Santiago
-Date: 2025-01-16
-Version: 0.0.1
-Python Version: 3.12.8
+created: 2025-01-16
+updated: 2025-06-09
+version: 0.0.3
+python version: 3.12.9
 
 Description:
 This module provides functionality for analyzing 2D kinematics data from cube-based movement assessments.
@@ -74,17 +75,22 @@ import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from matplotlib.colors import LinearSegmentedColormap, Normalize
-import seaborn as sns
+from matplotlib.colors import Normalize
 from tkinter import (
     Tk,
     filedialog,
     messagebox,
-    StringVar,
-    Label,
-    Entry,
-    Button,
     simpledialog,
+    Toplevel,
+    Text,
+    Scrollbar,
+    Frame,
+    Button,
+    WORD,
+    RIGHT,
+    Y,
+    BOTH,
+    END
 )
 from datetime import datetime
 from scipy.signal import butter, filtfilt
@@ -119,6 +125,150 @@ column_names = [
 ]
 
 
+def show_instructions():
+    """
+    Display a comprehensive instruction window before file selection.
+    """
+    root = Tk()
+    root.withdraw()  # Hide the main window
+    
+    # Create instruction window
+    instruction_window = Toplevel(root)
+    instruction_window.title("CUBE 2D Kinematics Analysis - Instructions")
+    instruction_window.geometry("700x600")
+    instruction_window.grab_set()  # Make it modal
+    
+    # Create scrollable text widget
+    frame = Frame(instruction_window)
+    frame.pack(fill=BOTH, expand=True, padx=10, pady=10)
+    
+    scrollbar = Scrollbar(frame)
+    scrollbar.pack(side=RIGHT, fill=Y)
+    
+    text_widget = Text(frame, wrap=WORD, yscrollcommand=scrollbar.set, font=("Arial", 11))
+    text_widget.pack(side="left", fill=BOTH, expand=True)
+    scrollbar.config(command=text_widget.yview)
+    
+    instructions = """
+CUBE 2D KINEMATICS ANALYSIS - SETUP INSTRUCTIONS
+
+This tool analyzes 2D (meters) movement patterns in a cube/grid environment. Please follow these steps:
+
+═══════════════════════════════════════════════════════════════════════════════════
+
+1. PREPARE YOUR DATA FILES
+
+   Required Files:
+   • CSV files containing position data in meters
+   • All CSV files should be in the same directory
+   • Files must have consistent sampling frequency
+
+   CSV File Format (SIMPLIFIED):
+   • Any header row (will be ignored)
+   • Exactly 3 columns minimum:
+     - Column 0: Any data (frame, time, etc.) - will be ignored
+     - Column 1: X coordinates in meters (medio-lateral)
+     - Column 2: Y coordinates in meters (antero-posterior)
+   • Coordinates relative to center origin (0,0)
+
+   Example CSV content:
+   frame,x,y
+   0,0.656807,0.194554
+   1,0.582177,0.299958
+   2,0.560044,0.310084
+   ...
+
+   OR:
+
+   time,p33_x,p33_y
+   0.0,0.656807,0.194554
+   0.033,0.582177,0.299958
+   0.066,0.560044,0.310084
+   ...
+
+   The system will ALWAYS use:
+   • Column 1 as X coordinates
+   • Column 2 as Y coordinates
+   • Header names are ignored
+
+═══════════════════════════════════════════════════════════════════════════════════
+
+2. OUTPUT FILES GENERATED
+
+   For each input file, the system creates:
+   • Movement pathway plot (PNG)
+   • Individual results CSV (database-ready)
+   • Summary text file (human-readable)
+   • Consolidated database CSV (all results combined)
+
+   Database CSV Format:
+   - file_name: Input file name
+   - analysis_date: Processing date
+   - analysis_time: Processing time
+   - sampling_frequency_hz: Sampling rate
+   - total_distance_m: Total distance traveled
+   - average_speed_ms: Average movement speed
+   - maximum_speed_ms: Peak speed
+   - time_stationary_s: Time below 0.05 m/s
+   - total_time_s: Total recording time
+   - movement_percentage: Percentage of time moving
+   - data_points: Number of data samples
+
+═══════════════════════════════════════════════════════════════════════════════════
+
+3. QUADRANTS FILE (OPTIONAL)
+
+   • Text file defining the 9-quadrant grid layout
+   • If not provided, default 3x3 grid will be used
+   • Default quadrants cover a 1.5m x 1.5m area centered at origin
+
+═══════════════════════════════════════════════════════════════════════════════════
+
+4. PROCESSING DETAILS
+
+   The analysis will:
+   • Apply low-pass filtering (6 Hz cutoff) to smooth trajectories
+   • Calculate comprehensive kinematic metrics
+   • Generate pathway visualization with time-based color gradient
+   • Create database-ready CSV files for easy analysis
+   • Provide both individual and consolidated results
+
+═══════════════════════════════════════════════════════════════════════════════════
+
+CLICK 'CONTINUE' TO START FILE SELECTION
+"""
+    
+    text_widget.insert("1.0", instructions)
+    text_widget.config(state="disabled")  # Make text read-only
+    
+    # Add continue button
+    button_frame = Frame(instruction_window)
+    button_frame.pack(pady=10)
+    
+    continue_clicked = [False]  # Use list to allow modification in nested function
+    
+    def on_continue():
+        continue_clicked[0] = True
+        instruction_window.destroy()
+        root.quit()
+    
+    continue_button = Button(button_frame, text="CONTINUE", command=on_continue, 
+                           bg="#4CAF50", fg="white", font=("Arial", 12, "bold"),
+                           padx=20, pady=10)
+    continue_button.pack()
+    
+    # Center the window
+    instruction_window.update_idletasks()
+    x = (instruction_window.winfo_screenwidth() // 2) - (instruction_window.winfo_width() // 2)
+    y = (instruction_window.winfo_screenheight() // 2) - (instruction_window.winfo_height() // 2)
+    instruction_window.geometry(f"+{x}+{y}")
+    
+    root.mainloop()
+    root.destroy()
+    
+    return continue_clicked[0]
+
+
 def load_quadrants(file_path=None):
     """
     Load quadrants from a file or return default quadrants as a pandas DataFrame.
@@ -143,8 +293,8 @@ def load_quadrants(file_path=None):
 
 def load_data(input_file):
     """
-    Loads the input file, processes the columns for X and Y coordinates,
-    and computes their mean if there are multiple X and Y columns.
+    Loads the input file using column positions: column 1 = X, column 2 = Y.
+    Column 0 can be frame, time, or any other data.
 
     Args:
         input_file (str): Path to the input CSV file.
@@ -152,21 +302,26 @@ def load_data(input_file):
     Returns:
         tuple: Tuple containing arrays for X and Y coordinates.
     """
-    # Load the data, skipping the header
-    data = np.genfromtxt(input_file, delimiter=",", skip_header=1)
+    try:
+        # Load the data, skipping the header
+        data = np.genfromtxt(input_file, delimiter=",", skip_header=1)
 
-    # Exclude the first column (time/frame)
-    data = data[:, 1:]
+        # Handle single column case
+        if data.ndim == 1:
+            raise ValueError("File must contain at least 3 columns (any, X, Y)")
+        
+        # Check if we have at least 3 columns
+        if data.shape[1] < 3:
+            raise ValueError("File must contain at least 3 columns (any, X, Y)")
+        
+        # Always use column 1 as X and column 2 as Y
+        x = data[:, 1]  # Column 1 = X coordinates
+        y = data[:, 2]  # Column 2 = Y coordinates
 
-    # Separate X and Y columns (odd columns for X, even columns for Y)
-    x = data[:, ::2]  # Columns at indices 1, 3, 5, ...
-    y = data[:, 1::2]  # Columns at indices 2, 4, 6, ...
-
-    # Compute the mean along the rows if there are multiple columns
-    x_mean = np.mean(x, axis=1) if x.shape[1] > 1 else x.flatten()
-    y_mean = np.mean(y, axis=1) if y.shape[1] > 1 else y.flatten()
-
-    return x_mean, y_mean
+        return x, y
+        
+    except Exception as e:
+        raise ValueError(f"Error loading data from {input_file}: {e}")
 
 
 def butter_lowpass_filter(data, cutoff, fs, order=4, padding=True):
@@ -216,11 +371,13 @@ def butter_lowpass_filter(data, cutoff, fs, order=4, padding=True):
 
 
 def calculate_distance(x, y):
+    """Calculate instantaneous distance between consecutive points."""
     distance = np.insert(np.sqrt(np.diff(x) ** 2 + np.diff(y) ** 2), 0, 0)
     return distance
 
 
 def calculate_speed(distance, fs):
+    """Calculate instantaneous speed from distance and sampling frequency."""
     return distance * fs
 
 
@@ -228,11 +385,11 @@ def plot_pathway_with_quadrants(x, y, quadrants_df, time_vector):
     """Plot pathway with time-based color gradient and quadrants."""
 
     # Plot the quadrants and pathway
-    fig, ax = plt.subplots(figsize=(8, 8))
+    fig, ax = plt.subplots(figsize=(10, 10))
 
-    # Para cada quadrante no DataFrame
+    # Draw each quadrant
     for _, quad in quadrants_df.iterrows():
-        # Extrair os vértices
+        # Extract vertices
         vertices_x = [
             quad["vertex1_x"],
             quad["vertex2_x"],
@@ -248,147 +405,182 @@ def plot_pathway_with_quadrants(x, y, quadrants_df, time_vector):
             quad["vertex1_y"],
         ]
 
-        # Desenhar o quadrante
-        ax.plot(vertices_x, vertices_y, color="gray", linewidth=2)
+        # Draw quadrant boundaries
+        ax.plot(vertices_x, vertices_y, color="gray", linewidth=2, alpha=0.7)
 
-        # Calcular o centro do quadrante para o número
-        center_x = np.mean(vertices_x[:-1])  # Exclui o último ponto que é repetido
+        # Calculate quadrant center for numbering
+        center_x = np.mean(vertices_x[:-1])  # Exclude repeated last point
         center_y = np.mean(vertices_y[:-1])
 
-        # Ajustar a posição do número do quadrante 1
+        # Adjust position for quadrant 1 text
         if int(quad["quadrant"]) == 1:
-            center_y -= (
-                0.25  # Ajusta a posição do texto para baixo apenas para o quadrante 1
-            )
+            center_y -= 0.25
 
-        # Adicionar o número do quadrante
+        # Add quadrant number
         ax.text(
             float(center_x),
             float(center_y),
             str(int(quad["quadrant"])),
             ha="center",
             va="center",
-            fontsize=10,
-            bbox=dict(boxstyle="circle", facecolor="white"),
+            fontsize=12,
+            fontweight="bold",
+            bbox=dict(boxstyle="circle", facecolor="white", alpha=0.8),
         )
 
-    # Criar o gradiente de cores para o caminho
+    # Create color gradient for pathway
     points = np.array([x, y]).T.reshape(-1, 1, 2)
     segments = np.concatenate([points[:-1], points[1:]], axis=1)
     norm = Normalize(0, 1)
     lc = LineCollection(segments.tolist(), cmap="plasma", norm=norm)
     lc.set_array(np.linspace(0, 1, len(time_vector)))
-    lc.set_linewidth(2)
+    lc.set_linewidth(3)
     line = ax.add_collection(lc)
 
-    # Plot first point as a green dot
-    ax.scatter(x[0], y[0], color="green", s=100, zorder=5)
+    # Plot start point (green) and end point (red)
+    ax.scatter(x[0], y[0], color="green", s=150, zorder=5, 
+              label="Start", edgecolors="black", linewidth=2)
+    ax.scatter(x[-1], y[-1], color="red", s=150, zorder=5, 
+              label="End", edgecolors="black", linewidth=2)
 
-    # Plot last point as a red dot
-    ax.scatter(x[-1], y[-1], color="red", s=100, zorder=5)
-
-    # Adicionar barra de cores
-    cbar = plt.colorbar(line, ax=ax, orientation="vertical")
-    cbar.set_label("Time (s)")
+    # Add colorbar
+    cbar = plt.colorbar(line, ax=ax, orientation="vertical", shrink=0.8)
+    cbar.set_label("Time (s)", fontsize=12)
     cbar.set_ticks([0, 1])
     cbar.set_ticklabels([f"{time_vector[0]:.2f}", f"{time_vector[-1]:.2f}"])
 
-    # Configurações do gráfico
-    ax.set_title("CUBE 2D Pathway with Time-Based Color Gradient", fontsize=14)
-    ax.set_xlabel("X - Medio-lateral (m)")
-    ax.set_ylabel("Y - Antero-posterior (m)")
-    ax.axhline(0, color="black", linewidth=0.8)
-    ax.axvline(0, color="black", linewidth=0.8)
+    # Configure plot
+    ax.set_title("CUBE 2D Pathway with Time-Based Color Gradient", fontsize=16, fontweight="bold")
+    ax.set_xlabel("X - Medio-lateral (m)", fontsize=12)
+    ax.set_ylabel("Y - Antero-posterior (m)", fontsize=12)
+    ax.axhline(0, color="black", linewidth=1, alpha=0.5)
+    ax.axvline(0, color="black", linewidth=1, alpha=0.5)
     ax.set_aspect("equal", "box")
+    ax.legend()
+    ax.grid(True, alpha=0.3)
 
     return fig
 
 
-def process_all_files(file_paths, quadrants, output_dir):
-    # Solicitar fs uma vez no início
-    fs = None
-    while fs is None:
-        try:
-            fs_value = input("Enter the sampling frequency (fs) for all files: ")
-            fs = float(fs_value)
-            if fs <= 0:
-                raise ValueError("Sampling frequency must be positive")
-        except ValueError as e:
-            print(f"Invalid input: {e}. Please enter a valid positive number.")
-
-    for file_path in file_paths:
-        base_name = os.path.splitext(os.path.basename(file_path))[0]
-        process_file(file_path, quadrants, output_dir, fs, base_name)
-
-
 def process_file(file_path, quadrants_df, output_dir, fs, base_name):
-    # Process the file with the selected fs
-    x, y = load_data(file_path)
-    x = butter_lowpass_filter(x, 6, fs)
-    y = butter_lowpass_filter(y, 6, fs)
+    """Process a single file and generate results."""
+    try:
+        # Load and filter data
+        x, y = load_data(file_path)
+        x = butter_lowpass_filter(x, 6, fs)
+        y = butter_lowpass_filter(y, 6, fs)
 
-    # Calculate metrics
-    distance = calculate_distance(x, y)
-    speed = calculate_speed(distance, fs)
-    total_distance = np.sum(distance)
-    avg_speed = np.mean(speed)
-    time_stationary = np.sum(speed < 0.05) / fs  # Time below 0.05 m/s
-    total_time = len(x) / fs  # Total time in seconds
+        # Calculate metrics
+        distance = calculate_distance(x, y)
+        speed = calculate_speed(distance, fs)
+        total_distance = np.sum(distance)
+        avg_speed = np.mean(speed)
+        max_speed = np.max(speed)
+        time_stationary = np.sum(speed < 0.05) / fs  # Time below 0.05 m/s
+        total_time = len(x) / fs  # Total time in seconds
+        movement_percentage = ((total_time - time_stationary) / total_time * 100)
 
-    # Create a time vector
-    time_vector = np.linspace(0, (len(x) - 1) / fs, len(x))
+        # Create time vector
+        time_vector = np.linspace(0, (len(x) - 1) / fs, len(x))
 
-    # Plot and save pathway with quadrants
-    plt.figure(figsize=(8, 8))
-    plot_pathway_with_quadrants(x, y, quadrants_df, time_vector)
-    plt.savefig(os.path.join(output_dir, f"{base_name}_cube2d_result.png"))
-    plt.close()
+        # Plot and save pathway with quadrants
+        fig = plot_pathway_with_quadrants(x, y, quadrants_df, time_vector)
+        plt.savefig(os.path.join(output_dir, f"{base_name}_cube2d_result.png"), 
+                   dpi=300, bbox_inches='tight')
+        plt.close(fig)
 
-    # Save metrics to text file
-    with open(os.path.join(output_dir, f"{base_name}_cube2d_result.txt"), "w") as f:
-        f.write(f"Total distance: {total_distance:.2f} m\n")
-        f.write(f"Average speed: {avg_speed:.2f} m/s\n")
-        f.write(f"Time stationary: {time_stationary:.2f} s\n")
-        f.write(f"Total time: {total_time:.2f} s\n")
+        # Save metrics to CSV file (database-friendly format)
+        results_csv = os.path.join(output_dir, f"{base_name}_cube2d_results.csv")
+        results_data = {
+            'file_name': [base_name],
+            'analysis_date': [datetime.now().strftime('%Y-%m-%d')],
+            'analysis_time': [datetime.now().strftime('%H:%M:%S')],
+            'sampling_frequency_hz': [fs],
+            'total_distance_m': [round(total_distance, 3)],
+            'average_speed_ms': [round(avg_speed, 3)],
+            'maximum_speed_ms': [round(max_speed, 3)],
+            'time_stationary_s': [round(time_stationary, 3)],
+            'total_time_s': [round(total_time, 3)],
+            'movement_percentage': [round(movement_percentage, 1)],
+            'data_points': [len(x)]
+        }
+        
+        results_df = pd.DataFrame(results_data)
+        results_df.to_csv(results_csv, index=False)
+
+        # Also save detailed text file for human reading
+        with open(os.path.join(output_dir, f"{base_name}_cube2d_summary.txt"), "w") as f:
+            f.write("CUBE 2D KINEMATICS ANALYSIS RESULTS\n")
+            f.write("="*50 + "\n")
+            f.write(f"File: {base_name}\n")
+            f.write(f"Analysis date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"Sampling frequency: {fs} Hz\n")
+            f.write(f"Data points: {len(x)}\n\n")
+            f.write("KINEMATIC METRICS:\n")
+            f.write(f"Total distance: {total_distance:.3f} m\n")
+            f.write(f"Average speed: {avg_speed:.3f} m/s\n")
+            f.write(f"Maximum speed: {max_speed:.3f} m/s\n")
+            f.write(f"Time stationary: {time_stationary:.3f} s\n")
+            f.write(f"Total time: {total_time:.3f} s\n")
+            f.write(f"Movement percentage: {movement_percentage:.1f}%\n")
+
+        return True
+        
+    except Exception as e:
+        print(f"Error processing file {file_path}: {e}")
+        return False
 
 
 def run_cube2d_kinematics():
-    # Inicializar a interface Tkinter
-    root = Tk()
-    root.withdraw()  # Ocultar a janela principal
+    """Main function to run the CUBE 2D kinematics analysis."""
+    
+    # Show instructions first
+    if not show_instructions():
+        print("Analysis cancelled by user.")
+        return
 
-    # Print the directory and name of the script being executed
+    # Initialize Tkinter interface
+    root = Tk()
+    root.withdraw()  # Hide main window
+
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
-
     print("Starting CUBE 2D Kinematics analysis...")
 
-    # Solicitar o diretório de dados
-    data_dir = filedialog.askdirectory(title="Select the Data Directory")
+    # Select data directory
+    data_dir = filedialog.askdirectory(title="Select the Data Directory (containing CSV files)")
     if not data_dir:
         print("No data directory selected. Exiting.")
         return
 
-    # Solicitar o arquivo de quadrantes
-    quadrants_file = filedialog.askopenfilename(
-        title="Select the Quadrants File", filetypes=[("Text files", "*.txt")]
-    )
-    if not quadrants_file:
-        print("No quadrants file selected. Exiting.")
+    # Count CSV files
+    csv_files = [f for f in os.listdir(data_dir) if f.endswith(".csv")]
+    if not csv_files:
+        messagebox.showerror("Error", "No CSV files found in the selected directory!")
         return
+    
+    print(f"Found {len(csv_files)} CSV files to process.")
 
-    # Solicitar o diretório de saída
+    # Select quadrants file (optional)
+    quadrants_file = filedialog.askopenfilename(
+        title="Select the Quadrants File (optional - cancel for default)",
+        filetypes=[("Text files", "*.txt"), ("All files", "*.*")]
+    )
+
+    # Select output directory
     output_dir = filedialog.askdirectory(title="Select the Output Directory")
     if not output_dir:
         print("No output directory selected. Exiting.")
         return
 
-    # Solicitar fs uma vez no início usando um diálogo
+    # Get sampling frequency
     fs = None
     while fs is None:
         try:
             fs_value = simpledialog.askstring(
-                "Input", "Enter the sampling frequency (fs) for all files:"
+                "Sampling Frequency",
+                f"Enter the sampling frequency (fs) in Hz for all {len(csv_files)} files:\n\n"
+                "Common values: 30, 60, 100, 120, 250 Hz"
             )
             if fs_value is None:
                 print("No sampling frequency entered. Exiting.")
@@ -397,42 +589,89 @@ def run_cube2d_kinematics():
             if fs <= 0:
                 raise ValueError("Sampling frequency must be positive")
         except ValueError as e:
-            print(f"Invalid input: {e}. Please enter a valid positive number.")
+            messagebox.showerror("Invalid Input", 
+                               f"Error: {e}\nPlease enter a valid positive number.")
 
-    # Carregar quadrantes
+    # Load quadrants
     quadrants_df = load_quadrants(quadrants_file)
+    print(f"Using {'custom' if quadrants_file else 'default'} quadrants configuration.")
 
-    # Criar diretório base com timestamp
+    # Create base output directory with timestamp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     base_output_dir = os.path.join(output_dir, f"vaila_cube2d_{timestamp}")
     os.makedirs(base_output_dir, exist_ok=True)
 
-    # Processar todos os arquivos no diretório de dados
+    # Process all CSV files
     files_processed = 0
-    for file_name in os.listdir(data_dir):
-        if file_name.endswith(".csv"):
-            file_path = os.path.join(data_dir, file_name)
-            # Remover a extensão .csv do nome do arquivo
-            base_name = os.path.splitext(file_name)[0]
+    files_failed = 0
+    all_results = []  # Store all results for consolidated database
+    
+    for file_name in csv_files:
+        file_path = os.path.join(data_dir, file_name)
+        base_name = os.path.splitext(file_name)[0]
 
-            # Criar subdiretório para cada arquivo com timestamp
-            file_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            file_output_dir = os.path.join(
-                base_output_dir, f"{base_name}_cube2d_{file_timestamp}"
-            )
-            os.makedirs(file_output_dir, exist_ok=True)
+        # Create subdirectory for each file
+        file_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        file_output_dir = os.path.join(
+            base_output_dir, f"{base_name}_cube2d_{file_timestamp}"
+        )
+        os.makedirs(file_output_dir, exist_ok=True)
 
-            # Processar o arquivo com os novos nomes para os arquivos de resultado
-            process_file(file_path, quadrants_df, file_output_dir, fs, base_name)
+        # Process file
+        print(f"Processing: {file_name}")
+        if process_file(file_path, quadrants_df, file_output_dir, fs, base_name):
             files_processed += 1
+            
+            # Collect data for consolidated database
+            try:
+                x, y = load_data(file_path)
+                x = butter_lowpass_filter(x, 6, fs)
+                y = butter_lowpass_filter(y, 6, fs)
+                
+                distance = calculate_distance(x, y)
+                speed = calculate_speed(distance, fs)
+                total_distance = np.sum(distance)
+                avg_speed = np.mean(speed)
+                max_speed = np.max(speed)
+                time_stationary = np.sum(speed < 0.05) / fs
+                total_time = len(x) / fs
+                movement_percentage = ((total_time - time_stationary) / total_time * 100)
+                
+                all_results.append({
+                    'file_name': base_name,
+                    'analysis_date': datetime.now().strftime('%Y-%m-%d'),
+                    'analysis_time': datetime.now().strftime('%H:%M:%S'),
+                    'sampling_frequency_hz': fs,
+                    'total_distance_m': round(total_distance, 3),
+                    'average_speed_ms': round(avg_speed, 3),
+                    'maximum_speed_ms': round(max_speed, 3),
+                    'time_stationary_s': round(time_stationary, 3),
+                    'total_time_s': round(total_time, 3),
+                    'movement_percentage': round(movement_percentage, 1),
+                    'data_points': len(x)
+                })
+            except Exception as e:
+                print(f"Error collecting data for consolidated database: {e}")
+        else:
+            files_failed += 1
 
-    # Mostrar mensagem de conclusão
-    messagebox.showinfo(
-        "Processing Complete",
-        f"Analysis completed successfully!\n\n"
-        f"Files processed: {files_processed}\n"
-        f"Output directory: {base_output_dir}",
-    )
+    # Create consolidated database CSV
+    if all_results:
+        consolidated_df = pd.DataFrame(all_results)
+        consolidated_csv = os.path.join(base_output_dir, "consolidated_cube2d_database.csv")
+        consolidated_df.to_csv(consolidated_csv, index=False)
+        print(f"Consolidated database saved: {consolidated_csv}")
+
+    # Show completion message
+    message = f"Analysis completed!\n\n"
+    message += f"Files processed successfully: {files_processed}\n"
+    if files_failed > 0:
+        message += f"Files failed: {files_failed}\n"
+    message += f"\nOutput directory:\n{base_output_dir}\n\n"
+    message += f"Database file: consolidated_cube2d_database.csv"
+    
+    messagebox.showinfo("Processing Complete", message)
+    print(f"Analysis complete. Results saved to: {base_output_dir}")
 
 
 if __name__ == "__main__":
