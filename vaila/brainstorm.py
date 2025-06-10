@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 18 February 2025
-Update Date: 3 June 2025
-Version: 0.2.0
+Update Date: 18 February 2025
+Version: 0.3.1
 
 Description:
     Record voice audio, transcribe it to text, and use LLM to generate:
@@ -83,6 +83,19 @@ try:
 except ImportError:
     GTTS_AVAILABLE = False
 
+# Optional imports for audio conversion (fallbacks)
+try:
+    import librosa
+    LIBROSA_AVAILABLE = True
+except ImportError:
+    LIBROSA_AVAILABLE = False
+
+try:
+    from pydub import AudioSegment
+    PYDUB_AVAILABLE = True
+except ImportError:
+    PYDUB_AVAILABLE = False
+
 # Global variables
 AUDIO_FILE = "audio.wav"
 TRANSCRIBED_TEXT = ""
@@ -91,15 +104,14 @@ OUTPUT_DIR = "brainstorm_outputs"
 class BrainstormApp:
     def __init__(self):
         self.root = tk.Tk()
-        self.output_dir = OUTPUT_DIR  # Add instance variable for output directory
-        self.transcription_file = None  # Store path to current transcription file
-        self.session_dir = None  # Current session directory
+        self.output_dir = OUTPUT_DIR
+        self.transcription_file = None
+        self.session_dir = None
         self.setup_ui()
-        # Don't create directories automatically - only when user selects location
         
     def show_message(self, msg_type, title, message):
         """Show message box always on top of the main window."""
-        self.root.lift()  # Bring main window to front first
+        self.root.lift()
         self.root.attributes('-topmost', True)
         
         if msg_type == "info":
@@ -114,12 +126,89 @@ class BrainstormApp:
         self.root.focus_force()
         return result
         
+    def show_workflow_guide(self):
+        """Show a comprehensive workflow guide for users."""
+        guide_text = """BRAINSTORM WORKFLOW GUIDE - v0.3.1
+
+COMPLETE CREATIVE WORKFLOW:
+
+1. SETUP SESSION
+   • Click "Browse" to select base directory
+   • Click "New Session" to create organized folders
+   • All outputs will be saved in timestamped session
+
+2. AUDIO CAPTURE
+   • Record Audio: Captures voice (auto-converts to MP3)
+   • Load Audio: Import existing audio files
+   • Duration: Select 5-600 seconds recording time
+
+3. TRANSCRIPTION
+   • Transcribe: Convert single audio to text
+   • Batch Transcribe: Process multiple audio files
+   • Load Transcription: Import existing text files
+
+4. MUSIC GENERATION
+   • Generate Music Code: Creates Python/MIDI from text
+   • Batch Music Generation: Process multiple texts
+   • Execute Code: Run scripts to create MIDI files
+   • Generate MP3: Convert MIDI to MP3 (needs tools)
+
+5. CREATIVE OUTPUTS
+   • Generate Image: Create AI art prompts
+   • Creative Ideas: Get project suggestions
+   • Text to Audio: Convert text back to speech
+
+SESSION STRUCTURE:
+   brainstorm_YYYYMMDD_HHMMSS/
+   ├── audio/      (WAV, MP3 recordings)
+   ├── text/       (transcriptions, ideas)
+   ├── scripts/    (Python music code)
+   └── images/     (prompts, descriptions)
+
+MUSIC FEATURES:
+   • Mood detection (happy, sad, energetic, calm, etc.)
+   • Multi-track MIDI (melody, harmony, bass)
+   • Text-based rhythm and dynamics
+   • Automatic chord progressions
+   • Scale selection based on mood
+
+TIPS:
+   • Install FFmpeg for MP3 conversion
+   • Install MIDIUtil for music generation
+   • Use clear speech for better transcription
+   • Edit text before generating music
+   • Batch process for efficiency
+
+REQUIREMENTS:
+   • FFmpeg (MP3 conversion)
+   • FluidSynth/TiMidity (MIDI→MP3)
+   • MIDIUtil (music generation)
+   • Internet (transcription)
+
+SHORTCUTS:
+   • Record → Transcribe → Music → Export
+   • Batch: Select folder → Auto-process all
+   • Sessions keep everything organized!
+"""
+        
+        guide_window = tk.Toplevel(self.root)
+        guide_window.title("Brainstorm Workflow Guide")
+        guide_window.geometry("700x600")
+        guide_window.attributes('-topmost', True)
+        
+        text_widget = scrolledtext.ScrolledText(guide_window, wrap=tk.WORD, width=80, height=35)
+        text_widget.pack(padx=10, pady=10, fill="both", expand=True)
+        text_widget.insert("1.0", guide_text)
+        text_widget.config(state="disabled")
+        
+        tk.Button(guide_window, text="Close", command=guide_window.destroy,
+                 bg="#f44336", fg="white", font=("Arial", 10)).pack(pady=10)
+        
     def create_session_directory(self):
         """Create a new session directory with timestamp."""
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         self.session_dir = f"{self.output_dir}/brainstorm_{timestamp}"
         
-        # Create session directory and subdirectories
         Path(self.session_dir).mkdir(parents=True, exist_ok=True)
         Path(f"{self.session_dir}/audio").mkdir(exist_ok=True)
         Path(f"{self.session_dir}/scripts").mkdir(exist_ok=True)
@@ -135,14 +224,11 @@ class BrainstormApp:
         
     def setup_ui(self):
         """Setup the user interface."""
-        self.root.title("vailá Brainstorm - Voice to Creative AI")
+        self.root.title("vailá Brainstorm - Voice to AI Creative Assistant")
         self.root.geometry("1000x800")
-        
-        # Keep window always on top and focus
         self.root.attributes('-topmost', True)
         self.root.focus_force()
         
-        # Main frame with scrollbar
         main_frame = tk.Frame(self.root)
         main_frame.pack(fill="both", expand=True, padx=10, pady=10)
         
@@ -150,6 +236,12 @@ class BrainstormApp:
         header = tk.Label(main_frame, text="Brainstorm: Voice to AI Creative Assistant", 
                          font=("Arial", 16, "bold"))
         header.pack(pady=10)
+        
+        # Help button
+        help_frame = tk.Frame(main_frame)
+        help_frame.pack()
+        tk.Button(help_frame, text="Workflow Guide", command=self.show_workflow_guide,
+                 bg="#607D8B", fg="white", font=("Arial", 10)).pack()
         
         # Output directory selection section
         output_frame = tk.LabelFrame(main_frame, text="Output Directory", font=("Arial", 12, "bold"))
@@ -164,6 +256,13 @@ class BrainstormApp:
                                  relief="sunken", anchor="w", width=50)
         self.dir_label.pack(side="left", padx=5, fill="x", expand=True)
         
+        tk.Button(dir_selection_frame, text="Browse", command=self.choose_output_directory,
+                 bg="#607D8B", fg="white", font=("Arial", 9)).pack(side="right", padx=5)
+        tk.Button(dir_selection_frame, text="New Session", command=self.create_new_session,
+                 bg="#4CAF50", fg="white", font=("Arial", 9)).pack(side="right", padx=5)
+        tk.Button(dir_selection_frame, text="Reset", command=self.reset_output_directory,
+                 bg="#795548", fg="white", font=("Arial", 9)).pack(side="right")
+        
         # Session directory display
         session_frame = tk.Frame(output_frame)
         session_frame.pack(fill="x", pady=2)
@@ -174,32 +273,26 @@ class BrainstormApp:
                                     relief="sunken", anchor="w", width=50, fg="blue")
         self.session_label.pack(side="left", padx=5, fill="x", expand=True)
         
-        tk.Button(dir_selection_frame, text="Browse", command=self.choose_output_directory,
-                 bg="#607D8B", fg="white", font=("Arial", 9)).pack(side="right", padx=5)
-        tk.Button(dir_selection_frame, text="New Session", command=self.create_new_session,
-                 bg="#4CAF50", fg="white", font=("Arial", 9)).pack(side="right", padx=5)
-        tk.Button(dir_selection_frame, text="Reset", command=self.reset_output_directory,
-                 bg="#795548", fg="white", font=("Arial", 9)).pack(side="right")
-        
         # Audio section
         audio_frame = tk.LabelFrame(main_frame, text="1. Audio Recording", font=("Arial", 12, "bold"))
         audio_frame.pack(fill="x", pady=5)
-        
-        audio_buttons = tk.Frame(audio_frame)
-        audio_buttons.pack(pady=5)
-        
-        tk.Button(audio_buttons, text="Record Audio", command=self.record_audio,
-                 bg="#4CAF50", fg="white", font=("Arial", 10, "bold")).pack(side="left", padx=5)
         
         # Duration selection
         duration_frame = tk.Frame(audio_frame)
         duration_frame.pack(pady=2)
         
         tk.Label(duration_frame, text="Recording Duration (seconds):").pack(side="left")
-        self.duration_var = tk.StringVar(value="10")
-        duration_combo = ttk.Combobox(duration_frame, textvariable=self.duration_var, width=8, state="readonly")
-        duration_combo['values'] = ("5", "10", "15", "30", "60", "120", "300", "600")
-        duration_combo.pack(side="left", padx=5)
+        # Simplificar para usar apenas Entry, sem StringVar
+        self.duration_entry = tk.Entry(duration_frame, width=8)
+        self.duration_entry.insert(0, "10")  # Valor padrão inicial
+        self.duration_entry.pack(side="left", padx=5)
+        
+        # Audio buttons (remover o botão Set Duration)
+        audio_buttons = tk.Frame(audio_frame)
+        audio_buttons.pack(pady=5)
+        
+        tk.Button(audio_buttons, text="Record Audio", command=self.record_audio,
+                 bg="#4CAF50", fg="white", font=("Arial", 10, "bold")).pack(side="left", padx=5)
         tk.Button(audio_buttons, text="Transcribe", command=self.transcribe_audio,
                  bg="#2196F3", fg="white", font=("Arial", 10, "bold")).pack(side="left", padx=5)
         tk.Button(audio_buttons, text="Load Audio", command=self.load_audio,
@@ -242,6 +335,8 @@ class BrainstormApp:
                  bg="#E91E63", fg="white", font=("Arial", 10, "bold")).pack(side="left", padx=5)
         tk.Button(gen_buttons, text="Creative Ideas", command=self.generate_ideas,
                  bg="#FF5722", fg="white", font=("Arial", 10, "bold")).pack(side="left", padx=5)
+        tk.Button(gen_buttons, text="Batch Music Generation", command=self.batch_generate_music,
+                 bg="#00BCD4", fg="white", font=("Arial", 10, "bold")).pack(side="left", padx=5)
         
         # API Configuration
         api_frame = tk.Frame(gen_frame)
@@ -302,7 +397,6 @@ class BrainstormApp:
 
     def choose_output_directory(self):
         """Allow user to choose output directory."""
-        # Bring window to front before showing dialog
         self.root.lift()
         self.root.attributes('-topmost', True)
         self.root.update()
@@ -315,7 +409,7 @@ class BrainstormApp:
         if directory:
             self.output_dir = directory
             self.dir_var.set(directory)
-            self.session_dir = None  # Reset session directory
+            self.session_dir = None
             self.session_var.set("No session created")
             self.status_label.config(text=f"Base directory set to: {directory}", fg="blue")
             self.show_message("info", "Directory Selected", "Please click 'New Session' to start working.")
@@ -339,51 +433,93 @@ class BrainstormApp:
         self.session_var.set(session_name)
         self.status_label.config(text=f"New session created: {session_name}", fg="green")
         self.show_message("info", "Session Created", f"New session created:\n{session_path}")
-        
-        # Reset transcription file for new session
         self.transcription_file = None
 
     def record_audio(self):
         """Record audio for specified duration."""
-        # Ensure session directory exists
+        print("[DEBUG] Button clicked: Record Audio")
+        
         if not self.session_dir:
             self.create_new_session()
             
         try:
-            # Get duration from interface
+            # Ler diretamente do Entry e validar
             try:
-                duration = int(self.duration_var.get())
-            except:
-                duration = 10  # fallback
-                
+                duration = int(self.duration_entry.get())
+                if duration < 1 or duration > 600:
+                    raise ValueError("Duration must be between 1 and 600 seconds")
+                print(f"[DEBUG] Using duration from entry: {duration} seconds")
+            except ValueError:
+                duration = 10
+                self.status_label.config(text="Invalid duration. Using default (10s).", fg="red")
+                print(f"[DEBUG] Invalid duration, using default: {duration} seconds")
+            
             sample_rate = 44100
             self.status_label.config(text=f"Recording for {duration} seconds...", fg="red")
             self.root.update()
             
-            # Show countdown dialog
             self.show_message("info", "Recording", f"Click OK and start speaking!\nRecording for {duration} seconds...")
 
-            audio_data = sd.rec(int(duration * sample_rate), samplerate=sample_rate, channels=1)
+            print("[DEBUG] Starting audio recording...")
+            audio_data = sd.rec(int(duration * sample_rate), samplerate=sample_rate, channels=1, dtype='float32')
             sd.wait()
+            print("[DEBUG] Audio recording completed")
             
-            # Create timestamped filename using session directory
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             
             global AUDIO_FILE
-            AUDIO_FILE = f"{self.session_dir}/audio/audio_{timestamp}.wav"
+            wav_file = f"{self.session_dir}/audio/audio_{timestamp}.wav"
+            mp3_file = f"{self.session_dir}/audio/audio_{timestamp}.mp3"
             
-            sf.write(AUDIO_FILE, audio_data, sample_rate)
+            print(f"[DEBUG] Saving WAV file: {wav_file}")
             
-            self.status_label.config(text=f"Audio saved: {AUDIO_FILE}", fg="green")
-            self.show_message("info", "Success", f"Audio recorded and saved as '{AUDIO_FILE}'")
+            sf.write(wav_file, audio_data, sample_rate, subtype='PCM_16')
+            AUDIO_FILE = wav_file
+            
+            print(f"[DEBUG] WAV file saved successfully. Size: {os.path.getsize(wav_file)} bytes")
+            
+            mp3_created = False
+            print("[DEBUG] Attempting MP3 conversion...")
+            if self._convert_wav_to_mp3(wav_file, mp3_file):
+                mp3_created = True
+                print(f"[DEBUG] MP3 conversion successful: {mp3_file}")
+                self.status_label.config(text=f"Audio saved as MP3: {os.path.basename(mp3_file)}", fg="green")
+            else:
+                print("[DEBUG] MP3 conversion failed, keeping WAV")
+                self.status_label.config(text=f"Audio saved as WAV: {os.path.basename(wav_file)}", fg="green")
+            
+            if mp3_created:
+                self.show_message("info", "Success", f"Audio recorded and saved!\nWAV: {wav_file}\nMP3: {mp3_file}")
+            else:
+                self.show_message("info", "Success", f"Audio recorded and saved as WAV!\n{wav_file}\n\nNote: MP3 conversion requires FFmpeg")
+            
+            print(f"[DEBUG] Final AUDIO_FILE: {AUDIO_FILE}")
             
         except Exception as e:
+            print(f"[ERROR] Recording failed: {str(e)}")
             self.status_label.config(text=f"Error recording: {str(e)}", fg="red")
             self.show_message("error", "Recording Error", str(e))
 
+    def _convert_wav_to_mp3(self, wav_file, mp3_file):
+        """Convert WAV to MP3 using FFmpeg if available."""
+        try:
+            import subprocess
+            
+            result = subprocess.run(["ffmpeg", "-version"], 
+                                  capture_output=True, text=True, timeout=5)
+            if result.returncode != 0:
+                return False
+            
+            cmd = ["ffmpeg", "-i", wav_file, "-codec:a", "mp3", "-b:a", "192k", mp3_file, "-y"]
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            
+            return result.returncode == 0 and os.path.exists(mp3_file)
+            
+        except Exception:
+            return False
+
     def load_audio(self):
-        """Load an existing audio file."""
-        # Bring window to front before showing dialog
+        print("[DEBUG] Button clicked: Load Audio")
         self.root.lift()
         self.root.attributes('-topmost', True)
         self.root.update()
@@ -400,7 +536,6 @@ class BrainstormApp:
 
     def load_transcription(self):
         """Load an existing transcription file."""
-        # Bring window to front before showing dialog
         self.root.lift()
         self.root.attributes('-topmost', True)
         self.root.update()
@@ -425,7 +560,6 @@ class BrainstormApp:
 
     def save_transcription_edits(self):
         """Save edited text back to transcription file."""
-        # Ensure session directory exists
         if not self.session_dir:
             self.create_new_session()
             
@@ -435,7 +569,6 @@ class BrainstormApp:
             return
             
         if not self.transcription_file:
-            # Create new transcription file
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             self.transcription_file = f"{self.session_dir}/text/transcription_{timestamp}.txt"
         
@@ -449,7 +582,6 @@ class BrainstormApp:
 
     def text_to_audio(self):
         """Convert text to audio using TTS."""
-        # Ensure session directory exists
         if not self.session_dir:
             self.create_new_session()
             
@@ -462,23 +594,18 @@ class BrainstormApp:
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             audio_file = f"{self.session_dir}/audio/tts_audio_{timestamp}.wav"
             
-            # Try different TTS methods
             tts_success = False
+            method = ""
             
-            # Method 1: Try pyttsx3 (offline)
             if PYTTSX3_AVAILABLE and self._try_pyttsx3_tts(text, audio_file):
                 tts_success = True
                 method = "pyttsx3 (offline)"
-            else:
-                # Method 2: Try gTTS (online)
-                if GTTS_AVAILABLE and self._try_gtts_tts(text, audio_file):
-                    tts_success = True
-                    method = "Google TTS (online)"
-                else:
-                    # Method 3: Try Windows SAPI (Windows only)
-                    if self._try_windows_sapi_tts(text, audio_file):
-                        tts_success = True
-                        method = "Windows SAPI"
+            elif GTTS_AVAILABLE and self._try_gtts_tts(text, audio_file):
+                tts_success = True
+                method = "Google TTS (online)"
+            elif self._try_windows_sapi_tts(text, audio_file):
+                tts_success = True
+                method = "Windows SAPI"
             
             if tts_success:
                 self.status_label.config(text=f"TTS audio saved: {os.path.basename(audio_file)}", fg="green")
@@ -494,14 +621,12 @@ class BrainstormApp:
         try:
             engine = pyttsx3.init()
             
-            # Configure voice settings
             rate = engine.getProperty('rate')
-            engine.setProperty('rate', rate - 50)  # Slower speech
+            engine.setProperty('rate', rate - 50)
             
             volume = engine.getProperty('volume')
             engine.setProperty('volume', 0.9)
             
-            # Save to file
             engine.save_to_file(text, audio_file)
             engine.runAndWait()
             
@@ -513,7 +638,6 @@ class BrainstormApp:
     def _try_gtts_tts(self, text, audio_file):
         """Try Google TTS for conversion."""
         try:
-            # Detect language (simple heuristic)
             portuguese_words = ["o", "a", "de", "para", "com", "em", "um", "uma", "que", "do", "da"]
             spanish_words = ["el", "la", "de", "para", "con", "en", "un", "una", "que", "del", "de la"]
             
@@ -530,24 +654,20 @@ class BrainstormApp:
             
             tts = gTTS(text=text, lang=lang, slow=False)
             
-            # gTTS saves as MP3, so we need to convert or save with .mp3 extension
             mp3_file = audio_file.replace('.wav', '.mp3')
             tts.save(mp3_file)
             
-            # If we want WAV, convert using ffmpeg (if available)
             if os.path.exists(mp3_file):
                 try:
                     import subprocess
                     result = subprocess.run(["ffmpeg", "-i", mp3_file, audio_file, "-y"], 
                                           capture_output=True, timeout=10)
                     if result.returncode == 0:
-                        os.remove(mp3_file)  # Remove MP3 after conversion
+                        os.remove(mp3_file)
                         return True
                     else:
-                        # Keep MP3 if WAV conversion failed
                         return True
                 except:
-                    # Keep MP3 if ffmpeg not available
                     return True
             
             return False
@@ -561,7 +681,6 @@ class BrainstormApp:
             import subprocess
             import tempfile
             
-            # Create a VBS script to use Windows SAPI
             vbs_script = f"""
 Dim objVoice, objFile
 Set objVoice = CreateObject("SAPI.SpVoice")
@@ -596,61 +715,153 @@ Set objVoice = Nothing
 
     def transcribe_audio(self):
         """Transcribe the recorded audio and save to txt file."""
+        print("[DEBUG] Button clicked: Transcribe Audio")
+        
         if not os.path.exists(AUDIO_FILE):
+            print(f"[ERROR] Audio file not found: {AUDIO_FILE}")
             self.show_message("error", "Error", "No audio file found. Please record audio first.")
             return
-            
+        
+        print(f"[DEBUG] Transcribing audio file: {AUDIO_FILE}")
+        print(f"[DEBUG] File size: {os.path.getsize(AUDIO_FILE)} bytes")
+        
         try:
             r = sr.Recognizer()
+            
+            print("[DEBUG] Adjusting for ambient noise...")
+            
+            self.status_label.config(text="Processing audio file...", fg="orange")
+            self.root.update()
+            
+            try:
+                print("[DEBUG] Opening audio file...")
+                with sr.AudioFile(AUDIO_FILE) as source:
+                    print("[DEBUG] Audio file opened successfully")
+                    r.adjust_for_ambient_noise(source, duration=0.5)
+                    print("[DEBUG] Recording audio from file...")
+                    audio = r.record(source)
+                    print("[DEBUG] Audio recorded from file successfully")
+            except Exception as audio_error:
+                print(f"[ERROR] Failed to read audio file: {str(audio_error)}")
+                
+                print("[DEBUG] Attempting audio conversion...")
+                try:
+                    if LIBROSA_AVAILABLE:
+                        import librosa
+                        audio_data, sr_rate = librosa.load(AUDIO_FILE, sr=22050)
+                        
+                        temp_wav = AUDIO_FILE.replace('.wav', '_temp.wav').replace('.mp3', '_temp.wav')
+                        sf.write(temp_wav, audio_data, sr_rate, subtype='PCM_16')
+                        
+                        print(f"[DEBUG] Converted audio saved as: {temp_wav}")
+                        
+                        with sr.AudioFile(temp_wav) as source:
+                            r.adjust_for_ambient_noise(source, duration=0.5)
+                            audio = r.record(source)
+                            
+                        os.remove(temp_wav)
+                    else:
+                        raise ImportError("librosa not available")
+                        
+                except ImportError:
+                    print("[WARNING] librosa not available, trying pydub...")
+                    try:
+                        if PYDUB_AVAILABLE:
+                            from pydub import AudioSegment
+                            
+                            audio_segment = AudioSegment.from_file(AUDIO_FILE)
+                            audio_segment = audio_segment.set_frame_rate(22050).set_channels(1)
+                            
+                            temp_wav = AUDIO_FILE.replace('.wav', '_temp.wav').replace('.mp3', '_temp.wav')
+                            audio_segment.export(temp_wav, format="wav")
+                            
+                            print(f"[DEBUG] Converted audio with pydub: {temp_wav}")
+                            
+                            with sr.AudioFile(temp_wav) as source:
+                                r.adjust_for_ambient_noise(source, duration=0.5)
+                                audio = r.record(source)
+                                
+                            os.remove(temp_wav)
+                        else:
+                            raise ImportError("pydub not available")
+                            
+                    except ImportError:
+                        print("[ERROR] No audio conversion libraries available")
+                        print("[INFO] Install librosa or pydub for better audio format support:")
+                        print("[INFO] pip install librosa")
+                        print("[INFO] pip install pydub")
+                        raise audio_error
+            
             self.status_label.config(text="Transcribing...", fg="orange")
             self.root.update()
             
-            with sr.AudioFile(AUDIO_FILE) as source:
-                audio = r.record(source)
-            
-            # Try multiple languages
             languages = ["pt-BR", "en-US", "es-ES"]
             text = None
+            detected_lang = None
+            
+            print("[DEBUG] Attempting transcription with multiple languages...")
             
             for lang in languages:
                 try:
+                    print(f"[DEBUG] Trying language: {lang}")
                     text = r.recognize_google(audio, language=lang)
+                    detected_lang = lang
+                    print(f"[DEBUG] Success with language: {lang}")
+                    print(f"[DEBUG] Transcribed text: {text[:100]}...")
                     break
                 except sr.UnknownValueError:
+                    print(f"[DEBUG] Failed to understand audio in {lang}")
+                    continue
+                except sr.RequestError as e:
+                    print(f"[ERROR] Google API error with {lang}: {str(e)}")
                     continue
             
             if text:
                 global TRANSCRIBED_TEXT
                 TRANSCRIBED_TEXT = text
                 
-                # Save transcription to txt file
                 timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
                 
-                # Ensure session directory exists
                 if not self.session_dir:
                     self.create_new_session()
                 
                 self.transcription_file = f"{self.session_dir}/text/transcription_{timestamp}.txt"
                 
+                print(f"[DEBUG] Saving transcription to: {self.transcription_file}")
+                
                 with open(self.transcription_file, 'w', encoding='utf-8') as f:
+                    f.write(f"Original audio: {os.path.basename(AUDIO_FILE)}\n")
+                    f.write(f"Detected language: {detected_lang}\n")
+                    f.write(f"Transcription date: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                    f.write("-" * 50 + "\n\n")
                     f.write(text)
                 
-                # Display in interface
                 self.text_display.delete("1.0", tk.END)
                 self.text_display.insert(tk.END, text)
                 
-                self.status_label.config(text=f"Transcription saved: {self.transcription_file}", fg="green")
-                self.show_message("info", "Success", f"Audio transcribed and saved as:\n{self.transcription_file}")
+                self.status_label.config(text=f"Transcription completed! Language: {detected_lang}", fg="green")
+                self.show_message("info", "Success", f"Audio transcribed successfully!\n\nLanguage: {detected_lang}\nText saved to:\n{self.transcription_file}")
+                
+                print("[DEBUG] Transcription completed successfully")
             else:
-                raise sr.UnknownValueError("Could not understand audio in any language")
+                error_msg = "Could not understand audio in any language (PT-BR, EN-US, ES-ES)"
+                print(f"[ERROR] {error_msg}")
+                raise sr.UnknownValueError(error_msg)
                 
         except Exception as e:
-            self.status_label.config(text=f"Transcription error: {str(e)}", fg="red")
-            self.show_message("error", "Transcription Error", str(e))
+            error_detail = str(e)
+            print(f"[ERROR] Transcription failed: {error_detail}")
+            self.status_label.config(text=f"Transcription error: {error_detail}", fg="red")
+            self.show_message("error", "Transcription Error", 
+                             f"Failed to transcribe audio:\n\n{error_detail}\n\n"
+                             f"Suggestions:\n"
+                             f"• Check if the audio file is valid\n"
+                             f"• Try recording again\n"
+                             f"• Check internet connection\n"
+                             f"• Speak more clearly")
 
     def batch_transcribe(self):
-        """Transcribe multiple audio files from a selected directory."""
-        # Bring window to front before showing dialog
+        print("[DEBUG] Button clicked: Batch Transcribe")
         self.root.lift()
         self.root.attributes('-topmost', True)
         self.root.update()
@@ -687,10 +898,19 @@ Set objVoice = Nothing
             if not confirmed:
                 return
             
+            # Ask if user wants to generate music for each transcription
+            generate_music = self.show_message("yesno", "Generate Music", 
+                                             "Would you like to generate music code for each transcription?")
+            
             # Create batch transcription directory
             batch_timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             batch_dir = f"{self.session_dir}/text/batch_transcription_{batch_timestamp}"
             Path(batch_dir).mkdir(exist_ok=True)
+            
+            # Create music directory if needed
+            if generate_music:
+                music_dir = f"{self.session_dir}/scripts/batch_music_{batch_timestamp}"
+                Path(music_dir).mkdir(exist_ok=True)
             
             # Initialize recognizer
             r = sr.Recognizer()
@@ -738,14 +958,44 @@ Set objVoice = Nothing
                             f.write(text)
                         
                         successful += 1
-                        results_summary.append(f"✅ {filename} -> {base_name}_transcription.txt")
+                        results_summary.append(f"SUCCESS: {filename} -> {base_name}_transcription.txt")
+                        
+                        # Generate music if requested
+                        if generate_music:
+                            try:
+                                # Generate music code for this transcription
+                                music_code = self._generate_enhanced_music_code(text, filename)
+                                music_file = f"{music_dir}/{base_name}_music.py"
+                                
+                                with open(music_file, 'w', encoding='utf-8') as f:
+                                    f.write(music_code)
+                                
+                                results_summary.append(f"   Music code generated: {base_name}_music.py")
+                                
+                                # Try to execute the music code to generate MIDI
+                                try:
+                                    import subprocess
+                                    result = subprocess.run(["python", music_file], 
+                                                          capture_output=True, text=True, 
+                                                          cwd=music_dir,
+                                                          timeout=30)
+                                    
+                                    if result.returncode == 0:
+                                        results_summary.append(f"   MIDI file generated successfully")
+                                    else:
+                                        results_summary.append(f"   WARNING: MIDI generation failed: {result.stderr[:100]}")
+                                except Exception as midi_error:
+                                    results_summary.append(f"   WARNING: Could not execute music code: {str(midi_error)[:100]}")
+                                    
+                            except Exception as music_error:
+                                results_summary.append(f"   ERROR: Music generation failed: {str(music_error)[:100]}")
                     else:
                         failed += 1
-                        results_summary.append(f"❌ {filename} -> Could not understand audio")
+                        results_summary.append(f"FAILED: {filename} -> Could not understand audio")
                         
                 except Exception as e:
                     failed += 1
-                    results_summary.append(f"❌ {filename} -> Error: {str(e)}")
+                    results_summary.append(f"ERROR: {filename} -> Error: {str(e)}")
             
             # Create summary report
             summary_content = f"""Batch Transcription Report
@@ -778,8 +1028,8 @@ Files saved in: {batch_dir}
             
             self.show_message("info", "Batch Transcription Complete", 
                             f"Batch transcription completed!\n\n"
-                            f"✅ Successful: {successful}\n"
-                            f"❌ Failed: {failed}\n\n"
+                            f"Successful: {successful}\n"
+                            f"Failed: {failed}\n\n"
                             f"Files saved in:\n{batch_dir}")
             
         except Exception as e:
@@ -787,7 +1037,7 @@ Files saved in: {batch_dir}
             self.show_message("error", "Batch Transcription Error", f"Failed to process batch transcription:\n{str(e)}")
 
     def generate_music(self):
-        """Generate Python music code based on the transcription file."""
+        print("[DEBUG] Button clicked: Generate Music")
         # Try to get text from transcription file first, then from interface
         text = None
         if self.transcription_file and os.path.exists(self.transcription_file):
@@ -837,10 +1087,10 @@ Files saved in: {batch_dir}
 
     def _generate_music_local(self, text):
         """Generate music code locally (mock version)."""
-        code = self._generate_mock_music_code(text)
+        code = self._generate_enhanced_music_code(text, "interactive_session")
         self.music_display.delete("1.0", tk.END)
         self.music_display.insert(tk.END, code)
-        self.show_message("info", "Success", "Music code generated! (Local mock version)")
+        self.show_message("info", "Success", "Enhanced music code generated!")
 
     def _generate_mock_music_code(self, text):
         """Generate a mock music code based on text analysis."""
@@ -927,8 +1177,200 @@ print(f"MIDI file saved as: {{filename}}")
 print(f"Mood: {mood}, Scale: {scale}, Tempo: {tempo} BPM")
 '''
 
+    def _generate_enhanced_music_code(self, text, source_filename=""):
+        """Generate enhanced music code with more sophisticated analysis."""
+        import random
+        
+        # Enhanced mood and language analysis
+        mood_keywords = {
+            "happy": ["happy", "joy", "bright", "feliz", "alegre", "love", "amor", "smile", "festa", "celebration"],
+            "sad": ["sad", "melancholy", "dark", "triste", "melancolia", "cry", "choro", "saudade", "lonely"],
+            "energetic": ["energy", "fast", "dance", "energia", "rapido", "run", "correr", "move", "action", "festa"],
+            "calm": ["calm", "peace", "tranquil", "calma", "paz", "sereno", "quiet", "silencio", "relax"],
+            "mysterious": ["mystery", "strange", "dark", "misterio", "estranho", "unknown", "shadow", "sombra"],
+            "romantic": ["love", "amor", "heart", "coração", "romance", "passion", "paixão", "together", "juntos"]
+        }
+        
+        # Analyze text
+        text_lower = text.lower()
+        word_count = len(text.split())
+        
+        # Count mood matches
+        mood_scores = {}
+        for mood, keywords in mood_keywords.items():
+            score = sum(1 for keyword in keywords if keyword in text_lower)
+            mood_scores[mood] = score
+        
+        # Determine primary mood
+        primary_mood = max(mood_scores, key=mood_scores.get)
+        if mood_scores[primary_mood] == 0:
+            primary_mood = "neutral"
+        
+        # Musical parameters based on mood
+        mood_params = {
+            "happy": {"tempo": 120, "scale": "C major", "time_sig": 4, "dynamics": 100},
+            "sad": {"tempo": 60, "scale": "A minor", "time_sig": 3, "dynamics": 70},
+            "energetic": {"tempo": 140, "scale": "E major", "time_sig": 4, "dynamics": 110},
+            "calm": {"tempo": 70, "scale": "F major", "time_sig": 4, "dynamics": 60},
+            "mysterious": {"tempo": 90, "scale": "D minor", "time_sig": 5, "dynamics": 80},
+            "romantic": {"tempo": 80, "scale": "G major", "time_sig": 3, "dynamics": 85},
+            "neutral": {"tempo": 100, "scale": "G major", "time_sig": 4, "dynamics": 90}
+        }
+        
+        params = mood_params.get(primary_mood, mood_params["neutral"])
+        
+        # Generate melodic pattern based on text length and complexity
+        if word_count < 10:
+            melody_complexity = "simple"
+            note_count = 8
+        elif word_count < 30:
+            melody_complexity = "moderate"
+            note_count = 16
+        else:
+            melody_complexity = "complex"
+            note_count = 32
+            
+        return f'''# Enhanced music generation for: "{source_filename}"
+# Text preview: "{text[:100]}..."
+# Analysis: {word_count} words, primary mood: {primary_mood}
+# Musical parameters: {params}
+
+from midiutil import MIDIFile
+import random
+import math
+import datetime
+import os
+
+# Musical configuration
+TEMPO = {params["tempo"]}
+TIME_SIGNATURE = {params["time_sig"]}
+SCALE = "{params["scale"]}"
+BASE_VOLUME = {params["dynamics"]}
+MELODY_COMPLEXITY = "{melody_complexity}"
+
+# Create MIDI file with multiple tracks
+midi = MIDIFile(3)  # 3 tracks: melody, harmony, bass
+
+# Set tempo and time signature
+for track in range(3):
+    midi.addTempo(track, 0, TEMPO)
+    midi.addTimeSignature(track, 0, TIME_SIGNATURE, 4, 24)
+
+# Define scale notes
+scales = {{
+    "C major": [60, 62, 64, 65, 67, 69, 71, 72],
+    "A minor": [57, 59, 60, 62, 64, 65, 67, 69],
+    "E major": [64, 66, 68, 69, 71, 73, 75, 76],
+    "F major": [65, 67, 69, 70, 72, 74, 76, 77],
+    "D minor": [62, 64, 65, 67, 69, 70, 72, 74],
+    "G major": [67, 69, 71, 72, 74, 76, 78, 79]
+}}
+
+base_notes = scales.get(SCALE, scales["C major"])
+
+# Extend scale for more range
+extended_notes = []
+for octave in [-12, 0, 12]:
+    extended_notes.extend([note + octave for note in base_notes])
+
+# Track 1: Melody based on text rhythm
+print("Generating melody...")
+melody_time = 0
+text_words = "{text}".split()[:{note_count}]
+
+for i, word in enumerate(text_words):
+    # Use word length to determine note duration
+    duration = min(len(word) / 5.0, 2.0)
+    
+    # Use word position for pitch selection
+    if "{primary_mood}" in ["happy", "energetic"]:
+        # Upward tendency for happy/energetic moods
+        note_index = (i + len(word)) % len(base_notes)
+        note = base_notes[note_index] + random.choice([0, 12])
+    elif "{primary_mood}" in ["sad", "mysterious"]:
+        # Downward tendency for sad/mysterious moods
+        note_index = (len(base_notes) - 1 - i) % len(base_notes)
+        note = base_notes[note_index] + random.choice([-12, 0])
+    else:
+        # Random walk for neutral/other moods
+        note_index = random.randint(0, len(base_notes) - 1)
+        note = base_notes[note_index]
+    
+    # Add note with dynamics variation
+    volume = BASE_VOLUME + random.randint(-10, 10)
+    midi.addNote(0, 0, note, melody_time, duration, volume)
+    
+    # Add occasional rest
+    if random.random() < 0.1:
+        melody_time += duration + 0.5
+    else:
+        melody_time += duration
+
+# Track 2: Harmony (chord progression)
+print("Generating harmony...")
+chord_progressions = {{
+    "happy": [[0, 2, 4], [3, 5, 7], [4, 6, 1], [0, 2, 4]],  # I-IV-V-I
+    "sad": [[0, 2, 4], [5, 7, 2], [3, 5, 7], [0, 2, 4]],   # i-vi-iv-i
+    "energetic": [[0, 2, 4], [4, 6, 1], [5, 7, 2], [3, 5, 7]], # I-V-vi-IV
+    "calm": [[0, 2, 4], [2, 4, 6], [3, 5, 7], [0, 2, 4]],  # I-iii-IV-I
+    "mysterious": [[0, 2, 4], [1, 3, 5], [4, 6, 1], [0, 2, 4]], # i-ii°-V-i
+    "romantic": [[0, 2, 4], [3, 5, 7], [1, 3, 5], [4, 6, 1]],  # I-IV-ii-V
+    "neutral": [[0, 2, 4], [3, 5, 7], [4, 6, 1], [0, 2, 4]]    # I-IV-V-I
+}}
+
+progression = chord_progressions.get("{primary_mood}", chord_progressions["neutral"])
+chord_time = 0
+chord_duration = 4  # Each chord lasts 4 beats
+
+for chord_indices in progression * 4:  # Repeat progression 4 times
+    for note_index in chord_indices:
+        if note_index < len(base_notes):
+            note = base_notes[note_index]
+            midi.addNote(1, 1, note, chord_time, chord_duration, BASE_VOLUME - 20)
+    chord_time += chord_duration
+
+# Track 3: Bass line
+print("Generating bass line...")
+bass_time = 0
+bass_pattern = [0, 0, 4, 4, 5, 5, 0, 0]  # Simple bass pattern
+
+for i in range(int(melody_time / 2)):
+    note_index = bass_pattern[i % len(bass_pattern)]
+    bass_note = base_notes[note_index] - 24  # Two octaves lower
+    
+    # Rhythm variation based on mood
+    if "{primary_mood}" in ["energetic", "happy"]:
+        duration = 0.5  # Faster bass for upbeat moods
+    elif "{primary_mood}" in ["calm", "romantic"]:
+        duration = 2.0  # Slower bass for calm moods
+    else:
+        duration = 1.0
+    
+    midi.addNote(2, 2, bass_note, bass_time, duration, BASE_VOLUME - 10)
+    bass_time += duration
+
+# Add metadata
+midi.addText(0, 0, "Generated from: {source_filename}")
+midi.addText(0, 0, "Mood: {primary_mood}")
+midi.addText(0, 0, "Text: {text[:50]}...")
+
+# Save MIDI file
+timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+filename = f"brainstorm_{{os.path.splitext('{source_filename}')[0]}}_{{timestamp}}.mid"
+if not filename.startswith("brainstorm_"):
+    filename = f"brainstorm_music_{{timestamp}}.mid"
+
+with open(filename, "wb") as output_file:
+    midi.writeFile(output_file)
+
+print(f"MIDI file created: {{filename}}")
+print(f"Mood: {primary_mood}, Scale: {params['scale']}, Tempo: {params['tempo']} BPM")
+print(f"Complexity: {melody_complexity} ({{word_count}} words)")
+print("Tracks: Melody, Harmony, Bass")
+'''
+
     def generate_image(self):
-        """Generate image description/prompt based on transcription file."""
+        print("[DEBUG] Button clicked: Generate Image")
         # Try to get text from transcription file first, then from interface
         text = None
         if self.transcription_file and os.path.exists(self.transcription_file):
@@ -948,7 +1390,7 @@ print(f"Mood: {mood}, Scale: {scale}, Tempo: {tempo} BPM")
             
         # Generate image prompt
         image_prompt = f"""
-🎨 Image Generation Prompt:
+Image Generation Prompt:
 
 Original text: "{text}"
 
@@ -967,7 +1409,7 @@ Alternative prompts:
 2. Realistic: "Photorealistic representation of '{text}' in a laboratory setting"
 3. Artistic: "Impressionist painting style interpretation of '{text}' with bold brushstrokes"
 
-💡 Tips for best results:
+Tips for best results:
 - Use specific style keywords (photorealistic, digital art, watercolor, etc.)
 - Include lighting preferences (soft, dramatic, natural)
 - Specify composition (portrait, landscape, close-up)
@@ -979,7 +1421,7 @@ Alternative prompts:
         self.show_message("info", "Success", "Image prompts generated!")
 
     def generate_ideas(self):
-        """Generate creative ideas based on transcription file."""
+        print("[DEBUG] Button clicked: Generate Ideas")
         # Try to get text from transcription file first, then from interface
         text = None
         if self.transcription_file and os.path.exists(self.transcription_file):
@@ -998,52 +1440,52 @@ Alternative prompts:
             return
             
         ideas = f"""
-💡 Creative Ideas Generator
+Creative Ideas Generator
 Based on: "{text}"
 
-🎵 Musical Applications:
+Musical Applications:
 1. Create a ambient soundscape for meditation
 2. Compose a short jingle for presentations
 3. Generate background music for videos
 4. Create rhythmic patterns for dance
 5. Develop a musical signature/theme
 
-🎨 Visual Arts:
+Visual Arts:
 1. Create album cover artwork
 2. Design presentation backgrounds
 3. Generate social media graphics
 4. Create animated visualizations
 5. Design logo concepts
 
-🎭 Performance Ideas:
+Performance Ideas:
 1. Spoken word performance with music
 2. Interactive sound installation
 3. Dance choreography inspiration
 4. Theater scene background
 5. Podcast intro/outro
 
-🔬 Research Applications:
+Research Applications:
 1. Study music's effect on brain waves
 2. Analyze speech patterns and emotions
 3. Explore AI creativity boundaries
 4. Investigate sound-color synesthesia
 5. Test human-AI collaboration
 
-🎓 Educational Uses:
+Educational Uses:
 1. Language learning with music
 2. Memory enhancement techniques
 3. Creative writing prompts
 4. Art therapy exercises
 5. STEM demonstration tools
 
-🚀 Innovation Projects:
+Innovation Projects:
 1. Voice-controlled music creation
 2. Emotion-responsive soundtracks
 3. Collaborative AI composition
 4. Real-time music visualization
 5. Therapeutic sound design
 
-📱 Digital Applications:
+Digital Applications:
 1. Mobile app for instant composition
 2. Web-based collaborative platform
 3. VR/AR music creation environment
@@ -1056,7 +1498,7 @@ Based on: "{text}"
         self.show_message("info", "Success", "Creative ideas generated!")
 
     def save_music_code(self):
-        """Save the generated music code."""
+        print("[DEBUG] Button clicked: Save Music Code")
         # Ensure session directory exists
         if not self.session_dir:
             self.create_new_session()
@@ -1077,7 +1519,7 @@ Based on: "{text}"
             self.show_message("error", "Error", f"Failed to save: {str(e)}")
 
     def execute_music_code(self):
-        """Execute the generated music code."""
+        print("[DEBUG] Button clicked: Execute Music Code")
         # Ensure session directory exists
         if not self.session_dir:
             self.create_new_session()
@@ -1108,7 +1550,7 @@ Based on: "{text}"
             self.show_message("error", "Error", f"Failed to execute: {str(e)}")
 
     def generate_mp3(self):
-        """Generate MP3 from MIDI file if available."""
+        print("[DEBUG] Button clicked: Generate MP3")
         if not self.session_dir:
             self.show_message("error", "Error", "No session created. Please create a session first.")
             return
@@ -1140,28 +1582,28 @@ Based on: "{text}"
             # Try FluidSynth conversion
             if self._try_fluidsynth_conversion(midi_file, mp3_file):
                 mp3_created = True
-                conversion_log.append("✅ FluidSynth conversion successful!")
+                conversion_log.append("SUCCESS: FluidSynth conversion successful!")
             else:
-                conversion_log.append("❌ FluidSynth not available or failed")
+                conversion_log.append("FAILED: FluidSynth not available or failed")
                 
                 # Method 2: Try TiMidity conversion
                 if self._try_timidity_conversion(midi_file, mp3_file):
                     mp3_created = True
-                    conversion_log.append("✅ TiMidity conversion successful!")
+                    conversion_log.append("SUCCESS: TiMidity conversion successful!")
                 else:
-                    conversion_log.append("❌ TiMidity not available or failed")
+                    conversion_log.append("FAILED: TiMidity not available or failed")
                     
                     # Method 3: Try pygame MIDI playback (basic)
                     if self._try_pygame_conversion(midi_file, mp3_file):
                         mp3_created = True
-                        conversion_log.append("✅ Basic pygame conversion successful!")
+                        conversion_log.append("SUCCESS: Basic pygame conversion successful!")
                     else:
-                        conversion_log.append("❌ Pygame conversion failed")
+                        conversion_log.append("FAILED: Pygame conversion failed")
             
             # Create report
             if mp3_created:
                 result_msg = f"""
-🎵 MP3 Generation SUCCESSFUL! 🎉
+MP3 Generation SUCCESSFUL!
 
 MIDI file: {midi_files[0]}
 MP3 file: {os.path.basename(mp3_file)}
@@ -1170,12 +1612,12 @@ Location: {mp3_file}
 Conversion log:
 {chr(10).join(conversion_log)}
 
-✅ Your MP3 file is ready to play!
+Your MP3 file is ready to play!
 """
                 self.show_message("info", "MP3 Generated!", f"MP3 file created successfully:\n{mp3_file}")
             else:
                 result_msg = f"""
-🎵 MP3 Generation - Manual Steps Required
+MP3 Generation - Manual Steps Required
 
 MIDI file: {midi_files[0]}
 Location: {midi_file}
@@ -1371,9 +1813,180 @@ The MIDI file is ready for manual conversion!
         # This would extract URLs from the content if they exist
         self.show_message("info", "Info", "Image URL opening functionality would be implemented with actual API integration.")
 
+    def batch_generate_music(self):
+        """Generate music for multiple existing transcription files."""
+        # Bring window to front before showing dialog
+        self.root.lift()
+        self.root.attributes('-topmost', True)
+        self.root.update()
+        
+        directory = filedialog.askdirectory(
+            title="Select Directory with Transcription Files (.txt)",
+            parent=self.root
+        )
+        
+        if not directory:
+            return
+            
+        # Ensure session directory exists
+        if not self.session_dir:
+            self.create_new_session()
+            
+        try:
+            # Find all text files in the directory
+            text_files = list(Path(directory).glob("*.txt"))
+            
+            if not text_files:
+                self.show_message("warning", "No Text Files", "No .txt files found in the selected directory.")
+                return
+            
+            # Ask user for confirmation
+            confirmed = self.show_message("yesno", "Batch Music Generation", 
+                                        f"Found {len(text_files)} text files.\n\n"
+                                        f"Generate music for each transcription?\n\n"
+                                        f"This will create Python music scripts and MIDI files.")
+            
+            if not confirmed:
+                return
+            
+            # Create batch music directory
+            batch_timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            music_dir = f"{self.session_dir}/scripts/batch_music_{batch_timestamp}"
+            Path(music_dir).mkdir(parents=True, exist_ok=True)
+            
+            # Process each file
+            successful = 0
+            failed = 0
+            results_summary = []
+            
+            for i, text_file in enumerate(text_files):
+                try:
+                    # Update status
+                    progress = f"({i+1}/{len(text_files)})"
+                    filename = os.path.basename(text_file)
+                    self.status_label.config(text=f"Generating music {progress}: {filename}", fg="orange")
+                    self.root.update()
+                    
+                    # Read transcription
+                    with open(text_file, 'r', encoding='utf-8') as f:
+                        text = f.read().strip()
+                    
+                    if text:
+                        # Generate music code
+                        base_name = os.path.splitext(filename)[0]
+                        music_code = self._generate_enhanced_music_code(text, filename)
+                        music_file = f"{music_dir}/{base_name}_music.py"
+                        
+                        with open(music_file, 'w', encoding='utf-8') as f:
+                            f.write(music_code)
+                        
+                        successful += 1
+                        results_summary.append(f"SUCCESS: {filename} -> {base_name}_music.py")
+                        
+                        # Try to execute the music code to generate MIDI
+                        try:
+                            import subprocess
+                            result = subprocess.run(["python", music_file], 
+                                                  capture_output=True, text=True, 
+                                                  cwd=music_dir,
+                                                  timeout=30)
+                            
+                            if result.returncode == 0:
+                                results_summary.append(f"   MIDI file generated successfully")
+                                
+                                # Try to convert MIDI to MP3
+                                midi_files = [f for f in os.listdir(music_dir) 
+                                            if f.endswith('.mid') and base_name in f]
+                                if midi_files:
+                                    midi_path = f"{music_dir}/{midi_files[0]}"
+                                    mp3_path = midi_path.replace('.mid', '.mp3')
+                                    if self._try_convert_midi_to_mp3(midi_path, mp3_path):
+                                        results_summary.append(f"   MP3 file created successfully")
+                            else:
+                                results_summary.append(f"   WARNING: MIDI generation failed")
+                        except Exception as exec_error:
+                            results_summary.append(f"   WARNING: Could not execute music code")
+                    else:
+                        failed += 1
+                        results_summary.append(f"FAILED: {filename} -> Empty file")
+                        
+                except Exception as e:
+                    failed += 1
+                    results_summary.append(f"ERROR: {filename} -> Error: {str(e)[:100]}")
+            
+            # Create summary report
+            summary_content = f"""Batch Music Generation Report
+Generated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+Source Directory: {directory}
+Output Directory: {music_dir}
+
+Summary:
+- Total files processed: {len(text_files)}
+- Successful generations: {successful}
+- Failed generations: {failed}
+
+Results:
+{chr(10).join(results_summary)}
+
+Music files saved in: {music_dir}
+
+Next steps:
+1. Review the generated Python music scripts
+2. Execute them to create MIDI files
+3. Convert MIDI to MP3 using external tools if needed
+4. Use the generated music in your creative projects!
+"""
+            
+            # Save summary
+            summary_file = f"{music_dir}/batch_music_summary.txt"
+            with open(summary_file, 'w', encoding='utf-8') as f:
+                f.write(summary_content)
+            
+            # Update status and show results
+            self.status_label.config(text=f"Batch completed: {successful} success, {failed} failed", fg="green")
+            
+            # Show summary in music display
+            self.music_display.delete("1.0", tk.END)
+            self.music_display.insert(tk.END, summary_content)
+            
+            self.show_message("info", "Batch Music Generation Complete", 
+                            f"Batch music generation completed!\n\n"
+                            f"Successful: {successful}\n"
+                            f"Failed: {failed}\n\n"
+                            f"Files saved in:\n{music_dir}")
+            
+        except Exception as e:
+            self.status_label.config(text=f"Batch music generation error: {str(e)}", fg="red")
+            self.show_message("error", "Batch Music Error", f"Failed to process batch music generation:\n{str(e)}")
+
+    def _try_convert_midi_to_mp3(self, midi_path, mp3_path):
+        """Try to convert MIDI to MP3 using available tools."""
+        # Try FluidSynth first
+        if self._try_fluidsynth_conversion(midi_path, mp3_path):
+            return True
+        # Try TiMidity
+        elif self._try_timidity_conversion(midi_path, mp3_path):
+            return True
+        return False
+
     def run(self):
         """Start the application."""
         self.root.mainloop()
+
+    # Método para validar a duração
+    def validate_duration(self):
+        """Validate and set the recording duration from the input field."""
+        try:
+            duration = int(self.duration_entry.get())
+            if duration < 1 or duration > 600:
+                raise ValueError("Duration must be between 1 and 600 seconds.")
+            self.recording_duration = duration
+            self.status_label.config(text=f"Duration set to: {duration} seconds", fg="blue")
+            print(f"[DEBUG] Recording duration set to: {duration} seconds")
+        except ValueError as e:
+            self.show_message("error", "Invalid Duration", str(e))
+            self.recording_duration = 10  # Fallback to default
+            self.status_label.config(text="Invalid duration. Using default (10s).", fg="red")
 
 def run_brainstorm():
     """Main function to run the Brainstorm module."""
