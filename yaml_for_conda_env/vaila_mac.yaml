@@ -20,7 +20,7 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - python=3.12.9
+  - python=3.12.11
   - numpy
   - pandas
   - matplotlib
@@ -97,4 +97,6 @@ dependencies:
       - mido
       - pyttsx3
       - gtts
-      - ultralytics==8.3.150
+      - librosa
+      - pydub
+      - ultralytics==8.3.152
