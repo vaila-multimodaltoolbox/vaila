@@ -19,7 +19,8 @@ from tkinter import filedialog, Toplevel, Button, Label, Listbox, Frame, message
 import numpy as np
 import time
 import matplotlib.pyplot as plt
-from matplotlib.widgets import Slider, Button as MplButton
+from matplotlib.widgets import Slider, Button as MplButton, TextBox
+from matplotlib import animation
 from rich import print
 
 
@@ -362,43 +363,115 @@ def show_csv_matplotlib(points, marker_names, fps=30):
 
     current_frame = [0]
 
-    def update(val):
-        frame = int(slider.val)
+    def update_frame(val):
+        # Update the scatter plot with the new points of the selected frame.
+        frame = int(slider.val) if isinstance(val, float) else int(val)
         current_frame[0] = frame
+        new_positions = points[frame]
         scatter._offsets3d = (
-            points[frame, :, 0],
-            points[frame, :, 1],
-            points[frame, :, 2],
+            new_positions[:, 0],
+            new_positions[:, 1],
+            new_positions[:, 2],
         )
         fig.canvas.draw_idle()
 
-    slider.on_changed(update)
+    slider.on_changed(update_frame)
 
+    # Variables for automatic playback control
     playing = [False]
     timer = [None]
 
     def timer_callback():
         current_frame[0] = (current_frame[0] + 1) % num_frames
         slider.set_val(current_frame[0])
-        update(current_frame[0])
+        update_frame(current_frame[0])
 
     def play_pause(event):
         if not playing[0]:
             playing[0] = True
-            button.label.set_text("Pause")
-            timer[0] = fig.canvas.new_timer(interval=1000 / fps)
+            btn_play.label.set_text("Pause")
+            timer[0] = fig.canvas.new_timer(interval=1000 / 30)  # Assuming 30 fps
+            try:
+                timer[0].single_shot = False
+            except AttributeError:
+                pass
             timer[0].add_callback(timer_callback)
             timer[0].start()
         else:
             playing[0] = False
-            button.label.set_text("Play")
+            btn_play.label.set_text("Play")
             if timer[0] is not None:
                 timer[0].stop()
                 timer[0] = None
 
-    ax_button = plt.axes([0.82, 0.02, 0.1, 0.05])
-    button = MplButton(ax_button, "Play")
-    button.on_clicked(play_pause)
+    # Create play button
+    ax_play = fig.add_axes([0.82, 0.02, 0.1, 0.05])
+    btn_play = MplButton(ax_play, "Play")
+    btn_play.on_clicked(play_pause)
+
+    # Add record button
+    ax_record = fig.add_axes([0.82, 0.08, 0.1, 0.05])
+    btn_record = MplButton(ax_record, "Record")
+    
+    def record_animation(event):
+        try:
+            # Ask for save location
+            file_path = filedialog.asksaveasfilename(
+                defaultextension=".mp4",
+                filetypes=[("MP4 files", "*.mp4")],
+                title="Save animation as"
+            )
+            if not file_path:
+                return
+
+            # Create animation writer
+            writer = animation.FFMpegWriter(
+                fps=30,
+                metadata=dict(artist='VAILA'),
+                bitrate=1800
+            )
+
+            # Show recording message
+            btn_record.label.set_text("Recording...")
+            fig.canvas.draw_idle()
+
+            # Create animation
+            def update(frame):
+                new_positions = points[frame]
+                scatter._offsets3d = (
+                    new_positions[:, 0],
+                    new_positions[:, 1],
+                    new_positions[:, 2],
+                )
+                return scatter,
+
+            anim = animation.FuncAnimation(
+                fig, update, frames=num_frames,
+                interval=1000/30, blit=True
+            )
+
+            # Save animation
+            anim.save(file_path, writer=writer)
+            
+            # Reset button text
+            btn_record.label.set_text("Record")
+            fig.canvas.draw_idle()
+            
+            messagebox.showinfo("Success", "Animation saved successfully!")
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to save animation: {e}")
+            btn_record.label.set_text("Record")
+            fig.canvas.draw_idle()
+
+    btn_record.on_clicked(record_animation)
+
+    # Add space key functionality
+    def on_key(event):
+        if event.key == ' ':
+            play_pause(None)
+
+    fig.canvas.mpl_connect('key_press_event', on_key)
 
     plt.show()
 
@@ -532,7 +605,6 @@ def show_csv():
         time_vector, marker_data, valid_markers = read_csv_generic(file_path)
     except Exception as e:
         messagebox.showerror("Error", f"Error reading the CSV file: {e}")
-        root.destroy()
         return
 
     # List the available markers
@@ -557,7 +629,7 @@ def show_csv():
 
     # Create the 3D figure with the initial frame (frame 0) markers
     fig = plt.figure(figsize=(10, 8))
-    ax = fig.add_axes([0.0, 0.12, 1.0, 0.88], projection="3d")
+    ax = fig.add_axes([0.0, 0.15, 1.0, 0.85], projection="3d")  # Increased bottom margin
     scat = ax.scatter(points[0, :, 0], points[0, :, 1], points[0, :, 2], c="blue", s=20)
 
     ax.set_xlabel("X")
@@ -567,13 +639,84 @@ def show_csv():
         f"C3D CSV Viewer | File: {file_name} | Markers: {len(selected_markers)}/{len(available_markers)} | Frames: {num_frames}"
     )
 
-    # Define fixed limits for the visualization:
-    ax.set_xlim([-1, 5])
-    ax.set_ylim([-1, 5])
-    ax.set_zlim([0, 2])
+    # Calculate initial limits from data
+    x_min, x_max = points[:, :, 0].min(), points[:, :, 0].max()
+    y_min, y_max = points[:, :, 1].min(), points[:, :, 1].max()
+    z_min, z_max = points[:, :, 2].min(), points[:, :, 2].max()
+
+    # Add some padding to the limits
+    x_range = x_max - x_min
+    y_range = y_max - y_min
+    z_range = z_max - z_min
+    padding = 0.1  # 10% padding
+
+    x_min -= x_range * padding
+    x_max += x_range * padding
+    y_min -= y_range * padding
+    y_max += y_range * padding
+    z_min -= z_range * padding
+    z_max += z_range * padding
+
+    # Set initial limits
+    ax.set_xlim([x_min, x_max])
+    ax.set_ylim([y_min, y_max])
+    ax.set_zlim([z_min, z_max])
 
     # Define the equal aspect to avoid distortions
     ax.set_aspect("equal")
+
+    # Add text boxes for axis limits
+    def update_x_limits(text):
+        try:
+            x_min_new, x_max_new = map(float, text.split(','))
+            if x_min_new < x_max_new:
+                ax.set_xlim([x_min_new, x_max_new])
+                fig.canvas.draw_idle()
+        except ValueError:
+            pass
+
+    def update_y_limits(text):
+        try:
+            y_min_new, y_max_new = map(float, text.split(','))
+            if y_min_new < y_max_new:
+                ax.set_ylim([y_min_new, y_max_new])
+                fig.canvas.draw_idle()
+        except ValueError:
+            pass
+
+    def update_z_limits(text):
+        try:
+            z_min_new, z_max_new = map(float, text.split(','))
+            if z_min_new < z_max_new:
+                ax.set_zlim([z_min_new, z_max_new])
+                fig.canvas.draw_idle()
+        except ValueError:
+            pass
+
+    def reset_limits(event):
+        ax.set_xlim([x_min, x_max])
+        ax.set_ylim([y_min, y_max])
+        ax.set_zlim([z_min, z_max])
+        textbox_x.set_val(f"{x_min:.2f},{x_max:.2f}")
+        textbox_y.set_val(f"{y_min:.2f},{y_max:.2f}")
+        textbox_z.set_val(f"{z_min:.2f},{z_max:.2f}")
+        fig.canvas.draw_idle()
+
+    # Create text boxes for limits with better positioning
+    ax_textbox_x = fig.add_axes([0.02, 0.08, 0.12, 0.03])
+    ax_textbox_y = fig.add_axes([0.02, 0.05, 0.12, 0.03])
+    ax_textbox_z = fig.add_axes([0.02, 0.02, 0.12, 0.03])
+    ax_reset = fig.add_axes([0.15, 0.02, 0.06, 0.09])
+
+    textbox_x = TextBox(ax_textbox_x, 'X:', initial=f"{x_min:.2f},{x_max:.2f}")
+    textbox_y = TextBox(ax_textbox_y, 'Y:', initial=f"{y_min:.2f},{y_max:.2f}")
+    textbox_z = TextBox(ax_textbox_z, 'Z:', initial=f"{z_min:.2f},{z_max:.2f}")
+    btn_reset = MplButton(ax_reset, 'Reset\nLimits')
+
+    textbox_x.on_submit(update_x_limits)
+    textbox_y.on_submit(update_y_limits)
+    textbox_z.on_submit(update_z_limits)
+    btn_reset.on_clicked(reset_limits)
 
     # Create a slider for frame control, positioned at the bottom
     ax_frame = fig.add_axes([0.25, 0.02, 0.5, 0.04])
@@ -622,15 +765,76 @@ def show_csv():
                 timer[0].stop()
                 timer[0] = None
 
-    from matplotlib.widgets import Button as MplButton
-
+    # Create play button
     ax_play = fig.add_axes([0.82, 0.02, 0.1, 0.05])
     btn_play = MplButton(ax_play, "Play")
     btn_play.on_clicked(play_pause)
 
-    plt.show()
+    # Add record button
+    ax_record = fig.add_axes([0.82, 0.08, 0.1, 0.05])
+    btn_record = MplButton(ax_record, "Record")
+    
+    def record_animation(event):
+        try:
+            # Ask for save location
+            file_path = filedialog.asksaveasfilename(
+                defaultextension=".mp4",
+                filetypes=[("MP4 files", "*.mp4")],
+                title="Save animation as"
+            )
+            if not file_path:
+                return
 
-    root.destroy()
+            # Create animation writer
+            writer = animation.FFMpegWriter(
+                fps=30,
+                metadata=dict(artist='VAILA'),
+                bitrate=1800
+            )
+
+            # Show recording message
+            btn_record.label.set_text("Recording...")
+            fig.canvas.draw_idle()
+
+            # Create animation
+            def update(frame):
+                new_positions = points[frame]
+                scat._offsets3d = (
+                    new_positions[:, 0],
+                    new_positions[:, 1],
+                    new_positions[:, 2],
+                )
+                return scat,
+
+            anim = animation.FuncAnimation(
+                fig, update, frames=num_frames,
+                interval=1000/30, blit=True
+            )
+
+            # Save animation
+            anim.save(file_path, writer=writer)
+            
+            # Reset button text
+            btn_record.label.set_text("Record")
+            fig.canvas.draw_idle()
+            
+            messagebox.showinfo("Success", "Animation saved successfully!")
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to save animation: {e}")
+            btn_record.label.set_text("Record")
+            fig.canvas.draw_idle()
+
+    btn_record.on_clicked(record_animation)
+
+    # Add space key functionality
+    def on_key(event):
+        if event.key == ' ':
+            play_pause(None)
+
+    fig.canvas.mpl_connect('key_press_event', on_key)
+
+    plt.show()
 
 
 ###############################################################################
