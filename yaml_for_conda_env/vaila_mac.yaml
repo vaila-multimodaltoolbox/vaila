@@ -99,4 +99,4 @@ dependencies:
       - gtts
       - librosa
       - pydub
-      - ultralytics==8.3.152
+      - ultralytics==8.3.154
