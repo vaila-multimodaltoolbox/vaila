@@ -82,13 +82,72 @@ def reshapedata(df, selected_markers):
 
 
 ###############################################################################
+# Function: detect_delimiter
+# (Adicionado para manter compatibilidade com vaila/__init__.py)
+###############################################################################
+def detect_delimiter(file_path):
+    """
+    Detects the delimiter used in the file by trying common delimiters.
+    
+    Args:
+        file_path (str): Path to the file
+        
+    Returns:
+        str: Detected delimiter (',', ';', '\t', or ' ')
+    """
+    delimiters = [',', ';', '\t', ' ']
+    max_columns = 0
+    best_delimiter = ','
+    
+    with open(file_path, 'r', encoding='utf-8') as file:
+        first_line = file.readline().strip()
+        
+        for delimiter in delimiters:
+            columns = len(first_line.split(delimiter))
+            if columns > max_columns:
+                max_columns = columns
+                best_delimiter = delimiter
+    
+    return best_delimiter
+
+
+###############################################################################
+# Function: detect_has_header
+# (Adicionado para manter compatibilidade com vaila/__init__.py)
+###############################################################################
+def detect_has_header(file_path, delimiter):
+    """
+    Detects if the file has a header by checking if the first line contains non-numeric values.
+    
+    Args:
+        file_path (str): Path to the file
+        delimiter (str): Delimiter used in the file
+        
+    Returns:
+        bool: True if file has header, False otherwise
+    """
+    with open(file_path, 'r', encoding='utf-8') as file:
+        first_line = file.readline().strip()
+        values = first_line.split(delimiter)
+        
+        # Check if any value in the first line is not numeric
+        for value in values:
+            try:
+                float(value)
+            except ValueError:
+                return True
+    return False
+
+
+###############################################################################
 # Function: select_file
 # (Adicionado para manter compatibilidade com vaila/__init__.py)
 ###############################################################################
 def select_file():
-    """Exibe a caixa de diálogo para seleção do arquivo CSV."""
+    """Exibe a caixa de diálogo para seleção do arquivo CSV ou TXT."""
     return filedialog.askopenfilename(
-        title="Selecione o arquivo CSV", filetypes=[("CSV files", "*.csv")]
+        title="Selecione o arquivo CSV ou TXT",
+        filetypes=[("Data files", "*.csv;*.txt"), ("CSV files", "*.csv"), ("Text files", "*.txt")]
     )
 
 
@@ -345,53 +404,103 @@ def show_csv_matplotlib(points, marker_names, fps=30):
 
 
 ###############################################################################
-# Function: read_csv_generic
+# Function: detect_units
 # (Adicionado para manter compatibilidade com vaila/__init__.py)
+###############################################################################
+def detect_units(points):
+    """
+    Detects if the data is in millimeters or meters based on the magnitude of values.
+    
+    Args:
+        points (numpy.ndarray): Array of shape (num_frames, num_markers, 3) containing the coordinates
+        
+    Returns:
+        bool: True if data is in millimeters (needs conversion), False if already in meters
+    """
+    # Calculate the mean absolute value of all coordinates
+    mean_abs = np.mean(np.abs(points))
+    
+    # If mean absolute value is greater than 100, likely in millimeters
+    return mean_abs > 100
+
+
+###############################################################################
+# Function: read_csv_generic
+# (Added to maintain compatibility with vaila/__init__.py)
 ###############################################################################
 def read_csv_generic(file_path):
     """
-    Lê um arquivo CSV considerando:
-      - A primeira coluna contém os instantes de tempo ou frames.
-      - As colunas subsequentes estão organizadas em grupos de três (x, y, z) para cada marcador,
-        com nomes no formato 'marker_X', 'marker_Y', 'marker_Z'.
+    Reads a CSV or TXT file considering:
+      - Automatically detects the delimiter (',', ';', '\t', ' ')
+      - Detects if the file has a header
+      - If it doesn't have a header, uses default names (p1_x, p1_y, p1_z, p2_x, ...)
+      - The first column contains the time or frames
+      - The subsequent columns are organized in groups of three (x, y, z)
+      - Automatically detects and converts units from millimeters to meters if necessary
 
-    Retorna:
-      time_vector: pd.Series com os dados de tempo/frames.
-      marker_data: dicionário que mapeia o nome do marcador para um array numpy Nx3 com as coordenadas.
-      valid_markers: dicionário que mapeia o nome do marcador para a lista de colunas usadas.
+    Returns:
+      time_vector: pd.Series with the time/frames data
+      marker_data: dictionary mapping the marker name to a numpy array Nx3
+      valid_markers: dictionary mapping the marker name to the list of columns used
     """
-    df = pd.read_csv(file_path)
+    # Detect delimiter
+    delimiter = detect_delimiter(file_path)
+    
+    # Detect if file has header
+    has_header = detect_has_header(file_path, delimiter)
+    
+    # Read the file
+    if has_header:
+        df = pd.read_csv(file_path, delimiter=delimiter)
+    else:
+        # Create default column names for files without headers
+        num_columns = len(pd.read_csv(file_path, delimiter=delimiter, nrows=0).columns)
+        default_columns = ['Time']
+        for i in range(1, (num_columns - 1) // 3 + 1):
+            default_columns.extend([f'p{i}_x', f'p{i}_y', f'p{i}_z'])
+        df = pd.read_csv(file_path, delimiter=delimiter, names=default_columns)
+    
     if df.empty:
-        raise ValueError("O arquivo CSV está vazio ou não pôde ser lido.")
+        raise ValueError("The file is empty or could not be read.")
 
-    # A primeira coluna é o tempo/frames.
+    # The first column is the time/frames
     time_vector = df.iloc[:, 0]
 
-    # Processa as colunas restantes: cada coluna deve ter o formato marker_coord (ex.: PELO_X)
+    # Process the remaining columns: each column must have the format marker_coord (ex.: PELO_X)
     marker_headers = {}
     for col in df.columns[1:]:
         if "_" in col:
-            parts = col.rsplit("_", 1)  # divide pela última ocorrência de '_'
+            parts = col.rsplit("_", 1)  # split by the last occurrence of '_'
             if len(parts) == 2 and parts[1].upper() in ["X", "Y", "Z"]:
                 marker_name = parts[0]
                 if marker_name not in marker_headers:
                     marker_headers[marker_name] = []
                 marker_headers[marker_name].append(col)
 
-    # Seleciona apenas os marcadores que possuem o conjunto completo de 3 colunas
+    # Select only the markers that have the complete set of 3 columns
     valid_markers = {}
     for marker, cols in marker_headers.items():
         if len(cols) == 3:
-            # Ordena as colunas para garantir a ordem: X, Y, Z.
+            # Sort the columns to ensure the order: X, Y, Z
             sorted_cols = sorted(cols, key=lambda c: c.upper().split("_")[-1])
             valid_markers[marker] = sorted_cols
         else:
-            print(f"Aviso: O marcador '{marker}' possui dados incompletos: {cols}")
+            print(f"Warning: The marker '{marker}' has incomplete data: {cols}")
 
-    # Extrai os dados de cada marcador em um array Nx3.
+    # Extract the data for each marker into an Nx3 array
     marker_data = {}
     for marker, cols in valid_markers.items():
         marker_data[marker] = df[cols].to_numpy()
+
+    # Check if data needs unit conversion
+    if valid_markers:
+        # Create a temporary array with all points to check units
+        temp_points = np.stack([marker_data[marker] for marker in valid_markers.keys()], axis=1)
+        if detect_units(temp_points):
+            print("Converting units from millimeters to meters...")
+            # Convert all marker data from millimeters to meters
+            for marker in marker_data:
+                marker_data[marker] = marker_data[marker] * 0.001
 
     return time_vector, marker_data, valid_markers
 
@@ -416,13 +525,13 @@ def show_csv():
     root.withdraw()
     file_path = select_file()
     if not file_path:
-        print("Nenhum arquivo selecionado.")
+        print("No file selected.")
         return
 
     try:
         time_vector, marker_data, valid_markers = read_csv_generic(file_path)
     except Exception as e:
-        messagebox.showerror("Erro", f"Erro ao ler o arquivo CSV: {e}")
+        messagebox.showerror("Error", f"Error reading the CSV file: {e}")
         root.destroy()
         return
 
