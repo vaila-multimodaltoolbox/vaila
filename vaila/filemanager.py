@@ -30,7 +30,7 @@ Main Features:
 
     File Removal:
         Removes files matching specific extensions or directories.
-        Safeguards critical system files from accidental deletion by recognizing forbidden patterns.
+        Safeguards critical system files from accidental deletion by recognizing forbidden patterns and offering multiple user confirmations.
 
     File Search:
         Searches for files or directories based on user-defined patterns.
@@ -111,6 +111,9 @@ import json
 import fnmatch
 import paramiko
 from scp import SCPClient
+import subprocess
+from tkinter import ttk
+import platform  # Add this import at the top with other imports
 
 
 def copy_file():
@@ -751,126 +754,60 @@ def find_file():
 
 def transfer_file():
     # Print the directory and name of the script being executed
+    print("Run def transfer_file")
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
 
-    # Initialize Tkinter root
-    root = Tk()
-    root.withdraw()  # Hide the root window
-    root.tk.call("wm", "attributes", ".", "-topmost", "1")  # Keep window on top
-
-    # Prompt the user to select Upload or Download
-    transfer_type = simpledialog.askstring(
-        "Transfer Type", "Enter 'upload' to send files or 'download' to receive files:"
-    )
-
-    if transfer_type not in ["upload", "download"]:
-        messagebox.showerror("Error", "Invalid transfer type provided.")
-        return
-
-    # Select file or directory for upload or specify destination directory for download
-    if transfer_type == "upload":
-        src_path = filedialog.askopenfilename(
-            title="Select the file or directory to transfer"
-        )
-        if not src_path:
-            messagebox.showerror("Error", "No file or directory selected.")
-            return
-    else:  # download
-        remote_file = simpledialog.askstring(
-            "Remote File", "Enter the remote file or directory path:"
-        )
-        if not remote_file:
-            messagebox.showerror("Error", "No remote file or directory path provided.")
-            return
-        dest_path = filedialog.askdirectory(title="Select the destination directory")
-        if not dest_path:
-            messagebox.showerror("Error", "No destination directory selected.")
-            return
-
-    # Remote server details
-    remote_host = simpledialog.askstring(
-        "Remote Host", "Enter the remote host (e.g., example.com):"
-    )
-    if not remote_host:
-        messagebox.showerror("Error", "No remote host provided.")
-        return
-
-    remote_port = simpledialog.askinteger(
-        "Remote Port", "Enter the SSH port (default is 22):", initialvalue=22
-    )
-    if not remote_port:
-        remote_port = 22
-
-    remote_user = simpledialog.askstring("Remote User", "Enter the SSH username:")
-    if not remote_user:
-        messagebox.showerror("Error", "No SSH username provided.")
-        return
-
-    remote_password = simpledialog.askstring(
-        "Remote Password", "Enter the SSH password:", show="*"
-    )
-    if remote_password is None:
-        messagebox.showerror("Error", "No SSH password provided.")
-        return
-
     try:
-        # Create an SSH client
-        ssh = paramiko.SSHClient()
-        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        # Get the directory where the current script is located
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        
+        # Determine the correct script based on the operating system
+        if platform.system() == "Windows":
+            script_name = "transfer.bat"
+            # Execute the batch script in a new command window
+            subprocess.Popen(['cmd', '/c', 'start', 'cmd', '/k', script_name], 
+                           shell=True, cwd=script_dir)
+        else:
+            # Linux/macOS
+            script_name = "transfer.sh"
+            script_path = os.path.join(script_dir, script_name)
+            
+            # Check if transfer.sh exists
+            if not os.path.exists(script_path):
+                messagebox.showerror("Error", f"Transfer script not found: {script_path}")
+                return
+            
+            # Make the script executable
+            os.chmod(script_path, 0o755)
+            
+            print(f"Executing transfer script: {script_path}")
+            
+            # Execute the shell script in a new terminal
+            if platform.system() == "Darwin":  # macOS
+                subprocess.Popen(['open', '-a', 'Terminal', script_path])
+            else:  # Linux
+                # Try different terminal emulators
+                terminals = ['gnome-terminal', 'xterm', 'konsole', 'lxterminal']
+                for terminal in terminals:
+                    try:
+                        subprocess.Popen([terminal, '-e', f'bash {script_path}'], 
+                                       cwd=script_dir)
+                        break
+                    except FileNotFoundError:
+                        continue
+                else:
+                    # Fallback: try to run directly
+                    subprocess.Popen(['bash', script_path], cwd=script_dir)
 
-        # Debugging output
-        print(f"Connecting to {remote_host}:{remote_port} as {remote_user}")
-
-        ssh.connect(
-            hostname=remote_host,
-            port=remote_port,
-            username=remote_user,
-            password=remote_password,
-        )
-
-        # Create an SCP client
-        transport = ssh.get_transport()
-        if transport is None:
-            messagebox.showerror("Error", "SSH transport is not available.")
-            return
-
-        with SCPClient(transport) as scp:  # Use the valid transport
-
-            if transfer_type == "upload":
-                # Upload the file or directory
-                print(f"Uploading {src_path} to {remote_host}:{remote_file}")
-                scp.put(
-                    src_path, remote_path=remote_file, recursive=os.path.isdir(src_path)
-                )
-                messagebox.showinfo(
-                    "Success",
-                    f"File or directory successfully uploaded to {remote_host}:{remote_file}",
-                )
-            else:
-                # Download the file or directory
-                print(f"Downloading {remote_file} from {remote_host} to {dest_path}")
-                scp.get(remote_file, local_path=dest_path, recursive=True)
-                messagebox.showinfo(
-                    "Success",
-                    f"File or directory successfully downloaded from {remote_host}:{remote_file} to {dest_path}",
-                )
-
-    except paramiko.AuthenticationException as auth_error:
+    except FileNotFoundError as e:
         messagebox.showerror(
-            "Authentication Error", f"Authentication failed: {auth_error}"
+            "Error", 
+            f"Transfer script not found: {e.filename}\n"
+            f"Please ensure {script_name} is in the same directory as filemanager.py"
         )
-        print(f"Authentication failed: {auth_error}")
-
-    except paramiko.SSHException as ssh_error:
-        messagebox.showerror("SSH Error", f"SSH connection error: {ssh_error}")
-        print(f"SSH connection error: {ssh_error}")
-
+        print(f"Script not found: {e}")
+    
     except Exception as e:
-        # Show an error message if something goes wrong
-        messagebox.showerror("Error", f"Error during file transfer: {e}")
-        print(f"Error during file transfer: {e}")
-
-    finally:
-        # Close the SSH connection
-        ssh.close()
+        messagebox.showerror("Error", f"Unexpected error during transfer: {e}")
+        print(f"Unexpected error: {e}")
