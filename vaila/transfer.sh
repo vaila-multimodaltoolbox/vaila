@@ -11,24 +11,46 @@
 # === Date: 2025-06-24
 # === Updated: 2025-06-24
 # === Contact: paulosantiago@usp.br
-# === Version: 0.0.2
+# === Version: 0.0.3
 # === Description: This script is used to transfer a folder to a remote server using SSH
 # === It prompts the user for the remote username, host, port, local directory, and remote directory
 # === It then uses either scp or rsync command to transfer the folder to the remote server
 # === It then prints a message to the console indicating that the transfer is complete
 
+# Change to user's Downloads directory for safety
+cd "$HOME/Downloads"
+
+echo "============================================"
+echo "SCP/RSYNC Folder Transfer Tool"
+echo "============================================"
+echo "Current directory: $(pwd)"
+echo
+
+# Ask user if they want to use Downloads directory or choose another
+read -p "Do you want to use Downloads directory? (Y/N) [Y]: " USE_DOWNLOADS
+USE_DOWNLOADS=${USE_DOWNLOADS:-Y}
+
+if [[ "$USE_DOWNLOADS" =~ ^[Yy]$ ]]; then
+    DEF_LOCAL_DIR="$(pwd)"
+    echo "Using Downloads directory: $DEF_LOCAL_DIR"
+else
+    DEF_LOCAL_DIR="."
+    echo "You can specify a different directory below."
+fi
+
+echo
+
 # No defaults for sensitive information
 DEF_REMOTE_USER=""
 DEF_REMOTE_HOST=""
 DEF_REMOTE_PORT="22"
-DEF_LOCAL_DIR="."
 DEF_REMOTE_DIR=""
 
 # Prompt user for parameters (no defaults except for port and local dir)
 read -p "Enter remote username: " REMOTE_USER
 read -p "Enter remote host (IP or hostname): " REMOTE_HOST
 read -p "Enter SSH port [22]: " REMOTE_PORT
-read -p "Enter FULL path to local folder [.]: " LOCAL_DIR
+read -p "Enter FULL path to local folder [$DEF_LOCAL_DIR]: " LOCAL_DIR
 read -p "Enter FULL path to destination on server: " REMOTE_DIR
 
 # Set defaults if empty
