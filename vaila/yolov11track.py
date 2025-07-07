@@ -57,7 +57,7 @@ import numpy as np
 import datetime
 from ultralytics import YOLO
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, ttk
 from pathlib import Path
 import subprocess
 import re
@@ -309,6 +309,23 @@ class TrackerConfigDialog(tk.simpledialog.Dialog):
 
 class ModelSelectorDialog(tk.simpledialog.Dialog):
     def body(self, master):
+        # Create main frame
+        main_frame = tk.Frame(master)
+        main_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        # Title
+        title_label = tk.Label(main_frame, text="Select YOLO Model", font=("Arial", 12, "bold"))
+        title_label.pack(pady=(0, 10))
+        
+        # Create notebook for tabs
+        notebook = ttk.Notebook(main_frame)
+        notebook.pack(fill="both", expand=True)
+        
+        # Tab 1: Pre-trained models
+        pretrained_frame = tk.Frame(notebook)
+        notebook.add(pretrained_frame, text="Pre-trained Models")
+        
+        # Pre-trained models list
         models = [
             # Object Detection explanation: https://docs.ultralytics.com/tasks/detect/
             ("yolo11n.pt", "Detection - Nano (fastest)"),
@@ -336,22 +353,107 @@ class ModelSelectorDialog(tk.simpledialog.Dialog):
             ("yolo11x-obb.pt", "OBB - XLarge"),
         ]
 
-        self.listbox = tk.Listbox(master, width=50, height=15)
+        # Create listbox with scrollbar for pre-trained models
+        listbox_frame = tk.Frame(pretrained_frame)
+        listbox_frame.pack(fill="both", expand=True, padx=5, pady=5)
+        
+        self.pretrained_listbox = tk.Listbox(listbox_frame, width=50, height=12)
+        scrollbar = tk.Scrollbar(listbox_frame, orient="vertical", command=self.pretrained_listbox.yview)
+        self.pretrained_listbox.configure(yscrollcommand=scrollbar.set)
+        
         for model, desc in models:
-            self.listbox.insert(tk.END, f"{model} - {desc}")
-        self.listbox.pack(padx=5, pady=5)
+            self.pretrained_listbox.insert(tk.END, f"{model} - {desc}")
+        
+        self.pretrained_listbox.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+        # Tab 2: Custom model
+        custom_frame = tk.Frame(notebook)
+        notebook.add(custom_frame, text="Custom Model")
+        
+        # Custom model selection
+        custom_label = tk.Label(custom_frame, text="Select custom model file:", font=("Arial", 10))
+        custom_label.pack(pady=(10, 5))
+        
+        # Frame for path display and browse button
+        path_frame = tk.Frame(custom_frame)
+        path_frame.pack(fill="x", padx=10, pady=5)
+        
+        self.custom_path_var = tk.StringVar()
+        self.custom_path_entry = tk.Entry(path_frame, textvariable=self.custom_path_var, width=50)
+        self.custom_path_entry.pack(side="left", fill="x", expand=True, padx=(0, 5))
+        
+        browse_button = tk.Button(path_frame, text="Browse", command=self.browse_custom_model)
+        browse_button.pack(side="right")
+        
+        # Help text for custom models
+        help_text = tk.Label(
+            custom_frame,
+            text="Supported formats: .pt, .onnx, .engine\n"
+                 "Custom models should be trained with YOLO format\n"
+                 "Make sure the model file exists and is accessible",
+            justify="left",
+            font=("Arial", 9),
+            fg="gray"
+        )
+        help_text.pack(pady=10)
+        
+        # Store the selected tab
+        self.selected_tab = "pretrained"
+        self.custom_model_path = None
+        
+        # Bind tab change event
+        notebook.bind("<<NotebookTabChanged>>", self.on_tab_changed)
+        
+        return self.pretrained_listbox
 
-        return self.listbox
+    def browse_custom_model(self):
+        """Browse for custom model file."""
+        file_path = filedialog.askopenfilename(
+            title="Select Custom Model File",
+            filetypes=[
+                ("YOLO models", "*.pt"),
+                ("ONNX models", "*.onnx"),
+                ("TensorRT models", "*.engine"),
+                ("All files", "*.*")
+            ]
+        )
+        if file_path:
+            self.custom_path_var.set(file_path)
+            self.custom_model_path = file_path
+
+    def on_tab_changed(self, event):
+        """Handle tab change events."""
+        notebook = event.widget
+        current_tab = notebook.select()
+        tab_id = notebook.index(current_tab)
+        
+        if tab_id == 0:  # Pre-trained models tab
+            self.selected_tab = "pretrained"
+        elif tab_id == 1:  # Custom model tab
+            self.selected_tab = "custom"
 
     def validate(self):
-        if not self.listbox.curselection():
-            messagebox.showwarning("Warning", "Please select a model")
-            return False
+        if self.selected_tab == "pretrained":
+            if not self.pretrained_listbox.curselection():
+                messagebox.showwarning("Warning", "Please select a pre-trained model")
+                return False
+        elif self.selected_tab == "custom":
+            custom_path = self.custom_path_var.get().strip()
+            if not custom_path:
+                messagebox.showwarning("Warning", "Please select a custom model file")
+                return False
+            if not os.path.exists(custom_path):
+                messagebox.showerror("Error", f"Custom model file not found: {custom_path}")
+                return False
         return True
 
     def apply(self):
-        selection = self.listbox.get(self.listbox.curselection())
-        self.result = selection.split(" - ")[0]
+        if self.selected_tab == "pretrained":
+            selection = self.pretrained_listbox.get(self.pretrained_listbox.curselection())
+            self.result = selection.split(" - ")[0]
+        elif self.selected_tab == "custom":
+            self.result = self.custom_path_var.get().strip()
 
 
 class TrackerSelectorDialog(tk.simpledialog.Dialog):
@@ -872,23 +974,34 @@ def run_yolov11track():
         return
     tracker_name = tracker_dialog.result
 
-    # Build the full path for the model
-    models_dir = os.path.join(os.path.dirname(__file__), "models")
-    os.makedirs(models_dir, exist_ok=True)
-    model_path = os.path.join(models_dir, model_name)
-
-    # Download the model if it doesn't exist
-    if not os.path.exists(model_path):
-        try:
-            print(f"Downloading model {model_name}...")
-            current_dir = os.getcwd()
-            os.chdir(models_dir)
-            YOLO(model_name)
-            os.chdir(current_dir)
-            print(f"Model downloaded successfully to {model_path}")
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to download model: {str(e)}")
+    # Handle model path based on whether it's a custom model or pre-trained
+    if os.path.isabs(model_name) or model_name.startswith('./') or model_name.startswith('../'):
+        # Custom model - use the path directly
+        model_path = model_name
+        print(f"Using custom model: {model_path}")
+        
+        # Validate custom model file
+        if not os.path.exists(model_path):
+            messagebox.showerror("Error", f"Custom model file not found: {model_path}")
             return
+    else:
+        # Pre-trained model - build the path in models directory
+        models_dir = os.path.join(os.path.dirname(__file__), "models")
+        os.makedirs(models_dir, exist_ok=True)
+        model_path = os.path.join(models_dir, model_name)
+
+        # Download the model if it doesn't exist
+        if not os.path.exists(model_path):
+            try:
+                print(f"Downloading model {model_name}...")
+                current_dir = os.getcwd()
+                os.chdir(models_dir)
+                YOLO(model_name)
+                os.chdir(current_dir)
+                print(f"Model downloaded successfully to {model_path}")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to download model: {str(e)}")
+                return
 
     # Get configuration using TrackerConfigDialog
     config_dialog = TrackerConfigDialog(root, title="Tracker Configuration")
@@ -898,7 +1011,12 @@ def run_yolov11track():
     config = config_dialog.result
 
     # Initialize the YOLO model
-    model = YOLO(model_path)
+    try:
+        model = YOLO(model_path)
+        print(f"Model loaded successfully: {model_path}")
+    except Exception as e:
+        messagebox.showerror("Error", f"Failed to load model: {str(e)}")
+        return
 
     # Select classes for tracking
     class_dialog = ClassSelectorDialog(root, title="Select Classes for Tracking")
@@ -914,6 +1032,7 @@ def run_yolov11track():
     print(f"Initializing BotSort")
 
     # Try create reid_weights if osnet_x0_25_msmt17.pt does not exist, download it from the internet https://huggingface.co/paulosantiago/osnet_x0_25_msmt17/resolve/main/osnet_x0_25_msmt17.pt
+    models_dir = os.path.join(os.path.dirname(__file__), "models")
     reid_weights_path = os.path.join(models_dir, "osnet_x0_25_msmt17.pt")
     if not os.path.exists(reid_weights_path):
         print("Downloading ReID model...")
