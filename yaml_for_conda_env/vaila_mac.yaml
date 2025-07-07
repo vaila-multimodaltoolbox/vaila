@@ -99,4 +99,5 @@ dependencies:
       - gtts
       - librosa
       - pydub
+      - anylabeling
       - ultralytics
