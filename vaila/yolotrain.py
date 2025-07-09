@@ -40,9 +40,9 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 from ultralytics import YOLO
 import torch
-import datetime
-import re
-import webbrowser
+# import datetime
+# import re
+#import webbrowser
 
 
 # --- Class to redirect the console output to the Text Widget ---
