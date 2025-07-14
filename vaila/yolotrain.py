@@ -77,14 +77,32 @@ class YOLOTrainApp(tk.Tk):
         self.geometry("800x600")
         self.configure(padx=10, pady=10)
 
-        # Available YOLO models (simplified list)
+        # Available YOLO models (expanded list)
         self.available_models = [
-            "yolo11m.pt",  # Recommended default
-            "yolo11s.pt",  # Small
-            "yolo11n.pt",  # Nano
-            "yolov8m.pt",  # YOLOv8 medium
-            "yolov8s.pt",  # YOLOv8 small
-            "yolov8n.pt",  # YOLOv8 nano
+            # YOLO11 Models (Latest)
+            "yolo11x.pt",  # YOLO11 Extra Large
+            "yolo11l.pt",  # YOLO11 Large
+            "yolo11m.pt",  # YOLO11 Medium (Recommended default)
+            "yolo11s.pt",  # YOLO11 Small
+            "yolo11n.pt",  # YOLO11 Nano
+            # YOLO12 Models (Latest)
+            "yolo12x.pt",  # YOLO12 Extra Large
+            "yolo12l.pt",  # YOLO12 Large
+            "yolo12m.pt",  # YOLO12 Medium
+            "yolo12s.pt",  # YOLO12 Small
+            "yolo12n.pt",  # YOLO12 Nano
+            # YOLOv8 Models (Stable)
+            "yolov8x.pt",  # YOLOv8 Extra Large
+            "yolov8l.pt",  # YOLOv8 Large
+            "yolov8m.pt",  # YOLOv8 Medium
+            "yolov8s.pt",  # YOLOv8 Small
+            "yolov8n.pt",  # YOLOv8 Nano
+            # YOLOv9 Models (Latest)
+            "yolov9c.pt",  # YOLOv9 Compact
+            "yolov9e.pt",  # YOLOv9 Extra Large
+            "yolov9l.pt",  # YOLOv9 Large
+            "yolov9m.pt",  # YOLOv9 Medium
+            "yolov9s.pt",  # YOLOv9 Small
         ]
 
         # Tkinter variables
@@ -98,7 +116,7 @@ class YOLOTrainApp(tk.Tk):
     def create_widgets(self):
         """Creates simplified widgets."""
         # Configure grid
-        self.grid_rowconfigure(6, weight=1)
+        self.grid_rowconfigure(8, weight=1)
         self.grid_columnconfigure(1, weight=1)
 
         # Title
@@ -183,6 +201,73 @@ class YOLOTrainApp(tk.Tk):
             self, height=15, wrap="word", font=("Consolas", 9)
         )
         self.console.grid(row=7, column=0, columnspan=3, padx=10, pady=5, sticky="nsew")
+
+    def _update_model_list(self, event=None):
+        """Updates the model list based on selected category."""
+        category = self.model_category.get()
+        
+        # Filter models by category
+        if category == "YOLO11":
+            models = [m for m in self.available_models if m.startswith("yolo11")]
+        elif category == "YOLO12":
+            models = [m for m in self.available_models if m.startswith("yolo12")]
+        elif category == "YOLOv8":
+            models = [m for m in self.available_models if m.startswith("yolov8")]
+        elif category == "YOLOv9":
+            models = [m for m in self.available_models if m.startswith("yolov9")]
+        else:
+            models = self.available_models
+        
+        # Update combobox values
+        self.model_combo['values'] = models
+        
+        # Set default model for category
+        if models:
+            if category == "YOLO11":
+                self.base_model.set("yolo11m.pt")
+            elif category == "YOLO12":
+                self.base_model.set("yolo12m.pt")
+            elif category == "YOLOv8":
+                self.base_model.set("yolov8m.pt")
+            elif category == "YOLOv9":
+                self.base_model.set("yolov9m.pt")
+            else:
+                self.base_model.set(models[0])
+
+    def show_model_help(self):
+        """Shows help information about YOLO models."""
+        help_text = """
+YOLO MODEL SELECTION GUIDE
+==========================
+
+MODEL CATEGORIES:
+• YOLO11: Latest version (2024) - Best performance
+• YOLO12: Latest version (2024) - Newest features  
+• YOLOv8: Stable version - Well tested
+• YOLOv9: Latest version - Advanced features
+
+MODEL SIZES (n → s → m → l → x):
+• n (Nano): ~6MB - Fastest, lowest accuracy
+• s (Small): ~20MB - Fast, low accuracy
+• m (Medium): ~50MB - Balanced (RECOMMENDED)
+• l (Large): ~150MB - Slow, high accuracy
+• x (Extra Large): ~300MB - Slowest, highest accuracy
+
+RECOMMENDATIONS:
+• For beginners: Use YOLO11m or YOLO12m
+• For real-time: Use nano (n) models
+• For best accuracy: Use large (l) or extra large (x) models
+• For mobile/edge: Use nano (n) or small (s) models
+
+TRAINING CONSIDERATIONS:
+• Larger models need more GPU memory
+• Smaller models may need more training epochs
+• Medium models offer best balance of speed/accuracy
+
+For more info: https://docs.ultralytics.com/models/
+        """
+        
+        messagebox.showinfo("YOLO Model Guide", help_text)
 
     def show_anylabeling_help(self):
         """Shows AnyLabeling help."""
@@ -566,8 +651,7 @@ names: {names_str}  # class names
             # Get parameters from GUI (only essential ones)
             dataset_folder = self.dataset_path.get()
             yaml_file = self.yaml_path.get()
-            model_name = self.base_model.get()
-            run_name = self.project_name.get()
+            # model_name = self.base_model.get() # This line is removed
 
             # Print to both GUI and terminal
             print("=" * 60)
@@ -575,8 +659,8 @@ names: {names_str}  # class names
             print("=" * 60)
             print(f"Dataset folder: {dataset_folder}")
             print(f"YAML file: {yaml_file}")
-            print(f"Model: {model_name}")
-            print(f"Run name: {run_name}")
+            # print(f"Model: {model_name}") # This line is removed
+            print(f"Run name: {self.project_name.get()}") # Keep project_name for consistency
             print("=" * 60)
 
             # Validate YAML file
@@ -601,11 +685,15 @@ names: {names_str}  # class names
                 img_size = yaml_data.get('imgsz', 640)
                 device = yaml_data.get('device', 'cpu')
                 
+                # Get model name from YAML (with default)
+                model_name = yaml_data.get('model', 'yolo11m.pt')
+
                 print(f"\nTraining parameters from YAML:")
                 print(f"  Epochs: {epochs}")
                 print(f"  Batch size: {batch_size}")
                 print(f"  Image size: {img_size}")
                 print(f"  Device: {device}")
+                print(f"  Model: {model_name}")
                 
                 # Validate that the paths actually exist
                 train_path = yaml_data.get('train', '')
@@ -637,35 +725,64 @@ names: {names_str}  # class names
             os.makedirs(models_dir, exist_ok=True)
             model_path = os.path.join(models_dir, model_name)
 
-            print(f"\nChecking model: {model_name}")
+            print(f"\n--- MODEL INFORMATION ---")
+            print(f"Selected model: {model_name}")
             print(f"Models directory: {models_dir}")
             print(f"Model path: {model_path}")
+            
+            # Show model characteristics
+            self._show_model_characteristics(model_name)
 
             # Download the model if it doesn't exist
             if not os.path.exists(model_path):
                 try:
-                    print(f"Downloading model {model_name}...")
+                    print(f"\nDownloading model {model_name}...")
+                    print(f"This may take a few minutes depending on your internet connection.")
+                    print(f"Model size varies by type:")
+                    print(f"  • Nano models (~6-20 MB)")
+                    print(f"  • Small models (~20-50 MB)")
+                    print(f"  • Medium models (~50-150 MB)")
+                    print(f"  • Large models (~150-300 MB)")
+                    print(f"  • Extra Large models (~300-600 MB)")
+                    
                     current_dir = os.getcwd()
                     os.chdir(models_dir)
                     
-                    # Download using YOLO
+                    # Download using YOLO with progress indication
+                    print(f"\nInitiating download...")
                     model = YOLO(model_name)
                     
                     os.chdir(current_dir)
-                    print(f"Model downloaded successfully to {model_path}")
+                    
+                    # Check if file was actually downloaded
+                    if os.path.exists(model_path):
+                        size_mb = os.path.getsize(model_path) / (1024 * 1024)
+                        print(f"✓ Model downloaded successfully!")
+                        print(f"  File size: {size_mb:.1f} MB")
+                        print(f"  Location: {model_path}")
+                    else:
+                        raise FileNotFoundError(f"Model file not found after download: {model_path}")
+                        
                 except Exception as e:
-                    print(f"Error downloading model: {e}")
+                    print(f"❌ Error downloading model: {e}")
+                    print(f"Possible solutions:")
+                    print(f"  • Check your internet connection")
+                    print(f"  • Verify the model name is correct")
+                    print(f"  • Try a different model")
+                    print(f"  • Check if Ultralytics is up to date")
                     raise
             else:
-                print(f"Model already exists: {model_path}")
+                size_mb = os.path.getsize(model_path) / (1024 * 1024)
+                print(f"✓ Model already exists: {model_path}")
+                print(f"  File size: {size_mb:.1f} MB")
 
             print(f"\nLoading model: {model_name}")
             model = YOLO(model_path)
-            print(f"Model loaded successfully")
+            print(f"✓ Model loaded successfully")
 
             # Define output directory structure
             output_dir = os.path.join(dataset_folder, "runs")
-            run_output_dir = os.path.join(output_dir, run_name)
+            run_output_dir = os.path.join(output_dir, self.project_name.get()) # Use project_name
             weights_dir = os.path.join(run_output_dir, "weights")
 
             print(f"\n--- Training Configuration ---")
@@ -694,7 +811,7 @@ names: {names_str}  # class names
                 imgsz=img_size,
                 device=device,
                 project=output_dir,
-                name=run_name,
+                name=self.project_name.get(), # Use project_name
                 exist_ok=True,
                 verbose=True  # This ensures detailed output
             )
@@ -769,6 +886,65 @@ names: {names_str}  # class names
         finally:
             sys.stdout = original_stdout
             self.after(0, lambda: self.start_button.config(state=tk.NORMAL))
+
+    def _show_model_characteristics(self, model_name):
+        """Shows characteristics of the selected model."""
+        print(f"\nModel characteristics:")
+        
+        # Model size and performance characteristics
+        model_info = {
+            "yolo11n.pt": {"size": "~6MB", "speed": "Fastest", "accuracy": "Lower", "use": "Edge devices, real-time"},
+            "yolo11s.pt": {"size": "~20MB", "speed": "Fast", "accuracy": "Low", "use": "Mobile, embedded"},
+            "yolo11m.pt": {"size": "~50MB", "speed": "Medium", "accuracy": "Good", "use": "General purpose (recommended)"},
+            "yolo11l.pt": {"size": "~150MB", "speed": "Slow", "accuracy": "High", "use": "High accuracy needed"},
+            "yolo11x.pt": {"size": "~300MB", "speed": "Slowest", "accuracy": "Highest", "use": "Best accuracy"},
+            
+            "yolo12n.pt": {"size": "~6MB", "speed": "Fastest", "accuracy": "Lower", "use": "Edge devices, real-time"},
+            "yolo12s.pt": {"size": "~20MB", "speed": "Fast", "accuracy": "Low", "use": "Mobile, embedded"},
+            "yolo12m.pt": {"size": "~50MB", "speed": "Medium", "accuracy": "Good", "use": "General purpose"},
+            "yolo12l.pt": {"size": "~150MB", "speed": "Slow", "accuracy": "High", "use": "High accuracy needed"},
+            "yolo12x.pt": {"size": "~300MB", "speed": "Slowest", "accuracy": "Highest", "use": "Best accuracy"},
+            
+            "yolov8n.pt": {"size": "~6MB", "speed": "Fastest", "accuracy": "Lower", "use": "Edge devices, real-time"},
+            "yolov8s.pt": {"size": "~20MB", "speed": "Fast", "accuracy": "Low", "use": "Mobile, embedded"},
+            "yolov8m.pt": {"size": "~50MB", "speed": "Medium", "accuracy": "Good", "use": "General purpose"},
+            "yolov8l.pt": {"size": "~150MB", "speed": "Slow", "accuracy": "High", "use": "High accuracy needed"},
+            "yolov8x.pt": {"size": "~300MB", "speed": "Slowest", "accuracy": "Highest", "use": "Best accuracy"},
+            
+            "yolov9c.pt": {"size": "~10MB", "speed": "Fast", "accuracy": "Low", "use": "Compact, efficient"},
+            "yolov9s.pt": {"size": "~20MB", "speed": "Fast", "accuracy": "Low", "use": "Mobile, embedded"},
+            "yolov9m.pt": {"size": "~50MB", "speed": "Medium", "accuracy": "Good", "use": "General purpose"},
+            "yolov9l.pt": {"size": "~150MB", "speed": "Slow", "accuracy": "High", "use": "High accuracy needed"},
+            "yolov9e.pt": {"size": "~300MB", "speed": "Slowest", "accuracy": "Highest", "use": "Best accuracy"},
+        }
+        
+        if model_name in model_info:
+            info = model_info[model_name]
+            print(f"  Size: {info['size']}")
+            print(f"  Speed: {info['speed']}")
+            print(f"  Accuracy: {info['accuracy']}")
+            print(f"  Best for: {info['use']}")
+        else:
+            print(f"  Model: {model_name}")
+            print(f"  Note: Model characteristics not available")
+        
+        # Show recommendations
+        print(f"\nRecommendations:")
+        if "n" in model_name:
+            print(f"  • Good for: Real-time applications, edge devices")
+            print(f"  • Consider: May need more training epochs for good accuracy")
+        elif "s" in model_name:
+            print(f"  • Good for: Mobile applications, embedded systems")
+            print(f"  • Consider: Balance between speed and accuracy")
+        elif "m" in model_name:
+            print(f"  • Good for: General purpose training (recommended)")
+            print(f"  • Consider: Best balance of speed, accuracy, and size")
+        elif "l" in model_name:
+            print(f"  • Good for: High accuracy requirements")
+            print(f"  • Consider: Slower training and inference")
+        elif "x" in model_name or "e" in model_name:
+            print(f"  • Good for: Best possible accuracy")
+            print(f"  • Consider: Requires more GPU memory and time")
 
     def _show_model_info(self, best_model_path, last_model_path, run_output_dir):
         """Shows detailed information about saved models."""

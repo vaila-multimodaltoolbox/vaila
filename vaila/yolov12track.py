@@ -173,21 +173,128 @@ def update_csv(
         writer.writerows(rows)
 
 
+def get_hardware_info():
+    """Get detailed hardware information for GPU/CPU detection"""
+    info = []
+    info.append(f"Python version: {sys.version}")
+    info.append(f"PyTorch version: {torch.__version__}")
+    
+    if torch.cuda.is_available():
+        info.append(f"CUDA available: Yes")
+        info.append(f"CUDA version: {torch.version.cuda}")
+        info.append(f"Number of GPUs: {torch.cuda.device_count()}")
+        for i in range(torch.cuda.device_count()):
+            info.append(f"GPU {i}: {torch.cuda.get_device_name(i)}")
+            info.append(f"  Memory: {torch.cuda.get_device_properties(i).total_memory / 1e9:.2f} GB")
+    else:
+        info.append("CUDA available: No")
+        info.append(f"CPU cores: {os.cpu_count()}")
+    
+    return "\n".join(info)
+
+def detect_optimal_device():
+    """Detect and return the optimal device for processing"""
+    # Default to CPU for better compatibility
+    if torch.cuda.is_available():
+        gpu_count = torch.cuda.device_count()
+        if gpu_count > 1:
+            print(f"Multiple GPUs detected ({gpu_count}). GPU 0 available for selection.")
+        
+        # Clear cache for optimal performance
+        torch.cuda.empty_cache()
+        # Still return "cpu" as default for better compatibility
+        return "cpu"
+    else:
+        return "cpu"
+
+def validate_device_choice(user_device):
+    """Validate user device choice and provide feedback"""
+    if user_device.lower() == "cuda":
+        if torch.cuda.is_available():
+            return True, "GPU (CUDA) - High performance"
+        else:
+            return False, "GPU (CUDA) requested but not available. Using CPU instead."
+    elif user_device.lower() == "cpu":
+        return True, "CPU - Universal compatibility (default)"
+    else:
+        return False, f"Invalid device: {user_device}. Using CPU instead."
+
+
 class TrackerConfigDialog(tk.simpledialog.Dialog):
     def __init__(self, parent, title=None):
         self.tooltip = None  # Initialize tooltip as None
+        self.hardware_info = get_hardware_info()
+        self.optimal_device = detect_optimal_device()
         super().__init__(parent, title)
 
     def body(self, master):
+        # Hardware Info Frame
+        hw_frame = tk.LabelFrame(master, text="Hardware Information", padx=5, pady=5)
+        hw_frame.grid(row=0, column=0, columnspan=3, sticky="ew", padx=5, pady=5)
+        
+        hw_text = tk.Text(hw_frame, height=6, width=60, wrap="word", font=("Consolas", 8))
+        hw_text.insert(tk.END, self.hardware_info)
+        hw_text.config(state="disabled")
+        hw_text.pack(padx=5, pady=5)
+        
+        # Device Selection Frame
+        device_frame = tk.LabelFrame(master, text="Device Selection", padx=5, pady=5)
+        device_frame.grid(row=1, column=0, columnspan=3, sticky="ew", padx=5, pady=5)
+        
+        # Device choice
+        tk.Label(device_frame, text="Processing Device:").grid(row=0, column=0, padx=5, pady=5)
+        
+        self.device_var = tk.StringVar(value="cpu")  # Default to CPU
+        device_combo = ttk.Combobox(device_frame, textvariable=self.device_var, 
+                                   values=["cpu", "cuda"], state="readonly", width=10)
+        device_combo.grid(row=0, column=1, padx=5, pady=5)
+        
+        # Device status
+        self.device_status = tk.Label(device_frame, text="", fg="green")
+        self.device_status.grid(row=0, column=2, padx=5, pady=5)
+        
+        # Update status when device changes
+        def update_device_status(*args):
+            device = self.device_var.get()
+            is_valid, message = validate_device_choice(device)
+            if is_valid:
+                if device == "cpu":
+                    self.device_status.config(text="✓ " + message, fg="blue")  # Blue for CPU
+                else:
+                    self.device_status.config(text="✓ " + message, fg="green")  # Green for GPU
+            else:
+                self.device_status.config(text="⚠ " + message, fg="orange")
+        
+        self.device_var.trace("w", update_device_status)
+        update_device_status()  # Initial update
+        
+        # Help text for device selection
+        help_text = tk.Label(device_frame, text="?", cursor="hand2", fg="blue")
+        help_text.grid(row=0, column=3, padx=5, pady=5)
+        device_tooltip = (
+            "Processing device options:\n"
+            "'cpu'  - Use CPU (DEFAULT)\n"
+            "        Universal compatibility\n"
+            "        Works on all computers\n"
+            "        Slower but reliable\n\n"
+            "'cuda' - Use GPU (NVIDIA only)\n"
+            "        Much faster processing (10-20x)\n"
+            "        Requires NVIDIA GPU and CUDA\n"
+            "        May have compatibility issues\n\n"
+            "CPU is recommended for most users."
+        )
+        help_text.bind("<Enter>", lambda e: self.show_help(e, device_tooltip))
+        help_text.bind("<Leave>", self.hide_help)
+
         # Confidence
         tk.Label(master, text="Confidence threshold:").grid(
-            row=0, column=0, padx=5, pady=5
+            row=2, column=0, padx=5, pady=5
         )
         self.conf = tk.Entry(master)
         self.conf.insert(0, "0.15")
-        self.conf.grid(row=0, column=1, padx=5, pady=5)
+        self.conf.grid(row=2, column=1, padx=5, pady=5)
         help_text = tk.Label(master, text="?", cursor="hand2", fg="blue")
-        help_text.grid(row=0, column=2, padx=5, pady=5)
+        help_text.grid(row=2, column=2, padx=5, pady=5)
         conf_tooltip = (
             "Confidence threshold (0-1):\n"
             "Controls how confident the model must be to detect an object.\n"
@@ -199,12 +306,12 @@ class TrackerConfigDialog(tk.simpledialog.Dialog):
         help_text.bind("<Leave>", self.hide_help)
 
         # IoU
-        tk.Label(master, text="IoU threshold:").grid(row=1, column=0, padx=5, pady=5)
+        tk.Label(master, text="IoU threshold:").grid(row=3, column=0, padx=5, pady=5)
         self.iou = tk.Entry(master)
         self.iou.insert(0, "0.7")
-        self.iou.grid(row=1, column=1, padx=5, pady=5)
+        self.iou.grid(row=3, column=1, padx=5, pady=5)
         help_text = tk.Label(master, text="?", cursor="hand2", fg="blue")
-        help_text.grid(row=1, column=2, padx=5, pady=5)
+        help_text.grid(row=3, column=2, padx=5, pady=5)
         iou_tooltip = (
             "Intersection over Union threshold (0-1):\n"
             "Controls how much overlap is needed to merge multiple detections.\n"
@@ -215,34 +322,13 @@ class TrackerConfigDialog(tk.simpledialog.Dialog):
         help_text.bind("<Enter>", lambda e: self.show_help(e, iou_tooltip))
         help_text.bind("<Leave>", self.hide_help)
 
-        # Device
-        tk.Label(master, text="Device (cuda/cpu):").grid(
-            row=2, column=0, padx=5, pady=5
-        )
-        self.device = tk.Entry(master)
-        self.device.insert(0, "cpu")
-        self.device.grid(row=2, column=1, padx=5, pady=5)
-        help_text = tk.Label(master, text="?", cursor="hand2", fg="blue")
-        help_text.grid(row=2, column=2, padx=5, pady=5)
-        device_tooltip = (
-            "Processing device options:\n"
-            "'cuda' - Use GPU (NVIDIA only)\n"
-            "        Much faster processing (10-20x)\n"
-            "        Requires NVIDIA GPU and CUDA\n\n"
-            "'cpu'  - Use CPU\n"
-            "        Works on all computers\n"
-            "        Slower but universally compatible"
-        )
-        help_text.bind("<Enter>", lambda e: self.show_help(e, device_tooltip))
-        help_text.bind("<Leave>", self.hide_help)
-
         # Video stride
-        tk.Label(master, text="Video stride:").grid(row=3, column=0, padx=5, pady=5)
+        tk.Label(master, text="Video stride:").grid(row=4, column=0, padx=5, pady=5)
         self.vid_stride = tk.Entry(master)
         self.vid_stride.insert(0, "1")
-        self.vid_stride.grid(row=3, column=1, padx=5, pady=5)
+        self.vid_stride.grid(row=4, column=1, padx=5, pady=5)
         help_text = tk.Label(master, text="?", cursor="hand2", fg="blue")
-        help_text.grid(row=3, column=2, padx=5, pady=5)
+        help_text.grid(row=4, column=2, padx=5, pady=5)
         stride_tooltip = (
             "Video stride (frames to skip):\n"
             "1 = Process every frame\n"
@@ -288,10 +374,18 @@ class TrackerConfigDialog(tk.simpledialog.Dialog):
 
     def validate(self):
         try:
+            # Validate device choice
+            device = self.device_var.get()
+            is_valid, message = validate_device_choice(device)
+            
+            if not is_valid:
+                messagebox.showwarning("Device Warning", message)
+                device = "cpu"  # Fallback to CPU
+            
             self.result = {
                 "conf": float(self.conf.get()),
                 "iou": float(self.iou.get()),
-                "device": self.device.get(),
+                "device": device,
                 "vid_stride": int(self.vid_stride.get()),
                 "half": True,
                 "persist": True,
@@ -945,6 +1039,13 @@ def run_yolov12track():
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
 
+    # Print hardware information
+    print("=" * 60)
+    print("HARDWARE CONFIGURATION")
+    print("=" * 60)
+    print(get_hardware_info())
+    print("=" * 60)
+
     root = tk.Tk()
     root.withdraw()
 
@@ -998,6 +1099,15 @@ def run_yolov12track():
         return
 
     config = config_dialog.result
+    
+    # Print device information
+    device = config["device"]
+    print(f"\nSelected device: {device}")
+    if device == "cuda":
+        print(f"GPU: {torch.cuda.get_device_name(0)}")
+        print(f"GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f} GB")
+    else:
+        print(f"CPU cores: {os.cpu_count()}")
 
     # Initialize the YOLO model
     model = YOLO(model_path)
