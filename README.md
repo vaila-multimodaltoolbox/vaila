@@ -131,7 +131,7 @@ If you need any further adjustments or have additional requests, feel free to le
    - Navigate to the directory where *vailá* was downloaded or extracted.
     - - Normally use this command if you have downloaded *vailá* from Downloads
      ```powershell
-        cd "C:\Users\$env:USERNAME\Downloads\vaila"
+     cd "C:\Users\$env:USERNAME\Downloads\vaila"
      ```
    - Execute the installation script:
      ```powershell
