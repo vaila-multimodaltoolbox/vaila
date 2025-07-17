@@ -1,4 +1,57 @@
 """
+Project: vailá Multimodal Toolbox
+Script: modifylabref.py - Custom 3D Rotation Processing Toolkit
+
+Author: Paulo Roberto Pereira Santiago
+Email: paulosantiago@usp.br
+GitHub: https://github.com/vaila-multimodaltoolbox/vaila
+Creation Date: 21 Sep 2024
+Update Date: 17 Jul 2025
+Version: 0.0.3
+
+Description:
+    This script is designed for rotating and transforming 3D motion capture data.
+    It allows the application of predefined or custom rotation angles (in degrees) and
+    rotation orders (e.g., 'xyz', 'zyx') to sets of 3D data points (e.g., from CSV files).
+
+    Main Features:
+    1. Predefined Rotations:
+        - Options 'A', 'B', and 'C' apply standard rotation transformations:
+          'A' applies a 180 degree rotation around the Z-axis.
+          'B' applies a 90 degree clockwise rotation around the Z-axis.
+          'C' applies a 90 degree counterclockwise rotation around the Z-axis.
+
+    2. Custom Rotation:
+        - Users can input custom angles in the format: [x, y, z]
+        - Optionally specify rotation order: [x, y, z], xyz
+        - Supports all 6 rotation orders: xyz, xzy, yxz, yzx, zxy, zyx
+
+    3. Automated File Processing:
+        - Processes all CSV files in the specified input directory
+        - Outputs saved to 'rotated_files' subfolder
+        - Preserves original data precision
+
+Usage:
+    Run the script from the command line:
+        python modifylabref.py
+
+Requirements:
+    - Python 3.x
+    - numpy
+    - pandas
+    - scipy
+
+License:
+    This project is licensed under the terms of GNU General Public License v3.0.
+
+Change History:
+    - v1.3: Fixed data missing handling and precision preservation
+    - v1.2: Added custom rotation support with multiple rotation orders
+    - v1.1: Added predefined rotation options (A, B, C)
+    - v1.0: Initial version with basic 3D rotation functionality
+"""
+
+"""
 ================================================================================
 Custom 3D Rotation Processing Toolkit
 ================================================================================
@@ -45,6 +98,7 @@ import numpy as np
 import pandas as pd
 from scipy.spatial.transform import Rotation as R
 from datetime import datetime
+from rich import print
 
 
 def rotdata(data, xth=0, yth=0, zth=0, ordem="xyz"):
@@ -203,12 +257,20 @@ def save_with_original_precision(data, original_data_str, output_path):
         precision = detect_column_precision(original_data_str, i)
         column_formats[i] = precision
     
-    # Apply formatting to each column
+    # Apply formatting to each column, but ensure minimum precision for rotated data
     formatted_data = data.copy()
     for i, col in enumerate(formatted_data.columns):
         precision = column_formats.get(i, 6)
-        if precision == 0:
-            # Integer formatting
+        
+        # Check if the column has decimal values (indicating that rotation was applied)
+        has_decimals = (formatted_data[col] % 1 != 0).any()
+
+        if precision == 0 and has_decimals:
+            # Override precision if rotation created decimal values
+            precision = 6
+            
+        if precision == 0 and not has_decimals:
+            # Integer formatting only if truly integers
             formatted_data[col] = formatted_data[col].apply(lambda x: f"{int(x)}" if pd.notna(x) else "")
         else:
             # Float formatting with specific precision
@@ -308,6 +370,10 @@ def run_modify_labref(option, input_dir):
 
 
 def main():
+    # Print the directory and name of the script being executed
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+
     """Interactive main function for script execution."""
     print("\nCUSTOM 3D ROTATION PROCESSING TOOLKIT")
     print("="*50)

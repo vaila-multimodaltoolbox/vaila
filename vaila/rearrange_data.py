@@ -1,55 +1,43 @@
 """
-rearrange_data.py
-
-Created: 08 Oct 2024
-Updated: 03 Jun 2025
-
-Version: 0.0.4
+Project: vailá Multimodal Toolbox
+Script: rearrange_data.py - CSV Data Rearrangement and Processing Tool
 
 Author: Paulo Roberto Pereira Santiago
+Email: paulosantiago@usp.br
+GitHub: https://github.com/vaila-multimodaltoolbox/vaila
+Creation Date: 08 Oct 2024
+Update Date: 17 Jul 2025
+Version: 0.0.5
 
 Description:
--------------
-This script provides tools for rearranging and processing CSV data files.
-It includes functions for:
-- Reordering columns.
-- Merging and stacking CSV files.
-- Converting MediaPipe data to a format compatible with 'getpixelvideo.py'.
-- Detecting precision and scientific notation in the data.
-- Converting units between various metric systems.
-- Modifying lab reference systems.
-- Saving the second half of each CSV file.
-Features:
----------
-- Batch processing of CSV files.
-- Support for GUI-based column reordering and data reshaping.
-- MediaPipe data conversion to a compatible format for pixel coordinate visualization.
-- Flexible unit conversion and custom lab reference adjustments.
-- User-friendly interface with options for saving intermediate and final processed data.
-- Saving the second half of each CSV file.
-
-Changelog:
-----------
-- 2024-08-10: Added functionality to batch convert MediaPipe CSV files and save them in a new directory.
-- 2024-08-10: Implemented automatic directory creation for saving converted MediaPipe data.
-- 2024-07-31: Initial version with core functionalities for CSV reordering and unit conversion.
-- 2025-05-15: Added functionality to save the second half of each CSV file.
+    This script provides tools for rearranging and processing CSV data files.
+    It includes functions for:
+    - Reordering columns.
+    - Merging and stacking CSV files.
+    - Converting MediaPipe data to a format compatible with 'getpixelvideo.py'.
+    - Detecting precision and scientific notation in the data.
+    - Converting units between various metric systems.
+    - Modifying lab reference systems.
+    - Saving the second half of each CSV file.
 
 Usage:
-------
-- Run the script to launch a GUI for reordering CSV columns.
-- Use the "Convert MediaPipe" button to batch convert MediaPipe CSV files to a compatible format.
-- Save the processed files in a timestamped directory.
-- Use the "Save 2nd Half CSV" button to save the second half of each CSV file.
+    Run the script from the command line:
+        python rearrange_data.py
 
 Requirements:
--------------
-- Python 3.x
-- pandas
-- numpy
-- tkinter
+    - Python 3.x
+    - pandas
+    - numpy
+    - tkinter
 
-License: GNU General Public License v3.0
+License:
+    This project is licensed under the terms of GNU General Public License v3.0.
+
+Change History:
+    - v0.0.4: Added functionality to save the second half of each CSV file
+    - v0.0.3: Added batch convert MediaPipe CSV files functionality
+    - v0.0.2: Added automatic directory creation for saving converted MediaPipe data
+    - v0.0.1: Initial version with core functionalities for CSV reordering and unit conversion
 """
 
 import os
@@ -440,7 +428,7 @@ class ColumnReorderGUI(tk.Tk):
             else:
                 self.setup_normal_gui(full_path)
 
-        # Configurar o tamanho da janela
+        # Configure the window
         self.title(f"Reorder CSV Columns - {self.file_names[0]}")
         screen_width = self.winfo_screenwidth()
         screen_height = self.winfo_screenheight()
@@ -449,16 +437,16 @@ class ColumnReorderGUI(tk.Tk):
         self.geometry(f"{window_width}x{window_height}")
 
     def setup_empty_gui(self):
-        """Configuração para quando não há arquivos CSV"""
+        """Configuration for empty CSV files"""
         print("No CSV files found. Simulating an empty CSV file.")
-        self.df = pd.DataFrame(columns=["Column1", "Column2", "Column3"])
+        self.df = pd.DataFrame(columns=pd.Index(["Column1", "Column2", "Column3"]))
         self.file_names = ["Simulated_Empty_File.csv"]
         self.max_decimal_places = 2
         self.scientific_notation = False
         self.setup_gui()
 
     def setup_large_file_gui(self, file_path):
-        """Configuração especial para arquivos grandes"""
+        """Configuration for large files"""
         try:
             # Ler apenas o cabeçalho e as primeiras linhas
             print("Reading file headers...")
@@ -482,7 +470,7 @@ class ColumnReorderGUI(tk.Tk):
             self.setup_empty_gui()
 
     def setup_normal_gui(self, file_path):
-        """Configuração normal para arquivos pequenos"""
+        """Configuration for small files"""
         try:
             self.df = pd.read_csv(file_path)
             self.max_decimal_places, self.scientific_notation = (
@@ -499,7 +487,7 @@ class ColumnReorderGUI(tk.Tk):
             self.setup_empty_gui()
 
     def setup_gui(self, is_large_file=False):
-        """Configuração da interface gráfica com modo para arquivos grandes"""
+        """Configuration for the GUI with large file mode"""
         main_frame = tk.Frame(self)
         main_frame.pack(fill=tk.BOTH, expand=True)
 
@@ -517,7 +505,7 @@ class ColumnReorderGUI(tk.Tk):
         scrollbar.pack(side="right", fill="y")
         canvas.pack(side="left", fill="both", expand=True)
 
-        # Adicionar aviso para arquivos grandes
+        # Add warning for large files
         if is_large_file:
             warning_label = tk.Label(
                 scrollable_frame,
@@ -527,7 +515,7 @@ class ColumnReorderGUI(tk.Tk):
             )
             warning_label.grid(row=0, column=0, columnspan=3, pady=5)
 
-        # Instruções normais
+        # Normal instructions
         instructions_text = (
             "Click to select a Column and press Enter to reorder. Select and press 'd' to delete.\n"
             "Press 'm' to manually select range. Press 'l' to edit rows. Press Ctrl+S to save. "
@@ -543,13 +531,13 @@ class ColumnReorderGUI(tk.Tk):
         )
         self.instructions.grid(row=1, column=0, columnspan=3, pady=10, sticky="n")
 
-        # Resto da configuração da GUI permanece o mesmo
+        # Rest of the GUI configuration remains the same
         self.header_frame = tk.Frame(scrollable_frame)
         self.header_frame.grid(
             row=2, column=0, columnspan=2, pady=10, padx=10, sticky="nsew"
         )
 
-        # Labels para número e nome
+        # Labels for number and name
         self.number_label = tk.Label(
             self.header_frame, text="Number", font=("default", 12, "bold")
         )
@@ -560,7 +548,7 @@ class ColumnReorderGUI(tk.Tk):
         )
         self.name_label.grid(row=0, column=1, padx=(5, 10), pady=(10, 0))
 
-        # Mostrar shape com informação adicional para arquivos grandes
+        # Show shape with additional information for large files
         if is_large_file:
             shape_text = f"Shape: {self.df.shape[0]} rows (showing first 5) × {self.df.shape[1]} columns"
         else:
@@ -582,14 +570,14 @@ class ColumnReorderGUI(tk.Tk):
         )
         self.header_listbox.grid(row=1, column=1, padx=(5, 10), pady=10, sticky="ns")
 
-        # Atualizar listboxes
+        # Update listboxes
         self.update_listbox()
 
-        # Adicionar frame de botões
+        # Add button frame
         button_frame = tk.Frame(self.header_frame)
         button_frame.grid(row=1, column=2, padx=10, pady=10, sticky="ns")
 
-        # Adicionar todos os botões
+        # Add all buttons
         self.convert_button = tk.Button(
             button_frame, text="Convert Units", command=self.convert_units
         )
@@ -780,16 +768,16 @@ class ColumnReorderGUI(tk.Tk):
         if row_range:
             try:
                 start, end = map(int, row_range.split(":"))
-                start -= 1  # Ajusta para índices 0-based
+                start -= 1  # Adjust for 0-based indexing
                 end -= 1
                 row_shape = (end - start + 1, len(self.current_order))
 
                 row_edit_window = tk.Toplevel(self)
                 row_edit_window.title("Edit Rows")
-                # Calcula o tamanho ideal baseado na resolução da tela
+                # Calculate the ideal size based on the screen resolution
                 screen_width = row_edit_window.winfo_screenwidth()
                 screen_height = row_edit_window.winfo_screenheight()
-                # Define 80% do tamanho da tela, mas não excede 600x400 se a tela permitir
+                # Define 80% of the screen size, but not exceed 600x400 if the screen allows
                 window_width = min(600, int(screen_width * 0.8))
                 window_height = min(400, int(screen_height * 0.8))
                 row_edit_window.geometry(f"{window_width}x{window_height}")
@@ -881,9 +869,7 @@ class ColumnReorderGUI(tk.Tk):
                 ):
                     file_path = os.path.join(root, file_name)
                     df = pd.read_csv(file_path)
-                    deleted_df = df.drop(
-                        df.index[start : end + 1]
-                    )  # The end + 1 ensures 'end' is included in deletion
+                    deleted_df = df.drop(df.index[start : end + 1].tolist())  # Convert slice to list for drop method
                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                     base_name = os.path.splitext(os.path.basename(file_name))[0]
                     new_file_name = (
@@ -927,7 +913,7 @@ class ColumnReorderGUI(tk.Tk):
             max_decimal_places = simpledialog.askinteger(
                 "Decimal Places",
                 "Enter the number of decimal places for saving:",
-                initialvalue=self.max_decimal_places,
+                initialvalue=int(self.max_decimal_places) if isinstance(self.max_decimal_places, (int, float)) else 6,
             )
             if max_decimal_places is None:
                 max_decimal_places = self.max_decimal_places
@@ -957,7 +943,7 @@ class ColumnReorderGUI(tk.Tk):
             max_decimal_places = simpledialog.askinteger(
                 "Decimal Places",
                 "Enter the number of decimal places for saving:",
-                initialvalue=self.max_decimal_places,
+                initialvalue=int(self.max_decimal_places) if isinstance(self.max_decimal_places, (int, float)) else 6,
             )
             if max_decimal_places is None:
                 max_decimal_places = self.max_decimal_places
@@ -1343,7 +1329,7 @@ class ColumnReorderGUI(tk.Tk):
                 filetypes=[("CSV files", "*.csv")],
             )
             if save_path:
-                stack_csv_files(base_file, stack_file, save_path, stack_position)
+                stack_csv_files(base_file, stack_file, save_path, stack_position or "end")
 
     def save_second_half(self):
         """Save the second half of each CSV file into `self.rearranged_path`."""
