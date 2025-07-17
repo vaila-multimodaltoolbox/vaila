@@ -22,6 +22,9 @@ import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider, Button as MplButton, TextBox
 from matplotlib import animation
 from rich import print
+from typing import Union, Optional, List, cast
+from mpl_toolkits.mplot3d import Axes3D
+from matplotlib.backend_bases import TimerBase
 
 
 ###############################################################################
@@ -164,7 +167,7 @@ def choose_visualizer():
     """
     root = tk.Tk()
     root.title("Select Visualizer")
-    choice = [None]
+    choice: list[str | None] = [None]  # Add type annotation
 
     def choose_matplotlib():
         choice[0] = "matplotlib"
@@ -340,7 +343,7 @@ def show_csv_matplotlib(points, marker_names, fps=30):
 
     num_frames, num_markers, _ = points.shape
     fig = plt.figure(figsize=(10, 8))
-    ax = fig.add_subplot(111, projection="3d")
+    ax = cast(Axes3D, fig.add_subplot(111, projection="3d"))
     scatter = ax.scatter(
         points[0, :, 0], points[0, :, 1], points[0, :, 2], c="blue", s=20
     )
@@ -354,11 +357,11 @@ def show_csv_matplotlib(points, marker_names, fps=30):
     x_min, x_max = points[:, :, 0].min(), points[:, :, 0].max()
     y_min, y_max = points[:, :, 1].min(), points[:, :, 1].max()
     z_min, z_max = points[:, :, 2].min(), points[:, :, 2].max()
-    ax.set_xlim([x_min, x_max])
-    ax.set_ylim([y_min, y_max])
-    ax.set_zlim([z_min, z_max])
+    ax.set_xlim((x_min, x_max))
+    ax.set_ylim((y_min, y_max))
+    ax.set_zlim((z_min, z_max))
 
-    ax_slider = plt.axes([0.25, 0.02, 0.5, 0.03])
+    ax_slider = plt.axes((0.25, 0.02, 0.5, 0.03))
     slider = Slider(ax_slider, "Frame", 0, num_frames - 1, valinit=0, valfmt="%d")
 
     current_frame = [0]
@@ -368,18 +371,30 @@ def show_csv_matplotlib(points, marker_names, fps=30):
         frame = int(slider.val) if isinstance(val, float) else int(val)
         current_frame[0] = frame
         new_positions = points[frame]
-        scatter._offsets3d = (
-            new_positions[:, 0],
-            new_positions[:, 1],
-            new_positions[:, 2],
-        )
+        
+        # Clear and redraw
+        ax.clear()
+        ax.set_xlabel("X")
+        ax.set_ylabel("Y")
+        ax.set_zlabel("Z")
+        
+        # Filter out NaN values for this frame
+        valid_mask = ~np.isnan(new_positions).any(axis=1)
+        valid_positions = new_positions[valid_mask]
+        
+        if len(valid_positions) > 0:
+            ax.scatter(valid_positions[:, 0], valid_positions[:, 1], zs=valid_positions[:, 2], c="blue", s=20)
+        
+        ax.set_xlim((x_min, x_max))
+        ax.set_ylim((y_min, y_max))
+        ax.set_zlim((z_min, z_max))
         fig.canvas.draw_idle()
 
     slider.on_changed(update_frame)
 
     # Variables for automatic playback control
     playing = [False]
-    timer = [None]
+    timer: list[TimerBase | None] = [None]
 
     def timer_callback():
         current_frame[0] = (current_frame[0] + 1) % num_frames
@@ -390,7 +405,7 @@ def show_csv_matplotlib(points, marker_names, fps=30):
         if not playing[0]:
             playing[0] = True
             btn_play.label.set_text("Pause")
-            timer[0] = fig.canvas.new_timer(interval=1000 / 30)  # Assuming 30 fps
+            timer[0] = fig.canvas.new_timer(interval=int(1000 / 30))  # Assuming 30 fps
             try:
                 timer[0].single_shot = False
             except AttributeError:
@@ -405,12 +420,11 @@ def show_csv_matplotlib(points, marker_names, fps=30):
                 timer[0] = None
 
     # Create play button
-    ax_play = fig.add_axes([0.82, 0.02, 0.1, 0.05])
+    ax_play = fig.add_axes((0.82, 0.02, 0.1, 0.05))
     btn_play = MplButton(ax_play, "Play")
     btn_play.on_clicked(play_pause)
-
     # Add record button
-    ax_record = fig.add_axes([0.82, 0.08, 0.1, 0.05])
+    ax_record = plt.axes((0.82, 0.08, 0.1, 0.05))  # Keep consistent with ax_slider format
     btn_record = MplButton(ax_record, "Record")
     
     def record_animation(event):
@@ -438,12 +452,24 @@ def show_csv_matplotlib(points, marker_names, fps=30):
             # Create animation
             def update(frame):
                 new_positions = points[frame]
-                scatter._offsets3d = (
-                    new_positions[:, 0],
-                    new_positions[:, 1],
-                    new_positions[:, 2],
-                )
-                return scatter,
+                
+                # Clear and redraw
+                ax.clear()
+                ax.set_xlabel("X")
+                ax.set_ylabel("Y")
+                ax.set_zlabel("Z")
+                
+                # Filter out NaN values for this frame
+                valid_mask = ~np.isnan(new_positions).any(axis=1)
+                valid_positions = new_positions[valid_mask]
+                
+                if len(valid_positions) > 0:
+                    ax.scatter(valid_positions[:, 0], valid_positions[:, 1], valid_positions[:, 2], c="blue", s=20)
+                
+                ax.set_xlim((x_min, x_max))
+                ax.set_ylim((y_min, y_max))
+                ax.set_zlim((z_min, z_max))
+                return ax,
 
             anim = animation.FuncAnimation(
                 fig, update, frames=num_frames,
@@ -627,10 +653,19 @@ def show_csv():
 
     file_name = os.path.basename(file_path)
 
+    # Filter out NaN values for initial plotting and limit calculation
+    valid_mask = ~np.isnan(points[0]).any(axis=1)
+    valid_points_frame0 = points[0][valid_mask]
+    
     # Create the 3D figure with the initial frame (frame 0) markers
     fig = plt.figure(figsize=(10, 8))
-    ax = fig.add_axes([0.0, 0.15, 1.0, 0.85], projection="3d")  # Increased bottom margin
-    scat = ax.scatter(points[0, :, 0], points[0, :, 1], points[0, :, 2], c="blue", s=20)
+    ax = cast(Axes3D, fig.add_subplot(111, projection="3d"))
+    ax.set_position((0.0, 0.15, 1.0, 0.85))  # Set position after creation
+    
+    if len(valid_points_frame0) > 0:
+        scat = ax.scatter(valid_points_frame0[:, 0], valid_points_frame0[:, 1], valid_points_frame0[:, 2], c="blue", s=20)
+    else:
+        scat = ax.scatter(0, 0, 0, c="blue", s=20, alpha=0)  # Invisible point
 
     ax.set_xlabel("X")
     ax.set_ylabel("Y")
@@ -639,16 +674,42 @@ def show_csv():
         f"C3D CSV Viewer | File: {file_name} | Markers: {len(selected_markers)}/{len(available_markers)} | Frames: {num_frames}"
     )
 
-    # Calculate initial limits from data
-    x_min, x_max = points[:, :, 0].min(), points[:, :, 0].max()
-    y_min, y_max = points[:, :, 1].min(), points[:, :, 1].max()
-    z_min, z_max = points[:, :, 2].min(), points[:, :, 2].max()
+    # Calculate initial limits from data, excluding NaN values
+    valid_points_all = points[~np.isnan(points)]
+    if len(valid_points_all) > 0:
+        # Get valid points for each dimension
+        x_valid = points[:, :, 0][~np.isnan(points[:, :, 0])]
+        y_valid = points[:, :, 1][~np.isnan(points[:, :, 1])]
+        z_valid = points[:, :, 2][~np.isnan(points[:, :, 2])]
+        
+        if len(x_valid) > 0 and len(y_valid) > 0 and len(z_valid) > 0:
+            x_min, x_max = x_valid.min(), x_valid.max()
+            y_min, y_max = y_valid.min(), y_valid.max()
+            z_min, z_max = z_valid.min(), z_valid.max()
+        else:
+            # Default limits if no valid data
+            x_min, x_max = -1, 1
+            y_min, y_max = -1, 1
+            z_min, z_max = -1, 1
+    else:
+        # Default limits if no valid data
+        x_min, x_max = -1, 1
+        y_min, y_max = -1, 1
+        z_min, z_max = -1, 1
 
     # Add some padding to the limits
     x_range = x_max - x_min
     y_range = y_max - y_min
     z_range = z_max - z_min
     padding = 0.1  # 10% padding
+
+    # Ensure we have a minimum range to avoid division by zero
+    if x_range == 0:
+        x_range = 1
+    if y_range == 0:
+        y_range = 1
+    if z_range == 0:
+        z_range = 1
 
     x_min -= x_range * padding
     x_max += x_range * padding
@@ -658,9 +719,9 @@ def show_csv():
     z_max += z_range * padding
 
     # Set initial limits
-    ax.set_xlim([x_min, x_max])
-    ax.set_ylim([y_min, y_max])
-    ax.set_zlim([z_min, z_max])
+    ax.set_xlim((x_min, x_max))
+    ax.set_ylim((y_min, y_max))
+    ax.set_zlim((z_min, z_max))
 
     # Define the equal aspect to avoid distortions
     ax.set_aspect("equal")
@@ -670,7 +731,7 @@ def show_csv():
         try:
             x_min_new, x_max_new = map(float, text.split(','))
             if x_min_new < x_max_new:
-                ax.set_xlim([x_min_new, x_max_new])
+                ax.set_xlim((x_min_new, x_max_new))
                 fig.canvas.draw_idle()
         except ValueError:
             pass
@@ -679,7 +740,7 @@ def show_csv():
         try:
             y_min_new, y_max_new = map(float, text.split(','))
             if y_min_new < y_max_new:
-                ax.set_ylim([y_min_new, y_max_new])
+                ax.set_ylim((y_min_new, y_max_new))
                 fig.canvas.draw_idle()
         except ValueError:
             pass
@@ -688,25 +749,25 @@ def show_csv():
         try:
             z_min_new, z_max_new = map(float, text.split(','))
             if z_min_new < z_max_new:
-                ax.set_zlim([z_min_new, z_max_new])
+                ax.set_zlim((z_min_new, z_max_new))
                 fig.canvas.draw_idle()
         except ValueError:
             pass
 
     def reset_limits(event):
-        ax.set_xlim([x_min, x_max])
-        ax.set_ylim([y_min, y_max])
-        ax.set_zlim([z_min, z_max])
+        ax.set_xlim((x_min, x_max))
+        ax.set_ylim((y_min, y_max))
+        ax.set_zlim((z_min, z_max))
         textbox_x.set_val(f"{x_min:.2f},{x_max:.2f}")
         textbox_y.set_val(f"{y_min:.2f},{y_max:.2f}")
         textbox_z.set_val(f"{z_min:.2f},{z_max:.2f}")
         fig.canvas.draw_idle()
 
     # Create text boxes for limits with better positioning
-    ax_textbox_x = fig.add_axes([0.02, 0.08, 0.12, 0.03])
-    ax_textbox_y = fig.add_axes([0.02, 0.05, 0.12, 0.03])
-    ax_textbox_z = fig.add_axes([0.02, 0.02, 0.12, 0.03])
-    ax_reset = fig.add_axes([0.15, 0.02, 0.06, 0.09])
+    ax_textbox_x = fig.add_axes((0.02, 0.08, 0.12, 0.03))
+    ax_textbox_y = fig.add_axes((0.02, 0.05, 0.12, 0.03))
+    ax_textbox_z = fig.add_axes((0.02, 0.02, 0.12, 0.03))
+    ax_reset = fig.add_axes((0.15, 0.02, 0.06, 0.09))
 
     textbox_x = TextBox(ax_textbox_x, 'X:', initial=f"{x_min:.2f},{x_max:.2f}")
     textbox_y = TextBox(ax_textbox_y, 'Y:', initial=f"{y_min:.2f},{y_max:.2f}")
@@ -719,28 +780,39 @@ def show_csv():
     btn_reset.on_clicked(reset_limits)
 
     # Create a slider for frame control, positioned at the bottom
-    ax_frame = fig.add_axes([0.25, 0.02, 0.5, 0.04])
+    ax_frame = fig.add_axes((0.25, 0.02, 0.5, 0.04))
     slider_frame = Slider(ax_frame, "Frame", 0, num_frames - 1, valinit=0, valfmt="%d")
 
     current_frame = [0]
 
     def update_frame(val):
-        # Update the scatter plot with the new points of the selected frame.
         frame = int(slider_frame.val) if isinstance(val, float) else int(val)
         current_frame[0] = frame
         new_positions = points[frame]
-        scat._offsets3d = (
-            new_positions[:, 0],
-            new_positions[:, 1],
-            new_positions[:, 2],
-        )
+        
+        # Filter out NaN values for this frame
+        valid_mask = ~np.isnan(new_positions).any(axis=1)
+        valid_positions = new_positions[valid_mask]
+        
+        # Clear and redraw
+        ax.clear()
+        ax.set_xlabel("X")
+        ax.set_ylabel("Y")
+        ax.set_zlabel("Z")
+        
+        if len(valid_positions) > 0:
+            ax.scatter(valid_positions[:, 0], valid_positions[:, 1], valid_positions[:, 2], c="blue", s=20)
+        
+        ax.set_xlim((x_min, x_max))
+        ax.set_ylim((y_min, y_max))
+        ax.set_zlim((z_min, z_max))
         fig.canvas.draw_idle()
 
     slider_frame.on_changed(update_frame)
 
     # Variables for automatic playback control
     playing = [False]
-    timer = [None]
+    timer: list[TimerBase | None] = [None]
 
     def timer_callback():
         current_frame[0] = (current_frame[0] + 1) % num_frames
@@ -751,7 +823,7 @@ def show_csv():
         if not playing[0]:
             playing[0] = True
             btn_play.label.set_text("Pause")
-            timer[0] = fig.canvas.new_timer(interval=1000 / 30)  # Assuming 30 fps
+            timer[0] = fig.canvas.new_timer(interval=int(1000 / 30))  # Assuming 30 fps
             try:
                 timer[0].single_shot = False
             except AttributeError:
@@ -766,12 +838,12 @@ def show_csv():
                 timer[0] = None
 
     # Create play button
-    ax_play = fig.add_axes([0.82, 0.02, 0.1, 0.05])
+    ax_play = fig.add_axes((0.82, 0.02, 0.1, 0.05))
     btn_play = MplButton(ax_play, "Play")
     btn_play.on_clicked(play_pause)
 
     # Add record button
-    ax_record = fig.add_axes([0.82, 0.08, 0.1, 0.05])
+    ax_record = fig.add_axes((0.82, 0.08, 0.1, 0.05))
     btn_record = MplButton(ax_record, "Record")
     
     def record_animation(event):
@@ -799,12 +871,28 @@ def show_csv():
             # Create animation
             def update(frame):
                 new_positions = points[frame]
-                scat._offsets3d = (
-                    new_positions[:, 0],
-                    new_positions[:, 1],
-                    new_positions[:, 2],
-                )
-                return scat,
+                
+                # Filter out NaN values for this frame
+                valid_mask = ~np.isnan(new_positions).any(axis=1)
+                valid_positions = new_positions[valid_mask]
+                
+                # Clear and redraw
+                ax.clear()
+                ax.set_xlabel("X")
+                ax.set_ylabel("Y")
+                ax.set_zlabel("Z")
+                if len(valid_positions) > 0:
+                    ax.scatter(
+                        valid_positions[:, 0],
+                        valid_positions[:, 1],
+                        valid_positions[:, 2].tolist(),  # Ensure zs is 1D array or list
+                        c="blue", s=20
+                    )
+
+                ax.set_xlim((x_min, x_max))
+                ax.set_ylim((y_min, y_max))
+                ax.set_zlim((z_min, z_max))
+                return ax,
 
             anim = animation.FuncAnimation(
                 fig, update, frames=num_frames,
