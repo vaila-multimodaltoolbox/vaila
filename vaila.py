@@ -13,7 +13,7 @@ Description:
 vailá (Versatile Anarcho Integrated Liberation Ánalysis) is an open-source,
 Python-based multimodal toolbox designed to streamline biomechanical data
 analysis. It integrates multiple types of biomechanical data (e.g., IMU, motion
-capture, markerless tracking, force plates, GNSS/GPS, EMG) into a unified,
+capture, markerless tracking, force plates, GNSS/GPS, EMG and more. Use your imagination!) into a unified,
 flexible platform for advanced human movement analysis. The software was
 developed with a modular architecture to ensure easy expansion, transparency,
 and community-driven contributions.
