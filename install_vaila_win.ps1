@@ -271,34 +271,34 @@ Write-Output "Restart your computer to ensure all changes take effect."
 
 # --------- AnyLabeling Download Information ---------
 Write-Output ""
-Write-Output "=" * 60
-Write-Output "IMPORTANT INFORMATION FOR YOLO TRAINING"
-Write-Output "=" * 60
+Write-Output "============================================================"
+Write-Output "INFORMAÇÃO IMPORTANTE PARA TREINO DE REDES YOLO"
+Write-Output "============================================================"
 Write-Output ""
-Write-Output "To use YOLO training resources in vaila, you need AnyLabeling."
-Write-Output "AnyLabeling is a free tool for training data annotation."
+Write-Output "Para usar recursos de treino de redes YOLO no vaila, você precisa do AnyLabeling."
+Write-Output "O AnyLabeling é uma ferramenta gratuita para anotação de dados de treino."
 Write-Output ""
-Write-Output "Opening AnyLabeling download page in your default browser..."
+Write-Output "Abrindo página de download do AnyLabeling no seu navegador padrão..."
 Write-Output ""
 
 # Open AnyLabeling download page in default browser
 Try {
     Start-Process "https://github.com/vietanhdev/anylabeling/releases"
-    Write-Output "AnyLabeling download page opened in your browser."
+    Write-Output "✓ Página do AnyLabeling aberta no navegador."
     Write-Output ""
-    Write-Output "INSTRUCTIONS:"
-    Write-Output "1. Download the latest AnyLabeling for Windows"
-    Write-Output "2. Install AnyLabeling on your computer"
-    Write-Output "3. Use AnyLabeling to create training annotations"
-    Write-Output "4. Import the annotations into vaila to train YOLO networks"
+    Write-Output "INSTRUÇÕES:"
+    Write-Output "1. Baixe a versão mais recente do AnyLabeling para Windows"
+    Write-Output "2. Instale o AnyLabeling no seu computador"
+    Write-Output "3. Use o AnyLabeling para criar anotações de treino"
+    Write-Output "4. Importe as anotações no vaila para treinar redes YOLO"
     Write-Output ""
 } Catch {
-    Write-Warning "Unable to open the browser automatically."
-    Write-Output "Please access manually: https://github.com/vietanhdev/anylabeling/releases"
+    Write-Warning "Não foi possível abrir o navegador automaticamente."
+    Write-Output "Por favor, acesse manualmente: https://github.com/vietanhdev/anylabeling/releases"
     Write-Output ""
 }
 
-Write-Output "=" * 60
-Write-Output "vaila installation completed successfully!"
-Write-Output "=" * 60
+Write-Output "============================================================"
+Write-Output "Instalação do vaila concluída com sucesso!"
+Write-Output "============================================================"
 Pause
