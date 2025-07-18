@@ -5,8 +5,8 @@
                  configures Desktop/Start Menu shortcuts, Windows Terminal profiles,
                  and robustly avoids copying __pycache__ or .pyc files.
     Creation Date: 17 December 2024
-    Updated Date: 31 May 2025
-    Authors: Paulo R. P. Santiago (USP) & David Williams (UNF), revised by ChatGPT
+    Updated Date: 18 July 2025
+    Authors: Paulo R. P. Santiago (USP) & David Williams (UNF)
 #>
 
 # Check for administrative privileges
@@ -268,4 +268,49 @@ If (Test-Path $vailaSitePackagesDir) {
 
 Write-Output "Installation and configuration of vaila completed successfully!"
 Write-Output "Restart your computer to ensure all changes take effect."
+
+# --------- AnyLabeling Download Information ---------
+Write-Output ""
+Write-Output "============================================================"
+Write-Output "IMPORTANT INFORMATION FOR YOLO TRAINING / INFORMAÇÃO IMPORTANTE PARA TREINO YOLO"
+Write-Output "============================================================"
+Write-Output ""
+Write-Output "To use YOLO training resources in vaila, you need AnyLabeling."
+Write-Output "Para usar recursos de treino YOLO no vaila, você precisa do AnyLabeling."
+Write-Output ""
+Write-Output "AnyLabeling is a free tool for training data annotation."
+Write-Output "O AnyLabeling é uma ferramenta gratuita para anotação de dados de treino."
+Write-Output ""
+Write-Output "Opening AnyLabeling download page in your default browser..."
+Write-Output "Abrindo página de download do AnyLabeling no seu navegador padrão..."
+Write-Output ""
+
+# Open AnyLabeling download page in default browser
+Try {
+    Start-Process "https://github.com/vietanhdev/anylabeling/releases"
+    Write-Output "AnyLabeling download page opened in your browser."
+    Write-Output "Página do AnyLabeling aberta no navegador."
+    Write-Output ""
+    Write-Output "INSTRUCTIONS / INSTRUÇÕES:"
+    Write-Output "1. Download the latest AnyLabeling for Windows"
+    Write-Output "   1. Baixe a versão mais recente do AnyLabeling para Windows"
+    Write-Output "2. Install AnyLabeling on your computer"
+    Write-Output "   2. Instale o AnyLabeling no seu computador"
+    Write-Output "3. Use AnyLabeling to create training annotations"
+    Write-Output "   3. Use o AnyLabeling para criar anotações de treino"
+    Write-Output "4. Import the annotations into vaila to train YOLO networks"
+    Write-Output "   4. Importe as anotações no vaila para treinar redes YOLO"
+    Write-Output ""
+} Catch {
+    Write-Warning "Unable to open the browser automatically."
+    Write-Warning "Não foi possível abrir o navegador automaticamente."
+    Write-Output "Please access manually: https://github.com/vietanhdev/anylabeling/releases"
+    Write-Output "Por favor, acesse manualmente: https://github.com/vietanhdev/anylabeling/releases"
+    Write-Output ""
+}
+
+Write-Output "============================================================"
+Write-Output "vaila installation completed successfully!"
+Write-Output "Instalação do vaila concluída com sucesso!"
+Write-Output "============================================================"
 Pause
