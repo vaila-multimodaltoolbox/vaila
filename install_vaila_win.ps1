@@ -5,8 +5,8 @@
                  configures Desktop/Start Menu shortcuts, Windows Terminal profiles,
                  and robustly avoids copying __pycache__ or .pyc files.
     Creation Date: 17 December 2024
-    Updated Date: 31 May 2025
-    Authors: Paulo R. P. Santiago (USP) & David Williams (UNF), revised by ChatGPT
+    Updated Date: 18 July 2025
+    Authors: Paulo R. P. Santiago (USP) & David Williams (UNF)
 #>
 
 # Check for administrative privileges
@@ -268,4 +268,37 @@ If (Test-Path $vailaSitePackagesDir) {
 
 Write-Output "Installation and configuration of vaila completed successfully!"
 Write-Output "Restart your computer to ensure all changes take effect."
+
+# --------- AnyLabeling Download Information ---------
+Write-Output ""
+Write-Output "=" * 60
+Write-Output "IMPORTANT INFORMATION FOR YOLO TRAINING"
+Write-Output "=" * 60
+Write-Output ""
+Write-Output "To use YOLO training resources in vaila, you need AnyLabeling."
+Write-Output "AnyLabeling is a free tool for training data annotation."
+Write-Output ""
+Write-Output "Opening AnyLabeling download page in your default browser..."
+Write-Output ""
+
+# Open AnyLabeling download page in default browser
+Try {
+    Start-Process "https://github.com/vietanhdev/anylabeling/releases"
+    Write-Output "AnyLabeling download page opened in your browser."
+    Write-Output ""
+    Write-Output "INSTRUCTIONS:"
+    Write-Output "1. Download the latest AnyLabeling for Windows"
+    Write-Output "2. Install AnyLabeling on your computer"
+    Write-Output "3. Use AnyLabeling to create training annotations"
+    Write-Output "4. Import the annotations into vaila to train YOLO networks"
+    Write-Output ""
+} Catch {
+    Write-Warning "Unable to open the browser automatically."
+    Write-Output "Please access manually: https://github.com/vietanhdev/anylabeling/releases"
+    Write-Output ""
+}
+
+Write-Output "=" * 60
+Write-Output "vaila installation completed successfully!"
+Write-Output "=" * 60
 Pause

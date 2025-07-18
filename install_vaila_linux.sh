@@ -18,10 +18,10 @@
 #   - Ensure Conda is installed and accessible from the command line before running.    #
 #                                                                                       #
 # Author: Prof. Dr. Paulo R. P. Santiago                                                #
-# Date: September 17, 2024
-# Updated: May 15, 2025
-# Version: 0.1.4                                                                          #
-# OS: Ubuntu, Kubuntu, Linux Mint, Pop_OS!, Zorin OS, etc.                                  #
+# Date: September 17, 2024                                                              #
+# Updated Date: 18 July 2025                                                            #
+# Version: 0.0.9                                                                        #
+# OS: Ubuntu, Kubuntu, Linux Mint, Pop_OS!, Zorin OS, etc.                              #
 #########################################################################################
 
 echo "Starting installation of vaila - Multimodal Toolbox on Linux..."
@@ -208,3 +208,42 @@ if ! command -v x-terminal-emulator &> /dev/null; then
     echo "Installing terminal utility..."
     sudo apt install -y x-terminal-emulator
 fi
+
+# --------- AnyLabeling Download Information ---------
+echo ""
+echo "=================================================================="
+echo "IMPORTANT INFORMATION FOR YOLO TRAINING"
+echo "=================================================================="
+echo ""
+echo "To use YOLO training resources in vaila, you need AnyLabeling."
+echo "AnyLabeling is a free tool for training data annotation."
+echo ""
+echo "Opening AnyLabeling download page in your default browser..."
+echo ""
+
+# Open AnyLabeling download page in default browser
+if command -v xdg-open &> /dev/null; then
+    xdg-open "https://github.com/vietanhdev/anylabeling/releases"
+    echo "✓ AnyLabeling download page opened in your browser."
+elif command -v gnome-open &> /dev/null; then
+    gnome-open "https://github.com/vietanhdev/anylabeling/releases"
+    echo "✓ AnyLabeling download page opened in your browser."
+else
+    echo "Could not automatically open browser. Please visit manually:"
+    echo "https://github.com/vietanhdev/anylabeling/releases"
+fi
+
+echo ""
+echo "INSTRUCTIONS FOR LINUX:"
+echo "1. Download the latest AnyLabeling for Linux"
+echo "2. Extract the downloaded file"
+echo "3. Make the anylabeling binary executable:"
+echo "   sudo chmod +x anylabeling"
+echo "4. Run AnyLabeling: ./anylabeling"
+echo "5. Use AnyLabeling to create training annotations"
+echo "6. Import the annotations into vaila to train YOLO networks"
+echo ""
+
+echo "=================================================================="
+echo "vaila installation completed successfully!"
+echo "=================================================================="

@@ -19,7 +19,8 @@
 #                                                                                       #
 # Author: Prof. Dr. Paulo R. P. Santiago                                                #
 # Date: September 22, 2024                                                              #
-# Version: 2.0                                                                          #
+# Updated Date: 18 July 2025                                                            #
+# Version: 0.0.9                                                                        #
 # OS: macOS                                                                             #
 #########################################################################################
 
@@ -180,3 +181,44 @@ fi
 
 echo "vaila Launcher created and configured in /Applications as a symbolic link! Check the Applications folder."
 echo "Installation and setup completed."
+
+# --------- AnyLabeling Download Information ---------
+echo ""
+echo "=================================================================="
+echo "IMPORTANT INFORMATION FOR YOLO TRAINING"
+echo "=================================================================="
+echo ""
+echo "To use YOLO training resources in vaila, you need AnyLabeling."
+echo "AnyLabeling is a free tool for training data annotation."
+echo ""
+echo "Opening AnyLabeling download page in your default browser..."
+echo ""
+
+# Open AnyLabeling download page in default browser
+if command -v open &> /dev/null; then
+    open "https://github.com/vietanhdev/anylabeling/releases"
+    echo "✓ AnyLabeling download page opened in your browser."
+else
+    echo "Could not automatically open browser. Please visit manually:"
+    echo "https://github.com/vietanhdev/anylabeling/releases"
+fi
+
+echo ""
+echo "INSTRUCTIONS FOR macOS:"
+echo "1. Download the appropriate AnyLabeling-Folder.zip (CPU) or AnyLabeling-Folder-GPU.zip (GPU)"
+echo "2. Extract the downloaded ZIP file:"
+echo "   unzip AnyLabeling-Folder.zip"
+echo "3. Navigate to the extracted folder:"
+echo "   cd AnyLabeling-Folder"
+echo "4. Run the application:"
+echo "   ./anylabeling"
+echo "5. Use AnyLabeling to create training annotations"
+echo "6. Import the annotations into vaila to train YOLO networks"
+echo ""
+echo "Note: The macOS build is provided as a directory structure rather than a bundled .app file."
+echo "This approach offers better compatibility across different macOS versions."
+echo ""
+
+echo "=================================================================="
+echo "vaila installation completed successfully!"
+echo "=================================================================="
