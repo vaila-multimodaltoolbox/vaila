@@ -1,5 +1,5 @@
 # vailá - Multimodal Toolbox
-# Last updated: 20 March 2025
+# Last updated: 18 July 2025
 # © Paulo Santiago, Guilherme Cesar, Ligia Mochida, Bruno Bedo
 # https://github.com/vaila-multimodaltoolbox/vaila
 # Please see AUTHORS for contributors.
@@ -108,5 +108,4 @@ dependencies:
       - gtts
       - librosa
       - pydub
-      - anylabeling
       - ultralytics
