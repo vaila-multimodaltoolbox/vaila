@@ -675,6 +675,234 @@ def create_ground_grid(x_min=-1, x_max=5, y_min=-1, y_max=6, spacing=1.0):
     return grid
 
 
+def check_display_environment():
+    """
+    Check if the system has a proper display environment for OpenGL.
+    
+    Returns:
+        bool: True if display is available, False otherwise
+        str: Description of the environment
+    """
+    import os
+    
+    # Check if we're in a remote session or headless environment
+    if 'SSH_CLIENT' in os.environ or 'SSH_TTY' in os.environ:
+        return False, "SSH remote session detected"
+    
+    if 'DISPLAY' not in os.environ and os.name != 'nt':
+        return False, "No DISPLAY environment variable (headless system)"
+    
+    # Check for common virtualization/container environments
+    if any(env in os.environ for env in ['CONTAINER', 'DOCKER', 'KUBERNETES']):
+        return False, "Container/virtualization environment detected"
+    
+    return True, "Display environment available"
+
+
+def check_opengl_support():
+    """
+    Check if OpenGL/Open3D visualization is supported on this system.
+    
+    Returns:
+        bool: True if supported, False otherwise
+        str: Error message if not supported
+    """
+    # First check display environment
+    display_ok, display_msg = check_display_environment()
+    if not display_ok:
+        return False, f"Display issue: {display_msg}"
+    
+    try:
+        # Try to create a minimal Open3D window to test OpenGL support
+        test_vis = o3d.visualization.Visualizer()
+        success = test_vis.create_window(window_name="OpenGL Test", width=100, height=100, visible=False)
+        
+        if success:
+            test_vis.destroy_window()
+            return True, "OpenGL support confirmed"
+        else:
+            return False, "Failed to create Open3D window - OpenGL not supported"
+            
+    except Exception as e:
+        error_msg = str(e).lower()
+        if 'glx' in error_msg or 'glfw' in error_msg:
+            return False, f"OpenGL/GLX error: {str(e)}"
+        elif 'mesa' in error_msg or 'swrast' in error_msg:
+            return False, f"Mesa/software rendering issue: {str(e)}"
+        else:
+            return False, f"OpenGL initialization error: {str(e)}"
+
+
+def run_viewc3d_fallback(points, filepath, fps, marker_labels, selected_indices):
+    """
+    Fallback visualization using matplotlib when OpenGL is not available.
+    Provides interactive frame navigation and playback.
+    """
+    try:
+        import matplotlib.pyplot as plt
+        from mpl_toolkits.mplot3d import Axes3D
+        import matplotlib.animation as animation
+        from matplotlib.widgets import Slider, Button
+        
+        # Filter points to selected markers
+        points = points[:, selected_indices, :]
+        selected_markers = [marker_labels[i] for i in selected_indices]
+        num_frames, num_markers, _ = points.shape
+        file_name = os.path.basename(filepath)
+        
+        print(f"[yellow]🎯 Using matplotlib fallback visualization[/yellow]")
+        print(f"📁 File: {file_name}")
+        print(f"🎯 Markers: {num_markers}/{len(marker_labels)}")
+        print(f"🎬 Frames: {num_frames}")
+        print(f"⚡ FPS: {fps}")
+        
+        # Create figure with extra space for controls
+        fig = plt.figure(figsize=(14, 10))
+        ax = fig.add_subplot(111, projection='3d')
+        plt.subplots_adjust(bottom=0.15)
+        
+        # Calculate global limits for consistent scaling
+        all_valid = points[~np.isnan(points)]
+        if len(all_valid) > 0:
+            x_coords = points[:, :, 0][~np.isnan(points[:, :, 0])]
+            y_coords = points[:, :, 1][~np.isnan(points[:, :, 1])]
+            z_coords = points[:, :, 2][~np.isnan(points[:, :, 2])]
+            
+            x_min, x_max = np.min(x_coords), np.max(x_coords)
+            y_min, y_max = np.min(y_coords), np.max(y_coords)
+            z_min, z_max = np.min(z_coords), np.max(z_coords)
+            
+            # Add margin
+            x_range = max(x_max - x_min, 0.1) * 0.1
+            y_range = max(y_max - y_min, 0.1) * 0.1
+            z_range = max(z_max - z_min, 0.1) * 0.1
+            
+            x_min -= x_range; x_max += x_range
+            y_min -= y_range; y_max += y_range
+            z_min -= z_range; z_max += z_range
+        else:
+            x_min = y_min = z_min = -1
+            x_max = y_max = z_max = 1
+        
+        # Initialize plot
+        current_frame = [0]
+        scatter_plot = None
+        
+        def update_plot(frame_idx):
+            nonlocal scatter_plot
+            ax.clear()
+            
+            # Get current frame data
+            frame_data = points[frame_idx]
+            valid_mask = ~np.isnan(frame_data).any(axis=1)
+            valid_points = frame_data[valid_mask]
+            
+            if len(valid_points) > 0:
+                scatter_plot = ax.scatter(valid_points[:, 0], valid_points[:, 1], valid_points[:, 2], 
+                                        c='blue', s=60, alpha=0.8, edgecolors='navy', linewidth=0.5)
+            
+            # Set consistent limits and labels
+            ax.set_xlim(x_min, x_max)
+            ax.set_ylim(y_min, y_max)
+            ax.set_zlim(z_min, z_max)
+            ax.set_xlabel('X (meters)', fontsize=10)
+            ax.set_ylabel('Y (meters)', fontsize=10)
+            ax.set_zlabel('Z (meters)', fontsize=10)
+            
+            # Update title with frame info
+            time_sec = frame_idx / fps if fps > 0 else 0
+            ax.set_title(f'C3D Viewer (Matplotlib Fallback)\n'
+                        f'{file_name} | Frame {frame_idx+1}/{num_frames} | '
+                        f'Time: {time_sec:.2f}s | Valid: {len(valid_points)}/{num_markers}',
+                        fontsize=11, pad=20)
+            
+            fig.canvas.draw_idle()
+        
+        # Create slider for frame control
+        ax_slider = plt.axes([0.15, 0.02, 0.5, 0.03])
+        slider = Slider(ax_slider, 'Frame', 0, num_frames-1, valinit=0, valfmt='%d')
+        
+        def on_slider_change(val):
+            frame_idx = int(slider.val)
+            current_frame[0] = frame_idx
+            update_plot(frame_idx)
+        
+        slider.on_changed(on_slider_change)
+        
+        # Create play/pause button
+        ax_button = plt.axes([0.7, 0.02, 0.08, 0.05])
+        button = Button(ax_button, 'Play')
+        
+        # Animation control
+        anim = [None]
+        is_playing = [False]
+        
+        def toggle_play(event):
+            if not is_playing[0]:
+                # Start playing
+                def animate(frame):
+                    new_frame = (current_frame[0] + 1) % num_frames
+                    current_frame[0] = new_frame
+                    slider.set_val(new_frame)
+                    return []
+                
+                anim[0] = animation.FuncAnimation(fig, animate, frames=num_frames, 
+                                                interval=int(1000/fps), repeat=True, blit=False)
+                button.label.set_text('Pause')
+                is_playing[0] = True
+            else:
+                # Stop playing
+                if anim[0]:
+                    anim[0].event_source.stop()
+                button.label.set_text('Play')
+                is_playing[0] = False
+        
+        button.on_clicked(toggle_play)
+        
+        # Add keyboard shortcuts
+        def on_key(event):
+            if event.key == ' ':  # Space bar
+                toggle_play(None)
+            elif event.key == 'right' and current_frame[0] < num_frames - 1:
+                current_frame[0] += 1
+                slider.set_val(current_frame[0])
+            elif event.key == 'left' and current_frame[0] > 0:
+                current_frame[0] -= 1
+                slider.set_val(current_frame[0])
+            elif event.key == 'up' and current_frame[0] < num_frames - 10:
+                current_frame[0] += 10
+                slider.set_val(current_frame[0])
+            elif event.key == 'down' and current_frame[0] >= 10:
+                current_frame[0] -= 10
+                slider.set_val(current_frame[0])
+        
+        fig.canvas.mpl_connect('key_press_event', on_key)
+        
+        # Add instructions
+        instructions = ("🎮 Controls: Space=Play/Pause | ←→=Frame | ↑↓=10 Frames | Mouse=Rotate View")
+        plt.figtext(0.02, 0.95, instructions, fontsize=10, 
+                   bbox=dict(boxstyle="round,pad=0.5", facecolor="lightblue", alpha=0.8))
+        
+        # Plot initial frame
+        update_plot(0)
+        
+        print(f"[green]✅ Matplotlib visualization ready![/green]")
+        print(f"[cyan]🎮 Use slider, play button, or keyboard for navigation[/cyan]")
+        
+        plt.show()
+        
+        print("[green]📊 Matplotlib visualization completed successfully![/green]")
+        return True
+        
+    except ImportError as e:
+        print(f"[red]❌ Error: matplotlib not available for fallback visualization[/red]")
+        print(f"[red]   Install with: pip install matplotlib[/red]")
+        return False
+    except Exception as e:
+        print(f"[red]❌ Error in matplotlib fallback: {str(e)}[/red]")
+        return False
+
+
 def run_viewc3d():
     # Print the directory and name of the script being executed
     print(f"Running script: {os.path.basename(__file__)}")
@@ -689,6 +917,24 @@ def run_viewc3d():
     if not selected_indices:
         print("No markers selected, exiting.")
         exit(0)
+    
+    # Check OpenGL support before proceeding
+    opengl_supported, error_msg = check_opengl_support()
+    
+    if not opengl_supported:
+        print(f"[yellow]⚠ OpenGL/Open3D not supported on this system:[/yellow]")
+        print(f"[yellow]  {error_msg}[/yellow]")
+        print(f"[yellow]  This is common on older Linux systems or remote connections[/yellow]")
+        print(f"[cyan]🔄 Switching to matplotlib fallback visualization...[/cyan]")
+        
+        success = run_viewc3d_fallback(points, filepath, fps, marker_labels, selected_indices)
+        if success:
+            return
+        else:
+            print("[red]❌ Both Open3D and matplotlib visualization failed[/red]")
+            print("[red]Please check your system's graphics drivers and Python environment[/red]")
+            return
+    
     # Filter the points array to only the selected markers
     points = points[:, selected_indices, :]
     num_markers = len(selected_indices)
@@ -703,8 +949,21 @@ def run_viewc3d():
         "Mouse: [Left: Rotate, Middle/Right: Pan, Wheel: Zoom]"
     )
 
-    vis = o3d.visualization.VisualizerWithKeyCallback()
-    vis.create_window(window_name=window_title)
+    try:
+        vis = o3d.visualization.VisualizerWithKeyCallback()
+        window_created = vis.create_window(window_name=window_title)
+        
+        if not window_created:
+            print("[red]❌ Failed to create Open3D window[/red]")
+            print("[cyan]🔄 Trying matplotlib fallback...[/cyan]")
+            success = run_viewc3d_fallback(points, filepath, fps, marker_labels, selected_indices)
+            return
+            
+    except Exception as e:
+        print(f"[red]❌ Open3D window creation failed: {str(e)}[/red]")
+        print("[cyan]🔄 Trying matplotlib fallback...[/cyan]")
+        success = run_viewc3d_fallback(points, filepath, fps, marker_labels, selected_indices)
+        return
 
     # Remove this line:
     # marker_radius, marker_color = get_marker_customization()
@@ -771,18 +1030,35 @@ def run_viewc3d():
 
     # Configurar câmera inicial para escala de campo de futebol:
     ctr = vis.get_view_control()
-    bbox_center = np.array([52.5, 34.0, 0.0])  # Centro do campo de futebol
-    ctr.set_lookat(bbox_center)
-    ctr.set_front(np.array([0, -1, -0.5]))  # Vista diagonal para melhor perspectiva
-    ctr.set_up(np.array([0, 0, 1]))
-    ctr.set_zoom(0.003)  # Zoom extremamente pequeno para mostrar campo completo
-
-    # Melhorar limites de zoom ainda mais:
+    
+    # Check if view control was created successfully
+    if ctr is None:
+        print("[red]❌ Failed to get view control - camera setup failed[/red]")
+        print("[cyan]🔄 Trying matplotlib fallback...[/cyan]")
+        vis.destroy_window()
+        success = run_viewc3d_fallback(points, filepath, fps, marker_labels, selected_indices)
+        return
+    
     try:
-        ctr.set_constant_z_near(0.00001)     # Ultra próximo
-        ctr.set_constant_z_far(1000000.0)    # Ultra distante (1000km)
-    except AttributeError:
-        pass
+        bbox_center = np.array([52.5, 34.0, 0.0])  # Centro do campo de futebol
+        ctr.set_lookat(bbox_center)
+        ctr.set_front(np.array([0, -1, -0.5]))  # Vista diagonal para melhor perspectiva
+        ctr.set_up(np.array([0, 0, 1]))
+        ctr.set_zoom(0.003)  # Zoom extremamente pequeno para mostrar campo completo
+
+        # Melhorar limites de zoom ainda mais:
+        try:
+            ctr.set_constant_z_near(0.00001)     # Ultra próximo
+            ctr.set_constant_z_far(1000000.0)    # Ultra distante (1000km)
+        except AttributeError:
+            print("[yellow]⚠ Advanced zoom controls not available on this Open3D version[/yellow]")
+            
+    except Exception as e:
+        print(f"[red]❌ Camera setup failed: {str(e)}[/red]")
+        print("[cyan]🔄 Trying matplotlib fallback...[/cyan]")
+        vis.destroy_window()
+        success = run_viewc3d_fallback(points, filepath, fps, marker_labels, selected_indices)
+        return
 
     # Configure rendering options
     render_option = vis.get_render_option()
