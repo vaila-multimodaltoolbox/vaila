@@ -55,19 +55,126 @@ For more details, visit: https://www.gnu.org/licenses/lgpl-3.0.html
 """
 
 import os
+from pathlib import Path
 import pandas as pd
 import numpy as np
 from pykalman import KalmanFilter
-from scipy.signal import savgol_filter, butter, filtfilt, sosfiltfilt, firwin
-from scipy.interpolate import CubicSpline
+from scipy.signal import savgol_filter
 from statsmodels.nonparametric.smoothers_lowess import lowess
 from tkinter import filedialog, messagebox, Toplevel, Button, Label, simpledialog
 from scipy.interpolate import UnivariateSpline
 import tkinter as tk
 from rich import print
 from statsmodels.tsa.arima.model import ARIMA
-from .filter_utils import butter_filter  # Importar a função do filter_utils.py
-import sys  # Adicione esta linha
+import sys
+import toml
+import datetime
+
+# Import filter_utils - handle both relative and absolute imports
+try:
+    from .filter_utils import butter_filter
+except ImportError:
+    try:
+        from filter_utils import butter_filter
+    except ImportError:
+        print("Warning: filter_utils not found. Butterworth filtering will be disabled.")
+        def butter_filter(data, **kwargs):
+            print("Butterworth filter not available - filter_utils not found")
+            return data
+
+
+def save_config_to_toml(config, filepath):
+    """Save the current configuration to a TOML file with didactic comments for non-experts."""
+    with open(filepath, 'w', encoding='utf-8') as f:
+        f.write("# ================================================================\n")
+        f.write("# Interp/Smooth Split - Configuration File\n")
+        f.write("# Generated automatically by interp_smooth_split.py\n")
+        f.write(f"# Created: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write("# ================================================================\n")
+        f.write("#\n")
+        f.write("# HOW TO USE THIS FILE:\n")
+        f.write("# 1. Edit the values below to customize your interpolation and smoothing.\n")
+        f.write("# 2. Save this file.\n")
+        f.write("# 3. In the script, click 'Load TOML configuration'.\n")
+        f.write("# 4. Select this file and run your analysis.\n")
+        f.write("#\n")
+        f.write("# IMPORTANT: Keep the format exactly as shown!\n")
+        f.write("# - true/false must be lowercase\n")
+        f.write("# - Numbers can have decimals (3.0) or not (30)\n")
+        f.write("# - Text must be in quotes (\"linear\")\n")
+        f.write("#\n")
+        f.write("# Each section below controls a part of the processing.\n")
+        f.write("# All options are explained with examples.\n")
+        f.write("# ================================================================\n\n")
+
+        # Interpolation section
+        f.write("[interpolation]\n")
+        f.write("# Method for filling gaps in your data.\n")
+        f.write("# Options: \"linear\", \"cubic\", \"nearest\", \"kalman\", \"none\", \"skip\"\n")
+        f.write("#   - linear: straight lines between points (most common)\n")
+        f.write("#   - cubic: smooth curves\n")
+        f.write("#   - nearest: copy nearest valid value\n")
+        f.write("#   - kalman: predictive filling (advanced)\n")
+        f.write("#   - none: leave gaps as NaN\n")
+        f.write("#   - skip: do not fill gaps, only apply smoothing\n")
+        f.write("method = \"linear\"\n")
+        f.write("# Maximum gap size to fill (in frames).\n")
+        f.write("# 0 = fill all gaps, 60 = fill up to 2 seconds at 30fps.\n")
+        f.write("max_gap = 60\n\n")
+
+        # Smoothing section
+        f.write("[smoothing]\n")
+        f.write("# Method for smoothing the data after filling gaps.\n")
+        f.write("# Options: \"none\", \"savgol\", \"lowess\", \"kalman\", \"butterworth\", \"splines\", \"arima\"\n")
+        f.write("#   - none: no smoothing\n")
+        f.write("#   - savgol: Savitzky-Golay filter (preserves peaks)\n")
+        f.write("#   - lowess: Local regression (for noisy data)\n")
+        f.write("#   - kalman: Kalman filter (for tracking)\n")
+        f.write("#   - butterworth: Butterworth filter (biomechanics standard)\n")
+        f.write("#   - splines: Spline smoothing (very smooth curves)\n")
+        f.write("#   - arima: ARIMA model (time series)\n")
+        f.write("method = \"none\"\n")
+        f.write("#\n")
+        f.write("# --- Parameters for each smoothing method (only the relevant ones are used) ---\n")
+        f.write("# Savitzky-Golay (savgol):\n")
+        f.write("window_length = 7    # Odd number, e.g. 5, 7, 9\n")
+        f.write("polyorder = 3        # Usually 2 or 3\n")
+        f.write("# LOWESS:\n")
+        f.write("frac = 0.3           # Fraction of data (0.1-1.0)\n")
+        f.write("it = 3               # Number of iterations\n")
+        f.write("# Kalman:\n")
+        f.write("n_iter = 5           # EM algorithm iterations (3-10)\n")
+        f.write("mode = 1             # 1 = simple, 2 = advanced\n")
+        f.write("# Butterworth:\n")
+        f.write("cutoff = 4.0        # Cutoff frequency in Hz (e.g. 4.0, 10.0)\n")
+        f.write("fs = 30.0           # Sampling frequency (video FPS, e.g. 30.0, 100.0)\n")
+        f.write("# Splines:\n")
+        f.write("smoothing_factor = 1.0   # 0 = no smoothing, 1 = moderate, 10+ = strong\n")
+        f.write("# ARIMA:\n")
+        f.write("p = 1                # AR order\n")
+        f.write("d = 0                # Difference order\n")
+        f.write("q = 0                # MA order\n\n")
+
+        # Padding section
+        f.write("[padding]\n")
+        f.write("# Add extra frames at the start and end to avoid edge effects.\n")
+        f.write("# percent = how much padding to add (as percent of data length).\n")
+        f.write("# 0 = no padding, 10 = 10%% of data length (recommended).\n")
+        f.write("percent = 10.0\n\n")
+
+        # Split section
+        f.write("[split]\n")
+        f.write("# Split the data into two parts?\n")
+        f.write("# enabled = true/false\n")
+        f.write("enabled = false\n\n")
+    print(f"Configuration saved in: {filepath}")
+
+def load_config_from_toml(filepath):
+    """Load the configuration from a TOML file and return a dictionary."""
+    with open(filepath, 'r', encoding='utf-8') as f:
+        config = toml.load(f)
+    print(f"Configuration loaded from: {filepath}")
+    return config
 
 
 class InterpolationConfigDialog(simpledialog.Dialog):
@@ -85,6 +192,8 @@ class InterpolationConfigDialog(simpledialog.Dialog):
         self.arima_p = tk.StringVar(value="1")  # AR order
         self.arima_d = tk.StringVar(value="0")  # Difference order
         self.arima_q = tk.StringVar(value="0")  # MA order
+        self.loaded_toml = None
+        self.use_toml = False
 
         # Call parent constructor after initializing variables
         super().__init__(parent, title="Interpolation Configuration")
@@ -210,7 +319,7 @@ class InterpolationConfigDialog(simpledialog.Dialog):
         self.params_widgets = []
         self.param_entries = {}  # Dictionary to keep track of parameter entries
 
-        # Adicionar botão de confirmação de parâmetros
+        # Add confirmation button
         self.confirm_button = tk.Button(
             right_column,
             text="Confirm Parameters",
@@ -257,6 +366,16 @@ class InterpolationConfigDialog(simpledialog.Dialog):
         # Bind the mouse wheel to the canvas for scrolling
         self.bind_mousewheel(canvas)
 
+        # TOML buttons
+        toml_frame = tk.LabelFrame(master, text="Configuration via TOML", padx=10, pady=10)
+        toml_frame.pack(fill="x", pady=5)
+        btns_frame = tk.Frame(toml_frame)
+        btns_frame.pack()
+        tk.Button(btns_frame, text="Create TOML template", command=self.create_toml_template).pack(side="left", padx=5)
+        tk.Button(btns_frame, text="Load TOML configuration", command=self.load_toml_config).pack(side="left", padx=5)
+        self.toml_label = tk.Label(toml_frame, text="No TOML loaded", fg="gray")
+        self.toml_label.pack()
+
         return self.interp_entry  # Initial focus
 
     def bind_mousewheel(self, canvas):
@@ -294,7 +413,7 @@ class InterpolationConfigDialog(simpledialog.Dialog):
                 label1.pack(anchor="w", padx=5, pady=2)
                 entry1 = tk.Entry(self.params_frame, textvariable=self.savgol_window)
                 entry1.pack(fill="x", padx=5, pady=2)
-                # Adicionar binding para Enter
+                # Add binding for Enter
                 entry1.bind(
                     "<Return>",
                     lambda e: self.update_parameter_value(e, self.savgol_window),
@@ -306,7 +425,7 @@ class InterpolationConfigDialog(simpledialog.Dialog):
                 label2.pack(anchor="w", padx=5, pady=2)
                 entry2 = tk.Entry(self.params_frame, textvariable=self.savgol_poly)
                 entry2.pack(fill="x", padx=5, pady=2)
-                # Adicionar binding para Enter
+                # Add binding for Enter
                 entry2.bind(
                     "<Return>",
                     lambda e: self.update_parameter_value(e, self.savgol_poly),
@@ -334,7 +453,7 @@ class InterpolationConfigDialog(simpledialog.Dialog):
                     [header, label1, entry1, label2, entry2, explanation]
                 )
 
-                # Guardar referências aos entries para acesso posterior
+                # Save references to entries for later access
                 self.param_entries["window_length"] = entry1
                 self.param_entries["polyorder"] = entry2
 
@@ -351,7 +470,7 @@ class InterpolationConfigDialog(simpledialog.Dialog):
                 label1.pack(anchor="w", padx=5, pady=2)
                 entry1 = tk.Entry(self.params_frame, textvariable=self.lowess_frac)
                 entry1.pack(fill="x", padx=5, pady=2)
-                # Adicionar binding para Enter
+                # Add binding for Enter
                 entry1.bind(
                     "<Return>",
                     lambda e: self.update_parameter_value(e, self.lowess_frac),
@@ -363,7 +482,7 @@ class InterpolationConfigDialog(simpledialog.Dialog):
                 label2.pack(anchor="w", padx=5, pady=2)
                 entry2 = tk.Entry(self.params_frame, textvariable=self.lowess_it)
                 entry2.pack(fill="x", padx=5, pady=2)
-                # Adicionar binding para Enter
+                # Add binding for Enter
                 entry2.bind(
                     "<Return>", lambda e: self.update_parameter_value(e, self.lowess_it)
                 )
@@ -373,11 +492,11 @@ class InterpolationConfigDialog(simpledialog.Dialog):
                     self.params_frame,
                     text=(
                         "LOWESS Filter Parameters:\n"
-                        "• Fraction: Proportion of points used (0-1)\n"
+                        "* Fraction: Proportion of points used (0-1)\n"
                         "  - 0.2-0.3: preserves local details\n"
                         "  - 0.4-0.6: moderate smoothing\n"
                         "  - 0.7-1.0: strong smoothing\n\n"
-                        "• Iterations: Number of robustifying iterations\n"
+                        "* Iterations: Number of robustifying iterations\n"
                         "  - 1-2: faster processing\n"
                         "  - 3-4: better outlier removal\n"
                         "  - 5+: more robust smoothing"
@@ -390,7 +509,7 @@ class InterpolationConfigDialog(simpledialog.Dialog):
                     [header, label1, entry1, label2, entry2, explanation]
                 )
 
-                # Guardar referências aos entries para acesso posterior
+                # Save references to entries for later access
                 self.param_entries["frac"] = entry1
                 self.param_entries["it"] = entry2
 
@@ -436,17 +555,17 @@ class InterpolationConfigDialog(simpledialog.Dialog):
                     self.params_frame,
                     text=(
                         "Kalman Filter Parameters:\n"
-                        "• EM Iterations: Algorithm iterations\n"
+                        "* EM Iterations: Algorithm iterations\n"
                         "  - 3-5: basic estimation\n"
                         "  - 6-10: better convergence\n"
                         "  - 10+: more precise convergence\n\n"
-                        "• Processing Mode:\n"
+                        "* Processing Mode:\n"
                         "  - 1: Process each column independently (1D)\n"
                         "  - 2: Process X,Y pairs together (2D, requires even number of columns)\n\n"
-                        "Characteristics:\n"
-                        "• Optimal for Gaussian noise\n"
-                        "• Preserves movement trends\n"
-                        "• Adapts to velocity changes"
+                        "* Characteristics:\n"
+                        "* Optimal for Gaussian noise\n"
+                        "* Preserves movement trends\n"
+                        "* Adapts to velocity changes"
                     ),
                     foreground="blue",
                     justify="left",
@@ -456,7 +575,7 @@ class InterpolationConfigDialog(simpledialog.Dialog):
                     [header, label1, entry1, label2, entry2, explanation]
                 )
 
-                # Guardar referências aos entries para acesso posterior
+                # Save references to entries for later access
                 self.param_entries["n_iter"] = entry1
                 self.param_entries["mode"] = entry2
 
@@ -477,7 +596,7 @@ class InterpolationConfigDialog(simpledialog.Dialog):
                 label1.pack(anchor="w", padx=5, pady=2)
                 entry1 = tk.Entry(self.params_frame, textvariable=self.butter_cutoff)
                 entry1.pack(fill="x", padx=5, pady=2)
-                # Adicionar binding para Enter
+                # Add binding for Enter
                 entry1.bind(
                     "<Return>",
                     lambda e: self.update_parameter_value(e, self.butter_cutoff),
@@ -491,7 +610,7 @@ class InterpolationConfigDialog(simpledialog.Dialog):
                 label2.pack(anchor="w", padx=5, pady=2)
                 entry2 = tk.Entry(self.params_frame, textvariable=self.butter_fs)
                 entry2.pack(fill="x", padx=5, pady=2)
-                # Adicionar binding para Enter
+                # Add binding for Enter
                 entry2.bind(
                     "<Return>", lambda e: self.update_parameter_value(e, self.butter_fs)
                 )
@@ -511,11 +630,11 @@ class InterpolationConfigDialog(simpledialog.Dialog):
                     self.params_frame,
                     text=(
                         "Butterworth Filter Parameters:\n"
-                        "• Cutoff Frequency (Hz):\n"
+                        "* Cutoff Frequency (Hz):\n"
                         "  - 4-6 Hz: slow movements/posture\n"
                         "  - 7-12 Hz: normal movements\n"
                         "  - 13-20 Hz: fast movements\n\n"
-                        "• Sampling Frequency (Hz):\n"
+                        "* Sampling Frequency (Hz):\n"
                         "  - Data capture frequency\n"
                         "  - Common in biomechanics: 50-200 Hz\n"
                         "  - Must be > 2x cutoff (Nyquist)\n\n"
@@ -529,7 +648,7 @@ class InterpolationConfigDialog(simpledialog.Dialog):
                     [header, label1, entry1, label2, entry2, reminder, explanation]
                 )
 
-                # Guardar referências aos entries para acesso posterior
+                # Save references to entries for later access
                 self.param_entries["cutoff"] = entry1
                 self.param_entries["fs"] = entry2
 
@@ -560,16 +679,16 @@ class InterpolationConfigDialog(simpledialog.Dialog):
                     self.params_frame,
                     text=(
                         "Spline Smoothing Parameters:\n"
-                        "• Smoothing Factor (s):\n"
+                        "* Smoothing Factor (s):\n"
                         "  - s = 0: Pure interpolation\n"
                         "  - 0 < s < 1: Light smoothing\n"
                         "  - s = 1: Balanced smoothing\n"
                         "  - 1 < s < 10: Moderate smoothing\n"
                         "  - s ≥ 10: Strong smoothing\n\n"
-                        "Characteristics:\n"
-                        "• Preserves curve continuity\n"
-                        "• Ideal for biomechanical data\n"
-                        "• Prevents artificial oscillations"
+                        "* Characteristics:\n"
+                        "* Preserves curve continuity\n"
+                        "* Ideal for biomechanical data\n"
+                        "* Prevents artificial oscillations"
                     ),
                     foreground="blue",
                     justify="left",
@@ -623,22 +742,22 @@ class InterpolationConfigDialog(simpledialog.Dialog):
                     self.params_frame,
                     text=(
                         "ARIMA Model Parameters (p,d,q):\n"
-                        "• p: Autoregressive Order\n"
+                        "* p: Autoregressive Order\n"
                         "  - 0: No AR component\n"
                         "  - 1: Short-term dependence\n"
                         "  - 2+: Long-term dependence\n\n"
-                        "• d: Differencing Order\n"
+                        "* d: Differencing Order\n"
                         "  - 0: Stationary data\n"
                         "  - 1: Removes linear trend\n"
                         "  - 2: Removes quadratic trend\n\n"
-                        "• q: Moving Average Order\n"
+                        "* q: Moving Average Order\n"
                         "  - 0: No MA component\n"
                         "  - 1: Short-term correction\n"
                         "  - 2+: Long-term correction\n\n"
                         "Common combinations:\n"
-                        "• (1,0,0): Simple AR model\n"
-                        "• (0,1,1): Simple exponential smoothing\n"
-                        "• (1,1,1): ARIMA with trend"
+                        "* (1,0,0): Simple AR model\n"
+                        "* (0,1,1): Simple exponential smoothing\n"
+                        "* (1,1,1): ARIMA with trend"
                     ),
                     foreground="blue",
                     justify="left",
@@ -668,11 +787,11 @@ class InterpolationConfigDialog(simpledialog.Dialog):
             self.params_widgets.append(label)
 
     def update_parameter_value(self, event, stringvar):
-        """Atualiza o valor da StringVar quando o usuário pressiona Enter"""
+        """Update the value of the StringVar when the user presses Enter"""
         widget = event.widget
         value = widget.get()
         stringvar.set(value)
-        # Move o foco para o próximo widget
+        # Move the focus to the next widget
         widget.tk_focusNext().focus()
 
     def validate(self):
@@ -795,12 +914,12 @@ class InterpolationConfigDialog(simpledialog.Dialog):
             return False
 
     def confirm_parameters(self):
-        """Confirma e atualiza os parâmetros antes do processamento"""
+        """Confirm and update parameters before processing"""
         try:
-            # Força a perda de foco de todos os widgets de entrada
+            # Force focus loss of all input widgets
             self.focus()
 
-            # Força atualização explícita dos valores dos Entry widgets
+            # Force explicit update of Entry widget values
             if "cutoff" in self.param_entries:
                 self.butter_cutoff.set(self.param_entries["cutoff"].get())
             if "fs" in self.param_entries:
@@ -820,13 +939,13 @@ class InterpolationConfigDialog(simpledialog.Dialog):
             if "mode" in self.param_entries:
                 self.kalman_mode.set(self.param_entries["mode"].get())
 
-            # Força a atualização dos widgets
+            # Force update of widgets
             self.update_idletasks()
 
-            # Captura o método de suavização atual
+            # Capture the current smoothing method
             smooth_method = int(self.smooth_entry.get())
 
-            # Print dos parâmetros confirmados no terminal
+            # Print confirmed parameters in terminal
             print("\n" + "=" * 50)
             print("CONFIRMED PARAMETERS:")
             print("=" * 50)
@@ -836,7 +955,7 @@ class InterpolationConfigDialog(simpledialog.Dialog):
             print(f"Padding: {self.padding_entry.get()}%")
             print(f"Split Data: {'Yes' if self.split_var.get() else 'No'}")
 
-            # Define params_text e imprime parâmetros específicos do método
+            # Define params_text and print specific method parameters
             if smooth_method == 1:  # None
                 params_text = "No smoothing parameters needed"
                 print("\nNo smoothing parameters needed")
@@ -873,7 +992,7 @@ class InterpolationConfigDialog(simpledialog.Dialog):
                 print(f"- Cutoff Frequency: {cutoff} Hz")
                 print(f"- Sampling Frequency: {fs} Hz")
 
-                # Validação adicional para Butterworth
+                # Additional validation for Butterworth
                 if cutoff >= fs / 2:
                     raise ValueError(
                         "Cutoff frequency must be less than half of sampling frequency (Nyquist frequency)"
@@ -895,7 +1014,7 @@ class InterpolationConfigDialog(simpledialog.Dialog):
 
             print("=" * 50)
 
-            # Mostra mensagem de confirmação com os valores atuais
+            # Show confirmation message with current values
             confirmation = f"""Current Parameters:
             
 Interpolation Method: {self.interp_entry.get()}
@@ -912,7 +1031,7 @@ Parameters have been confirmed and will be used for processing.
 """
             messagebox.showinfo("Parameters Confirmed", confirmation)
 
-            # Muda a cor do botão para indicar que os parâmetros foram confirmados
+            # Change the color of the button to indicate that the parameters have been confirmed
             self.confirm_button.configure(
                 bg="pale green", text="Parameters Confirmed ✓"
             )
@@ -921,109 +1040,125 @@ Parameters have been confirmed and will be used for processing.
             messagebox.showerror("Error", f"Invalid parameter value: {str(e)}")
 
     def apply(self):
-        try:
-            # Verifica se os parâmetros foram confirmados
-            if self.confirm_button["text"] != "Parameters Confirmed ✓":
-                if not messagebox.askyesno(
-                    "Warning",
-                    "Parameters have not been confirmed. Do you want to proceed anyway?",
-                ):
-                    return
-
-            # Força a atualização dos valores dos widgets antes de coletá-los
-            self.update_idletasks()
-
-            # Debug: Print dos valores das StringVar antes do processamento
-            print("\nDEBUG - StringVar Values:")
-            print(f"Savgol Window: {self.savgol_window.get()}")
-            print(f"Savgol Poly: {self.savgol_poly.get()}")
-            print(f"LOWESS Frac: {self.lowess_frac.get()}")
-            print(f"LOWESS It: {self.lowess_it.get()}")
-            print(f"Butter Cutoff: {self.butter_cutoff.get()}")
-            print(f"Butter Fs: {self.butter_fs.get()}")
-            print(f"Kalman Iterations: {self.kalman_iterations.get()}")
-
-            interp_map = {
-                1: "linear",
-                2: "cubic",
-                3: "nearest",
-                4: "kalman",
-                5: "none",
-                6: "skip",
+        if self.use_toml and self.loaded_toml:
+            # Build the result from the loaded TOML
+            interp = self.loaded_toml.get('interpolation', {})
+            smoothing = self.loaded_toml.get('smoothing', {})
+            padding = self.loaded_toml.get('padding', {})
+            split = self.loaded_toml.get('split', {})
+            smooth_params = {k:v for k,v in smoothing.items() if k != 'method'}
+            self.result = {
+                'padding': float(padding.get('percent', 10)),
+                'interp_method': interp.get('method', 'linear'),
+                'smooth_method': smoothing.get('method', 'none'),
+                'smooth_params': smooth_params,
+                'max_gap': int(interp.get('max_gap', 60)),
+                'do_split': bool(split.get('enabled', False)),
             }
+        else:
+            try:
+                # Check if the parameters have been confirmed
+                if self.confirm_button["text"] != "Parameters Confirmed ✓":
+                    if not messagebox.askyesno(
+                        "Warning",
+                        "Parameters have not been confirmed. Do you want to proceed anyway?",
+                    ):
+                        return
 
-            smooth_map = {
-                1: "none",
-                2: "savgol",
-                3: "lowess",
-                4: "kalman",
-                5: "butterworth",
-                6: "splines",
-                7: "arima",
-            }
+                # Force update of widget values before collecting them
+                self.update_idletasks()
 
-            # Debug: Print dos valores dos Entry widgets
-            print("\nDEBUG - Entry Values:")
-            print(f"Interpolation Method: {self.interp_entry.get()}")
-            print(f"Smoothing Method: {self.smooth_entry.get()}")
-            print(f"Max Gap: {self.max_gap_entry.get()}")
-            print(f"Padding: {self.padding_entry.get()}")
+                # Debug: Print the values of the StringVar before processing
+                print("\nDEBUG - StringVar Values:")
+                print(f"Savgol Window: {self.savgol_window.get()}")
+                print(f"Savgol Poly: {self.savgol_poly.get()}")
+                print(f"LOWESS Frac: {self.lowess_frac.get()}")
+                print(f"LOWESS It: {self.lowess_it.get()}")
+                print(f"Butter Cutoff: {self.butter_cutoff.get()}")
+                print(f"Butter Fs: {self.butter_fs.get()}")
+                print(f"Kalman Iterations: {self.kalman_iterations.get()}")
 
-            smooth_method = int(self.smooth_entry.get())
-            interp_method = int(self.interp_entry.get())
-            max_gap = int(self.max_gap_entry.get())
-            padding = float(self.padding_entry.get())
-            do_split = self.split_var.get()
+                interp_map = {
+                    1: "linear",
+                    2: "cubic",
+                    3: "nearest",
+                    4: "kalman",
+                    5: "none",
+                    6: "skip",
+                }
 
-            # Prepara os parâmetros de smoothing com base no método escolhido
-            smooth_params = {}
-            if smooth_method == 2:  # Savitzky-Golay
-                window_length = int(self.savgol_window.get())
-                polyorder = int(self.savgol_poly.get())
-                smooth_params = {"window_length": window_length, "polyorder": polyorder}
-                print(
-                    f"APPLY: Savitzky-Golay settings - window={window_length}, polyorder={polyorder}"
-                )
+                smooth_map = {
+                    1: "none",
+                    2: "savgol",
+                    3: "lowess",
+                    4: "kalman",
+                    5: "butterworth",
+                    6: "splines",
+                    7: "arima",
+                }
 
-            elif smooth_method == 3:  # LOWESS
-                frac = float(self.lowess_frac.get())
-                it = int(self.lowess_it.get())
-                smooth_params = {"frac": frac, "it": it}
-                print(f"APPLY: LOWESS settings - frac={frac}, it={it}")
+                # Debug: Print the values of the Entry widgets
+                print("\nDEBUG - Entry Values:")
+                print(f"Interpolation Method: {self.interp_entry.get()}")
+                print(f"Smoothing Method: {self.smooth_entry.get()}")
+                print(f"Max Gap: {self.max_gap_entry.get()}")
+                print(f"Padding: {self.padding_entry.get()}")
 
-            elif smooth_method == 4:  # Kalman
-                n_iter = int(self.kalman_iterations.get())
-                mode = int(self.kalman_mode.get())
-                if mode not in [1, 2]:
-                    messagebox.showerror(
-                        "Error", "Kalman mode must be 1 (1D) or 2 (2D)"
+                smooth_method = int(self.smooth_entry.get())
+                interp_method = int(self.interp_entry.get())
+                max_gap = int(self.max_gap_entry.get())
+                padding = float(self.padding_entry.get())
+                do_split = self.split_var.get()
+
+                # Prepare the smoothing parameters based on the chosen method
+                smooth_params = {}
+                if smooth_method == 2:  # Savitzky-Golay
+                    window_length = int(self.savgol_window.get())
+                    polyorder = int(self.savgol_poly.get())
+                    smooth_params = {"window_length": window_length, "polyorder": polyorder}
+                    print(
+                        f"APPLY: Savitzky-Golay settings - window={window_length}, polyorder={polyorder}"
                     )
-                    return False
-                smooth_params = {"n_iter": n_iter, "mode": mode}
-                print(f"APPLY: Kalman settings - n_iter={n_iter}, mode={mode}")
 
-            elif smooth_method == 5:  # Butterworth
-                cutoff = float(self.butter_cutoff.get())
-                fs = float(self.butter_fs.get())
-                smooth_params = {"cutoff": cutoff, "fs": fs}
-                print(f"APPLY: Butterworth settings - cutoff={cutoff} Hz, fs={fs} Hz")
+                elif smooth_method == 3:  # LOWESS
+                    frac = float(self.lowess_frac.get())
+                    it = int(self.lowess_it.get())
+                    smooth_params = {"frac": frac, "it": it}
+                    print(f"APPLY: LOWESS settings - frac={frac}, it={it}")
 
-            elif smooth_method == 6:  # Splines
-                smoothing_factor = float(self.spline_smoothing.get())
-                smooth_params = {"smoothing_factor": smoothing_factor}
-                print(
-                    f"APPLY: Spline Smoothing settings - smoothing_factor={smoothing_factor}"
-                )
+                elif smooth_method == 4:  # Kalman
+                    n_iter = int(self.kalman_iterations.get())
+                    mode = int(self.kalman_mode.get())
+                    if mode not in [1, 2]:
+                        messagebox.showerror(
+                            "Error", "Kalman mode must be 1 (1D) or 2 (2D)"
+                        )
+                        return False
+                    smooth_params = {"n_iter": n_iter, "mode": mode}
+                    print(f"APPLY: Kalman settings - n_iter={n_iter}, mode={mode}")
 
-            elif smooth_method == 7:  # ARIMA
-                p = int(self.arima_p.get())
-                d = int(self.arima_d.get())
-                q = int(self.arima_q.get())
-                smooth_params = {"p": p, "d": d, "q": q}
-                print(f"APPLY: ARIMA settings - order=({p},{d},{q})")
+                elif smooth_method == 5:  # Butterworth
+                    cutoff = float(self.butter_cutoff.get())
+                    fs = float(self.butter_fs.get())
+                    smooth_params = {"cutoff": cutoff, "fs": fs}
+                    print(f"APPLY: Butterworth settings - cutoff={cutoff} Hz, fs={fs} Hz")
 
-            # Exibe um resumo dos parâmetros escolhidos
-            summary = f"""
+                elif smooth_method == 6:  # Splines
+                    smoothing_factor = float(self.spline_smoothing.get())
+                    smooth_params = {"smoothing_factor": smoothing_factor}
+                    print(
+                        f"APPLY: Spline Smoothing settings - smoothing_factor={smoothing_factor}"
+                    )
+
+                elif smooth_method == 7:  # ARIMA
+                    p = int(self.arima_p.get())
+                    d = int(self.arima_d.get())
+                    q = int(self.arima_q.get())
+                    smooth_params = {"p": p, "d": d, "q": q}
+                    print(f"APPLY: ARIMA settings - order=({p},{d},{q})")
+
+                # Display a summary of the chosen parameters
+                summary = f"""
 === CONFIGURATION SUMMARY ===
 - Gap Filling Method: {interp_map[interp_method]}
 - Max Gap Size: {max_gap} frames
@@ -1032,54 +1167,54 @@ Parameters have been confirmed and will be used for processing.
 - Split Data: {'Yes' if do_split else 'No'}
 """
 
-            if smooth_method == 2:  # Savitzky-Golay
-                window = int(self.savgol_window.get())
-                poly = int(self.savgol_poly.get())
-                summary += f"\nSavitzky-Golay Parameters:\n- Window Length: {window}\n- Polynomial Order: {poly}"
-            elif smooth_method == 3:  # LOWESS
-                frac = float(self.lowess_frac.get())
-                it = int(self.lowess_it.get())
-                summary += (
-                    f"\nLOWESS Parameters:\n- Fraction: {frac}\n- Iterations: {it}"
-                )
-            elif smooth_method == 4:  # Kalman
-                n_iter = int(self.kalman_iterations.get())
-                mode = int(self.kalman_mode.get())
-                summary += f"\nKalman Parameters:\n- EM Iterations: {n_iter}\n- Processing Mode: {mode}"
-            elif smooth_method == 5:  # Butterworth
-                cutoff = float(self.butter_cutoff.get())
-                fs = float(self.butter_fs.get())
-                summary += f"\nButterworth Parameters:\n- Cutoff Frequency: {cutoff} Hz\n- Sampling Frequency: {fs} Hz"
-            elif smooth_method == 6:  # Splines
-                s = float(self.spline_smoothing.get())
-                summary += f"\nSpline Smoothing Parameters:\n- Smoothing Factor: {s}"
-            elif smooth_method == 7:  # ARIMA
-                order = (
-                    int(smooth_params["p"]),
-                    int(smooth_params["d"]),
-                    int(smooth_params["q"]),
-                )
-                summary += f"\nARIMA Parameters:\n- Order: {order}"
+                if smooth_method == 2:  # Savitzky-Golay
+                    window = int(self.savgol_window.get())
+                    poly = int(self.savgol_poly.get())
+                    summary += f"\nSavitzky-Golay Parameters:\n- Window Length: {window}\n- Polynomial Order: {poly}"
+                elif smooth_method == 3:  # LOWESS
+                    frac = float(self.lowess_frac.get())
+                    it = int(self.lowess_it.get())
+                    summary += (
+                        f"\nLOWESS Parameters:\n- Fraction: {frac}\n- Iterations: {it}"
+                    )
+                elif smooth_method == 4:  # Kalman
+                    n_iter = int(self.kalman_iterations.get())
+                    mode = int(self.kalman_mode.get())
+                    summary += f"\nKalman Parameters:\n- EM Iterations: {n_iter}\n- Processing Mode: {mode}"
+                elif smooth_method == 5:  # Butterworth
+                    cutoff = float(self.butter_cutoff.get())
+                    fs = float(self.butter_fs.get())
+                    summary += f"\nButterworth Parameters:\n- Cutoff Frequency: {cutoff} Hz\n- Sampling Frequency: {fs} Hz"
+                elif smooth_method == 6:  # Splines
+                    s = float(self.spline_smoothing.get())
+                    summary += f"\nSpline Smoothing Parameters:\n- Smoothing Factor: {s}"
+                elif smooth_method == 7:  # ARIMA
+                    order = (
+                        int(smooth_params["p"]),
+                        int(smooth_params["d"]),
+                        int(smooth_params["q"]),
+                    )
+                    summary += f"\nARIMA Parameters:\n- Order: {order}"
 
-            if messagebox.askokcancel("Confirm Parameters", summary):
-                config_result = {
-                    "padding": padding,
-                    "interp_method": interp_map[interp_method],
-                    "smooth_method": smooth_map[smooth_method],
-                    "smooth_params": smooth_params,
-                    "max_gap": max_gap,
-                    "do_split": do_split,
-                }
+                if messagebox.askokcancel("Confirm Parameters", summary):
+                    config_result = {
+                        "padding": padding,
+                        "interp_method": interp_map[interp_method],
+                        "smooth_method": smooth_map[smooth_method],
+                        "smooth_params": smooth_params,
+                        "max_gap": max_gap,
+                        "do_split": do_split,
+                    }
 
-                print("\nDEBUG - Final Configuration:")
-                print(f"FINAL CONFIG: {config_result}")
-                self.result = config_result
-            else:
+                    print("\nDEBUG - Final Configuration:")
+                    print(f"FINAL CONFIG: {config_result}")
+                    self.result = config_result
+                else:
+                    self.result = None
+
+            except ValueError as e:
+                messagebox.showerror("Error", f"Invalid parameter value: {str(e)}")
                 self.result = None
-
-        except ValueError as e:
-            messagebox.showerror("Error", f"Invalid parameter value: {str(e)}")
-            self.result = None
 
     def update_value(self, event):
         self.update_idletasks()
@@ -1089,6 +1224,140 @@ Parameters have been confirmed and will be used for processing.
         self.smooth_entry.bind("<FocusOut>", self.update_value)
         self.padding_entry.bind("<FocusOut>", self.update_value)
         self.max_gap_entry.bind("<FocusOut>", self.update_value)
+
+    def create_toml_template(self):
+        from tkinter import filedialog, messagebox
+        file_path = filedialog.asksaveasfilename(
+            title="Create TOML template",
+            defaultextension=".toml",
+            filetypes=[("TOML files", "*.toml"), ("All files", "*.*")],
+            initialfile="interp_smooth_config_template.toml"
+        )
+        if file_path:
+            config = self.get_current_config()
+            save_config_to_toml(config, file_path)
+            messagebox.showinfo("Template created", f"Template TOML created in:\n{file_path}")
+
+    def load_toml_config(self):
+        from tkinter import filedialog, messagebox
+        file_path = filedialog.askopenfilename(
+            title="Load TOML configuration",
+            filetypes=[("TOML files", "*.toml"), ("All files", "*.*")],
+        )
+        if file_path:
+            config = load_config_from_toml(file_path)
+            self.loaded_toml = config
+            self.use_toml = True
+            self.toml_label.config(text=f"TOML loaded: {os.path.basename(file_path)}", fg="green")
+            self.apply_toml_to_gui(config)
+            summary = f"TOML loaded: {os.path.basename(file_path)}\n"
+            summary += f"[interpolation] method: {config.get('interpolation', {}).get('method')}\n"
+            summary += f"max_gap: {config.get('interpolation', {}).get('max_gap')}\n"
+            summary += f"[smoothing] method: {config.get('smoothing', {}).get('method')}\n"
+            summary += f"[padding] percent: {config.get('padding', {}).get('percent')}\n"
+            summary += f"[split] enabled: {config.get('split', {}).get('enabled')}\n"
+            print("\n=== TOML configuration loaded and will be used ===\n" + summary)
+            messagebox.showinfo("TOML Parameters Loaded", summary)
+
+    def get_current_config(self):
+        # Collect the current values from the interface and build the dict for TOML
+        interp_map = {
+            1: "linear", 2: "cubic", 3: "nearest", 4: "kalman", 5: "none", 6: "skip"
+        }
+        smooth_map = {
+            1: "none", 2: "savgol", 3: "lowess", 4: "kalman", 5: "butterworth", 6: "splines", 7: "arima"
+        }
+        interp_method = interp_map.get(int(self.interp_entry.get()), "linear")
+        smooth_method = smooth_map.get(int(self.smooth_entry.get()), "none")
+        max_gap = int(self.max_gap_entry.get())
+        padding = float(self.padding_entry.get())
+        do_split = self.split_var.get()
+        # Specific parameters
+        smoothing_params = {}
+        if smooth_method == "savgol":
+            smoothing_params = {
+                "window_length": int(self.savgol_window.get()),
+                "polyorder": int(self.savgol_poly.get())
+            }
+        elif smooth_method == "lowess":
+            smoothing_params = {
+                "frac": float(self.lowess_frac.get()),
+                "it": int(self.lowess_it.get())
+            }
+        elif smooth_method == "kalman":
+            smoothing_params = {
+                "n_iter": int(self.kalman_iterations.get()),
+                "mode": int(self.kalman_mode.get())
+            }
+        elif smooth_method == "butterworth":
+            smoothing_params = {
+                "cutoff": float(self.butter_cutoff.get()),
+                "fs": float(self.butter_fs.get())
+            }
+        elif smooth_method == "splines":
+            smoothing_params = {
+                "smoothing_factor": float(self.spline_smoothing.get())
+            }
+        elif smooth_method == "arima":
+            smoothing_params = {
+                "p": int(self.arima_p.get()),
+                "d": int(self.arima_d.get()),
+                "q": int(self.arima_q.get())
+            }
+        config = {
+            "interpolation": {
+                "method": interp_method,
+                "max_gap": max_gap
+            },
+            "smoothing": {
+                "method": smooth_method,
+                **smoothing_params
+            },
+            "padding": {
+                "percent": padding
+            },
+            "split": {
+                "enabled": do_split
+            }
+        }
+        return config
+
+    def apply_toml_to_gui(self, config):
+        # Fill the interface fields with the values from the TOML
+        interp_map_rev = {"linear":1, "cubic":2, "nearest":3, "kalman":4, "none":5, "skip":6}
+        smooth_map_rev = {"none":1, "savgol":2, "lowess":3, "kalman":4, "butterworth":5, "splines":6, "arima":7}
+        interp = config.get('interpolation', {})
+        smoothing = config.get('smoothing', {})
+        padding = config.get('padding', {})
+        split = config.get('split', {})
+        self.interp_entry.delete(0, tk.END)
+        self.interp_entry.insert(0, str(interp_map_rev.get(interp.get('method', 'linear'), 1)))
+        self.smooth_entry.delete(0, tk.END)
+        self.smooth_entry.insert(0, str(smooth_map_rev.get(smoothing.get('method', 'none'), 1)))
+        self.max_gap_entry.delete(0, tk.END)
+        self.max_gap_entry.insert(0, str(interp.get('max_gap', 60)))
+        self.padding_entry.delete(0, tk.END)
+        self.padding_entry.insert(0, str(padding.get('percent', 10)))
+        self.split_var.set(bool(split.get('enabled', False)))
+        # Specific smoothing parameters
+        if smoothing.get('method') == 'savgol':
+            self.savgol_window.set(str(smoothing.get('window_length', 7)))
+            self.savgol_poly.set(str(smoothing.get('polyorder', 3)))
+        elif smoothing.get('method') == 'lowess':
+            self.lowess_frac.set(str(smoothing.get('frac', 0.3)))
+            self.lowess_it.set(str(smoothing.get('it', 3)))
+        elif smoothing.get('method') == 'kalman':
+            self.kalman_iterations.set(str(smoothing.get('n_iter', 5)))
+            self.kalman_mode.set(str(smoothing.get('mode', 1)))
+        elif smoothing.get('method') == 'butterworth':
+            self.butter_cutoff.set(str(smoothing.get('cutoff', 10)))
+            self.butter_fs.set(str(smoothing.get('fs', 100)))
+        elif smoothing.get('method') == 'splines':
+            self.spline_smoothing.set(str(smoothing.get('smoothing_factor', 1.0)))
+        elif smoothing.get('method') == 'arima':
+            self.arima_p.set(str(smoothing.get('p', 1)))
+            self.arima_d.set(str(smoothing.get('d', 0)))
+            self.arima_q.set(str(smoothing.get('q', 0)))
 
 
 def generate_report(dest_dir, config, processed_files):
@@ -1498,8 +1767,19 @@ def spline_smooth(data, s=1.0):
 
 
 def kalman_smooth(data, n_iter=5, mode=1):
-    alpha = 0.7  # Definir alpha aqui
-    data = np.asarray(data)  # Garantir que é um array numpy
+    """
+    Apply Kalman smoothing to data.
+    
+    Parameters:
+    - data: input data (1D or 2D array)
+    - n_iter: number of EM iterations
+    - mode: 1 for 1D processing, 2 for 2D (x,y pairs)
+    
+    Returns:
+    - smoothed data
+    """
+    alpha = 0.7  # Blending factor for smoothing
+    data = np.asarray(data)  # Ensure it's a numpy array
 
     # Handle 1D data
     if data.ndim == 1:
@@ -1639,7 +1919,7 @@ def kalman_smooth(data, n_iter=5, mode=1):
 
 def arima_smooth(data, order=(1, 0, 0)):
     """
-    Applies ARIMA smoothing to the input data using the ARIMA.filter method.
+    Applies ARIMA smoothing to the input data.
 
     Parameters:
         data (array-like): The input time series data. Can be 1D or 2D.
@@ -1651,14 +1931,29 @@ def arima_smooth(data, order=(1, 0, 0)):
     Returns:
         filtered_data (array-like): The smoothed data.
     """
-
     data = np.asarray(data)
+    
     # If data is 1D, process directly
     if data.ndim == 1:
         try:
-            model = ARIMA(data, order=order)
-            result = model.fit()  # Primeiro ajusta o modelo
-            return result.fittedvalues  # Depois obtém os valores suavizados
+            # Remove NaN values for ARIMA fitting
+            valid_mask = ~np.isnan(data)
+            if not np.any(valid_mask):
+                return data  # Return original if all NaN
+                
+            valid_data = data[valid_mask]
+            if len(valid_data) < max(order) + 1:
+                print("Warning: Not enough data points for ARIMA model")
+                return data
+                
+            model = ARIMA(valid_data, order=order)
+            result = model.fit(disp=False)  # Suppress output
+            
+            # Create output array
+            output = data.copy()
+            output[valid_mask] = result.fittedvalues
+            return output
+            
         except Exception as e:
             print(f"Error in ARIMA smoothing: {str(e)}")
             return data  # Return original data if smoothing fails
@@ -1667,11 +1962,25 @@ def arima_smooth(data, order=(1, 0, 0)):
         smoothed = np.empty_like(data)
         for j in range(data.shape[1]):
             try:
-                model = ARIMA(data[:, j], order=order)
-                result = model.fit()  # Primeiro ajusta o modelo
-                smoothed[:, j] = (
-                    result.fittedvalues
-                )  # Depois obtém os valores suavizados
+                col_data = data[:, j]
+                valid_mask = ~np.isnan(col_data)
+                
+                if not np.any(valid_mask):
+                    smoothed[:, j] = col_data  # Keep original if all NaN
+                    continue
+                    
+                valid_data = col_data[valid_mask]
+                if len(valid_data) < max(order) + 1:
+                    print(f"Warning: Not enough data points for ARIMA model in column {j}")
+                    smoothed[:, j] = col_data
+                    continue
+                    
+                model = ARIMA(valid_data, order=order)
+                result = model.fit(disp=False)  # Suppress output
+                
+                smoothed[:, j] = col_data.copy()
+                smoothed[valid_mask, j] = result.fittedvalues
+                
             except Exception as e:
                 print(f"Error in ARIMA smoothing for column {j}: {str(e)}")
                 smoothed[:, j] = data[:, j]  # Keep original data for failed columns
