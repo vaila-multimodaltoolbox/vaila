@@ -80,19 +80,15 @@ import os
 import time
 import datetime
 import tkinter as tk
-from tkinter import filedialog, messagebox, simpledialog
+from tkinter import filedialog, messagebox
 from pathlib import Path
 from rich import print
-import platform
 import numpy as np
 from collections import deque
 from scipy.signal import savgol_filter
-import copy
 from mediapipe.framework.formats import landmark_pb2
-import json
 import pandas as pd
 import tempfile
-import shutil
 
 # Additional imports for filtering and interpolation
 from pykalman import KalmanFilter
@@ -277,7 +273,6 @@ def kalman_smooth(data, n_iter=5, mode=1):
     if data.ndim == 1:
         data = data.reshape(-1, 1)
 
-    n_samples = data.shape[0]
     n_features = data.shape[1]
 
     try:
@@ -1073,7 +1068,7 @@ def get_pose_config():
     
     dialog = ConfidenceInputDialog(root)
     if dialog.result:
-        print(f"Configuration applied successfully!")
+        print("Configuration applied successfully!")
         return dialog.result
     else:
         messagebox.showerror("Error", "Configuration cancelled - no values entered.")
@@ -1095,7 +1090,6 @@ def resize_video_opencv(input_file, output_file, scale_factor, progress_callback
         # Get video properties
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        fps = cap.get(cv2.CAP_PROP_FPS)
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
         # Calculate new dimensions
@@ -1107,7 +1101,6 @@ def resize_video_opencv(input_file, output_file, scale_factor, progress_callback
             "original_video": os.path.basename(input_file),
             "original_width": width,
             "original_height": height,
-            "original_fps": fps,
             "original_frames": total_frames,
             "scale_factor": scale_factor,
             "output_width": new_width,
@@ -1120,7 +1113,7 @@ def resize_video_opencv(input_file, output_file, scale_factor, progress_callback
 
         # Define codec and create VideoWriter object
         fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-        out = cv2.VideoWriter(output_file, fourcc, fps, (new_width, new_height))
+        out = cv2.VideoWriter(output_file, fourcc, 30, (new_width, new_height))
 
         # Process the video frame by frame
         frame_count = 0
@@ -1276,8 +1269,6 @@ def apply_interpolation_and_smoothing(df, config, progress_callback=None):
                     except Exception as e:
                         print(f"LOWESS smoothing failed for column {j}: {e}")
         elif smooth_method == 'kalman':
-            n_iter = smooth_params.get('n_iter', 5)
-            mode = smooth_params.get('mode', 1)
             for j in range(data.shape[1]):
                 col = data[:, j]
                 valid = ~np.isnan(col)
@@ -1384,7 +1375,8 @@ def apply_temporal_filter(landmarks_history, window=5):
                 try:
                     filtered = savgol_filter(values, window, 2)
                     filtered_coords.append(filtered[-1])
-                except:
+                except Exception as e:
+                    print(f"Error during Savitzky-Golay filtering: {e}")
                     filtered_coords.append(landmark_data[-1][dim])
             else:
                 filtered_coords.append(landmark_data[-1][dim])
@@ -1459,10 +1451,10 @@ def process_video(video_path, output_dir, pose_config):
     """
     Process a video file using MediaPipe Pose estimation with optional video resize.
     """
-    print(f"\n=== Parameters being used for this video ===")
+    print("\n=== Parameters being used for this video ===")
     for k, v in pose_config.items():
         print(f"{k}: {v}")
-    print(f"==========================================\n")
+    print("==========================================\n")
     
     print(f"Processing video: {video_path}")
     start_time = time.time()
@@ -1497,9 +1489,9 @@ def process_video(video_path, output_dir, pose_config):
         
         if resize_metadata:
             processing_video_path = temp_resized_video
-            print(f"  Video resized successfully for processing")
+            print("Video resized successfully for processing")
         else:
-            print(f"  Failed to resize video, using original")
+            print("Failed to resize video, using original")
             enable_resize = False
 
     # Initial configuration
@@ -1510,14 +1502,12 @@ def process_video(video_path, output_dir, pose_config):
 
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    fps = cap.get(cv2.CAP_PROP_FPS)
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
     # Output files
     output_video_path = output_dir / f"{video_path.stem}_mp.mp4"
     output_file_path = output_dir / f"{video_path.stem}_mp_norm.csv"
     output_pixel_file_path = output_dir / f"{video_path.stem}_mp_pixel.csv"
-    output_original_file_path = output_dir / f"{video_path.stem}_mp_original.csv"
 
     # Initialize MediaPipe
     pose = mp.solutions.pose.Pose(
@@ -1773,9 +1763,9 @@ def process_video(video_path, output_dir, pose_config):
         try:
             os.remove(temp_resized_video)
             os.rmdir(os.path.dirname(temp_resized_video))
-            print(f"\n  Cleaned up temporary resized video")
-        except:
-            pass
+            print("\n  Cleaned up temporary resized video")
+        except Exception as e:
+            print(f"Warning: Could not clean up temporary resized video: {e}")
 
     # Save configuration used for this video
     try:
@@ -1793,13 +1783,13 @@ def process_video(video_path, output_dir, pose_config):
     with open(log_info_path, "w") as log_file:
         log_file.write(f"Video Path: {video_path}\n")
         log_file.write(f"Output Video Path: {output_video_path}\n")
-        log_file.write(f"Configuration File: configuration_used.toml (saved in this directory)\n")
+        log_file.write("Configuration File: configuration_used.toml (saved in this directory)\n")
         if enable_resize:
             log_file.write(f"Video Resize: Enabled ({resize_scale}x scaling)\n")
             log_file.write(f"Original Resolution: {resize_metadata['original_width']}x{resize_metadata['original_height']}\n")
             log_file.write(f"Processing Resolution: {resize_metadata['output_width']}x{resize_metadata['output_height']}\n")
         else:
-            log_file.write(f"Video Resize: Disabled\n")
+            log_file.write("Video Resize: Disabled\n")
             log_file.write(f"Resolution: {original_width}x{original_height}\n")
         log_file.write(f"FPS: {original_fps}\n")
         log_file.write(f"Total Frames: {frame_count}\n")
@@ -1808,14 +1798,14 @@ def process_video(video_path, output_dir, pose_config):
         
         # Advanced filtering information
         if pose_config.get('enable_advanced_filtering', False):
-            log_file.write(f"Advanced Filtering: Enabled\n")
+            log_file.write("Advanced Filtering: Enabled\n")
             log_file.write(f"Interpolation Method: {pose_config.get('interp_method', 'none')}\n")
             log_file.write(f"Smoothing Method: {pose_config.get('smooth_method', 'none')}\n")
             log_file.write(f"Maximum Gap Size: {pose_config.get('max_gap', 0)} frames\n")
             if pose_config.get('smooth_params'):
                 log_file.write(f"Smoothing Parameters: {pose_config['smooth_params']}\n")
         else:
-            log_file.write(f"Advanced Filtering: Disabled\n")
+            log_file.write("Advanced Filtering: Disabled\n")
             
         if frames_with_missing_data:
             log_file.write(f"Frames with missing data: {len(frames_with_missing_data)}\n")
@@ -1825,7 +1815,7 @@ def process_video(video_path, output_dir, pose_config):
     print(f"\nCompleted processing {video_path.name}")
     print(f"Output saved to: {output_dir}")
     if enable_resize:
-        print(f"Coordinates converted back to original video dimensions")
+        print("Coordinates converted back to original video dimensions")
     print(f"Processing time: {execution_time:.2f} seconds\n")
 
     print(f"df_norm head:\n{df_norm.head()}")
