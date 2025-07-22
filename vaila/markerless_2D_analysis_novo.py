@@ -1029,11 +1029,11 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
                     summary += f"max_gap: {config.get('max_gap')}\n"
                     if 'smooth_params' in config:
                         summary += f"smooth_params: {config['smooth_params']}\n"
+                    summary += f"enable_padding: {config.get('enable_padding', ENABLE_PADDING_DEFAULT)}\n"
+                    summary += f"pad_start_frames: {config.get('pad_start_frames', PAD_START_FRAMES_DEFAULT)}\n"
                     print("\n=== TOML configuration loaded and will be used ===\n" + summary)
                     from tkinter import messagebox
                     messagebox.showinfo("TOML Parameters Loaded", summary)
-                    summary += f"enable_padding: {config.get('enable_padding', ENABLE_PADDING_DEFAULT)}\n"
-                    summary += f"pad_start_frames: {config.get('pad_start_frames', PAD_START_FRAMES_DEFAULT)}\n"
                 else:
                     self.toml_label.config(text="Error loading TOML", fg="red")
             except Exception as e:
@@ -1049,12 +1049,11 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
                 "model_complexity": int(self.model_complexity_entry.get()),
                 "enable_segmentation": self.enable_segmentation_entry.get().lower() == "true",
                 "smooth_segmentation": self.smooth_segmentation_entry.get().lower() == "true",
-            "static_image_mode": self.static_image_mode_entry.get().lower() == "true",
-            "apply_filtering": self.apply_filtering_entry.get().lower() == "true",
-            "estimate_occluded": self.estimate_occluded_entry.get().lower() == "true",
+                "static_image_mode": self.static_image_mode_entry.get().lower() == "true",
+                "apply_filtering": self.apply_filtering_entry.get().lower() == "true",
+                "estimate_occluded": self.estimate_occluded_entry.get().lower() == "true",
                 "enable_resize": self.enable_resize_entry.get().lower() == "true",
                 "resize_scale": int(self.resize_scale_entry.get()),
-                # Defaults for other advanced parameters
                 "enable_advanced_filtering": False,
                 "interp_method": "linear",
                 "smooth_method": "none",
@@ -1062,7 +1061,7 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
                 "_all_smooth_params": get_default_config()["smoothing_params"],
                 "enable_padding": self.enable_padding_entry.get().lower() == "true",
                 "pad_start_frames": int(self.pad_start_frames_entry.get()),
-        }
+            }
 
 
 def get_pose_config():
@@ -1614,14 +1613,14 @@ def process_video(video_path, output_dir, pose_config):
     for frame_idx in range(len(normalized_landmarks_list)):
         landmarks_norm = normalized_landmarks_list[frame_idx]
         landmarks_pixel = pixel_landmarks_list[frame_idx]
-        norm_row = [frame_idx]
-        pixel_row = [frame_idx]
-        for landmark in landmarks_norm:
-            norm_row.extend(landmark)
-        for landmark in landmarks_pixel:
-            pixel_row.extend(landmark)
-        df_norm_data.append(norm_row)
-        df_pixel_data.append(pixel_row)
+    norm_row = [frame_idx]
+    pixel_row = [frame_idx]
+    for landmark in landmarks_norm:
+        norm_row.extend(landmark)
+    for landmark in landmarks_pixel:
+        pixel_row.extend(landmark)
+    df_norm_data.append(norm_row)
+    df_pixel_data.append(pixel_row)
     columns = ["frame_index"]
     for name in landmark_names:
         columns.extend([f"{name}_x", f"{name}_y", f"{name}_z"])
