@@ -1,0 +1,192 @@
+# ================================================================
+# MediaPipe 2D Analysis Configuration File
+# Generated automatically by markerless_2D_analysis.py in vaila Multimodal Analysis Toolbox
+# Created: 2025-07-21 15:36:26
+# ================================================================
+#
+# HOW TO USE THIS FILE:
+# 1. Edit the values below to customize your analysis
+# 2. Save this file
+# 3. In the script, click 'Load Existing TOML Configuration'
+# 4. Select this file and run your analysis
+#
+# IMPORTANT: Keep the format exactly as shown!
+# - true/false must be lowercase
+# - Numbers can have decimals (3.0) or not (30)
+# - Text must be in quotes ("linear")
+# ================================================================
+
+[mediapipe]
+# ================================================================
+# MEDIAPIPE POSE DETECTION SETTINGS
+# ================================================================
+# These control how MediaPipe detects poses in your video
+min_detection_confidence = 0.1    # How confident to start detecting (0.1-1.0)
+#                                        # Lower = detect more poses (try 0.1-0.3)
+#                                        # Higher = only clear poses (try 0.7-0.9)
+min_tracking_confidence = 0.1     # How confident to keep tracking (0.1-1.0)
+#                                       # Lower = track longer (try 0.1-0.3)
+#                                       # Higher = drop unclear tracking (try 0.7-0.9)
+model_complexity = 2                  # Model accuracy vs speed
+#                        # 0 = fastest, least accurate
+#                        # 1 = balanced speed and accuracy
+#                        # 2 = slowest, most accurate (recommended)
+enable_segmentation = false           # Draw person outline (true/false)
+#                             # true = creates person mask (slower)
+#                             # false = only landmarks (faster)
+smooth_segmentation = false           # Smooth the outline (true/false)
+#                             # Only works if enable_segmentation = true
+static_image_mode = false             # Treat each frame separately (true/false)
+#                           # false = track across frames (recommended)
+#                           # true = detect fresh each frame (slower)
+apply_filtering = true               # Apply built-in smoothing (true/false)
+#                         # true = smoother movement (recommended)
+#                         # false = raw detection results
+estimate_occluded = true             # Guess hidden body parts (true/false)
+#                           # true = fill in missing landmarks (recommended)
+#                           # false = leave gaps when parts are hidden
+
+[video_resize]
+# ================================================================
+# VIDEO RESIZING FOR BETTER DETECTION
+# ================================================================
+# Resize video before analysis to improve pose detection
+# Useful for: small people, distant subjects, low resolution videos
+enable_resize = true                 # Resize video before analysis (true/false)
+#                           # true = upscale for better detection
+#                           # false = use original size (faster)
+resize_scale = 2                      # Scale factor (2-8)
+#                        # 2 = double size (good for most cases)
+#                        # 3-4 = better for very small subjects
+#                        # 5-8 = for very distant or tiny people
+#                        # Higher = better detection but much slower
+#                        # Coordinates are automatically converted back
+
+[advanced_filtering]
+# ================================================================
+# ADVANCED FILTERING AND INTERPOLATION
+# ================================================================
+# Fill gaps and smooth the landmark data after detection
+enable_advanced_filtering = true    # Use advanced processing (true/false)
+#                                     # true = apply smoothing and gap filling
+#                                     # false = use raw MediaPipe output
+interp_method = "linear"             # How to fill missing data
+#                         # "linear" = straight lines (most common)
+#                         # "cubic" = curved lines (smoother)
+#                         # "nearest" = copy nearest valid point
+#                         # "kalman" = predictive filling
+#                         # "none" = don't fill gaps
+smooth_method = "butterworth"               # Type of smoothing to apply
+#                       # "none" = no smoothing
+#                       # "butterworth" = most common for biomechanics
+#                       # "savgol" = preserves signal features
+#                       # "lowess" = for very noisy data
+#                       # "kalman" = for tracking applications
+#                       # "splines" = very smooth curves
+max_gap = 60                         # Maximum gap size to fill (frames)
+#                         # 60 = fill gaps up to 2 seconds (at 30fps)
+#                         # 30 = fill gaps up to 1 second (at 30fps)
+#                         # 0 = fill all gaps regardless of size
+
+[smoothing_params]
+# ================================================================
+# SMOOTHING PARAMETERS - Detailed Guide for Users
+# ================================================================
+# Only the parameters for your selected method will be used.
+# To use smoothing, set 'smooth_method' above to the desired option:
+#   - 'none' = No smoothing (default)
+#   - 'savgol' = Savitzky-Golay filter (good for preserving peaks)
+#   - 'lowess' = Local regression (good for noisy data)
+#   - 'kalman' = Kalman filter (good for tracking)
+#   - 'butterworth' = Butterworth filter (most common for biomechanics)
+#   - 'splines' = Spline smoothing (very smooth curves)
+#   - 'arima' = ARIMA model (for time series)
+
+# ----------------------------------------------------------------
+# SAVITZKY-GOLAY FILTER (smooth_method = 'savgol')
+# ----------------------------------------------------------------
+# Best for: Preserving signal features while reducing noise
+# Common use: When you want smooth movement but keep important details
+savgol_window_length = 5    # Window size (must be odd number)
+#                                 # Smaller = less smoothing (try 5-11)
+#                                 # Larger = more smoothing (try 13-21)
+savgol_polyorder = 2        # Polynomial order (usually 2 or 3)
+#                           # 2 = simpler curves, 3 = more complex curves
+
+# ----------------------------------------------------------------
+# LOWESS SMOOTHING (smooth_method = 'lowess')
+# ----------------------------------------------------------------
+# Best for: Very noisy data that needs strong smoothing
+# Common use: Poor quality videos or tremor analysis
+lowess_frac = 0.1        # Fraction of data to use (0.1 to 1.0)
+#                      # Smaller = less smoothing (try 0.1-0.3)
+#                      # Larger = more smoothing (try 0.5-0.8)
+lowess_it = 1          # Number of iterations (usually 1-5)
+#                    # More iterations = more robust but slower
+
+# ----------------------------------------------------------------
+# BUTTERWORTH FILTER (smooth_method = 'butterworth') - MOST COMMON
+# ----------------------------------------------------------------
+# Best for: General biomechanics analysis (most used in research)
+# Common use: Human movement, sports analysis, gait analysis
+# IMPORTANT: Match butter_fs to your video frame rate!
+butter_cutoff = 5.0    # Cutoff frequency in Hz - ADJUST THIS!
+#                      # Lower = more smoothing:
+#                      #   3Hz = heavy smoothing (slow movements)
+#                      #   6Hz = medium smoothing (normal walking)
+#                      #  10Hz = light smoothing (fast movements)
+#                      #  15Hz = minimal smoothing (sports)
+butter_fs = 30.0       # Sampling frequency = VIDEO FRAME RATE!
+#                    # 30Hz for 30fps video, 60Hz for 60fps video
+#                    # 120Hz for 120fps high-speed video
+
+# ----------------------------------------------------------------
+# KALMAN FILTER (smooth_method = 'kalman')
+# ----------------------------------------------------------------
+# Best for: Tracking objects with predictable motion
+# Common use: Following specific body parts, sports tracking
+kalman_iterations = 5    # EM algorithm iterations (3-10)
+#                         # More = better fit but slower
+kalman_mode = 1          # 1 = simple mode, 2 = advanced mode
+#                   # Mode 1 for most cases, Mode 2 for complex movements
+
+# ----------------------------------------------------------------
+# SPLINE SMOOTHING (smooth_method = 'splines')
+# ----------------------------------------------------------------
+# Best for: Creating very smooth curves for presentation
+# Common use: Publication figures, smooth trajectories
+spline_smoothing_factor = 1.0    # Smoothing factor
+#                               # 0 = no smoothing (follows data exactly)
+#                               # 1 = moderate smoothing
+#                               # 10+ = heavy smoothing
+
+# ----------------------------------------------------------------
+# ARIMA MODEL (smooth_method = 'arima')
+# ----------------------------------------------------------------
+# Best for: Time series analysis and prediction
+# Common use: Advanced statistical analysis (requires expertise)
+arima_p = 1    # Autoregressive order (usually 1-3)
+arima_d = 0    # Differencing order (usually 0-1)
+arima_q = 0    # Moving average order (usually 0-3)
+# Note: ARIMA requires statistical knowledge to use effectively
+
+# ================================================================
+# QUICK REFERENCE FOR COMMON SCENARIOS:
+# ================================================================
+# Walking analysis:     butterworth, cutoff=6, fs=30
+# Running analysis:     butterworth, cutoff=10, fs=60
+# Sports (fast moves):  butterworth, cutoff=15, fs=120
+# Tremor/shaky video:   lowess, frac=0.3, it=3
+# Presentation plots:   splines, smoothing_factor=1.0
+# Research publication: savgol, window=7, polyorder=3
+# ================================================================
+
+[padding]
+# ================================================================
+# INITIAL FRAME PADDING FOR STABILIZATION
+# ================================================================
+# Add repeated frames at the start to help MediaPipe stabilize.
+enable_padding = true  # true/false
+pad_start_frames = 120  # Number of frames to pad at start
+# Recommended: 30-60 for most videos.
+
