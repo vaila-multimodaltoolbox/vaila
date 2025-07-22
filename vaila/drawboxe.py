@@ -1,34 +1,36 @@
 """
-drawboxe.py
+Project: vailá Multimodal Toolbox
+Script: drawboxe.py - Draw boxes on videos
+
+Author: Paulo Roberto Pereira Santiago
+Email: paulosantiago@usp.br
+GitHub: https://github.com/vaila-multimodaltoolbox/vaila
+Creation Date: 28 October 2024
+Update Date: 21 July 2025
+Version: 0.0.5
 
 Description:
------------
-This script is designed to add bounding boxes to videos using coordinates
-obtained from clicks on an image. It also supports extracting frames and
-applying boxes to specific frame intervals or directly to videos. The script
-can be used for batch processing of videos in a directory.
+    Draw boxes on videos.
 
-Version: 0.0.5
-created: 2025-02-28
-updated: 2025-05-18 (modes logic fully fixed)
+Usage:
+    Run the script from the command line:
+        python drawboxe.py
 
-Author:
--------
-Prof. PhD. Paulo Santiago
+Requirements:
+    - Python 3.x
+    - OpenCV
+    - Tkinter (for GUI operations)
 
 License:
---------
-This code is licensed under the MIT License. See the LICENSE file for more details.
+    This project is licensed under the terms of GNU General Public License v3.0.
 
-Dependencies:
--------------
-- Python 3.12.9 (Anaconda environment)
-- os
-- ffmpeg (installed via Conda or available in PATH)
-- matplotlib
-- opencv-python
-- tkinter
-
+Change History:
+    - v0.0.6: Added support for free polygon boxes
+    - v0.0.5: Added support for trapezoid boxes
+    - v0.0.4: Added support for rectangle boxes
+    - v0.0.3: Added support for frame intervals
+    - v0.0.2: Added support for multiple videos
+    - v0.0.1: First version
 """
 
 import numpy as np
@@ -92,11 +94,14 @@ def apply_boxes_directly_to_video(input_path, output_path, coordinates, selectio
     out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
     frame_count = 0
     total_frames = int(vidcap.get(cv2.CAP_PROP_FRAME_COUNT))
+    
     while True:
         ret, frame = vidcap.read()
         if not ret:
             break
+        
         mask_all = np.zeros(frame.shape[:2], dtype=np.uint8)
+        
         for coords, (mode, shape_type) in zip(coordinates, selections):
             if shape_type == "rectangle":
                 x1, y1 = int(coords[0][0]), int(coords[0][1])
@@ -109,7 +114,7 @@ def apply_boxes_directly_to_video(input_path, output_path, coordinates, selectio
                     mask = np.zeros(frame.shape[:2], dtype=np.uint8)
                     mask[y1:y2, x1:x2] = 255
                     mask_all = cv2.bitwise_or(mask_all, mask)
-            elif shape_type == "trapezoid":
+            elif shape_type in ("trapezoid", "free"):
                 pts = np.array(coords, np.int32).reshape((-1, 1, 2))
                 if mode == "inside":
                     cv2.fillPoly(frame, [pts], (0, 0, 0))
@@ -117,8 +122,10 @@ def apply_boxes_directly_to_video(input_path, output_path, coordinates, selectio
                     mask = np.zeros(frame.shape[:2], dtype=np.uint8)
                     cv2.fillPoly(mask, [pts], 255)
                     mask_all = cv2.bitwise_or(mask_all, mask)
+        
         if np.any(mask_all):
             frame = cv2.bitwise_and(frame, frame, mask=mask_all)
+        
         out.write(frame)
         frame_count += 1
         print(
@@ -138,7 +145,9 @@ def apply_boxes_to_frames(frames_dir, coordinates, selections, frame_intervals):
             if start_frame <= frame_number <= end_frame:
                 frame_path = os.path.join(frames_dir, filename)
                 img = cv2.imread(frame_path)
+                
                 mask_all = np.zeros(img.shape[:2], dtype=np.uint8)
+                
                 for coords, (mode, shape_type) in zip(coordinates, selections):
                     if shape_type == "rectangle":
                         x1, y1 = int(coords[0][0]), int(coords[0][1])
@@ -151,7 +160,7 @@ def apply_boxes_to_frames(frames_dir, coordinates, selections, frame_intervals):
                             mask = np.zeros(img.shape[:2], dtype=np.uint8)
                             mask[y1:y2, x1:x2] = 255
                             mask_all = cv2.bitwise_or(mask_all, mask)
-                    elif shape_type == "trapezoid":
+                    elif shape_type in ("trapezoid", "free"):
                         pts = np.array(coords, np.int32).reshape((-1, 1, 2))
                         if mode == "inside":
                             cv2.fillPoly(img, [pts], (0, 0, 0))
@@ -159,8 +168,10 @@ def apply_boxes_to_frames(frames_dir, coordinates, selections, frame_intervals):
                             mask = np.zeros(img.shape[:2], dtype=np.uint8)
                             cv2.fillPoly(mask, [pts], 255)
                             mask_all = cv2.bitwise_or(mask_all, mask)
+                
                 if np.any(mask_all):
                     img = cv2.bitwise_and(img, img, mask=mask_all)
+                
                 cv2.imwrite(frame_path, img)
 
 
@@ -191,15 +202,14 @@ def get_box_coordinates(image_path):
     selection_mode = {"mode": "inside", "shape": "rectangle"}
 
     def update_title():
-        shape_text = (
-            "trapezoid" if selection_mode["shape"] == "trapezoid" else "rectangle"
-        )
+        shape_text = selection_mode["shape"]
         ax.set_title(
             f"Color Guide:\n"
             f"Rectangle: Red (inside) / Blue (outside)\n"
             f"Trapezoid: Green (inside) / Yellow (outside)\n"
+            f"Free: Magenta (inside) / Cyan (outside)\n"
             f'Current mode: {selection_mode["mode"]}, Shape: {shape_text}\n'
-            'Click to select corners. Press "e" to toggle mode, "t" to toggle shape, Enter to finish.'
+            'Click to select corners. Press "e" to toggle mode, "t" to toggle shape, "p" to finish free polygon, Enter to finish.'
         )
         fig.canvas.draw()
 
@@ -209,6 +219,8 @@ def get_box_coordinates(image_path):
     shapes = []
     selections = []
     temp_points = []
+    free_polygon_sizes = []  # Rastrear tamanho de cada polígono livre
+    free_lines = []  # Rastrear linhas desenhadas no modo free
 
     def on_key(event):
         if event.key == "e":
@@ -217,11 +229,40 @@ def get_box_coordinates(image_path):
             )
             update_title()
         elif event.key == "t":
-            selection_mode["shape"] = (
-                "trapezoid" if selection_mode["shape"] == "rectangle" else "rectangle"
-            )
+            # Alterna entre rectangle, trapezoid e free
+            if selection_mode["shape"] == "rectangle":
+                selection_mode["shape"] = "trapezoid"
+            elif selection_mode["shape"] == "trapezoid":
+                selection_mode["shape"] = "free"
+            else:
+                selection_mode["shape"] = "rectangle"
             temp_points.clear()
+            # Limpar linhas do modo free anterior
+            for line in free_lines:
+                line.remove()
+            free_lines.clear()
             update_title()
+        elif event.key == "p":
+            # Finaliza o polígono livre se houver pelo menos 3 pontos
+            if selection_mode["shape"] == "free" and len(temp_points) >= 3:
+                color = "cyan" if selection_mode["mode"] == "outside" else "magenta"
+                poly = patches.Polygon(
+                    temp_points,
+                    linewidth=1.5,
+                    edgecolor=color,
+                    facecolor="none",
+                )
+                ax.add_patch(poly)
+                shapes.append(poly)
+                points.extend(temp_points)
+                selections.append((selection_mode["mode"], "free"))
+                free_polygon_sizes.append(len(temp_points))  # Guardar tamanho do polígono
+                # Limpar linhas temporárias
+                for line in free_lines:
+                    line.remove()
+                free_lines.clear()
+                temp_points.clear()
+                plt.draw()
         elif event.key == "enter":
             plt.close()
 
@@ -232,8 +273,18 @@ def get_box_coordinates(image_path):
                 shapes[-1].remove()
                 shapes.pop()
                 selections.pop()
-                points = points[:-4] if points else []
+                if selections and selections[-1][1] == "free":
+                    # Remover pontos do último polígono livre
+                    if free_polygon_sizes:
+                        points = points[:-free_polygon_sizes.pop()]
+                else:
+                    # Remover pontos do rectangle/trapezoid (4 pontos)
+                    points = points[:-4] if points else []
                 temp_points.clear()
+                # Limpar linhas do modo free
+                for line in free_lines:
+                    line.remove()
+                free_lines.clear()
                 plt.draw()
             return
         if event.button == 1:
@@ -263,7 +314,7 @@ def get_box_coordinates(image_path):
                     selections.append((selection_mode["mode"], "rectangle"))
                     temp_points.clear()
                     plt.draw()
-            else:
+            elif selection_mode["shape"] == "trapezoid":
                 temp_points.append((event.xdata, event.ydata))
                 if len(temp_points) == 4:
                     color = "yellow" if selection_mode["mode"] == "outside" else "green"
@@ -279,19 +330,54 @@ def get_box_coordinates(image_path):
                     selections.append((selection_mode["mode"], "trapezoid"))
                     temp_points.clear()
                     plt.draw()
+            elif selection_mode["shape"] == "free":
+                temp_points.append((event.xdata, event.ydata))
+                # Desenhar linha entre os pontos para feedback visual
+                if len(temp_points) > 1:
+                    line = ax.plot(
+                        [temp_points[-2][0], temp_points[-1][0]],
+                        [temp_points[-2][1], temp_points[-1][1]],
+                        color="magenta" if selection_mode["mode"] == "inside" else "cyan",
+                        linewidth=1.5,
+                    )[0]  # plot() retorna uma lista, pegamos o primeiro elemento
+                    free_lines.append(line)  # Adicionar à lista para poder remover depois
+                    plt.draw()
 
     fig.canvas.mpl_connect("button_press_event", on_click)
     fig.canvas.mpl_connect("key_press_event", on_key)
     plt.show()
     if temp_points:
         raise ValueError("An incomplete shape was defined.")
+    
+    # Processar boxes corretamente
     boxes = []
-    for i in range(0, len(points), 4):
-        if i + 3 < len(points):
-            box_points = [
-                (int(points[j][0]), int(points[j][1])) for j in range(i, i + 4)
-            ]
-            boxes.append(box_points)
+    i = 0
+    free_index = 0
+    
+    while i < len(points):
+        if selections and len(selections) > len(boxes):
+            current_selection = selections[len(boxes)]
+            if current_selection[1] == 'free':
+                # Usar o tamanho correto do polígono livre
+                if free_index < len(free_polygon_sizes):
+                    n_points = free_polygon_sizes[free_index]
+                    box_points = [(int(points[j][0]), int(points[j][1])) for j in range(i, i + n_points)]
+                    boxes.append(box_points)
+                    i += n_points
+                    free_index += 1
+                else:
+                    break
+            else:
+                # Para rectangle e trapezoid, usar 4 pontos
+                if i + 4 <= len(points):
+                    box_points = [(int(points[j][0]), int(points[j][1])) for j in range(i, i + 4)]
+                    boxes.append(box_points)
+                    i += 4
+                else:
+                    break
+        else:
+            break
+    
     return boxes, selections
 
 
