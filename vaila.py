@@ -112,11 +112,10 @@ import platform
 import subprocess
 import sys
 import webbrowser
-from typing import Optional
 
 # Third-party imports
 import tkinter as tk
-from tkinter import messagebox, filedialog, ttk, Toplevel, Label, Button, simpledialog
+from tkinter import messagebox, ttk, Toplevel, Label, Button, simpledialog
 from PIL import Image, ImageTk
 
 # Conditionally import platform-specific functionality
@@ -1407,7 +1406,7 @@ class Vaila(tk.Tk):
     def markerless_2d_analysis(self):
         """Runs the Markerless 2D Analysis module."""
         import tkinter as tk
-        from tkinter import messagebox, simpledialog
+        from tkinter import simpledialog
 
         root = tk.Tk()
         root.withdraw()
@@ -1440,7 +1439,6 @@ class Vaila(tk.Tk):
     def markerless_3d_analysis(self):
         """Runs the Markerless 3D Analysis module."""
         import tkinter as tk
-        from tkinter import messagebox, simpledialog
 
         root = tk.Tk()
         root.withdraw()
@@ -1668,7 +1666,6 @@ class Vaila(tk.Tk):
         def use_train_yolov11():
             dialog.destroy()
             try:
-                import sys
                 from vaila import yolotrain
 
                 yolotrain.run_yolotrain_gui()
@@ -1760,7 +1757,7 @@ class Vaila(tk.Tk):
         The user will be prompted to select the directory containing the C3D files.
 
         """
-        print(f"C_A_r1_c2 - def convert_c3d_csv on code line number 1589")
+        print("C_A_r1_c2 - def convert_c3d_csv on code line number 1589")
         from vaila import convert_c3d_to_csv
         from vaila import convert_csv_to_c3d
 
@@ -2035,7 +2032,7 @@ class Vaila(tk.Tk):
         This method provides options to correct lens distortion in either videos or CSV/DAT coordinate files,
         or via an interactive GUI. All use the same camera calibration parameters.
         """
-        print(f"C_B_r4_c1 - def run_distortvideo on code line number 1846")
+        print("C_B_r4_c1 - def run_distortvideo on code line number 1846")
         # bring in everything we need
         from tkinter import Toplevel, Label, Button
         from vaila import (
