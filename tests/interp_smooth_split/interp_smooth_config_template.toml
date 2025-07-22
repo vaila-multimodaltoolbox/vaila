@@ -1,0 +1,78 @@
+# ================================================================
+# Interp/Smooth Split - Configuration File
+# Generated automatically by interp_smooth_split.py
+# Created: 2025-07-21 16:26:39
+# ================================================================
+#
+# HOW TO USE THIS FILE:
+# 1. Edit the values below to customize your interpolation and smoothing.
+# 2. Save this file.
+# 3. In the script, click 'Load TOML configuration'.
+# 4. Select this file and run your analysis.
+#
+# IMPORTANT: Keep the format exactly as shown!
+# - true/false must be lowercase
+# - Numbers can have decimals (3.0) or not (30)
+# - Text must be in quotes ("linear")
+#
+# Each section below controls a part of the processing.
+# All options are explained with examples.
+# ================================================================
+
+[interpolation]
+# Method for filling gaps in your data.
+# Options: "linear", "cubic", "nearest", "kalman", "none", "skip"
+#   - linear: straight lines between points (most common)
+#   - cubic: smooth curves
+#   - nearest: copy nearest valid value
+#   - kalman: predictive filling (advanced)
+#   - none: leave gaps as NaN
+#   - skip: do not fill gaps, only apply smoothing
+method = "linear"
+# Maximum gap size to fill (in frames).
+# 0 = fill all gaps, 60 = fill up to 2 seconds at 30fps.
+max_gap = 60
+
+[smoothing]
+# Method for smoothing the data after filling gaps.
+# Options: "none", "savgol", "lowess", "kalman", "butterworth", "splines", "arima"
+#   - none: no smoothing
+#   - savgol: Savitzky-Golay filter (preserves peaks)
+#   - lowess: Local regression (for noisy data)
+#   - kalman: Kalman filter (for tracking)
+#   - butterworth: Butterworth filter (biomechanics standard)
+#   - splines: Spline smoothing (very smooth curves)
+#   - arima: ARIMA model (time series)
+method = "none"
+#
+# --- Parameters for each smoothing method (only the relevant ones are used) ---
+# Savitzky-Golay (savgol):
+window_length = 7    # Odd number, e.g. 5, 7, 9
+polyorder = 3        # Usually 2 or 3
+# LOWESS:
+frac = 0.3           # Fraction of data (0.1-1.0)
+it = 3               # Number of iterations
+# Kalman:
+n_iter = 5           # EM algorithm iterations (3-10)
+mode = 1             # 1 = simple, 2 = advanced
+# Butterworth:
+cutoff = 10.0        # Cutoff frequency in Hz (e.g. 4.0, 10.0)
+fs = 100.0           # Sampling frequency (video FPS, e.g. 30.0, 100.0)
+# Splines:
+smoothing_factor = 1.0   # 0 = no smoothing, 1 = moderate, 10+ = strong
+# ARIMA:
+p = 1                # AR order
+d = 0                # Difference order
+q = 0                # MA order
+
+[padding]
+# Add extra frames at the start and end to avoid edge effects.
+# percent = how much padding to add (as percent of data length).
+# 0 = no padding, 10 = 10%% of data length (recommended).
+percent = 10.0
+
+[split]
+# Split the data into two parts?
+# enabled = true/false
+enabled = false
+
