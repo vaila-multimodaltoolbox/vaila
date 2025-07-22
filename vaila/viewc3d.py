@@ -53,12 +53,10 @@ import open3d as o3d
 import ezc3d
 import numpy as np
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk, simpledialog
+from tkinter import filedialog, messagebox, ttk
 import time
 from rich import print
 import json
-import threading
-import datetime
 import pandas as pd
 
 
