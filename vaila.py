@@ -4,8 +4,8 @@ vaila.py
 ===============================================================================
 Author: Prof. Paulo R. P. Santiago
 Date:  7 October 2024
-Update:  22 July 2025
-Version updated: 0.10.1
+Update:  23 July 2025
+Version updated: 0.10.2
 Python Version: 3.12.11
 
 Description:
@@ -107,6 +107,7 @@ Visit the project repository: https://github.com/vaila-multimodaltoolbox
 
 # Standard library imports
 import os
+from rich import print
 import signal
 import platform
 import subprocess
@@ -135,7 +136,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 22.July.2025 v0.10.1 (Python 3.12.11)
+vailá - 23.July.2025 v0.10.2 (Python 3.12.11)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -201,6 +202,26 @@ Use the button 'imagination!' to access command-line (xonsh) tools for advanced 
 
 print(text)
 
+def open_folder_cross_platform(path):
+    if platform.system() == "Windows":
+        os.startfile(path)
+    elif platform.system() == "Darwin":
+        subprocess.Popen(["open", path])
+    else:  # Linux
+        # Try different file managers for Linux
+        try:
+            subprocess.Popen(["dolphin", path])  # KDE file manager first
+        except FileNotFoundError:
+            try:
+                subprocess.Popen(["nautilus", path])  # GNOME file manager
+            except FileNotFoundError:
+                try:
+                    subprocess.Popen(["thunar", path])  # XFCE file manager
+                except FileNotFoundError:
+                    try:
+                        subprocess.Popen(["xdg-open", path])  # fallback to xdg-open
+                    except FileNotFoundError:
+                        print(f"Could not open folder: {path}")
 
 class Vaila(tk.Tk):
     def __init__(self):
@@ -214,7 +235,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 22.July.2025 v0.10.1 (Python 3.12.11)")
+        self.title("vailá - 23.July.2025 v0.10.2 (Python 3.12.11)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -310,11 +331,7 @@ class Vaila(tk.Tk):
         # When clicked, open the execution directory
         vaila_click.bind(
             "<Button-1>",
-            lambda e: (
-                os.startfile(os.getcwd())
-                if platform.system() == "Windows"
-                else subprocess.Popen(["xdg-open", os.getcwd()])
-            ),
+            lambda e: open_folder_cross_platform(os.getcwd()),
         )
 
         # Static label restante
@@ -2263,40 +2280,73 @@ class Vaila(tk.Tk):
         the xonsh shell is started. This allows you to access the Conda environment and
         any packages installed in it, as well as the xonsh shell features.
 
-        Note that this function does not work if the Multimodal Toolbox is not installed
-        in the default location. If you have installed the Multimodal Toolbox in a custom
-        location, you should use the `conda activate` command manually to activate the
-        environment and then start xonsh.
+        Note that this function detects both Anaconda and Miniconda installations
+        automatically and uses the appropriate conda path.
         """
+        import os
+        
         if platform.system() == "Darwin":  # For macOS
-            # Use osascript to open Terminal and activate the Conda environment, then start xonsh
-            subprocess.Popen(
-                [
-                    "osascript",
-                    "-e",
-                    'tell application "Terminal" to do script "source ~/anaconda3/etc/profile.d/conda.sh && conda activate vaila && xonsh"',
-                ]
-            )
+            # Detect Conda installation (Anaconda or Miniconda)
+            conda_path = None
+            if os.path.exists(os.path.expanduser("~/anaconda3/etc/profile.d/conda.sh")):
+                conda_path = "~/anaconda3/etc/profile.d/conda.sh"
+            elif os.path.exists(os.path.expanduser("~/miniconda3/etc/profile.d/conda.sh")):
+                conda_path = "~/miniconda3/etc/profile.d/conda.sh"
+            
+            if conda_path:
+                subprocess.Popen(
+                    [
+                        "osascript",
+                        "-e",
+                        f'tell application "Terminal" to do script "source {conda_path} && conda activate vaila && xonsh"',
+                    ]
+                )
+            else:
+                messagebox.showerror("Error", "Conda not found in anaconda3 or miniconda3.")
 
         elif platform.system() == "Windows":  # For Windows
-            # Open PowerShell 7 and activate the Conda environment
-            subprocess.Popen(
-                "start pwsh -NoExit -Command \"& 'C:\\ProgramData\\anaconda3\\shell\\condabin\\conda-hook.ps1'; conda activate vaila; xonsh\"",
-                shell=True,
-            )
+            # Detect Conda installation (Anaconda or Miniconda)
+            conda_hook = None
+            user_profile = os.environ.get("USERPROFILE", "")
+            
+            if os.path.exists(os.path.join(user_profile, "anaconda3", "shell", "condabin", "conda-hook.ps1")):
+                conda_hook = os.path.join(user_profile, "anaconda3", "shell", "condabin", "conda-hook.ps1")
+            elif os.path.exists(os.path.join(user_profile, "miniconda3", "shell", "condabin", "conda-hook.ps1")):
+                conda_hook = os.path.join(user_profile, "miniconda3", "shell", "condabin", "conda-hook.ps1")
+            elif os.path.exists("C:\\ProgramData\\anaconda3\\shell\\condabin\\conda-hook.ps1"):
+                conda_hook = "C:\\ProgramData\\anaconda3\\shell\\condabin\\conda-hook.ps1"
+            elif os.path.exists("C:\\ProgramData\\miniconda3\\shell\\condabin\\conda-hook.ps1"):
+                conda_hook = "C:\\ProgramData\\miniconda3\\shell\\condabin\\conda-hook.ps1"
+            
+            if conda_hook:
+                subprocess.Popen(
+                    f'start pwsh -NoExit -Command "& \'{conda_hook}\'; conda activate vaila; xonsh"',
+                    shell=True,
+                )
+            else:
+                messagebox.showerror("Error", "Conda not found in anaconda3 or miniconda3.")
 
         elif platform.system() == "Linux":  # For Linux
-            # Open a terminal and activate the Conda environment using xonsh
-            subprocess.Popen(
-                [
-                    "x-terminal-emulator",
-                    "-e",
-                    "bash",
-                    "-c",
-                    "source ~/anaconda3/etc/profile.d/conda.sh && conda activate vaila && xonsh",
-                ],
-                start_new_session=True,
-            )
+            # Detect Conda installation (Anaconda or Miniconda)
+            conda_path = None
+            if os.path.exists(os.path.expanduser("~/anaconda3/etc/profile.d/conda.sh")):
+                conda_path = "~/anaconda3/etc/profile.d/conda.sh"
+            elif os.path.exists(os.path.expanduser("~/miniconda3/etc/profile.d/conda.sh")):
+                conda_path = "~/miniconda3/etc/profile.d/conda.sh"
+            
+            if conda_path:
+                subprocess.Popen(
+                    [
+                        "x-terminal-emulator",
+                        "-e",
+                        "bash",
+                        "-c",
+                        f"source {conda_path} && conda activate vaila && xonsh",
+                    ],
+                    start_new_session=True,
+                )
+            else:
+                messagebox.showerror("Error", "Conda not found in anaconda3 or miniconda3.")
 
     def quit_app(self):
         """Quits the Multimodal Toolbox application.
