@@ -2,11 +2,13 @@
 ================================================================================
 Pixel Coordinate Tool - getpixelvideo.py
 ================================================================================
+vailá - Multimodal Toolbox
 Author: Prof. Dr. Paulo R. P. Santiago
-Date: 09 December 2024
-Update: 21 March 2025
-Version: 0.0.4
-Python Version: 3.12.9
+https://github.com/paulopreto/vaila-multimodaltoolbox
+Date: 22 July 2025
+Update: 22 July 2025
+Version: 0.0.5
+Python Version: 3.12.11
 
 Description:
 ------------
