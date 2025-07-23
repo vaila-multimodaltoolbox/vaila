@@ -206,8 +206,9 @@ def reshapedata(file_path, new_order, save_directory, suffix, column_precision=N
         print("First 5 rows of the original DataFrame:")
         print(df.head())
 
-        new_order_indices = [headers.index(col) for col in new_order]
-        df_reordered = df.iloc[:, new_order_indices]
+        # Only keep columns from new_order that exist in headers
+        existing_cols = [col for col in new_order if col in headers]
+        df_reordered = df[existing_cols]
 
         print("First 5 rows of the reordered DataFrame:")
         print(df_reordered.head())
@@ -226,7 +227,8 @@ def reshapedata(file_path, new_order, save_directory, suffix, column_precision=N
         
         # Adjust precision mapping for reordered columns
         reordered_precision = {}
-        for new_idx, old_idx in enumerate(new_order_indices):
+        for new_idx, col in enumerate(existing_cols):
+            old_idx = headers.index(col)
             reordered_precision[new_idx] = column_precision.get(old_idx, 6)
 
         save_dataframe_with_precision(df_reordered, new_file_path, reordered_precision)
@@ -925,7 +927,7 @@ class ColumnReorderGUI(tk.Tk):
                     self.current_order,
                     self.rearranged_path,
                     "",
-                    max_decimal_places,
+                    {i: max_decimal_places for i in range(len(self.current_order))},
                 )
             messagebox.showinfo(
                 "Success",
@@ -955,7 +957,7 @@ class ColumnReorderGUI(tk.Tk):
                     self.current_order,
                     self.rearranged_path,
                     "_final",
-                    max_decimal_places,
+                    {i: max_decimal_places for i in range(len(self.current_order))},
                 )
             messagebox.showinfo(
                 "Success",
