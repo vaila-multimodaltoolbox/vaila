@@ -2,11 +2,14 @@
 ================================================================================
 Video Cutting Tool - cutvideo.py
 ================================================================================
+vailá - Multimodal Toolbox
 Author: Prof. Dr. Paulo R. P. Santiago
+https://github.com/paulopreto/vaila-multimodaltoolbox
+Please see AUTHOR.
 Date: 24 January 2025
-Updated: 19 April 2025
-Version: 0.0.5
-Python Version: 3.12.9
+Updated: 22 July 2025
+Version: 0.0.6
+Python Version: 3.12.11
 
 Description:
 ------------
@@ -487,8 +490,21 @@ def play_video_with_cuts(video_path):
 
     running = True
     while running:
-        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_count)
-        ret, frame = cap.read()
+        if paused:
+            # Quando pausado, vamos usar o método set para posicionar no frame exato
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_count)
+            ret, frame = cap.read()
+        else:
+            # Quando em reprodução, apenas leia o próximo frame sem reposicionar
+            ret, frame = cap.read()
+            if ret:
+                frame_count = int(cap.get(cv2.CAP_PROP_POS_FRAMES)) - 1
+            else:
+                # Final do vídeo alcançado, reiniciar
+                frame_count = 0
+                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                ret, frame = cap.read()
+
         if not ret:
             break
 
@@ -602,10 +618,12 @@ def play_video_with_cuts(video_path):
                     frame_count = max(0, min(frame_count, total_frames - 1))
                     paused = True
 
-        if not paused:
-            frame_count = (frame_count + 1) % total_frames
-
-        clock.tick(fps)
+        if paused:
+            # Se pausado, não limitamos a taxa de FPS para que a interface seja responsiva
+            clock.tick(60)  # Taxa de atualização da interface
+        else:
+            # Se em reprodução, limitamos à taxa de FPS do vídeo
+            clock.tick(fps)
 
     cap.release()
     pygame.quit()
