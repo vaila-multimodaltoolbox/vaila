@@ -1,8 +1,8 @@
 <#
     Script: win_launch_vaila.ps1
     Author: Prof. Dr. Paulo R. P. Santiago
-    Date: November 27, 2025
-    Update: November 27, 2025
+    Date: July 23, 2025
+    Update: July 23, 2025
     Description: Launches the vailá - Multimodal Toolbox using the Anaconda PowerShell Prompt on Windows 11.
                  The script activates the 'vaila' Conda environment and runs the vailá Python script.
 
@@ -20,8 +20,8 @@
       - This script can be run from any PowerShell instance where Conda is initialized.
 
     Author: Prof. Dr. Paulo R. P. Santiago
-    Date: November 25, 2024
-    Version: 1.2
+    Date: July 23, 2025
+    Version: 0.0.2
     OS: Windows 11
 #>
 
