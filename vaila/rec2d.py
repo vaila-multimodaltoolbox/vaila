@@ -11,12 +11,13 @@
 # - The script matches each frame in the pixel coordinates file with the corresponding DLT parameters based on frame number.
 # --------------------------------------------------
 
+import os
 import numpy as np
 import pandas as pd
 from numpy.linalg import inv
 from tkinter import filedialog, Tk, messagebox
 from datetime import datetime
-import os
+from rich import print
 
 
 def read_coordinates(file_path, usecols=None):
@@ -88,6 +89,10 @@ def process_files_in_directory(dlt_params_df, directory):
 
 
 def run_rec2d():
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    print("Starting Reconstruction 2D module...")
+
     root = Tk()
     root.withdraw()
 
