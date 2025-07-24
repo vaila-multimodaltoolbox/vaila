@@ -4,8 +4,8 @@ vaila.py
 ===============================================================================
 Author: Prof. Paulo R. P. Santiago
 Date:  7 October 2024
-Update:  23 July 2025
-Version updated: 0.10.2
+Update:  24 July 2025
+Version updated: 0.10.3
 Python Version: 3.12.11
 
 Description:
@@ -136,7 +136,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 23.July.2025 v0.10.2 (Python 3.12.11)
+vailá - 24.July.2025 v0.10.3 (Python 3.12.11)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -235,7 +235,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 23.July.2025 v0.10.2 (Python 3.12.11)")
+        self.title("vailá - 24.July.2025 v0.10.3 (Python 3.12.11)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -1863,16 +1863,10 @@ class Vaila(tk.Tk):
 
     # C_A_r3_c1
     def run_dlt3d(self):
-        """
-        Método para executar o script dlt3d.py.
-        Essa função utiliza o interpretador Python (sys.executable) para chamar o script,
-        que se encontra na pasta "vaila".
-        """
+        """Run DLT module in multiplatform."""
         try:
-            # Build the path to the dlt3d.py script
-            script_path = os.path.join("vaila", "dlt3d.py")
-            # Execute the script in a new process
-            subprocess.Popen([sys.executable, script_path])
+            from vaila import dlt3d
+            dlt3d.main()
         except Exception as e:
             messagebox.showerror("Error", f"Error running dlt3d.py: {e}")
 
