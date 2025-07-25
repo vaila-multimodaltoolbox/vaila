@@ -1,13 +1,36 @@
 """
-===============================================================================
+================================================================================
 vaila_datdistort.py
-===============================================================================
-Author: Based on vaila_lensdistortvideo.py by Prof. Paulo R. P. Santiago
-Date: March 2024
-===============================================================================
+================================================================================
+vailá - Multimodal Toolbox
+Author: Prof. Dr. Paulo R. P. Santiago
+https://github.com/paulopreto/vaila-multimodaltoolbox
+Date: 03 April 2025
+Update: 24 July 2025
+Version: 0.0.2
+Python Version: 3.12.11
 
-This script applies lens distortion correction to 2D coordinates from a DAT file
+Description:
+------------
+This tool applies lens distortion correction to 2D coordinates from a DAT file
 using the same camera calibration parameters as vaila_lensdistortvideo.py.
+
+New Features in This Version:
+------------------------------
+1. Fixed issue with column order in output file.
+2. Improved error handling.
+3. Added more detailed error logging.
+
+How to use:
+------------
+1. Select the distortion parameters CSV file.
+2. Select the directory containing CSV/DAT files to process.
+3. The script will process all CSV and DAT files in the directory and save the
+   results in the output directory.
+
+python vaila_datdistort.py
+
+================================================================================
 """
 
 import cv2
@@ -18,8 +41,6 @@ from rich import print
 import tkinter as tk
 from tkinter import filedialog
 from datetime import datetime
-import subprocess
-import sys
 
 
 def load_distortion_parameters(csv_path):
@@ -104,14 +125,13 @@ def process_dat_file(input_path, output_path, parameters, image_size=(1920, 1080
         ]
     )
 
-    # Get all x,y column pairs (assuming format p1_x, p1_y, p2_x, p2_y, etc)
+    # Use original column order from the file to preserve header order
     columns = df.columns.tolist()
     x_columns = [col for col in columns if col.endswith("_x")]
     y_columns = [col for col in columns if col.endswith("_y")]
 
-    # Sort columns to ensure matching pairs
-    x_columns.sort()
-    y_columns.sort()
+    # No need to sort - use the original order from the file
+    # This preserves the correct p1_x, p1_y, p2_x, p2_y... order
 
     result_frames = []
 
@@ -144,11 +164,11 @@ def process_dat_file(input_path, output_path, parameters, image_size=(1920, 1080
                 points, camera_matrix, dist_coeffs, image_size
             )
 
-            # Create new row with undistorted coordinates
-            new_row = {"frame": frame_num}
+            # Start with a copy of the original row to preserve all columns
+            new_row = row.to_dict()
             point_idx = 0
 
-            # Reconstruct all columns, replacing coordinates with undistorted ones
+            # Update only the coordinate columns with undistorted values
             for x_col, y_col in zip(x_columns, y_columns):
                 if point_idx < len(undistorted_points):
                     # Get original values
@@ -164,22 +184,16 @@ def process_dat_file(input_path, output_path, parameters, image_size=(1920, 1080
                         new_row[x_col] = undistorted_points[point_idx][0]
                         new_row[y_col] = undistorted_points[point_idx][1]
                         point_idx += 1
-                    else:
-                        # Keep original invalid/zero values
-                        new_row[x_col] = orig_x
-                        new_row[y_col] = orig_y
-                else:
-                    # Keep original values for any remaining columns
-                    new_row[x_col] = row[x_col]
-                    new_row[y_col] = row[y_col]
+                    # For invalid/zero values, keep original (already in new_row)
+                # For remaining columns, keep original (already in new_row)
 
             result_frames.append(new_row)
         except Exception as e:
             print(f"Error processing frame {frame_num}: {e}")
             result_frames.append(row.to_dict())
 
-    # Create output DataFrame and save
-    result_df = pd.DataFrame(result_frames)
+    # Create output DataFrame with the same column order as input
+    result_df = pd.DataFrame(result_frames, columns=df.columns)
     result_df.to_csv(output_path, index=False)
 
 
