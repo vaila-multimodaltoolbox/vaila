@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 08 Oct 2024
-Update Date: 17 Jul 2025
-Version: 0.0.5
+Update Date: 25 Jul 2025
+Version: 0.0.6
 
 Description:
     This script provides tools for rearranging and processing CSV data files.
@@ -41,6 +41,7 @@ Change History:
 """
 
 import os
+import pathlib
 from rich import print
 import pandas as pd
 import tkinter as tk
@@ -151,8 +152,8 @@ def save_dataframe_with_precision(df, file_path, column_precision):
 # Function to detect scientific notation and maximum precision in the data
 def detect_precision_and_notation(file_path):
     # Print the directory and name of the script being executed
-    print(f"Running script: {os.path.basename(__file__)}")
-    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    print(f"Running script: {pathlib.Path(__file__).name}")
+    print(f"Script directory: {pathlib.Path(__file__).parent}")
 
     df = pd.read_csv(file_path, dtype=str)
     max_decimal_places = 0
@@ -170,8 +171,8 @@ def detect_precision_and_notation(file_path):
 # Function to save the DataFrame with the detected precision
 def save_dataframe(df, file_path, columns, max_decimal_places):
     # Print the directory and name of the script being executed
-    print(f"Running script: {os.path.basename(__file__)}")
-    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    print(f"Running script: {pathlib.Path(__file__).name}")
+    print(f"Script directory: {pathlib.Path(__file__).parent}")
 
     float_format = f"%.{max_decimal_places}f"
     df.to_csv(file_path, index=False, columns=columns, float_format=float_format)
@@ -180,8 +181,8 @@ def save_dataframe(df, file_path, columns, max_decimal_places):
 # Function to get headers from the CSV file
 def get_headers(file_path):
     # Print the directory and name of the script being executed
-    print(f"Running script: {os.path.basename(__file__)}")
-    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    print(f"Running script: {pathlib.Path(__file__).name}")
+    print(f"Script directory: {pathlib.Path(__file__).parent}")
 
     try:
         df = pd.read_csv(file_path, nrows=0)
@@ -242,8 +243,8 @@ def reshapedata(file_path, new_order, save_directory, suffix, column_precision=N
 # Function to convert MediaPipe data to the format compatible with getpixelvideo.py
 def convert_mediapipe_to_pixel_format(file_path, save_directory):
     # Print the directory and name of the script being executed
-    print(f"Running script: {os.path.basename(__file__)}")
-    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    print(f"Running script: {pathlib.Path(__file__).name}")
+    print(f"Script directory: {pathlib.Path(__file__).parent}")
 
     df = pd.read_csv(file_path)
 
@@ -279,8 +280,8 @@ def convert_mediapipe_to_pixel_format(file_path, save_directory):
 # Function to batch convert all MediaPipe CSV files in a directory
 def batch_convert_mediapipe(directory_path):
     # Print the directory and name of the script being executed
-    print(f"Running script: {os.path.basename(__file__)}")
-    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    print(f"Running script: {pathlib.Path(__file__).name}")
+    print(f"Script directory: {pathlib.Path(__file__).parent}")
 
     if not directory_path:
         print("No directory selected.")
@@ -511,7 +512,7 @@ class ColumnReorderGUI(tk.Tk):
         if is_large_file:
             warning_label = tk.Label(
                 scrollable_frame,
-                text="⚠️ Large File Mode: Limited Preview Available ⚠️",
+                text="Large File Mode: Limited Preview Available",
                 font=("default", 12, "bold"),
                 fg="red",
             )
@@ -552,7 +553,7 @@ class ColumnReorderGUI(tk.Tk):
 
         # Show shape with additional information for large files
         if is_large_file:
-            shape_text = f"Shape: {self.df.shape[0]} rows (showing first 5) × {self.df.shape[1]} columns"
+            shape_text = f"Shape: {self.df.shape[0]} rows (showing first 5) x {self.df.shape[1]} columns"
         else:
             shape_text = f"Shape: {self.df.shape}"
 
@@ -1264,6 +1265,11 @@ class ColumnReorderGUI(tk.Tk):
             pass
 
     def apply_modify(self, modify_window):
+        """Apply the rotation to the CSV files in the directory."""
+        # Print the directory and name of the script being executed
+        print(f"Running script: {pathlib.Path(__file__).name}")
+        print(f"Script directory: {pathlib.Path(__file__).parent}")
+
         try:
             selection = self.current_option_listbox.curselection()
             if not selection:
@@ -1297,6 +1303,11 @@ class ColumnReorderGUI(tk.Tk):
             modify_window.destroy()
 
     def merge_csv(self):
+        """Merge two CSV files into one."""
+        # Print the directory and name of the script being executed
+        print(f"Running script: {pathlib.Path(__file__).name}")
+        print(f"Script directory: {pathlib.Path(__file__).parent}")
+
         base_file = select_file("Select the base CSV file")
         merge_file = select_file("Select the CSV file to merge")
 
@@ -1316,6 +1327,11 @@ class ColumnReorderGUI(tk.Tk):
                 merge_csv_files(base_file, merge_file, save_path, insert_position)
 
     def stack_csv(self):
+        """Stack/append two CSV files into one."""
+        # Print the directory and name of the script being executed
+        print(f"Running script: {pathlib.Path(__file__).name}")
+        print(f"Script directory: {pathlib.Path(__file__).parent}")
+
         base_file = select_file("Select the base CSV file")
         stack_file = select_file("Select the CSV file to stack/append")
 
@@ -1335,6 +1351,10 @@ class ColumnReorderGUI(tk.Tk):
 
     def save_second_half(self):
         """Save the second half of each CSV file into `self.rearranged_path`."""
+        # Print the directory and name of the script being executed
+        print(f"Running script: {pathlib.Path(__file__).name}")
+        print(f"Script directory: {pathlib.Path(__file__).parent}")
+
         # Cria o diretório de saída, se necessário
         if not os.path.exists(self.rearranged_path):
             os.makedirs(self.rearranged_path)
@@ -1369,6 +1389,10 @@ class ColumnReorderGUI(tk.Tk):
         Resets the index of the first column to start from 0 and go until the end of the data,
         saving a new file in the rearranged directory.
         """
+        # Print the directory and name of the script being executed
+        print(f"Running script: {pathlib.Path(__file__).name}")
+        print(f"Script directory: {pathlib.Path(__file__).parent}")
+
         if not os.path.exists(self.rearranged_path):
             os.makedirs(self.rearranged_path)
 
@@ -1392,6 +1416,11 @@ class ColumnReorderGUI(tk.Tk):
 
 
 def convert_dvideo_to_vaila(file_path, save_directory):
+    """Convert a Dvideo file to a Vaila CSV file."""
+    # Print the directory and name of the script being executed
+    print(f"Running script: {pathlib.Path(__file__).name}")
+    print(f"Script directory: {pathlib.Path(__file__).parent}")
+
     try:
         # Read the .dat file with space-separated values using raw string literal for regex separator
         df = pd.read_csv(file_path, sep=r"\s+", header=None)
@@ -1428,6 +1457,11 @@ def convert_dvideo_to_vaila(file_path, save_directory):
 
 
 def batch_convert_dvideo(directory_path):
+    """Batch convert all Dvideo files in a directory to Vaila CSV files."""
+    # Print the directory and name of the script being executed
+    print(f"Running script: {pathlib.Path(__file__).name}")
+    print(f"Script directory: {pathlib.Path(__file__).parent}")
+
     if not directory_path:
         print("No directory selected.")
         return
@@ -1457,6 +1491,11 @@ def batch_convert_dvideo(directory_path):
 def convert_yolo_tracker_to_pixel_format(
     tracker_file, save_directory=None, chunk_size=10000
 ):
+    """Convert a YOLO tracker file to a Vaila CSV file."""
+    # Print the directory and name of the script being executed
+    print(f"Running script: {pathlib.Path(__file__).name}")
+    print(f"Script directory: {pathlib.Path(__file__).parent}")
+
     print(f"Converting YOLO tracker file: {tracker_file}")
 
     try:
@@ -1632,6 +1671,7 @@ def batch_convert_yolo_tracker(directory_path=None):
 
 def rearrange_data_in_directory():
     # Print the directory and name of the script being executed
+    print("Running script: rearrange_data")
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
 
