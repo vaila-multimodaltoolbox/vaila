@@ -5,8 +5,8 @@ Script: markerless_2D_analysis.py - Markerless 2D Analysis with Video Resize
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
-Creation Date: 29 July 2025
-Update Date: 29 July 2025
+Creation Date: 29 July 2024
+Update Date: 25 July 2025
 Version: 0.5.0
 
 Description:
@@ -89,6 +89,9 @@ from scipy.signal import savgol_filter
 from mediapipe.framework.formats import landmark_pb2
 import pandas as pd
 import tempfile
+import platform
+import psutil
+import gc
 
 # Additional imports for filtering and interpolation
 from pykalman import KalmanFilter
@@ -117,6 +120,11 @@ except ImportError:
     import sys
     subprocess.check_call([sys.executable, "-m", "pip", "install", "toml"])
     import toml
+
+# Additional imports for CPU throttling and better resource management
+import threading
+import signal
+import multiprocessing
 
 landmark_names = [
     "nose",
@@ -160,6 +168,11 @@ PAD_START_FRAMES = 120  # Number of initial frames to pad for MediaPipe stabiliz
 # Add new defaults
 PAD_START_FRAMES_DEFAULT = 30
 ENABLE_PADDING_DEFAULT = True
+
+# CPU throttling settings for high-resolution videos
+CPU_USAGE_THRESHOLD = 150  # Percentage (across all cores)
+FRAME_SLEEP_TIME = 0.01  # Sleep between frames when CPU is high
+MAX_CPU_CHECK_INTERVAL = 100  # Check CPU every N frames
 
 # Smoothing and filtering functions
 def savgol_smooth(data, window_length, polyorder):
@@ -952,6 +965,7 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
         btns_frame.pack()
         tk.Button(btns_frame, text="Load Configuration TOML", command=self.load_config_file).pack(side="left", padx=5)
         tk.Button(btns_frame, text="Create Default TOML Template", command=self.create_default_toml_template).pack(side="left", padx=5)
+        tk.Button(btns_frame, text="Help", command=self.show_help).pack(side="left", padx=5)
         self.toml_label = tk.Label(toml_frame, text="No TOML loaded", fg="gray")
         self.toml_label.pack()
 
@@ -959,15 +973,22 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
 
     def create_default_toml_template(self):
         from tkinter import filedialog, messagebox
+        # Create a root window for the dialog
+        dialog_root = tk.Tk()
+        dialog_root.withdraw()
+        dialog_root.attributes('-topmost', True)
+        
         file_path = filedialog.asksaveasfilename(
+            parent=dialog_root,
             title="Create Default TOML Configuration Template",
             defaultextension=".toml",
             filetypes=[("TOML files", "*.toml"), ("All files", "*.*")],
             initialfile="mediapipe_config_template.toml"
         )
+        
         if file_path:
             default_config = get_default_config()
-            # Monta dict no formato esperado por save_config_to_toml
+            # Build dict in format expected by save_config_to_toml
             save_config = {
                 "min_detection_confidence": default_config["mediapipe"]["min_detection_confidence"],
                 "min_tracking_confidence": default_config["mediapipe"]["min_tracking_confidence"],
@@ -992,12 +1013,21 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
                 messagebox.showinfo("Template Created", f"Default TOML template created successfully:\n{file_path}")
             else:
                 messagebox.showerror("Error", "Failed to create template file.")
+        
+        dialog_root.destroy()
 
     def load_config_file(self):
+        # Create a root window for the dialog
+        dialog_root = tk.Tk()
+        dialog_root.withdraw()
+        dialog_root.attributes('-topmost', True)
+        
         file_path = filedialog.askopenfilename(
+            parent=dialog_root,
             title="Select TOML file",
             filetypes=[("TOML files", "*.toml"), ("All files", "*.*")],
         )
+        
         if file_path:
             try:
                 config = load_config_from_toml(file_path)
@@ -1033,6 +1063,173 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
                     self.toml_label.config(text="Error loading TOML", fg="red")
             except Exception as e:
                 self.toml_label.config(text=f"Error: {e}", fg="red")
+        
+        dialog_root.destroy()
+
+    def show_help(self):
+        """Show help window with script information and usage instructions"""
+        help_window = tk.Toplevel()
+        help_window.title("MediaPipe 2D Analysis - Help")
+        help_window.geometry("800x600")
+        help_window.configure(bg='white')
+        
+        # Make window modal and on top (without grab to avoid conflicts)
+        help_window.transient()
+        help_window.attributes('-topmost', True)
+        help_window.focus_set()
+        
+        # Create scrollable text widget
+        text_frame = tk.Frame(help_window)
+        text_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        scrollbar = tk.Scrollbar(text_frame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        text_widget = tk.Text(text_frame, wrap=tk.WORD, yscrollcommand=scrollbar.set, 
+                             font=('Arial', 10), bg='white', fg='black')
+        text_widget.pack(fill=tk.BOTH, expand=True)
+        scrollbar.config(command=text_widget.yview)
+        
+        help_text = """
+MEDIAPIPE 2D ANALYSIS - HELP GUIDE
+=====================================
+
+OVERVIEW
+--------
+This script performs batch processing of videos for 2D pose estimation using MediaPipe's Pose model. 
+It processes videos from a specified input directory, overlays pose landmarks on each video frame, 
+and exports both normalized and pixel-based landmark coordinates to CSV files.
+
+NEW FEATURES
+------------
+• Video resize functionality for better pose detection
+• Batch processing for high-resolution videos (Linux only)
+• Advanced filtering and smoothing options
+• TOML configuration file support
+• Automatic memory management
+
+SYSTEM REQUIREMENTS
+------------------
+• Python 3.12.11
+• OpenCV (pip install opencv-python)
+• MediaPipe (pip install mediapipe)
+• Tkinter (usually included with Python)
+• Pandas (pip install pandas)
+• psutil (pip install psutil) - for memory monitoring
+
+BATCH PROCESSING (Linux Only)
+----------------------------
+For high-resolution videos (>2.7K) or low memory systems:
+• Automatically detects when batch processing is needed
+• Processes frames in small batches to prevent memory overflow
+• Cleans memory after each batch
+• Provides detailed progress information
+
+VIDEO RESIZE FEATURE
+-------------------
+• Enable resize for better pose detection on small/distant subjects
+• Scale factors: 2x to 8x (higher = better detection but slower)
+• Coordinates automatically converted back to original video dimensions
+• Useful for: small people, distant subjects, low resolution videos
+
+ADVANCED FILTERING
+-----------------
+• Interpolation methods: linear, cubic, nearest, kalman
+• Smoothing methods: none, butterworth, savgol, lowess, kalman, splines, arima
+• Gap filling for missing landmark data
+• Configurable parameters for each method
+
+TOML CONFIGURATION
+-----------------
+• Create default TOML template with "Create Default TOML Template"
+• Load existing configuration with "Load Configuration TOML"
+• Save and reuse configurations for batch processing
+• Detailed parameter descriptions in TOML files
+
+OUTPUT FILES
+-----------
+For each processed video, the following files are generated:
+
+1. Processed Video (*_mp.mp4):
+   Video with 2D pose landmarks overlaid on original frames
+
+2. Normalized Landmark CSV (*_mp_norm.csv):
+   Landmark coordinates normalized to 0-1 scale for each frame
+
+3. Pixel Landmark CSV (*_mp_pixel.csv):
+   Landmark coordinates in pixel format (original video dimensions)
+
+4. Log File (log_info.txt):
+   Video metadata and processing information
+
+5. Configuration File (configuration_used.toml):
+   Settings used for processing (saved in output directory)
+
+USAGE INSTRUCTIONS
+-----------------
+1. Run the script: python markerless_2D_analysis.py
+2. Select input directory containing video files (.mp4, .avi, .mov)
+3. Select output directory for processed files
+4. Configure MediaPipe parameters or load TOML configuration
+5. Click "OK" to start processing
+
+PARAMETER GUIDE
+--------------
+MediaPipe Settings:
+• min_detection_confidence (0.1-1.0): How confident to start detecting
+• min_tracking_confidence (0.1-1.0): How confident to keep tracking
+• model_complexity (0-2): 0=fastest, 1=balanced, 2=most accurate
+• enable_segmentation: Draw person outline (slower but more detailed)
+• static_image_mode: Treat each frame separately (slower)
+
+Video Resize:
+• enable_resize: Upscale video for better detection
+• resize_scale (2-8): Scale factor (higher = better but slower)
+
+Advanced Filtering:
+• enable_advanced_filtering: Apply smoothing and gap filling
+• interp_method: How to fill missing data
+• smooth_method: Type of smoothing to apply
+• max_gap: Maximum gap size to fill (frames)
+
+RECOMMENDED SETTINGS
+-------------------
+For most cases:
+• min_detection_confidence: 0.1-0.3
+• min_tracking_confidence: 0.1-0.3
+• model_complexity: 2 (for accuracy)
+• enable_resize: true (for small/distant subjects)
+• resize_scale: 2-3 (good balance)
+
+For high-resolution videos:
+• Use batch processing (automatic on Linux)
+• Consider lower model_complexity (1) for speed
+• Enable advanced filtering for smooth results
+
+TROUBLESHOOTING
+--------------
+• If processing is slow: Reduce model_complexity or disable resize
+• If memory issues: Batch processing will activate automatically on Linux
+• If poor detection: Increase resize_scale or adjust confidence thresholds
+• If system crashes: Reduce batch size or disable advanced filtering
+
+BATCH PROCESSING DETAILS
+-----------------------
+• Automatically activated on Linux for high-resolution videos
+• Batch sizes: 4K+ (30 frames), 2.7K-4K (50 frames), 1080p-2.7K (100 frames)
+• Memory cleanup after each batch
+• Progress tracking with detailed logs
+
+For more information, visit: https://github.com/vaila-multimodaltoolbox/vaila
+        """
+        
+        text_widget.insert(tk.END, help_text)
+        text_widget.config(state=tk.DISABLED)  # Make read-only
+        
+        # Close button
+        close_btn = tk.Button(help_window, text="Close", command=help_window.destroy,
+                             font=('Arial', 10), bg='#4CAF50', fg='white', padx=20)
+        close_btn.pack(pady=10)
 
     def apply(self):
         if self.use_toml and self.loaded_config:
@@ -1446,6 +1643,217 @@ def estimate_occluded_landmarks(landmarks, landmarks_history=None):
 
     return estimated
 
+def pad_signal(signal, pad_width, mode='edge'):
+    if pad_width == 0:
+        return signal
+    return np.pad(signal, (pad_width, pad_width), mode=mode)
+
+
+def is_linux_system():
+    """Check if running on Linux system"""
+    return platform.system().lower() == 'linux'
+
+
+def get_system_memory_info():
+    """Get current system memory usage"""
+    try:
+        memory = psutil.virtual_memory()
+        return {
+            'total_gb': memory.total / (1024**3),
+            'available_gb': memory.available / (1024**3),
+            'used_gb': memory.used / (1024**3),
+            'percent_used': memory.percent
+        }
+    except Exception as e:
+        print(f"Warning: Could not get memory info: {e}")
+        return None
+
+
+def should_use_batch_processing(video_path, pose_config):
+    # Activate when:
+    # - Linux system
+    # - Resolution > 2.7K (2700px) OR > 1000 frames
+    # - Memory < 4GB available OR > 80% used
+    if not is_linux_system():
+        return False
+    
+    # Check video resolution and frame count
+    cap = cv2.VideoCapture(str(video_path))
+    if not cap.isOpened():
+        return False
+    
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    cap.release()
+    
+    # High resolution threshold (2.7K = 2700 pixels width)
+    is_high_res = width > 2700 or height > 2700
+    
+    # High frame count threshold (> 1000 frames)
+    is_long_video = total_frames > 1000
+    
+    # Check available memory
+    memory_info = get_system_memory_info()
+    low_memory = False
+    if memory_info:
+        # If less than 4GB available or more than 80% used
+        low_memory = (memory_info['available_gb'] < 4.0 or 
+                     memory_info['percent_used'] > 80)
+    
+    should_use_batch = is_high_res or low_memory or is_long_video
+    
+    if should_use_batch:
+        print(f"🔧 Batch processing enabled:")
+        print(f"   - Resolution: {width}x{height}")
+        print(f"   - Total frames: {total_frames}")
+        if memory_info:
+            print(f"   - Memory: {memory_info['available_gb']:.1f}GB available, {memory_info['percent_used']:.1f}% used")
+        print(f"   - High resolution: {is_high_res}")
+        print(f"   - Long video: {is_long_video}")
+        print(f"   - Low memory: {low_memory}")
+    
+    return should_use_batch
+
+
+def calculate_batch_size(video_path, pose_config):
+    # 4K+: 20 frames/batch (reduced for stability)
+    # 2.7K-4K: 30 frames/batch  
+    # 1080p-2.7K: 50 frames/batch
+    # <1080p: 100 frames/batch
+    # Long videos (>1000 frames): further reduction
+    # Ajusta baseado na memória disponível
+    cap = cv2.VideoCapture(str(video_path))
+    if not cap.isOpened():
+        return 50  # Conservative default fallback
+    
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    cap.release()
+    
+    # Base batch size on resolution
+    pixels_per_frame = width * height
+    
+    if pixels_per_frame > 8_000_000:  # 4K+
+        batch_size = 20  # Reduced for stability
+    elif pixels_per_frame > 4_000_000:  # 2.7K-4K
+        batch_size = 30  # Reduced from 50
+    elif pixels_per_frame > 2_000_000:  # 1080p-2.7K
+        batch_size = 50  # Reduced from 100
+    else:
+        batch_size = 100  # Reduced from 200
+    
+    # Further reduction for long videos (>1000 frames)
+    if total_frames > 5000:  # Very long videos
+        batch_size = max(10, batch_size // 3)
+    elif total_frames > 2000:  # Long videos
+        batch_size = max(15, batch_size // 2)
+    elif total_frames > 1000:  # Medium-long videos
+        batch_size = max(20, int(batch_size * 0.7))
+    
+    # Adjust based on available memory
+    memory_info = get_system_memory_info()
+    if memory_info:
+        available_gb = memory_info['available_gb']
+        if available_gb < 2.0:
+            batch_size = max(10, batch_size // 2)
+        elif available_gb < 4.0:
+            batch_size = max(15, int(batch_size * 0.75))
+        elif available_gb < 6.0:
+            batch_size = max(20, int(batch_size * 0.85))
+    
+    # Ensure batch size doesn't exceed total frames
+    batch_size = min(batch_size, total_frames)
+    
+    print(f"📊 Batch processing configuration:")
+    print(f"   - Resolution: {width}x{height} ({pixels_per_frame:,} pixels/frame)")
+    print(f"   - Total frames: {total_frames}")
+    print(f"   - Batch size: {batch_size} frames")
+    print(f"   - Estimated batches: {(total_frames + batch_size - 1) // batch_size}")
+    if memory_info:
+        print(f"   - Available memory: {memory_info['available_gb']:.1f}GB")
+    
+    return batch_size
+
+
+def process_video_batch(frames, pose, pose_config, width, height, progress_callback=None, batch_index=0):
+    """
+    Process a batch of frames and return landmarks with CPU throttling
+    """
+    batch_landmarks = []
+    batch_pixel_landmarks = []
+    
+    for i, frame in enumerate(frames):
+        # CPU throttling check
+        frame_global_index = batch_index * len(frames) + i
+        if should_throttle_cpu(frame_global_index):
+            apply_cpu_throttling()
+        
+        if progress_callback and i % 10 == 0:
+            progress_callback(f"Processing frame {i+1}/{len(frames)} in batch")
+        
+        results = pose.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+        
+        if results.pose_landmarks:
+            landmarks = [
+                [landmark.x, landmark.y, landmark.z]
+                for landmark in results.pose_landmarks.landmark
+            ]
+            
+            # Apply occluded landmark estimation if enabled
+            if pose_config.get("estimate_occluded", False):
+                landmarks = estimate_occluded_landmarks(landmarks)
+            
+            batch_landmarks.append(landmarks)
+            
+            # Convert to pixel coordinates
+            pixel_landmarks = [
+                [int(landmark[0] * width), int(landmark[1] * height), landmark[2]]
+                for landmark in landmarks
+            ]
+            batch_pixel_landmarks.append(pixel_landmarks)
+        else:
+            # No pose detected
+            num_landmarks = len(landmark_names)
+            nan_landmarks = [[np.nan, np.nan, np.nan] for _ in range(num_landmarks)]
+            batch_landmarks.append(nan_landmarks)
+            batch_pixel_landmarks.append(nan_landmarks)
+        
+        # Small sleep between frames to prevent CPU overload
+        time.sleep(FRAME_SLEEP_TIME)
+    
+    return batch_landmarks, batch_pixel_landmarks
+
+
+def cleanup_memory():
+    """Aggressive memory cleanup for Linux systems"""
+    # Force Python garbage collection multiple times
+    for _ in range(3):
+        gc.collect()
+    
+    if is_linux_system():
+        # Linux-specific memory cleanup
+        try:
+            import ctypes
+            libc = ctypes.CDLL("libc.so.6")
+            libc.malloc_trim(0)  # Return freed memory to OS
+        except Exception as e:
+            print(f"Warning: Could not perform malloc_trim: {e}")
+        
+        # Additional memory pressure relief
+        try:
+            # Sync and drop caches if possible (requires privileges)
+            import subprocess
+            subprocess.run(['sync'], check=False, capture_output=True)
+        except:
+            pass
+    
+    # Force memory usage report
+    memory_info = get_system_memory_info()
+    if memory_info:
+        print(f"Memory cleanup: {memory_info['available_gb']:.1f}GB available, {memory_info['percent_used']:.1f}% used")
+
 
 def process_video(video_path, output_dir, pose_config):
     """
@@ -1555,37 +1963,105 @@ def process_video(video_path, output_dir, pose_config):
         all_frames.append(frame)
     cap.release()
 
-    # Process all frames (padding + real)
+    # Check if batch processing should be used
+    use_batch_processing = should_use_batch_processing(video_path, pose_config)
+    
+    # Initialize frame_count for both modes
     frame_count = 0
-    for frame in all_frames:
-        results = pose.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-        if results.pose_landmarks:
-            if VERBOSE_FRAMES:
-                print(f"Frame {frame_count}: pose detected!")
-            landmarks = [
-                [landmark.x, landmark.y, landmark.z]
-                for landmark in results.pose_landmarks.landmark
-            ]
-            if pose_config.get("estimate_occluded", False):
-                landmarks = estimate_occluded_landmarks(landmarks, list(landmarks_history))
-            landmarks_history.append(landmarks)
-            if pose_config.get("apply_filtering", False) and len(landmarks_history) > 3:
-                landmarks = apply_temporal_filter(list(landmarks_history))
-            normalized_landmarks_list.append(landmarks)
-            pixel_landmarks = [
-                [int(landmark[0] * width), int(landmark[1] * height), landmark[2]]
-                for landmark in landmarks
-            ]
-            pixel_landmarks_list.append(pixel_landmarks)
-        else:
-            if VERBOSE_FRAMES:
-                print(f"Frame {frame_count}: NO pose detected")
-            num_landmarks = len(landmark_names)
-            nan_landmarks = [[np.nan, np.nan, np.nan] for _ in range(num_landmarks)]
-            normalized_landmarks_list.append(nan_landmarks)
-            pixel_landmarks_list.append(nan_landmarks)
-            frames_with_missing_data.append(frame_count)
-        frame_count += 1
+    
+    if use_batch_processing:
+        print(f"Using batch processing for high-resolution video")
+        batch_size = calculate_batch_size(video_path, pose_config)
+        
+        # Process frames in batches
+        normalized_landmarks_list = []
+        pixel_landmarks_list = []
+        frames_with_missing_data = []
+        
+        total_batches = (len(all_frames) + batch_size - 1) // batch_size
+        
+        for batch_idx in range(total_batches):
+            start_idx = batch_idx * batch_size
+            end_idx = min(start_idx + batch_size, len(all_frames))
+            batch_frames = all_frames[start_idx:end_idx]
+            
+            print(f"Processing batch {batch_idx + 1}/{total_batches} (frames {start_idx}-{end_idx-1})")
+            
+            # Process batch with batch index for CPU throttling
+            batch_norm, batch_pixel = process_video_batch(
+                batch_frames, pose, pose_config, width, height,
+                lambda msg: print(f"    {msg}"), batch_index=batch_idx
+            )
+            
+            # Store results
+            normalized_landmarks_list.extend(batch_norm)
+            pixel_landmarks_list.extend(batch_pixel)
+            
+            # Track missing data frames
+            for i, landmarks in enumerate(batch_norm):
+                if all(np.isnan(lm[0]) for lm in landmarks):
+                    frames_with_missing_data.append(start_idx + i)
+            
+            # Memory cleanup after each batch
+            cleanup_memory()
+            print(f"Batch {batch_idx + 1} completed, memory cleaned")
+            
+            # Small pause to allow system to stabilize
+            time.sleep(0.1)
+        
+        # Set frame_count for batch processing
+        frame_count = len(normalized_landmarks_list)
+        
+        pose.close()
+        cv2.destroyAllWindows()
+        
+    else:
+        # Standard processing for normal resolution videos
+        print(f"Using standard processing (no batch processing needed)")
+        
+        # Process all frames (padding + real) with CPU throttling
+        frame_count = 0
+        for frame in all_frames:
+            # CPU throttling check for standard processing
+            if should_throttle_cpu(frame_count):
+                apply_cpu_throttling()
+            
+            results = pose.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+            if results.pose_landmarks:
+                if VERBOSE_FRAMES:
+                    print(f"Frame {frame_count}: pose detected!")
+                landmarks = [
+                    [landmark.x, landmark.y, landmark.z]
+                    for landmark in results.pose_landmarks.landmark
+                ]
+                if pose_config.get("estimate_occluded", False):
+                    landmarks = estimate_occluded_landmarks(landmarks, list(landmarks_history))
+                landmarks_history.append(landmarks)
+                if pose_config.get("apply_filtering", False) and len(landmarks_history) > 3:
+                    landmarks = apply_temporal_filter(list(landmarks_history))
+                normalized_landmarks_list.append(landmarks)
+                pixel_landmarks = [
+                    [int(landmark[0] * width), int(landmark[1] * height), landmark[2]]
+                    for landmark in landmarks
+                ]
+                pixel_landmarks_list.append(pixel_landmarks)
+            else:
+                if VERBOSE_FRAMES:
+                    print(f"Frame {frame_count}: NO pose detected")
+                num_landmarks = len(landmark_names)
+                nan_landmarks = [[np.nan, np.nan, np.nan] for _ in range(num_landmarks)]
+                normalized_landmarks_list.append(nan_landmarks)
+                pixel_landmarks_list.append(nan_landmarks)
+                frames_with_missing_data.append(frame_count)
+                
+            frame_count += 1
+            
+            # Small sleep between frames to prevent CPU overload
+            time.sleep(FRAME_SLEEP_TIME)
+            
+            # Progress info every 100 frames
+            if frame_count % 100 == 0:
+                print(f"  Processed {frame_count}/{len(all_frames)} frames")
 
     pose.close()
     cv2.destroyAllWindows()
@@ -1650,6 +2126,14 @@ def process_video(video_path, output_dir, pose_config):
     df_pixel_original.to_csv(output_pixel_file_path, index=False)
     print(f"Saved: {output_file_path} (normalized)")
     print(f"Saved: {output_pixel_file_path} (pixel, original size)")
+
+    # Convert and save in vailá format
+    vaila_file_path = output_dir / f"{video_path.stem}_mp_vaila.csv"
+    success = convert_mediapipe_to_vaila_format(df_pixel_original, vaila_file_path)
+    if success:
+        print(f"Saved: {vaila_file_path} (vailá format)")
+    else:
+        print(f"Warning: Failed to save vailá format file")
 
     # If smoothing/filtering was applied, save an extra CSV for smoothed pixel and norm data
     if pose_config.get('enable_advanced_filtering', False) and pose_config.get('smooth_method', 'none') != 'none':
@@ -1831,13 +2315,20 @@ def process_videos_in_directory():
 
     root = tk.Tk()
     root.withdraw()
+    root.attributes('-topmost', True)  # Keep dialog on top
 
-    input_dir = filedialog.askdirectory(title="Select the input directory containing videos")
+    input_dir = filedialog.askdirectory(
+        parent=root,
+        title="Select the input directory containing videos"
+    )
     if not input_dir:
         messagebox.showerror("Error", "No input directory selected.")
         return
 
-    output_base = filedialog.askdirectory(title="Select the base output directory")
+    output_base = filedialog.askdirectory(
+        parent=root,
+        title="Select the base output directory"
+    )
     if not output_base:
         messagebox.showerror("Error", "No output directory selected.")
         return
@@ -1892,10 +2383,71 @@ def process_videos_in_directory():
         time.sleep(1)
 
 
-def pad_signal(signal, pad_width, mode='edge'):
-    if pad_width == 0:
-        return signal
-    return np.pad(signal, (pad_width, pad_width), mode=mode)
+def convert_mediapipe_to_vaila_format(df_pixel, output_path):
+    """
+    Convert MediaPipe format to vailá format (frame, p1_x, p1_y, p2_x, p2_y, ...)
+    This mimics the convert_mediapipe_to_pixel_format function from rearrange_data.py
+    """
+    try:
+        print("Converting to vailá format...")
+        
+        # Create the new DataFrame with the "frame" column and pX_x, pX_y coordinates
+        new_df = pd.DataFrame()
+        new_df["frame"] = df_pixel.iloc[:, 0]  # Use the first column as "frame"
+
+        columns = df_pixel.columns[1:]  # Ignore the first column (frame_index)
+        
+        # Convert MediaPipe format (landmark_x, landmark_y, landmark_z) to vailá format (p1_x, p1_y, p2_x, p2_y)
+        point_counter = 1
+        for i in range(0, len(columns), 3):
+            if i + 1 < len(columns):  # Ensure we have both x and y columns
+                x_col = columns[i]      # landmark_x
+                y_col = columns[i + 1]  # landmark_y
+                # Note: We skip the z column (i + 2) as vailá format is 2D only
+                
+                new_df[f"p{point_counter}_x"] = df_pixel[x_col]
+                new_df[f"p{point_counter}_y"] = df_pixel[y_col]
+                point_counter += 1
+
+        # Save the converted file
+        new_df.to_csv(output_path, index=False, float_format="%.1f")
+        print(f"vailá format CSV saved to: {output_path}")
+        
+        return True
+    except Exception as e:
+        print(f"Error converting to vailá format: {e}")
+        return False
+
+
+def get_cpu_usage():
+    """Get current CPU usage percentage"""
+    try:
+        return psutil.cpu_percent(interval=0.1)
+    except:
+        return 0
+
+
+def should_throttle_cpu(frame_count):
+    """Check if we should throttle CPU based on usage and frame count"""
+    if frame_count % MAX_CPU_CHECK_INTERVAL == 0:  # Check every N frames
+        cpu_usage = get_cpu_usage()
+        if cpu_usage > CPU_USAGE_THRESHOLD:
+            print(f"⚠️  High CPU usage detected: {cpu_usage:.1f}% - Applying throttling")
+            return True
+    return False
+
+
+def apply_cpu_throttling():
+    """Apply CPU throttling by sleeping and reducing process priority"""
+    time.sleep(FRAME_SLEEP_TIME * 2)  # Longer sleep for high CPU
+    
+    # Reduce process priority on Linux
+    if is_linux_system():
+        try:
+            import os
+            os.nice(5)  # Increase niceness (lower priority)
+        except:
+            pass
 
 
 if __name__ == "__main__":
