@@ -741,9 +741,9 @@ DRAWBOXE - HELP
         for shape in temp_shapes:
             shape.remove()
         temp_shapes.clear()
-            for line in free_lines:
-                line.remove()
-            free_lines.clear()
+        for line in free_lines:
+            line.remove()
+        free_lines.clear()
 
     def on_key(event):
         nonlocal shapes, points, selections, temp_points, free_polygon_sizes
@@ -793,10 +793,10 @@ DRAWBOXE - HELP
                 
                 color = validate_color(selection_mode["color"])
                 if selection_mode["mode"] == "inside":
-                poly = patches.Polygon(
-                    temp_points,
+                    poly = patches.Polygon(
+                        temp_points,
                         linewidth=3,
-                    edgecolor=color,
+                        edgecolor=color,
                         facecolor=color,
                         alpha=0.6,
                     )
@@ -808,7 +808,7 @@ DRAWBOXE - HELP
                         edgecolor=color,
                         facecolor='none',
                         alpha=1.0,
-                )
+                    )
                     # Add a semi-transparent overlay to indicate outside mode
                     overlay = patches.Polygon(
                         temp_points,
@@ -881,10 +881,10 @@ DRAWBOXE - HELP
                     last_selection = selections.pop()
                     if last_selection[1] == "free":
                         # Remove points from last free polygon
-                    if free_polygon_sizes:
+                        if free_polygon_sizes:
                             num_points = free_polygon_sizes.pop()
                             points = points[:-num_points] if len(points) >= num_points else []
-                else:
+                    else:
                         # Remove points from rectangle/trapezoid (4 points)
                         points = points[:-4] if len(points) >= 4 else []
                 
@@ -914,12 +914,12 @@ DRAWBOXE - HELP
                     points.extend(rect_points)
                     color = validate_color(selection_mode["color"])
                     if selection_mode["mode"] == "inside":
-                    rect = patches.Rectangle(
+                        rect = patches.Rectangle(
                             (min(x1, x2), min(y1, y2)),
                             abs(x2 - x1),
                             abs(y2 - y1),
                             linewidth=3,
-                        edgecolor=color,
+                            edgecolor=color,
                             facecolor=color,
                             alpha=0.6,
                         )
@@ -932,7 +932,7 @@ DRAWBOXE - HELP
                             edgecolor=color,
                             facecolor='none',
                             alpha=1.0,
-                    )
+                        )
                         # Add overlay for outside mode
                         overlay = patches.Rectangle(
                             (min(x1, x2), min(y1, y2)),
@@ -981,10 +981,10 @@ DRAWBOXE - HELP
                     plt.draw()
                     # Create final shape
                     if selection_mode["mode"] == "inside":
-                    trap = patches.Polygon(
-                        temp_points,
+                        trap = patches.Polygon(
+                            temp_points,
                             linewidth=3,
-                        edgecolor=color,
+                            edgecolor=color,
                             facecolor=color,
                             alpha=0.6,
                         )
@@ -995,7 +995,7 @@ DRAWBOXE - HELP
                             edgecolor=color,
                             facecolor='none',
                             alpha=1.0,
-                    )
+                        )
                         # Add overlay for outside mode
                         overlay = patches.Polygon(
                             temp_points,
@@ -1124,7 +1124,7 @@ DRAWBOXE - HELP
             pick_rect["rect"] = None
             pick_mode["active"] = False
             update_title()
-                    plt.draw()
+            plt.draw()
 
     fig.canvas.mpl_connect("button_press_event", on_click)
     fig.canvas.mpl_connect("button_release_event", on_release)

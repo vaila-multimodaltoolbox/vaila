@@ -2020,41 +2020,41 @@ def process_video(video_path, output_dir, pose_config):
         print(f"Using standard processing (no batch processing needed)")
         
         # Process all frames (padding + real) with CPU throttling
-    frame_count = 0
-    for frame in all_frames:
+        frame_count = 0
+        for frame in all_frames:
             # CPU throttling check for standard processing
             if should_throttle_cpu(frame_count):
                 apply_cpu_throttling()
             
-        results = pose.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-        if results.pose_landmarks:
-            if VERBOSE_FRAMES:
-                print(f"Frame {frame_count}: pose detected!")
-            landmarks = [
-                [landmark.x, landmark.y, landmark.z]
-                for landmark in results.pose_landmarks.landmark
-            ]
-            if pose_config.get("estimate_occluded", False):
-                landmarks = estimate_occluded_landmarks(landmarks, list(landmarks_history))
-            landmarks_history.append(landmarks)
-            if pose_config.get("apply_filtering", False) and len(landmarks_history) > 3:
-                landmarks = apply_temporal_filter(list(landmarks_history))
-            normalized_landmarks_list.append(landmarks)
-            pixel_landmarks = [
-                [int(landmark[0] * width), int(landmark[1] * height), landmark[2]]
-                for landmark in landmarks
-            ]
-            pixel_landmarks_list.append(pixel_landmarks)
-        else:
-            if VERBOSE_FRAMES:
-                print(f"Frame {frame_count}: NO pose detected")
-            num_landmarks = len(landmark_names)
-            nan_landmarks = [[np.nan, np.nan, np.nan] for _ in range(num_landmarks)]
-            normalized_landmarks_list.append(nan_landmarks)
-            pixel_landmarks_list.append(nan_landmarks)
-            frames_with_missing_data.append(frame_count)
-            
-        frame_count += 1
+            results = pose.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+            if results.pose_landmarks:
+                if VERBOSE_FRAMES:
+                    print(f"Frame {frame_count}: pose detected!")
+                landmarks = [
+                    [landmark.x, landmark.y, landmark.z]
+                    for landmark in results.pose_landmarks.landmark
+                ]
+                if pose_config.get("estimate_occluded", False):
+                    landmarks = estimate_occluded_landmarks(landmarks, list(landmarks_history))
+                landmarks_history.append(landmarks)
+                if pose_config.get("apply_filtering", False) and len(landmarks_history) > 3:
+                    landmarks = apply_temporal_filter(list(landmarks_history))
+                normalized_landmarks_list.append(landmarks)
+                pixel_landmarks = [
+                    [int(landmark[0] * width), int(landmark[1] * height), landmark[2]]
+                    for landmark in landmarks
+                ]
+                pixel_landmarks_list.append(pixel_landmarks)
+            else:
+                if VERBOSE_FRAMES:
+                    print(f"Frame {frame_count}: NO pose detected")
+                num_landmarks = len(landmark_names)
+                nan_landmarks = [[np.nan, np.nan, np.nan] for _ in range(num_landmarks)]
+                normalized_landmarks_list.append(nan_landmarks)
+                pixel_landmarks_list.append(nan_landmarks)
+                frames_with_missing_data.append(frame_count)
+                
+            frame_count += 1
             
             # Small sleep between frames to prevent CPU overload
             time.sleep(FRAME_SLEEP_TIME)
