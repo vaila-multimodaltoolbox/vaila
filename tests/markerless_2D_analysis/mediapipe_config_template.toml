@@ -1,7 +1,7 @@
 # ================================================================
 # MediaPipe 2D Analysis Configuration File
 # Generated automatically by markerless_2D_analysis.py in vaila Multimodal Analysis Toolbox
-# Created: 2025-07-21 15:36:26
+# Created: 2025-07-25 11:46:14
 # ================================================================
 #
 # HOW TO USE THIS FILE:
@@ -52,7 +52,7 @@ estimate_occluded = true             # Guess hidden body parts (true/false)
 # ================================================================
 # Resize video before analysis to improve pose detection
 # Useful for: small people, distant subjects, low resolution videos
-enable_resize = true                 # Resize video before analysis (true/false)
+enable_resize = false                 # Resize video before analysis (true/false)
 #                           # true = upscale for better detection
 #                           # false = use original size (faster)
 resize_scale = 2                      # Scale factor (2-8)
@@ -107,10 +107,10 @@ max_gap = 60                         # Maximum gap size to fill (frames)
 # ----------------------------------------------------------------
 # Best for: Preserving signal features while reducing noise
 # Common use: When you want smooth movement but keep important details
-savgol_window_length = 5    # Window size (must be odd number)
+savgol_window_length = 7    # Window size (must be odd number)
 #                                 # Smaller = less smoothing (try 5-11)
 #                                 # Larger = more smoothing (try 13-21)
-savgol_polyorder = 2        # Polynomial order (usually 2 or 3)
+savgol_polyorder = 3        # Polynomial order (usually 2 or 3)
 #                           # 2 = simpler curves, 3 = more complex curves
 
 # ----------------------------------------------------------------
@@ -118,10 +118,10 @@ savgol_polyorder = 2        # Polynomial order (usually 2 or 3)
 # ----------------------------------------------------------------
 # Best for: Very noisy data that needs strong smoothing
 # Common use: Poor quality videos or tremor analysis
-lowess_frac = 0.1        # Fraction of data to use (0.1 to 1.0)
+lowess_frac = 0.3        # Fraction of data to use (0.1 to 1.0)
 #                      # Smaller = less smoothing (try 0.1-0.3)
 #                      # Larger = more smoothing (try 0.5-0.8)
-lowess_it = 1          # Number of iterations (usually 1-5)
+lowess_it = 3          # Number of iterations (usually 1-5)
 #                    # More iterations = more robust but slower
 
 # ----------------------------------------------------------------
@@ -187,6 +187,6 @@ arima_q = 0    # Moving average order (usually 0-3)
 # ================================================================
 # Add repeated frames at the start to help MediaPipe stabilize.
 enable_padding = true  # true/false
-pad_start_frames = 120  # Number of frames to pad at start
+pad_start_frames = 30  # Number of frames to pad at start
 # Recommended: 30-60 for most videos.
 
