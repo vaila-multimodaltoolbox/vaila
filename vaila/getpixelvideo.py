@@ -6,8 +6,8 @@ vailá - Multimodal Toolbox
 Author: Prof. Dr. Paulo R. P. Santiago
 https://github.com/paulopreto/vaila-multimodaltoolbox
 Date: 22 July 2025
-Update: 22 July 2025
-Version: 0.0.5
+Update: 24 July 2025
+Version: 0.0.6
 Python Version: 3.12.11
 
 Description:
@@ -22,6 +22,15 @@ New Features in This Version:
 1. Prompts the user to load existing keypoints from a saved file before starting.
 2. Allows the user to choose the keypoint file via a file dialog.
 3. Select keypoint number in the video frame.
+
+How to use:
+------------
+1. Select the video file to process.
+2. Select the keypoint file to load.
+3. Mark points in the video frame.
+4. Save the results in CSV format.
+
+python getpixelvideo.py 
 
 ================================================================================
 """
@@ -717,7 +726,7 @@ def play_video_with_controls(video_path, coordinates=None):
 
                 for _, row in df.iterrows():
                     frame_num = int(row["frame"])
-                    for i in range(1, 101):  # Assumindo no máximo 100 pontos
+                    for i in range(1, 1001):  # Aumentado para suportar até 1000 marcadores
                         x_col = f"p{i}_x"
                         y_col = f"p{i}_y"
                         if x_col in df.columns and y_col in df.columns:
@@ -738,7 +747,7 @@ def play_video_with_controls(video_path, coordinates=None):
 
                 for _, row in df.iterrows():
                     frame_num = int(row["frame"])
-                    for i in range(1, 101):  # Assumindo no máximo 100 pontos
+                    for i in range(1, 1001):  # Aumentado para suportar até 1000 marcadores
                         x_col = f"p{i}_x"
                         y_col = f"p{i}_y"
                         if x_col in df.columns and y_col in df.columns:
@@ -1480,7 +1489,7 @@ def load_coordinates_from_file(total_frames):
 
         # Determinar o número máximo de marcadores no arquivo
         max_marker = 0
-        for i in range(1, 101):  # Limite máximo de 100 marcadores
+        for i in range(1, 1001):  # Aumentado limite máximo para 1000 marcadores
             if f"p{i}_x" in df.columns:
                 max_marker = i
 
