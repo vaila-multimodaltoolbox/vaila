@@ -1,15 +1,13 @@
 """
+videoprocessor.py
 vailá - Multimodal Toolbox
-© Paulo Santiago, Guilherme Cesar, Ligia Mochida, Bruno Bedo
 https://github.com/vaila-multimodaltoolbox/vaila
 Please see AUTHORS for contributors.
 Created by Paulo Santiago
 Date: 03 April 2025
-Updated: 03 April 2025
+Updated: 25 July 2025
 
 Licensed under GNU Lesser General Public License v3.0
-
-videoprocessor.py
 
 Description:
 This script allows users to process and edit video files, enabling batch processing of videos. Users can choose between two main operations:
@@ -27,6 +25,7 @@ Key Features:
 - Detailed console output for tracking progress and handling errors.
 
 Usage:
+- python videoprocessor.py
 - Run the script to open a graphical interface. After selecting the source and target directories, choose between merging or splitting the videos.
 - The processed videos will be saved in a new output directory named with a timestamp.
 
@@ -44,6 +43,8 @@ Installation of FFmpeg (for video processing):
 """
 
 import os
+import pathlib
+from rich import print
 import time
 import subprocess
 import json
@@ -697,8 +698,8 @@ def process_videos_split(
 
 def process_videos_gui():
     # Print the directory and name of the script being executed
-    print(f"Running script: {os.path.basename(__file__)}")
-    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    print(f"Running script: {pathlib.Path(__file__).name}")
+    print(f"Script directory: {pathlib.Path(__file__).parent}")
     print("Starting video processing...")
 
     if not check_ffmpeg_installed():
