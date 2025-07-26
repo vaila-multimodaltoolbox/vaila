@@ -208,6 +208,9 @@ def save_config_toml(video_path, coordinates, selections, colors):
     basename = os.path.splitext(os.path.basename(video_path))[0]
     config_path = os.path.join(os.path.dirname(video_path), f"{basename}_dbox.toml")
     
+    # Escape the video path for TOML (replace backslashes with forward slashes)
+    escaped_video_path = video_path.replace('\\', '/')
+    
     # Create TOML content with comments
     toml_content = f"""# ================================================================
 # DrawBoxe Configuration File
@@ -239,7 +242,7 @@ date = "{datetime.datetime.now().strftime("%Y-%m-%d")}"
 
 [video_info]
 basename = "{basename}"
-original_path = "{video_path}"
+original_path = "{escaped_video_path}"
 
 """
     
