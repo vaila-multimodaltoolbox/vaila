@@ -1949,18 +1949,28 @@ def process_video(video_path, output_dir, pose_config):
         cap.release()
         pose.close()
         return
+
     enable_padding = pose_config.get('enable_padding', ENABLE_PADDING_DEFAULT)
     pad_start_frames = pose_config.get('pad_start_frames', PAD_START_FRAMES_DEFAULT)
+
+    print(f"Padding configuration: enable_padding={enable_padding}, pad_start_frames={pad_start_frames}")
+
     if enable_padding and pad_start_frames > 0:
+        print(f"Applying padding: adding {pad_start_frames} repeated frames at start")
         padding_frames = [first_frame.copy() for _ in range(pad_start_frames)]
-        all_frames = padding_frames + [first_frame]
+        all_frames = padding_frames + [first_frame]  # Adiciona frames repetidos
+        print(f"Total frames after padding: {len(all_frames)} (including {pad_start_frames} padding frames)")
     else:
+        print("Padding disabled or pad_start_frames = 0")
         all_frames = [first_frame]
+
     while True:
         ret, frame = cap.read()
         if not ret:
             break
         all_frames.append(frame)
+
+    print(f"Total frames loaded: {len(all_frames)}")
     cap.release()
 
     # Check if batch processing should be used
@@ -2021,7 +2031,7 @@ def process_video(video_path, output_dir, pose_config):
         
         # Process all frames (padding + real) with CPU throttling
         frame_count = 0
-        for frame in all_frames:
+        for frame in all_frames:  # Processa TODOS os frames (incluindo padding)
             # CPU throttling check for standard processing
             if should_throttle_cpu(frame_count):
                 apply_cpu_throttling()
@@ -2068,9 +2078,15 @@ def process_video(video_path, output_dir, pose_config):
 
     # --- Remove padding frames from results ---
     if enable_padding and pad_start_frames > 0:
-        normalized_landmarks_list = normalized_landmarks_list[pad_start_frames:]
-        pixel_landmarks_list = pixel_landmarks_list[pad_start_frames:]
-        frames_with_missing_data = [f-pad_start_frames for f in frames_with_missing_data if f >= pad_start_frames]
+        print(f"Removing {pad_start_frames} padding frames from results")
+        print(f"Before removal: {len(normalized_landmarks_list)} frames")
+        # NÃO remover padding aqui - vamos aplicar o filtro primeiro
+        # normalized_landmarks_list = normalized_landmarks_list[pad_start_frames:]
+        # pixel_landmarks_list = pixel_landmarks_list[pad_start_frames:]
+        # frames_with_missing_data = [f-pad_start_frames for f in frames_with_missing_data if f >= pad_start_frames]
+        print(f"Keeping padding for advanced filtering: {len(normalized_landmarks_list)} frames")
+    else:
+        print("No padding frames to remove")
 
     # Convert landmarks to DataFrames for advanced processing
     step_text = "Step 3/4" if enable_resize else "Step 2/3"
@@ -2093,23 +2109,36 @@ def process_video(video_path, output_dir, pose_config):
         columns.extend([f"{name}_x", f"{name}_y", f"{name}_z"])
     df_norm = pd.DataFrame(df_norm_data, columns=columns)
     df_pixel = pd.DataFrame(df_pixel_data, columns=columns)
-    
-    # Apply advanced filtering and smoothing if enabled
+
+    # Apply advanced filtering and smoothing if enabled (COM PADDING)
     if pose_config.get('enable_advanced_filtering', False):
         step_text = "Step 4/5" if enable_resize else "Step 3/4"
-        print(f"\n{step_text}: Applying advanced filtering and smoothing")
+        print(f"\n{step_text}: Applying advanced filtering and smoothing (with padding)")
         
-        # Apply to normalized data
+        # Apply to normalized data (with padding)
         df_norm = apply_interpolation_and_smoothing(
             df_norm, pose_config, 
             lambda msg: print(f"  Normalized data: {msg}")
         )
         
-        # Apply to pixel data  
+        # Apply to pixel data (with padding)
         df_pixel = apply_interpolation_and_smoothing(
             df_pixel, pose_config,
             lambda msg: print(f"  Pixel data: {msg}")
         )
+
+    # AGORA remover padding dos resultados filtrados
+    if enable_padding and pad_start_frames > 0:
+        print(f"Removing {pad_start_frames} padding frames from filtered results")
+        print(f"Before removal: {len(df_norm)} frames")
+        df_norm = df_norm.iloc[pad_start_frames:].reset_index(drop=True)
+        df_pixel = df_pixel.iloc[pad_start_frames:].reset_index(drop=True)
+        # Ajustar frame_index para começar do 0
+        df_norm['frame_index'] = df_norm.index
+        df_pixel['frame_index'] = df_pixel.index
+        print(f"After removal: {len(df_norm)} frames")
+    else:
+        print("No padding frames to remove from filtered results")
 
     # Save processed CSVs
     print(f"\n{step_text}: Saving processed CSVs")
@@ -2307,6 +2336,11 @@ def process_video(video_path, output_dir, pose_config):
     print(f"df_norm shape: {df_norm.shape}")
     print(f"df_pixel shape: {df_pixel.shape}")
 
+    print(f"DEBUG: enable_padding = {enable_padding}")
+    print(f"DEBUG: pad_start_frames = {pad_start_frames}")
+    print(f"DEBUG: Total frames before padding removal: {len(normalized_landmarks_list)}")
+    print(f"DEBUG: Total frames after padding removal: {len(normalized_landmarks_list[pad_start_frames:])}")
+
 
 def process_videos_in_directory():
     # Print the directory and name of the script being executed
@@ -2379,8 +2413,10 @@ def process_videos_in_directory():
         # Release memory
         import gc
         gc.collect()
-        # Small pause to allow complete memory release
-        time.sleep(1)
+        # Small pause 2 seconds to allow complete memory release
+        time.sleep(2)
+        print("Memory released")
+    print("All videos processed")
 
 
 def convert_mediapipe_to_vaila_format(df_pixel, output_path):
