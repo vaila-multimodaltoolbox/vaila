@@ -117,6 +117,9 @@ def play_video_with_controls(video_path, coordinates=None):
 
     # Add sequential mode variable
     sequential_mode = False
+    
+    # Add auto-marking mode variable
+    auto_marking_mode = False
 
     def draw_controls():
         """
@@ -159,6 +162,11 @@ def play_video_with_controls(video_path, coordinates=None):
             f"Frame: {frame_count + 1}/{total_frames}", True, (255, 255, 255)
         )
         control_surface.blit(frame_info, (slider_margin_left, slider_y - 25))
+        
+        # Draw auto-marking indicator if enabled
+        if auto_marking_mode:
+            auto_indicator = font.render("AUTO-MARKING ON", True, (255, 255, 0))
+            control_surface.blit(auto_indicator, (slider_margin_left + 300, slider_y - 25))
 
         # Draw marker navigation and persistence info
         if one_line_mode:
@@ -180,11 +188,13 @@ def play_video_with_controls(video_path, coordinates=None):
         button_gap = 10
         persist_button_width = 70
         seq_button_width = 70
+        auto_button_width = 70
         total_buttons_width = (
             (button_width * 3)
             + persist_button_width
             + seq_button_width
-            + (button_gap * 4)
+            + auto_button_width
+            + (button_gap * 5)
         )
         cluster_x = (window_width - total_buttons_width) // 2
         cluster_y = slider_y - button_height - 5
@@ -272,6 +282,22 @@ def play_video_with_controls(video_path, coordinates=None):
         seq_text = font.render("Sequential", True, (255, 255, 255))
         control_surface.blit(seq_text, seq_text.get_rect(center=seq_button_rect.center))
 
+        # Add Auto-marking mode button after sequential button
+        auto_button_rect = pygame.Rect(
+            cluster_x
+            + 4 * (button_width + button_gap)
+            + persist_button_width
+            + seq_button_width
+            + (button_gap * 2),
+            cluster_y,
+            auto_button_width,
+            button_height,
+        )
+        auto_color = (150, 50, 150) if auto_marking_mode else (100, 100, 100)
+        pygame.draw.rect(control_surface, auto_color, auto_button_rect)
+        auto_text = font.render("Auto", True, (255, 255, 255))
+        control_surface.blit(auto_text, auto_text.get_rect(center=auto_button_rect.center))
+
         screen.blit(control_surface, (0, window_height))
         return (
             one_line_button_rect,
@@ -280,6 +306,7 @@ def play_video_with_controls(video_path, coordinates=None):
             persist_button_rect,
             load_button_rect,
             seq_button_rect,  # Add sequential button to return
+            auto_button_rect,  # Add auto button to return
             slider_margin_left,
             slider_y,
             slider_width,
@@ -321,6 +348,10 @@ def play_video_with_controls(video_path, coordinates=None):
             "- Sequential Mode (S key): Each click creates",
             "  a new marker with incrementing IDs. No need",
             "  to select markers first. Only in Normal mode.",
+            "",
+            "- Auto-marking Mode (M key): Automatically marks",
+            "  points at mouse position during playback.",
+            "  No clicking required - just move the mouse.",
             "",
             "Persistence Mode (P key):",
             "Shows markers from previous frames.",
@@ -984,6 +1015,7 @@ def play_video_with_controls(video_path, coordinates=None):
             persist_button_rect,
             load_button_rect,
             seq_button_rect,  # Add sequential button to return
+            auto_button_rect,  # Add auto button to return
             slider_x,
             slider_y,
             slider_width,
@@ -1010,6 +1042,23 @@ def play_video_with_controls(video_path, coordinates=None):
                 )
 
         pygame.display.flip()
+
+        # Auto-marking logic - mark points automatically during playback
+        if auto_marking_mode and not paused and not one_line_mode:
+            mouse_x, mouse_y = pygame.mouse.get_pos()
+            if mouse_y < window_height:  # Only mark if mouse is in video area
+                # Convert screen coordinates to video coordinates
+                video_x = (mouse_x + crop_x) / zoom_level
+                video_y = (mouse_y + crop_y) / zoom_level
+                
+                # Mark the point at the selected marker index
+                if selected_marker_idx >= 0:
+                    # Update existing marker
+                    while len(coordinates[frame_count]) <= selected_marker_idx:
+                        coordinates[frame_count].append((None, None))
+                    coordinates[frame_count][selected_marker_idx] = (video_x, video_y)
+                    if selected_marker_idx in deleted_positions[frame_count]:
+                        deleted_positions[frame_count].remove(selected_marker_idx)
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -1059,6 +1108,11 @@ def play_video_with_controls(video_path, coordinates=None):
                     selected_marker_idx = (
                         -1
                     )  # Reset selected marker when changing modes
+                elif event.key == pygame.K_m:
+                    auto_marking_mode = not auto_marking_mode
+                    save_message_text = f"Auto-marking {'enabled' if auto_marking_mode else 'disabled'}"
+                    showing_save_message = True
+                    save_message_timer = 30
                 elif event.key == pygame.K_TAB:
                     # Completely revamped marker navigation
                     if one_line_mode:
@@ -1350,6 +1404,12 @@ def play_video_with_controls(video_path, coordinates=None):
                         if not one_line_mode:  # Only toggle if not in one-line mode
                             sequential_mode = not sequential_mode
                             save_message_text = f"Sequential mode {'enabled' if sequential_mode else 'disabled'}"
+                            showing_save_message = True
+                            save_message_timer = 30
+                    elif auto_button_rect.collidepoint(x, rel_y):
+                        if not one_line_mode:  # Only toggle if not in one-line mode
+                            auto_marking_mode = not auto_marking_mode
+                            save_message_text = f"Auto-marking {'enabled' if auto_marking_mode else 'disabled'}"
                             showing_save_message = True
                             save_message_timer = 30
                     elif slider_y <= rel_y <= slider_y + slider_height:
