@@ -1,4 +1,64 @@
+"""
+Project: vailá Multimodal Toolbox
+Script: mocap_analysis.py - Mocap Analysis
+
+Author: Paulo Roberto Pereira Santiago
+Email: paulosantiago@usp.br
+GitHub: https://github.com/vaila-multimodaltoolbox/vaila
+Creation Date: 29 July 2024
+Update Date: 27 July 2025
+Version: 0.5.1
+
+Description:
+This script performs batch processing of videos for 3D pose estimation using
+Mocap data. It processes videos from a specified input directory,
+overlays pose landmarks on each video frame, and exports both normalized and
+pixel-based landmark coordinates to CSV files.
+
+The user can configure key MediaPipe parameters via a graphical interface,
+including detection confidence, tracking confidence, model complexity, and
+whether to enable segmentation and smooth segmentation.
+
+Features:
+- Added temporal filtering to smooth landmark movements.
+- Added estimation of occluded landmarks based on anatomical constraints.
+- Added log file with video metadata and processing information.
+
+Usage:
+- Run the script to open a graphical interface for selecting the input directory
+  containing video files (.csv), the output directory, and for
+  specifying the Mocap configuration parameters.
+- The script processes each video, generating an output video with overlaid pose
+  landmarks, and CSV files containing both normalized and pixel-based landmark
+  coordinates in original video dimensions.
+
+Requirements:
+- Python 3.12.11
+- Tkinter (usually included with Python installations)
+- Pandas (for coordinate conversion: `pip install pandas`)
+
+Output:
+The following files are generated for each processed video:
+1. Processed Video (`*_mp.mp4`):
+   The video with the 2D pose landmarks overlaid on the original frames.
+2. Normalized Landmark CSV (`*_mp_norm.csv`):
+   A CSV file containing the landmark coordinates normalized to a scale between 0 and 1
+   for each frame. These coordinates represent the relative positions of landmarks in the video.
+3. Pixel Landmark CSV (`*_mp_pixel.csv`):
+   A CSV file containing the landmark coordinates in pixel format. The x and y coordinates
+   are scaled to the video's resolution, representing the exact pixel positions of the landmarks.
+4. Original Coordinates CSV (`*_mp_original.csv`):
+   If resize was used, coordinates converted back to original video dimensions.
+5. Log File (`log_info.txt`):
+   A log file containing video metadata and processing information.
+
+License:
+    This project is licensed under the terms of GNU General Public License v3.0.
+"""
+
 import os
+from rich import print
+from pathlib import Path
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -45,6 +105,13 @@ def read_anatomical_csv(file_path):
 
 
 def analyze_mocap_fullbody_data():
+    # B_r1_c3
+    print("B_r1_c3")
+    # Print the directory and name of the script being executed
+    print(f"Running script: {Path(__file__).name}")
+    print(f"Script directory: {Path(__file__).parent.resolve()}")
+    print()
+
     root = Tk()
     root.withdraw()  # Hide the main Tkinter window
 

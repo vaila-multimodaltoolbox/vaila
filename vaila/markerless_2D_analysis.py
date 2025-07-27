@@ -74,11 +74,11 @@ License:
     This project is licensed under the terms of GNU General Public License v3.0.
 """
 
-import cv2
-import mediapipe as mp
 import os
 import time
 import datetime
+import cv2
+import mediapipe as mp
 import tkinter as tk
 from tkinter import filedialog, messagebox
 from pathlib import Path
@@ -2468,7 +2468,7 @@ def should_throttle_cpu(frame_count):
     if frame_count % MAX_CPU_CHECK_INTERVAL == 0:  # Check every N frames
         cpu_usage = get_cpu_usage()
         if cpu_usage > CPU_USAGE_THRESHOLD:
-            print(f"⚠️  High CPU usage detected: {cpu_usage:.1f}% - Applying throttling")
+            print(f"High CPU usage detected: {cpu_usage:.1f}% - Applying throttling")
             return True
     return False
 
