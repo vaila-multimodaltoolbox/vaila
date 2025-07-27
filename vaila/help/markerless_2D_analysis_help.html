@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>markerless_2D_analysis.py - Complete Documentation</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+        }
+        h2 {
+            color: #34495e;
+            border-left: 4px solid #3498db;
+            padding-left: 15px;
+            margin-top: 30px;
+        }
+        h3 {
+            color: #2980b9;
+            margin-top: 25px;
+        }
+        .version-info {
+            background-color: #ecf0f1;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .feature-box {
+            background-color: #e8f4fd;
+            border: 1px solid #3498db;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        .warning {
+            background-color: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        .code {
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 3px;
+            padding: 10px;
+            font-family: 'Courier New', monospace;
+            overflow-x: auto;
+        }
+        .parameter {
+            background-color: #e9ecef;
+            border: 1px solid #adb5bd;
+            border-radius: 3px;
+            padding: 2px 6px;
+            font-family: monospace;
+            font-weight: bold;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+        }
+        .output-example {
+            background-color: #f8f9fa;
+            border-left: 4px solid #28a745;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        .controls-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .control-section {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+        }
+        .toc {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 5px;
+            margin-bottom: 30px;
+        }
+        .toc ul {
+            list-style-type: none;
+            padding-left: 0;
+        }
+        .toc li {
+            margin: 8px 0;
+        }
+        .toc a {
+            text-decoration: none;
+            color: #3498db;
+        }
+        .toc a:hover {
+            text-decoration: underline;
+        }
+        .new-feature {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            border-radius: 5px;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        .new-feature::before {
+            content: "🆕 ";
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>markerless_2D_analysis.py - Complete Documentation</h1>
+        
+        <div class="version-info">
+            <strong>Version:</strong> 0.5.0<br>
+            <strong>Date:</strong> 25 July 2025<br>
+            <strong>Author:</strong> Paulo Roberto Pereira Santiago<br>
+            <strong>Project:</strong> vailá - Multimodal Toolbox<br>
+            <strong>Email:</strong> paulosantiago@usp.br
+        </div>
+
+        <div class="toc">
+            <h3>Table of Contents</h3>
+            <ul>
+                <li><a href="#overview">1. Overview</a></li>
+                <li><a href="#installation">2. Installation & Requirements</a></li>
+                <li><a href="#usage">3. Basic Usage</a></li>
+                <li><a href="#features">4. Key Features</a></li>
+                <li><a href="#configuration">5. Configuration Parameters</a></li>
+                <li><a href="#video-resize">6. Video Resize Feature</a></li>
+                <li><a href="#filtering">7. Filtering & Smoothing</a></li>
+                <li><a href="#output">8. Output Files</a></li>
+                <li><a href="#performance">9. Performance Optimization</a></li>
+                <li><a href="#troubleshooting">10. Troubleshooting</a></li>
+            </ul>
+        </div>
+
+        <section id="overview">
+            <h2>1. Overview</h2>
+            <p>
+                <strong>markerless_2D_analysis.py</strong> is a comprehensive batch processing tool for 2D pose estimation using MediaPipe's Pose model. 
+                This script processes videos from a specified input directory, overlays pose landmarks on each video frame, and exports both normalized and 
+                pixel-based landmark coordinates to CSV files.
+            </p>
+            
+            <div class="feature-box">
+                <h3>Key Capabilities:</h3>
+                <ul>
+                    <li><strong>Batch Processing:</strong> Process multiple videos in a directory</li>
+                    <li><strong>Pose Estimation:</strong> MediaPipe Pose model integration</li>
+                    <li><strong>Video Resize:</strong> Upscale videos for better pose detection</li>
+                    <li><strong>Advanced Filtering:</strong> Multiple smoothing and filtering options</li>
+                    <li><strong>Coordinate Conversion:</strong> Automatic conversion back to original dimensions</li>
+                    <li><strong>Memory Management:</strong> Optimized for large video files</li>
+                    <li><strong>Progress Tracking:</strong> Real-time progress monitoring</li>
+                    <li><strong>Logging:</strong> Comprehensive processing logs</li>
+                </ul>
+            </div>
+        </section>
+
+        <section id="installation">
+            <h2>2. Installation & Requirements</h2>
+            
+            <h3>System Requirements:</h3>
+            <ul>
+                <li><strong>Python 3.12.11+</strong></li>
+                <li><strong>OpenCV:</strong> Video processing and manipulation</li>
+                <li><strong>MediaPipe:</strong> Pose estimation model</li>
+                <li><strong>Tkinter:</strong> Graphical interface (usually included with Python)</li>
+                <li><strong>Pandas:</strong> Data manipulation and CSV export</li>
+                <li><strong>NumPy:</strong> Numerical operations</li>
+                <li><strong>SciPy:</strong> Signal processing and filtering</li>
+                <li><strong>Statsmodels:</strong> Advanced statistical filtering</li>
+                <li><strong>PyKalman:</strong> Kalman filtering</li>
+                <li><strong>Rich:</strong> Enhanced console output</li>
+                <li><strong>Psutil:</strong> System monitoring</li>
+            </ul>
+
+            <h3>Installation:</h3>
+            <div class="code">
+pip install opencv-python mediapipe pandas numpy scipy statsmodels pykalman rich psutil
+            </div>
+
+            <div class="warning">
+                <strong>Note:</strong> Some dependencies like PyKalman may require additional system libraries. 
+                If you encounter installation issues, refer to the respective package documentation.
+            </div>
+        </section>
+
+        <section id="usage">
+            <h2>3. Basic Usage</h2>
+            
+            <h3>Starting the Application:</h3>
+            <div class="code">
+python vaila/markerless_2D_analysis.py
+            </div>
+
+            <h3>Step-by-Step Process:</h3>
+            <ol>
+                <li><strong>Launch:</strong> Run the script to open the graphical interface</li>
+                <li><strong>Select Input Directory:</strong> Choose folder containing video files (.mp4, .avi, .mov)</li>
+                <li><strong>Select Output Directory:</strong> Choose where to save processed files</li>
+                <li><strong>Configure Parameters:</strong> Adjust MediaPipe and processing settings</li>
+                <li><strong>Enable Video Resize:</strong> Choose whether to upscale videos for better detection</li>
+                <li><strong>Start Processing:</strong> Click process to begin batch analysis</li>
+                <li><strong>Monitor Progress:</strong> Watch real-time progress and logs</li>
+                <li><strong>Review Output:</strong> Check generated videos and CSV files</li>
+            </ol>
+
+            <div class="new-feature">
+                <strong>New in v0.5.0:</strong> Video resize functionality for improved pose detection on small or distant subjects.
+            </div>
+        </section>
+
+        <section id="features">
+            <h2>4. Key Features</h2>
+            
+            <div class="controls-grid">
+                <div class="control-section">
+                    <h3>Pose Estimation</h3>
+                    <ul>
+                        <li><strong>MediaPipe Integration:</strong> State-of-the-art pose detection</li>
+                        <li><strong>33 Landmarks:</strong> Full body pose estimation</li>
+                        <li><strong>Real-time Processing:</strong> Efficient frame-by-frame analysis</li>
+                        <li><strong>Confidence Tracking:</strong> Quality assessment for each landmark</li>
+                    </ul>
+                </div>
+
+                <div class="control-section">
+                    <h3>Video Processing</h3>
+                    <ul>
+                        <li><strong>Batch Processing:</strong> Multiple videos in one session</li>
+                        <li><strong>Format Support:</strong> MP4, AVI, MOV files</li>
+                        <li><strong>Memory Optimization:</strong> Efficient handling of large files</li>
+                        <li><strong>Progress Monitoring:</strong> Real-time status updates</li>
+                    </ul>
+                </div>
+
+                <div class="control-section">
+                    <h3>Data Export</h3>
+                    <ul>
+                        <li><strong>Multiple Formats:</strong> Normalized and pixel coordinates</li>
+                        <li><strong>CSV Export:</strong> Standard format for analysis</li>
+                        <li><strong>Video Overlay:</strong> Visual pose landmarks</li>
+                        <li><strong>Logging:</strong> Detailed processing information</li>
+                    </ul>
+                </div>
+
+                <div class="control-section">
+                    <h3>Advanced Features</h3>
+                    <ul>
+                        <li><strong>Video Resize:</strong> Upscale for better detection</li>
+                        <li><strong>Filtering Options:</strong> Multiple smoothing algorithms</li>
+                        <li><strong>Coordinate Conversion:</strong> Back to original dimensions</li>
+                        <li><strong>Memory Management:</strong> Automatic cleanup</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <section id="configuration">
+            <h2>5. Configuration Parameters</h2>
+            
+            <h3>MediaPipe Pose Parameters</h3>
+            <table>
+                <tr>
+                    <th>Parameter</th>
+                    <th>Default</th>
+                    <th>Range</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td><span class="parameter">detection_confidence</span></td>
+                    <td>0.5</td>
+                    <td>0.0 - 1.0</td>
+                    <td>Minimum confidence for pose detection</td>
+                </tr>
+                <tr>
+                    <td><span class="parameter">tracking_confidence</span></td>
+                    <td>0.5</td>
+                    <td>0.0 - 1.0</td>
+                    <td>Minimum confidence for pose tracking</td>
+                </tr>
+                <tr>
+                    <td><span class="parameter">model_complexity</span></td>
+                    <td>2</td>
+                    <td>0, 1, 2</td>
+                    <td>Model complexity (0=light, 1=medium, 2=heavy)</td>
+                </tr>
+                <tr>
+                    <td><span class="parameter">enable_segmentation</span></td>
+                    <td>False</td>
+                    <td>True/False</td>
+                    <td>Enable pose segmentation</td>
+                </tr>
+                <tr>
+                    <td><span class="parameter">smooth_segmentation</span></td>
+                    <td>True</td>
+                    <td>True/False</td>
+                    <td>Enable smooth segmentation</td>
+                </tr>
+            </table>
+
+            <h3>Processing Parameters</h3>
+            <table>
+                <tr>
+                    <th>Parameter</th>
+                    <th>Default</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td><span class="parameter">enable_resize</span></td>
+                    <td>False</td>
+                    <td>Enable video upscaling for better detection</td>
+                </tr>
+                <tr>
+                    <td><span class="parameter">resize_scale</span></td>
+                    <td>2</td>
+                    <td>Upscaling factor (2x, 4x, 8x)</td>
+                </tr>
+                <tr>
+                    <td><span class="parameter">enable_advanced_filtering</span></td>
+                    <td>False</td>
+                    <td>Enable advanced smoothing and filtering</td>
+                </tr>
+                <tr>
+                    <td><span class="parameter">interp_method</span></td>
+                    <td>linear</td>
+                    <td>Interpolation method (linear, cubic, spline)</td>
+                </tr>
+                <tr>
+                    <td><span class="parameter">smooth_method</span></td>
+                    <td>savgol</td>
+                    <td>Smoothing method (savgol, kalman, lowess, spline, arima)</td>
+                </tr>
+            </table>
+        </section>
+
+        <section id="video-resize">
+            <h2>6. Video Resize Feature</h2>
+            
+            <div class="new-feature">
+                <strong>New Feature:</strong> Video resize functionality to improve pose detection for small or distant subjects.
+            </div>
+
+            <h3>When to Use Video Resize:</h3>
+            <ul>
+                <li><strong>Small Subjects:</strong> When the person in the video appears small</li>
+                <li><strong>Distant Subjects:</strong> When the camera is far from the subject</li>
+                <li><strong>Low Resolution:</strong> When the original video has low resolution</li>
+                <li><strong>Poor Detection:</strong> When pose detection is inaccurate</li>
+            </ul>
+
+            <h3>Resize Options:</h3>
+            <table>
+                <tr>
+                    <th>Scale Factor</th>
+                    <th>Use Case</th>
+                    <th>Performance Impact</th>
+                </tr>
+                <tr>
+                    <td><strong>2x</strong></td>
+                    <td>Moderate improvement needed</td>
+                    <td>Low</td>
+                </tr>
+                <tr>
+                    <td><strong>4x</strong></td>
+                    <td>Significant improvement needed</td>
+                    <td>Medium</td>
+                </tr>
+                <tr>
+                    <td><strong>8x</strong></td>
+                    <td>Maximum improvement needed</td>
+                    <td>High</td>
+                </tr>
+            </table>
+
+            <h3>Coordinate Conversion:</h3>
+            <p>When video resize is enabled, the script automatically:</p>
+            <ul>
+                <li>Upscales the video for processing</li>
+                <li>Detects poses on the upscaled video</li>
+                <li>Converts coordinates back to original video dimensions</li>
+                <li>Provides both upscaled and original coordinate outputs</li>
+            </ul>
+        </section>
+
+        <section id="filtering">
+            <h2>7. Filtering & Smoothing</h2>
+            
+            <h3>Available Filtering Methods:</h3>
+            
+            <h4>Savitzky-Golay Filter</h4>
+            <p>Polynomial smoothing filter for time series data.</p>
+            <ul>
+                <li><strong>Best for:</strong> Smoothing landmark trajectories</li>
+                <li><strong>Parameters:</strong> Window length, polynomial order</li>
+                <li><strong>Advantages:</strong> Preserves peak shapes</li>
+            </ul>
+
+            <h4>Kalman Filter</h4>
+            <p>Recursive filter for optimal state estimation.</p>
+            <ul>
+                <li><strong>Best for:</strong> Noisy data with known dynamics</li>
+                <li><strong>Parameters:</strong> Process noise, measurement noise</li>
+                <li><strong>Advantages:</strong> Handles missing data well</li>
+            </ul>
+
+            <h4>LOWESS Filter</h4>
+            <p>Locally weighted scatterplot smoothing.</p>
+            <ul>
+                <li><strong>Best for:</strong> Non-linear trends</li>
+                <li><strong>Parameters:</strong> Fraction of data points, iterations</li>
+                <li><strong>Advantages:</strong> Adapts to local structure</li>
+            </ul>
+
+            <h4>Spline Smoothing</h4>
+            <p>Cubic spline interpolation with smoothing.</p>
+            <ul>
+                <li><strong>Best for:</strong> Smooth curves through data points</li>
+                <li><strong>Parameters:</strong> Smoothing parameter</li>
+                <li><strong>Advantages:</strong> Continuous derivatives</li>
+            </ul>
+
+            <h4>ARIMA Model</h4>
+            <p>Autoregressive integrated moving average model.</p>
+            <ul>
+                <li><strong>Best for:</strong> Time series forecasting</li>
+                <li><strong>Parameters:</strong> Order (p, d, q)</li>
+                <li><strong>Advantages:</strong> Captures temporal dependencies</li>
+            </ul>
+
+            <h3>Configuration Example:</h3>
+            <div class="code">
+# Enable advanced filtering
+enable_advanced_filtering = True
+
+# Choose interpolation method
+interp_method = "linear"  # or "cubic", "spline"
+
+# Choose smoothing method
+smooth_method = "savgol"  # or "kalman", "lowess", "spline", "arima"
+            </div>
+        </section>
+
+        <section id="output">
+            <h2>8. Output Files</h2>
+            
+            <h3>Generated Files for Each Video:</h3>
+            
+            <div class="output-example">
+                <h4>1. Processed Video (<code>*_mp.mp4</code>)</h4>
+                <p>The original video with 2D pose landmarks overlaid on each frame. Shows the detected pose in real-time.</p>
+            </div>
+
+            <div class="output-example">
+                <h4>2. Normalized Coordinates (<code>*_mp_norm.csv</code>)</h4>
+                <p>Landmark coordinates normalized to a scale between 0 and 1. Useful for analysis independent of video resolution.</p>
+                <div class="code">
+frame,landmark_0_x,landmark_0_y,landmark_0_z,landmark_1_x,landmark_1_y,landmark_1_z,...
+0,0.5,0.3,0.0,0.6,0.4,0.0,...
+1,0.52,0.31,0.0,0.61,0.41,0.0,...
+                </div>
+            </div>
+
+            <div class="output-example">
+                <h4>3. Pixel Coordinates (<code>*_mp_pixel.csv</code>)</h4>
+                <p>Landmark coordinates in pixel format, scaled to the video's resolution. Exact pixel positions of landmarks.</p>
+                <div class="code">
+frame,landmark_0_x,landmark_0_y,landmark_0_z,landmark_1_x,landmark_1_y,landmark_1_z,...
+0,960,576,0.0,1152,768,0.0,...
+1,998,595,0.0,1171,787,0.0,...
+                </div>
+            </div>
+
+            <div class="output-example">
+                <h4>4. Original Coordinates (<code>*_mp_original.csv</code>)</h4>
+                <p>If video resize was used, coordinates converted back to original video dimensions.</p>
+            </div>
+
+            <div class="output-example">
+                <h4>5. Log File (<code>log_info.txt</code>)</h4>
+                <p>Detailed processing information including video metadata, processing parameters, and performance statistics.</p>
+            </div>
+
+            <h3>File Naming Convention:</h3>
+            <div class="code">
+input_video.mp4 → input_video_mp.mp4 (processed video)
+input_video.mp4 → input_video_mp_norm.csv (normalized coordinates)
+input_video.mp4 → input_video_mp_pixel.csv (pixel coordinates)
+input_video.mp4 → input_video_mp_original.csv (original coordinates)
+            </div>
+        </section>
+
+        <section id="performance">
+            <h2>9. Performance Optimization</h2>
+            
+            <h3>Memory Management:</h3>
+            <ul>
+                <li><strong>Automatic Cleanup:</strong> Memory is freed after each video</li>
+                <li><strong>Batch Processing:</strong> Large videos are processed in batches</li>
+                <li><strong>System Monitoring:</strong> Memory usage is tracked and optimized</li>
+                <li><strong>Garbage Collection:</strong> Automatic cleanup of unused objects</li>
+            </ul>
+
+            <h3>Batch Processing Logic:</h3>
+            <table>
+                <tr>
+                    <th>Video Resolution</th>
+                    <th>Batch Size</th>
+                    <th>Reason</th>
+                </tr>
+                <tr>
+                    <td>4K+ (>3840px)</td>
+                    <td>20 frames</td>
+                    <td>High memory usage</td>
+                </tr>
+                <tr>
+                    <td>2.7K-4K (2700-3840px)</td>
+                    <td>30 frames</td>
+                    <td>Moderate memory usage</td>
+                </tr>
+                <tr>
+                    <td>1080p-2.7K (1080-2700px)</td>
+                    <td>50 frames</td>
+                    <td>Standard processing</td>
+                </tr>
+                <tr>
+                    <td><1080p</td>
+                    <td>100 frames</td>
+                    <td>Low memory usage</td>
+                </tr>
+            </table>
+
+            <h3>Performance Tips:</h3>
+            <ul>
+                <li><strong>Use appropriate model complexity:</strong> Light (0) for speed, Heavy (2) for accuracy</li>
+                <li><strong>Adjust confidence thresholds:</strong> Higher values reduce processing time</li>
+                <li><strong>Enable video resize only when needed:</strong> Upscaling increases processing time</li>
+                <li><strong>Close other applications:</strong> Free up system memory</li>
+                <li><strong>Use SSD storage:</strong> Faster read/write speeds</li>
+            </ul>
+        </section>
+
+        <section id="troubleshooting">
+            <h2>10. Troubleshooting</h2>
+            
+            <h3>Common Issues:</h3>
+            
+            <h4>Memory Errors</h4>
+            <ul>
+                <li><strong>Symptom:</strong> "Out of memory" or "MemoryError"</li>
+                <li><strong>Solution:</strong> Reduce batch size, close other applications, use lower resolution</li>
+            </ul>
+
+            <h4>Poor Pose Detection</h4>
+            <ul>
+                <li><strong>Symptom:</strong> Missing or inaccurate landmarks</li>
+                <li><strong>Solution:</strong> Enable video resize, adjust confidence thresholds, improve lighting</li>
+            </ul>
+
+            <h4>Slow Processing</h4>
+            <ul>
+                <li><strong>Symptom:</strong> Very slow video processing</li>
+                <li><strong>Solution:</strong> Use lighter model complexity, disable advanced filtering, reduce video resolution</li>
+            </ul>
+
+            <h4>Missing Dependencies</h4>
+            <ul>
+                <li><strong>Symptom:</strong> "ModuleNotFoundError"</li>
+                <li><strong>Solution:</strong> Install missing packages with pip</li>
+            </ul>
+
+            <h3>Error Messages:</h3>
+            <table>
+                <tr>
+                    <th>Error</th>
+                    <th>Cause</th>
+                    <th>Solution</th>
+                </tr>
+                <tr>
+                    <td>"No video files found"</td>
+                    <td>No supported video files in directory</td>
+                    <td>Check file formats (.mp4, .avi, .mov)</td>
+                </tr>
+                <tr>
+                    <td>"Failed to open video"</td>
+                    <td>Corrupted or unsupported video file</td>
+                    <td>Check video file integrity</td>
+                </tr>
+                <tr>
+                    <td>"MemoryError"</td>
+                    <td>Insufficient system memory</td>
+                    <td>Close applications, reduce batch size</td>
+                </tr>
+                <tr>
+                    <td>"ImportError"</td>
+                    <td>Missing Python packages</td>
+                    <td>Install required dependencies</td>
+                </tr>
+            </table>
+
+            <h3>Performance Optimization:</h3>
+            <ul>
+                <li><strong>For large videos:</strong> Use batch processing and memory management</li>
+                <li><strong>For real-time processing:</strong> Use lighter model complexity</li>
+                <li><strong>For accuracy:</strong> Use higher model complexity and confidence thresholds</li>
+                <li><strong>For small subjects:</strong> Enable video resize with appropriate scale factor</li>
+            </ul>
+        </section>
+
+        <div class="feature-box">
+            <h3>Quick Reference</h3>
+            <p><strong>Essential Commands:</strong></p>
+            <ul>
+                <li><span class="parameter">python vaila/markerless_2D_analysis.py</span> - Start the application</li>
+                <li><span class="parameter">detection_confidence</span> - Adjust pose detection sensitivity</li>
+                <li><span class="parameter">enable_resize</span> - Enable video upscaling</li>
+                <li><span class="parameter">enable_advanced_filtering</span> - Enable smoothing algorithms</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>
