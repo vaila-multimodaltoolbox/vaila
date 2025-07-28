@@ -1,32 +1,50 @@
 """
-syncvid.py
+Project: vailá Multimodal Toolbox
+Script: syncvid.py - Sync Video
 
-This script is used for manually synchronizing videos, allowing the user to input
-keyframes for multiple video files and select a main camera for synchronization.
+Author: Paulo Roberto Pereira Santiago
+Email: paulosantiago@usp.br
+GitHub: https://github.com/vaila-multimodaltoolbox/vaila
+Creation Date: 29 July 2024
+Update Date: 28 July 2025
+Version: 0.0.2
+
+Description:
+This script performs batch processing of videos for sync videos.
+
 
 Features:
-- Manual synchronization: Allows the user to manually input keyframes for
-  synchronization.
-- Automatic synchronization (using flash): Automatically extracts the median of
-  the R, G, and B values from a specific region of each video to automatically
-  synchronize the videos based on a flash or brightness change.
-
-Dependencies:
-- tkinter: For the graphical user interface (GUI).
-- cv2 (OpenCV): For video processing, used in automatic synchronization.
-- numpy: For numerical array manipulation, used in automatic synchronization.
+- Added support for sync files.
 
 Usage:
-- Run the script and follow the instructions in the GUI to select the videos
-  and choose the synchronization method.
-- Save the resulting synchronization file in the desired format.
+- Run the script to open a graphical interface for selecting the input directory
+  containing video files (.mp4, .avi, .mov), the output directory, and for
+  specifying the sync file.
 
-Author: [Your Name]
-Date: [Current Date]
+Requirements:
+- Python 3.12.11
+- Tkinter (usually included with Python installations)
 
+Output:
+The following files are generated for each processed video:
+1. Sync File (`*_sync.txt`):
+   The sync file with the sync data.
+
+Example:
+- Video: 1.mp4
+- Sync: 1_sync.txt
+- Output: 1_sync.mp4
+
+How to run:
+python syncvid.py
+
+License:
+    This project is licensed under the terms of GNU General Public License v3.0.
 """
 
 import os
+from pathlib import Path
+from rich import print
 import tkinter as tk
 from tkinter import filedialog, messagebox
 from vaila.sync_flash import (
@@ -208,6 +226,10 @@ def get_sync_info(video_files):
 
 
 def sync_videos():
+    # Print the directory and name of the script being executed
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    print("Starting syncvid.py...")
     root = tk.Tk()
     root.withdraw()
 
