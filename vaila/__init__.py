@@ -48,7 +48,6 @@ from .filemanager import (
     transfer_file,
 )
 from .showc3d import show_c3d
-from .syncvid import sync_videos
 from .compress_videos_h264 import compress_videos_h264_gui
 from .compress_videos_h265 import compress_videos_h265_gui
 from .extractpng import VideoProcessor
@@ -57,7 +56,6 @@ from .vailaplot2d import run_plot_2d as plot_2d
 from .vailaplot3d import run_plot_3d as plot_3d
 from .mergestack import merge_csv_files, stack_csv_files
 from .videoprocessor import process_videos_gui
-from .sync_flash import get_median_brightness
 from .spectral_features import (
     total_power,
     power_frequency_50,
@@ -107,7 +105,6 @@ __all__ = [
     "find_file",
     "transfer_file",
     "show_c3d",
-    "sync_videos",
     "VideoProcessor",
     "select_file",
     "show_csv",

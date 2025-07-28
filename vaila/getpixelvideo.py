@@ -1531,7 +1531,6 @@ def play_video_with_controls(video_path, coordinates=None):
     else:
         print("Coordinates were not saved.")
 
-
 def load_coordinates_from_file(total_frames):
     root = Tk()
     root.withdraw()
