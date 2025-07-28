@@ -995,11 +995,11 @@ class Vaila(tk.Tk):
             width=button_width,
         )
 
-        # C_B_r1_c2 - Video: Cut Videos
-        cut_videos_btn = tk.Button(
+        # C_B_r1_c2 - Video: vailá (placeholder)
+        vaila_btn_sync = tk.Button(
             tools_col2,
-            text="Sync Video",
-            command=self.cut_videos,
+            text="vailá",
+            command=self.show_vaila_message,
             width=button_width,
         )
 
@@ -1025,10 +1025,10 @@ class Vaila(tk.Tk):
         )
 
         # C_B_r2_c3 - Video: Make Sync Videos
-        sync_videos_btn = tk.Button(
+        make_sync_file_btn = tk.Button(
             tools_col2,
             text="Make Sync file",
-            command=self.sync_videos,
+            command=self.sync_videos,  # ✅ CORRETO: cria o arquivo de sincronização
             width=button_width,
         )
 
@@ -1105,11 +1105,11 @@ class Vaila(tk.Tk):
 
         # Packing Video buttons
         extract_png_btn.grid(row=0, column=0, padx=2, pady=2)
-        cut_videos_btn.grid(row=0, column=1, padx=2, pady=2)
+        vaila_btn_sync.grid(row=0, column=1, padx=2, pady=2)  # ✅ Substituído por vailá
         draw_box_btn.grid(row=0, column=2, padx=2, pady=2)
         compress_videos_h264_btn.grid(row=1, column=0, padx=2, pady=2)
         compress_videos_h265_btn.grid(row=1, column=1, padx=2, pady=2)
-        sync_videos_btn.grid(row=1, column=2, padx=2, pady=2)
+        make_sync_file_btn.grid(row=1, column=2, padx=2, pady=2)  # ✅ Segundo botão
         getpixelvideo_btn.grid(row=2, column=0, padx=2, pady=2)
         count_frames_btn.grid(row=2, column=1, padx=2, pady=2)
         video_processing_btn.grid(row=2, column=2, padx=2, pady=2)
