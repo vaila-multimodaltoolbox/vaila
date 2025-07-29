@@ -37,7 +37,7 @@ import sys
 import pathlib
 import threading
 import tkinter as tk
-from tkinter import filedialog, messagebox, scrolledtext, ttk
+from tkinter import filedialog, messagebox, scrolledtext
 from ultralytics import YOLO
 import torch
 # import datetime
@@ -673,7 +673,7 @@ names: {names_str}  # class names
                 import yaml
                 with open(yaml_file, 'r') as f:
                     yaml_data = yaml.safe_load(f)
-                print(f"YAML loaded successfully")
+                print("YAML loaded successfully")
                 print(f"Classes: {yaml_data.get('nc', 'Not found')}")
                 print(f"Class names: {yaml_data.get('names', 'Not found')}")
                 print(f"Train path: {yaml_data.get('train', 'Not found')}")
@@ -688,7 +688,7 @@ names: {names_str}  # class names
                 # Get model name from YAML (with default)
                 model_name = yaml_data.get('model', 'yolo11m.pt')
 
-                print(f"\nTraining parameters from YAML:")
+                print("\nTraining parameters from YAML:")
                 print(f"  Epochs: {epochs}")
                 print(f"  Batch size: {batch_size}")
                 print(f"  Image size: {img_size}")
@@ -725,7 +725,7 @@ names: {names_str}  # class names
             os.makedirs(models_dir, exist_ok=True)
             model_path = os.path.join(models_dir, model_name)
 
-            print(f"\n--- MODEL INFORMATION ---")
+            print("\n--- MODEL INFORMATION ---")
             print(f"Selected model: {model_name}")
             print(f"Models directory: {models_dir}")
             print(f"Model path: {model_path}")
@@ -737,19 +737,19 @@ names: {names_str}  # class names
             if not os.path.exists(model_path):
                 try:
                     print(f"\nDownloading model {model_name}...")
-                    print(f"This may take a few minutes depending on your internet connection.")
-                    print(f"Model size varies by type:")
-                    print(f"  • Nano models (~6-20 MB)")
-                    print(f"  • Small models (~20-50 MB)")
-                    print(f"  • Medium models (~50-150 MB)")
-                    print(f"  • Large models (~150-300 MB)")
-                    print(f"  • Extra Large models (~300-600 MB)")
+                    print("This may take a few minutes depending on your internet connection.")
+                    print("Model size varies by type:")
+                    print("  • Nano models (~6-20 MB)")
+                    print("  • Small models (~20-50 MB)")
+                    print("  • Medium models (~50-150 MB)")
+                    print("  • Large models (~150-300 MB)")
+                    print("  • Extra Large models (~300-600 MB)")
                     
                     current_dir = os.getcwd()
                     os.chdir(models_dir)
                     
                     # Download using YOLO with progress indication
-                    print(f"\nInitiating download...")
+                    print("\nInitiating download...")
                     model = YOLO(model_name)
                     
                     os.chdir(current_dir)
@@ -757,35 +757,35 @@ names: {names_str}  # class names
                     # Check if file was actually downloaded
                     if os.path.exists(model_path):
                         size_mb = os.path.getsize(model_path) / (1024 * 1024)
-                        print(f"✓ Model downloaded successfully!")
+                        print("Model downloaded successfully!")
                         print(f"  File size: {size_mb:.1f} MB")
                         print(f"  Location: {model_path}")
                     else:
                         raise FileNotFoundError(f"Model file not found after download: {model_path}")
                         
                 except Exception as e:
-                    print(f"❌ Error downloading model: {e}")
-                    print(f"Possible solutions:")
-                    print(f"  • Check your internet connection")
-                    print(f"  • Verify the model name is correct")
-                    print(f"  • Try a different model")
-                    print(f"  • Check if Ultralytics is up to date")
+                    print(f"Error downloading model: {e}")
+                    print("Possible solutions:")
+                    print("  • Check your internet connection")
+                    print("  • Verify the model name is correct")
+                    print("  • Try a different model")
+                    print("  • Check if Ultralytics is up to date")
                     raise
             else:
                 size_mb = os.path.getsize(model_path) / (1024 * 1024)
-                print(f"✓ Model already exists: {model_path}")
+                print(f"Model already exists: {model_path}")
                 print(f"  File size: {size_mb:.1f} MB")
 
             print(f"\nLoading model: {model_name}")
             model = YOLO(model_path)
-            print(f"✓ Model loaded successfully")
+            print("Model loaded successfully")
 
             # Define output directory structure
             output_dir = os.path.join(dataset_folder, "runs")
             run_output_dir = os.path.join(output_dir, self.project_name.get()) # Use project_name
             weights_dir = os.path.join(run_output_dir, "weights")
 
-            print(f"\n--- Training Configuration ---")
+            print("\n--- Training Configuration ---")
             print(f"Dataset: {dataset_folder}")
             print(f"YAML: {yaml_file}")
             print(f"Model: {model_name}")
@@ -804,7 +804,7 @@ names: {names_str}  # class names
             print("Training progress will be shown below:\n")
 
             # Start training with parameters from YAML
-            results = model.train(
+            results = model.train(  # noqa: F841 - Training results object (important for future use)
                 data=yaml_file,
                 epochs=epochs,
                 batch=batch_size,
@@ -820,10 +820,10 @@ names: {names_str}  # class names
             best_model_path = os.path.join(weights_dir, "best.pt")
             last_model_path = os.path.join(weights_dir, "last.pt")
             
-            print(f"\n" + "=" * 60)
+            print("\n" + "=" * 60)
             print("TRAINING COMPLETED SUCCESSFULLY!")
             print("=" * 60)
-            print(f"OUTPUT LOCATIONS:")
+            print("OUTPUT LOCATIONS:")
             print(f"   Best model: {best_model_path}")
             print(f"   Last model: {last_model_path}")
             print(f"   Results folder: {run_output_dir}")
@@ -860,7 +860,7 @@ names: {names_str}  # class names
 
         except Exception as e:
             error_msg = str(e)
-            print(f"\n" + "=" * 60)
+            print("\n" + "=" * 60)
             print("TRAINING ERROR!")
             print("=" * 60)
             print(f"Error type: {type(e).__name__}")
@@ -874,7 +874,7 @@ names: {names_str}  # class names
             
             # Fix the lambda scope issue
             error_type = type(e).__name__
-            error_details = str(e)
+            error_details = str(e)  # noqa: F841 - Error details for potential future use
             
             self.after(0, lambda: messagebox.showerror(
                 "Training Error", 
@@ -889,7 +889,7 @@ names: {names_str}  # class names
 
     def _show_model_characteristics(self, model_name):
         """Shows characteristics of the selected model."""
-        print(f"\nModel characteristics:")
+        print("\nModel characteristics:")
         
         # Model size and performance characteristics
         model_info = {
@@ -925,30 +925,30 @@ names: {names_str}  # class names
             print(f"  Accuracy: {info['accuracy']}")
             print(f"  Best for: {info['use']}")
         else:
-            print(f"  Model: {model_name}")
-            print(f"  Note: Model characteristics not available")
+            print(f"   Model: {model_name}")
+            print("  Note: Model characteristics not available")
         
         # Show recommendations
-        print(f"\nRecommendations:")
+        print("\nRecommendations:")
         if "n" in model_name:
-            print(f"  • Good for: Real-time applications, edge devices")
-            print(f"  • Consider: May need more training epochs for good accuracy")
+            print("Good for: Real-time applications, edge devices")
+            print("Consider: May need more training epochs for good accuracy")
         elif "s" in model_name:
-            print(f"  • Good for: Mobile applications, embedded systems")
-            print(f"  • Consider: Balance between speed and accuracy")
+            print("Good for: Mobile applications, embedded systems")
+            print("Consider: Balance between speed and accuracy")
         elif "m" in model_name:
-            print(f"  • Good for: General purpose training (recommended)")
-            print(f"  • Consider: Best balance of speed, accuracy, and size")
+            print("Good for: General purpose training (recommended)")
+            print("Consider: Best balance of speed, accuracy, and size")
         elif "l" in model_name:
-            print(f"  • Good for: High accuracy requirements")
-            print(f"  • Consider: Slower training and inference")
+            print("Good for: High accuracy requirements")
+            print("Consider: Slower training and inference")
         elif "x" in model_name or "e" in model_name:
-            print(f"  • Good for: Best possible accuracy")
-            print(f"  • Consider: Requires more GPU memory and time")
+            print("Good for: Best possible accuracy")
+            print("Consider: Requires more GPU memory and time")
 
     def _show_model_info(self, best_model_path, last_model_path, run_output_dir):
         """Shows detailed information about saved models."""
-        print(f"\nMODEL INFORMATION:")
+        print("\nMODEL INFORMATION:")
         
         # Check best model
         if os.path.exists(best_model_path):
@@ -968,7 +968,7 @@ names: {names_str}  # class names
         
         # List all files in the run directory
         if os.path.exists(run_output_dir):
-            print(f"\nFILES IN RESULTS FOLDER:")
+            print("\nFILES IN RESULTS FOLDER:")
             for root, dirs, files in os.walk(run_output_dir):
                 level = root.replace(run_output_dir, '').count(os.sep)
                 indent = ' ' * 2 * level
@@ -979,11 +979,11 @@ names: {names_str}  # class names
                     size_mb = os.path.getsize(file_path) / (1024 * 1024)
                     print(f"{subindent}{file} ({size_mb:.1f} MB)")
         
-        print(f"\nUSAGE TIPS:")
-        print(f"   • Use 'best.pt' for inference (highest accuracy)")
-        print(f"   • Use 'last.pt' if you want to continue training")
-        print(f"   • All training logs and plots are in: {run_output_dir}")
-        print(f"   • You can copy the model files to use in other projects")
+        print("\nUSAGE TIPS:")
+        print("Use 'best.pt' for inference (highest accuracy)")
+        print("Use 'last.pt' if you want to continue training")
+        print(f"All training logs and plots are in: {run_output_dir}")
+        print("You can copy the model files to use in other projects")
 
     def _validate_existing_yaml(self, yaml_file):
         """Validates existing YAML file."""
@@ -1029,7 +1029,7 @@ names: {names_str}  # class names
                 )
                 return False
             
-            print(f"YAML validation successful:")
+            print("YAML validation successful:")
             print(f"  Classes: {yaml_data['nc']}")
             print(f"  Class names: {yaml_data['names']}")
             print(f"  Train path: {train_path}")

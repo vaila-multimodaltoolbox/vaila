@@ -122,9 +122,10 @@ except ImportError:
     import toml
 
 # Additional imports for CPU throttling and better resource management
-import threading
-import signal
-import multiprocessing
+# These are used conditionally for Linux-specific features
+import threading  # noqa: F401 - For future Linux thread management
+import signal  # noqa: F401 - For future Linux process management  
+import multiprocessing  # noqa: F401 - For future Linux batch processing
 
 landmark_names = [
     "nose",
@@ -1643,10 +1644,10 @@ def estimate_occluded_landmarks(landmarks, landmarks_history=None):
 
     return estimated
 
-def pad_signal(signal, pad_width, mode='edge'):
+def pad_signal(data, pad_width, mode='edge'):
     if pad_width == 0:
-        return signal
-    return np.pad(signal, (pad_width, pad_width), mode=mode)
+        return data
+    return np.pad(data, (pad_width, pad_width), mode=mode)
 
 
 def is_linux_system():
@@ -1704,7 +1705,7 @@ def should_use_batch_processing(video_path, pose_config):
     should_use_batch = is_high_res or low_memory or is_long_video
     
     if should_use_batch:
-        print(f"🔧 Batch processing enabled:")
+        print("Batch processing enabled:")
         print(f"   - Resolution: {width}x{height}")
         print(f"   - Total frames: {total_frames}")
         if memory_info:
@@ -1766,7 +1767,7 @@ def calculate_batch_size(video_path, pose_config):
     # Ensure batch size doesn't exceed total frames
     batch_size = min(batch_size, total_frames)
     
-    print(f"📊 Batch processing configuration:")
+    print("Batch processing configuration:")
     print(f"   - Resolution: {width}x{height} ({pixels_per_frame:,} pixels/frame)")
     print(f"   - Total frames: {total_frames}")
     print(f"   - Batch size: {batch_size} frames")
@@ -1846,7 +1847,7 @@ def cleanup_memory():
             # Sync and drop caches if possible (requires privileges)
             import subprocess
             subprocess.run(['sync'], check=False, capture_output=True)
-        except:
+        except Exception:
             pass
     
     # Force memory usage report
@@ -1980,7 +1981,7 @@ def process_video(video_path, output_dir, pose_config):
     frame_count = 0
     
     if use_batch_processing:
-        print(f"Using batch processing for high-resolution video")
+        print("Using batch processing for high-resolution video")
         batch_size = calculate_batch_size(video_path, pose_config)
         
         # Process frames in batches
@@ -2027,7 +2028,7 @@ def process_video(video_path, output_dir, pose_config):
         
     else:
         # Standard processing for normal resolution videos
-        print(f"Using standard processing (no batch processing needed)")
+        print("Using standard processing (no batch processing needed)")
         
         # Process all frames (padding + real) with CPU throttling
         frame_count = 0
@@ -2162,7 +2163,7 @@ def process_video(video_path, output_dir, pose_config):
     if success:
         print(f"Saved: {vaila_file_path} (vailá format)")
     else:
-        print(f"Warning: Failed to save vailá format file")
+        print("Warning: Failed to save vailá format file")
 
     # If smoothing/filtering was applied, save an extra CSV for smoothed pixel and norm data
     if pose_config.get('enable_advanced_filtering', False) and pose_config.get('smooth_method', 'none') != 'none':
@@ -2459,7 +2460,7 @@ def get_cpu_usage():
     """Get current CPU usage percentage"""
     try:
         return psutil.cpu_percent(interval=0.1)
-    except:
+    except Exception:
         return 0
 
 
@@ -2482,7 +2483,7 @@ def apply_cpu_throttling():
         try:
             import os
             os.nice(5)  # Increase niceness (lower priority)
-        except:
+        except Exception:
             pass
 
 
