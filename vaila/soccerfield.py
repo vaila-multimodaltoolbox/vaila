@@ -452,16 +452,15 @@ def plot_field(df, show_reference_points=True):
     # Add point numbers to the field for reference (only if enabled)
     if show_reference_points:
         for name, (x, y, num) in points.items():
-            # Adjust text offset slightly based on field size for better visibility, or keep fixed.
-            # Using a fixed offset for now.
+            # Adjust text offset based on field size for better visibility
             text_offset_x = field_width * 0.005
             text_offset_y = field_height * 0.005
-            # Ensure a minimum offset if field is very small, but 0.5 was quite large.
-            # Let's try a smaller fixed offset, e.g., 0.2 or relate to margin
-            offset = 0.2  # Smaller fixed offset
+            # Ensure a minimum offset if field is very small
+            offset_x = max(text_offset_x, 0.2)
+            offset_y = max(text_offset_y, 0.2)
             ax.text(
-                x + offset,  # Was x + 0.5
-                y + offset,  # Was y + 0.5
+                x + offset_x,
+                y + offset_y,
                 str(num),
                 color="black",
                 fontsize=8,
