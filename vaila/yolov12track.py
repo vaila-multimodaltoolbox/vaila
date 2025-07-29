@@ -60,7 +60,6 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from pathlib import Path
 import subprocess
-import re
 import colorsys
 import pkg_resources
 import glob
@@ -180,7 +179,7 @@ def get_hardware_info():
     info.append(f"PyTorch version: {torch.__version__}")
     
     if torch.cuda.is_available():
-        info.append(f"CUDA available: Yes")
+        info.append("CUDA available: Yes")
         info.append(f"CUDA version: {torch.version.cuda}")
         info.append(f"Number of GPUs: {torch.cuda.device_count()}")
         for i in range(torch.cuda.device_count()):
@@ -1123,7 +1122,7 @@ def run_yolov12track():
     print("Checking if we are ready to initialize BotSort...")
 
     # Initialize BotSort
-    print(f"Initializing BotSort")
+    print("Initializing BotSort")
 
     # Try create reid_weights if osnet_x0_25_msmt17.pt does not exist, download it from the internet https://huggingface.co/paulosantiago/osnet_x0_25_msmt17/resolve/main/osnet_x0_25_msmt17.pt
     reid_weights_path = os.path.join(models_dir, "osnet_x0_25_msmt17.pt")
@@ -1149,7 +1148,7 @@ def run_yolov12track():
     if not reid_weights.exists():
         print(f"ReID model not found at: {reid_weights}")
     try:
-        tracker = BotSort(reid_weights=reid_weights, device=device, half=half)
+        BotSort(reid_weights=reid_weights, device=device, half=half)
         print("BotSort initialized successfully.")
     except Exception as e:
         print(f"Error initializing BotSort: {e}")

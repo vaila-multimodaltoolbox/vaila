@@ -111,7 +111,6 @@ from rich import print
 import signal
 import platform
 import subprocess
-import sys
 import webbrowser
 
 # Third-party imports

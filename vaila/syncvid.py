@@ -227,8 +227,8 @@ def get_sync_info(video_files):
 
 def sync_videos():
     # Print the directory and name of the script being executed
-    print(f"Running script: {os.path.basename(__file__)}")
-    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    print(f"Running script: {Path(__file__).name}")
+    print(f"Script directory: {Path(__file__).parent}")
     print("Starting syncvid.py...")
     root = tk.Tk()
     root.withdraw()
