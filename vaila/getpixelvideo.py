@@ -6,8 +6,8 @@ vailá - Multimodal Toolbox
 Author: Prof. Dr. Paulo R. P. Santiago
 https://github.com/paulopreto/vaila-multimodaltoolbox
 Date: 22 July 2025
-Update: 24 July 2025
-Version: 0.0.6
+Update: 28 July 2025
+Version: 0.0.7
 Python Version: 3.12.11
 
 Description:
@@ -36,6 +36,7 @@ python getpixelvideo.py
 """
 
 import os
+from pathlib import Path
 from rich import print
 import pygame
 import cv2
@@ -372,7 +373,6 @@ def play_video_with_controls(video_path, coordinates=None):
         line_height = 28
 
         # Calculate column positions
-        col_width = window_width // 2 - 30
         left_col_x = 20
         right_col_x = window_width // 2 + 10
 
@@ -725,11 +725,11 @@ def play_video_with_controls(video_path, coordinates=None):
                 shutil.copy2(line_file, backup_file)
                 print(f"1-Line backup created: {backup_file}")
             except Exception as e:
-                print(f"Erro ao fazer backup 1-line: {e}")
+                print(f"Error trying to backup 1-line: {e}")
 
     def reload_coordinates():
-        """Carrega um novo arquivo de coordenadas durante a execução"""
-        nonlocal coordinates, one_line_markers, deleted_markers, deleted_positions, selected_marker_idx
+        """Load a new coordinates file during execution"""
+        nonlocal coordinates, one_line_markers, deleted_markers, deleted_positions, selected_marker_idx, one_line_mode, save_message_text, showing_save_message, save_message_timer
 
         # Fazer backup do atual antes de carregar um novo
         make_backup()
@@ -738,26 +738,26 @@ def play_video_with_controls(video_path, coordinates=None):
         root = Tk()
         root.withdraw()
         input_file = filedialog.askopenfilename(
-            title="Selecionar Arquivo de Keypoints",
-            filetypes=[("Arquivos CSV", "*.csv")],
+            title="Select Keypoints File",
+            filetypes=[("CSV Files", "*.csv")],
         )
         if not input_file:
-            save_message_text = "Carregamento cancelado."
+            save_message_text = "Loading canceled."
             showing_save_message = True
             save_message_timer = 60
             return
 
         try:
-            # Verificar se é arquivo de 1 line ou normal
+            # Check if it's a 1 line or normal file
             df = pd.read_csv(input_file)
             if "_1_line" in input_file or len(df) == 1:
-                # Provavelmente é um arquivo de 1 line
+                # Probably a 1 line file
                 one_line_markers = []
                 deleted_markers = set()
 
                 for _, row in df.iterrows():
                     frame_num = int(row["frame"])
-                    for i in range(1, 1001):  # Aumentado para suportar até 1000 marcadores
+                    for i in range(1, 1001):  # Increased to support up to 1000 markers
                         x_col = f"p{i}_x"
                         y_col = f"p{i}_y"
                         if x_col in df.columns and y_col in df.columns:
@@ -769,10 +769,10 @@ def play_video_with_controls(video_path, coordinates=None):
                 save_message_text = (
                     f"Carregado arquivo de 1 line: {os.path.basename(input_file)}"
                 )
-                # Se estava no modo normal, alternar para o modo 1 line
+                # If it was in normal mode, switch to 1 line mode
                 one_line_mode = True
             else:
-                # Arquivo de coordenadas normal
+                # Normal coordinates file
                 coordinates = {i: [] for i in range(total_frames)}
                 deleted_positions = {i: set() for i in range(total_frames)}
 
@@ -786,10 +786,10 @@ def play_video_with_controls(video_path, coordinates=None):
                                 coordinates[frame_num].append((row[x_col], row[y_col]))
 
                 save_message_text = f"Carregado arquivo: {os.path.basename(input_file)}"
-                # Se estava no modo 1 line, alternar para o modo normal
+                # If it was in 1 line mode, switch to normal mode
                 one_line_mode = False
 
-            # Inicializar sempre no primeiro marcador (índice 0)
+            # Always initialize on the first marker (index 0)
             selected_marker_idx = 0
 
             showing_save_message = True
@@ -808,16 +808,16 @@ def play_video_with_controls(video_path, coordinates=None):
 
     while running:
         if paused:
-            # Quando pausado, vamos usar o método set para posicionar no frame exato
+            # When paused, we'll use the set method to position exactly on the frame
             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_count)
             ret, frame = cap.read()
         else:
-            # Quando em reprodução, apenas leia o próximo frame sem reposicionar
+            # When playing, just read the next frame without repositioning
             ret, frame = cap.read()
             if ret:
                 frame_count = int(cap.get(cv2.CAP_PROP_POS_FRAMES)) - 1
             else:
-                # Final do vídeo alcançado, reiniciar
+                # End of video reached, restart
                 frame_count = 0
                 cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                 ret, frame = cap.read()
@@ -1637,8 +1637,9 @@ def get_video_path():
 
 def run_getpixelvideo():
     # Print the script version and directory
-    print(f"Running script: {os.path.basename(__file__)}")
-    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    print(f"Running script: {Path(__file__).name}")
+    print(f"Script directory: {Path(__file__).parent}")
+    print("Starting GetPixelVideo...")
     print("-" * 80)
 
     video_path = get_video_path()
