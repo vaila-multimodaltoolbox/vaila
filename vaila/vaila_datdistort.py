@@ -102,7 +102,7 @@ def process_dat_file(input_path, output_path, parameters, image_size=(1920, 1080
     # Read the DAT file - try both comma and semicolon as separators
     try:
         df = pd.read_csv(input_path)
-    except:
+    except Exception:
         df = pd.read_csv(input_path, sep=";")
 
     # Create camera matrix
@@ -259,7 +259,7 @@ def run_datdistort():
                 print(f"Error processing {filename}: {e}")
                 continue
 
-    print(f"\nProcessing complete!")
+    print("\nProcessing complete!")
     print(f"Files processed: {processed_count}")
     print(f"Output directory: {output_dir}")
 

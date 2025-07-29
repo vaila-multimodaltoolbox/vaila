@@ -7,7 +7,7 @@ Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
 Update Date: 28 July 2025
-Version: 0.0.7
+Version: 0.0.8
 
 Description:
 This script performs batch processing of videos for cutting videos.
@@ -452,12 +452,14 @@ def play_video_with_cuts(video_path):
                     running = False
 
     def save_and_generate_videos():
+        nonlocal cuts, video_path, using_sync_file, sync_data
+        
         if not cuts:
             messagebox.showinfo("Info", "No cuts were marked!")
             return False
 
         # First save cuts to text file
-        txt_path = save_cuts_to_txt(video_path, cuts)
+        save_cuts_to_txt(video_path, cuts)
 
         # Close pygame temporarily instead of fully quitting it
         pygame.display.quit()
@@ -846,7 +848,7 @@ def cleanup_resources():
     try:
         cap = cv2.VideoCapture(0)  # Dummy capture to reset OpenCV state
         cap.release()
-    except:
+    except Exception:
         pass
 
     # Close pygame display but don't fully quit pygame
@@ -862,8 +864,8 @@ def cleanup_resources():
 
 def run_cutvideo():
     # Print the directory and name of the script being executed
-    print(f"Running script: {os.path.basename(__file__)}")
-    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    print(f"Running script: {Path(__file__).name}")
+    print(f"Script directory: {Path(__file__).parent}")
     print("Starting cutvideo.py...")
 
     # Platform-specific adjustments
@@ -879,8 +881,7 @@ def run_cutvideo():
             # Set OpenGL to software rendering as a fallback for Mesa/OpenGL issues on Linux
             os.environ["LIBGL_ALWAYS_SOFTWARE"] = "1"
             os.environ["SDL_VIDEODRIVER"] = "x11"
-        except Exception as e:
-            print(f"Note: Could not set GPU compatibility mode: {e}")
+        except Exception:
             print(
                 "If you experience graphics issues, try running: export LIBGL_ALWAYS_SOFTWARE=1"
             )
