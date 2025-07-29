@@ -133,8 +133,6 @@ from datetime import datetime
 from pathlib import Path
 from rich import print
 import matplotlib.pyplot as plt
-import matplotlib.patches as patches
-from matplotlib.gridspec import GridSpec
 
 
 def calculate_force(mass, gravity=9.81):
@@ -1309,6 +1307,8 @@ def process_mediapipe_data(input_file, output_dir):
             propulsion_frames = range(squat_frame, takeoff_frame + 1)
             power_propulsion = power[propulsion_frames]
             max_power = np.max(power) if len(power) > 0 else 0
+            # Calculate average power during propulsion phase
+            avg_power_propulsion = np.mean(power_propulsion) if len(power_propulsion) > 0 else 0
             
             # CORREÇÃO: Encontrar o índice do valor máximo de power em toda a série
             idx_max_power = np.argmax(power)  # Agora pega o índice do máximo valor em toda a série power
@@ -1347,6 +1347,7 @@ def process_mediapipe_data(input_file, output_dir):
             "kinetic_energy_J": round(kinetic_energy, 3),
             "power_takeoff_W": round(power_takeoff, 3),
             "power_avg_propulsion_W": round(power_avg_propulsion, 3),
+            "power_avg_propulsion_phase_W": round(avg_power_propulsion, 3),
             "max_power_W": round(max_power, 3),
             "frame_max_power": int(idx_max_power),
             "time_max_power_s": round(time_max_power, 3),
@@ -1560,7 +1561,7 @@ def process_mediapipe_data(input_file, output_dir):
         print(f"HTML report generated: {report_path}")
 
         # Print diagnostic information
-        print(f"Diagnostic info:")
+        print("Diagnostic info:")
         print(f"  Reference CG position: {cg_y_ref:.3f} m")
         print(f"  Jump height (CG method): {jump_phase_results.get('height_cg_method_m', 0):.3f} m")
         print(f"  Flight time: {jump_phase_results.get('flight_time_s', 0):.3f} s")
@@ -1726,7 +1727,7 @@ def calc_fator_convert_mediapipe(
     return factor
 
 
-def calc_fator_convert_mediapipe(df, shank_length_real):
+def calc_fator_convert_mediapipe_simple(df, shank_length_real):
     rkx, rky = df["right_knee_x"].iloc[0], df["right_knee_y"].iloc[0]
     rax, ray = df["right_ankle_x"].iloc[0], df["right_ankle_y"].iloc[0]
     normalized_length = np.sqrt((rkx - rax) ** 2 + (rky - ray) ** 2)
@@ -1878,7 +1879,7 @@ def calculate_cg_frame(df, factor):
 
 
 def jump_height_mediapipe(df, shank_length_real):
-    factor = calc_fator_convert_mediapipe(df, shank_length_real)
+    factor = calc_fator_convert_mediapipe_simple(df, shank_length_real)
     cg_x, cg_y = calculate_cg_frame(df, factor)
     # Now y increases upward, so the highest value is the peak!
     jump_height = cg_y.max() - cg_y.iloc[:10].mean()
@@ -1930,7 +1931,7 @@ def generate_normalized_diagnostic_plot(
     """
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    fig, ax = plt.figure(figsize=(14, 10)), plt.subplot(111)
+    fig, ax = plt.subplots(figsize=(14, 10))
 
     # Convert frames to time
     time = data.index / fps
@@ -2709,11 +2710,11 @@ def vaila_and_jump():
 
     msg = "All CSV files have been processed and results saved.\n\n"
     if data_type == 1:
-        msg += f"Input data type: Time of Flight\n"
+        msg += "Input data type: Time of Flight\n"
     elif data_type == 2:
-        msg += f"Input data type: Jump Height\n"
+        msg += "Input data type: Jump Height\n"
     else:
-        msg += f"Input data type: MediaPipe Ankle\n"
+        msg += "Input data type: MediaPipe Ankle\n"
     msg += f"Output directory: {os.path.join(target_dir, 'vaila_verticaljump_*')}"
     messagebox.showinfo("Success", msg, parent=root)
 
