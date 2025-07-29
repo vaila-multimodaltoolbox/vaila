@@ -1104,8 +1104,9 @@ def run_viewc3d():
     render_option.light_on = False
 
     # Inicializar com linhas básicas do campo
-    current_field_lines = create_football_field_lines()
-    vis.add_geometry(current_field_lines)
+    current_field_lines = [create_football_field_lines()]
+    for geom in current_field_lines:
+        vis.add_geometry(geom)
     
     # Controle de visibilidade das linhas
     show_field_lines = [True]
@@ -1119,33 +1120,35 @@ def run_viewc3d():
         nonlocal current_field_lines, default_field_geometries
         
         if show_field_lines[0]:
-            # Se está mostrando, esconder
-            vis.remove_geometry(current_field_lines, reset_bounding_box=False)
+            # If showing, hide them
+            for geom in current_field_lines:
+                vis.remove_geometry(geom, reset_bounding_box=False)
             print("\nField lines hidden")
             show_field_lines[0] = False
         else:
-            # Se está escondido, perguntar se quer carregar novo arquivo
+            # If hidden, ask to show or load new
             root = _create_centered_tk_root()
             choice = messagebox.askyesnocancel(
                 "Field Lines", 
                 "Show current lines or load new CSV file?\n\n"
                 "Yes = Show current lines\n"
                 "No = Load new CSV file with auto-adjust\n"
-                "Cancel = Keep hidden",
-                parent=root
+                "Cancel = Keep hidden"
             )
             root.destroy()
             
             if choice is True:
-                # Mostrar linhas atuais
-                vis.add_geometry(current_field_lines, reset_bounding_box=False)
+                # Show current lines
+                for geom in current_field_lines:
+                    vis.add_geometry(geom, reset_bounding_box=False)
                 print("\nField lines visible")
                 show_field_lines[0] = True
                 
             elif choice is False:
-                # Carregar novo arquivo CSV com auto-ajuste
+                # Load new CSV file with auto-adjust
                 result = load_field_lines_from_csv()
-                if result:
+                
+                if result is not None:
                     # Remove default ground/grid if they exist
                     if default_field_geometries:
                         print("\nRemoving default ground plane and grid.")
@@ -1156,42 +1159,49 @@ def run_viewc3d():
                                 pass
                         default_field_geometries = [] # Clear so we don't remove again
 
-                    if len(result) == 3:  # Novo formato com centro e zoom
-                        new_lines, center, optimal_zoom = result
-                        
-                        # Remover linhas antigas se existirem
+                    # Remove old field lines
+                    for geom in current_field_lines:
                         try:
-                            vis.remove_geometry(current_field_lines, reset_bounding_box=False)
+                            vis.remove_geometry(geom, reset_bounding_box=False)
                         except Exception:
                             pass
-                        
-                        # Adicionar novas linhas
-                        current_field_lines = new_lines
-                        vis.add_geometry(current_field_lines, reset_bounding_box=False)
-                        
-                        # Ajustar câmera automaticamente
-                        ctr.set_lookat([center[0], center[1], center[2]])
-                        ctr.set_front([0, -1, -0.3])  # Vista ligeiramente diagonal
+                    
+                    if isinstance(result, pd.DataFrame):
+                        # --- Full Soccer Field from CSV ---
+                        df = result
+                        current_field_lines = create_full_soccer_field(vis, df)
+
+                        # Auto-adjust camera
+                        points_array = df[['x', 'y', 'z']].to_numpy()
+                        x_min, x_max = points_array[:, 0].min(), points_array[:, 0].max()
+                        y_min, y_max = points_array[:, 1].min(), points_array[:, 1].max()
+                        z_min, z_max = points_array[:, 2].min(), points_array[:, 2].max()
+                        center = np.array([(x_min + x_max) / 2, (y_min + y_max) / 2, (z_min + z_max) / 2])
+                        max_range = max(x_max - x_min, y_max - y_min, z_max - z_min)
+                        optimal_zoom = 0.3 / max_range if max_range > 0 else 0.003
+                        optimal_zoom = max(0.001, min(optimal_zoom, 0.1))
+
+                        ctr.set_lookat(center)
+                        ctr.set_front([0, -1, -0.3])
                         ctr.set_up([0, 0, 1])
                         ctr.set_zoom(optimal_zoom)
-                        
-                        # Atualizar render options para linhas mais espessas
-                        render_option.line_width = 10.0  # Linhas muito mais espessas
-                        
-                        print("\nNew field lines loaded with auto-adjusted view")
-                        print(f"Camera centered at: [{center[0]:.1f}, {center[1]:.1f}, {center[2]:.1f}]")
-                        print(f"Zoom set to: {optimal_zoom:.4f}")
-                        show_field_lines[0] = True
-                    else:
-                        # Formato antigo (retrocompatibilidade)
-                        new_lines = result
-                        try:
-                            vis.remove_geometry(current_field_lines, reset_bounding_box=False)
-                        except Exception:
-                            pass
-                        current_field_lines = new_lines
-                        vis.add_geometry(current_field_lines, reset_bounding_box=False)
                         render_option.line_width = 10.0
+                        print("\nFull soccer field loaded with auto-adjusted view")
+                        show_field_lines[0] = True
+                        
+                    elif isinstance(result, tuple) and len(result) == 3:
+                        # --- Simple Lines from CSV ---
+                        new_lines, center, optimal_zoom = result
+                        current_field_lines = [new_lines]
+                        vis.add_geometry(new_lines, reset_bounding_box=False)
+
+                        # Adjust camera automatically
+                        ctr.set_lookat([center[0], center[1], center[2]])
+                        ctr.set_front([0, -1, -0.3])
+                        ctr.set_up([0, 0, 1])
+                        ctr.set_zoom(optimal_zoom)
+                        render_option.line_width = 10.0
+                        print("\nNew field lines loaded with auto-adjusted view")
                         show_field_lines[0] = True
         
         return False
@@ -1337,95 +1347,94 @@ def run_viewc3d():
 
     # Add after the other callback functions
     def set_view_limits(vis_obj):
-        """Allow setting custom limits for visualization"""
+        """Allow setting custom limits for visualization and regenerate the ground/grid."""
+        nonlocal default_field_geometries
         
-        # Create window for input of limits
         root = _create_centered_tk_root()
         
         try:
-            # Get current approximate limits from data
-            all_points = points.reshape(-1, 3)
-            valid_points = all_points[~np.isnan(all_points).any(axis=1)]
+            # Get current data bounds to use as default values
+            all_points_data = points.reshape(-1, 3)
+            valid_points = all_points_data[~np.isnan(all_points_data).any(axis=1)]
             
             if len(valid_points) > 0:
                 current_x_min, current_x_max = valid_points[:, 0].min(), valid_points[:, 0].max()
                 current_y_min, current_y_max = valid_points[:, 1].min(), valid_points[:, 1].max()
                 current_z_min, current_z_max = valid_points[:, 2].min(), valid_points[:, 2].max()
             else:
-                current_x_min = current_x_max = 0
-                current_y_min = current_y_max = 0
-                current_z_min = current_z_max = 0
+                current_x_min, current_x_max, current_y_min, current_y_max, current_z_min, current_z_max = 0, 0, 0, 0, 0, 0
             
             print("\nCurrent data bounds:")
             print(f"X: [{current_x_min:.3f}, {current_x_max:.3f}]")
             print(f"Y: [{current_y_min:.3f}, {current_y_max:.3f}]")
             print(f"Z: [{current_z_min:.3f}, {current_z_max:.3f}]")
             
-            # Request new limits
-            x_min = simpledialog.askfloat("X Axis", f"X minimum (current: {current_x_min:.3f}):", 
-                                         initialvalue=current_x_min - 10.0, parent=root)  # 10m de margem
+            # Request new limits from user
+            x_min = simpledialog.askfloat("X Axis", "X minimum:", initialvalue=current_x_min - 2.0)
             if x_min is None:
-                root.destroy()
                 return False
-            
-            x_max = simpledialog.askfloat("X Axis", f"X maximum (current: {current_x_max:.3f}):", 
-                                         initialvalue=current_x_max + 10.0, parent=root)
+            x_max = simpledialog.askfloat("X Axis", "X maximum:", initialvalue=current_x_max + 2.0)
             if x_max is None:
-                root.destroy()
                 return False
-            
-            y_min = simpledialog.askfloat("Y Axis", f"Y minimum (current: {current_y_min:.3f}):", 
-                                         initialvalue=current_y_min - 10.0, parent=root)
+            y_min = simpledialog.askfloat("Y Axis", "Y minimum:", initialvalue=current_y_min - 2.0)
             if y_min is None:
-                root.destroy()
                 return False
-            
-            y_max = simpledialog.askfloat("Y Axis", f"Y maximum (current: {current_y_max:.3f}):", 
-                                         initialvalue=current_y_max + 10.0, parent=root)
+            y_max = simpledialog.askfloat("Y Axis", "Y maximum:", initialvalue=current_y_max + 2.0)
             if y_max is None:
-                root.destroy()
                 return False
-            
-            z_min = simpledialog.askfloat("Z Axis", f"Z minimum (current: {current_z_min:.3f}):", 
-                                         initialvalue=current_z_min - 2.0, parent=root)
+            z_min = simpledialog.askfloat("Z Axis", "Z minimum:", initialvalue=current_z_min - 2.0)
             if z_min is None:
-                root.destroy()
                 return False
-            
-            z_max = simpledialog.askfloat("Z Axis", f"Z maximum (current: {current_z_max:.3f}):", 
-                                         initialvalue=current_z_max + 10.0, parent=root)  # 10m de altura
+            z_max = simpledialog.askfloat("Z Axis", "Z maximum:", initialvalue=current_z_max + 2.0)
             if z_max is None:
-                root.destroy()
                 return False
             
+        finally:
             root.destroy()
+
+        # Remove old default geometries
+        for geom in default_field_geometries:
+            try:
+                vis.remove_geometry(geom, reset_bounding_box=False)
+            except Exception:
+                pass
+        default_field_geometries.clear()
+
+        # Create new ground, grid, and markers based on user limits
+        new_width, new_height = x_max - x_min, y_max - y_min
+        x_range, y_range, z_range = new_width, new_height, z_max - z_min
+        max_range = max(x_range, y_range, z_range, 1) # Avoid division by zero
+        
+        if new_width > 0 and new_height > 0:
+            new_ground = create_ground_plane(width=new_width, height=new_height)
+            new_ground.translate(np.array([(x_min + x_max) / 2, (y_min + y_max) / 2, z_min]))
+            spacing = max(1.0, int(max(new_width, new_height) / 20))
+            new_grid = create_ground_grid(x_min=x_min, x_max=x_max, y_min=y_min, y_max=y_max, spacing=spacing)
             
-            # Apply new limits adjusting the camera position
-            new_center = np.array([(x_min + x_max) / 2, (y_min + y_max) / 2, (z_min + z_max) / 2])
-            
-            # Calculate appropriate distance from the camera
-            x_range = x_max - x_min
-            y_range = y_max - y_min
-            z_range = z_max - z_min
-            max_range = max(x_range, y_range, z_range)
-            
-            # Adjust visualization
-            ctr.set_lookat(new_center)
-            # Calculate zoom based on the maximum range
-            optimal_zoom = 0.5 / max_range if max_range > 0 else 0.5
-            ctr.set_zoom(optimal_zoom)
-            
-            print("\nNew view limits set:")
-            print(f"X: [{x_min:.3f}, {x_max:.3f}]")
-            print(f"Y: [{y_min:.3f}, {y_max:.3f}]")
-            print(f"Z: [{z_min:.3f}, {z_max:.3f}]")
-            print(f"Center: [{new_center[0]:.3f}, {new_center[1]:.3f}, {new_center[2]:.3f}]")
-            
-        except Exception as e:
-            print(f"Error setting view limits: {e}")
-            root.destroy()
+            vis.add_geometry(new_ground, reset_bounding_box=False)
+            vis.add_geometry(new_grid, reset_bounding_box=False)
+            default_field_geometries.extend([new_ground, new_grid])
+
+        # Add corner markers for the new bounds
+        new_corners = [np.array([x_min, y_min, z_min]), np.array([x_max, y_min, z_min]),
+                       np.array([x_max, y_max, z_min]), np.array([x_min, y_max, z_min])]
+        for corner in new_corners:
+            x_marker = create_x_marker(corner, size=max_range * 0.02)
+            vis.add_geometry(x_marker, reset_bounding_box=False)
+            default_field_geometries.append(x_marker)
+
+        # Apply new camera view
+        new_center = np.array([(x_min + x_max) / 2, (y_min + y_max) / 2, (z_min + z_max) / 2])
+        optimal_zoom = 0.5 / max_range if max_range > 0 else 0.5
+        ctr.set_lookat(new_center)
+        ctr.set_zoom(optimal_zoom)
+        
+        print("\nNew view limits set:")
+        print(f"X: [{x_min:.3f}, {x_max:.3f}] | Y: [{y_min:.3f}, {y_max:.3f}] | Z: [{z_min:.3f}, {z_max:.3f}]")
+        print(f"Center: [{new_center[0]:.3f}, {new_center[1]:.3f}, {new_center[2]:.3f}]")
         
         return False
+
 
     # Function to reset the camera
     def reset_camera_view(_vis_obj):
@@ -1807,8 +1816,7 @@ def load_field_lines_from_csv():
     root = _create_centered_tk_root()
     csv_file = filedialog.askopenfilename(
         title="Select field lines CSV file",
-        filetypes=[("CSV Files", "*.csv"), ("All Files", "*.*")],
-        parent=root
+        filetypes=[("CSV Files", "*.csv"), ("All Files", "*.*")]
     )
     root.destroy()
     
