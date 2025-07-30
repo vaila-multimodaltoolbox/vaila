@@ -6,8 +6,8 @@ vailá - Multimodal Toolbox
 Author: Prof. Dr. Paulo R. P. Santiago
 https://github.com/paulopreto/vaila-multimodaltoolbox
 Date: 22 July 2025
-Update: 28 July 2025
-Version: 0.0.7
+Update: 29 July 2025
+Version: 0.0.8
 Python Version: 3.12.11
 
 Description:
@@ -22,6 +22,7 @@ New Features in This Version:
 1. Prompts the user to load existing keypoints from a saved file before starting.
 2. Allows the user to choose the keypoint file via a file dialog.
 3. Select keypoint number in the video frame.
+4. Speed in play automarker
 
 How to use:
 ------------
