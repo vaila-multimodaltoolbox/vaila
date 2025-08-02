@@ -48,6 +48,7 @@ Notes:
 """
 
 import os
+from pathlib import Path
 from rich import print
 import sys
 import csv
@@ -58,7 +59,6 @@ import datetime
 from ultralytics import YOLO
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
-from pathlib import Path
 import subprocess
 import colorsys
 import pkg_resources
@@ -67,8 +67,12 @@ import pandas as pd
 from boxmot import BotSort
 
 
-print(f"Running script: {os.path.basename(__file__)}")
-print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+# Print the script version and directory
+print(f"Running script: {Path(__file__).name}")
+print(f"Script directory: {Path(__file__).parent}")
+print("Starting YOLOv11Track...")
+print("-" * 80)
+
 # Ensure BoxMOT can be found
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 

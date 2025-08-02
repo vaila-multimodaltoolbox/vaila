@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 18 February 2025
-Update Date: 09 July 2025
-Version: 0.2.0
+Update Date: 02 Augst 2025
+Version: 0.0.3
 
 Description:
     This script performs object detection and tracking on video files using the YOLO model v12.
@@ -48,6 +48,7 @@ Notes:
 """
 
 import os
+from pathlib import Path
 from rich import print
 import sys
 import csv
@@ -67,8 +68,6 @@ import pandas as pd
 from boxmot import BotSort
 
 
-print(f"Running script: {os.path.basename(__file__)}")
-print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
 # Ensure BoxMOT can be found
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
@@ -1035,8 +1034,10 @@ def create_combined_person_csv(output_dir):
 
 
 def run_yolov12track():
-    print(f"Running script: {os.path.basename(__file__)}")
-    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    print(f"Running script: {Path(__file__).name}")
+    print(f"Script directory: {Path(__file__).parent}")
+    print("Starting yolov12track.py...")
+    print("-" * 80)
 
     # Print hardware information
     print("=" * 60)
