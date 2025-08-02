@@ -1,9 +1,17 @@
 """
+================================================================================
 Script: dlt3d.py
+================================================================================
+vailá - Multimodal Toolbox
+© Paulo Santiago, Guilherme Cesar, Ligia Mochida, Bruno Bedo
+https://github.com/paulopreto/vaila-multimodaltoolbox
+Please see AUTHORS for contributors.
+
+================================================================================
 Author: Paulo Roberto Pereira Santiago
-Version: 0.02
+Version: 0.0.3
 Create: 24 February, 2025
-Last Updated: 10 March, 2025
+Last Updated: 02 August, 2025
 
 Description:
     This script calculates the Direct Linear Transformation (DLT) parameters for 3D coordinate transformations.
@@ -179,7 +187,7 @@ def save_dlt_parameters(output_file, dlt_params):
     """Saves the computed DLT3d parameters to a CSV file without spaces after commas."""
     with open(output_file, "w") as f:
         f.write(
-            "frame,L1,L2,L3,L4,L5,L6,L7,L8,L10,L11,L11\n"
+            "frame,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10,L11\n"
         )  # Please verify header names if needed
         for frame, params in dlt_params.items():
             param_str = ",".join([f"{p:.6f}" for p in params])
