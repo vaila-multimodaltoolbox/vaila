@@ -1,23 +1,41 @@
 """
-rec2d_one_dlt2d.py
+================================================================================
+Script: rec2d_one_dlt2d.py
+================================================================================
+
+vailá - Multimodal Toolbox
+© Paulo Santiago, Guilherme Cesar, Ligia Mochida, Bruno Bedo
+https://github.com/paulopreto/vaila-multimodaltoolbox
+Please see AUTHORS for contributors.
+
+================================================================================
 Author: Paulo Santiago
-Version: 0.0.5
-Last Updated: February 24, 2025
-Description: Batch processing of 2D coordinates reconstruction using DLT parameters from a single set of DLT parameters.
---------------------------------------------------
- Usage Instructions:
-- Place all the CSV files containing pixel coordinates in a directory.
-- Select the DLT parameters file (should contain only one set of DLT parameters).
-- The script will process each CSV file in the directory and save the reconstructed 2D coordinates in a new directory with a timestamp.
---------------------------------------------------
+Version: 0.0.3
+Created: August 9, 2024
+Last Updated: August 02, 2025
+
+Description:
+    Optimized batch processing of 2D coordinates reconstruction using corresponding DLT parameters for each frame.
+    Processes multiple CSV files containing pixel coordinates and reconstructs them to 2D real-world coordinates.
+    The pixel files are expected to use vailá's standard header:
+      frame,p1_x,p1_y,p2_x,p2_y,...,pN_x,pN_y
+    Uses DLT2D parameters that can vary per frame.
+    
+    Optimizations:
+    - Pre-allocated NumPy arrays to eliminate dynamic memory allocation
+    - Progress tracking for large datasets
+    - Reduced debug output for cleaner processing feedback
+    - User-defined output directory and data frequency upfront
+    - Vectorized operations for better performance
 """
 
 import os
+from pathlib import Path
 from rich import print
 import numpy as np
 import pandas as pd
 from numpy.linalg import inv
-from tkinter import filedialog, Tk, messagebox
+from tkinter import filedialog, Tk, messagebox, simpledialog
 from datetime import datetime
 
 
@@ -42,48 +60,86 @@ def rec2d(A, cc2d):
     return np.asarray(H)
 
 
-def process_files_in_directory(dlt_params, directory):
+def process_files_in_directory(dlt_params, input_directory, output_directory, data_rate):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_dir = os.path.join(directory, f"Rec2D_{timestamp}")
+    output_dir = os.path.join(output_directory, f"vaila_rec2d_{timestamp}")
     os.makedirs(output_dir, exist_ok=True)
 
-    csv_files = sorted([f for f in os.listdir(directory) if f.endswith(".csv")])
+    csv_files = sorted([f for f in os.listdir(input_directory) if f.endswith(".csv")])
+    
+    if not csv_files:
+        messagebox.showerror("Error", "No CSV files found in the selected directory!")
+        return
+    
+    print(f"Found {len(csv_files)} CSV files to process")
+    
+    total_files = len(csv_files)
+    files_processed = 0
 
     for csv_file in csv_files:
-        pixel_file = os.path.join(directory, csv_file)
+        files_processed += 1
+        progress = (files_processed / total_files) * 100
+        print(f"Processing file {files_processed}/{total_files} ({progress:.1f}%): {csv_file}")
+        
+        pixel_file = os.path.join(input_directory, csv_file)
         pixel_coords_df = pd.read_csv(pixel_file)
-
-        rec_coords = []
+        
+        # Calculate number of coordinate pairs (excluding frame column)
+        num_coords = (pixel_coords_df.shape[1] - 1) // 2
+        total_frames = len(pixel_coords_df)
+        
+        # Pre-allocate array: frame + (x,y) for each coordinate pair
+        total_cols = 1 + (num_coords * 2)  # frame + x,y for each point
+        rec_coords_array = np.full((total_frames, total_cols), np.nan, dtype=np.float64)
+        
+        # Set frame numbers in first column
+        rec_coords_array[:, 0] = pixel_coords_df["frame"].values
+        
+        # Process each frame with pre-allocated array
         for i, row in pixel_coords_df.iterrows():
-            frame_num = int(row["frame"])
             pixel_coords = row[1:].to_numpy().reshape(-1, 2)
             if not np.isnan(pixel_coords).all():
                 rec2d_coords = rec2d(dlt_params, pixel_coords)
-                rec_coords.append((frame_num, *rec2d_coords.flatten()))
-            else:
-                rec_coords.append((frame_num, *[np.nan] * (len(row) - 1)))
+                # Fill the pre-allocated array directly
+                rec_coords_array[i, 1:] = rec2d_coords.flatten()
+            # NaN values already pre-allocated, so skip invalid data
 
-        rec_coords_df = pd.DataFrame(rec_coords, columns=pixel_coords_df.columns)
+        # Convert to DataFrame with original column names
+        rec_coords_df = pd.DataFrame(rec_coords_array, columns=pixel_coords_df.columns)
 
+        # Save with timestamp
         output_file = os.path.join(
             output_dir, f"{os.path.splitext(csv_file)[0]}_{timestamp}.2d"
         )
         rec_coords_df.to_csv(output_file, index=False, float_format="%.6f")
-
+    
+    print("\n=== Processing Complete ===")
+    print(f"Processed {total_files} files")
+    print(f"Data rate used: {data_rate} Hz")
+    print(f"Output directory: {output_dir}")
+    
     messagebox.showinfo(
-        "Success", f"Reconstructed 2D coordinates saved to {output_dir}"
+        "Processing Complete",
+        f"2D reconstruction completed successfully!\n\n"
+        f"Processed: {total_files} files\n"
+        f"Data rate: {data_rate} Hz\n"
+        f"Output directory: {os.path.basename(output_dir)}"
     )
     print(f"Reconstructed 2D coordinates saved to {output_dir}")
 
 
 def run_rec2d_one_dlt2d():
-    # Print the directory and name of the script being executed
-    print(f"Running script: {os.path.basename(__file__)}")
-    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    # Print the script version and directory
+    print(f"Running script: {Path(__file__).name}")
+    print(f"Script directory: {Path(__file__).parent}")
+    print("Starting optimized rec2d_one_dlt2d.py...")
+    print("-" * 80)
 
     root = Tk()
     root.withdraw()
 
+    # Step 1: Select DLT parameters file
+    print("Step 1: Selecting DLT parameters file...")
     dlt_file = filedialog.askopenfilename(
         title="Select DLT Parameters File", filetypes=[("DLT2D files", "*.dlt2d")]
     )
@@ -91,21 +147,54 @@ def run_rec2d_one_dlt2d():
         print("DLT file selection cancelled.")
         return
 
-    directory = filedialog.askdirectory(title="Select Directory Containing CSV Files")
-    if not directory:
-        print("Directory selection cancelled.")
+    # Step 2: Select input directory with CSV files
+    print("Step 2: Selecting input directory...")
+    input_directory = filedialog.askdirectory(title="Select Directory Containing CSV Files")
+    if not input_directory:
+        print("Input directory selection cancelled.")
         return
 
+    # Step 3: Select output directory
+    print("Step 3: Selecting output directory...")
+    output_directory = filedialog.askdirectory(title="Select Output Directory for Results")
+    if not output_directory:
+        print("Output directory selection cancelled.")
+        return
+
+    # Step 4: Ask for data frequency
+    print("Step 4: Setting data frequency...")
+    data_rate = simpledialog.askinteger(
+        "Data Frequency", 
+        "Enter the data frequency (Hz):", 
+        minvalue=1, 
+        initialvalue=100
+    )
+    if data_rate is None:
+        messagebox.showerror("Error", "Data frequency is required. Operation cancelled.")
+        return
+
+    # Load and validate DLT parameters
+    print("Loading DLT parameters...")
     dlt_params_df = pd.read_csv(dlt_file)
 
     if dlt_params_df.shape[0] < 1:
-        print("DLT file should contain at least one set of DLT parameters.")
+        messagebox.showerror("Error", "DLT file should contain at least one set of DLT parameters.")
         return
 
-    # Pegue apenas o primeiro conjunto de parâmetros DLT
+    # Use the first set of DLT parameters
     dlt_params = dlt_params_df.iloc[0, 1:].to_numpy()
+    
+    print(f"Configuration complete:")
+    print(f"  - DLT file: {os.path.basename(dlt_file)}")
+    print(f"  - Input directory: {input_directory}")
+    print(f"  - Output directory: {output_directory}")
+    print(f"  - Data rate: {data_rate} Hz")
+    print("-" * 80)
 
-    process_files_in_directory(dlt_params, directory)
+    # Process files
+    process_files_in_directory(dlt_params, input_directory, output_directory, data_rate)
+
+    root.destroy()
 
 
 if __name__ == "__main__":
