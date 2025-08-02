@@ -1,54 +1,75 @@
 """
-Project: vailá Multimodal Toolbox
-Script: viewc3d.py - View C3D File
+================================================================================
+Script: viewc3d.py
+================================================================================
 
-Author: Paulo Roberto Pereira Santiago
-Email: paulosantiago@usp.br
-GitHub: https://github.com/vaila-multimodaltoolbox/vaila
-Creation Date: 6 February 2025
-Update Date: 28 July 2025
-Version: 0.0.4
+vailá - Multimodal Toolbox
+© Paulo Santiago, Guilherme Cesar, Ligia Mochida, Bruno Bedo
+https://github.com/paulopreto/vaila-multimodaltoolbox
+Please see AUTHORS for contributors.
+
+================================================================================
+Author: Paulo Santiago
+Version: 0.1.0
+Created: February 6, 2025
+Last Updated: August 2, 2025
 
 Description:
-------------
-This script launches a 3D viewer for C3D files, providing efficient visualization of marker data.
-Marker positions are converted from millimeters to meters and displayed using Open3D.
-The viewer features:
-  - Display of markers (optionally selected by the user), Cartesian coordinate axes, a dark gray ground with a 1x1 grid, and boundary markers.
-  - Detailed window title displaying file name, number of markers (selected vs. total), number of frames, FPS, and keyboard/mouse shortcuts.
-  - Keyboard shortcuts for navigation:
-       'N': Next frame
-       'P': Previous frame
-       'F': Advance 10 frames
-       'B': Go back 10 frames
-       'Space': Toggle automatic playback
-       'O': Display current camera parameters
-  - Mouse actions:
-       Left Drag: Rotate
-       Middle or Right Drag: Pan
-       Mouse Wheel: Zoom
-
-Usage:
-------
-1. Ensure the required dependencies are installed:
-   - open3d (pip install open3d)
-   - ezc3d (pip install ezc3d)
-   - numpy
-   - tkinter (typically included with Python)
-2. Run the script.
-3. When prompted, choose a C3D file via the file selection dialog.
-4. In the marker selection window, choose the markers you want to display and press "Select".
-5. Use the specified keyboard and mouse commands to navigate through the frames in the 3D viewer.
-
-License:
---------
-This program is free software: you can redistribute it and/or modify it under the terms of
-the GNU General Public License as published by the Free Software Foundation, either version 3 of
-the License, or (at your option) any later version. This program is distributed in the hope that
-it will be useful, but WITHOUT ANY WARRANTY.
+    Advanced 3D viewer for C3D files with adaptive visualization for different scales.
+    Automatically detects and converts units (millimeters/meters) with enhanced confidence scoring.
+    Features adaptive ground plane, grid, and camera positioning based on data scale.
+    
+    Key Features:
+    - Adaptive visualization for small (lab) to large (soccer field) scales
+    - Automatic unit detection (mm/m) with confidence scoring
+    - Interactive marker selection with search and filter options
+    - Real-time marker labels with color coding
+    - Ground grid toggle and field line customization
+    - Matplotlib fallback for systems without OpenGL support
+    
+    Keyboard Shortcuts:
+    Navigation:
+      ← → - Previous/Next frame
+      ↑ ↓ - Forward/Backward 60 frames  
+      S/E - Jump to start/end
+      Space - Play/Pause animation
+    
+    Markers:
+      +/-/= - Increase/Decrease marker size
+      C - Change marker color
+      X - Toggle marker labels (names)
+    
+    View:
+      T - Change background color
+      Y - Change ground plane color
+      G - Toggle football field lines
+      M - Toggle ground grid
+      R - Reset camera view
+      L - Set custom view limits
+    
+    Data:
+      U - Override unit conversion (mm/m)
+    
+    Info:
+      I - Show frame info
+      O - Show camera parameters
+      H - Show help
+    
+    Mouse Controls:
+      Left Drag - Rotate view
+      Middle/Right Drag - Pan view
+      Mouse Wheel - Zoom in/out
+    
+    Optimizations:
+    - Adaptive ground plane and grid based on data bounds
+    - Intelligent camera positioning for different scales
+    - Enhanced unit detection with statistical analysis
+    - Real-time label updates during animation
+    - Robust fallback visualization system
 """
 
 import os
+from pathlib import Path
 import open3d as o3d
 import ezc3d
 import numpy as np
@@ -78,7 +99,7 @@ def _create_centered_tk_root():
 
 def detect_c3d_units(pts):
     """
-    Detect if C3D data is in millimeters or meters based on multiple criteria.
+    Enhanced detection of C3D data units (millimeters vs meters) using multiple criteria.
     
     Args:
         pts: np.ndarray with shape (num_frames, num_markers, 3) - raw data from C3D
@@ -94,50 +115,95 @@ def detect_c3d_units(pts):
         print("[yellow]Warning: No valid data found, assuming meters[/yellow]")
         return False, "no_valid_data"
     
+    confidence_score = 0
+    detection_reasons = []
+    
     # Method 1: Check absolute magnitude of values
     mean_abs_value = np.mean(np.abs(valid_data))
+    median_abs_value = np.median(np.abs(valid_data))
+    
     if mean_abs_value > 100:
-        return True, f"magnitude_check (mean_abs: {mean_abs_value:.1f})"
+        confidence_score += 3
+        detection_reasons.append(f"high_magnitude (mean: {mean_abs_value:.1f})")
+    elif mean_abs_value > 10:
+        confidence_score += 1
+        detection_reasons.append(f"moderate_magnitude (mean: {mean_abs_value:.1f})")
     
-    # Method 2: Check range of values
+    # Method 2: Check data range
     data_range = np.max(valid_data) - np.min(valid_data)
-    if data_range > 1000:
-        return True, f"range_check (range: {data_range:.1f})"
+    if data_range > 2000:
+        confidence_score += 3
+        detection_reasons.append(f"large_range ({data_range:.1f})")
+    elif data_range > 100:
+        confidence_score += 1
+        detection_reasons.append(f"moderate_range ({data_range:.1f})")
     
-    # Method 3: Inter-marker distances (human body scale)
+    # Method 3: Inter-marker distances analysis
     if pts.shape[0] > 0 and pts.shape[1] > 1:
-        first_frame = pts[0]
-        valid_markers = first_frame[~np.isnan(first_frame).any(axis=1)]
+        # Use multiple frames for better statistics
+        frame_indices = np.linspace(0, pts.shape[0]-1, min(10, pts.shape[0]), dtype=int)
+        all_distances = []
         
-        if len(valid_markers) > 1:
-            # Calculate pairwise distances between markers
-            distances = []
-            for i in range(len(valid_markers)):
-                for j in range(i+1, len(valid_markers)):
-                    dist = np.linalg.norm(valid_markers[i] - valid_markers[j])
-                    distances.append(dist)
+        for frame_idx in frame_indices:
+            frame = pts[frame_idx]
+            valid_markers = frame[~np.isnan(frame).any(axis=1)]
             
-            if distances:
-                avg_distance = np.mean(distances)
-                max_distance = np.max(distances)
-                
-                # Human body markers typically span 0.5-2.5 meters
-                # If average distance > 50 or max > 3000, likely in mm
-                if avg_distance > 50 or max_distance > 3000:
-                    return True, f"marker_distance_check (avg: {avg_distance:.1f}, max: {max_distance:.1f})"
-    
-    # Method 4: Check for typical human measurement ranges
-    if len(valid_data) > 100:
-        # For human motion capture in meters:
-        # - Most coordinates should be between -5 and +5 meters
-        # - Very few should exceed 10 meters
-        extreme_values = np.sum(np.abs(valid_data) > 10)
-        extreme_percentage = (extreme_values / len(valid_data)) * 100
+            if len(valid_markers) > 1:
+                for i in range(len(valid_markers)):
+                    for j in range(i+1, len(valid_markers)):
+                        dist = np.linalg.norm(valid_markers[i] - valid_markers[j])
+                        all_distances.append(dist)
         
-        if extreme_percentage > 10:  # More than 10% of values are "extreme"
-            return True, f"human_scale_check (extreme_values: {extreme_percentage:.1f}%)"
+        if all_distances:
+            avg_distance = np.mean(all_distances)
+            max_distance = np.max(all_distances)
+            percentile_95 = np.percentile(all_distances, 95)
+            
+            # More sophisticated distance analysis
+            if avg_distance > 200 or max_distance > 4000:
+                confidence_score += 3
+                detection_reasons.append(f"large_distances (avg: {avg_distance:.1f}, max: {max_distance:.1f})")
+            elif avg_distance > 50 or percentile_95 > 2000:
+                confidence_score += 2
+                detection_reasons.append(f"moderate_distances (avg: {avg_distance:.1f}, p95: {percentile_95:.1f})")
     
-    return False, "passed_all_checks"
+    # Method 4: Statistical analysis of coordinate values
+    if len(valid_data) > 100:
+        # Check percentage of values in different ranges
+        very_large = np.sum(np.abs(valid_data) > 1000)
+        large = np.sum(np.abs(valid_data) > 100)
+        moderate = np.sum(np.abs(valid_data) > 10)
+        
+        very_large_pct = (very_large / len(valid_data)) * 100
+        large_pct = (large / len(valid_data)) * 100
+        moderate_pct = (moderate / len(valid_data)) * 100
+        
+        if very_large_pct > 5:  # More than 5% of values > 1000
+            confidence_score += 3
+            detection_reasons.append(f"very_large_values ({very_large_pct:.1f}%)")
+        elif large_pct > 50:  # More than 50% of values > 100
+            confidence_score += 2
+            detection_reasons.append(f"many_large_values ({large_pct:.1f}%)")
+        elif moderate_pct > 80:  # More than 80% of values > 10
+            confidence_score += 1
+            detection_reasons.append(f"mostly_moderate_values ({moderate_pct:.1f}%)")
+    
+    # Method 5: Standard deviation analysis
+    std_dev = np.std(valid_data)
+    if std_dev > 500:
+        confidence_score += 2
+        detection_reasons.append(f"high_std_dev ({std_dev:.1f})")
+    elif std_dev > 100:
+        confidence_score += 1
+        detection_reasons.append(f"moderate_std_dev ({std_dev:.1f})")
+    
+    # Decision based on confidence score
+    is_millimeters = confidence_score >= 3
+    
+    detection_summary = ", ".join(detection_reasons) if detection_reasons else "no_clear_indicators"
+    final_method = f"confidence_score_{confidence_score} ({detection_summary})"
+    
+    return is_millimeters, final_method
 
 
 def ask_user_units_c3d():
@@ -937,8 +1003,10 @@ def run_viewc3d_fallback(points, filepath, fps, marker_labels, selected_indices)
 
 def run_viewc3d():
     # Print the directory and name of the script being executed
-    print(f"Running script: {os.path.basename(__file__)}")
-    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    print(f"Running script: {Path(__file__).name}")
+    print(f"Script directory: {Path(__file__).parent}")
+    print("Starting viewc3d.py...")
+    print("-" * 80)
 
     # Load data from the C3D file, including FPS and marker labels
     points, filepath, fps, marker_labels = load_c3d_file()
@@ -1040,31 +1108,79 @@ def run_viewc3d():
     axes = create_coordinate_lines(axis_length=0.25)
     vis.add_geometry(axes)
 
-    # Modificar o ground plane e grid para o tamanho de um campo de futebol:
-    ground = create_ground_plane(width=120.0, height=80.0)  # 120x80m (maior que campo oficial)
-    ground.translate(np.array([52.5, 34.0, 0.0]))  # Centralizar no campo
+    # Calculate data bounds for adaptive ground plane and grid
+    all_points_data = points.reshape(-1, 3)
+    valid_data_points = all_points_data[~np.isnan(all_points_data).any(axis=1)]
+    
+    if len(valid_data_points) > 0:
+        data_x_min, data_x_max = valid_data_points[:, 0].min(), valid_data_points[:, 0].max()
+        data_y_min, data_y_max = valid_data_points[:, 1].min(), valid_data_points[:, 1].max()
+        data_z_min, data_z_max = valid_data_points[:, 2].min(), valid_data_points[:, 2].max()
+        
+        # Add margins (20% of range or minimum 2 meters)
+        x_range = data_x_max - data_x_min
+        y_range = data_y_max - data_y_min
+        margin_x = max(x_range * 0.2, 2.0)
+        margin_y = max(y_range * 0.2, 2.0)
+        
+        ground_x_min = data_x_min - margin_x
+        ground_x_max = data_x_max + margin_x
+        ground_y_min = data_y_min - margin_y
+        ground_y_max = data_y_max + margin_y
+        ground_z = data_z_min  # Ground at minimum Z level
+        
+        # Determine appropriate grid spacing based on data scale
+        max_range = max(x_range, y_range)
+        if max_range > 50:  # Large scale (like soccer field)
+            grid_spacing = 5.0
+        elif max_range > 10:  # Medium scale
+            grid_spacing = 1.0
+        else:  # Small scale
+            grid_spacing = 0.5
+    else:
+        # Fallback for no valid data
+        ground_x_min, ground_x_max = -10, 10
+        ground_y_min, ground_y_max = -10, 10
+        ground_z = 0
+        grid_spacing = 1.0
+    
+    # Create adaptive ground plane
+    ground_width = ground_x_max - ground_x_min
+    ground_height = ground_y_max - ground_y_min
+    ground_center_x = (ground_x_min + ground_x_max) / 2
+    ground_center_y = (ground_y_min + ground_y_max) / 2
+    
+    ground = create_ground_plane(width=ground_width, height=ground_height)
+    ground.translate(np.array([ground_center_x, ground_center_y, ground_z]))
     vis.add_geometry(ground)
 
-    # Grid com espaçamento maior para campo de futebol
-    grid = create_ground_grid(x_min=0, x_max=105, y_min=0, y_max=68, spacing=5.0)  # Espaçamento de 5m
+    # Create adaptive grid
+    grid = create_ground_grid(x_min=ground_x_min, x_max=ground_x_max, 
+                             y_min=ground_y_min, y_max=ground_y_max, 
+                             spacing=grid_spacing)
+    # Adjust grid Z position to be slightly above ground
+    grid_points = np.asarray(grid.points)
+    grid_points[:, 2] = ground_z + 0.001  # Slightly above ground to avoid Z-fighting
+    grid.points = o3d.utility.Vector3dVector(grid_points)
     vis.add_geometry(grid)
 
     # Store default field geometries to be removed if a custom field is loaded
     default_field_geometries = [ground, grid]
 
-    # Ajustar os marcadores "X" nos cantos do campo:
+    # Add corner markers at ground level
+    marker_size = max(0.1, max_range * 0.01)  # Adaptive marker size
     corners = [
-        np.array([0, 0, 0]),      # bottom_left_corner
-        np.array([105, 0, 0]),    # bottom_right_corner  
-        np.array([105, 68, 0]),   # top_right_corner
-        np.array([0, 68, 0]),     # top_left_corner
+        np.array([ground_x_min, ground_y_min, ground_z]),
+        np.array([ground_x_max, ground_y_min, ground_z]),
+        np.array([ground_x_max, ground_y_max, ground_z]),
+        np.array([ground_x_min, ground_y_max, ground_z])
     ]
     for corner in corners:
-        x_marker = create_x_marker(corner, size=1.0)  # Marcadores maiores
+        x_marker = create_x_marker(corner, size=marker_size)
         vis.add_geometry(x_marker)
         default_field_geometries.append(x_marker)
 
-    # Configurar câmera inicial para escala de campo de futebol:
+    # Configure adaptive camera
     ctr = vis.get_view_control()
     
     # Check if view control was created successfully
@@ -1076,18 +1192,33 @@ def run_viewc3d():
         return
     
     try:
-        bbox_center = np.array([52.5, 34.0, 0.0])  # Centro do campo de futebol
-        ctr.set_lookat(bbox_center)
-        ctr.set_front(np.array([0, -1, -0.5]))  # Vista diagonal para melhor perspectiva
+        # Adaptive camera positioning based on data
+        data_center = np.array([ground_center_x, ground_center_y, (data_z_min + data_z_max) / 2])
+        max_dimension = max(ground_width, ground_height, data_z_max - data_z_min)
+        
+        # Calculate optimal zoom based on data scale
+        if max_dimension > 100:  # Very large scale (soccer field)
+            optimal_zoom = 0.003
+        elif max_dimension > 20:  # Large scale
+            optimal_zoom = 0.02
+        elif max_dimension > 5:   # Medium scale
+            optimal_zoom = 0.1
+        else:                     # Small scale
+            optimal_zoom = 0.3
+        
+        ctr.set_lookat(data_center)
+        ctr.set_front(np.array([0, -1, -0.5]))  # Diagonal view
         ctr.set_up(np.array([0, 0, 1]))
-        ctr.set_zoom(0.003)  # Zoom extremamente pequeno para mostrar campo completo
+        ctr.set_zoom(optimal_zoom)
 
-        # Melhorar limites de zoom ainda mais:
+        # Improve zoom limits
         try:
-            ctr.set_constant_z_near(0.00001)     # Ultra próximo
-            ctr.set_constant_z_far(1000000.0)    # Ultra distante (1000km)
+            ctr.set_constant_z_near(max_dimension * 0.0001)
+            ctr.set_constant_z_far(max_dimension * 1000)
         except AttributeError:
             print("[yellow] Advanced zoom controls not available on this Open3D version[/yellow]")
+            
+        print(f"[green] Camera configured for {max_dimension:.1f}m scale (zoom: {optimal_zoom})[/green]")
             
     except Exception as e:
         print(f"[red] Camera setup failed: {str(e)}[/red]")
@@ -1103,17 +1234,135 @@ def run_viewc3d():
     render_option.background_color = np.array([0, 0, 0])
     render_option.light_on = False
 
-    # Inicializar com linhas básicas do campo
-    current_field_lines = [create_football_field_lines()]
+    # Inicializar com linhas básicas do campo no nível correto do solo
+    current_field_lines = [create_football_field_lines(ground_z)]
     for geom in current_field_lines:
         vis.add_geometry(geom)
     
-    # Controle de visibilidade das linhas
+    # Controle de visibilidade das linhas e grid
     show_field_lines = [True]
+    show_grid = [True]  # Grid is initially visible
+    
+    # Initialize marker labels system
+    marker_labels_visible = [False]  # Labels initially hidden
+    marker_label_texts = []  # Will store text geometries
+    
+    # Get selected marker names for labeling
+    selected_marker_names = [marker_labels[i] for i in selected_indices]
     
     # Frame control variables and callback definitions
     current_frame = 0
     is_playing = False
+
+    def toggle_grid(_vis_obj):
+        """Toggle ground grid visibility"""
+        nonlocal show_grid, grid
+        
+        if show_grid[0]:
+            # Hide grid
+            vis.remove_geometry(grid, reset_bounding_box=False)
+            print("\nGround grid hidden")
+            show_grid[0] = False
+        else:
+            # Show grid
+            vis.add_geometry(grid, reset_bounding_box=False)
+            print("\nGround grid visible")
+            show_grid[0] = True
+        
+        return False
+    
+    def create_text_geometry(text, position, size=0.1, color=[1, 1, 1]):
+        """Create a 3D text geometry (simplified using a small cube as placeholder)"""
+        # Note: Open3D doesn't have native text rendering in 3D space
+        # We'll create a small cube with the label as a visual indicator
+        # The cube will be positioned above the marker
+        text_cube = o3d.geometry.TriangleMesh.create_box(
+            width=size * 0.3, height=size * 0.3, depth=size * 0.3
+        )
+        # Position above the marker
+        offset_pos = position + np.array([0, 0, size * 1.5])
+        text_cube.translate(offset_pos)
+        text_cube.paint_uniform_color(color)
+        return text_cube
+    
+    def toggle_marker_labels(_vis_obj):
+        """Toggle marker labels visibility"""
+        nonlocal marker_labels_visible, marker_label_texts
+        
+        if marker_labels_visible[0]:
+            # Hide labels
+            for label_geom in marker_label_texts:
+                vis.remove_geometry(label_geom, reset_bounding_box=False)
+            marker_label_texts.clear()
+            print("\nMarker labels hidden")
+            marker_labels_visible[0] = False
+        else:
+            # Show labels - create text geometries for current frame
+            frame_data = points[current_frame]
+            for i, (marker_name, marker_pos) in enumerate(zip(selected_marker_names, frame_data)):
+                if not np.isnan(marker_pos).any():
+                    # Choose color based on marker name for better distinction
+                    first_char = marker_name.lower()[0] if marker_name else 'z'
+                    if first_char in 'abc':
+                        label_color = [1, 0, 0]  # Red
+                    elif first_char in 'def':
+                        label_color = [0, 1, 0]  # Green
+                    elif first_char in 'ghi':
+                        label_color = [0, 0, 1]  # Blue
+                    elif first_char in 'jklm':
+                        label_color = [1, 1, 0]  # Yellow
+                    elif first_char in 'nopq':
+                        label_color = [1, 0, 1]  # Magenta
+                    elif first_char in 'rst':
+                        label_color = [0, 1, 1]  # Cyan
+                    else:
+                        label_color = [1, 1, 1]  # White
+                    
+                    label_geom = create_text_geometry(marker_name, marker_pos, 
+                                                    size=current_radius * 3, 
+                                                    color=label_color)
+                    vis.add_geometry(label_geom, reset_bounding_box=False)
+                    marker_label_texts.append(label_geom)
+            
+            print(f"\nMarker labels visible ({len(marker_label_texts)} labels)")
+            marker_labels_visible[0] = True
+        
+        return False
+    
+    def update_marker_labels():
+        """Update marker label positions when frame changes"""
+        if marker_labels_visible[0] and marker_label_texts:
+            # Remove old labels
+            for label_geom in marker_label_texts:
+                vis.remove_geometry(label_geom, reset_bounding_box=False)
+            marker_label_texts.clear()
+            
+            # Add new labels for current frame
+            frame_data = points[current_frame]
+            for i, (marker_name, marker_pos) in enumerate(zip(selected_marker_names, frame_data)):
+                if not np.isnan(marker_pos).any():
+                    # Choose color based on marker name for better distinction
+                    first_char = marker_name.lower()[0] if marker_name else 'z'
+                    if first_char in 'abc':
+                        label_color = [1, 0, 0]  # Red
+                    elif first_char in 'def':
+                        label_color = [0, 1, 0]  # Green
+                    elif first_char in 'ghi':
+                        label_color = [0, 0, 1]  # Blue
+                    elif first_char in 'jklm':
+                        label_color = [1, 1, 0]  # Yellow
+                    elif first_char in 'nopq':
+                        label_color = [1, 0, 1]  # Magenta
+                    elif first_char in 'rst':
+                        label_color = [0, 1, 1]  # Cyan
+                    else:
+                        label_color = [1, 1, 1]  # White
+                    
+                    label_geom = create_text_geometry(marker_name, marker_pos, 
+                                                    size=current_radius * 3, 
+                                                    color=label_color)
+                    vis.add_geometry(label_geom, reset_bounding_box=False)
+                    marker_label_texts.append(label_geom)
 
     def toggle_field_lines(_vis_obj):
         """Toggle field lines or load new field lines from CSV"""
@@ -1288,6 +1537,9 @@ def run_viewc3d():
             new_vertices = spheres_bases[i] + new_pos
             sphere.vertices = o3d.utility.Vector3dVector(new_vertices)
             vis.update_geometry(sphere)
+        
+        # Update marker labels if they are visible
+        update_marker_labels()
         
         # Update frame indicator in the terminal
         frame_info = f"Frame {current_frame+1}/{num_frames}"
@@ -1471,11 +1723,13 @@ MARKERS:
 +/= - Increase marker size
 - - Decrease marker size
 C - Change marker color
+X - Toggle marker labels (names)
 
 VIEW:
 T - Change background color
 Y - Change ground plane color
 G - Toggle football field lines
+M - Toggle ground grid
 R - Reset camera view
 L - Set view limits
 
@@ -1618,13 +1872,15 @@ H - Show this help"""
     vis.register_key_callback(ord("S"), jump_to_start)
     vis.register_key_callback(ord("E"), jump_to_end)
     
-    # Novos atalhos para cores
+    # Novos atalhos para cores e funcionalidades
     vis.register_key_callback(ord("T"), toggle_background_advanced)  # Background colorido
     vis.register_key_callback(ord("Y"), change_ground_color)         # Ground plane colorido
     vis.register_key_callback(ord("L"), set_view_limits)
     vis.register_key_callback(ord("I"), show_frame_info)
     vis.register_key_callback(ord("H"), show_help)
-    vis.register_key_callback(ord("G"), toggle_field_lines)  # Use G ao invés de F
+    vis.register_key_callback(ord("G"), toggle_field_lines)  # Field lines
+    vis.register_key_callback(ord("M"), toggle_grid)         # Grid visibility
+    vis.register_key_callback(ord("X"), toggle_marker_labels)  # Marker labels
     
     # Add unit conversion override key
     def override_units(_vis_obj):
@@ -1792,7 +2048,7 @@ H - Show this help"""
     # Atualizar o título da janela
     window_title = (
         f"C3D Viewer | File: {file_name} | Markers: {num_markers}/{total_markers} | Frames: {num_frames} | FPS: {fps} | "
-        "Keys: [←→: Frame, ↑↓: 60 Frames, C: Color, U: Units, G: Field, H: Help] | "
+        "Keys: [←→: Frame, ↑↓: 60 Frames, C: Color, X: Labels, M: Grid, G: Field, H: Help] | "
         "Mouse: [Left: Rotate, Middle/Right: Pan, Wheel: Zoom]"
     )
 
@@ -1862,6 +2118,12 @@ def load_field_lines_from_csv():
                  messagebox.showwarning("Warning", "No lines could be generated from the CSV. Ensure it contains at least two points per line segment.")
                  return None
 
+            # Adjust Z coordinates to ground level if they are close to zero
+            lines_points_array = np.array(lines_points)
+            if np.max(np.abs(lines_points_array[:, 2])) < 0.1:  # If Z values are very small
+                lines_points_array[:, 2] += 0.001  # Raise slightly above ground
+                lines_points = lines_points_array.tolist()
+            
             # Criar LineSet com linhas mais espessas
             field_lines = o3d.geometry.LineSet(
                 points=o3d.utility.Vector3dVector(lines_points),
@@ -1901,8 +2163,8 @@ def load_field_lines_from_csv():
         messagebox.showerror("Error", f"Failed to load CSV file:\n{str(e)}")
         return None
 
-def create_football_field_lines():
-    """Creates basic football field markings as default"""
+def create_football_field_lines(ground_level=0):
+    """Creates basic football field markings at the specified ground level"""
     lines_points = []
     lines_indices = []
     
@@ -1913,10 +2175,10 @@ def create_football_field_lines():
     # Apenas as linhas básicas do campo
     # Retângulo externo
     corners = [
-        [-field_length/2, -field_width/2, 0],
-        [field_length/2, -field_width/2, 0],
-        [field_length/2, field_width/2, 0],
-        [-field_length/2, field_width/2, 0]
+        [-field_length/2, -field_width/2, ground_level + 0.001],  # Slightly above ground
+        [field_length/2, -field_width/2, ground_level + 0.001],
+        [field_length/2, field_width/2, ground_level + 0.001],
+        [-field_length/2, field_width/2, ground_level + 0.001]
     ]
     
     for i in range(len(corners)):
@@ -1924,7 +2186,8 @@ def create_football_field_lines():
         lines_indices.append([i, (i + 1) % len(corners)])
     
     # Linha do meio
-    lines_points.extend([[0, -field_width/2, 0], [0, field_width/2, 0]])
+    lines_points.extend([[0, -field_width/2, ground_level + 0.001], 
+                        [0, field_width/2, ground_level + 0.001]])
     lines_indices.append([len(lines_points)-2, len(lines_points)-1])
     
     # Criar LineSet
