@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DLT3D e Reconstrução 3D - vailá</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+            border-left: 4px solid #3498db;
+            padding-left: 15px;
+        }
+        h3 {
+            color: #2c3e50;
+            margin-top: 25px;
+        }
+        .module-section {
+            background-color: #f8f9fa;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            border-left: 4px solid #e74c3c;
+        }
+        .code-block {
+            background-color: #2c3e50;
+            color: #ecf0f1;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            overflow-x: auto;
+            margin: 15px 0;
+        }
+        .warning {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 15px 0;
+        }
+        .info {
+            background-color: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 15px 0;
+        }
+        .step {
+            background-color: #e8f5e8;
+            border: 1px solid #c3e6c3;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        ul {
+            padding-left: 20px;
+        }
+        li {
+            margin: 8px 0;
+        }
+        .file-format {
+            background-color: #f1f2f6;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-family: 'Courier New', monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>DLT3D e Reconstrução 3D - vailá</h1>
+        
+        <div class="info">
+            <strong>Visão Geral:</strong> Este guia explica como usar os módulos de calibração DLT3D e reconstrução 3D do vailá para análise de movimento tridimensional.
+        </div>
+
+        <h2>Módulos Disponíveis</h2>
+        
+        <div class="module-section">
+            <h3>1. dlt3d.py - Calibração DLT3D</h3>
+            <p><strong>Função:</strong> Calcula os parâmetros DLT3D (11 parâmetros) para transformação de coordenadas de pixel para coordenadas 3D reais.</p>
+            
+            <h4>Como usar:</h4>
+            <div class="step">
+                <strong>Passo 1:</strong> Execute o script dlt3d.py
+            </div>
+            <div class="step">
+                <strong>Passo 2:</strong> Selecione o arquivo de coordenadas de pixel (CSV)
+            </div>
+            <div class="step">
+                <strong>Passo 3:</strong> Escolha se deseja criar um template REF3D ou usar um arquivo existente
+            </div>
+            <div class="step">
+                <strong>Passo 4:</strong> Se criar template, edite com as coordenadas 3D reais e execute novamente
+            </div>
+            
+            <h4>Formatos de Arquivo:</h4>
+            <div class="file-format">
+                <strong>Arquivo de Pixel:</strong><br>
+                frame,p1_x,p1_y,p2_x,p2_y,...,pN_x,pN_y
+            </div>
+            <div class="file-format">
+                <strong>Arquivo REF3D:</strong><br>
+                frame,p1_x,p1_y,p1_z,p2_x,p2_y,p2_z,...,pN_x,pN_y,pN_z
+            </div>
+            <div class="file-format">
+                <strong>Arquivo de Saída DLT3D:</strong><br>
+                frame,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10,L11
+            </div>
+            
+            <div class="warning">
+                <strong>Importante:</strong> O arquivo REF3D deve conter coordenadas 3D reais (x, y, z) para cada ponto de calibração.
+            </div>
+        </div>
+
+        <div class="module-section">
+            <h3>2. rec3d_one_dlt3d.py - Reconstrução 3D (Uma Linha)</h3>
+            <p><strong>Função:</strong> Reconstrução 3D usando um conjunto de parâmetros DLT3D por câmera (processamento de linha única).</p>
+            
+            <h4>Características:</h4>
+            <ul>
+                <li>Usa um conjunto de parâmetros DLT3D por câmera</li>
+                <li>Processa múltiplas câmeras simultaneamente</li>
+                <li>Gera arquivos CSV, 3D e C3D</li>
+                <li>Otimizado para grandes conjuntos de dados</li>
+            </ul>
+            
+            <h4>Como usar:</h4>
+            <div class="step">
+                <strong>Passo 1:</strong> Selecione os arquivos DLT3D (um por câmera)
+            </div>
+            <div class="step">
+                <strong>Passo 2:</strong> Selecione os arquivos de coordenadas de pixel (um por câmera)
+            </div>
+            <div class="step">
+                <strong>Passo 3:</strong> Escolha o diretório de saída
+            </div>
+            <div class="step">
+                <strong>Passo 4:</strong> Defina a frequência de dados (Hz)
+            </div>
+            
+            <div class="info">
+                <strong>Saída:</strong> Arquivos CSV, 3D, C3D (metros) e C3D (milímetros)
+            </div>
+        </div>
+
+        <div class="module-section">
+            <h3>3. rec3d.py - Reconstrução 3D (Processamento em Lote)</h3>
+            <p><strong>Função:</strong> Reconstrução 3D em lote usando múltiplos conjuntos de parâmetros DLT3D por câmera.</p>
+            
+            <h4>Características:</h4>
+            <ul>
+                <li>Processa múltiplos arquivos CSV em um diretório</li>
+                <li>Suporta parâmetros DLT3D que variam por frame</li>
+                <li>Múltiplas câmeras com diferentes parâmetros por frame</li>
+                <li>Otimizado para processamento em lote</li>
+            </ul>
+            
+            <h4>Como usar:</h4>
+            <div class="step">
+                <strong>Passo 1:</strong> Selecione os arquivos DLT3D (um por câmera)
+            </div>
+            <div class="step">
+                <strong>Passo 2:</strong> Selecione o diretório com arquivos CSV para processar
+            </div>
+            <div class="step">
+                <strong>Passo 3:</strong> Escolha o diretório de saída
+            </div>
+            <div class="step">
+                <strong>Passo 4:</strong> Defina a frequência de dados (Hz)
+            </div>
+            
+            <div class="info">
+                <strong>Saída:</strong> Arquivos .3d com coordenadas 3D reconstruídas
+            </div>
+        </div>
+
+        <h2>Diferenças entre os Módulos</h2>
+        
+        <div class="code-block">
+rec3d_one_dlt3d.py:
+- Um conjunto de parâmetros DLT3D por câmera
+- Processa arquivos individuais
+- Gera múltiplos formatos de saída (CSV, 3D, C3D)
+
+rec3d.py:
+- Múltiplos conjuntos de parâmetros DLT3D por câmera
+- Processamento em lote de múltiplos arquivos
+- Parâmetros podem variar por frame
+- Saída em formato .3d
+        </div>
+
+        <h2>Fluxo de Trabalho Recomendado</h2>
+        
+        <div class="step">
+            <strong>1. Calibração:</strong> Use dlt3d.py para calcular os parâmetros DLT3D
+        </div>
+        <div class="step">
+            <strong>2. Reconstrução Individual:</strong> Use rec3d_one_dlt3d.py para arquivos únicos
+        </div>
+        <div class="step">
+            <strong>3. Reconstrução em Lote:</strong> Use rec3d.py para múltiplos arquivos
+        </div>
+
+        <h2>Formatos de Arquivo Suportados</h2>
+        
+        <h3>Entrada:</h3>
+        <ul>
+            <li><strong>CSV:</strong> Coordenadas de pixel (frame, p1_x, p1_y, p2_x, p2_y, ...)</li>
+            <li><strong>DLT3D:</strong> Parâmetros DLT3D (frame, L1, L2, ..., L11)</li>
+            <li><strong>REF3D:</strong> Coordenadas 3D de referência (frame, p1_x, p1_y, p1_z, ...)</li>
+        </ul>
+        
+        <h3>Saída:</h3>
+        <ul>
+            <li><strong>CSV:</strong> Coordenadas 3D reconstruídas</li>
+            <li><strong>3D:</strong> Formato específico do vailá</li>
+            <li><strong>C3D:</strong> Formato padrão da indústria (metros e milímetros)</li>
+        </ul>
+
+        <div class="warning">
+            <strong>Dicas Importantes:</strong>
+            <ul>
+                <li>Certifique-se de que os arquivos de pixel tenham o cabeçalho padrão do vailá</li>
+                <li>Verifique se as coordenadas 3D de referência estão corretas</li>
+                <li>Use a mesma frequência de dados em todo o processo</li>
+                <li>Mantenha backup dos arquivos originais</li>
+            </ul>
+        </div>
+
+        <h2>Suporte</h2>
+        <p>Para dúvidas ou problemas, consulte a documentação completa do vailá ou entre em contato com a equipe de desenvolvimento.</p>
+        
+        <div class="info">
+            <strong>vailá - Multimodal Toolbox</strong><br>
+            © Paulo Santiago, Guilherme Cesar, Ligia Mochida, Bruno Bedo<br>
+            <a href="https://github.com/vaila-multimodaltoolbox/vaila" target="_blank">https://github.com/vaila-multimodaltoolbox/vaila</a>
+        </div>
+    </div>
+</body>
+</html> 
