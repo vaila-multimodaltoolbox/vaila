@@ -5,7 +5,7 @@ Script: rec2d.py
 
 vailá - Multimodal Toolbox
 © Paulo Santiago, Guilherme Cesar, Ligia Mochida, Bruno Bedo
-https://github.com/paulopreto/vaila-multimodaltoolbox
+https://github.com/vaila-multimodaltoolbox/vaila
 Please see AUTHORS for contributors.
 
 ================================================================================
