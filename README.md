@@ -445,8 +445,8 @@ C_A_r3_c1 - Make DLT3D    C_A_r3_c2 - Rec3D 1DLT     C_A_r3_c3 - Rec3D MultiDLT
 C_A_r4_c1 - vailá         C_A_r4_c2 - vailá          C_A_r4_c3 - vailá
 
 C_B: Video and Image
-C_B_r1_c1 - Video<-->PNG  C_B_r1_c2 - Cut Videos    C_B_r1_c3 - Draw Box
-C_B_r2_c1 - CompressH264  C_B_r2_c2 - Compress H265 C_B_r2_c3 - Make Sync file
+C_B_r1_c1 - Video<-->PNG  C_B_r1_c2 - vaiá          C_B_r1_c3 - Draw Box
+C_B_r2_c1 - CompressH264  C_B_r2_c2 - CompressH265  C_B_r2_c3 - Make Sync file
 C_B_r3_c1 - GetPixelCoord C_B_r3_c2 - Metadata info C_B_r3_c3 - Merge Videos
 C_B_r4_c1 - Distort video C_B_r4_c2 - Cut Video     C_B_r4_c3 - vailá
 
@@ -604,8 +604,6 @@ vaila
 └── yolov11track.py               # YOLOv11 based tracking
 ```
 
-Essa versão da árvore reflete exatamente o que você possui atualmente.
-
 ## Citing *vailá*
 
 If you use *vailá* in your research or project, please consider citing our work:
@@ -619,6 +617,16 @@ If you use *vailá* in your research or project, please consider citing our work
   archivePrefix={arXiv},
   primaryClass={cs.HC},
   url={https://arxiv.org/abs/2410.07238}
+}
+
+@article{tahara2025predicting,
+  title={Predicting walkway spatiotemporal parameters using a markerless, pixel-based machine learning approach},
+  author={Tahara, Ariany K and Chinaglia, Abel G and Monteiro, Rafael LM and Bedo, Bruno LS and Cesar, Guilherme M and Santiago, Paulo RP},
+  journal={Brazilian Journal of Motor Behavior},
+  volume={19},
+  number={1},
+  pages={e462--e462},
+  year={2025}
 }
 ```
 
