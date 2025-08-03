@@ -4,8 +4,8 @@ vaila.py
 ===============================================================================
 Author: Prof. Paulo R. P. Santiago
 Date:  7 October 2024
-Update:  02 August 2025
-Version updated: 0.10.7
+Update:  03 August 2025
+Version updated: 0.10.8
 Python Version: 3.12.11
 
 Description:
@@ -135,7 +135,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 02.August.2025 v0.10.7 (Python 3.12.11)
+vailá - 03.August.2025 v0.10.8 (Python 3.12.11)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -182,11 +182,11 @@ C_A_r3_c1 - Make DLT3D    C_A_r3_c2 - Rec3D 1DLT     C_A_r3_c3 - Rec3D MultiDLT
 C_A_r4_c1 - ReID Marker   C_A_r4_c2 - vailá          C_A_r4_c3 - vailá
 
 -> C_B: Video and Image
-C_B_r1_c1 - Video<-->PNG  C_B_r1_c2 - vailá    C_B_r1_c3 - Draw Box
-C_B_r2_c1 - CompressH264  C_B_r2_c2 - Compress H265 C_B_r2_c3 - Make Sync file
-C_B_r3_c1 - GetPixelCoord C_B_r3_c2 - Metadata info C_B_r3_c3 - Merge Videos
-C_B_r4_c1 - Distort video C_B_r4_c2 - Cut Video     C_B_r4_c3 - Resize Video
-C_B_r5_c1 - YT Downloader C_B_r5_c2 - Insert Audio  C_B_r5_c3 - rm Dup PNG
+C_B_r1_c1 - Video<-->PNG  C_B_r1_c2 - vailá          C_B_r1_c3 - Draw Box
+C_B_r2_c1 - CompressH264  C_B_r2_c2 - CompressH265   C_B_r2_c3 - Make Sync file
+C_B_r3_c1 - GetPixelCoord C_B_r3_c2 - Metadata info  C_B_r3_c3 - Merge Videos
+C_B_r4_c1 - Distort video C_B_r4_c2 - Cut Video      C_B_r4_c3 - Resize Video
+C_B_r5_c1 - YT Downloader C_B_r5_c2 - Insert Audio   C_B_r5_c3 - rm Dup PNG
 
 -> C_C: Visualization
 C_C_r1_c1 - Show C3D      C_C_r1_c2 - Show CSV       C_C_r2_c1 - Plot 2D
@@ -234,7 +234,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 02.August.2025 v0.10.7 (Python 3.12.11)")
+        self.title("vailá - 03.August.2025 v0.10.8 (Python 3.12.11)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
