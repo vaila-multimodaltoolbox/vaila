@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visualização 3D de C3D - vailá</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+            border-left: 4px solid #3498db;
+            padding-left: 15px;
+        }
+        h3 {
+            color: #2c3e50;
+            margin-top: 25px;
+        }
+        .module-section {
+            background-color: #f8f9fa;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            border-left: 4px solid #e74c3c;
+        }
+        .code-block {
+            background-color: #2c3e50;
+            color: #ecf0f1;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            overflow-x: auto;
+            margin: 15px 0;
+        }
+        .warning {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 15px 0;
+        }
+        .info {
+            background-color: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 15px 0;
+        }
+        .step {
+            background-color: #e8f5e8;
+            border: 1px solid #c3e6c3;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .keyboard-shortcut {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 5px 0;
+            font-family: 'Courier New', monospace;
+        }
+        ul {
+            padding-left: 20px;
+        }
+        li {
+            margin: 8px 0;
+        }
+        .file-format {
+            background-color: #f1f2f6;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-family: 'Courier New', monospace;
+        }
+        .feature-highlight {
+            background-color: #e8f4fd;
+            border: 1px solid #b3d9ff;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 15px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Visualização 3D de C3D - vailá</h1>
+        
+        <div class="info">
+            <strong>Visão Geral:</strong> Este módulo permite visualizar arquivos C3D em 3D usando Open3D, com recursos avançados de visualização inspirados no Blender e Mokka BTK.
+        </div>
+
+        <h2>Funcionalidades Principais</h2>
+        
+        <div class="feature-highlight">
+            <h3>🎯 Visualização 3D Interativa</h3>
+            <ul>
+                <li>Carregamento e visualização de arquivos C3D</li>
+                <li>Interface interativa com controles de teclado</li>
+                <li>Seleção personalizada de marcadores</li>
+                <li>Conversão automática de unidades (mm para m)</li>
+            </ul>
+        </div>
+
+        <div class="feature-highlight">
+            <h3>🏟️ Sistema de Campo Adaptativo</h3>
+            <ul>
+                <li>Plano de solo sempre posicionado em Z=0</li>
+                <li>Grade adaptativa baseada nos limites dos dados</li>
+                <li>Linhas de campo personalizadas via CSV</li>
+                <li>Sistema de coordenadas aprimorado</li>
+            </ul>
+        </div>
+
+        <h2>Como Usar</h2>
+        
+        <div class="step">
+            <h3>1. Executar o Script</h3>
+            <div class="code-block">
+python vaila/viewc3d.py
+            </div>
+        </div>
+
+        <div class="step">
+            <h3>2. Selecionar Arquivo C3D</h3>
+            <ul>
+                <li>Uma janela de diálogo será aberta para selecionar o arquivo C3D</li>
+                <li>O script detectará automaticamente as unidades (mm/m)</li>
+                <li>Você pode confirmar ou alterar a conversão de unidades</li>
+            </ul>
+        </div>
+
+        <div class="step">
+            <h3>3. Selecionar Marcadores</h3>
+            <ul>
+                <li>Escolha quais marcadores deseja visualizar</li>
+                <li>Você pode selecionar todos ou apenas marcadores específicos</li>
+                <li>Os marcadores serão exibidos como esferas coloridas</li>
+            </ul>
+        </div>
+
+        <h2>Controles de Teclado</h2>
+        
+        <div class="module-section">
+            <h3>Controles Básicos</h3>
+            <div class="keyboard-shortcut"><strong>L</strong> - Definir limites de visualização (com plano de solo adaptativo)</div>
+            <div class="keyboard-shortcut"><strong>R</strong> - Resetar visualização</div>
+            <div class="keyboard-shortcut"><strong>H</strong> - Mostrar ajuda</div>
+            <div class="keyboard-shortcut"><strong>Q</strong> - Sair</div>
+        </div>
+
+        <div class="module-section">
+            <h3>Controles Avançados</h3>
+            <div class="keyboard-shortcut"><strong>F</strong> - Carregar linhas de campo personalizadas (CSV)</div>
+            <div class="keyboard-shortcut"><strong>Mouse</strong> - Rotacionar, zoom e pan na visualização</div>
+        </div>
+
+        <h2>Recursos Avançados</h2>
+
+        <h3>Linhas de Campo Personalizadas</h3>
+        <div class="info">
+            Você pode criar arquivos CSV com linhas de campo personalizadas. O formato deve incluir:
+        </div>
+        
+        <div class="file-format">
+line_id,x1,y1,z1,x2,y2,z2,color_r,color_g,color_b,description
+1,-50,0,0,50,0,0,1,0,0,linha_central_vermelha
+2,0,-30,0,0,30,0,0,1,0,linha_central_verde
+        </div>
+
+        <div class="warning">
+            <strong>Nota:</strong> As coordenadas devem estar no mesmo sistema de unidades dos dados C3D.
+        </div>
+
+        <h3>Sistema de Coordenadas Aprimorado</h3>
+        <ul>
+            <li>Eixos coloridos (Vermelho=X, Verde=Y, Azul=Z)</li>
+            <li>Esferas nos pontos finais dos eixos</li>
+            <li>Escala adaptativa baseada nos dados</li>
+        </ul>
+
+        <h3>Plano de Solo Adaptativo</h3>
+        <ul>
+            <li>Sempre posicionado em Z=0</li>
+            <li>Dimensões ajustadas aos limites dos dados</li>
+            <li>Espaçamento de grade adaptativo</li>
+        </ul>
+
+        <h2>Inspirações e Melhorias</h2>
+        
+        <div class="info">
+            Este módulo incorpora conceitos de visualização do Blender e Mokka BTK:
+        </div>
+        
+        <ul>
+            <li><strong>Blender:</strong> Grade adaptativa, desenho flexível de linhas, sistema de coordenadas robusto</li>
+            <li><strong>Mokka BTK:</strong> Sistema de coordenadas aprimorado, anotações, visualização biomecânica</li>
+        </ul>
+
+        <h2>Exemplo de Uso</h2>
+        
+        <div class="step">
+            <h3>Visualização de Dados de Movimento</h3>
+            <ol>
+                <li>Execute o script</li>
+                <li>Selecione um arquivo C3D com dados de movimento</li>
+                <li>Confirme a conversão de unidades (mm → m)</li>
+                <li>Selecione os marcadores desejados</li>
+                <li>Use 'L' para ajustar os limites de visualização</li>
+                <li>Use 'F' para carregar linhas de campo (opcional)</li>
+                <li>Navegue na visualização 3D com o mouse</li>
+            </ol>
+        </div>
+
+        <h2>Arquivos de Exemplo</h2>
+        
+        <div class="info">
+            Arquivos de exemplo estão disponíveis em:
+        </div>
+        
+        <ul>
+            <li><strong>Linhas de campo:</strong> <code>tests/custom_field_lines_example.csv</code></li>
+            <li><strong>Campo de futebol:</strong> <code>tests/sport_fields/soccerfield_ref3d.csv</code></li>
+        </ul>
+
+        <h2>Solução de Problemas</h2>
+        
+        <div class="warning">
+            <strong>Problema:</strong> Visualização não aparece<br>
+            <strong>Solução:</strong> Verifique se o Open3D está instalado: <code>pip install open3d</code>
+        </div>
+        
+        <div class="warning">
+            <strong>Problema:</strong> Plano de solo em posição incorreta<br>
+            <strong>Solução:</strong> Use a tecla 'L' para redefinir os limites de visualização
+        </div>
+        
+        <div class="warning">
+            <strong>Problema:</strong> Arquivo CSV não carrega<br>
+            <strong>Solução:</strong> Verifique o formato do CSV e se as coordenadas estão corretas
+        </div>
+
+        <h2>Dependências</h2>
+        
+        <div class="code-block">
+open3d>=0.17.0
+numpy>=1.21.0
+pandas>=1.3.0
+matplotlib>=3.5.0
+tkinter (incluído no Python)
+        </div>
+
+        <div class="info">
+            <strong>Nota:</strong> Se o Open3D não estiver disponível, o script usará Matplotlib como alternativa.
+        </div>
+    </div>
+</body>
+</html> 
