@@ -10,15 +10,17 @@ Please see AUTHORS for contributors.
 
 ================================================================================
 Author: Paulo Santiago
-Version: 0.1.0
-Created: February 6, 2025
-Last Updated: August 2, 2025
+Version: 0.0.7
+Created: 06 February 2025
+Last Updated: 08 August 2025
 
 Description:
-    Advanced 3D viewer for C3D files with adaptive visualization for different scales.
-    Automatically detects and converts units (millimeters/meters) with enhanced confidence scoring.
-    Features adaptive ground plane, grid, and camera positioning based on data scale.
-    
+------------
+Advanced 3D viewer for C3D files with adaptive visualization for different scales.
+Automatically detects and converts units (millimeters/meters) with enhanced confidence scoring.
+Features adaptive ground plane, grid, and camera positioning based on data scale.
+Features soccer field lines and penalty areas.
+
     Key Features:
     - Adaptive visualization for small (lab) to large (soccer field) scales
     - Automatic unit detection (mm/m) with confidence scoring
