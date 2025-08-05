@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 20 March 2025
-Updated: 26 May 2025
-Version: 0.0.4
+Updated: 08 August 2025
+Version: 0.0.5
 
 Description:
     This script draws a soccer field based on the coordinates in soccerfield_ref3d.csv.
@@ -42,6 +42,7 @@ License:
 """
 
 import os
+from pathlib import Path
 from rich import print
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -78,13 +79,14 @@ def draw_arc(ax, center, radius, theta1, theta2, **kwargs):
     ax.add_patch(arc)
 
 
-def plot_field(df, show_reference_points=True):
+def plot_field(df, show_reference_points=True, show_axis_values=False):
     """
     Plots a soccer field using coordinates from the DataFrame.
 
     Args:
         df: DataFrame with field point coordinates
         show_reference_points: Whether to show reference point numbers on the field
+        show_axis_values: Whether to show numerical values on X and Y axes
 
     Returns:
         fig, ax: Matplotlib figure and axes with the drawn field
@@ -103,7 +105,20 @@ def plot_field(df, show_reference_points=True):
     ax.set_xlim(min_x - margin - 1, max_x + margin + 1)
     ax.set_ylim(min_y - margin - 1, max_y + margin + 1)
     ax.set_aspect("equal")
-    ax.axis("off")
+    
+    if show_axis_values:
+        # Show axis values with grid
+        ax.grid(True, alpha=0.3, color='gray', linestyle='-', linewidth=0.5)
+        ax.set_xlabel('X (meters)', fontsize=10)
+        ax.set_ylabel('Y (meters)', fontsize=10)
+        ax.tick_params(axis='both', which='major', labelsize=8)
+        # Set tick intervals based on field size
+        x_ticks = np.arange(min_x - margin, max_x + margin + 1, 5)
+        y_ticks = np.arange(min_y - margin, max_y + margin + 1, 5)
+        ax.set_xticks(x_ticks)
+        ax.set_yticks(y_ticks)
+    else:
+        ax.axis("off")
 
     # Convert DataFrame to dictionary for easier access
     points = {
@@ -641,6 +656,7 @@ def run_soccerfield():
     current_ax = [None]
     current_canvas = [None]
     show_reference_points = [True]  # Boolean state for reference points visibility
+    show_axis_values = [False]  # Boolean state for axis values visibility
     current_field_csv = [None]  # Store the current field CSV path
     current_markers_csv = [None]  # Store the current markers CSV path
     selected_markers = [None]  # Store currently selected markers
@@ -674,7 +690,7 @@ def run_soccerfield():
             print(f"Number of reference points: {len(df)}")
 
             # Create figure and embed in Tkinter
-            fig, ax = plot_field(df, show_reference_points=show_reference_points[0])
+            fig, ax = plot_field(df, show_reference_points=show_reference_points[0], show_axis_values=show_axis_values[0])
 
             # Save current axis for later use
             current_ax[0] = ax
@@ -742,6 +758,31 @@ def run_soccerfield():
             ref_points_button.config(text="Hide Reference Points")
         else:
             ref_points_button.config(text="Show Reference Points")
+
+        # Reload the field with the new setting
+        if current_field_csv[0]:
+            load_field(custom_file=current_field_csv[0])
+
+        # Re-plot markers if any were loaded
+        if current_markers_csv[0]:
+            load_and_plot_markers(
+                current_ax[0],
+                current_markers_csv[0],
+                current_canvas[0],
+                manual_marker_artists,
+                frame_markers,
+                current_frame,
+                selected_markers[0],
+            )
+
+    def toggle_axis_values():
+        """Toggle the visibility of axis values on the field"""
+        show_axis_values[0] = not show_axis_values[0]
+
+        if show_axis_values[0]:
+            axis_values_button.config(text="Hide Axis Values")
+        else:
+            axis_values_button.config(text="Show Axis Values")
 
         # Reload the field with the new setting
         if current_field_csv[0]:
@@ -1404,6 +1445,18 @@ def run_soccerfield():
         pady=5,
     )
     ref_points_button.pack(side=tk.LEFT, padx=5, pady=5)
+
+    # Add toggle button for axis values
+    axis_values_button = Button(
+        button_frame,
+        text="Show Axis Values",
+        command=toggle_axis_values,
+        bg="white",
+        fg="black",
+        padx=10,
+        pady=5,
+    )
+    axis_values_button.pack(side=tk.LEFT, padx=5, pady=5)
 
     # Add marker selection button - initially disabled
     select_markers_button = Button(
