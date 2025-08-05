@@ -1127,7 +1127,7 @@ def run_viewc3d():
         ground_x_max = data_x_max + margin_x
         ground_y_min = data_y_min - margin_y
         ground_y_max = data_y_max + margin_y
-        ground_z = data_z_min  # Ground at minimum Z level
+        ground_z = 0.0  # Ground always at Z=0 level
         
         # Determine appropriate grid spacing based on data scale
         max_range = max(x_range, y_range)
@@ -1659,7 +1659,7 @@ def run_viewc3d():
         
         if new_width > 0 and new_height > 0:
             new_ground = create_ground_plane(width=new_width, height=new_height)
-            new_ground.translate(np.array([(x_min + x_max) / 2, (y_min + y_max) / 2, z_min]))
+            new_ground.translate(np.array([(x_min + x_max) / 2, (y_min + y_max) / 2, 0.0]))
             spacing = max(1.0, int(max(new_width, new_height) / 20))
             new_grid = create_ground_grid(x_min=x_min, x_max=x_max, y_min=y_min, y_max=y_max, spacing=spacing)
             
@@ -2022,6 +2022,18 @@ H - Show this help"""
         geometries.append(draw_line_3d(vis, p['right_penalty_area_top_right'], p['right_penalty_area_bottom_right']))
         geometries.append(draw_line_3d(vis, p['right_penalty_area_bottom_right'], p['right_penalty_area_bottom_left']))
 
+        # Left goal area (small area)
+        geometries.append(draw_line_3d(vis, p['left_goal_area_bottom_left'], p['left_goal_area_top_left']))
+        geometries.append(draw_line_3d(vis, p['left_goal_area_top_left'], p['left_goal_area_top_right']))
+        geometries.append(draw_line_3d(vis, p['left_goal_area_top_right'], p['left_goal_area_bottom_right']))
+        geometries.append(draw_line_3d(vis, p['left_goal_area_bottom_right'], p['left_goal_area_bottom_left']))
+
+        # Right goal area (small area)
+        geometries.append(draw_line_3d(vis, p['right_goal_area_bottom_left'], p['right_goal_area_top_left']))
+        geometries.append(draw_line_3d(vis, p['right_goal_area_top_left'], p['right_goal_area_top_right']))
+        geometries.append(draw_line_3d(vis, p['right_goal_area_top_right'], p['right_goal_area_bottom_right']))
+        geometries.append(draw_line_3d(vis, p['right_goal_area_bottom_right'], p['right_goal_area_bottom_left']))
+
         # Penalty Arcs
         # Left
         center_l = p['left_penalty_spot']
@@ -2030,6 +2042,11 @@ H - Show this help"""
         radius_l = np.linalg.norm(p1 - center_l)
         angle1_l = np.rad2deg(np.arctan2(p1[1]-center_l[1], p1[0]-center_l[0]))
         angle2_l = np.rad2deg(np.arctan2(p2[1]-center_l[1], p2[0]-center_l[0]))
+        
+        # For the left penalty arc, we need to draw the OUTER arc (towards center field, not towards goal)
+        # Left penalty area center is at x=11, penalty area edge is at x=16.5
+        # Current angles: angle1_l ≈ -53° (left intersection), angle2_l ≈ +53° (right intersection)
+        # The direct path from angle1_l to angle2_l goes through 0° (towards center - CORRECT)
         geometries.append(draw_arc_3d(vis, center_l, [0,0,1], radius_l, angle1_l, angle2_l))
 
         # Right
@@ -2039,7 +2056,13 @@ H - Show this help"""
         radius_r = np.linalg.norm(p1_r - center_r)
         angle1_r = np.rad2deg(np.arctan2(p1_r[1]-center_r[1], p1_r[0]-center_r[0]))
         angle2_r = np.rad2deg(np.arctan2(p2_r[1]-center_r[1], p2_r[0]-center_r[0]))
-        geometries.append(draw_arc_3d(vis, center_r, [0,0,1], radius_r, angle2_r, angle1_r))
+        
+        # For the right penalty arc, we need to draw the OUTER arc (towards center field, not towards goal)
+        # Right penalty area center is at x=94, penalty area edge is at x=88.5
+        # Current angles: angle1_r ≈ -127° (left intersection), angle2_r ≈ +127° (right intersection)
+        # The direct path from angle1_r to angle2_r goes through 0° (towards goal - WRONG)
+        # We need the complementary arc that goes through 180° (towards center field - CORRECT)
+        geometries.append(draw_arc_3d(vis, center_r, [0,0,1], radius_r, angle2_r, angle1_r + 360))
 
         return geometries
 
