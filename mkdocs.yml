@@ -7,6 +7,13 @@ theme:
   name: material
   logo: images/vaila_logo.png
   favicon: images/vaila_ico.png
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.highlight
+    - search.share
   palette:
     - scheme: default
       primary: black
@@ -19,15 +26,29 @@ theme:
         icon: material/weather-sunny
         name: Light mode
 
+plugins:
+  - search
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          rendering:
+            show_source: true
+            show_root_heading: true
+          selection:
+            docstring_style: "google"
+          setup_commands:
+            - "import sys"
+            - "sys.path.append('..')"
+
 markdown_extensions:
   - attr_list
   - pymdownx.superfences
   - pymdownx.details
   - pymdownx.magiclink
   - pymdownx.mark
-  - pymdownx.tasklist  # Lista de tarefas
-  - pymdownx.emoji  # Emojis
-  - pymdownx.mark
+  - pymdownx.tasklist
+  - pymdownx.emoji
   - pymdownx.tilde
   - pymdownx.highlight
   - pymdownx.superfences:
@@ -35,25 +56,48 @@ markdown_extensions:
         - name: mermaid
           class: mermaid
 
-extra:
-  nav:
-    - Home: index.md
-    - Overview: overview.md
-    - "vailá Manifest": vaila-manifest.md
-    - "Available Multimodal Analysis":
-        - IMU Analysis: imu-analysis.md
-        - Kinematic Cluster Analysis: kinematic-cluster-analysis.md
-        - Kinematic Mocap Full Body Analysis: mocap-full-body-analysis.md
-        - Markerless 2D with video: markerless-2d-video.md
-        - Markerless 3D with multiple videos: markerless-3d-multiple-videos.md
-    - "Available Tools":
-        - Edit CSV: edit-csv.md
-        - Convert C3D data to CSV: convert-c3d-csv.md
-        - Metadata info: metadata-info.md
-        - "Cut videos based on list": cut-videos.md
-        - "Draw a black box around videos": draw-black-box.md
-        - "Compress videos to HEVC (H.265)": compress-hevc.md
-        - "Compress videos to H.264": compress-h264.md
-        - "Plot 2D": plot-2d.md
-    - Additional Commands: additional-commands.md
-    - "Environment Setup/Install": environment-setup.md
+nav:
+  - Home: index.md
+  - Overview: overview.md
+  - "vailá Manifest": vaila-manifest.md
+  - Installation:
+    - "Environment Setup": installation/environment-setup.md
+    - "Requirements": installation/requirements.md
+    - "Troubleshooting": installation/troubleshooting.md
+  - "Multimodal Analysis":
+    - "Markerless Analysis":
+      - "2D Video Analysis": modules/markerless-analysis/markerless-2d-video.md
+      - "3D Video Analysis": modules/markerless-analysis/markerless-3d-video.md
+      - "Live Analysis": modules/markerless-analysis/markerless-live.md
+    - "Motion Capture":
+      - "Full Body Analysis": modules/motion-capture/mocap-full-body.md
+      - "Cluster Analysis": modules/motion-capture/kinematic-cluster.md
+    - "Sensor Analysis":
+      - "IMU Analysis": modules/sensors/imu-analysis.md
+      - "Force Plate": modules/sensors/force-plate.md
+      - "EMG Analysis": modules/sensors/emg-analysis.md
+      - "GNSS/GPS": modules/sensors/gnss-gps.md
+  - "Available Tools":
+    - "Data Processing":
+      - "Edit CSV": modules/tools/edit-csv.md
+      - "Convert C3D/CSV": modules/tools/convert-c3d-csv.md
+      - "Metadata Info": modules/tools/metadata-info.md
+    - "Video Processing":
+      - "Cut Videos": modules/tools/cut-videos.md
+      - "Draw Black Box": modules/tools/draw-black-box.md
+      - "Compress H.264": modules/tools/compress-h264.md
+      - "Compress H.265": modules/tools/compress-hevc.md
+      - "Get Pixel Coordinates": modules/tools/get-pixel-coordinates.md
+      - "DLT3D Reconstruction": modules/tools/dlt3d-reconstruction.md
+    - "Visualization":
+      - "Plot 2D": modules/tools/plot-2d.md
+      - "View 3D": modules/visualization/view3d.md
+  - "Tutorials":
+    - "Quick Start": tutorials/quick-start.md
+    - "Markerless Tutorial": tutorials/markerless-tutorial.md
+    - "Advanced Features": tutorials/advanced-features.md
+  - "API Reference":
+    - "Modules": api/modules.md
+    - "Functions": api/functions.md
+  - "Additional Commands": additional-commands.md
+  - "Walkway ML": walkway_ml.md
