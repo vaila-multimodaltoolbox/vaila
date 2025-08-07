@@ -25,6 +25,32 @@ If (-Not (Test-Path $vailaProgramPath)) {
     New-Item -ItemType Directory -Force -Path $vailaProgramPath | Out-Null
 }
 
+# Check Windows version
+Write-Output "Checking Windows version..."
+$osVersion = [System.Environment]::OSVersion.Version
+If ($osVersion.Major -lt 10) {
+    Write-Warning "This application is optimized for Windows 10/11. You may experience compatibility issues."
+    Write-Output "Current Windows version: $($osVersion.Major).$($osVersion.Minor)"
+}
+
+# Check available disk space
+Write-Output "Checking available disk space..."
+$drive = (Get-Item $vailaProgramPath).PSDrive
+$freeSpace = $drive.Free / 1GB
+If ($freeSpace -lt 2) {
+    Write-Warning "Insufficient disk space. At least 2GB required. Available: $([math]::Round($freeSpace, 2))GB"
+    Write-Output "Continuing anyway, but installation may fail..."
+}
+
+# Check internet connectivity
+Write-Output "Checking internet connectivity..."
+Try {
+    $null = Invoke-WebRequest -Uri "https://www.google.com" -TimeoutSec 5
+    Write-Output "Internet connection available."
+} Catch {
+    Write-Warning "No internet connection detected. Some features may not work properly."
+}
+
 # Copy project files, excluding __pycache__ and .pyc files
 Write-Output "Copying vaila files (excluding __pycache__ and .pyc)..."
 Get-ChildItem -Path $sourcePath -Recurse -Force | Where-Object {
@@ -210,7 +236,7 @@ If (Test-Path $wtPath) {
             name = "vaila"
             commandline = "pwsh.exe -ExecutionPolicy Bypass -NoExit -Command `"& `'$condaPath\shell\condabin\conda-hook.ps1`'; conda activate `'vaila`'; cd `'$vailaProgramPath`'; python `'vaila.py`'`""
             startingDirectory = "$vailaProgramPath"
-            icon = "$vailaProgramPath\docs\images\vaila_ico.png"
+            icon = "$vailaProgramPath\docs\images\vaila_ico.ico"
             guid = "{17ce5bfe-17ed-5f3a-ab15-5cd5baafed5b}"
             hidden = $false
         }
@@ -272,45 +298,34 @@ Write-Output "Restart your computer to ensure all changes take effect."
 # --------- AnyLabeling Download Information ---------
 Write-Output ""
 Write-Output "============================================================"
-Write-Output "IMPORTANT INFORMATION FOR YOLO TRAINING / INFORMAÇÃO IMPORTANTE PARA TREINO YOLO"
+Write-Output "IMPORTANT INFORMATION FOR YOLO TRAINING"
 Write-Output "============================================================"
 Write-Output ""
 Write-Output "To use YOLO training resources in vaila, you need AnyLabeling."
-Write-Output "Para usar recursos de treino YOLO no vaila, você precisa do AnyLabeling."
 Write-Output ""
 Write-Output "AnyLabeling is a free tool for training data annotation."
-Write-Output "O AnyLabeling é uma ferramenta gratuita para anotação de dados de treino."
 Write-Output ""
 Write-Output "Opening AnyLabeling download page in your default browser..."
-Write-Output "Abrindo página de download do AnyLabeling no seu navegador padrão..."
 Write-Output ""
 
 # Open AnyLabeling download page in default browser
 Try {
     Start-Process "https://github.com/vietanhdev/anylabeling/releases"
     Write-Output "AnyLabeling download page opened in your browser."
-    Write-Output "Página do AnyLabeling aberta no navegador."
     Write-Output ""
-    Write-Output "INSTRUCTIONS / INSTRUÇÕES:"
+    Write-Output "INSTRUCTIONS:"
     Write-Output "1. Download the latest AnyLabeling for Windows"
-    Write-Output "   1. Baixe a versão mais recente do AnyLabeling para Windows"
     Write-Output "2. Install AnyLabeling on your computer"
-    Write-Output "   2. Instale o AnyLabeling no seu computador"
     Write-Output "3. Use AnyLabeling to create training annotations"
-    Write-Output "   3. Use o AnyLabeling para criar anotações de treino"
     Write-Output "4. Import the annotations into vaila to train YOLO networks"
-    Write-Output "   4. Importe as anotações no vaila para treinar redes YOLO"
     Write-Output ""
 } Catch {
     Write-Warning "Unable to open the browser automatically."
-    Write-Warning "Não foi possível abrir o navegador automaticamente."
     Write-Output "Please access manually: https://github.com/vietanhdev/anylabeling/releases"
-    Write-Output "Por favor, acesse manualmente: https://github.com/vietanhdev/anylabeling/releases"
     Write-Output ""
 }
 
 Write-Output "============================================================"
 Write-Output "vaila installation completed successfully!"
-Write-Output "Instalação do vaila concluída com sucesso!"
 Write-Output "============================================================"
 Pause
