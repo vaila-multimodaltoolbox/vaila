@@ -2,7 +2,7 @@
 ; vaila Installer Script
 
 #define MyAppName "vaila"
-#define MyAppVersion "0.0.3"
+#define MyAppVersion "0.10.10"
 #define MyAppPublisher "Prof. Dr. Paulo R. P. Santiago"
 #define MyAppURL "https://github.com/vaila-multimodaltoolbox/vaila"
 
@@ -28,14 +28,21 @@ SolidCompression=yes
 WizardStyle=modern
 WizardImageFile=docs\images\wizard_image.bmp
 WizardSmallImageFile=docs\images\wizard_small.bmp
+LicenseFile=LICENSE
+InfoBeforeFile=README.md
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
 Source: "install_vaila_win.ps1"; DestDir: "{app}"; Flags: ignoreversion
-; Also include all other files needed for installation
-Source: "*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "uninstall_vaila_win.ps1"; DestDir: "{app}"; Flags: ignoreversion
+Source: "vaila\*"; DestDir: "{app}\vaila"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "docs\*"; DestDir: "{app}\docs"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "yaml_for_conda_env\*"; DestDir: "{app}\yaml_for_conda_env"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "tests\*"; DestDir: "{app}\tests"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "LICENSE"; DestDir: "{app}"; Flags: ignoreversion
+Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}\{#MyAppName}"; Filename: "pwsh.exe"; Parameters: "-ExecutionPolicy Bypass -NoExit -Command ""& '{app}\run_vaila.ps1'"""; IconFilename: "{app}\docs\images\vaila_ico.ico"; WorkingDir: "{app}"
@@ -58,17 +65,41 @@ begin
     exit;
   end;
   
-  // Check if Anaconda/Conda is installed (basic check)
+  // Check if Anaconda/Conda is installed (improved check)
   if not DirExists(ExpandConstant('{userdocs}\..\Anaconda3')) and 
-     not DirExists(ExpandConstant('{userdocs}\..\miniconda3')) then
+     not DirExists(ExpandConstant('{userdocs}\..\miniconda3')) and
+     not DirExists(ExpandConstant('{userdocs}\..\anaconda3')) and
+     not DirExists(ExpandConstant('{userdocs}\..\Miniconda3')) then
   begin
     if MsgBox('Anaconda/Miniconda was not detected in the default location.' + #13#10 +
              'vaila requires Anaconda or Miniconda to function properly.' + #13#10 + #13#10 +
+             'Please install Anaconda or Miniconda from: https://docs.conda.io/en/latest/miniconda.html' + #13#10 + #13#10 +
              'Do you want to continue anyway?', mbConfirmation, MB_YESNO) = IDNO then
     begin
       Result := False;
       exit;
     end;
+  end;
+  
+  // Check Windows version (vaila works best on Windows 10/11)
+  if GetWindowsVersion < $06040000 then // Windows 10 or later
+  begin
+    if MsgBox('This application is optimized for Windows 10/11.' + #13#10 +
+             'You may experience compatibility issues on older Windows versions.' + #13#10 + #13#10 +
+             'Do you want to continue?', mbConfirmation, MB_YESNO) = IDNO then
+    begin
+      Result := False;
+      exit;
+    end;
+  end;
+  
+  // Check available disk space (require at least 2GB)
+  if GetSpaceOnDisk(ExpandConstant('{app}'), 0) < 2147483648 then // 2GB in bytes
+  begin
+    MsgBox('Insufficient disk space. At least 2GB of free space is required.' + #13#10 +
+           'Please free up some space and try again.', mbError, MB_OK);
+    Result := False;
+    exit;
   end;
   
   Result := True;
@@ -79,15 +110,43 @@ procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then
   begin
-    // Create a quick execution script for vaila
+    // Create a more robust execution script for vaila
     SaveStringToFile(ExpandConstant('{app}\run_vaila.ps1'), 
       '# Script to run vaila' + #13#10 +
       '# Automatically created by the installer' + #13#10 + #13#10 +
-      '$condaPath = (& conda info --base).Trim()' + #13#10 +
-      '& "$condaPath\shell\condabin\conda-hook.ps1"' + #13#10 +
-      'conda activate vaila' + #13#10 +
-      'cd "' + ExpandConstant('{app}') + '"' + #13#10 +
-      'python vaila.py' + #13#10,
+      'try {' + #13#10 +
+      '    $condaPath = (& conda info --base).Trim()' + #13#10 +
+      '    & "$condaPath\shell\condabin\conda-hook.ps1"' + #13#10 +
+      '    conda activate vaila' + #13#10 +
+      '    cd "' + ExpandConstant('{app}') + '"' + #13#10 +
+      '    python vaila.py' + #13#10 +
+      '} catch {' + #13#10 +
+      '    Write-Host "Error: Could not start vaila. Please ensure Conda is properly installed." -ForegroundColor Red' + #13#10 +
+      '    Read-Host "Press Enter to exit"' + #13#10 +
+      '}',
       False);
+    
+    // Show completion message
+    MsgBox('vaila has been installed successfully!' + #13#10 + #13#10 +
+           'The installation script will now run to set up the Conda environment.' + #13#10 +
+           'This may take several minutes. Please wait for the process to complete.' + #13#10 + #13#10 +
+           'After installation, you can launch vaila from:' + #13#10 +
+           '- Start Menu > vaila' + #13#10 +
+           '- Desktop shortcut' + #13#10 + #13#10 +
+           'For more information, visit: {#MyAppURL}', mbInformation, MB_OK);
   end;
 end;
+
+[Registry]
+Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{#MyAppName}"; ValueType: string; ValueName: "DisplayName"; ValueData: "{#MyAppName}"; Flags: uninsdeletekey
+Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{#MyAppName}"; ValueType: string; ValueName: "UninstallString"; ValueData: "{uninstallexe}"; Flags: uninsdeletekey
+Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{#MyAppName}"; ValueType: string; ValueName: "DisplayIcon"; ValueData: "{app}\docs\images\vaila_ico.ico"; Flags: uninsdeletekey
+Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{#MyAppName}"; ValueType: string; ValueName: "Publisher"; ValueData: "{#MyAppPublisher}"; Flags: uninsdeletekey
+Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{#MyAppName}"; ValueType: string; ValueName: "URLInfoAbout"; ValueData: "{#MyAppURL}"; Flags: uninsdeletekey
+Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{#MyAppName}"; ValueType: string; ValueName: "DisplayVersion"; ValueData: "{#MyAppVersion}"; Flags: uninsdeletekey
+
+[UninstallDelete]
+Type: filesandordirs; Name: "{app}"
+Type: files; Name: "{userdesktop}\{#MyAppName}.lnk"
+Type: files; Name: "{group}\{#MyAppName}\{#MyAppName}.lnk"
+Type: dirifempty; Name: "{group}\{#MyAppName}"
