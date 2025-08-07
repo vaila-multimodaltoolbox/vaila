@@ -4,8 +4,8 @@ vaila.py
 ===============================================================================
 Author: Prof. Paulo R. P. Santiago
 Date:  07 October 2024
-Update:  08 August 2025
-Version updated: 0.10.9
+Update:  07 August 2025
+Version updated: 0.10.10
 Python Version: 3.12.11
 
 Description:
@@ -135,7 +135,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 08.August.2025 v0.10.9 (Python 3.12.11)
+vailá - 07.August.2025 v0.10.10 (Python 3.12.11)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -234,7 +234,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 08.August.2025 v0.10.9 (Python 3.12.11)")
+        self.title("vailá - 07.August.2025 v0.10.10 (Python 3.12.11)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -1027,7 +1027,7 @@ class Vaila(tk.Tk):
         make_sync_file_btn = tk.Button(
             tools_col2,
             text="Make Sync file",
-            command=self.sync_videos,  # ✅ CORRETO: cria o arquivo de sincronização
+            command=self.sync_videos,  # Creates the synchronization file
             width=button_width,
         )
 
@@ -1104,11 +1104,11 @@ class Vaila(tk.Tk):
 
         # Packing Video buttons
         extract_png_btn.grid(row=0, column=0, padx=2, pady=2)
-        vaila_btn_sync.grid(row=0, column=1, padx=2, pady=2)  # ✅ Substituído por vailá
+        vaila_btn_sync.grid(row=0, column=1, padx=2, pady=2)  # Replaced with vaila
         draw_box_btn.grid(row=0, column=2, padx=2, pady=2)
         compress_videos_h264_btn.grid(row=1, column=0, padx=2, pady=2)
         compress_videos_h265_btn.grid(row=1, column=1, padx=2, pady=2)
-        make_sync_file_btn.grid(row=1, column=2, padx=2, pady=2)  # ✅ Segundo botão
+        make_sync_file_btn.grid(row=1, column=2, padx=2, pady=2)  # Second button
         getpixelvideo_btn.grid(row=2, column=0, padx=2, pady=2)
         count_frames_btn.grid(row=2, column=1, padx=2, pady=2)
         video_processing_btn.grid(row=2, column=2, padx=2, pady=2)
@@ -1895,7 +1895,7 @@ class Vaila(tk.Tk):
         input the sample rate and start and end indices for analysis.
 
         """
-        pass  # Aqui você deve adicionar a lógica para a reconstrução 3D com múltiplos DLTs
+        pass  # Here you should add the logic for 3D reconstruction with multiple DLTs
 
     # C_A_r4_c1 - ReID Marker
     def reid_marker(self):
