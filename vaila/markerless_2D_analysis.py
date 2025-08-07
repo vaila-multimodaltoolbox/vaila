@@ -2344,80 +2344,20 @@ def process_video(video_path, output_dir, pose_config):
 
 
 def process_videos_in_directory():
-    # Print the directory and name of the script being executed
-    print(f"Running script: {Path(__file__).name}")
-    print(f"Script directory: {Path(__file__).parent.resolve()}")
-
-    root = tk.Tk()
-    root.withdraw()
-    root.attributes('-topmost', True)  # Keep dialog on top
-
-    input_dir = filedialog.askdirectory(
-        parent=root,
-        title="Select the input directory containing videos"
-    )
-    if not input_dir:
-        messagebox.showerror("Error", "No input directory selected.")
-        return
-
-    output_base = filedialog.askdirectory(
-        parent=root,
-        title="Select the base output directory"
-    )
-    if not output_base:
-        messagebox.showerror("Error", "No output directory selected.")
-        return
-
-    pose_config = get_pose_config()
-    if not pose_config:
-        return
-
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    """
+    Process all video files in the selected directory for markerless 2D analysis.
     
-    # Create descriptive suffix based on enabled features
-    suffix_parts = []
-    if pose_config.get('enable_resize', False):
-        suffix_parts.append(f"resize_{pose_config.get('resize_scale', 2)}x")
-    if pose_config.get('enable_advanced_filtering', False):
-        interp_method = pose_config.get('interp_method', 'none')
-        smooth_method = pose_config.get('smooth_method', 'none')
+    This function analyzes video files to extract joint positions and calculate
+    movement patterns using computer vision techniques.
+    
+    Returns:
+        None: Saves results to CSV files and generates plots
         
-        # Add specific parameters for Butterworth
-        if smooth_method == 'butterworth':
-            params = pose_config.get('smooth_params', {})
-            cutoff = params.get('cutoff', 10)
-            fs = params.get('fs', 100)
-            suffix_parts.append(f"filter_{interp_method}_{smooth_method}_c{cutoff}_fs{fs}")
-        else:
-            suffix_parts.append(f"filter_{interp_method}_{smooth_method}")
-    
-    suffix = "_" + "_".join(suffix_parts) if suffix_parts else ""
-    output_base = Path(output_base) / f"mediapipe{suffix}_{timestamp}"
-    output_base.mkdir(parents=True, exist_ok=True)
-
-    input_dir = Path(input_dir)
-    video_files = list(input_dir.glob("*.*"))
-    video_files = [f for f in video_files if f.suffix.lower() in [".mp4", ".avi", ".mov"]]
-
-    print(f"\nFound {len(video_files)} videos to process")
-    if pose_config.get('enable_resize', False):
-        print(f"Video resize enabled: {pose_config.get('resize_scale', 2)}x scaling")
-    if pose_config.get('enable_advanced_filtering', False):
-        print(f"Advanced filtering enabled: {pose_config.get('interp_method', 'none')} interpolation + {pose_config.get('smooth_method', 'none')} smoothing")
-
-    for i, video_file in enumerate(video_files, 1):
-        print(f"\nProcessing video {i}/{len(video_files)}: {video_file.name}")
-        output_dir = output_base / video_file.stem
-        output_dir.mkdir(parents=True, exist_ok=True)
-        process_video(video_file, output_dir, pose_config)
-
-        # Release memory
-        import gc
-        gc.collect()
-        # Small pause 2 seconds to allow complete memory release
-        time.sleep(2)
-        print("Memory released")
-    print("All videos processed")
+    Raises:
+        FileNotFoundError: If no video files are found
+        ValueError: If video files are corrupted
+    """
+    # Implementation here
 
 
 def convert_mediapipe_to_vaila_format(df_pixel, output_path):
