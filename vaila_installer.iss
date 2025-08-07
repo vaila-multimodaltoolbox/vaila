@@ -93,15 +93,6 @@ begin
     end;
   end;
   
-  // Check available disk space (require at least 2GB)
-  if GetSpaceOnDisk(ExpandConstant('{app}'), 0) < 2147483648 then // 2GB in bytes
-  begin
-    MsgBox('Insufficient disk space. At least 2GB of free space is required.' + #13#10 +
-           'Please free up some space and try again.', mbError, MB_OK);
-    Result := False;
-    exit;
-  end;
-  
   Result := True;
 end;
 
