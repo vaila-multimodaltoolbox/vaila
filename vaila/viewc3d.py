@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 ================================================================================
 Author: Paulo Santiago
-Version: 0.0.7
+Version: 0.0.8
 Created: 06 February 2025
-Last Updated: 08 August 2025
+Last Updated: 07 August 2025
 
 Description:
 ------------
@@ -75,6 +75,7 @@ from pathlib import Path
 import open3d as o3d
 import ezc3d
 import numpy as np
+from collections import deque
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk, simpledialog
 import time
@@ -84,6 +85,11 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from matplotlib.widgets import Slider, Button
+import subprocess
+import tempfile
+import shutil
+import threading
+import webbrowser
 
 
 def _create_centered_tk_root():
@@ -1053,7 +1059,8 @@ def run_viewc3d():
 
     try:
         vis = o3d.visualization.VisualizerWithKeyCallback()
-        window_created = vis.create_window(window_name=window_title)
+        # Create window with Blender-like aspect (16:9)
+        window_created = vis.create_window(window_name=window_title, width=1280, height=720)
         
         if not window_created:
             print("[red] Failed to create Open3D window[/red]")
@@ -1194,33 +1201,72 @@ def run_viewc3d():
         return
     
     try:
-        # Adaptive camera positioning based on data
-        data_center = np.array([ground_center_x, ground_center_y, (data_z_min + data_z_max) / 2])
-        max_dimension = max(ground_width, ground_height, data_z_max - data_z_min)
-        
-        # Calculate optimal zoom based on data scale
-        if max_dimension > 100:  # Very large scale (soccer field)
-            optimal_zoom = 0.003
-        elif max_dimension > 20:  # Large scale
-            optimal_zoom = 0.02
-        elif max_dimension > 5:   # Medium scale
-            optimal_zoom = 0.1
-        else:                     # Small scale
-            optimal_zoom = 0.3
-        
-        ctr.set_lookat(data_center)
-        ctr.set_front(np.array([0, -1, -0.5]))  # Diagonal view
-        ctr.set_up(np.array([0, 0, 1]))
-        ctr.set_zoom(optimal_zoom)
+        def compute_lookat_extrinsic(eye, center, up):
+            forward = center - eye
+            forward = forward / (np.linalg.norm(forward) + 1e-12)
+            upn = up / (np.linalg.norm(up) + 1e-12)
+            right = np.cross(forward, upn)
+            right = right / (np.linalg.norm(right) + 1e-12)
+            up2 = np.cross(right, forward)
+            R = np.eye(4)
+            R[0, :3] = right
+            R[1, :3] = up2
+            R[2, :3] = -forward
+            T = np.eye(4)
+            T[:3, 3] = -eye
+            return R @ T
 
-        # Improve zoom limits
-        try:
-            ctr.set_constant_z_near(max_dimension * 0.0001)
-            ctr.set_constant_z_far(max_dimension * 1000)
-        except AttributeError:
-            print("[yellow] Advanced zoom controls not available on this Open3D version[/yellow]")
-            
-        print(f"[green] Camera configured for {max_dimension:.1f}m scale (zoom: {optimal_zoom})[/green]")
+        def set_camera_blender_like(view_ctl, center, x_range, y_range, z_range, fov_x_deg=40.0, width=1280, height=720, margin=1.3):
+            params = view_ctl.convert_to_pinhole_camera_parameters()
+            # Intrinsics like Blender 16:9 with ~40° horizontal FOV
+            fov_x = np.deg2rad(fov_x_deg)
+            fx = width / (2.0 * np.tan(fov_x / 2.0))
+            fy = fx  # square pixels
+            params.intrinsic.width = width
+            params.intrinsic.height = height
+            params.intrinsic.set_intrinsics(width, height, fx, fy, width / 2.0, height / 2.0)
+
+            # Vertical FOV implied
+            fov_y = 2.0 * np.arctan((height / 2.0) / fy)
+
+            # Fit both axes
+            half_w = max(x_range, 1e-6) * 0.5
+            half_h = max(y_range, 1e-6) * 0.5
+            dist_x = half_w / np.tan(fov_x / 2.0)
+            dist_y = half_h / np.tan(fov_y / 2.0)
+            base_dist = max(dist_x, dist_y)
+            # Consider vertical spread a bit
+            base_dist = max(base_dist, (z_range * 0.5) / np.tan(fov_y / 3.0))
+            distance = base_dist * margin
+
+            front_dir = np.array([0.0, -1.0, -0.5])
+            front_dir = front_dir / (np.linalg.norm(front_dir) + 1e-12)
+            eye = center - front_dir * distance
+            up = np.array([0.0, 0.0, 1.0])
+            params.extrinsic = compute_lookat_extrinsic(eye, center, up)
+
+            view_ctl.convert_from_pinhole_camera_parameters(params)
+            try:
+                # Generous near/far planes based on scale
+                max_dimension = max(x_range, y_range, z_range, 1.0)
+                view_ctl.set_constant_z_near(max_dimension * 0.0001)
+                view_ctl.set_constant_z_far(max_dimension * 2000.0)
+            except AttributeError:
+                pass
+
+        # Determine center and ranges (include origin to show axes)
+        data_center = np.array([ground_center_x, ground_center_y, (data_z_min + data_z_max) / 2])
+        x_range = ground_width
+        y_range = ground_height
+        z_range = max(0.1, data_z_max - data_z_min)
+
+        # Slightly extend ranges to include origin and give more air
+        x_range = max(x_range, abs(data_center[0]) * 2.0, 1.0)
+        y_range = max(y_range, abs(data_center[1]) * 2.0, 1.0)
+        z_range = max(z_range, abs(data_center[2]) * 2.0, 0.5)
+
+        set_camera_blender_like(ctr, data_center, x_range, y_range, z_range, fov_x_deg=40.0, width=1280, height=720, margin=1.35)
+        print("[green]Camera configured with Blender-like FOV (~40° horiz) and 16:9 aspect[/green]")
             
     except Exception as e:
         print(f"[red] Camera setup failed: {str(e)}[/red]")
@@ -1252,9 +1298,459 @@ def run_viewc3d():
     # Get selected marker names for labeling
     selected_marker_names = [marker_labels[i] for i in selected_indices]
     
+    # ---- Advanced Features State (Trails, Skeleton, Measurements, Capture) ----
+    trails_enabled = [False]
+    trail_length = [120]  # frames
+    trails_positions = [deque(maxlen=trail_length[0]) for _ in range(num_markers)]
+    trails_linesets = [None for _ in range(num_markers)]
+
+    skeleton_connections = []           # list of (idx_a, idx_b) in selected marker indices space
+    skeleton_linesets = []
+
+    measurement_pair = [None, None]     # (idx_a, idx_b)
+    measurement_lineset = [None]
+
+    screenshot_serial = [0]
+
+    def _safe_add_geometry(geometry):
+        try:
+            vis.add_geometry(geometry, reset_bounding_box=False)
+        except Exception as exc:
+            print(f"[yellow]Could not add geometry: {exc}[/yellow]")
+
+    def _safe_remove_geometry(geometry):
+        try:
+            vis.remove_geometry(geometry, reset_bounding_box=False)
+        except Exception:
+            pass
+
+    def _color_map_speed(speeds):
+        """Map speeds (array) to RGB colors (blue->green->red)."""
+        if len(speeds) == 0:
+            return np.zeros((0, 3))
+        v = np.array(speeds)
+        v = np.nan_to_num(v, nan=0.0, posinf=0.0, neginf=0.0)
+        v_min, v_max = float(np.min(v)), float(np.max(v))
+        if v_max - v_min < 1e-9:
+            t = np.zeros_like(v)
+        else:
+            t = (v - v_min) / (v_max - v_min)
+        # simple RGB mapping
+        colors = np.stack([t, 1.0 - np.abs(t - 0.5) * 2.0, 1.0 - t], axis=1)
+        colors = np.clip(colors, 0.0, 1.0)
+        return colors
+
+    def _update_single_trail(marker_index, new_pos):
+        """Append position and update/create its LineSet with per-segment speed color."""
+        if np.isnan(new_pos).any():
+            return
+        trails_positions[marker_index].append(new_pos.copy())
+        positions = np.array(trails_positions[marker_index])
+        if len(positions) < 2:
+            return
+        # Build lines between consecutive positions
+        lines = [[i, i + 1] for i in range(len(positions) - 1)]
+        # Speeds magnitude between segments
+        diffs = np.linalg.norm(np.diff(positions, axis=0), axis=1)
+        colors = _color_map_speed(diffs)
+
+        if trails_linesets[marker_index] is None:
+            ls = o3d.geometry.LineSet()
+            trails_linesets[marker_index] = ls
+            _safe_add_geometry(ls)
+
+        ls = trails_linesets[marker_index]
+        ls.points = o3d.utility.Vector3dVector(positions)
+        ls.lines = o3d.utility.Vector2iVector(np.array(lines, dtype=np.int32))
+        if len(colors) > 0:
+            ls.colors = o3d.utility.Vector3dVector(colors)
+        vis.update_geometry(ls)
+
+    def toggle_trails(_vis_obj):
+        trails_enabled[0] = not trails_enabled[0]
+        if not trails_enabled[0]:
+            # Remove existing trails
+            for ls in trails_linesets:
+                if ls is not None:
+                    _safe_remove_geometry(ls)
+            for i in range(num_markers):
+                trails_linesets[i] = None
+                trails_positions[i].clear()
+            print("\nTrails disabled")
+        else:
+            # Initialize with current frame positions
+            for i in range(num_markers):
+                trails_positions[i].clear()
+                if not np.isnan(points[0, i]).any():
+                    trails_positions[i].append(points[0, i].copy())
+            print(f"\nTrails enabled (length={trail_length[0]} frames)")
+        return False
+
+    def load_skeleton_from_json(_vis_obj):
+        """Load a skeleton connections JSON and draw dynamic lines following markers.
+        Robust name mapping with normalization and first-valid-frame initialization."""
+        nonlocal skeleton_connections, skeleton_linesets
+        root = _create_centered_tk_root()
+        json_file = filedialog.askopenfilename(
+            title="Select skeleton JSON",
+            filetypes=[("JSON Files", "*.json"), ("All Files", "*.*")]
+        )
+        root.destroy()
+        if not json_file:
+            return False
+        try:
+            with open(json_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            conns = data.get("connections", [])
+        except Exception as exc:
+            messagebox.showerror("Error", f"Failed to load JSON: {exc}")
+            return False
+
+        def _norm(s: str) -> str:
+            s = s.strip().lower()
+            # remove separators
+            out = []
+            for ch in s:
+                if ch.isalnum():
+                    out.append(ch)
+            return ''.join(out)
+
+        # Build normalized map from selected names to indices
+        norm_to_indices = {}
+        for idx, name in enumerate(selected_marker_names):
+            n = _norm(name)
+            norm_to_indices.setdefault(n, []).append(idx)
+
+        def _resolve_name(target: str):
+            # Direct pN mapping to original marker index (1-based -> 0-based)
+            t = target.strip()
+            if len(t) >= 2 and (t[0] == 'p' or t[0] == 'P') and t[1:].isdigit():
+                n = int(t[1:])
+                global_idx = n - 1
+                if 0 <= global_idx < len(marker_labels):
+                    try:
+                        # map original index to selected space
+                        sel_pos = selected_indices.index(global_idx)
+                        return sel_pos
+                    except ValueError:
+                        # not selected; cannot map into current points subset
+                        return None
+            nt = _norm(target)
+            # Exact normalized match
+            if nt in norm_to_indices and len(norm_to_indices[nt]) == 1:
+                return norm_to_indices[nt][0]
+            # Heuristic: unique contains match
+            candidates = []
+            for nsel, idcs in norm_to_indices.items():
+                if nt in nsel or nsel in nt:
+                    candidates.extend(idcs)
+            candidates = list(dict.fromkeys(candidates))  # unique order
+            if len(candidates) == 1:
+                return candidates[0]
+            return None
+
+        mapped = []
+        unresolved = []
+        for pair in conns:
+            if not isinstance(pair, (list, tuple)) or len(pair) != 2:
+                continue
+            a, b = str(pair[0]), str(pair[1])
+            ia = _resolve_name(a)
+            ib = _resolve_name(b)
+            if ia is not None and ib is not None:
+                mapped.append((ia, ib))
+            else:
+                unresolved.append((a, b))
+
+        # Remove previous skeleton
+        for ls in skeleton_linesets:
+            _safe_remove_geometry(ls)
+        skeleton_linesets = []
+        skeleton_connections = mapped
+
+        # Create linesets for each connection with first valid frame
+        for (ia, ib) in skeleton_connections:
+            # Find first frame where both are valid
+            init_pts = None
+            for fidx in range(num_frames):
+                pa = points[fidx, ia]
+                pb = points[fidx, ib]
+                if not (np.isnan(pa).any() or np.isnan(pb).any()):
+                    init_pts = np.array([pa, pb])
+                    break
+            if init_pts is None:
+                # No valid data for this pair; skip
+                continue
+            ls = o3d.geometry.LineSet()
+            ls.points = o3d.utility.Vector3dVector(init_pts)
+            ls.lines = o3d.utility.Vector2iVector(np.array([[0, 1]], dtype=np.int32))
+            ls.paint_uniform_color([1.0, 1.0, 1.0])
+            _safe_add_geometry(ls)
+            skeleton_linesets.append(ls)
+
+        print(f"\nLoaded skeleton connections: {len(skeleton_connections)}")
+        if unresolved:
+            print("Unresolved label pairs (no match in selected markers):")
+            for a, b in unresolved[:10]:
+                print(f"  - {a} / {b}")
+            if len(unresolved) > 10:
+                print(f"  ... and {len(unresolved) - 10} more")
+        if not skeleton_linesets:
+            messagebox.showwarning("Skeleton", "No skeleton segments were created. Check marker names in the JSON vs selected markers.")
+        vis.update_renderer()
+        return False
+
+    def _update_skeleton_lines(frame_idx):
+        if not skeleton_linesets:
+            return
+        frame = points[frame_idx]
+        for (ls, (ia, ib)) in zip(skeleton_linesets, skeleton_connections):
+            pa = frame[ia]
+            pb = frame[ib]
+            if np.isnan(pa).any() or np.isnan(pb).any():
+                # keep previous to avoid flicker
+                continue
+            ls.points = o3d.utility.Vector3dVector(np.array([pa, pb]))
+            vis.update_geometry(ls)
+
+    def measure_distance_between_two_markers(_vis_obj):
+        """Prompt two marker names and display/update a measurement line."""
+        nonlocal measurement_pair, measurement_lineset
+        root = _create_centered_tk_root()
+        try:
+            a = simpledialog.askstring(
+                "Distance Measurement",
+                "First marker name (case-sensitive):\n" + ", ".join(selected_marker_names[:30]) + (" ..." if len(selected_marker_names) > 30 else "")
+            )
+            if a is None:
+                return False
+            b = simpledialog.askstring(
+                "Distance Measurement",
+                "Second marker name (case-sensitive):\n" + ", ".join(selected_marker_names[:30]) + (" ..." if len(selected_marker_names) > 30 else "")
+            )
+            if b is None:
+                return False
+        finally:
+            root.destroy()
+
+        name_to_idx = {name: idx for idx, name in enumerate(selected_marker_names)}
+        if a not in name_to_idx or b not in name_to_idx:
+            messagebox.showwarning("Warning", "One or both marker names not found among selected markers.")
+            return False
+        ia, ib = name_to_idx[a], name_to_idx[b]
+        measurement_pair[0], measurement_pair[1] = ia, ib
+
+        # Create or update the measurement line now
+        frame = points[current_frame]
+        pa, pb = frame[ia], frame[ib]
+        if np.isnan(pa).any() or np.isnan(pb).any():
+            print("\nCannot draw measurement: marker position is NaN on current frame")
+            return False
+        if measurement_lineset[0] is None:
+            ls = o3d.geometry.LineSet()
+            measurement_lineset[0] = ls
+            _safe_add_geometry(ls)
+        ls = measurement_lineset[0]
+        ls.points = o3d.utility.Vector3dVector(np.array([pa, pb]))
+        ls.lines = o3d.utility.Vector2iVector(np.array([[0, 1]], dtype=np.int32))
+        ls.paint_uniform_color([1.0, 1.0, 0.0])
+        vis.update_geometry(ls)
+
+        dist = float(np.linalg.norm(pb - pa))
+        print(f"\nDistance {a} - {b}: {dist:.3f} m")
+        return False
+
+    def _update_measurement_line(frame_idx):
+        if measurement_lineset[0] is None or measurement_pair[0] is None:
+            return
+        ia, ib = measurement_pair
+        frame = points[frame_idx]
+        pa, pb = frame[ia], frame[ib]
+        if np.isnan(pa).any() or np.isnan(pb).any():
+            return
+        measurement_lineset[0].points = o3d.utility.Vector3dVector(np.array([pa, pb]))
+        vis.update_geometry(measurement_lineset[0])
+
+    def save_screenshot(_vis_obj):
+        """Save a screenshot PNG next to the C3D file."""
+        out_dir = os.path.dirname(filepath)
+        screenshot_serial[0] += 1
+        out_path = os.path.join(out_dir, f"viewc3d_frame{current_frame:05d}_{screenshot_serial[0]:03d}.png")
+        try:
+            vis.capture_screen_image(out_path, do_render=True)
+            print(f"\nSaved screenshot: {out_path}")
+        except Exception as exc:
+            print(f"\n[red]Failed to save screenshot:[/red] {exc}")
+        return False
+
+    def export_png_sequence(_vis_obj):
+        """Export the whole sequence as PNG images in a chosen directory."""
+        nonlocal current_frame, is_playing
+        root = _create_centered_tk_root()
+        out_dir = filedialog.askdirectory(title="Select output directory for PNG sequence")
+        root.destroy()
+        if not out_dir:
+            return False
+        was_playing = is_playing
+        is_playing = False
+        start_frame = current_frame
+        print(f"\nExporting PNG sequence to: {out_dir}")
+        for fidx in range(num_frames):
+            current_frame = fidx
+            update_spheres(points[current_frame])
+            out_path = os.path.join(out_dir, f"frame_{fidx:05d}.png")
+            try:
+                vis.capture_screen_image(out_path, do_render=True)
+            except Exception as exc:
+                print(f"\n[red]Failed at frame {fidx}:[/red] {exc}")
+                break
+        current_frame = start_frame
+        update_spheres(points[current_frame])
+        is_playing = was_playing
+        print("\nPNG sequence export done")
+        return False
+
+    # --- Blender-like quick views and video export ---
+    def _data_center_for_views():
+        try:
+            return np.array([ground_center_x, ground_center_y, (data_z_min + data_z_max) / 2])
+        except Exception:
+            return np.array([0.0, 0.0, 0.0])
+
+    def view_front(_vis_obj):
+        center = _data_center_for_views()
+        ctr.set_lookat(center)
+        ctr.set_front(np.array([0, -1, 0]))
+        ctr.set_up(np.array([0, 0, 1]))
+        vis.update_renderer()
+        print("\nView: Front")
+        return False
+
+    def view_right(_vis_obj):
+        center = _data_center_for_views()
+        ctr.set_lookat(center)
+        ctr.set_front(np.array([-1, 0, 0]))
+        ctr.set_up(np.array([0, 0, 1]))
+        vis.update_renderer()
+        print("\nView: Right")
+        return False
+
+    def view_top(_vis_obj):
+        center = _data_center_for_views()
+        ctr.set_lookat(center)
+        ctr.set_front(np.array([0, 0, -1]))
+        ctr.set_up(np.array([0, 1, 0]))
+        vis.update_renderer()
+        print("\nView: Top")
+        return False
+
+    def export_video_mp4(_vis_obj):
+        """Export animation to MP4 using ffmpeg (temp PNGs -> MP4)."""
+        nonlocal current_frame, is_playing
+        root = _create_centered_tk_root()
+        default_name = os.path.splitext(os.path.basename(filepath))[0] + "_viewc3d.mp4"
+        out_path = filedialog.asksaveasfilename(
+            title="Save MP4 video",
+            defaultextension=".mp4",
+            initialfile=default_name,
+            filetypes=[("MP4 Video", "*.mp4"), ("All Files", "*.*")]
+        )
+        root.destroy()
+        if not out_path:
+            return False
+        was_playing = is_playing
+        is_playing = False
+        start_frame = current_frame
+        tmp_dir = tempfile.mkdtemp(prefix="viewc3d_frames_")
+        print(f"\nExporting MP4 via ffmpeg → {out_path}")
+        try:
+            for fidx in range(num_frames):
+                current_frame = fidx
+                update_spheres(points[current_frame])
+                png_path = os.path.join(tmp_dir, f"frame_{fidx:05d}.png")
+                vis.capture_screen_image(png_path, do_render=True)
+            # Build ffmpeg command
+            cmd = [
+                "ffmpeg", "-y",
+                "-framerate", str(max(1, int(fps))),
+                "-i", os.path.join(tmp_dir, "frame_%05d.png"),
+                "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18",
+                out_path
+            ]
+            try:
+                subprocess.run(cmd, check=True)
+                print("\nMP4 export finished")
+            except FileNotFoundError:
+                print("\n[red]ffmpeg not found. Install ffmpeg and ensure it is in PATH.[/red]")
+            except subprocess.CalledProcessError as exc:
+                print(f"\n[red]ffmpeg failed:[/red] {exc}")
+        finally:
+            current_frame = start_frame
+            update_spheres(points[current_frame])
+            is_playing = was_playing
+            try:
+                shutil.rmtree(tmp_dir)
+            except Exception:
+                pass
+        return False
+
+    def render_turntable(_vis_obj):
+        """Render a simple turntable MP4 rotating the view around the scene center."""
+        nonlocal is_playing
+        root = _create_centered_tk_root()
+        default_name = os.path.splitext(os.path.basename(filepath))[0] + "_turntable.mp4"
+        out_path = filedialog.asksaveasfilename(
+            title="Save turntable MP4",
+            defaultextension=".mp4",
+            initialfile=default_name,
+            filetypes=[("MP4 Video", "*.mp4"), ("All Files", "*.*")]
+        )
+        root.destroy()
+        if not out_path:
+            return False
+        was_playing = is_playing
+        is_playing = False
+        tmp_dir = tempfile.mkdtemp(prefix="viewc3d_turn_")
+        print(f"\nRendering turntable → {out_path}")
+        frames = 180
+        try:
+            for i in range(frames):
+                # Small horizontal rotate per frame
+                try:
+                    ctr.rotate(10, 0)
+                except Exception:
+                    pass
+                vis.update_renderer()
+                png_path = os.path.join(tmp_dir, f"frame_{i:05d}.png")
+                vis.capture_screen_image(png_path, do_render=True)
+            cmd = [
+                "ffmpeg", "-y",
+                "-framerate", "30",
+                "-i", os.path.join(tmp_dir, "frame_%05d.png"),
+                "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18",
+                out_path
+            ]
+            try:
+                subprocess.run(cmd, check=True)
+                print("\nTurntable export finished")
+            except FileNotFoundError:
+                print("\n[red]ffmpeg not found. Install ffmpeg and ensure it is in PATH.[/red]")
+            except subprocess.CalledProcessError as exc:
+                print(f"\n[red]ffmpeg failed:[/red] {exc}")
+        finally:
+            is_playing = was_playing
+            try:
+                shutil.rmtree(tmp_dir)
+            except Exception:
+                pass
+        return False
+    
     # Frame control variables and callback definitions
     current_frame = 0
     is_playing = False
+    verbose_frame = [False]  # Print per-frame info in console when True
+    playback_rates = [0.1, 0.2, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0]
+    playback_rate_index = [4]  # start at 1.0x
 
     def toggle_grid(_vis_obj):
         """Toggle ground grid visibility"""
@@ -1543,9 +2039,21 @@ def run_viewc3d():
         # Update marker labels if they are visible
         update_marker_labels()
         
-        # Update frame indicator in the terminal
-        frame_info = f"Frame {current_frame+1}/{num_frames}"
-        print(f"\r{frame_info} - Time: {(current_frame/fps):.3f}s", end="", flush=True)
+        # Update trails if enabled
+        if trails_enabled[0]:
+            for i in range(num_markers):
+                _update_single_trail(i, frame_data[i])
+
+        # Update dynamic skeleton
+        _update_skeleton_lines(current_frame)
+
+        # Update measurement line
+        _update_measurement_line(current_frame)
+        
+        # Optional per-frame console info
+        if verbose_frame[0]:
+            frame_info = f"Frame {current_frame+1}/{num_frames}"
+            print(f"\r{frame_info} - Time: {(current_frame/fps):.3f}s", end="", flush=True)
         
         vis.poll_events()
         vis.update_renderer()
@@ -1594,9 +2102,29 @@ def run_viewc3d():
         update_spheres(points[current_frame])
         return False
 
-    def toggle_play(vis_obj):
+    def toggle_play(_vis_obj=None):
         nonlocal is_playing
         is_playing = not is_playing
+        print(f"\nPlay: {'ON' if is_playing else 'PAUSE'}")
+        return False
+
+    def faster_playback(_vis_obj):
+        # Increase playback rate
+        if playback_rate_index[0] < len(playback_rates) - 1:
+            playback_rate_index[0] += 1
+        print(f"\nPlayback rate: {playback_rates[playback_rate_index[0]]}x")
+        return False
+
+    def slower_playback(_vis_obj):
+        # Decrease playback rate
+        if playback_rate_index[0] > 0:
+            playback_rate_index[0] -= 1
+        print(f"\nPlayback rate: {playback_rates[playback_rate_index[0]]}x")
+        return False
+
+    def toggle_verbose(_vis_obj):
+        verbose_frame[0] = not verbose_frame[0]
+        print(f"\nPer-frame console info: {'ON' if verbose_frame[0] else 'OFF'}")
         return False
 
     # Add after the other callback functions
@@ -1692,42 +2220,71 @@ def run_viewc3d():
 
     # Function to reset the camera
     def reset_camera_view(_vis_obj):
-        """Reset camera to default view"""
-        ctr.set_lookat([52.5, 34.0, 0.0])  # Centro do campo
-        ctr.set_front([0, -1, -0.5])
-        ctr.set_up([0, 0, 1])
-        ctr.set_zoom(0.003)  # Zoom para mostrar campo completo
-        print("\nCamera view reset to football field scale")
+        """Reset camera to default view based on data bounds"""
+        # Calculate data center and optimal zoom
+        all_points_data = points.reshape(-1, 3)
+        valid_data_points = all_points_data[~np.isnan(all_points_data).any(axis=1)]
+        
+        if len(valid_data_points) > 0:
+            data_center = np.mean(valid_data_points, axis=0)
+            data_range = np.max(valid_data_points, axis=0) - np.min(valid_data_points, axis=0)
+            max_dimension = np.max(data_range)
+            
+            # Calculate optimal zoom based on data scale
+            if max_dimension > 100:  # Very large scale (soccer field)
+                optimal_zoom = 0.003
+            elif max_dimension > 20:  # Large scale
+                optimal_zoom = 0.02
+            elif max_dimension > 5:   # Medium scale
+                optimal_zoom = 0.1
+            else:                     # Small scale
+                optimal_zoom = 0.3
+        else:
+            data_center = np.array([0, 0, 0])
+            optimal_zoom = 0.1
+        
+        ctr.set_lookat(data_center)
+        ctr.set_front(np.array([0, -1, -0.5]))  # Diagonal view
+        ctr.set_up(np.array([0, 0, 1]))
+        ctr.set_zoom(optimal_zoom)
+        print(f"\nCamera view reset to data center: {data_center}")
         return False
 
     # Add the show_help function and register the shortcut
     def show_help(_vis_obj):
-        """Show help in a matplotlib GUI window"""
-        import matplotlib.pyplot as plt
-        
-        fig, ax = plt.subplots(figsize=(10, 8))
-        ax.set_xlim(0, 10)
-        ax.set_ylim(0, 10)
-        ax.axis('off')
-        
-        # Add title
-        ax.text(5, 9.5, 'C3D VIEWER - KEYBOARD SHORTCUTS', ha='center', va='top', 
-                fontsize=16, fontweight='bold')
-        
-        # Add shortcuts text
-        shortcuts_text = """NAVIGATION:
+        """Open help in the default browser (non-blocking, scrollable)."""
+        # Prefer existing docs if available
+        candidate_paths = [
+            Path(__file__).parent / "help" / "view3d_eng_help.html",
+            Path(__file__).parent / "help" / "view3d_help.html"
+        ]
+        for p in candidate_paths:
+            if p.exists():
+                webbrowser.open(p.as_uri())
+                print(f"\nOpened help: {p}")
+                return False
+        # Fallback: generate a temporary HTML
+        html = """
+        <html><head><meta charset='utf-8'><title>C3D Viewer Help</title></head>
+        <body style='font-family: monospace; white-space: pre-wrap;'>
+        <h3>C3D VIEWER - KEYBOARD SHORTCUTS</h3>
+        NAVIGATION
 ← → - Previous/Next frame
 ↑ ↓ - Forward/Backward 60 frames
+        F/B - Previous/Next frame
 S/E - Jump to start/end
-Space - Play/Pause animation
+        Space or Enter - Play/Pause animation
 
-MARKERS:
-+/= - Increase marker size
+        MARKERS
+        +/-= - Increase marker size
 - - Decrease marker size
 C - Change marker color
 X - Toggle marker labels (names)
+        W - Toggle trails with velocity coloring
+        J - Load skeleton connections from JSON
+        D - Measure distance between two markers
 
-VIEW:
+        VIEW
 T - Change background color
 Y - Change ground plane color
 G - Toggle football field lines
@@ -1735,19 +2292,32 @@ M - Toggle ground grid
 R - Reset camera view
 L - Set view limits
 
-DATA:
+        DATA
 U - Override unit conversion (mm/m)
 
-INFO:
+        INFO
 I - Show frame info
 O - Show camera parameters
-H - Show this help"""
-        
-        ax.text(0.5, 8.5, shortcuts_text, ha='left', va='top', fontsize=11, 
-                fontfamily='monospace')
-        
-        plt.tight_layout()
-        plt.show()
+        H - Show this help
+
+        CAPTURE
+        K - Save screenshot (PNG)
+        Z - Export PNG sequence
+        V - Export MP4 (requires ffmpeg)
+        9 - Render turntable MP4 (requires ffmpeg)
+
+        NUMPAD-LIKE VIEWS
+        1 - Front, 3 - Right, 7 - Top
+
+        PLAYBACK SPEED
+        [ - Slower, ] - Faster (rates: 0.1×, 0.2×, 0.25×, 0.5×, 1×, 2×, 4×, 8×)
+        Q - Toggle per-frame console info
+        </body></html>
+        """
+        tmp = Path(tempfile.gettempdir()) / "viewc3d_help.html"
+        tmp.write_text(html, encoding="utf-8")
+        webbrowser.open(tmp.as_uri())
+        print(f"\nOpened help: {tmp}")
         return False
 
     # Add these missing functions before the callback registrations:
@@ -1865,7 +2435,8 @@ H - Show this help"""
     vis.register_key_callback(ord("B"), backward_60_frames)
 
     # Outros atalhos
-    vis.register_key_callback(ord(" "), toggle_play)
+    vis.register_key_callback(ord(" "), toggle_play)  # Space
+    vis.register_key_callback(257, toggle_play)       # Enter/Return
     vis.register_key_callback(ord("O"), lambda _vis_obj: print(ctr.convert_to_pinhole_camera_parameters().extrinsic))
     vis.register_key_callback(ord("+"), increase_radius)
     vis.register_key_callback(ord("="), increase_radius)
@@ -1883,6 +2454,25 @@ H - Show this help"""
     vis.register_key_callback(ord("G"), toggle_field_lines)  # Field lines
     vis.register_key_callback(ord("M"), toggle_grid)         # Grid visibility
     vis.register_key_callback(ord("X"), toggle_marker_labels)  # Marker labels
+    # New advanced features
+    vis.register_key_callback(ord("W"), toggle_trails)                     # Trails
+    vis.register_key_callback(ord("J"), load_skeleton_from_json)           # Skeleton JSON
+    vis.register_key_callback(ord("D"), measure_distance_between_two_markers)  # Distance
+    vis.register_key_callback(ord("K"), save_screenshot)                   # Screenshot
+    vis.register_key_callback(ord("Z"), export_png_sequence)               # PNG sequence
+    # Blender-like views and video
+    vis.register_key_callback(ord("1"), view_front)   # Front
+    vis.register_key_callback(ord("3"), view_right)   # Right
+    vis.register_key_callback(ord("7"), view_top)     # Top
+    vis.register_key_callback(ord("V"), export_video_mp4)  # MP4 export
+    vis.register_key_callback(ord("9"), render_turntable)  # Turntable render (moved from R)
+    vis.register_key_callback(ord("R"), reset_camera_view) # Reset camera view
+    # Playback speed and verbose toggle
+    vis.register_key_callback(ord("]"), faster_playback)
+    vis.register_key_callback(ord("["), slower_playback)
+    vis.register_key_callback(ord("Q"), toggle_verbose)
+    # Quit (ESC)
+    vis.register_key_callback(256, lambda _v: (vis.destroy_window(), False)[1])
     
     # Add unit conversion override key
     def override_units(_vis_obj):
@@ -2089,6 +2679,10 @@ H - Show this help"""
                 last_time = current_time
         else:
             time.sleep(0.01)  # Small sleep to reduce CPU usage when not playing
+        try:
+            vis.update_renderer()
+        except Exception:
+            pass
     vis.destroy_window()
 
 
