@@ -74,6 +74,8 @@ def play_video_with_controls(video_path, coordinates=None):
     original_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     original_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    vw = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    vh = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = int(cap.get(cv2.CAP_PROP_FPS))
 
     # Initialize Pygame
@@ -818,10 +820,13 @@ def play_video_with_controls(video_path, coordinates=None):
             if ret:
                 frame_count = int(cap.get(cv2.CAP_PROP_POS_FRAMES)) - 1
             else:
-                # End of video reached, restart
-                frame_count = 0
-                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                # End of video reached: stop at last frame and pause (no loop)
+                paused = True
+                frame_count = total_frames - 1
+                cap.set(cv2.CAP_PROP_POS_FRAMES, frame_count)
                 ret, frame = cap.read()
+                if not ret:
+                    break
 
         if not ret:
             break
@@ -1532,7 +1537,7 @@ def play_video_with_controls(video_path, coordinates=None):
     else:
         print("Coordinates were not saved.")
 
-def load_coordinates_from_file(total_frames):
+def load_coordinates_from_file(total_frames, video_width=None, video_height=None):
     root = Tk()
     root.withdraw()
     input_file = filedialog.askopenfilename(
@@ -1545,34 +1550,62 @@ def load_coordinates_from_file(total_frames):
 
     try:
         df = pd.read_csv(input_file)
-        coordinates = {i: [] for i in range(total_frames)}
 
-        # Determinar o número máximo de marcadores no arquivo
-        max_marker = 0
-        for i in range(1, 1001):  # Aumentado limite máximo para 1000 marcadores
-            if f"p{i}_x" in df.columns:
-                max_marker = i
-
-        for _, row in df.iterrows():
-            frame_num = int(row["frame"])
-
-            # Garantir que todos os frames tenham o mesmo número de marcadores
-            for i in range(1, max_marker + 1):
-                x_col = f"p{i}_x"
-                y_col = f"p{i}_y"
-
-                if x_col in df.columns and y_col in df.columns:
-                    # Se x ou y for NaN/vazio, ambos serão considerados None
-                    x_val = row.get(x_col)
-                    y_val = row.get(y_col)
-
+        # Case A: vailá format (frame + pN_x/pN_y)
+        if "frame" in df.columns and any(col.startswith("p") and col.endswith("_x") for col in df.columns):
+            coordinates = {i: [] for i in range(total_frames)}
+            max_marker = 0
+            for i in range(1, 5001):
+                if f"p{i}_x" in df.columns:
+                    max_marker = i
+            for _, row in df.iterrows():
+                frame_num = int(row.get("frame", 0)) if pd.notna(row.get("frame")) else 0
+                pts = []
+                for i in range(1, max_marker + 1):
+                    x_val = row.get(f"p{i}_x")
+                    y_val = row.get(f"p{i}_y")
                     if pd.isna(x_val) or pd.isna(y_val):
-                        coordinates[frame_num].append((None, None))
+                        pts.append((None, None))
                     else:
-                        coordinates[frame_num].append((x_val, y_val))
+                        pts.append((float(x_val), float(y_val)))
+                while pts and (pts[-1][0] is None or pts[-1][1] is None):
+                    pts.pop()
+                coordinates[frame_num] = pts
+            print(f"Coordinates successfully loaded (vailá): {input_file}")
+            return coordinates
 
-        print(f"Coordinates successfully loaded from: {input_file}")
-        return coordinates
+        # Case B: MediaPipe CSV (frame_index + landmark_x/y)
+        if "frame_index" in df.columns and any(col.endswith("_x") for col in df.columns):
+            base_names = sorted({col[:-2] for col in df.columns if col.endswith("_x") and f"{col[:-2]}_y" in df.columns})
+            def _is_normalized(sample_cols):
+                try:
+                    sample_vals = pd.concat([df[c].dropna().head(200) for c in sample_cols])
+                    return (sample_vals.max() <= 1.2) and (sample_vals.min() >= -0.2)
+                except Exception:
+                    return False
+            sample_cols = [f"{base}_x" for base in base_names[:min(5, len(base_names))]]
+            is_norm = _is_normalized(sample_cols)
+            sx = video_width if (is_norm and video_width) else 1.0
+            sy = video_height if (is_norm and video_height) else 1.0
+            coordinates = {i: [] for i in range(total_frames)}
+            for _, row in df.iterrows():
+                frame_num = int(row.get("frame_index", 0))
+                pts = []
+                for base in base_names:
+                    x_val = row.get(f"{base}_x")
+                    y_val = row.get(f"{base}_y")
+                    if pd.notna(x_val) and pd.notna(y_val):
+                        pts.append((float(x_val) * sx, float(y_val) * sy))
+                    else:
+                        pts.append((None, None))
+                while pts and (pts[-1][0] is None or pts[-1][1] is None):
+                    pts.pop()
+                coordinates[frame_num] = pts
+            print(f"Coordinates successfully loaded (MediaPipe): {input_file}")
+            return coordinates
+
+        print(f"Formato de arquivo não reconhecido: {input_file}. Starting fresh.")
+        return {i: [] for i in range(total_frames)}
     except Exception as e:
         print(f"Error loading coordinates from {input_file}: {e}. Starting fresh.")
         return {i: [] for i in range(total_frames)}
@@ -1658,10 +1691,12 @@ def run_getpixelvideo():
         print("Error opening video file.")
         return
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    vw = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    vh = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     cap.release()
 
     if load_existing:
-        coordinates = load_coordinates_from_file(total_frames)
+        coordinates = load_coordinates_from_file(total_frames, vw, vh)
     else:
         coordinates = None
 
