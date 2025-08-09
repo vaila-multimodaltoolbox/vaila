@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D C3D Visualization - vailá</title>
+    <title>C3D Viewer - Keyboard Shortcuts - vailá</title>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -102,164 +102,188 @@
             border-radius: 5px;
             margin: 15px 0;
         }
+        .shortcut-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>3D C3D Visualization - vailá</h1>
+        <h1>C3D Viewer - Keyboard Shortcuts</h1>
         
         <div class="info">
-            <strong>Overview:</strong> This module allows 3D visualization of C3D files using Open3D, with advanced visualization features inspired by Blender and Mokka BTK.
+            <strong>Overview:</strong> Advanced 3D viewer for C3D files with Blender-like features, marker trails, skeleton visualization, and video export capabilities.
         </div>
 
-        <h2>Main Features</h2>
+        <h2>Navigation Controls</h2>
         
-        <div class="feature-highlight">
-            <h3>🎯 Interactive 3D Visualization</h3>
-            <ul>
-                <li>Load and visualize C3D files</li>
-                <li>Interactive interface with keyboard controls</li>
-                <li>Custom marker selection</li>
-                <li>Automatic unit conversion (mm to m)</li>
-            </ul>
-        </div>
+        <div class="shortcut-grid">
+            <div class="module-section">
+                <h3>Frame Navigation</h3>
+                <div class="keyboard-shortcut"><strong>← →</strong> - Previous/Next frame</div>
+                <div class="keyboard-shortcut"><strong>F/B</strong> - Previous/Next frame (alternative)</div>
+                <div class="keyboard-shortcut"><strong>↑ ↓</strong> - Forward/Backward 60 frames</div>
+                <div class="keyboard-shortcut"><strong>S/E</strong> - Jump to start/end</div>
+                <div class="keyboard-shortcut"><strong>Space or Enter</strong> - Play/Pause animation</div>
+            </div>
 
-        <div class="feature-highlight">
-            <h3>🏟️ Adaptive Field System</h3>
-            <ul>
-                <li>Ground plane always positioned at Z=0</li>
-                <li>Adaptive grid based on data boundaries</li>
-                <li>Custom field lines via CSV</li>
-                <li>Enhanced coordinate system</li>
-            </ul>
-        </div>
-
-        <h2>How to Use</h2>
-        
-        <div class="step">
-            <h3>1. Run the Script</h3>
-            <div class="code-block">
-python vaila/viewc3d.py
+            <div class="module-section">
+                <h3>Camera Views</h3>
+                <div class="keyboard-shortcut"><strong>1</strong> - Front view</div>
+                <div class="keyboard-shortcut"><strong>3</strong> - Right view</div>
+                <div class="keyboard-shortcut"><strong>7</strong> - Top view</div>
+                <div class="keyboard-shortcut"><strong>R</strong> - Reset camera view</div>
+                <div class="keyboard-shortcut"><strong>L</strong> - Set custom view limits</div>
             </div>
         </div>
 
-        <div class="step">
-            <h3>2. Select C3D File</h3>
-            <ul>
-                <li>A dialog window will open to select the C3D file</li>
-                <li>The script will automatically detect units (mm/m)</li>
-                <li>You can confirm or change the unit conversion</li>
-            </ul>
+        <h2>Marker Controls</h2>
+        
+        <div class="shortcut-grid">
+            <div class="module-section">
+                <h3>Marker Appearance</h3>
+                <div class="keyboard-shortcut"><strong>+ /=</strong> - Increase marker size</div>
+                <div class="keyboard-shortcut"><strong>-</strong> - Decrease marker size</div>
+                <div class="keyboard-shortcut"><strong>C</strong> - Change marker color</div>
+                <div class="keyboard-shortcut"><strong>X</strong> - Toggle marker labels</div>
+            </div>
+
+            <div class="module-section">
+                <h3>Advanced Features</h3>
+                <div class="keyboard-shortcut"><strong>W</strong> - Toggle trails with velocity coloring</div>
+                <div class="keyboard-shortcut"><strong>J</strong> - Load skeleton connections from JSON</div>
+                <div class="keyboard-shortcut"><strong>D</strong> - Measure distance between two markers</div>
+            </div>
         </div>
 
-        <div class="step">
-            <h3>3. Select Markers</h3>
-            <ul>
-                <li>Choose which markers you want to visualize</li>
-                <li>You can select all or specific markers only</li>
-                <li>Markers will be displayed as colored spheres</li>
-            </ul>
+        <h2>Visual Controls</h2>
+        
+        <div class="shortcut-grid">
+            <div class="module-section">
+                <h3>Background & Ground</h3>
+                <div class="keyboard-shortcut"><strong>T</strong> - Change background color</div>
+                <div class="keyboard-shortcut"><strong>Y</strong> - Change ground plane color</div>
+                <div class="keyboard-shortcut"><strong>M</strong> - Toggle ground grid</div>
+                <div class="keyboard-shortcut"><strong>G</strong> - Toggle football field lines</div>
+            </div>
+
+            <div class="module-section">
+                <h3>Information</h3>
+                <div class="keyboard-shortcut"><strong>I</strong> - Show frame info</div>
+                <div class="keyboard-shortcut"><strong>O</strong> - Show camera parameters</div>
+                <div class="keyboard-shortcut"><strong>H</strong> - Show this help</div>
+                <div class="keyboard-shortcut"><strong>U</strong> - Override unit conversion (mm/m)</div>
+            </div>
         </div>
 
-        <h2>Keyboard Controls</h2>
+        <h2>Capture & Export</h2>
+        
+        <div class="shortcut-grid">
+            <div class="module-section">
+                <h3>Screenshots & Images</h3>
+                <div class="keyboard-shortcut"><strong>K</strong> - Save screenshot (PNG)</div>
+                <div class="keyboard-shortcut"><strong>Z</strong> - Export PNG sequence</div>
+            </div>
+
+            <div class="module-section">
+                <h3>Video Export</h3>
+                <div class="keyboard-shortcut"><strong>V</strong> - Export MP4 (requires ffmpeg)</div>
+                <div class="keyboard-shortcut"><strong>9</strong> - Render turntable MP4 (requires ffmpeg)</div>
+            </div>
+        </div>
+
+        <h2>Playback Speed</h2>
         
         <div class="module-section">
-            <h3>Basic Controls</h3>
-            <div class="keyboard-shortcut"><strong>L</strong> - Set view limits (with adaptive ground plane)</div>
-            <div class="keyboard-shortcut"><strong>R</strong> - Reset view</div>
-            <div class="keyboard-shortcut"><strong>H</strong> - Show help</div>
-            <div class="keyboard-shortcut"><strong>Q</strong> - Quit</div>
+            <div class="keyboard-shortcut"><strong>[</strong> - Slower playback</div>
+            <div class="keyboard-shortcut"><strong>]</strong> - Faster playback</div>
+            <div class="keyboard-shortcut"><strong>Q</strong> - Toggle per-frame console info</div>
+            <div class="info">
+                <strong>Available speeds:</strong> 0.1×, 0.2×, 0.25×, 0.5×, 1×, 2×, 4×, 8×
+            </div>
         </div>
 
+        <h2>Mouse Controls</h2>
+        
         <div class="module-section">
-            <h3>Advanced Controls</h3>
-            <div class="keyboard-shortcut"><strong>F</strong> - Load custom field lines (CSV)</div>
-            <div class="keyboard-shortcut"><strong>Mouse</strong> - Rotate, zoom and pan in the visualization</div>
+            <div class="keyboard-shortcut"><strong>Left Drag</strong> - Rotate view</div>
+            <div class="keyboard-shortcut"><strong>Middle/Right Drag</strong> - Pan view</div>
+            <div class="keyboard-shortcut"><strong>Mouse Wheel</strong> - Zoom in/out</div>
         </div>
 
         <h2>Advanced Features</h2>
 
-        <h3>Custom Field Lines</h3>
+        <div class="feature-highlight">
+            <h3>🎯 Marker Trails (W key)</h3>
+            <ul>
+                <li>Visualize historical marker positions</li>
+                <li>Color-coded by velocity magnitude</li>
+                <li>Configurable trail length</li>
+                <li>Real-time updates during playback</li>
+            </ul>
+        </div>
+
+        <div class="feature-highlight">
+            <h3>🦴 Skeleton Visualization (J key)</h3>
+            <ul>
+                <li>Load skeleton connections from JSON files</li>
+                <li>Support for MediaPipe pN naming convention</li>
+                <li>Dynamic line segments between markers</li>
+                <li>Automatic name mapping and validation</li>
+            </ul>
+        </div>
+
+        <div class="feature-highlight">
+            <h3>📏 Distance Measurement (D key)</h3>
+            <ul>
+                <li>Interactive distance measurement between markers</li>
+                <li>Real-time distance display</li>
+                <li>Visual line connecting selected markers</li>
+                <li>Distance updates during animation</li>
+            </ul>
+        </div>
+
+        <div class="feature-highlight">
+            <h3>🎬 Video Export</h3>
+            <ul>
+                <li><strong>V key:</strong> Export full animation as MP4</li>
+                <li><strong>9 key:</strong> Create turntable video (360° rotation)</li>
+                <li>Requires ffmpeg installation</li>
+                <li>High-quality video output</li>
+            </ul>
+        </div>
+
+        <h2>JSON Skeleton Format</h2>
+        
         <div class="info">
-            You can create CSV files with custom field lines. The format should include:
+            Example skeleton JSON for MediaPipe pose landmarks:
         </div>
         
         <div class="file-format">
-line_id,x1,y1,z1,x2,y2,z2,color_r,color_g,color_b,description
-1,-50,0,0,50,0,0,1,0,0,center_line_red
-2,0,-30,0,0,30,0,0,1,0,center_line_green
+{
+  "schema": "mediapipe_pose_33_pn",
+  "note": "pN is 1-based (p1=nose, p12=right_shoulder, p11=left_shoulder)",
+  "connections": [
+    ["p1","p2"], ["p1","p5"], ["p2","p3"], ["p3","p4"],
+    ["p11","p12"], ["p11","p23"], ["p12","p24"], ["p23","p24"],
+    ["p11","p13"], ["p12","p14"], ["p13","p15"], ["p14","p16"]
+  ]
+}
         </div>
 
-        <div class="warning">
-            <strong>Note:</strong> Coordinates must be in the same unit system as the C3D data.
-        </div>
-
-        <h3>Enhanced Coordinate System</h3>
-        <ul>
-            <li>Colored axes (Red=X, Green=Y, Blue=Z)</li>
-            <li>Spheres at axis endpoints</li>
-            <li>Adaptive scale based on data</li>
-        </ul>
-
-        <h3>Adaptive Ground Plane</h3>
-        <ul>
-            <li>Always positioned at Z=0</li>
-            <li>Dimensions adjusted to data boundaries</li>
-            <li>Adaptive grid spacing</li>
-        </ul>
-
-        <h2>Inspirations and Improvements</h2>
-        
-        <div class="info">
-            This module incorporates visualization concepts from Blender and Mokka BTK:
-        </div>
-        
-        <ul>
-            <li><strong>Blender:</strong> Adaptive grid, flexible line drawing, robust coordinate system</li>
-            <li><strong>Mokka BTK:</strong> Enhanced coordinate system, annotations, biomechanical visualization</li>
-        </ul>
-
-        <h2>Usage Example</h2>
-        
-        <div class="step">
-            <h3>Motion Data Visualization</h3>
-            <ol>
-                <li>Run the script</li>
-                <li>Select a C3D file with motion data</li>
-                <li>Confirm unit conversion (mm → m)</li>
-                <li>Select desired markers</li>
-                <li>Use 'L' to adjust view limits</li>
-                <li>Use 'F' to load field lines (optional)</li>
-                <li>Navigate the 3D visualization with mouse</li>
-            </ol>
-        </div>
-
-        <h2>Example Files</h2>
-        
-        <div class="info">
-            Example files are available at:
-        </div>
-        
-        <ul>
-            <li><strong>Field lines:</strong> <code>tests/custom_field_lines_example.csv</code></li>
-            <li><strong>Soccer field:</strong> <code>tests/sport_fields/soccerfield_ref3d.csv</code></li>
-        </ul>
-
-        <h2>Troubleshooting</h2>
+        <h2>Performance Tips</h2>
         
         <div class="warning">
-            <strong>Problem:</strong> Visualization doesn't appear<br>
-            <strong>Solution:</strong> Check if Open3D is installed: <code>pip install open3d</code>
-        </div>
-        
-        <div class="warning">
-            <strong>Problem:</strong> Ground plane in incorrect position<br>
-            <strong>Solution:</strong> Use 'L' key to reset view limits
-        </div>
-        
-        <div class="warning">
-            <strong>Problem:</strong> CSV file doesn't load<br>
-            <strong>Solution:</strong> Check CSV format and if coordinates are correct
+            <strong>For large datasets:</strong>
+            <ul>
+                <li>Use 'Q' to disable per-frame console output</li>
+                <li>Reduce marker size with '-' key</li>
+                <li>Hide marker labels with 'X' key</li>
+                <li>Disable trails with 'W' key</li>
+            </ul>
         </div>
 
         <h2>Dependencies</h2>
@@ -269,36 +293,38 @@ open3d>=0.17.0
 numpy>=1.21.0
 pandas>=1.3.0
 matplotlib>=3.5.0
-tkinter (included in Python)
+ezc3d>=1.0.0
+rich>=10.0.0
+ffmpeg (for video export)
         </div>
 
         <div class="info">
             <strong>Note:</strong> If Open3D is not available, the script will use Matplotlib as an alternative.
         </div>
 
-        <h2>Technical Details</h2>
+        <h2>Recent Updates</h2>
         
-        <h3>Bug Fixes</h3>
-        <ul>
-            <li><strong>Ground Plane Bug:</strong> Fixed issue where ground plane was drawn above or below Z=0 when using 'L' key</li>
-            <li><strong>Coordinate System:</strong> Enhanced with colored axes and endpoint markers</li>
-            <li><strong>Adaptive Scaling:</strong> Ground grid and coordinate system now scale based on data boundaries</li>
-        </ul>
+        <div class="step">
+            <h3>✅ Fixed Issues</h3>
+            <ul>
+                <li><strong>Play/Pause:</strong> Space and Enter keys now work correctly</li>
+                <li><strong>Camera Reset:</strong> R key now resets to data center with adaptive zoom</li>
+                <li><strong>Frame Navigation:</strong> F/B keys now do single-step navigation</li>
+                <li><strong>Playback Speed:</strong> [ and ] keys now properly control speed</li>
+                <li><strong>Window Closing:</strong> ESC key and window click now close properly</li>
+            </ul>
+        </div>
 
-        <h3>New Features</h3>
-        <ul>
-            <li><strong>Custom Field Lines:</strong> Load line segments from CSV files with individual colors</li>
-            <li><strong>Adaptive Ground System:</strong> Ground plane and grid that adjust to data scale</li>
-            <li><strong>Enhanced Coordinate System:</strong> More robust visualization with color-coded axes</li>
-            <li><strong>Keyboard Shortcuts:</strong> New 'F' key for loading custom field lines</li>
-        </ul>
-
-        <h3>Performance Improvements</h3>
-        <ul>
-            <li>Better memory management for large datasets</li>
-            <li>Optimized rendering for complex scenes</li>
-            <li>Improved user interface responsiveness</li>
-        </ul>
+        <div class="step">
+            <h3>🆕 New Features</h3>
+            <ul>
+                <li><strong>Marker Trails:</strong> Visualize movement history with velocity coloring</li>
+                <li><strong>Skeleton Loading:</strong> Load and visualize skeleton connections from JSON</li>
+                <li><strong>Distance Measurement:</strong> Interactive distance measurement between markers</li>
+                <li><strong>Video Export:</strong> Export animations and turntable videos</li>
+                <li><strong>Blender-like Views:</strong> Front, Right, Top views with numpad-style keys</li>
+            </ul>
+        </div>
     </div>
 </body>
 </html> 
