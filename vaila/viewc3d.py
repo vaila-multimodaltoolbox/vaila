@@ -88,7 +88,6 @@ from matplotlib.widgets import Slider, Button
 import subprocess
 import tempfile
 import shutil
-import threading
 import webbrowser
 
 
@@ -301,11 +300,17 @@ def load_c3d_file():
         fps: frames per second (Hz).
         marker_labels: list of marker labels.
     """
-    root = _create_centered_tk_root()
-    filepath = filedialog.askopenfilename(
-        title="Select a C3D file", filetypes=[("C3D Files", "*.c3d")]
-    )
-    root.destroy()
+    # Allow bypassing dialog via environment variable for automated tests
+    env_path = os.environ.get("VIEWC3D_FILE", "").strip()
+    if env_path and os.path.exists(env_path):
+        filepath = env_path
+        print(f"[cyan]Using C3D file from VIEWC3D_FILE:[/cyan] {filepath}")
+    else:
+        root = _create_centered_tk_root()
+        filepath = filedialog.askopenfilename(
+            title="Select a C3D file", filetypes=[("C3D Files", "*.c3d")]
+        )
+        root.destroy()
     if not filepath:
         print("No file was selected. Exiting.")
         exit(0)
@@ -440,6 +445,11 @@ def select_markers(marker_labels, c3d_filepath=None):
     Returns:
         List of selected marker indices.
     """
+    # Non-interactive bypass for automated runs
+    env_sel = os.environ.get("VIEWC3D_MARKERS", "").strip().lower()
+    if env_sel == "all":
+        return list(range(len(marker_labels)))
+
     root = tk.Tk()
     root.title("Select Markers to Display")
     root.geometry("600x500")
@@ -1152,6 +1162,8 @@ def run_viewc3d():
         ground_y_min, ground_y_max = -10, 10
         ground_z = 0
         grid_spacing = 1.0
+        # Ensure max_range is defined for later usage (e.g., corner X markers sizing)
+        max_range = max(ground_x_max - ground_x_min, ground_y_max - ground_y_min)
     
     # Create adaptive ground plane
     ground_width = ground_x_max - ground_x_min
@@ -1620,7 +1632,7 @@ def run_viewc3d():
     def view_front(_vis_obj):
         center = _data_center_for_views()
         ctr.set_lookat(center)
-        ctr.set_front(np.array([0, -1, 0]))
+        ctr.set_front(np.array([0, 1, 0]))
         ctr.set_up(np.array([0, 0, 1]))
         vis.update_renderer()
         print("\nView: Front")
@@ -1629,7 +1641,7 @@ def run_viewc3d():
     def view_right(_vis_obj):
         center = _data_center_for_views()
         ctr.set_lookat(center)
-        ctr.set_front(np.array([-1, 0, 0]))
+        ctr.set_front(np.array([1, 0, 0]))
         ctr.set_up(np.array([0, 0, 1]))
         vis.update_renderer()
         print("\nView: Right")
@@ -1638,7 +1650,7 @@ def run_viewc3d():
     def view_top(_vis_obj):
         center = _data_center_for_views()
         ctr.set_lookat(center)
-        ctr.set_front(np.array([0, 0, -1]))
+        ctr.set_front(np.array([0, 0, 1]))
         ctr.set_up(np.array([0, 1, 0]))
         vis.update_renderer()
         print("\nView: Top")
@@ -1984,6 +1996,8 @@ def run_viewc3d():
             
             # Position at the current frame position
             current_pos = points[current_frame][i]
+            if np.isnan(current_pos).any():
+                current_pos = np.zeros(3)
             new_sphere.vertices = o3d.utility.Vector3dVector(base_vertices + current_pos)
             new_sphere.paint_uniform_color(available_colors[current_color_index][0])
             
@@ -2032,6 +2046,9 @@ def run_viewc3d():
     def update_spheres(frame_data):
         for i, sphere in enumerate(spheres):
             new_pos = frame_data[i]
+            # Skip update if the new position is invalid to avoid corrupting geometry
+            if np.isnan(new_pos).any():
+                continue
             new_vertices = spheres_bases[i] + new_pos
             sphere.vertices = o3d.utility.Vector3dVector(new_vertices)
             vis.update_geometry(sphere)
@@ -2392,9 +2409,9 @@ O - Show camera parameters
         
         # Adjust grid color based on background to maintain contrast
         if sum(new_bg_color) < 1.5:  # Dark background
-            grid.paint_uniform_color([0.8, 0.8, 0.8])  # Grid claro
+            grid.paint_uniform_color([0.8, 0.8, 0.8])  # Light grid
         else:  # Light background
-            grid.paint_uniform_color([0.2, 0.2, 0.2])  # Grid escuro
+            grid.paint_uniform_color([0.2, 0.2, 0.2])  # Dark grid
             
         vis.update_geometry(grid)
         
@@ -2420,21 +2437,21 @@ O - Show camera parameters
         return False
 
     # Register all shortcuts
-    # Setas esquerda/direita para frame anterior/próximo
-    vis.register_key_callback(262, next_frame)      # Seta direita (→)
-    vis.register_key_callback(263, previous_frame)  # Seta esquerda (←)
+    # Left/right arrows for previous/next frame
+    vis.register_key_callback(262, next_frame)      # Right arrow (→)
+    vis.register_key_callback(263, previous_frame)  # Left arrow (←)
 
-    # Setas cima/baixo para +60/-60 frames
-    vis.register_key_callback(264, backward_60_frames)  # Seta baixo (↓) - volta 60
-    vis.register_key_callback(265, forward_60_frames)   # Seta cima (↑) - avança 60
+    # Arrows up/down for +60/-60 frames
+    vis.register_key_callback(264, backward_60_frames)  # Down arrow (↓) - go back 60
+    vis.register_key_callback(265, forward_60_frames)   # Up arrow (↑) - go forward 60
 
-    # Manter as teclas N/P e F/B como alternativas
+    # Keep N/P and F/B as alternatives
     vis.register_key_callback(ord("N"), next_frame)
     vis.register_key_callback(ord("P"), previous_frame)
     vis.register_key_callback(ord("F"), forward_60_frames)
     vis.register_key_callback(ord("B"), backward_60_frames)
 
-    # Outros atalhos
+    # Other shortcuts
     vis.register_key_callback(ord(" "), toggle_play)  # Space
     vis.register_key_callback(257, toggle_play)       # Enter/Return
     vis.register_key_callback(ord("O"), lambda _vis_obj: print(ctr.convert_to_pinhole_camera_parameters().extrinsic))
@@ -2445,9 +2462,9 @@ O - Show camera parameters
     vis.register_key_callback(ord("S"), jump_to_start)
     vis.register_key_callback(ord("E"), jump_to_end)
     
-    # Novos atalhos para cores e funcionalidades
-    vis.register_key_callback(ord("T"), toggle_background_advanced)  # Background colorido
-    vis.register_key_callback(ord("Y"), change_ground_color)         # Ground plane colorido
+    # New shortcuts for colors and features
+    vis.register_key_callback(ord("T"), toggle_background_advanced)  # Background colored
+    vis.register_key_callback(ord("Y"), change_ground_color)         # Ground plane colored
     vis.register_key_callback(ord("L"), set_view_limits)
     vis.register_key_callback(ord("I"), show_frame_info)
     vis.register_key_callback(ord("H"), show_help)
@@ -2482,16 +2499,17 @@ O - Show camera parameters
         user_choice = ask_user_units_c3d()
         
         if user_choice == 'mm':
-            # Convert from meters back to mm, then to meters (effectively *1000 then *0.001 = *1)
-            # But first we need to "undo" the previous conversion if it was done
-            print("[yellow]Converting data assuming current data is in millimeters...[/yellow]")
-            points = points * 0.001  # Assuming current is mm, convert to meters
-            
+            # Interpret current data as millimeters and convert to meters
+            print("[yellow]Applying unit override: interpreting current data as millimeters → converting to meters[/yellow]")
+            points = points * 0.001
         elif user_choice == 'm':
-            # Convert from mm to meters (multiply by 1000 then by 0.001)
-            print("[yellow]Converting data assuming current data is in meters...[/yellow]")
-            points = points * 1000 * 0.001  # This keeps it the same but for demonstration
-            
+            # Interpret current data as meters; no scaling needed
+            print("[yellow]Applying unit override: interpreting current data as meters (no scaling)[/yellow]")
+        else:
+            # Keep as is if user kept auto
+            print("[yellow]Unit override cancelled or auto-selected; keeping current scaling[/yellow]")
+            return False
+        
         # Recreate spheres with new positions
         for i in range(num_markers):
             vis.remove_geometry(spheres[i], reset_bounding_box=False)
@@ -2660,7 +2678,7 @@ O - Show camera parameters
 
     # --- End of Field Drawing Logic ---
 
-    # Atualizar o título da janela
+    # Update window title
     window_title = (
         f"C3D Viewer | File: {file_name} | Markers: {num_markers}/{total_markers} | Frames: {num_frames} | FPS: {fps} | "
         "Keys: [←→: Frame, ↑↓: 60 Frames, C: Color, X: Labels, M: Grid, G: Field, H: Help] | "
@@ -2756,19 +2774,19 @@ def load_field_lines_from_csv():
             y_min, y_max = points_array[:, 1].min(), points_array[:, 1].max()
             z_min, z_max = points_array[:, 2].min(), points_array[:, 2].max()
             
-            # Calcular centro e escala
+            # Calculate center and scale
             center_x = (x_min + x_max) / 2
             center_y = (y_min + y_max) / 2
             center_z = (z_min + z_max) / 2
             
-            # Calcular range máximo para determinar zoom apropriado
+            # Calculate maximum range to determine appropriate zoom
             x_range = x_max - x_min
             y_range = y_max - y_min
             z_range = z_max - z_min
             max_range = max(x_range, y_range, z_range)
             
-            # Calcular zoom baseado no tamanho dos dados
-            # Para um campo de futebol (105m), zoom ~0.003 funciona bem
+            # Calculate zoom based on data size
+            # For a football field (105m), zoom ~0.003 works well
             optimal_zoom = 0.3 / max_range if max_range > 0 else 0.003
             optimal_zoom = max(0.001, min(optimal_zoom, 0.1))  # Limitar entre 0.001 e 0.1
             
@@ -2787,12 +2805,12 @@ def create_football_field_lines(ground_level=0):
     lines_points = []
     lines_indices = []
     
-    # Campo oficial: 105m x 68m
+    # Official field: 105m x 68m
     field_length = 105.0
     field_width = 68.0
     
-    # Apenas as linhas básicas do campo
-    # Retângulo externo
+    # Only the basic field lines
+    # Outer rectangle
     corners = [
         [-field_length/2, -field_width/2, ground_level + 0.001],  # Slightly above ground
         [field_length/2, -field_width/2, ground_level + 0.001],
@@ -2804,12 +2822,12 @@ def create_football_field_lines(ground_level=0):
         lines_points.append(corners[i])
         lines_indices.append([i, (i + 1) % len(corners)])
     
-    # Linha do meio
+    # Middle line
     lines_points.extend([[0, -field_width/2, ground_level + 0.001], 
                         [0, field_width/2, ground_level + 0.001]])
     lines_indices.append([len(lines_points)-2, len(lines_points)-1])
     
-    # Criar LineSet
+    # Create LineSet
     field_lines = o3d.geometry.LineSet(
         points=o3d.utility.Vector3dVector(lines_points),
         lines=o3d.utility.Vector2iVector(lines_indices)
