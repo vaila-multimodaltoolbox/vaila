@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 25 July 2025
-Version: 0.5.0
+Update Date: 9 August 2025
+Version: 0.5.1
 
 Description:
 This script performs batch processing of videos for 2D pose estimation using
@@ -90,6 +90,7 @@ from mediapipe.framework.formats import landmark_pb2
 import pandas as pd
 import tempfile
 import platform
+import shutil
 import psutil
 import gc
 
@@ -2110,6 +2111,8 @@ def process_video(video_path, output_dir, pose_config):
         columns.extend([f"{name}_x", f"{name}_y", f"{name}_z"])
     df_norm = pd.DataFrame(df_norm_data, columns=columns)
     df_pixel = pd.DataFrame(df_pixel_data, columns=columns)
+    # Keep an unfiltered copy for optional RAW vailá export
+    df_pixel_unfiltered = df_pixel.copy()
 
     # Apply advanced filtering and smoothing if enabled (COM PADDING)
     if pose_config.get('enable_advanced_filtering', False):
@@ -2138,6 +2141,12 @@ def process_video(video_path, output_dir, pose_config):
         df_norm['frame_index'] = df_norm.index
         df_pixel['frame_index'] = df_pixel.index
         print(f"After removal: {len(df_norm)} frames")
+        # Remove padding from unfiltered as well to keep alignment
+        try:
+            df_pixel_unfiltered = df_pixel_unfiltered.iloc[pad_start_frames:].reset_index(drop=True)
+            df_pixel_unfiltered['frame_index'] = df_pixel_unfiltered.index
+        except Exception:
+            pass
     else:
         print("No padding frames to remove from filtered results")
 
@@ -2149,21 +2158,32 @@ def process_video(video_path, output_dir, pose_config):
     # Always convert pixel coordinates to original size if resize was used
     if enable_resize and resize_metadata:
         df_pixel_original = convert_coordinates_to_original(df_pixel, resize_metadata)
+        df_pixel_unfiltered_original = convert_coordinates_to_original(df_pixel_unfiltered, resize_metadata)
     else:
         df_pixel_original = df_pixel
+        df_pixel_unfiltered_original = df_pixel_unfiltered
 
     # Save only the pixel CSV in original size
     df_pixel_original.to_csv(output_pixel_file_path, index=False)
     print(f"Saved: {output_file_path} (normalized)")
     print(f"Saved: {output_pixel_file_path} (pixel, original size)")
 
-    # Convert and save in vailá format
+    # Convert and save in vailá format (filtered as primary)
     vaila_file_path = output_dir / f"{video_path.stem}_mp_vaila.csv"
     success = convert_mediapipe_to_vaila_format(df_pixel_original, vaila_file_path)
     if success:
         print(f"Saved: {vaila_file_path} (vailá format)")
     else:
         print("Warning: Failed to save vailá format file")
+
+    # If advanced filtering was applied, also export RAW (unfiltered) vailá
+    if pose_config.get('enable_advanced_filtering', False):
+        vaila_raw_path = output_dir / f"{video_path.stem}_mp_vaila_raw.csv"
+        success_raw = convert_mediapipe_to_vaila_format(df_pixel_unfiltered_original, vaila_raw_path)
+        if success_raw:
+            print(f"Saved: {vaila_raw_path} (vailá RAW, unfiltered)")
+        else:
+            print("Warning: Failed to save vailá RAW file")
 
     # If smoothing/filtering was applied, save an extra CSV for smoothed pixel and norm data
     if pose_config.get('enable_advanced_filtering', False) and pose_config.get('smooth_method', 'none') != 'none':
@@ -2215,7 +2235,7 @@ def process_video(video_path, output_dir, pose_config):
 
         if frame_idx % 30 == 0:
             progress = (frame_idx / total_frames) * 100
-            print(f"\rGenerating video {frame_idx}/{total_frames} ({progress:.1f}%)", end="")
+            print(f"\r Generating video {frame_idx}/{total_frames} ({progress:.1f}%)", end="")
 
         # Get processed landmarks for this frame from DataFrame
         if frame_idx < len(df_pixel):
@@ -2271,6 +2291,32 @@ def process_video(video_path, output_dir, pose_config):
     # Close resources
     cap.release()
     out.release()
+
+    # Optionally create an H.264 copy for wider compatibility (if ffmpeg is available)
+    try:
+        ffmpeg_path = shutil.which('ffmpeg')
+        if ffmpeg_path:
+            h264_path = output_dir / f"{video_path.stem}_mp_h264.mp4"
+            cmd = [
+                ffmpeg_path,
+                '-y',
+                '-i', str(output_video_path),
+                '-c:v', 'libx264',
+                '-preset', 'veryfast',
+                '-crf', '18',
+                '-pix_fmt', 'yuv420p',
+                str(h264_path)
+            ]
+            import subprocess as _sub
+            _sub.run(cmd, check=False, capture_output=True)
+            if h264_path.exists():
+                print(f"Created H.264 copy for compatibility: {h264_path}")
+            else:
+                print("ffmpeg did not produce H.264 copy; keeping mp4v only.")
+        else:
+            print("ffmpeg not found in PATH. Keeping mp4v video only.")
+    except Exception as _e:
+        print(f"Warning: Could not create H.264 copy: {_e}")
 
     # Clean up temporary files
     if temp_resized_video and os.path.exists(temp_resized_video):
@@ -2357,7 +2403,100 @@ def process_videos_in_directory():
         FileNotFoundError: If no video files are found
         ValueError: If video files are corrupted
     """
-    # Implementation here
+    print(f"Running script: {Path(__file__).name}")
+    print(f"Script directory: {Path(__file__).parent.resolve()}")
+
+    # Create minimal Tk root for dialogs
+    root = tk.Tk()
+    root.withdraw()
+    # Keep dialogs on top (as before)
+    try:
+        root.attributes('-topmost', True)
+    except Exception:
+        pass
+
+    # Select input directory
+    input_dir = filedialog.askdirectory(
+        parent=root,
+        title="Select the input directory containing videos"
+    )
+    if not input_dir:
+        messagebox.showerror("Error", "No input directory selected.")
+        return
+
+    # Select output base directory
+    output_base = filedialog.askdirectory(
+        parent=root,
+        title="Select the base output directory"
+    )
+    if not output_base:
+        messagebox.showerror("Error", "No output directory selected.")
+        return
+
+    # Pose configuration (GUI or TOML via dialog)
+    pose_config = get_pose_config()
+    if not pose_config:
+        return
+
+    # Timestamped output folder with descriptive suffix (as before)
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    suffix_parts = []
+    if pose_config.get('enable_resize', False):
+        suffix_parts.append(f"resize_{pose_config.get('resize_scale', 2)}x")
+    if pose_config.get('enable_advanced_filtering', False):
+        interp_method = pose_config.get('interp_method', 'none')
+        smooth_method = pose_config.get('smooth_method', 'none')
+        if smooth_method == 'butterworth':
+            params = pose_config.get('smooth_params', {})
+            cutoff = params.get('cutoff', 10)
+            fs = params.get('fs', 100)
+            suffix_parts.append(f"filter_{interp_method}_{smooth_method}_c{cutoff}_fs{fs}")
+        else:
+            suffix_parts.append(f"filter_{interp_method}_{smooth_method}")
+    suffix = ("_" + "_".join(suffix_parts)) if suffix_parts else ""
+    output_base = Path(output_base) / f"mediapipe{suffix}_{timestamp}"
+    output_base.mkdir(parents=True, exist_ok=True)
+
+    # Gather video files
+    input_dir = Path(input_dir)
+    video_files = [
+        f for f in input_dir.glob("*.*") if f.suffix.lower() in [".mp4", ".avi", ".mov"]
+    ]
+
+    if not video_files:
+        messagebox.showerror("Error", "No video files (.mp4, .avi, .mov) found in the selected folder.")
+        return
+
+    print(f"\nFound {len(video_files)} videos to process")
+    if pose_config.get('enable_resize', False):
+        print(f"Video resize enabled: {pose_config.get('resize_scale', 2)}x scaling")
+    if pose_config.get('enable_advanced_filtering', False):
+        print(
+            f"Advanced filtering enabled: {pose_config.get('interp_method', 'none')} interpolation + "
+            f"{pose_config.get('smooth_method', 'none')} smoothing"
+        )
+
+    # Process each video
+    for i, video_file in enumerate(video_files, 1):
+        print(f"\nProcessing video {i}/{len(video_files)}: {video_file.name}")
+        output_dir = output_base / video_file.stem
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        try:
+            process_video(video_file, output_dir, pose_config)
+        except Exception as e:
+            print(f"Error processing {video_file.name}: {e}")
+        finally:
+            # Release memory between videos (as before)
+            try:
+                import gc as _gc
+                _gc.collect()
+            except Exception:
+                pass
+            time.sleep(2)
+            print("Memory released")
+
+    print("\nAll videos processed!")
 
 
 def convert_mediapipe_to_vaila_format(df_pixel, output_path):
