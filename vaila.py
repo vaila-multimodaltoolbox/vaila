@@ -4,8 +4,8 @@ vaila.py
 ===============================================================================
 Author: Prof. Paulo R. P. Santiago
 Date:  07 October 2024
-Update:  09 August 2025
-Version updated: 0.10.12
+Update:  10 August 2025
+Version updated: 0.10.13
 Python Version: 3.12.11
 
 Description:
@@ -135,7 +135,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 09.August.2025 v0.10.12 (Python 3.12.11)
+vailá - 10.August.2025 v0.10.13 (Python 3.12.11)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -234,7 +234,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 09.August.2025 v0.10.12 (Python 3.12.11)")
+        self.title("vailá - 10.August.2025 v0.10.13 (Python 3.12.11)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -1443,7 +1443,7 @@ class Vaila(tk.Tk):
             return
 
         if choice == "1":
-            from vaila.markerless_2D_analysis import process_videos_in_directory
+            from vaila.markerless_2d_analysis import process_videos_in_directory
         else:
             from vaila.markerless2d_analysis_v2 import (
                 process_videos_in_directory,
@@ -1475,7 +1475,7 @@ class Vaila(tk.Tk):
             return
 
         if choice == "1":
-            from vaila.markerless_3D_analysis import process_videos_in_directory
+            from vaila.markerless_3d_analysis import process_videos_in_directory
         else:
             from vaila.markerless3d_analysis_v2 import process_videos_in_directory
 
