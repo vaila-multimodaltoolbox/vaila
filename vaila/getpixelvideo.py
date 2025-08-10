@@ -151,8 +151,10 @@ def play_video_with_controls(video_path, coordinates=None):
             (60, 60, 60),
             (slider_margin_left, slider_y, slider_width, slider_height),
         )
+        # Guard against zero total_frames to avoid division by zero for short/merged videos
+        denom_frames = total_frames if total_frames and total_frames > 0 else 1
         slider_pos = slider_margin_left + int(
-            (frame_count / total_frames) * slider_width
+            (frame_count / denom_frames) * slider_width
         )
         pygame.draw.circle(
             control_surface,
@@ -162,8 +164,10 @@ def play_video_with_controls(video_path, coordinates=None):
         )
 
         # Draw frame info above the slider.
+        # Use a safe display total when total_frames is unknown/zero
+        display_total = total_frames if total_frames and total_frames > 0 else max(1, frame_count + 1)
         frame_info = font.render(
-            f"Frame: {frame_count + 1}/{total_frames}", True, (255, 255, 255)
+            f"Frame: {frame_count + 1}/{display_total}", True, (255, 255, 255)
         )
         control_surface.blit(frame_info, (slider_margin_left, slider_y - 25))
         
@@ -809,6 +813,7 @@ def play_video_with_controls(video_path, coordinates=None):
     save_message_timer = 0
     save_message_text = ""
 
+    last_valid_frame = None
     while running:
         if paused:
             # When paused, we'll use the set method to position exactly on the frame
@@ -820,16 +825,37 @@ def play_video_with_controls(video_path, coordinates=None):
             if ret:
                 frame_count = int(cap.get(cv2.CAP_PROP_POS_FRAMES)) - 1
             else:
-                # End of video reached: stop at last frame and pause (no loop)
+                # End of video reached or short/merged video read failure.
+                # Gracefully pause at the last known frame instead of exiting.
                 paused = True
-                frame_count = total_frames - 1
-                cap.set(cv2.CAP_PROP_POS_FRAMES, frame_count)
-                ret, frame = cap.read()
-                if not ret:
-                    break
+                # If total_frames is known, clamp to last frame; else keep current index
+                if total_frames and total_frames > 0:
+                    frame_count = max(0, min(frame_count, total_frames - 1))
+                # Try to show the last valid frame if available
+                if last_valid_frame is not None:
+                    frame = last_valid_frame.copy()
+                    ret = True
+                else:
+                    # Attempt to reposition and read the current frame
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, frame_count)
+                    ret, frame = cap.read()
+                    if not ret:
+                        # If still failing, do not crash: continue loop in paused state
+                        # and wait for user input (e.g., ESC or navigation)
+                        clock.tick(30)
+                        continue
 
         if not ret:
-            break
+            # If we still couldn't get a frame, try to keep showing the last valid one
+            if last_valid_frame is not None:
+                frame = last_valid_frame.copy()
+                ret = True
+            else:
+                # Nothing to show; avoid abrupt exit, but limit CPU
+                clock.tick(30)
+                continue
+        else:
+            last_valid_frame = frame
 
         # Apply zoom
         zoomed_width = int(original_width * zoom_level)
@@ -1422,8 +1448,13 @@ def play_video_with_controls(video_path, coordinates=None):
                         dragging_slider = True
                         rel_x = x - slider_x
                         rel_x = max(0, min(rel_x, slider_width))
-                        frame_count = int((rel_x / slider_width) * total_frames)
-                        frame_count = max(0, min(frame_count, total_frames - 1))
+                        denom_frames = total_frames if total_frames and total_frames > 0 else max(1, frame_count + 1)
+                        # Map slider position proportionally; clamp when total_frames unknown
+                        frame_count = int((rel_x / slider_width) * denom_frames)
+                        if total_frames and total_frames > 0:
+                            frame_count = max(0, min(frame_count, total_frames - 1))
+                        else:
+                            frame_count = max(0, frame_count)
                         paused = True
                 else:
                     # Clique na área do vídeo
@@ -1518,8 +1549,12 @@ def play_video_with_controls(video_path, coordinates=None):
                 if dragging_slider:
                     rel_x = event.pos[0] - slider_x
                     rel_x = max(0, min(rel_x, slider_width))
-                    frame_count = int((rel_x / slider_width) * total_frames)
-                    frame_count = max(0, min(frame_count, total_frames - 1))
+                    denom_frames = total_frames if total_frames and total_frames > 0 else max(1, frame_count + 1)
+                    frame_count = int((rel_x / slider_width) * denom_frames)
+                    if total_frames and total_frames > 0:
+                        frame_count = max(0, min(frame_count, total_frames - 1))
+                    else:
+                        frame_count = max(0, frame_count)
                     paused = True
 
         if paused:
