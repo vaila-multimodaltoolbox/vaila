@@ -33,8 +33,6 @@ from .batchcut import batch_cut_videos
 from .drawboxe import run_drawboxe
 from . import cluster_analysis
 from . import imu_analysis
-from . import markerless_3D_analysis
-from . import mocap_analysis
 from . import forceplate_analysis
 from .filemanager import (
     import_file,
@@ -92,8 +90,6 @@ __all__ = [
     "get_labcoord_angles",
     "cluster_analysis",
     "imu_analysis",
-    "markerless_3D_analysis",
-    "mocap_analysis",
     "forceplate_analysis",
     "import_file",
     "export_file",
