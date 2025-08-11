@@ -196,11 +196,16 @@ def infer_vp3d(model, seq2d_norm: np.ndarray) -> np.ndarray:
     device = torch.device("cuda" if torch and torch.cuda.is_available() else "cpu")
     model.to(device)
     receptive = model.receptive_field()
-    Xw = sliding_windows(seq2d_norm, receptive=receptive, pad=True)   # [T,R,J,2]
-    Xw = torch.from_numpy(Xw).float().to(device).permute(0,2,3,1)     # [T,J,2,R]
+    Xw = sliding_windows(seq2d_norm, receptive=receptive, pad=True)   # [T, R, J, 2]
+    X = torch.from_numpy(Xw).float().to(device)                        # [T, R, J, 2]
     with torch.no_grad():
-        Y = model(Xw)                                                 # [T,J,3]
-    return Y.cpu().numpy().astype(np.float32)
+        Y = model(X)                                                   # [T, R', J_out, 3] or [T, J_out, 3]
+    if Y.dim() == 4:
+        center = Y.shape[1] // 2
+        Yc = Y[:, center, :, :]                                        # [T, J_out, 3]
+    else:
+        Yc = Y                                                         # already [T, J_out, 3]
+    return Yc.cpu().numpy().astype(np.float32)
 
 # =====================
 # Ground + DLT
