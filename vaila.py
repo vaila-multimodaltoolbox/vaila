@@ -4,8 +4,8 @@ vaila.py
 ===============================================================================
 Author: Prof. Paulo R. P. Santiago
 Date:  07 October 2024
-Update:  10 August 2025
-Version updated: 0.10.13
+Update:  11 August 2025
+Version updated: 0.10.14
 Python Version: 3.12.11
 
 Description:
@@ -42,7 +42,7 @@ Key Features:
 
 4. **Visualization**:
    - Includes 2D and 3D plotting of biomechanical data using libraries such as
-     Matplotlib and Plotly.
+     Matplotlib, Plotly and Open3D.
 
 5. **Cross-Platform**:
    - Designed for macOS, Linux, and Windows, with full transparency of execution
@@ -135,7 +135,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 10.August.2025 v0.10.13 (Python 3.12.11)
+vailá - 11.August.2025 v0.10.14 (Python 3.12.11)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -234,7 +234,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 10.August.2025 v0.10.13 (Python 3.12.11)")
+        self.title("vailá - 11.August.2025 v0.10.14 (Python 3.12.11)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
