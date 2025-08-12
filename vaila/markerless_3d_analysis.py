@@ -192,20 +192,57 @@ def sliding_windows(X: np.ndarray, receptive: int, pad: bool=True) -> np.ndarray
         starts = [i for i in range(T-receptive+1)]
         return np.stack([X[i:i+receptive] for i in starts], axis=0)
 
-def infer_vp3d(model, seq2d_norm: np.ndarray) -> np.ndarray:
+def infer_vp3d(model, seq2d_norm: np.ndarray, batch_size: Optional[int] = None) -> np.ndarray:
+    """Run VideoPose3D with progress and bounded memory.
+
+    The model expects input shaped [B, T, J, 2]. We build sliding windows of length
+    receptive field and feed them in batches along the first dimension.
+    """
     device = torch.device("cuda" if torch and torch.cuda.is_available() else "cpu")
     model.to(device)
+    # Choose a conservative default batch size
+    if batch_size is None:
+        batch_size = 1024 if device.type == "cuda" else 64
     receptive = model.receptive_field()
-    Xw = sliding_windows(seq2d_norm, receptive=receptive, pad=True)   # [T, R, J, 2]
-    X = torch.from_numpy(Xw).float().to(device)                        # [T, R, J, 2]
+    Xw = sliding_windows(seq2d_norm, receptive=receptive, pad=True)  # [T, R, J, 2]
+
+    T = Xw.shape[0]
+    print(f"[Vp3D] Inference device: {device}; frames={T}; receptive={receptive}; batch={batch_size}")
+    sys.stdout.flush()
+
+    out_np = np.zeros((T, 17, 3), dtype=np.float32)
+
+    model.eval()
     with torch.no_grad():
-        Y = model(X)                                                   # [T, R', J_out, 3] or [T, J_out, 3]
-    if Y.dim() == 4:
-        center = Y.shape[1] // 2
-        Yc = Y[:, center, :, :]                                        # [T, J_out, 3]
-    else:
-        Yc = Y                                                         # already [T, J_out, 3]
-    return Yc.cpu().numpy().astype(np.float32)
+        start = 0
+        while start < T:
+            end = min(T, start + batch_size)
+            try:
+                X = torch.from_numpy(Xw[start:end]).float().to(device)  # [B, R, J, 2]
+                Y = model(X)  # [B, R', J_out, 3] or [B, J_out, 3]
+                if Y.dim() == 4:
+                    center = Y.shape[1] // 2
+                    Y = Y[:, center, :, :]
+                out_np[start:end] = Y.detach().cpu().numpy().astype(np.float32)
+                start = end
+                # Lightweight progress
+                if (start // batch_size) % max(1, (T // batch_size) // 10 + 1) == 0:
+                    print(f"[Vp3D] {start}/{T} frames")
+                    sys.stdout.flush()
+            except RuntimeError as e:
+                msg = str(e)
+                if "out of memory" in msg.lower() or "not enough memory" in msg.lower():
+                    new_bs = max(8, batch_size // 2)
+                    if new_bs == batch_size:
+                        raise
+                    print(f"[Vp3D] OOM at batch_size={batch_size}. Retrying with batch_size={new_bs}...")
+                    sys.stdout.flush()
+                    batch_size = new_bs
+                    torch.cuda.empty_cache() if device.type == "cuda" else None
+                else:
+                    raise
+
+    return out_np
 
 # =====================
 # Ground + DLT
