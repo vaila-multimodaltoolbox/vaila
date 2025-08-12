@@ -18,7 +18,9 @@ Description:
 Usage:
     Run from the command line:
         python -m vaila.scout_vaila
-
+    or enter the vaila directory and run:
+        python scout_vaila.py
+    
 Requirements:
     - Python 3.x
     - tkinter (GUI)
@@ -82,31 +84,51 @@ DEFAULT_CFG_FILENAME = "vaila_scout_config.toml"
 
 def _default_config() -> Dict:
     return {
+        "program": {
+            "name": "vaila_scout",
+            "version": "0.1.0",
+            "author": "Paulo Roberto Pereira Santiago",
+            "email": "paulosantiago@usp.br",
+            "description": "Integrated scouting (annotation + analysis) for soccer.",
+            "repository": "https://github.com/vaila-multimodaltoolbox/vaila",
+            "license": "GPL-3.0-or-later",
+            "homepage": "https://github.com/vaila-multimodaltoolbox/vaila",
+            "created": "2025-08-12",
+            "updated": "2025-08-12",
+        },
         "project": {
             "name": "vaila_scout",
             "field_width_m": 105.0,
             "field_height_m": 68.0,
+            "sport": "soccer",
+            "field_units": "meters",
+            "field_standard": "FIFA",
+            "description": "Default soccer field and teams for scouting.",
         },
         "teams": {
             "home": {
                 "name": "HOME",
                 "players": [str(n) for n in range(1, 24)],
+                "players_names": {},  # "10": "Player Name"
             },
             "away": {
                 "name": "AWAY",
                 "players": [str(n) for n in range(1, 24)],
+                "players_names": {},
             },
         },
         "actions": [
-            "pass",
-            "shot",
-            "dribble",
-            "tackle",
-            "interception",
-            "foul",
-            "assist",
-            "clearance",
-            "cross",
+            "Passing",
+            "First touch and receiving",
+            "Ball control",
+            "Dribbling",
+            "Shielding",
+            "Shooting and finishing",
+            "Heading",
+            "Crossing",
+            "Tackling",
+            "Interceptions",
+            "Goalkeeping skills: catching, shot stopping, positioning, distribution",
         ],
         "results": ["success", "fail", "neutral"],
     }
@@ -152,6 +174,7 @@ class ScoutEvent:
     result: str
     pos_x_m: float
     pos_y_m: float
+    player_name: str = ""
 
     def to_row(self) -> Dict[str, object]:
         return asdict(self)
@@ -265,7 +288,8 @@ class ScoutApp(tk.Tk):
         menubar.add_cascade(label="Tools", menu=tools_menu)
 
         help_menu = tk.Menu(menubar, tearoff=0)
-        help_menu.add_command(label="Help (Docs)	F1", command=self.open_help)
+        help_menu.add_command(label="Help (?)", command=self.open_help)
+        help_menu.add_command(label="Keyboard Shortcuts", command=self.open_shortcuts)
         menubar.add_cascade(label="Help", menu=help_menu)
 
         self.config(menu=menubar)
@@ -291,11 +315,10 @@ class ScoutApp(tk.Tk):
         self.team_cb = ttk.Combobox(controls, textvariable=self.team_var, values=teams, width=16, state="readonly")
         self.team_cb.grid(row=0, column=1, padx=4, pady=4)
 
-        # Player selector
+        # Player selector (uses display with optional names)
         ttk.Label(controls, text="Player:").grid(row=0, column=2, sticky=tk.W, padx=4, pady=4)
-        home_players = cfg["teams"]["home"]["players"]
-        self.player_var = tk.StringVar(value=home_players[0])
-        self.player_cb = ttk.Combobox(controls, textvariable=self.player_var, values=home_players, width=10)
+        self.player_var = tk.StringVar(value="")
+        self.player_cb = ttk.Combobox(controls, textvariable=self.player_var, values=[], width=24, state="readonly")
         self.player_cb.grid(row=0, column=3, padx=4, pady=4)
 
         # Action selector
@@ -347,25 +370,31 @@ class ScoutApp(tk.Tk):
         # Sync players list on team change
         self.team_cb.bind("<<ComboboxSelected>>", self._on_team_changed)
 
-        # --- Hotkeys
+        # Hotkeys (simple)
         self.bind_all("<Control-s>", lambda e: self.save_csv())
         self.bind_all("<Control-o>", lambda e: self.load_csv())
         self.bind_all("<Control-k>", lambda e: self.clear_events())
         self.bind_all("h", lambda e: self.draw_heatmap())
         self.bind_all("H", lambda e: self.draw_heatmap())
-        self.bind_all("t", lambda e: self.reset_timer())
-        self.bind_all("T", lambda e: self.reset_timer())
-        self.bind_all("<F1>", lambda e: self.open_help())
+        self.bind_all("r", lambda e: self.reset_timer())
+        self.bind_all("R", lambda e: self.reset_timer())
+        self.bind_all("?", lambda e: self.open_help())
         self.bind_all("<Control-e>", lambda e: self.edit_config())
         self.bind_all("<Control-l>", lambda e: self.load_config())
-        self.bind_all("<Control-S>", lambda e: self.save_config())  # Shift+Ctrl+S
-
-        # --- Additional hotkeys
+        self.bind_all("<Control-S>", lambda e: self.save_config())
+        # Additional hotkeys
         self.bind_all("n", lambda e: self._toggle_auto())
         self.bind_all("N", lambda e: self._toggle_auto())
         self.bind_all("u", lambda e: self._toggle_unique())
         self.bind_all("U", lambda e: self._toggle_unique())
-        self.bind_all("<F5>", lambda e: self._toggle_team())
+        self.bind_all("t", lambda e: self._toggle_team())
+        self.bind_all("T", lambda e: self._toggle_team())
+        # Use comma/period to avoid matplotlib key conflicts with 'k'
+        self.bind_all(",", lambda e: self._on_prev_player())
+        self.bind_all(".", lambda e: self._on_next_player())
+        # Arrow keys for player navigation
+        self.bind_all("<Right>", lambda e: self._on_next_player())
+        self.bind_all("<Left>", lambda e: self._on_prev_player())
         self.bind_all("<Control-t>", lambda e: self.rename_teams())
 
         # Quick player numeric buffer UI and keybinds
@@ -380,14 +409,14 @@ class ScoutApp(tk.Tk):
         self.bind_all("+", self._on_plus_inc)
         self.bind_all("-", self._on_minus_dec)
 
+        # Populate initial players list based on current team
+        self._on_team_changed()
+
     # --- UI helpers
     def _on_team_changed(self, _evt=None):
         team_name = self.team_var.get()
-        team_key = "home" if team_name == self.cfg["teams"]["home"]["name"] else "away"
-        players = self.cfg["teams"][team_key]["players"]
-        self.player_cb.config(values=players)
-        if players:
-            self.player_var.set(players[0])
+        team_key = self._team_key_from_name(team_name)
+        self._refresh_player_combobox()
 
     def _redraw_field(self):
         draw_soccer_field(self.field_ax, self.field_w, self.field_h)
@@ -407,8 +436,8 @@ class ScoutApp(tk.Tk):
         home = self.cfg["teams"]["home"]["name"]
         away = self.cfg["teams"]["away"]["name"]
         return {
-            home: next_from_list(self.cfg["teams"]["home"].get("players", [])),
-            away: next_from_list(self.cfg["teams"]["away"].get("players", [])),
+            home: next_from_list(self._get_players_numbers("home")),
+            away: next_from_list(self._get_players_numbers("away")),
         }
 
     # --- Event handling
@@ -455,11 +484,13 @@ class ScoutApp(tk.Tk):
         ev = ScoutEvent(
             timestamp_s=round(timestamp, 2),
             team=team_name,
-            player=player_str,
+            player=self._parse_display_to_number(self.player_var.get()),
             action=self.action_var.get(),
             result=self.result_var.get(),
             pos_x_m=round(x_m, 2),
             pos_y_m=round(y_m, 2),
+            player_name=self._get_player_name(self._team_key_from_name(team_name),
+                                      self._parse_display_to_number(self.player_var.get())),
         )
         self.events.append(ev)
 
@@ -494,6 +525,7 @@ class ScoutApp(tk.Tk):
             return
         try:
             df.to_csv(path, index=False)
+            self._save_players_summary(Path(path))
             messagebox.showinfo("Saved", f"Saved: {path}")
         except Exception as exc:  # noqa: BLE001
             messagebox.showerror("Error", f"Failed to save CSV: {exc}")
@@ -511,6 +543,7 @@ class ScoutApp(tk.Tk):
             if not required.issubset(df.columns):
                 messagebox.showerror("Error", "Invalid CSV structure.")
                 return
+            has_name = "player_name" in df.columns
             self.events = [
                 ScoutEvent(
                     timestamp_s=float(row["timestamp_s"]),
@@ -520,9 +553,16 @@ class ScoutApp(tk.Tk):
                     result=str(row["result"]),
                     pos_x_m=float(row["pos_x_m"]),
                     pos_y_m=float(row["pos_y_m"]),
+                    player_name=str(row["player_name"]) if has_name and not pd.isna(row["player_name"]) else "",
                 )
                 for _, row in df.iterrows()
             ]
+            # Update names mapping from CSV if present
+            if has_name:
+                for e in self.events:
+                    if e.player_name:
+                        k = self._team_key_from_name(e.team)
+                        self.cfg["teams"][k].setdefault("players_names", {})[str(e.player)] = e.player_name
             # Re-plot on field
             self._redraw_field()
             if self.events:
@@ -625,10 +665,11 @@ class ScoutApp(tk.Tk):
             self.next_player_number_by_team = self._init_next_player_numbers()
 
     def _ensure_player_in_team(self, team_name: str, player: str) -> None:
-        key = "home" if team_name == self.cfg["teams"]["home"]["name"] else "away"
+        key = self._team_key_from_name(team_name)
         players = self.cfg["teams"][key].setdefault("players", [])
         if player not in players:
             players.append(player)
+        self.cfg["teams"][key].setdefault("players_names", {}).setdefault(str(player), "")
 
     # --- Config management
     def load_config(self):
@@ -689,14 +730,55 @@ class ScoutApp(tk.Tk):
             self.next_player_number_by_team = self._init_next_player_numbers()
 
     def open_help(self):
-        # Prefer project docs/help/scout_vaila.html
         here = Path(__file__).resolve()
-        repo_root = here.parents[1] if len(here.parents) >= 2 else here.parent
-        html_path = repo_root / "docs" / "help" / "scout_vaila.html"
+        help_dir = here.parent / "help"
+        html_path = help_dir / "scout_vaila.html"
+        md_path = help_dir / "scout_vaila.md"
         if html_path.exists():
             webbrowser.open_new_tab(html_path.as_uri())
-        else:
-            messagebox.showinfo("Help", "Help page not found at docs/help/scout_vaila.html")
+            return
+        if md_path.exists():
+            try:
+                webbrowser.open_new_tab(md_path.as_uri())
+            except Exception as exc:  # noqa: BLE001
+                messagebox.showinfo("Help", f"Help markdown is at vaila/help/scout_vaila.md. Could not open automatically: {exc}")
+            return
+        messagebox.showinfo("Help", "Help page not found at vaila/help/scout_vaila.html or .md")
+
+    def open_shortcuts(self):
+        win = tk.Toplevel(self)
+        win.title("Keyboard Shortcuts")
+        win.resizable(False, False)
+        frame = ttk.Frame(win, padding=10)
+        frame.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Label(frame, text="Keyboard Shortcuts", font=("Segoe UI", 11, "bold")).grid(row=0, column=0, columnspan=2, sticky=tk.W, pady=(0, 8))
+
+        shortcuts = [
+            ("Ctrl+S", "Save CSV"),
+            ("Ctrl+O", "Load CSV"),
+            ("Ctrl+K", "Clear events"),
+            ("H", "Show heatmap"),
+            ("R", "Reset timer"),
+            ("?", "Open help"),
+            ("T", "Toggle current team (home/away)"),
+            (", / .", "Previous / Next player"),
+            ("← / →", "Previous / Next player"),
+            ("+ / -", "Increment / Decrement current player number"),
+            ("N", "Toggle auto-number players"),
+            ("U", "Toggle unique player per click"),
+            ("Ctrl+E", "Edit config"),
+            ("Ctrl+L", "Load config"),
+            ("Ctrl+Shift+S", "Save config"),
+            ("Ctrl+T", "Rename teams"),
+            ("Digits 0–9", "Buffer player number; Enter apply; Backspace edit; Esc clear"),
+        ]
+
+        for i, (keys, desc) in enumerate(shortcuts, start=1):
+            ttk.Label(frame, text=keys, width=16).grid(row=i, column=0, sticky=tk.W, padx=(0, 12), pady=2)
+            ttk.Label(frame, text=desc).grid(row=i, column=1, sticky=tk.W, pady=2)
+
+        ttk.Button(frame, text="Close", command=win.destroy).grid(row=len(shortcuts) + 1, column=1, sticky=tk.E, pady=(10, 0))
 
     def _save_players_summary(self, events_csv_path: Path) -> None:
         try:
@@ -756,35 +838,84 @@ class ScoutApp(tk.Tk):
 
     def _on_plus_inc(self, _event):
         try:
-            current = int(self.player_var.get()) if self.player_var.get().isdigit() else 0
+            current_num = self._parse_display_to_number(self.player_var.get())
+            current = int(current_num) if current_num.isdigit() else 0
             new_val = str(current + 1)
             self._ensure_player_in_team(self.team_var.get(), new_val)
-            vals = list(self.player_cb.cget("values"))
-            if new_val not in vals:
-                vals.append(new_val)
-                self.player_cb.config(values=vals)
-            self.player_var.set(new_val)
+            self._set_player_selection_by_number(self._team_key_from_name(self.team_var.get()), new_val)
             self._update_quick_label()
         except Exception:
             pass
 
     def _on_minus_dec(self, _event):
         try:
-            current = int(self.player_var.get()) if self.player_var.get().isdigit() else 1
+            current_num = self._parse_display_to_number(self.player_var.get())
+            current = int(current_num) if current_num.isdigit() else 1
             new_val = str(max(1, current - 1))
             self._ensure_player_in_team(self.team_var.get(), new_val)
-            vals = list(self.player_cb.cget("values"))
-            if new_val not in vals:
-                vals.append(new_val)
-                self.player_cb.config(values=vals)
-            self.player_var.set(new_val)
+            self._set_player_selection_by_number(self._team_key_from_name(self.team_var.get()), new_val)
             self._update_quick_label()
         except Exception:
             pass
 
+    def _on_next_player(self, _event=None):
+        values = list(self.player_cb.cget("values"))
+        if not values:
+            return
+        try:
+            idx = values.index(self.player_var.get())
+        except ValueError:
+            idx = -1
+        self.player_var.set(values[(idx + 1) % len(values)])
+
+    def _on_prev_player(self, _event=None):
+        values = list(self.player_cb.cget("values"))
+        if not values:
+            return
+        try:
+            idx = values.index(self.player_var.get())
+        except ValueError:
+            idx = 0
+        self.player_var.set(values[(idx - 1) % len(values)])
+
     def _update_quick_label(self):
         buf = self.quick_player_buffer if self.quick_player_buffer else "(none)"
         self.quick_label.config(text=f"Quick player input: {buf}")
+
+    def _team_key_from_name(self, team_name: str) -> str:
+        return "home" if team_name == self.cfg["teams"]["home"]["name"] else "away"
+
+    def _get_players_numbers(self, team_key: str) -> List[str]:
+        return list(self.cfg["teams"][team_key].get("players", []))
+
+    def _get_player_name(self, team_key: str, number: str) -> str:
+        return str(self.cfg["teams"][team_key].get("players_names", {}).get(str(number), "")).strip()
+
+    def _display_for(self, team_key: str, number: str) -> str:
+        name = self._get_player_name(team_key, number)
+        return f"{number} {name}" if name else str(number)
+
+    def _players_display_list(self, team_key: str) -> List[str]:
+        return [self._display_for(team_key, num) for num in self._get_players_numbers(team_key)]
+
+    def _parse_display_to_number(self, display: str) -> str:
+        return display.strip().split()[0] if display else ""
+
+    def _refresh_player_combobox(self):
+        team_key = self._team_key_from_name(self.team_var.get())
+        values = self._players_display_list(team_key)
+        self.player_cb.config(values=values)
+        if values:
+            if self.player_var.get() not in values:
+                self.player_var.set(values[0])
+
+    def _set_player_selection_by_number(self, team_key: str, number: str):
+        disp = self._display_for(team_key, number)
+        values = list(self.player_cb.cget("values"))
+        if disp not in values:
+            values.append(disp)
+            self.player_cb.config(values=values)
+        self.player_var.set(disp)
 
     def rename_teams(self):
         dlg = RenameTeamsDialog(self, self.cfg)
@@ -843,6 +974,7 @@ class ConfigDialog(tk.Toplevel):
 
         # Clone config
         self.cfg = {
+            "program": dict(cfg.get("program", {})),
             "project": dict(cfg.get("project", {})),
             "teams": {
                 "home": dict(cfg.get("teams", {}).get("home", {})),
@@ -873,6 +1005,12 @@ class ConfigDialog(tk.Toplevel):
         self.home_players_var = tk.StringVar(value=",".join(self.cfg["teams"]["home"].get("players", [])))
         ttk.Entry(frame, textvariable=self.home_players_var, width=60).grid(row=2, column=1, columnspan=3, padx=4, pady=4, sticky=tk.W)
 
+        # After existing players fields
+        ttk.Label(frame, text="Home player names (num:name; ...):").grid(row=2, column=4, sticky=tk.W, padx=4, pady=4)
+        home_names_map = self.cfg["teams"]["home"].get("players_names", {})
+        self.home_names_var = tk.StringVar(value=";".join(f"{k}:{v}" for k, v in home_names_map.items()))
+        ttk.Entry(frame, textvariable=self.home_names_var, width=40).grid(row=2, column=5, padx=4, pady=4, sticky=tk.W)
+
         # Away team
         ttk.Label(frame, text="Away team name:").grid(row=3, column=0, sticky=tk.W, padx=4, pady=4)
         self.away_name_var = tk.StringVar(value=self.cfg["teams"]["away"].get("name", "AWAY"))
@@ -881,6 +1019,12 @@ class ConfigDialog(tk.Toplevel):
         ttk.Label(frame, text="Away players (comma-separated):").grid(row=4, column=0, sticky=tk.W, padx=4, pady=4)
         self.away_players_var = tk.StringVar(value=",".join(self.cfg["teams"]["away"].get("players", [])))
         ttk.Entry(frame, textvariable=self.away_players_var, width=60).grid(row=4, column=1, columnspan=3, padx=4, pady=4, sticky=tk.W)
+
+        # After existing players fields
+        ttk.Label(frame, text="Away player names (num:name; ...):").grid(row=4, column=4, sticky=tk.W, padx=4, pady=4)
+        away_names_map = self.cfg["teams"]["away"].get("players_names", {})
+        self.away_names_var = tk.StringVar(value=";".join(f"{k}:{v}" for k, v in away_names_map.items()))
+        ttk.Entry(frame, textvariable=self.away_names_var, width=40).grid(row=4, column=5, padx=4, pady=4, sticky=tk.W)
 
         # Actions and results
         ttk.Label(frame, text="Actions (comma-separated):").grid(row=5, column=0, sticky=tk.W, padx=4, pady=4)
@@ -912,12 +1056,37 @@ class ConfigDialog(tk.Toplevel):
         actions = [a.strip() for a in self.actions_var.get().split(",") if a.strip()]
         results = [r.strip() for r in self.results_var.get().split(",") if r.strip()]
 
+        # Parse names mappings
+        def parse_names(s: str) -> Dict[str, str]:
+            out: Dict[str, str] = {}
+            for pair in [p.strip() for p in s.split(";") if p.strip()]:
+                if ":" in pair:
+                    k, v = pair.split(":", 1)
+                    k = k.strip()
+                    v = v.strip()
+                    if k:
+                        out[k] = v
+            return out
+
+        home_names = parse_names(self.home_names_var.get())
+        away_names = parse_names(self.away_names_var.get())
+
+        # Ensure players include keys from names
+        for k in home_names:
+            if k not in home_players:
+                home_players.append(k)
+        for k in away_names:
+            if k not in away_players:
+                away_players.append(k)
+
         self.cfg["project"]["field_width_m"] = fw
         self.cfg["project"]["field_height_m"] = fh
         self.cfg["teams"]["home"]["name"] = self.home_name_var.get().strip() or "HOME"
         self.cfg["teams"]["home"]["players"] = home_players or [str(n) for n in range(1, 24)]
+        self.cfg["teams"]["home"]["players_names"] = home_names
         self.cfg["teams"]["away"]["name"] = self.away_name_var.get().strip() or "AWAY"
         self.cfg["teams"]["away"]["players"] = away_players or [str(n) for n in range(1, 24)]
+        self.cfg["teams"]["away"]["players_names"] = away_names
         self.cfg["actions"] = actions or _default_config()["actions"]
         self.cfg["results"] = results or _default_config()["results"]
 
