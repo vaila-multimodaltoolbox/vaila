@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>vailá Scout - Help</title>
+  <style>
+    body { font-family: Arial, Helvetica, sans-serif; line-height: 1.5; margin: 24px; }
+    h1, h2, h3 { color: #222; }
+    code, pre { background: #f5f5f5; padding: 2px 4px; border-radius: 4px; }
+    pre { padding: 12px; overflow: auto; }
+    .kbd { border: 1px solid #ccc; padding: 2px 6px; border-radius: 3px; background: #f9f9f9; }
+    ul { margin-top: 0; }
+  </style>
+  <meta name="description" content="vailá Scout: annotate soccer events and generate heatmaps." />
+</head>
+<body>
+  <h1>vailá Scout (Annotation + Analysis)</h1>
+  <p>
+    The vailá Scout tool lets you annotate soccer events on a virtual field and generate quick analyses (heatmaps) in the same interface.
+  </p>
+
+  <h2>How to Run</h2>
+  <pre><code>python -m vaila.scout_vaila</code></pre>
+
+  <h2>Features</h2>
+  <ul>
+    <li>Field drawn to scale (default 105 &times; 68 m) in the main window.</li>
+    <li>Click to annotate events (team, player, action, result).</li>
+    <li>Configurable teams, players, actions, results, and field size via TOML.</li>
+    <li>Save/Load events as CSV.</li>
+    <li>Heatmap appears in a new window when requested.</li>
+    <li>Hotkeys for faster workflows.</li>
+    <li>Player numbering modes: auto-number and unique-per-click.</li>
+    <li>Automatic players summary CSV when saving events.</li>
+    <li>Rename teams quickly (Tools → Rename Teams or Ctrl+T). Quick numeric entry to set player number.</li>
+  </ul>
+
+  <h2>CSV Format</h2>
+  <pre><code>timestamp_s,team,player,action,result,pos_x_m,pos_y_m</code></pre>
+
+  <h2>Configuration (TOML)</h2>
+  <p>
+    A default file is created at <code>~/.vaila/vaila_scout_config.toml</code> on first run.
+    You can Load/Save or Edit the config within the app.
+  </p>
+  <pre><code>[project]
+name = "vaila_scout"
+field_width_m = 105.0
+field_height_m = 68.0
+
+[teams.home]
+name = "HOME"
+players = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23"]
+
+[teams.away]
+name = "AWAY"
+players = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23"]
+
+actions = ["pass", "shot", "dribble", "tackle", "interception", "foul", "assist", "clearance", "cross"]
+results = ["success", "fail", "neutral"]
+</code></pre>
+
+  <h2>Players Summary CSV</h2>
+  <pre><code>team,player,num_events,first_timestamp_s,last_timestamp_s,timestamps</code></pre>
+
+  <h2>UI</h2>
+  <ul>
+    <li><strong>Left</strong>: field (click to annotate)</li>
+    <li><strong>Right top</strong>: selectors for team, player, action, result; CSV buttons; Show Heatmap; Reset Time</li>
+    <li><strong>Right mid</strong>: config buttons (Load/Save/Edit), Tools menu includes Rename Teams (Ctrl+T)</li>
+    <li><strong>Heatmap</strong>: opens in a new window when clicking Show Heatmap</li>
+  </ul>
+
+  <h2>Hotkeys</h2>
+  <ul>
+    <li><span class="kbd">Ctrl</span>+<span class="kbd">S</span>: Save CSV</li>
+    <li><span class="kbd">Ctrl</span>+<span class="kbd">O</span>: Load CSV</li>
+    <li><span class="kbd">Ctrl</span>+<span class="kbd">K</span>: Clear events</li>
+    <li><span class="kbd">H</span>: Show heatmap (new window)</li>
+    <li><span class="kbd">N</span>: Toggle auto-number players</li>
+    <li><span class="kbd">U</span>: Toggle unique player per click</li>
+    <li><span class="kbd">T</span>: Reset timer</li>
+    <li><span class="kbd">Ctrl</span>+<span class="kbd">E</span>: Edit config</li>
+    <li><span class="kbd">Ctrl</span>+<span class="kbd">L</span>: Load config</li>
+    <li><span class="kbd">Ctrl</span>+<span class="kbd">Shift</span>+<span class="kbd">S</span>: Save config</li>
+    <li><span class="kbd">F1</span>: Open this help</li>
+    <li><span class="kbd">F5</span>: Toggle current team (home/away)</li>
+    <li><span class="kbd">Ctrl</span>+<span class="kbd">T</span>: Rename teams</li>
+    <li>Digits 0–9: buffer player number; <span class="kbd">Enter</span> to apply; <span class="kbd">Backspace</span> to edit; <span class="kbd">Esc</span> to clear; <span class="kbd">+</span>/<span class="kbd">-</span> to inc/dec current player</li>
+  </ul>
+
+  <h2>Notes</h2>
+  <ul>
+    <li>Field coordinates use meters in [0, field_width] × [0, field_height].</li>
+    <li>Heatmap uses seaborn KDE.</li>
+  </ul>
+</body>
+</html>
+
+
