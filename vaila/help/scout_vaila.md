@@ -15,7 +15,9 @@ Features
 
 How to run
 ```bash
-python -m vaila.scout_vaila
+python vaila.py           # Click the "Scout" button in the vailá GUI
+python -m vaila.scout_vaila   # or run the module directly
+python vaila/scout_vaila.py   # or run the script file
 ```
 
 CSV format
@@ -29,62 +31,69 @@ team,player,num_events,first_timestamp_s,last_timestamp_s,timestamps
 ```
 
 Config (TOML)
-- Auto-created at `~/.vaila/vaila_scout_config.toml` on first run.
+- The app searches for `vaila_scout_config.toml` next to the script or under `vaila/models`.
+- If none is found, a commented template is created under `vaila/models`.
 - You can Load/Save or Edit the config in the app.
 
-Default schema
+Template summary
 ```toml
 [program]
 name = "vaila_scout"
 version = "0.1.0"
-author = "Paulo Roberto Pereira Santiago"
-email = "paulosantiago@usp.br"
-description = "Integrated scouting (annotation + analysis) for soccer."
-repository = "https://github.com/vaila-multimodaltoolbox/vaila"
-license = "GPL-3.0-or-later"
-homepage = "https://github.com/vaila-multimodaltoolbox/vaila"
-created = "2025-08-12"
-updated = "2025-08-12"
+...
 
 [project]
-name = "vaila_scout"
 field_width_m = 105.0
 field_height_m = 68.0
-sport = "soccer"
-field_units = "meters"
-field_standard = "FIFA"
-description = "Default soccer field and teams for scouting."
+...
 
 [teams.home]
 name = "HOME"
-players = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23"]
+color = "#1f77b4"
+players = ["1","2",...,"23"]
+
+[teams.home.players_names]
+"10" = "Pelé"  # optional mapping number → name
 
 [teams.away]
 name = "AWAY"
-players = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23"]
+color = "#d62728"
+players = ["1","2",...,"23"]
 
-actions = [
-  "Passing",
-  "First touch and receiving",
-  "Ball control",
-  "Dribbling",
-  "Shielding",
-  "Shooting and finishing",
-  "Heading",
-  "Crossing",
-  "Tackling",
-  "Interceptions",
-  "Goalkeeping skills: catching, shot stopping, positioning, distribution",
-]
+[teams.away.players_names]
+"10" = "Maradona"
+
+[drawing]
+player_circle_radius_m = 0.6
+player_edge_color = "black"
+player_number_color = "white"
+player_number_size = 8
+action_symbol_size = 90.0
+show_player_name = true
+player_name_size = 8
+
 results = ["success", "fail", "neutral"]
+
+[[actions]]        # structured actions at the end
+name = "Pass"
+symbol = "o"
+key = "p"
+color = "#FFD700"
+
+[[actions]]
+name = "Shot"
+symbol = "*"
+key = "g"
+color = "#FF4500"
+...
 ```
 
 UI
 - Left: field (click to annotate)
-- Right top: selectors for team, player, action, result; CSV buttons; Show Heatmap; Reset Time
-- Right mid: config buttons (Load/Save/Edit)
+- Right controls: Action and Result (with Cycle Result), CSV buttons, Clock (Start/Pause/Reset), Config (Load/Save/Edit), modes and quick input; Team/Player/Name selectors are at the bottom of the controls.
+- Right bottom: Home and Away rosters (No/Name) side by side.
 - Heatmap opens in a new window when clicking Show Heatmap (or press H)
- - Tools menu includes Rename Teams (Ctrl+T)
+- Tools menu includes Rename Teams (Ctrl+T)
 
 Hotkeys
 - Ctrl+S: Save CSV
@@ -92,6 +101,8 @@ Hotkeys
 - Ctrl+K: Clear events
 - H: Show heatmap (new window)
 - R: Reset timer
+- Space: Cycle Result
+- Ctrl+Space: Start/Pause clock
 - Ctrl+E: Edit config
 - Ctrl+L: Load config
 - Ctrl+Shift+S: Save config
@@ -99,8 +110,8 @@ Hotkeys
 - U: Toggle unique player per click
 - T: Toggle current team (home/away)
 - ,/. or ←/→: Next/previous player
- - Ctrl+T: Rename teams
- - Digits (0–9): buffer a player number; Enter to apply; Backspace to edit; Esc to clear; + / - to increment/decrement current player
+- Ctrl+T: Rename teams
+- Digits (0–9): buffer a player number; Enter to apply; Backspace to edit; Esc to clear; + / - to increment/decrement current player
 
 Notes
 - Field coordinates use meters in the range [0, field_width] and [0, field_height].
