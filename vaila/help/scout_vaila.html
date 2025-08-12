@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>vailá Scout - Help</title>
+  <meta name="description" content="vailá Scout: annotate soccer events and generate heatmaps." />
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: Arial, Helvetica, sans-serif; line-height: 1.5; margin: 24px; }
+    h1, h2, h3 { color: #222; }
+    code, pre { background: #f5f5f5; padding: 2px 4px; border-radius: 4px; }
+    pre { padding: 12px; overflow: auto; }
+    .kbd { border: 1px solid #ccc; padding: 2px 6px; border-radius: 3px; background: #f9f9f9; }
+    ul { margin-top: 0; }
+    .topbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+    .lang-switch { display: flex; gap: 8px; align-items: center; }
+    .lang-switch button { cursor: pointer; padding: 6px 10px; border-radius: 4px; border: 1px solid #888; background: #f7f7f7; }
+    .lang-switch button.active { font-weight: bold; background: #e8e8e8; }
+    .hidden { display: none; }
+    @media (prefers-color-scheme: dark) {
+      body { color: #eee; background: #111; }
+      h1, h2, h3 { color: #fff; }
+      code, pre { background: #222; }
+      .kbd { background: #222; border-color: #555; }
+      .lang-switch button { background: #1e1e1e; border-color: #555; color: #eee; }
+      .lang-switch button.active { background: #333; }
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <h1>vailá Scout</h1>
+    <div class="lang-switch">
+      <span>Language:</span>
+      <button id="btn-en" class="active" type="button">EN</button>
+      <button id="btn-pt" type="button">PT-BR</button>
+    </div>
+  </div>
+
+  <!-- English -->
+  <section id="lang-en">
+    <p>The vailá Scout tool lets you annotate soccer events on a virtual field and generate quick analyses (heatmaps).</p>
+
+    <h2>How to Run</h2>
+    <pre><code>python -m vaila.scout_vaila</code></pre>
+
+    <h2>Features</h2>
+    <ul>
+      <li>Field drawn to scale (default 105 × 68 m).</li>
+      <li>Click to annotate events (team, player with optional name, action, result).</li>
+      <li>Configurable teams, players, player names, actions, results, and field size via TOML.</li>
+      <li>Save/Load events as CSV. Optional <code>player_name</code> column when saving.</li>
+      <li>Heatmap in a separate window.</li>
+      <li>Simple hotkeys for faster workflows.</li>
+      <li>Player numbering modes: auto-number and unique-per-click.</li>
+      <li>Automatic per-player summary CSV when saving events.</li>
+      <li>Quick team renaming and quick numeric entry for player number.</li>
+    </ul>
+
+    <h2>CSV Format</h2>
+    <pre><code>timestamp_s,team,player,action,result,pos_x_m,pos_y_m,player_name</code></pre>
+    <p><em>Note:</em> <code>player_name</code> is optional on load; included on save if available.</p>
+
+    <h2>Players Summary CSV</h2>
+    <pre><code>team,player,num_events,first_timestamp_s,last_timestamp_s,timestamps</code></pre>
+
+    <h2>Configuration (TOML)</h2>
+    <p>A default file is created at <code>~/.vaila/vaila_scout_config.toml</code> on first run. You can Load/Save or Edit the config within the app.</p>
+
+    <h3>Default schema</h3>
+    <pre><code>[program]
+name = "vaila_scout"
+version = "0.1.0"
+author = "Paulo Roberto Pereira Santiago"
+email = "paulosantiago@usp.br"
+description = "Integrated scouting (annotation + analysis) for soccer."
+repository = "https://github.com/vaila-multimodaltoolbox/vaila"
+license = "GPL-3.0-or-later"
+homepage = "https://github.com/vaila-multimodaltoolbox/vaila"
+created = "2025-08-12"
+updated = "2025-08-12"
+
+[project]
+name = "vaila_scout"
+field_width_m = 105.0
+field_height_m = 68.0
+sport = "soccer"
+field_units = "meters"
+field_standard = "FIFA"
+description = "Default soccer field and teams for scouting."
+
+[teams.home]
+name = "HOME"
+players = ["1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20","21","22","23"]
+players_names = { "10" = "Playmaker", "9" = "Striker" } # optional
+
+[teams.away]
+name = "AWAY"
+players = ["1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20","21","22","23"]
+players_names = {} # optional
+
+ actions = [
+  "Passing",
+  "First touch and receiving",
+  "Ball control",
+  "Dribbling",
+  "Shielding",
+  "Shooting and finishing",
+  "Heading",
+  "Crossing",
+  "Tackling",
+  "Interceptions",
+  "Goalkeeping skills: catching, shot stopping, positioning, distribution",
+ ]
+results = ["success", "fail", "neutral"]</code></pre>
+
+    <h2>UI</h2>
+    <ul>
+      <li><strong>Left</strong>: field (click to annotate)</li>
+      <li><strong>Right top</strong>: selectors for team, player, action, result; CSV buttons; Show Heatmap; Reset Time</li>
+      <li><strong>Right mid</strong>: config buttons (Load/Save/Edit), Tools menu includes Rename Teams</li>
+      <li><strong>Heatmap</strong>: opens in a new window when clicking Show Heatmap</li>
+    </ul>
+
+    <h2>Hotkeys</h2>
+    <ul>
+      <li><span class="kbd">Ctrl</span>+<span class="kbd">S</span>: Save CSV</li>
+      <li><span class="kbd">Ctrl</span>+<span class="kbd">O</span>: Load CSV</li>
+      <li><span class="kbd">Ctrl</span>+<span class="kbd">K</span>: Clear events</li>
+      <li><span class="kbd">H</span>: Show heatmap</li>
+      <li><span class="kbd">R</span>: Reset timer</li>
+      <li><span class="kbd">?</span>: Open help</li>
+      <li><span class="kbd">T</span>: Toggle current team (home/away)</li>
+      <li><span class="kbd">,</span>/<span class="kbd">.</span> or <span class="kbd">←</span>/<span class="kbd">→</span>: Next/previous player</li>
+      <li><span class="kbd">+</span>/<span class="kbd">-</span>: Increment/decrement current player number</li>
+      <li><span class="kbd">N</span>: Toggle auto-number players</li>
+      <li><span class="kbd">U</span>: Toggle unique player per click</li>
+      <li><span class="kbd">Ctrl</span>+<span class="kbd">E</span>: Edit config</li>
+      <li><span class="kbd">Ctrl</span>+<span class="kbd">L</span>: Load config</li>
+      <li><span class="kbd">Ctrl</span>+<span class="kbd">Shift</span>+<span class="kbd">S</span>: Save config</li>
+      <li><span class="kbd">Ctrl</span>+<span class="kbd">T</span>: Rename teams</li>
+      <li>Digits 0–9: buffer player number; <span class="kbd">Enter</span> apply; <span class="kbd">Backspace</span> edit; <span class="kbd">Esc</span> clear</li>
+    </ul>
+
+    <h2>Notes</h2>
+    <ul>
+      <li>Field coordinates are in meters, ranges [0, field_width] × [0, field_height].</li>
+      <li>Heatmap uses seaborn KDE.</li>
+    </ul>
+  </section>
+
+  <!-- Português (BR) -->
+  <section id="lang-pt" class="hidden">
+    <p>O vailá Scout permite anotar eventos de futebol em um campo virtual e gerar análises rápidas (heatmaps).</p>
+
+    <h2>Como executar</h2>
+    <pre><code>python -m vaila.scout_vaila</code></pre>
+
+    <h2>Recursos</h2>
+    <ul>
+      <li>Campo desenhado em escala (padrão 105 × 68 m).</li>
+      <li>Clique para anotar eventos (equipe, jogador com nome opcional, ação, resultado).</li>
+      <li>Times, jogadores, nomes, ações, resultados e tamanho do campo configuráveis via TOML.</li>
+      <li>Salvar/Carregar eventos em CSV. Coluna opcional <code>player_name</code> ao salvar.</li>
+      <li>Heatmap em uma janela separada.</li>
+      <li>Atalhos simples para agilizar o fluxo.</li>
+      <li>Modos de numeração: numeração automática e único-por-clique.</li>
+      <li>Geração automática de CSV de resumo por jogador ao salvar.</li>
+      <li>Renomeie times rapidamente e use entrada numérica rápida para o número do jogador.</li>
+    </ul>
+
+    <h2>Formato CSV</h2>
+    <pre><code>timestamp_s,team,player,action,result,pos_x_m,pos_y_m,player_name</code></pre>
+    <p><em>Nota:</em> <code>player_name</code> é opcional ao carregar; incluído ao salvar se disponível.</p>
+
+    <h2>CSV de resumo por jogador</h2>
+    <pre><code>team,player,num_events,first_timestamp_s,last_timestamp_s,timestamps</code></pre>
+
+    <h2>Configuração (TOML)</h2>
+    <p>Um arquivo padrão é criado em <code>~/.vaila/vaila_scout_config.toml</code> na primeira execução. Você pode Carregar/Salvar ou Editar a configuração no app.</p>
+
+    <h3>Esquema padrão</h3>
+    <pre><code>[program]
+name = "vaila_scout"
+version = "0.1.0"
+author = "Paulo Roberto Pereira Santiago"
+email = "paulosantiago@usp.br"
+description = "Scouting integrado (anotação + análise) para futebol."
+
+[project]
+name = "vaila_scout"
+field_width_m = 105.0
+field_height_m = 68.0
+
+[teams.home]
+name = "HOME"
+players = ["1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20","21","22","23"]
+players_names = { "10" = "Meia", "9" = "Centroavante" } # opcional
+
+[teams.away]
+name = "AWAY"
+players = ["1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20","21","22","23"]
+players_names = {} # opcional
+
+actions = [
+  "Passing",
+  "First touch and receiving",
+  "Ball control",
+  "Dribbling",
+  "Shielding",
+  "Shooting and finishing",
+  "Heading",
+  "Crossing",
+  "Tackling",
+  "Interceptions",
+  "Goalkeeping - catching",
+  "Goalkeeping - shot stopping",
+  "Goalkeeping - positioning",
+  "Goalkeeping - distribution",
+]
+results = ["success", "fail", "neutral"]</code></pre>
+
+    <h2>Interface</h2>
+    <ul>
+      <li><strong>Esquerda</strong>: campo (clique para anotar)</li>
+      <li><strong>Direita (topo)</strong>: seletores de equipe, jogador, ação, resultado; botões de CSV; Heatmap; Resetar tempo</li>
+      <li><strong>Direita (meio)</strong>: botões de configuração (Carregar/Salvar/Editar), menu Ferramentas inclui Renomear Times</li>
+      <li><strong>Heatmap</strong>: abre em nova janela ao clicar em Show Heatmap</li>
+    </ul>
+
+    <h2>Atalhos</h2>
+    <ul>
+      <li><span class="kbd">Ctrl</span>+<span class="kbd">S</span>: Salvar CSV</li>
+      <li><span class="kbd">Ctrl</span>+<span class="kbd">O</span>: Carregar CSV</li>
+      <li><span class="kbd">Ctrl</span>+<span class="kbd">K</span>: Limpar eventos</li>
+      <li><span class="kbd">H</span>: Mostrar heatmap</li>
+      <li><span class="kbd">R</span>: Resetar tempo</li>
+      <li><span class="kbd">?</span>: Abrir ajuda</li>
+      <li><span class="kbd">T</span>: Alternar equipe atual (casa/fora)</li>
+      <li><span class="kbd">,</span>/<span class="kbd">.</span> ou <span class="kbd">←</span>/<span class="kbd">→</span>: Próximo/Anterior jogador</li>
+      <li><span class="kbd">+</span>/<span class="kbd">-</span>: Incrementar/decrementar número do jogador</li>
+      <li><span class="kbd">N</span>: Alternar numeração automática</li>
+      <li><span class="kbd">U</span>: Alternar jogador único por clique</li>
+      <li><span class="kbd">Ctrl</span>+<span class="kbd">E</span>: Editar configuração</li>
+      <li><span class="kbd">Ctrl</span>+<span class="kbd">L</span>: Carregar configuração</li>
+      <li><span class="kbd">Ctrl</span>+<span class="kbd">Shift</span>+<span class="kbd">S</span>: Salvar configuração</li>
+      <li><span class="kbd">Ctrl</span>+<span class="kbd">T</span>: Renomear times</li>
+      <li>Dígitos 0–9: digitar número do jogador; <span class="kbd">Enter</span> aplica; <span class="kbd">Backspace</span> edita; <span class="kbd">Esc</span> limpa</li>
+    </ul>
+
+    <h2>Notas</h2>
+    <ul>
+      <li>Coordenadas em metros, faixas [0, field_width] × [0, field_height].</li>
+      <li>Heatmap usa KDE do seaborn.</li>
+    </ul>
+  </section>
+
+  <script>
+    (function () {
+      const btnEn = document.getElementById('btn-en');
+      const btnPt = document.getElementById('btn-pt');
+      const en = document.getElementById('lang-en');
+      const pt = document.getElementById('lang-pt');
+
+      function setLang(lang) {
+        const isEn = lang === 'en';
+        en.classList.toggle('hidden', !isEn);
+        pt.classList.toggle('hidden', isEn);
+        btnEn.classList.toggle('active', isEn);
+        btnPt.classList.toggle('active', !isEn);
+        document.documentElement.lang = isEn ? 'en' : 'pt-BR';
+        try { localStorage.setItem('vailaHelpLang', lang); } catch (e) {}
+      }
+
+      btnEn.addEventListener('click', () => setLang('en'));
+      btnPt.addEventListener('click', () => setLang('pt'));
+
+      // initial
+      let lang = 'en';
+      try {
+        const stored = localStorage.getItem('vailaHelpLang');
+        if (stored === 'pt' || stored === 'en') lang = stored;
+      } catch (e) {}
+      setLang(lang);
+    })();
+  </script>
+</body>
+</html>

@@ -1166,7 +1166,11 @@ def process_mediapipe_data(input_file, output_dir):
         root.destroy()  # Clean up the root window
 
         # Calculate the conversion factor for normalized pixels to meters
-        conversion_factor = calc_fator_convert_mediapipe(data, shank_length_real)
+        # Use keyword argument to avoid misplacing into 'knee'
+        conversion_factor = calc_fator_convert_mediapipe(
+            data,
+            shank_length_real=shank_length_real,
+        )
         print(f"Conversion factor: {conversion_factor:.6f} m/unit")
 
         # Processing to calculate the CG (already in meters)
