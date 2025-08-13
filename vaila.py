@@ -107,6 +107,7 @@ Visit the project repository: https://github.com/vaila-multimodaltoolbox
 
 # Standard library imports
 import os
+import sys
 from rich import print
 import signal
 import platform
@@ -1747,10 +1748,19 @@ class Vaila(tk.Tk):
 
     # B_r5_c3 - Scout
     def scout(self):
-        """Runs the Scout module."""
-        from vaila import scout_vaila
-
-        scout_vaila.run_scout()
+        """Runs the Scout module in a separate process to avoid Tk conflicts."""
+        try:
+            # Try to run the Scout module directly
+            subprocess.Popen([sys.executable, "-m", "vaila.scout_vaila"])
+        except Exception as e:
+            print(f"Error launching Scout: {e}")
+            # Fallback: try to run the script file directly
+            try:
+                script_path = os.path.join(os.path.dirname(__file__), "vaila", "scout_vaila.py")
+                subprocess.Popen([sys.executable, script_path])
+            except Exception as e2:
+                print(f"Fallback also failed: {e2}")
+                messagebox.showerror("Error", f"Could not launch Scout module:\n{e}\n\n{e2}")
 
     # C_r1_c1
     def reorder_csv_data(self):
