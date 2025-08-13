@@ -1422,65 +1422,124 @@ class Vaila(tk.Tk):
     # B_r1_c4
     def markerless_2d_analysis(self):
         """Runs the Markerless 2D Analysis module."""
-        import tkinter as tk
-        from tkinter import simpledialog
 
-        root = tk.Tk()
-        root.withdraw()
-
-        # Simple choice dialog
-        choices = {
-            "1": "Standard (Faster, single-person)",
-            "2": "Advanced (Slower, multi-person with YOLO)",
-        }
-
+        # Option dialog using existing root
         choice = simpledialog.askstring(
-            "Markerless 2D Analysis Version",
-            "Select version:\n\n1: Standard (Faster, single-person)\n2: Advanced (Slower, multi-person with YOLO)",
+            "Markerless 2D Analysis Options",
+            "Select launch method:\n\n1: Separate Process (Recommended - No Tkinter conflicts)\n2: Same Process (Uses existing window)\n\nEnter 1 or 2:",
             initialvalue="1",
         )
 
-        if not choice or choice not in choices:
+        if not choice or choice not in ["1", "2"]:
             return
 
         if choice == "1":
-            from vaila.markerless_2d_analysis import process_videos_in_directory
+            # Option 1: Launch in separate process (recommended)
+            try:
+                # First ask for version choice
+                version_choice = simpledialog.askstring(
+                    "Markerless 2D Analysis Version",
+                    "Select version:\n\n1: Standard (Faster, single-person)\n2: Advanced (Slower, multi-person with YOLO)\n\nEnter 1 or 2:",
+                    initialvalue="1",
+                )
+                
+                if not version_choice or version_choice not in ["1", "2"]:
+                    return
+                
+                # Launch in separate process
+                if version_choice == "1":
+                    subprocess.Popen([sys.executable, "-m", "vaila.markerless_2d_analysis"])
+                else:
+                    subprocess.Popen([sys.executable, "-m", "vaila.markerless2d_analysis_v2"])
+                    
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to launch markerless analysis: {e}")
+                
         else:
-            from vaila.markerless2d_analysis_v2 import (
-                process_videos_in_directory,
-            )  # Fixed module name
-
-        process_videos_in_directory()
+            # Option 2: Use existing root window (may have conflicts)
+            try:
+                # Version choice
+                version_choice = simpledialog.askstring(
+                    "Markerless 2D Analysis Version",
+                    "Select version:\n\n1: Standard (Faster, single-person)\n2: Advanced (Slower, multi-person with YOLO)\n\nEnter 1 or 2:",
+                    initialvalue="1",
+                )
+                
+                if not version_choice or version_choice not in ["1", "2"]:
+                    return
+                
+                # Import and run in same process
+                if version_choice == "1":
+                    from vaila.markerless_2d_analysis import process_videos_in_directory
+                else:
+                    from vaila.markerless2d_analysis_v2 import process_videos_in_directory
+                
+                # Pass the existing root window to avoid creating new Tk
+                process_videos_in_directory(existing_root=self.root)
+                
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to run markerless analysis: {e}")
 
     # B_r1_c5
     def markerless_3d_analysis(self):
         """Runs the Markerless 3D Analysis module."""
-        import tkinter as tk
 
-        root = tk.Tk()
-        root.withdraw()
-
-        # Simple choice dialog
-        choices = {
-            "1": "Standard (Faster, single-person)",
-            "2": "Advanced (Slower, multi-person with YOLO)",
-        }
-
+        # Option dialog using existing root
         choice = simpledialog.askstring(
-            "Markerless 3D Analysis Version",
-            "Select version:\n\n1: Standard (Faster, single-person)\n2: Advanced (Slower, multi-person with YOLO)",
+            "Markerless 3D Analysis Options",
+            "Select launch method:\n\n1: Separate Process (Recommended - No Tkinter conflicts)\n2: Same Process (Uses existing window)\n\nEnter 1 or 2:",
             initialvalue="1",
         )
 
-        if not choice or choice not in choices:
+        if not choice or choice not in ["1", "2"]:
             return
 
         if choice == "1":
-            from vaila.markerless_3d_analysis import process_videos_in_directory
+            # Option 1: Launch in separate process (recommended)
+            try:
+                # First ask for version choice
+                version_choice = simpledialog.askstring(
+                    "Markerless 3D Analysis Version",
+                    "Select version:\n\n1: Standard (Faster, single-person)\n2: Advanced (Slower, multi-person with YOLO)\n\nEnter 1 or 2:",
+                    initialvalue="1",
+                )
+                
+                if not version_choice or version_choice not in ["1", "2"]:
+                    return
+                
+                # Launch in separate process
+                if version_choice == "1":
+                    subprocess.Popen([sys.executable, "-m", "vaila.markerless_3d_analysis"])
+                else:
+                    subprocess.Popen([sys.executable, "-m", "vaila.markerless3d_analysis_v2"])
+                    
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to launch markerless 3D analysis: {e}")
+                
         else:
-            from vaila.markerless3d_analysis_v2 import process_videos_in_directory
-
-        process_videos_in_directory()
+            # Option 2: Use existing root window (may have conflicts)
+            try:
+                # Version choice
+                version_choice = simpledialog.askstring(
+                    "Markerless 3D Analysis Version",
+                    "Select version:\n\n1: Standard (Faster, single-person)\n2: Advanced (Slower, multi-person with YOLO)\n\nEnter 1 or 2:",
+                    initialvalue="1",
+                )
+                
+                if not version_choice or version_choice not in ["1", "2"]:
+                    return
+                
+                # Import and run in same process
+                if version_choice == "1":
+                    from vaila.markerless_3d_analysis import process_videos_in_directory
+                else:
+                    from vaila.markerless3d_analysis_v2 import process_videos_in_directory
+                
+                # Pass the existing root window to avoid creating new Tk
+                process_videos_in_directory(existing_root=self.root)
+                
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to run markerless 3D analysis: {e}")
 
     # B_r2_c1
     def vector_coding(self):

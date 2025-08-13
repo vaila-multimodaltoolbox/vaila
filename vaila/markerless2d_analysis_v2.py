@@ -170,9 +170,12 @@ class ConfidenceInputDialog(simpledialog.Dialog):
         }
 
 
-def get_pose_config():
-    root = tk.Tk()
-    root.withdraw()
+def get_pose_config(existing_root=None):
+    if existing_root is not None:
+        root = existing_root
+    else:
+        root = tk.Tk()
+        root.withdraw()
     dialog = ConfidenceInputDialog(root, title="Pose Configuration")
     if dialog.result:
         return dialog.result
@@ -653,12 +656,15 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
     print(f"Files saved in: {output_dir}")
 
 
-def process_videos_in_directory():
+def process_videos_in_directory(existing_root=None):
     print(f"Running script: {Path(__file__).name}")
     print(f"Script directory: {Path(__file__).parent.resolve()}")
     
-    root = tk.Tk()
-    root.withdraw()
+    if existing_root is not None:
+        root = existing_root
+    else:
+        root = tk.Tk()
+        root.withdraw()
     
     input_dir = filedialog.askdirectory(
         title="Select the input directory containing videos"
@@ -672,7 +678,7 @@ def process_videos_in_directory():
         messagebox.showerror("Error", "No output directory selected.")
         return
     
-    pose_config = get_pose_config()
+    pose_config = get_pose_config(root)
     if not pose_config:
         return
     
