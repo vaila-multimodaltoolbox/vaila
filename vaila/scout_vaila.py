@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 12 August 2025
-Update Date: 12 August 2025
-Version: 0.1.0
+Update Date: 13 August 2025
+Version: 0.1.1
 
 Description:
     Integrated GUI to annotate sports events on a virtual soccer field and generate
@@ -170,17 +170,17 @@ def _default_config() -> Dict:
         # Prefer structured actions with symbol, hotkey and color. If user provides a simple list of strings,
         # the app will convert them to this structure with defaults.
         "actions": [
-            {"name": "Pass", "symbol": "o", "key": "p", "color": "#FFD700"},          # gold circle
-            {"name": "First touch", "symbol": "P", "key": "f", "color": "#8c564b"},
-            {"name": "Control", "symbol": "s", "key": "c", "color": "#9467bd"},
-            {"name": "Dribble", "symbol": "D", "key": "d", "color": "#17becf"},
-            {"name": "Shield", "symbol": "h", "key": "h", "color": "#7f7f7f"},
-            {"name": "Shot", "symbol": "*", "key": "g", "color": "#FF4500"},        # orange-red star
-            {"name": "Header", "symbol": "^", "key": "e", "color": "#2ca02c"},      # green triangle
-            {"name": "Cross", "symbol": "+", "key": "x", "color": "#1f77b4"},
-            {"name": "Tackle", "symbol": "x", "key": "t", "color": "#d62728"},
-            {"name": "Interception", "symbol": "X", "key": "i", "color": "#bcbd22"},
-            {"name": "Goalkeeping", "symbol": "s", "key": "k", "color": "#8c564b"},
+            {"name": "Pass", "code": 1, "symbol": "o", "key": "p", "color": "#FFD700"},
+            {"name": "First touch", "code": 2, "symbol": "P", "key": "f", "color": "#8c564b"},
+            {"name": "Control", "code": 3, "symbol": "s", "key": "c", "color": "#9467bd"},
+            {"name": "Dribble", "code": 4, "symbol": "D", "key": "d", "color": "#17becf"},
+            {"name": "Shield", "code": 5, "symbol": "h", "key": "h", "color": "#7f7f7f"},
+            {"name": "Shot", "code": 6, "symbol": "*", "key": "g", "color": "#FF4500"},
+            {"name": "Header", "code": 7, "symbol": "^", "key": "e", "color": "#2ca02c"},
+            {"name": "Cross", "code": 8, "symbol": "+", "key": "x", "color": "#1f77b4"},
+            {"name": "Tackle", "code": 9, "symbol": "x", "key": "t", "color": "#d62728"},
+            {"name": "Interception", "code": 10, "symbol": "X", "key": "i", "color": "#bcbd22"},
+            {"name": "Goalkeeping", "code": 11, "symbol": "s", "key": "k", "color": "#8c564b"},
         ],
         "results": ["success", "fail", "neutral"],
         "drawing": {
@@ -191,6 +191,7 @@ def _default_config() -> Dict:
             "action_symbol_size": 90,
             "show_player_name": True,
             "player_name_size": 8,
+            "show_action_symbol": True,
         },
     }
 
@@ -228,14 +229,16 @@ def write_toml_config(path: Path, cfg: Dict) -> bool:
 # --- Data structures ------------------------------------------------------------
 @dataclass
 class ScoutEvent:
+    # CSV order: timestamp_s, team, player_name, player, action, action_code, result, pos_x_m, pos_y_m
     timestamp_s: float
     team: str
+    player_name: str
     player: str
     action: str
+    action_code: int
     result: str
     pos_x_m: float
     pos_y_m: float
-    player_name: str = ""
 
     def to_row(self) -> Dict[str, object]:
         return asdict(self)
@@ -275,6 +278,7 @@ def _toml_template_with_comments(cfg: Dict) -> str:
     if actions and isinstance(actions[0], dict):
         for a in actions:
             name = str(a.get("name", "Action"))
+            code = a.get("code", "")
             symbol = str(a.get("symbol", "o"))
             key = str(a.get("key", ""))
             color = str(a.get("color", "#FFD700"))
@@ -282,6 +286,7 @@ def _toml_template_with_comments(cfg: Dict) -> str:
                 "\n".join([
                     "[[actions]]",
                     f'name = "{name}"',
+                    (f"code = {int(code)}" if str(code).isdigit() else f'code = "{code}"') if code != "" else "code = -1",
                     f'symbol = "{symbol}"',
                     f'key = "{key}"',
                     f'color = "{color}"',
@@ -295,6 +300,7 @@ def _toml_template_with_comments(cfg: Dict) -> str:
                 "\n".join([
                     "[[actions]]",
                     f'name = "{str(n)}"',
+                    "code = -1",
                     'symbol = "o"',
                     f'key = "{str(n)[:1].lower()}"',
                     'color = "#FFD700"',
@@ -479,13 +485,13 @@ class ScoutApp(tk.Tk):
         menubar.add_cascade(label="File", menu=file_menu)
 
         view_menu = tk.Menu(menubar, tearoff=0)
-        view_menu.add_command(label="Show Heatmap	H", command=self.draw_heatmap)
+        view_menu.add_command(label="Show Heatmap (H)", command=self.draw_heatmap)
         menubar.add_cascade(label="View", menu=view_menu)
 
         tools_menu = tk.Menu(menubar, tearoff=0)
         tools_menu.add_command(label="Load Config	Ctrl+L", command=self.load_config)
         tools_menu.add_command(label="Save Config	Ctrl+Shift+S", command=self.save_config)
-        tools_menu.add_command(label="Edit Config	Ctrl+E", command=self.edit_config)
+        tools_menu.add_command(label="Create Template", command=self._create_template_config)
         tools_menu.add_command(label="Rename Teams	Ctrl+T", command=self.rename_teams)
         menubar.add_cascade(label="Tools", menu=tools_menu)
 
@@ -510,21 +516,13 @@ class ScoutApp(tk.Tk):
         controls = ttk.Frame(right_frame)
         controls.pack(side=tk.TOP, fill=tk.X)
 
-        # Player/Team selectors moved to bottom of column for compactness
+        # Internal state for team/player (not shown in the UI)
         teams = [cfg["teams"]["home"]["name"], cfg["teams"]["away"]["name"]]
         self.team_var = tk.StringVar(value=teams[0])
         self.player_var = tk.StringVar(value="")
-        # Placeholders; grid later at bottom rows
-        ttk.Label(controls, text="Team:").grid(row=8, column=0, sticky=tk.W, padx=2, pady=2)
-        self.team_cb = ttk.Combobox(controls, textvariable=self.team_var, values=teams, width=12, state="readonly")
-        self.team_cb.grid(row=8, column=1, padx=2, pady=2)
-
-        ttk.Label(controls, text="Player:").grid(row=8, column=2, sticky=tk.W, padx=2, pady=2)
-        self.player_cb = ttk.Combobox(controls, textvariable=self.player_var, values=[], width=18, state="readonly")
-        self.player_cb.grid(row=8, column=3, padx=2, pady=2)
-        self.player_cb.bind("<<ComboboxSelected>>", self._on_player_changed)
-        self.player_name_label = ttk.Label(controls, text="Name: -")
-        self.player_name_label.grid(row=8, column=4, sticky=tk.W, padx=6, pady=2)
+        # Hidden combobox to reuse existing logic without showing controls
+        self.player_cb = ttk.Combobox(controls, textvariable=self.player_var, values=[], width=1, state="readonly")
+        self.player_cb.grid_remove()
 
         # Action selector (normalized structured actions)
         ttk.Label(controls, text="Action:").grid(row=1, column=0, sticky=tk.W, padx=2, pady=2)
@@ -537,7 +535,7 @@ class ScoutApp(tk.Tk):
         self.action_cb = ttk.Combobox(controls, textvariable=self.action_var, values=self.action_names, width=16, state="readonly")
         self.action_cb.grid(row=1, column=1, padx=2, pady=2)
 
-        # Result selector + cycle button
+        # Result selector
         ttk.Label(controls, text="Result:").grid(row=1, column=2, sticky=tk.W, padx=2, pady=2)
         self.results_list = list(cfg.get("results", _default_config()["results"]))
         if not self.results_list:
@@ -545,7 +543,6 @@ class ScoutApp(tk.Tk):
         self.result_var = tk.StringVar(value=self.results_list[0])
         self.result_cb = ttk.Combobox(controls, textvariable=self.result_var, values=self.results_list, width=10, state="readonly")
         self.result_cb.grid(row=1, column=3, padx=2, pady=2)
-        ttk.Button(controls, text="Cycle Result (Space)", command=self._cycle_result).grid(row=1, column=4, padx=4, pady=2, sticky=tk.W)
 
         # Timer display and controls
         timer_frame = ttk.Frame(controls)
@@ -573,12 +570,12 @@ class ScoutApp(tk.Tk):
         ttk.Button(btns, text="Show Heatmap", command=self.draw_heatmap).pack(side=tk.LEFT, padx=12)
         ttk.Button(btns, text="Reset Time", command=self.reset_timer).pack(side=tk.LEFT, padx=12)
 
-        # Config buttons
+        # Config buttons (without Edit Config)
         cfg_btns = ttk.Frame(controls)
         cfg_btns.grid(row=4, column=0, columnspan=4, sticky=tk.W, padx=2, pady=(2, 6))
         ttk.Button(cfg_btns, text="Load Config", command=self.load_config).pack(side=tk.LEFT, padx=4)
         ttk.Button(cfg_btns, text="Save Config", command=self.save_config).pack(side=tk.LEFT, padx=4)
-        ttk.Button(cfg_btns, text="Edit Config", command=self.edit_config).pack(side=tk.LEFT, padx=4)
+        ttk.Button(cfg_btns, text="Create Template", command=self._create_template_config).pack(side=tk.LEFT, padx=4)
 
         # --- Field figure (left)
         self.field_fig, self.field_ax = plt.subplots(figsize=(6.8, 4.3))
@@ -587,19 +584,13 @@ class ScoutApp(tk.Tk):
         self._redraw_field()
         self.field_canvas.mpl_connect("button_press_event", self._on_field_click)
 
-        # --- Modes for player numbering
+        # Remove auto-number/unique-per-click (not needed)
         self.auto_number_players = False
         self.unique_player_per_click = False
-        self.next_player_number_by_team: Dict[str, int] = self._init_next_player_numbers()
-        modes = ttk.Frame(controls)
-        modes.grid(row=5, column=0, columnspan=4, sticky=tk.W, padx=2, pady=(0, 2))
-        self.chk_auto_var = tk.BooleanVar(value=self.auto_number_players)
-        self.chk_unique_var = tk.BooleanVar(value=self.unique_player_per_click)
-        ttk.Checkbutton(modes, text="Auto-number players (N)", variable=self.chk_auto_var, command=self._toggle_auto).pack(side=tk.LEFT, padx=6)
-        ttk.Checkbutton(modes, text="Unique player per click (U)", variable=self.chk_unique_var, command=self._toggle_unique).pack(side=tk.LEFT, padx=6)
+        self.next_player_number_by_team: Dict[str, int] = {}
 
         # Sync players list on team change
-        self.team_cb.bind("<<ComboboxSelected>>", self._on_team_changed)
+        # No visible team combobox; keep hotkey 'T' to toggle team
 
         # Hotkeys (simple)
         self.bind_all("<Control-s>", lambda e: self.save_csv())
@@ -610,53 +601,39 @@ class ScoutApp(tk.Tk):
         self.bind_all("r", lambda e: self.reset_timer())
         self.bind_all("R", lambda e: self.reset_timer())
         self.bind_all("?", lambda e: self.open_help())
-        self.bind_all("<Control-e>", lambda e: self.edit_config())
+        # self.bind_all("<Control-e>", lambda e: self.edit_config())  # disabled - removed Edit Config
         self.bind_all("<Control-l>", lambda e: self.load_config())
         self.bind_all("<Control-S>", lambda e: self.save_config())
         # Additional hotkeys
-        self.bind_all("n", lambda e: self._toggle_auto())
-        self.bind_all("N", lambda e: self._toggle_auto())
-        self.bind_all("u", lambda e: self._toggle_unique())
-        self.bind_all("U", lambda e: self._toggle_unique())
         self.bind_all("t", lambda e: self._toggle_team())
         self.bind_all("T", lambda e: self._toggle_team())
-        # Use comma/period to avoid matplotlib key conflicts with 'k'
-        self.bind_all(",", lambda e: self._on_prev_player())
-        self.bind_all(".", lambda e: self._on_next_player())
-        # Arrow keys for player navigation
-        self.bind_all("<Right>", lambda e: self._on_next_player())
-        self.bind_all("<Left>", lambda e: self._on_prev_player())
-        self.bind_all("<Control-t>", lambda e: self.rename_teams())
-        # Space cycles result; Ctrl+Space toggles timer
-        self.bind_all("<space>", lambda e: self._cycle_result())
-        self.bind_all("<Control-space>", lambda e: self._toggle_timer())
-        # Action hotkeys from config (single-letter)
-        for k, act in self.key_to_action.items():
-            if not k:
-                continue
-            def _mk_set_action(name: str):
-                return lambda _e: self._set_action_by_name(name)
-            self.bind_all(k, _mk_set_action(act["name"]))
+        # self.bind_all("<Control-t>", lambda e: self.rename_teams())  # optional
+        # Space toggles timer - will be bound after _toggle_timer is defined
+        # Action hotkeys from config (single-letter) - DISABLED, using numeric codes instead
+        # for k, act in self.key_to_action.items():
+        #     if not k:
+        #         continue
+        #     def _mk_set_action(name: str):
+        #         return lambda _e: self._set_action_by_name(name)
+        #     self.bind_all(k, _mk_set_action(act["name"]))
 
-        # Quick player numeric buffer UI and keybinds
-        self.quick_player_buffer: str = ""
-        self.quick_label = ttk.Label(controls, text="Quick #: (none)")
+        # Quick action code buffer (digits map to action codes)
+        self.quick_action_buffer = ""
+        self.quick_label = ttk.Label(controls, text="Quick action code: (none)")
         self.quick_label.grid(row=6, column=0, columnspan=4, sticky=tk.W, padx=2, pady=(2, 2))
         for _d in list("0123456789"):
-            self.bind_all(_d, self._on_digit)
-        self.bind_all("<BackSpace>", self._on_backspace)
-        self.bind_all("<Escape>", self._on_escape)
-        self.bind_all("<Return>", self._on_enter_apply_player)
-        self.bind_all("+", self._on_plus_inc)
-        self.bind_all("-", self._on_minus_dec)
+            self.bind_all(_d, self._on_digit_action)
+        self.bind_all("<BackSpace>", self._on_backspace_action)
+        self.bind_all("<Escape>", self._on_escape_action)
+        self.bind_all("<Return>", self._on_enter_apply_action)
 
         # --- Rosters (bottom-right): Home and Away side by side
         rosters = ttk.Frame(right_frame)
         rosters.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=2, pady=(4, 2))
 
-        home_box = ttk.Labelframe(rosters, text="Home")
+        home_box = ttk.Labelframe(rosters, text=f"Home ({self.cfg['teams']['home']['name']})")
         home_box.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 4))
-        away_box = ttk.Labelframe(rosters, text="Away")
+        away_box = ttk.Labelframe(rosters, text=f"Away ({self.cfg['teams']['away']['name']})")
         away_box.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(4, 0))
 
         self.home_tv = ttk.Treeview(home_box, columns=("no", "name"), show="headings", height=12)
@@ -684,6 +661,17 @@ class ScoutApp(tk.Tk):
         self._timer_start_epoch = time.time()
         self._timer_paused_elapsed = 0.0
         self._tick_timer()
+        
+        # Now bind Space key after _toggle_timer is defined
+        self.bind_all("<space>", lambda e: self._toggle_timer())
+
+    def destroy(self):
+        try:
+            if hasattr(self, "_tick_after_id") and self._tick_after_id:
+                self.after_cancel(self._tick_after_id)
+        except Exception:
+            pass
+        super().destroy()
 
     # --- UI helpers
     def _on_team_changed(self, _evt=None):
@@ -712,7 +700,10 @@ class ScoutApp(tk.Tk):
         # Update clock label periodically
         if hasattr(self, "clock_var"):
             self.clock_var.set(self._format_time(self._get_current_time_s()))
-        self.after(200, self._tick_timer)
+        try:
+            self._tick_after_id = self.after(200, self._tick_timer)
+        except Exception:
+            pass
 
     def _get_current_time_s(self) -> float:
         if getattr(self, "manual_time_var", None) and self.manual_time_var.get():
@@ -720,6 +711,12 @@ class ScoutApp(tk.Tk):
                 return float(self.manual_time_entry.get())
             except Exception:
                 return 0.0
+        if not getattr(self, "_timer_running", False):
+            return float(getattr(self, "_timer_paused_elapsed", 0.0))
+        return float(self._timer_paused_elapsed + (time.time() - self._timer_start_epoch))
+
+    def _get_live_time_s(self) -> float:
+        # Live timer ignoring manual mode
         if not getattr(self, "_timer_running", False):
             return float(getattr(self, "_timer_paused_elapsed", 0.0))
         return float(self._timer_paused_elapsed + (time.time() - self._timer_start_epoch))
@@ -734,9 +731,19 @@ class ScoutApp(tk.Tk):
             self._timer_paused_elapsed = self._get_current_time_s()
             self._timer_running = False
 
+    def _toggle_timer(self):
+        """Toggle timer between running and paused states."""
+        # If manual mode is on, disable it so the live clock is visible
+        if getattr(self, "manual_time_var", None) and self.manual_time_var.get():
+            self.manual_time_var.set(False)
+        if getattr(self, "_timer_running", False):
+            self.pause_timer()
+        else:
+            self.start_timer()
+
     def _set_manual_time_now(self) -> None:
         try:
-            current = self._get_current_time_s()
+            current = self._get_live_time_s()
         except Exception:
             current = 0.0
         self.manual_time_entry.delete(0, tk.END)
@@ -774,6 +781,15 @@ class ScoutApp(tk.Tk):
             return
 
         timestamp = self._get_current_time_s()
+        # Result via mouse button: 1=left→success, 2=middle→neutral, 3=right→fail
+        btn = int(getattr(event, "button", 1) or 1)
+        if btn == 1:
+            clicked_result = "success"
+        elif btn == 3:
+            clicked_result = "fail"
+        else:
+            clicked_result = "neutral"
+        self.result_var.set(clicked_result)
         # Player assignment rules
         team_name = self.team_var.get()
         player_str = self.player_var.get()
@@ -788,7 +804,7 @@ class ScoutApp(tk.Tk):
                 current_vals.append(player_str)
                 self.player_cb.config(values=current_vals)
             self.player_var.set(player_str)
-        elif self.quick_player_buffer:
+        elif hasattr(self, 'quick_player_buffer') and self.quick_player_buffer:
             # Apply numeric buffer
             player_str = self.quick_player_buffer
             self._ensure_player_in_team(team_name, player_str)
@@ -800,16 +816,21 @@ class ScoutApp(tk.Tk):
             self.quick_player_buffer = ""
             self._update_quick_label()
 
+        # Action code lookup
+        _act = next((a for a in self.actions_cfg if a["name"] == self.action_var.get()), None)
+        _act_code = int(_act.get("code", -1)) if _act else -1
+
         ev = ScoutEvent(
             timestamp_s=round(timestamp, 2),
             team=team_name,
+            player_name=self._get_player_name(self._team_key_from_name(team_name),
+                                      self._parse_display_to_number(self.player_var.get())),
             player=self._parse_display_to_number(self.player_var.get()),
             action=self.action_var.get(),
+            action_code=_act_code,
             result=self.result_var.get(),
             pos_x_m=round(x_m, 2),
             pos_y_m=round(y_m, 2),
-            player_name=self._get_player_name(self._team_key_from_name(team_name),
-                                      self._parse_display_to_number(self.player_var.get())),
         )
         self.events.append(ev)
 
@@ -837,6 +858,20 @@ class ScoutApp(tk.Tk):
             messagebox.showwarning("No data", "No events to save.")
             return
         df = pd.DataFrame([e.to_row() for e in self.events])
+        # Ensure CSV columns order as requested
+        desired_cols = [
+            "timestamp_s",
+            "team",
+            "player_name",
+            "player",
+            "action",
+            "action_code",
+            "result",
+            "pos_x_m",
+            "pos_y_m",
+        ]
+        ordered = [c for c in desired_cols if c in df.columns] + [c for c in df.columns if c not in desired_cols]
+        df = df[ordered]
         path = filedialog.asksaveasfilename(
             title="Save Events CSV",
             defaultextension=".csv",
@@ -865,16 +900,18 @@ class ScoutApp(tk.Tk):
                 messagebox.showerror("Error", "Invalid CSV structure.")
                 return
             has_name = "player_name" in df.columns
+            has_action_code = "action_code" in df.columns
             self.events = [
                 ScoutEvent(
                     timestamp_s=float(row["timestamp_s"]),
                     team=str(row["team"]),
+                    player_name=str(row["player_name"]) if has_name and not pd.isna(row["player_name"]) else "",
                     player=str(row["player"]),
                     action=str(row["action"]),
+                    action_code=int(row["action_code"]) if has_action_code and not pd.isna(row["action_code"]) else -1,
                     result=str(row["result"]),
                     pos_x_m=float(row["pos_x_m"]),
                     pos_y_m=float(row["pos_y_m"]),
-                    player_name=str(row["player_name"]) if has_name and not pd.isna(row["player_name"]) else "",
                 )
                 for _, row in df.iterrows()
             ]
@@ -1037,27 +1074,27 @@ class ScoutApp(tk.Tk):
             )
 
         # Action symbol
-        act = self.name_to_action.get(ev.action, None)
-        if act is None:
-            return
-        symbol = str(act.get("symbol", "o"))
-        a_color = str(act.get("color", "yellow"))
-        off = circle_r * 1.2
-        mx, my = x_m + off, y_m + off
-        marker_map = {"o": "o", "*": "*", "+": "+", "x": "x", "X": "x", "^": "^", "s": "s", "P": "P", "D": "D", "h": "h"}
-        m = marker_map.get(symbol, None)
-        if m is not None and len(m) == 1:
-            # For unfilled markers like '+' and 'x', use facecolors/edgecolors appropriately to avoid warnings
-            unfilled = m in {"+", "x"}
-            if unfilled:
-                self.field_ax.scatter([mx], [my], s=action_symbol_size, c=a_color, marker=m, zorder=8)
-            else:
-                self.field_ax.scatter([mx], [my], s=action_symbol_size, c=a_color, edgecolors=result_edge, marker=m, zorder=8)
-        else:
-            self.field_ax.text(mx, my, symbol, color=a_color, fontsize=number_size + 2, weight="bold", zorder=8)
+        show_symbol = bool(self.cfg.get("drawing", {}).get("show_action_symbol", False))
+        if show_symbol:
+            act = self.name_to_action.get(ev.action, None)
+            if act is not None:
+                symbol = str(act.get("symbol", "o"))
+                a_color = str(act.get("color", "yellow"))
+                off = circle_r * 1.2
+                mx, my = x_m + off, y_m + off
+                marker_map = {"o": "o", "*": "*", "+": "+", "x": "x", "X": "x", "^": "^", "s": "s", "P": "P", "D": "D", "h": "h"}
+                m = marker_map.get(symbol, None)
+                if m is not None and len(m) == 1:
+                    unfilled = m in {"+", "x"}
+                    if unfilled:
+                        self.field_ax.scatter([mx], [my], s=action_symbol_size, c=a_color, marker=m, zorder=8)
+                    else:
+                        self.field_ax.scatter([mx], [my], s=action_symbol_size, c=a_color, edgecolors=result_edge, marker=m, zorder=8)
+                else:
+                    self.field_ax.text(mx, my, symbol, color=a_color, fontsize=number_size + 2, weight="bold", zorder=8)
     # --- Actions helpers
     def _normalize_actions_config(self, actions_cfg: List) -> List[Dict[str, str]]:
-        """Accepts either list[str] or list[dict] and returns list of dicts with keys name,symbol,key,color."""
+        """Accepts either list[str] or list[dict] and returns list of dicts with keys name,code,symbol,key,color."""
         out: List[Dict[str, str]] = []
         if not actions_cfg:
             return _default_config()["actions"]
@@ -1066,15 +1103,16 @@ class ScoutApp(tk.Tk):
             for a in actions_cfg:
                 out.append({
                     "name": str(a.get("name", "Action")),
+                    "code": int(a.get("code", -1)) if str(a.get("code", "")).isdigit() else a.get("code", -1),
                     "symbol": str(a.get("symbol", "o")),
                     "key": str(a.get("key", "")),
                     "color": str(a.get("color", "#FFD700")),
                 })
             return out
         # assume list of names
-        for n in actions_cfg:
+        for idx, n in enumerate(actions_cfg, start=1):
             name = str(n)
-            out.append({"name": name, "symbol": "o", "key": (name[:1].lower() if name else ""), "color": "#FFD700"})
+            out.append({"name": name, "code": idx, "symbol": "o", "key": (name[:1].lower() if name else ""), "color": "#FFD700"})
         return out
 
     def _set_action_by_name(self, name: str) -> None:
@@ -1104,17 +1142,31 @@ class ScoutApp(tk.Tk):
         if cfg is None:
             messagebox.showerror("Error", "Failed to read selected config.")
             return
+        # Backwards compatibility: accept old schema without drawing or structured actions
+        if "drawing" not in cfg:
+            cfg["drawing"] = _default_config()["drawing"]
+        if "results" not in cfg:
+            cfg["results"] = _default_config()["results"]
+        # Normalize actions to structured form
+        cfg["actions"] = self._normalize_actions_config(cfg.get("actions", _default_config()["actions"]))
         self.cfg = cfg
         self.cfg_path = path
         # Update UI based on new config
         self.field_w = float(cfg["project"]["field_width_m"])
         self.field_h = float(cfg["project"]["field_height_m"])
+        # Refresh actions
+        self.actions_cfg = self._normalize_actions_config(cfg.get("actions", []))
+        self.action_names = [a["name"] for a in self.actions_cfg]
+        self.name_to_action = {a["name"]: a for a in self.actions_cfg}
+        self.key_to_action = {str(a.get("key", "")).lower(): a for a in self.actions_cfg if a.get("key")}
+        self.action_cb.config(values=self.action_names)
+        if self.action_names:
+            self.action_var.set(self.action_names[0])
         teams = [cfg["teams"]["home"]["name"], cfg["teams"]["away"]["name"]]
-        self.team_cb.config(values=teams)
         self.team_var.set(teams[0])
         self._on_team_changed()
         self._redraw_field()
-        self.next_player_number_by_team = self._init_next_player_numbers()
+        self.next_player_number_by_team = {}
 
     def save_config(self):
         if self.cfg_path is None:
@@ -1131,6 +1183,29 @@ class ScoutApp(tk.Tk):
             messagebox.showinfo("Config", f"Config saved to\n{self.cfg_path}")
         else:
             messagebox.showwarning("Config", "Config was not saved (writer unavailable).")
+
+    def _create_template_config(self):
+        here = Path(__file__).resolve()
+        models_dir = here.parent / "models"
+        models_dir.mkdir(parents=True, exist_ok=True)
+        out_path = models_dir / DEFAULT_CFG_FILENAME
+        # Use current defaults but keep existing teams/actions/results if already loaded
+        cfg = {
+            "program": dict(self.cfg.get("program", _default_config()["program"])),
+            "project": dict(self.cfg.get("project", _default_config()["project"])),
+            "teams": {
+                "home": dict(self.cfg.get("teams", {}).get("home", _default_config()["teams"]["home"])),
+                "away": dict(self.cfg.get("teams", {}).get("away", _default_config()["teams"]["away"])),
+            },
+            "drawing": dict(self.cfg.get("drawing", _default_config()["drawing"])),
+            "results": list(self.cfg.get("results", _default_config()["results"])),
+            "actions": list(self.cfg.get("actions", _default_config()["actions"])),
+        }
+        ok = write_toml_template(out_path, cfg)
+        if ok:
+            messagebox.showinfo("Config", f"Template written to:\n{out_path}")
+        else:
+            messagebox.showerror("Config", "Failed to write template")
 
     def edit_config(self):
         dialog = ConfigDialog(self, self.cfg)
@@ -1186,18 +1261,14 @@ class ScoutApp(tk.Tk):
             ("Ctrl+K", "Clear events"),
             ("H", "Show heatmap"),
             ("R", "Reset timer"),
+            ("Space", "Start/Pause clock"),
             ("?", "Open help"),
             ("T", "Toggle current team (home/away)"),
-            (", / .", "Previous / Next player"),
-            ("← / →", "Previous / Next player"),
-            ("+ / -", "Increment / Decrement current player number"),
-            ("N", "Toggle auto-number players"),
-            ("U", "Toggle unique player per click"),
-            ("Ctrl+E", "Edit config"),
             ("Ctrl+L", "Load config"),
             ("Ctrl+Shift+S", "Save config"),
             ("Ctrl+T", "Rename teams"),
-            ("Digits 0–9", "Buffer player number; Enter apply; Backspace edit; Esc clear"),
+            ("Digits 0–9", "Enter action code; Enter apply; Backspace edit; Esc clear"),
+            ("Mouse", "Left=success, Right=fail, Middle=neutral"),
         ]
 
         for i, (keys, desc) in enumerate(shortcuts, start=1):
@@ -1234,85 +1305,75 @@ class ScoutApp(tk.Tk):
         self._on_team_changed()
 
     def _on_digit(self, event):
-        if event.char and event.char.isdigit() and len(self.quick_player_buffer) < 3:
-            self.quick_player_buffer += event.char
-            self._update_quick_label()
+        pass
 
     def _on_backspace(self, _event):
-        if self.quick_player_buffer:
-            self.quick_player_buffer = self.quick_player_buffer[:-1]
-            self._update_quick_label()
+        pass
 
     def _on_escape(self, _event):
-        if self.quick_player_buffer:
-            self.quick_player_buffer = ""
-            self._update_quick_label()
+        pass
 
     def _on_enter_apply_player(self, _event):
-        if not self.quick_player_buffer:
-            return
-        team_name = self.team_var.get()
-        player_str = self.quick_player_buffer
-        self._ensure_player_in_team(team_name, player_str)
-        vals = list(self.player_cb.cget("values"))
-        if player_str not in vals:
-            vals.append(player_str)
-            self.player_cb.config(values=vals)
-        self.player_var.set(player_str)
-        self.quick_player_buffer = ""
-        self._update_quick_label()
+        pass
 
     def _on_plus_inc(self, _event):
-        try:
-            current_num = self._parse_display_to_number(self.player_var.get())
-            current = int(current_num) if current_num.isdigit() else 0
-            new_val = str(current + 1)
-            self._ensure_player_in_team(self.team_var.get(), new_val)
-            self._set_player_selection_by_number(self._team_key_from_name(self.team_var.get()), new_val)
-            self._update_quick_label()
-        except Exception:
             pass
 
     def _on_minus_dec(self, _event):
-        try:
-            current_num = self._parse_display_to_number(self.player_var.get())
-            current = int(current_num) if current_num.isdigit() else 1
-            new_val = str(max(1, current - 1))
-            self._ensure_player_in_team(self.team_var.get(), new_val)
-            self._set_player_selection_by_number(self._team_key_from_name(self.team_var.get()), new_val)
-            self._update_quick_label()
-        except Exception:
             pass
 
     def _on_next_player(self, _event=None):
-        values = list(self.player_cb.cget("values"))
-        if not values:
-            return
-        try:
-            idx = values.index(self.player_var.get())
-        except ValueError:
-            idx = -1
-        self.player_var.set(values[(idx + 1) % len(values)])
+        pass
 
     def _on_prev_player(self, _event=None):
-        values = list(self.player_cb.cget("values"))
-        if not values:
-            return
-        try:
-            idx = values.index(self.player_var.get())
-        except ValueError:
-            idx = 0
-        self.player_var.set(values[(idx - 1) % len(values)])
+        pass
 
     def _update_quick_label(self):
-        buf = self.quick_player_buffer if self.quick_player_buffer else "(none)"
-        self.quick_label.config(text=f"Quick #: {buf}")
+        buf = self.quick_action_buffer if hasattr(self, 'quick_action_buffer') and self.quick_action_buffer else "(none)"
+        self.quick_label.config(text=f"Quick action code: {buf}")
 
     def _update_player_name_label(self):
         team_key = self._team_key_from_name(self.team_var.get())
         num = self._parse_display_to_number(self.player_var.get())
         name = self._get_player_name(team_key, num)
-        self.player_name_label.config(text=f"Name: {name if name else '-'}")
+        if hasattr(self, 'player_name_label'):
+            self.player_name_label.config(text=f"Name: {name if name else '-'}")
+
+    # --- Quick action code mapping
+    def _on_digit_action(self, event):
+        if event.char and event.char.isdigit() and len(getattr(self, 'quick_action_buffer', '')) < 4:
+            self.quick_action_buffer += event.char
+            self._update_quick_label()
+
+    def _on_backspace_action(self, _event):
+        if hasattr(self, 'quick_action_buffer') and self.quick_action_buffer:
+            self.quick_action_buffer = self.quick_action_buffer[:-1]
+            self._update_quick_label()
+
+    def _on_escape_action(self, _event):
+        if hasattr(self, 'quick_action_buffer') and self.quick_action_buffer:
+            self.quick_action_buffer = ""
+            self._update_quick_label()
+
+    def _on_enter_apply_action(self, _event):
+        if not hasattr(self, 'quick_action_buffer') or not self.quick_action_buffer:
+            return
+        try:
+            code = int(self.quick_action_buffer)
+        except Exception:
+            self.quick_action_buffer = ""
+            self._update_quick_label()
+            return
+        # Find action by code field
+        chosen = None
+        for a in self.actions_cfg:
+            if int(a.get("code", -1)) == code:
+                chosen = a
+                break
+        if chosen is not None:
+            self.action_var.set(chosen["name"])
+        self.quick_action_buffer = ""
+        self._update_quick_label()
 
     def _populate_rosters(self):
         # Fill home roster
@@ -1387,9 +1448,11 @@ class ScoutApp(tk.Tk):
         if getattr(dlg, "result", None):
             self.cfg = dlg.result
             teams = [self.cfg["teams"]["home"]["name"], self.cfg["teams"]["away"]["name"]]
-            self.team_cb.config(values=teams)
             if self.team_var.get() not in teams:
                 self.team_var.set(teams[0])
+            # Update roster labels with new team names
+            self.home_tv.master.configure(text=f"Home ({self.cfg['teams']['home']['name']})")
+            self.away_tv.master.configure(text=f"Away ({self.cfg['teams']['away']['name']})")
             self._on_team_changed()
 
 

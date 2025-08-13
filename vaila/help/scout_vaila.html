@@ -52,23 +52,24 @@ python vaila/scout_vaila.py   # or run the script file</code></pre>
       <li>Field drawn to scale (default 105 × 68 m).</li>
       <li>Click to annotate events (team, player with optional name, action, result).</li>
       <li>Configurable teams, players, player names, actions, results, and field size via TOML.</li>
-      <li>Save/Load events as CSV. Optional <code>player_name</code> column when saving.</li>
+      <li>Save/Load events as CSV with action codes and player names.</li>
       <li>Heatmap in a separate window.</li>
-      <li>Simple hotkeys for faster workflows.</li>
-      <li>Player numbering modes: auto-number and unique-per-click.</li>
+      <li>Numeric hotkeys for faster action selection.</li>
+      <li>Player rosters displayed side-by-side (Home/Away).</li>
       <li>Automatic per-player summary CSV when saving events.</li>
-      <li>Quick team renaming and quick numeric entry for player number.</li>
+      <li>Quick team renaming and numeric entry for action codes.</li>
+      <li>Action symbols drawn on field by default.</li>
     </ul>
 
     <h2>CSV Format</h2>
-    <pre><code>timestamp_s,team,player,action,result,pos_x_m,pos_y_m,player_name</code></pre>
-    <p><em>Note:</em> <code>player_name</code> is optional on load; included on save if available.</p>
+    <pre><code>timestamp_s,team,player_name,player,action,action_code,result,pos_x_m,pos_y_m</code></pre>
+    <p><em>Note:</em> <code>player_name</code> and <code>action_code</code> are included when available.</p>
 
     <h2>Players Summary CSV</h2>
     <pre><code>team,player,num_events,first_timestamp_s,last_timestamp_s,timestamps</code></pre>
 
     <h2>Configuration (TOML)</h2>
-    <p>The app looks for <code>vaila_scout_config.toml</code> next to the script (same folder) or under <code>vaila/models</code>. If none is found, a commented template is created in <code>vaila/models</code>. You can Load/Save or Edit the config within the app.</p>
+    <p>The app looks for <code>vaila_scout_config.toml</code> next to the script (same folder) or under <code>vaila/models</code>. If none is found, a commented template is created in <code>vaila/models</code>. You can Load/Save or Create Template the config within the app.</p>
 
     <h3>Template summary</h3>
     <pre><code>[program]
@@ -105,17 +106,20 @@ player_number_size = 8
 action_symbol_size = 90.0
 show_player_name = true
 player_name_size = 8
+show_action_symbol = true  # draw action symbols on field
 
 results = ["success", "fail", "neutral"]
 
-[[actions]]        # structured actions at the end
+[[actions]]        # structured actions with codes
 name = "Pass"
+code = 1
 symbol = "o"
 key = "p"
 color = "#FFD700"
 
 [[actions]]
 name = "Shot"
+code = 6
 symbol = "*"
 key = "g"
 color = "#FF4500"
@@ -124,8 +128,8 @@ color = "#FF4500"
     <h2>UI</h2>
     <ul>
       <li><strong>Left</strong>: field (click to annotate)</li>
-      <li><strong>Right controls</strong>: Action and Result (with Cycle Result), CSV buttons, Clock (Start/Pause/Reset), Config (Load/Save/Edit), modes and quick input; Team/Player/Name selectors are at the bottom of the controls.</li>
-      <li><strong>Right bottom</strong>: Home and Away rosters (No/Name) side by side.</li>
+      <li><strong>Right controls</strong>: Action and Result selectors, CSV buttons, Clock (Start/Pause/Reset), Config (Load/Save/Create Template), Quick action code input.</li>
+      <li><strong>Right bottom</strong>: Home and Away rosters (No/Name) side by side with team names displayed.</li>
       <li><strong>Heatmap</strong>: opens in a new window when clicking Show Heatmap</li>
     </ul>
 
@@ -136,25 +140,23 @@ color = "#FF4500"
       <li><span class="kbd">Ctrl</span>+<span class="kbd">K</span>: Clear events</li>
       <li><span class="kbd">H</span>: Show heatmap</li>
       <li><span class="kbd">R</span>: Reset timer</li>
-      <li><span class="kbd">Space</span>: Cycle Result</li>
-      <li><span class="kbd">Ctrl</span>+<span class="kbd">Space</span>: Start/Pause clock</li>
+      <li><span class="kbd">Space</span>: Start/Pause clock</li>
       <li><span class="kbd">?</span>: Open help</li>
       <li><span class="kbd">T</span>: Toggle current team (home/away)</li>
-      <li><span class="kbd">,</span>/<span class="kbd">.</span> or <span class="kbd">←</span>/<span class="kbd">→</span>: Next/previous player</li>
-      <li><span class="kbd">+</span>/<span class="kbd">-</span>: Increment/decrement current player number</li>
-      <li><span class="kbd">N</span>: Toggle auto-number players</li>
-      <li><span class="kbd">U</span>: Toggle unique player per click</li>
-      <li><span class="kbd">Ctrl</span>+<span class="kbd">E</span>: Edit config</li>
       <li><span class="kbd">Ctrl</span>+<span class="kbd">L</span>: Load config</li>
       <li><span class="kbd">Ctrl</span>+<span class="kbd">Shift</span>+<span class="kbd">S</span>: Save config</li>
       <li><span class="kbd">Ctrl</span>+<span class="kbd">T</span>: Rename teams</li>
-      <li>Digits 0–9: buffer player number; <span class="kbd">Enter</span> apply; <span class="kbd">Backspace</span> edit; <span class="kbd">Esc</span> clear</li>
+      <li>Digits 0–9: Enter action code; <span class="kbd">Enter</span> apply; <span class="kbd">Backspace</span> edit; <span class="kbd">Esc</span> clear</li>
+      <li>Mouse: Left click = success, Right click = fail, Middle click = neutral</li>
     </ul>
 
     <h2>Notes</h2>
     <ul>
       <li>Field coordinates are in meters, ranges [0, field_width] × [0, field_height].</li>
       <li>Heatmap uses seaborn KDE.</li>
+      <li>Action codes are numeric identifiers for quick input (1-11 by default).</li>
+      <li>Player markers show team color with result-based outline (blue=success, red=fail, white=neutral).</li>
+      <li>Action symbols are drawn by default next to player circles.</li>
     </ul>
   </section>
 
@@ -163,30 +165,33 @@ color = "#FF4500"
     <p>O vailá Scout permite anotar eventos de futebol em um campo virtual e gerar análises rápidas (heatmaps).</p>
 
     <h2>Como executar</h2>
-    <pre><code>python -m vaila.scout_vaila</code></pre>
+    <pre><code>python vaila.py   # Clique no botão "Scout" na GUI do vailá
+python -m vaila.scout_vaila   # ou execute o módulo diretamente
+python vaila/scout_vaila.py   # ou execute o arquivo do script</code></pre>
 
     <h2>Recursos</h2>
     <ul>
       <li>Campo desenhado em escala (padrão 105 × 68 m).</li>
       <li>Clique para anotar eventos (equipe, jogador com nome opcional, ação, resultado).</li>
       <li>Times, jogadores, nomes, ações, resultados e tamanho do campo configuráveis via TOML.</li>
-      <li>Salvar/Carregar eventos em CSV. Coluna opcional <code>player_name</code> ao salvar.</li>
+      <li>Salvar/Carregar eventos em CSV com códigos de ação e nomes de jogadores.</li>
       <li>Heatmap em uma janela separada.</li>
-      <li>Atalhos simples para agilizar o fluxo.</li>
-      <li>Modos de numeração: numeração automática e único-por-clique.</li>
+      <li>Atalhos numéricos para seleção rápida de ações.</li>
+      <li>Rosters de jogadores exibidos lado a lado (Casa/Fora).</li>
       <li>Geração automática de CSV de resumo por jogador ao salvar.</li>
-      <li>Renomeie times rapidamente e use entrada numérica rápida para o número do jogador.</li>
+      <li>Renomeie times rapidamente e use entrada numérica para códigos de ação.</li>
+      <li>Símbolos de ação desenhados no campo por padrão.</li>
     </ul>
 
     <h2>Formato CSV</h2>
-    <pre><code>timestamp_s,team,player,action,result,pos_x_m,pos_y_m,player_name</code></pre>
-    <p><em>Nota:</em> <code>player_name</code> é opcional ao carregar; incluído ao salvar se disponível.</p>
+    <pre><code>timestamp_s,team,player_name,player,action,action_code,result,pos_x_m,pos_y_m</code></pre>
+    <p><em>Nota:</em> <code>player_name</code> e <code>action_code</code> são incluídos quando disponíveis.</p>
 
     <h2>CSV de resumo por jogador</h2>
     <pre><code>team,player,num_events,first_timestamp_s,last_timestamp_s,timestamps</code></pre>
 
     <h2>Configuração (TOML)</h2>
-    <p>Um arquivo padrão é criado em <code>~/.vaila/vaila_scout_config.toml</code> na primeira execução. Você pode Carregar/Salvar ou Editar a configuração no app.</p>
+    <p>O app procura por <code>vaila_scout_config.toml</code> ao lado do script (mesma pasta) ou sob <code>vaila/models</code>. Se nenhum for encontrado, um template comentado é criado em <code>vaila/models</code>. Você pode Carregar/Salvar ou Criar Template da configuração no app.</p>
 
     <h3>Esquema padrão</h3>
     <pre><code>[program]
@@ -203,37 +208,48 @@ field_height_m = 68.0
 
 [teams.home]
 name = "HOME"
+color = "#1f77b4"
 players = ["1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20","21","22","23"]
-players_names = { "10" = "Meia", "9" = "Centroavante" } # opcional
+players_names = { "10" = "Pelé", "9" = "Ronaldo" } # opcional
 
 [teams.away]
 name = "AWAY"
+color = "#d62728"
 players = ["1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20","21","22","23"]
-players_names = {} # opcional
+players_names = { "10" = "Maradona" } # opcional
 
-actions = [
-  "Passing",
-  "First touch and receiving",
-  "Ball control",
-  "Dribbling",
-  "Shielding",
-  "Shooting and finishing",
-  "Heading",
-  "Crossing",
-  "Tackling",
-  "Interceptions",
-  "Goalkeeping - catching",
-  "Goalkeeping - shot stopping",
-  "Goalkeeping - positioning",
-  "Goalkeeping - distribution",
-]
-results = ["success", "fail", "neutral"]</code></pre>
+[drawing]
+player_circle_radius_m = 0.6
+player_edge_color = "black"
+player_number_color = "white"
+player_number_size = 8
+action_symbol_size = 90.0
+show_player_name = true
+player_name_size = 8
+show_action_symbol = true  # desenhar símbolos de ação no campo
+
+results = ["success", "fail", "neutral"]
+
+[[actions]]        # ações estruturadas com códigos
+name = "Pass"
+code = 1
+symbol = "o"
+key = "p"
+color = "#FFD700"
+
+[[actions]]
+name = "Shot"
+code = 6
+symbol = "*"
+key = "g"
+color = "#FF4500"
+...</code></pre>
 
     <h2>Interface</h2>
     <ul>
       <li><strong>Esquerda</strong>: campo (clique para anotar)</li>
-      <li><strong>Direita (topo)</strong>: seletores de equipe, jogador, ação, resultado; botões de CSV; Heatmap; Resetar tempo</li>
-      <li><strong>Direita (meio)</strong>: botões de configuração (Carregar/Salvar/Editar), menu Ferramentas inclui Renomear Times</li>
+      <li><strong>Direita (controles)</strong>: seletores de ação e resultado, botões de CSV, relógio (Iniciar/Pausar/Resetar), configuração (Carregar/Salvar/Criar Template), entrada rápida de código de ação.</li>
+      <li><strong>Direita (inferior)</strong>: rosters de Casa e Fora (Número/Nome) lado a lado com nomes dos times exibidos.</li>
       <li><strong>Heatmap</strong>: abre em nova janela ao clicar em Show Heatmap</li>
     </ul>
 
@@ -244,23 +260,23 @@ results = ["success", "fail", "neutral"]</code></pre>
       <li><span class="kbd">Ctrl</span>+<span class="kbd">K</span>: Limpar eventos</li>
       <li><span class="kbd">H</span>: Mostrar heatmap</li>
       <li><span class="kbd">R</span>: Resetar tempo</li>
+      <li><span class="kbd">Space</span>: Iniciar/Pausar relógio</li>
       <li><span class="kbd">?</span>: Abrir ajuda</li>
       <li><span class="kbd">T</span>: Alternar equipe atual (casa/fora)</li>
-      <li><span class="kbd">,</span>/<span class="kbd">.</span> ou <span class="kbd">←</span>/<span class="kbd">→</span>: Próximo/Anterior jogador</li>
-      <li><span class="kbd">+</span>/<span class="kbd">-</span>: Incrementar/decrementar número do jogador</li>
-      <li><span class="kbd">N</span>: Alternar numeração automática</li>
-      <li><span class="kbd">U</span>: Alternar jogador único por clique</li>
-      <li><span class="kbd">Ctrl</span>+<span class="kbd">E</span>: Editar configuração</li>
       <li><span class="kbd">Ctrl</span>+<span class="kbd">L</span>: Carregar configuração</li>
       <li><span class="kbd">Ctrl</span>+<span class="kbd">Shift</span>+<span class="kbd">S</span>: Salvar configuração</li>
       <li><span class="kbd">Ctrl</span>+<span class="kbd">T</span>: Renomear times</li>
-      <li>Dígitos 0–9: digitar número do jogador; <span class="kbd">Enter</span> aplica; <span class="kbd">Backspace</span> edita; <span class="kbd">Esc</span> limpa</li>
+      <li>Dígitos 0–9: digitar código de ação; <span class="kbd">Enter</span> aplica; <span class="kbd">Backspace</span> edita; <span class="kbd">Esc</span> limpa</li>
+      <li>Mouse: Clique esquerdo = sucesso, Clique direito = falha, Clique do meio = neutro</li>
     </ul>
 
     <h2>Notas</h2>
     <ul>
       <li>Coordenadas em metros, faixas [0, field_width] × [0, field_height].</li>
       <li>Heatmap usa KDE do seaborn.</li>
+      <li>Códigos de ação são identificadores numéricos para entrada rápida (1-11 por padrão).</li>
+      <li>Marcadores de jogadores mostram cor do time com contorno baseado no resultado (azul=sucesso, vermelho=falha, branco=neutro).</li>
+      <li>Símbolos de ação são desenhados por padrão ao lado dos círculos dos jogadores.</li>
     </ul>
   </section>
 
