@@ -1356,9 +1356,12 @@ For more information, visit: https://github.com/vaila-multimodaltoolbox/vaila
         }
 
 
-def get_pose_config():
-    root = tk.Tk()
-    root.withdraw()
+def get_pose_config(existing_root=None):
+    if existing_root is not None:
+        root = existing_root
+    else:
+        root = tk.Tk()
+        root.withdraw()
     
     # Remove automatic creation of default TOML. Only create via button or after processing.
     
@@ -2529,12 +2532,16 @@ def process_video(video_path, output_dir, pose_config):
     print(f"DEBUG: Total frames after padding removal: {len(normalized_landmarks_list[pad_start_frames:])}")
 
 
-def process_videos_in_directory():
+def process_videos_in_directory(existing_root=None):
     """
     Process all video files in the selected directory for markerless 2D analysis.
     
     This function analyzes video files to extract joint positions and calculate
     movement patterns using computer vision techniques.
+    
+    Args:
+        existing_root: Optional existing Tkinter root window to use for dialogs.
+                      If None, creates a new root window.
     
     Returns:
         None: Saves results to CSV files and generates plots
@@ -2546,14 +2553,17 @@ def process_videos_in_directory():
     print(f"Running script: {Path(__file__).name}")
     print(f"Script directory: {Path(__file__).parent.resolve()}")
 
-    # Create minimal Tk root for dialogs
-    root = tk.Tk()
-    root.withdraw()
-    # Keep dialogs on top (as before)
-    try:
-        root.attributes('-topmost', True)
-    except Exception:
-        pass
+    # Use existing root or create new one for dialogs
+    if existing_root is not None:
+        root = existing_root
+    else:
+        root = tk.Tk()
+        root.withdraw()
+        # Keep dialogs on top (as before)
+        try:
+            root.attributes('-topmost', True)
+        except Exception:
+            pass
 
     # Select input directory
     input_dir = filedialog.askdirectory(
@@ -2574,7 +2584,7 @@ def process_videos_in_directory():
         return
 
     # Pose configuration (GUI or TOML via dialog)
-    pose_config = get_pose_config()
+    pose_config = get_pose_config(root)
     if not pose_config:
         return
 
