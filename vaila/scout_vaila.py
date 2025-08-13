@@ -465,7 +465,7 @@ def draw_soccer_field(ax: plt.Axes, field_w: float, field_h: float) -> None:
 class ScoutApp(tk.Tk):
     def __init__(self, cfg: Dict):
         super().__init__()
-        self.title("vailá - Scout Integrated")
+        self.title("vailá - Scout - v0.1.0")
         self.geometry("1280x800")
 
         self.cfg = cfg
