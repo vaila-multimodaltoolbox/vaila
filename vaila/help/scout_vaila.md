@@ -6,12 +6,13 @@ Features
 - Field drawn to scale (default 105 x 68 m) in the main window.
 - Click to annotate events with team, player, action, and result.
 - Configurable teams, players, actions, results, and field size via TOML.
-- Save/Load events as CSV.
+- Save/Load events as CSV with action codes and player names.
 - Heatmap shown in a new window when requested.
-- Hotkeys for faster workflows.
-- Player numbering modes: auto-number and unique-per-click.
+- Hotkeys for faster workflows (numeric input for actions).
+- Player rosters displayed side-by-side (Home/Away).
 - Automatic players summary CSV when saving events.
- - Rename teams quickly (Tools → Rename Teams or Ctrl+T). Quick numeric entry to set player number.
+- Rename teams quickly (Tools → Rename Teams or Ctrl+T).
+- Action symbols drawn on field by default.
 
 How to run
 ```bash
@@ -22,7 +23,7 @@ python vaila/scout_vaila.py   # or run the script file
 
 CSV format
 ```text
-timestamp_s,team,player,action,result,pos_x_m,pos_y_m,player_name
+timestamp_s,team,player_name,player,action,action_code,result,pos_x_m,pos_y_m
 ```
 
 Players summary CSV (auto-created on save)
@@ -33,7 +34,7 @@ team,player,num_events,first_timestamp_s,last_timestamp_s,timestamps
 Config (TOML)
 - The app searches for `vaila_scout_config.toml` next to the script or under `vaila/models`.
 - If none is found, a commented template is created under `vaila/models`.
-- You can Load/Save or Edit the config in the app.
+- You can Load/Save or Create Template the config in the app.
 
 Template summary
 ```toml
@@ -71,17 +72,20 @@ player_number_size = 8
 action_symbol_size = 90.0
 show_player_name = true
 player_name_size = 8
+show_action_symbol = true  # draw action symbols on field
 
 results = ["success", "fail", "neutral"]
 
-[[actions]]        # structured actions at the end
+[[actions]]        # structured actions with codes
 name = "Pass"
+code = 1
 symbol = "o"
 key = "p"
 color = "#FFD700"
 
 [[actions]]
 name = "Shot"
+code = 6
 symbol = "*"
 key = "g"
 color = "#FF4500"
@@ -90,8 +94,8 @@ color = "#FF4500"
 
 UI
 - Left: field (click to annotate)
-- Right controls: Action and Result (with Cycle Result), CSV buttons, Clock (Start/Pause/Reset), Config (Load/Save/Edit), modes and quick input; Team/Player/Name selectors are at the bottom of the controls.
-- Right bottom: Home and Away rosters (No/Name) side by side.
+- Right controls: Action and Result selectors, CSV buttons, Clock (Start/Pause/Reset), Config (Load/Save/Create Template), Quick action code input.
+- Right bottom: Home and Away rosters (No/Name) side by side with team names displayed.
 - Heatmap opens in a new window when clicking Show Heatmap (or press H)
 - Tools menu includes Rename Teams (Ctrl+T)
 
@@ -101,20 +105,19 @@ Hotkeys
 - Ctrl+K: Clear events
 - H: Show heatmap (new window)
 - R: Reset timer
-- Space: Cycle Result
-- Ctrl+Space: Start/Pause clock
-- Ctrl+E: Edit config
+- Space: Start/Pause clock
 - Ctrl+L: Load config
 - Ctrl+Shift+S: Save config
-- N: Toggle auto-number players
-- U: Toggle unique player per click
 - T: Toggle current team (home/away)
-- ,/. or ←/→: Next/previous player
 - Ctrl+T: Rename teams
-- Digits (0–9): buffer a player number; Enter to apply; Backspace to edit; Esc to clear; + / - to increment/decrement current player
+- Digits (0–9): Enter action code; Enter to apply; Backspace to edit; Esc to clear
+- Mouse: Left click = success, Right click = fail, Middle click = neutral
 
 Notes
 - Field coordinates use meters in the range [0, field_width] and [0, field_height].
 - Heatmap uses KDE from seaborn.
+- Action codes are numeric identifiers for quick input (1-11 by default).
+- Player markers show team color with result-based outline (blue=success, red=fail, white=neutral).
+- Action symbols are drawn by default next to player circles.
 
 
