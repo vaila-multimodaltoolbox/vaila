@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>vailá — Vertical Jump Analysis (vaila_and_jump.py)</title>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; max-width: 1100px; margin: 0 auto; padding: 24px; color: #333; }
+    h1, h2 { color: #2c3e50; }
+    h1 { border-bottom: 2px solid #3498db; padding-bottom: 8px; }
+    h3 { color: #2980b9; margin-top: 24px; }
+    ul { margin: 0 0 16px 24px; }
+    code { background: #f6f8fa; padding: 2px 6px; border-radius: 4px; }
+    .lang { margin-top: 40px; padding-top: 10px; border-top: 1px solid #e0e0e0; }
+    .note { background: #f8f9fa; border-left: 4px solid #4caf50; padding: 12px 16px; margin: 16px 0; }
+    .foot { margin-top: 40px; border-top: 1px solid #ddd; padding-top: 12px; color: #777; font-size: 0.9em; text-align: center; }
+  </style>
+  <meta name="description" content="How to use vailá's Vertical Jump Analysis tool (vaila_and_jump.py): inputs, workflows, outputs, equations. English and Portuguese." />
+</head>
+<body>
+  <h1>vailá — Vertical Jump Analysis (vaila_and_jump.py)</h1>
+
+  <section id="en">
+    <h2>Overview</h2>
+    <p>
+      The tool processes CSV files to estimate jump metrics in three modes:
+      Time-of-Flight, Jump-Height, and MediaPipe Pose. It generates plots,
+      calibrated CSVs, and an HTML report.
+    </p>
+    <h3>Key Features</h3>
+    <ul>
+      <li>Automatic y-axis correction for MediaPipe (upward-positive)</li>
+      <li>Robust detection of jump phases (squat, takeoff, peak, landing)</li>
+      <li>Multiple height estimates: CG, flight time, feet-based</li>
+      <li>Power metrics: instantaneous, takeoff, average during propulsion</li>
+      <li>Bilateral foot timing and height comparisons</li>
+    </ul>
+
+    <h3>Input Types</h3>
+    <ol>
+      <li>
+        <strong>Time-of-Flight CSV</strong> — columns: <code>mass_kg</code>,
+        <code>time_of_flight_s</code>[, <code>contact_time_s</code>]
+      </li>
+      <li>
+        <strong>Jump-Height CSV</strong> — columns: <code>mass_kg</code>,
+        <code>height_m</code>[, <code>contact_time_s</code>]
+      </li>
+      <li>
+        <strong>MediaPipe Pose CSV</strong> — vailá naming, landmark columns like
+        <code>nose_x</code>, <code>nose_y</code>, <code>right_ankle_x</code>, <code>right_ankle_y</code>, etc.<br/>
+        You can use either:
+        <ul>
+          <li><em>Normalized CSV</em>: <code>*_mp_norm.csv</code> (x,y in [0..1]) — recommended</li>
+          <li><em>Pixel CSV</em>: <code>*_mp_pixel.csv</code> (x,y in pixels)</li>
+        </ul>
+        Both forms are supported. The script scales to meters using a shank-length factor.
+      </li>
+    </ol>
+
+    <h3>Coordinate System</h3>
+    <ul>
+      <li>Biomechanics convention: y increases upward. MediaPipe is reoriented accordingly.</li>
+      <li>CG and landmarks are converted to meters via shank-length scaling</li>
+      <li>Normalized CG referenced to average CG over initial frames (default: 10–20)</li>
+    </ul>
+
+    <h3>How to Use</h3>
+    <ol>
+      <li>Run via vailá GUI or <code>python vaila/vaila_and_jump.py</code></li>
+      <li>Choose the target directory with CSV files</li>
+      <li>Select data type: (1) Time of Flight, (2) Jump Height, (3) MediaPipe</li>
+      <li>For MediaPipe: enter subject mass (kg), video FPS, and shank length (m). To avoid prompts, place a <code>vaila_and_jump_config.toml</code> next to your CSV files with:<br/>
+        <pre>[jump_context]
+mass_kg = 75.0
+fps = 240
+shank_length_m = 0.40</pre>
+      </li>
+      <li>Review outputs in the generated timestamped folder</li>
+    </ol>
+
+    <h3>Outputs</h3>
+    <ul>
+      <li>CSV: <code>&lt;name&gt;_jump_metrics_&lt;timestamp&gt;.csv</code></li>
+      <li>CSV: <code>&lt;name&gt;_calibrated_&lt;timestamp&gt;.csv</code></li>
+      <li>CSV: <code>&lt;name&gt;_jump_database_&lt;timestamp&gt;.csv</code></li>
+      <li>PNG: diagnostic and phases plots; stick-figure visualizations</li>
+      <li>HTML: <code>&lt;name&gt;_report_&lt;timestamp&gt;.html</code></li>
+    </ul>
+
+    <h3>Equations</h3>
+    <ul>
+      <li>Height from flight time: h = g t² / 8</li>
+      <li>Takeoff velocity: v = sqrt(2 g h)</li>
+      <li>Potential energy: Ep = m g h</li>
+      <li>Kinetic energy: Ek = ½ m v²</li>
+      <li>Average propulsion power: P̄ = (Ek + Ep) / tprop</li>
+      <li>Vertical force: F(t) = m [a(t) + g]</li>
+      <li>Instantaneous power: P(t) = F(t) · v(t)</li>
+    </ul>
+
+    <div class="note">
+      <strong>Notes:</strong> Use the actual capture FPS for slow-motion recordings (e.g., 240 Hz). Normalized CSV is simplest; pixel CSV is supported via scaling. Units: m, s, W, J.
+    </div>
+  </section>
+
+  <section id="pt" class="lang">
+    <h2>Visão Geral (PT)</h2>
+    <p>
+      A ferramenta processa CSVs para estimar métricas do salto nos modos Tempo de Voo,
+      Altura Medida e MediaPipe. Gera gráficos, CSVs calibrados e um relatório HTML.
+    </p>
+    <h3>Principais Recursos</h3>
+    <ul>
+      <li>Correção automática do eixo y para MediaPipe (y para cima)</li>
+      <li>Detecção robusta das fases (agachamento, decolagem, pico, aterrissagem)</li>
+      <li>Altura por CG, tempo de voo e pés</li>
+      <li>Potência instantânea, na decolagem e média na propulsão</li>
+      <li>Comparações bilaterais de tempos e alturas dos pés</li>
+    </ul>
+
+    <h3>Tipos de Entrada</h3>
+    <ol>
+      <li>
+        <strong>CSV de Tempo de Voo</strong> — colunas: <code>mass_kg</code>,
+        <code>time_of_flight_s</code>[, <code>contact_time_s</code>]
+      </li>
+      <li>
+        <strong>CSV de Altura</strong> — colunas: <code>mass_kg</code>,
+        <code>height_m</code>[, <code>contact_time_s</code>]
+      </li>
+      <li>
+        <strong>CSV de Pose MediaPipe</strong> — nomes vailá, colunas como
+        <code>nose_x</code>, <code>nose_y</code>, <code>right_ankle_x</code>, <code>right_ankle_y</code>, etc.
+      </li>
+    </ol>
+
+    <h3>Sistema de Coordenadas</h3>
+    <ul>
+      <li>Para MediaPipe: <code>y_biomec = 1.0 - y_tela</code></li>
+      <li>CG e marcos em metros via escala pelo comprimento da perna (tíbia)</li>
+      <li>CG normalizado em relação à média dos quadros iniciais (padrão: 10–20)</li>
+    </ul>
+
+    <h3>Como Usar</h3>
+    <ol>
+      <li>Execute pela GUI do vailá ou <code>python vaila/vaila_and_jump.py</code></li>
+      <li>Selecione o diretório com os CSVs</li>
+      <li>Escolha: (1) Tempo de Voo, (2) Altura, (3) MediaPipe</li>
+      <li>Para MediaPipe: informe massa (kg), FPS e comprimento da perna (m)</li>
+      <li>Confira as saídas na pasta com timestamp</li>
+    </ol>
+
+    <h3>Saídas</h3>
+    <ul>
+      <li>CSV: <code>&lt;nome&gt;_jump_metrics_&lt;timestamp&gt;.csv</code></li>
+      <li>CSV: <code>&lt;nome&gt;_calibrated_&lt;timestamp&gt;.csv</code></li>
+      <li>CSV: <code>&lt;nome&gt;_jump_database_&lt;timestamp&gt;.csv</code></li>
+      <li>PNG: gráficos diagnósticos e de fases; figuras de bastão</li>
+      <li>HTML: <code>&lt;nome&gt;_report_&lt;timestamp&gt;.html</code></li>
+    </ul>
+
+    <h3>Equações</h3>
+    <ul>
+      <li>Altura: h = g t² / 8</li>
+      <li>Velocidade de decolagem: v = sqrt(2 g h)</li>
+      <li>Energia potencial: Ep = m g h</li>
+      <li>Energia cinética: Ek = ½ m v²</li>
+      <li>Potência média: P̄ = (Ek + Ep) / tprop</li>
+      <li>Força vertical: F(t) = m [a(t) + g]</li>
+      <li>Potência instantânea: P(t) = F(t) · v(t)</li>
+    </ul>
+
+    <div class="note">
+      <strong>Observações:</strong> Use o FPS correto para tempos precisos. Em câmera lenta,
+      prefira a taxa real de captura, quando disponível. Unidades: m, s, W, J.
+    </div>
+  </section>
+
+  <div class="foot">
+    Author: Prof. Paulo R. P. Santiago — License: GPL-3.0
+  </div>
+</body>
+</html>
