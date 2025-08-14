@@ -1084,22 +1084,22 @@ def generate_html_report(data, results, plot_files, output_dir, base_name):
             </tr>
             <tr>
                 <td>Flight Time</td>
-                <td>{results["flight_time_s"]:.3f}</td>
+                <td>{f"{results['flight_time_s']:.3f}" if results["flight_time_s"] is not None else "N/A"}</td>
                 <td>s</td>
             </tr>
             <tr>
                 <td>Takeoff Velocity</td>
-                <td>{results["velocity_m/s"]}</td>
+                <td>{results["velocity_m/s"] if results["velocity_m/s"] is not None else "N/A"}</td>
                 <td>m/s</td>
             </tr>
             <tr>
                 <td>Potential Energy</td>
-                <td>{results["potential_energy_J"]}</td>
+                <td>{results["potential_energy_J"] if results["potential_energy_J"] is not None else "N/A"}</td>
                 <td>J</td>
             </tr>
             <tr>
                 <td>Kinetic Energy</td>
-                <td>{results["kinetic_energy_J"]}</td>
+                <td>{results["kinetic_energy_J"] if results["kinetic_energy_J"] is not None else "N/A"}</td>
                 <td>J</td>
             </tr>
             <tr>
@@ -1119,17 +1119,17 @@ def generate_html_report(data, results, plot_files, output_dir, base_name):
             </tr>
             <tr>
                 <td>Propulsion Time</td>
-                <td>{results.get("propulsion_time_s", "—"):.3f}</td>
+                <td>{f"{results.get('propulsion_time_s', '—'):.3f}" if results.get("propulsion_time_s") is not None and results.get("propulsion_time_s") != "—" else "—"}</td>
                 <td>s</td>
             </tr>
             <tr>
                 <td>Ascent Time</td>
-                <td>{results.get("ascent_time_s", "—"):.3f}</td>
+                <td>{f"{results.get('ascent_time_s', '—'):.3f}" if results.get("ascent_time_s") is not None and results.get("ascent_time_s") != "—" else "—"}</td>
                 <td>s</td>
             </tr>
             <tr>
                 <td>Descent Time</td>
-                <td>{results.get("descent_time_s", "—"):.3f}</td>
+                <td>{f"{results.get('descent_time_s', '—'):.3f}" if results.get("descent_time_s") is not None and results.get("descent_time_s") != "—" else "—"}</td>
                 <td>s</td>
             </tr>
         </table>
@@ -1144,20 +1144,20 @@ def generate_html_report(data, results, plot_files, output_dir, base_name):
             </tr>
             <tr>
                 <td>Takeoff Time</td>
-                <td>{results.get("left_takeoff_time_s", "N/A"):.3f}</td>
-                <td>{results.get("right_takeoff_time_s", "N/A"):.3f}</td>
+                <td>{f"{results.get('left_takeoff_time_s', 'N/A'):.3f}" if results.get("left_takeoff_time_s") is not None and results.get("left_takeoff_time_s") != "N/A" else "N/A"}</td>
+                <td>{f"{results.get('right_takeoff_time_s', 'N/A'):.3f}" if results.get("right_takeoff_time_s") is not None and results.get("right_takeoff_time_s") != "N/A" else "N/A"}</td>
                 <td>{round(abs(results.get("left_takeoff_time_s", 0) - results.get("right_takeoff_time_s", 0)), 3) if results.get("left_takeoff_time_s") and results.get("right_takeoff_time_s") else "N/A"}</td>
             </tr>
             <tr>
                 <td>Landing Time</td>
-                <td>{results.get("left_landing_time_s", "N/A"):.3f}</td>
-                <td>{results.get("right_landing_time_s", "N/A"):.3f}</td>
+                <td>{f"{results.get('left_landing_time_s', 'N/A'):.3f}" if results.get("left_landing_time_s") is not None and results.get("left_landing_time_s") != "N/A" else "N/A"}</td>
+                <td>{f"{results.get('right_landing_time_s', 'N/A'):.3f}" if results.get("right_landing_time_s") is not None and results.get("right_landing_time_s") != "N/A" else "N/A"}</td>
                 <td>{round(abs(results.get("left_landing_time_s", 0) - results.get("right_landing_time_s", 0)), 3) if results.get("left_landing_time_s") and results.get("right_landing_time_s") else "N/A"}</td>
             </tr>
             <tr>
                 <td>Max Height</td>
-                <td>{results.get("height_left_foot_m", "N/A"):.3f}</td>
-                <td>{results.get("height_right_foot_m", "N/A"):.3f}</td>
+                <td>{f"{results.get('height_left_foot_m', 'N/A'):.3f}" if results.get("height_left_foot_m") is not None and results.get("height_left_foot_m") != "N/A" else "N/A"}</td>
+                <td>{f"{results.get('height_right_foot_m', 'N/A'):.3f}" if results.get("height_right_foot_m") is not None and results.get("height_right_foot_m") != "N/A" else "N/A"}</td>
                 <td>{round(abs(results.get("height_left_foot_m", 0) - results.get("height_right_foot_m", 0)), 3) if results.get("height_left_foot_m") and results.get("height_right_foot_m") else "N/A"}</td>
             </tr>
         </table>
@@ -1171,18 +1171,18 @@ def generate_html_report(data, results, plot_files, output_dir, base_name):
             </tr>
             <tr>
                 <td>Takeoff</td>
-                <td>{results["takeoff_frame"]}</td>
-                <td>{results["takeoff_frame"] / results["fps"]:.3f}</td>
+                <td>{results["takeoff_frame"] if results["takeoff_frame"] is not None else "N/A"}</td>
+                <td>{f"{results['takeoff_frame'] / results['fps']:.3f}" if results["takeoff_frame"] is not None else "N/A"}</td>
             </tr>
             <tr>
                 <td>Maximum Height</td>
-                <td>{results["max_height_frame"]}</td>
-                <td>{results["max_height_frame"] / results["fps"]:.3f}</td>
+                <td>{results["max_height_frame"] if results["max_height_frame"] is not None else "N/A"}</td>
+                <td>{f"{results['max_height_frame'] / results['fps']:.3f}" if results["max_height_frame"] is not None else "N/A"}</td>
             </tr>
             <tr>
                 <td>Landing</td>
-                <td>{results["landing_frame"]}</td>
-                <td>{results["landing_frame"] / results["fps"]:.3f}</td>
+                <td>{results["landing_frame"] if results["landing_frame"] is not None else "N/A"}</td>
+                <td>{f"{results['landing_frame'] / results['fps']:.3f}" if results["landing_frame"] is not None else "N/A"}</td>
             </tr>
         </table>
         
@@ -1454,32 +1454,32 @@ def process_mediapipe_data(input_file, output_dir):
             "mass_kg": mass,
             "fps": fps,
             "conversion_factor": round(conversion_factor, 6),
-            "flight_time_s": round(jump_phase_results.get("flight_time_s", 0), 3),
-            "velocity_m/s": round(velocity_takeoff, 3),
-            "potential_energy_J": round(potential_energy, 3),
-            "kinetic_energy_J": round(kinetic_energy, 3),
-            "power_takeoff_W": round(power_takeoff, 3),
-            "power_avg_propulsion_W": round(power_avg_propulsion, 3),
-            "power_avg_propulsion_phase_W": round(avg_power_propulsion, 3),
-            "max_power_W": round(max_power, 3),
-            "frame_max_power": int(idx_max_power),
-            "time_max_power_s": round(time_max_power, 3),
-            "takeoff_frame": int(takeoff_frame),
-            "max_height_frame": int(jump_phase_results.get("max_height_frame")),
-            "landing_frame": int(jump_phase_results.get("landing_frame")),
-            "propulsion_time_s": round(propulsion_time, 3),
-            "ascent_time_s": round(jump_phase_results.get("ascent_time_s", 0), 3),
-            "descent_time_s": round(jump_phase_results.get("descent_time_s", 0), 3),
-            "squat_depth_m": round(jump_phase_results.get("squat_depth_m", 0), 3),
-            "height_cg_method_m": round(jump_phase_results.get("height_cg_method_m", 0), 3),
-            "height_flight_time_method_m": round(jump_phase_results.get("height_flight_time_method_m", 0), 3),
-            "height_left_foot_m": round(jump_phase_results.get("height_left_foot_m", 0), 3),
-            "height_right_foot_m": round(jump_phase_results.get("height_right_foot_m", 0), 3),
-            "height_avg_feet_m": round(jump_phase_results.get("height_avg_feet_m", 0), 3),
-            "left_takeoff_time_s": round(jump_phase_results.get("left_takeoff_time_s", 0), 3),
-            "right_takeoff_time_s": round(jump_phase_results.get("right_takeoff_time_s", 0), 3),
-            "left_landing_time_s": round(jump_phase_results.get("left_landing_time_s", 0), 3),
-            "right_landing_time_s": round(jump_phase_results.get("right_landing_time_s", 0), 3),
+            "flight_time_s": round(jump_phase_results.get("flight_time_s", 0), 3) if jump_phase_results.get("flight_time_s") is not None else None,
+            "velocity_m/s": round(velocity_takeoff, 3) if velocity_takeoff is not None else None,
+            "potential_energy_J": round(potential_energy, 3) if potential_energy is not None else None,
+            "kinetic_energy_J": round(kinetic_energy, 3) if kinetic_energy is not None else None,
+            "power_takeoff_W": round(power_takeoff, 3) if power_takeoff is not None else None,
+            "power_avg_propulsion_W": round(power_avg_propulsion, 3) if power_avg_propulsion is not None else None,
+            "power_avg_propulsion_phase_W": round(avg_power_propulsion, 3) if avg_power_propulsion is not None else None,
+            "max_power_W": round(max_power, 3) if max_power is not None else None,
+            "frame_max_power": int(idx_max_power) if idx_max_power is not None else None,
+            "time_max_power_s": round(time_max_power, 3) if time_max_power is not None else None,
+            "takeoff_frame": int(takeoff_frame) if takeoff_frame is not None else None,
+            "max_height_frame": int(jump_phase_results.get("max_height_frame")) if jump_phase_results.get("max_height_frame") is not None else None,
+            "landing_frame": int(jump_phase_results.get("landing_frame")) if jump_phase_results.get("landing_frame") is not None else None,
+            "propulsion_time_s": round(propulsion_time, 3) if propulsion_time is not None else None,
+            "ascent_time_s": round(jump_phase_results.get("ascent_time_s", 0), 3) if jump_phase_results.get("ascent_time_s") is not None else None,
+            "descent_time_s": round(jump_phase_results.get("descent_time_s", 0), 3) if jump_phase_results.get("descent_time_s") is not None else None,
+            "squat_depth_m": round(jump_phase_results.get("squat_depth_m", 0), 3) if jump_phase_results.get("squat_depth_m") is not None else None,
+            "height_cg_method_m": round(jump_phase_results.get("height_cg_method_m", 0), 3) if jump_phase_results.get("height_cg_method_m") is not None else None,
+            "height_flight_time_method_m": round(jump_phase_results.get("height_flight_time_method_m", 0), 3) if jump_phase_results.get("height_flight_time_method_m") is not None else None,
+            "height_left_foot_m": round(jump_phase_results.get("height_left_foot_m", 0), 3) if jump_phase_results.get("height_left_foot_m") is not None else None,
+            "height_right_foot_m": round(jump_phase_results.get("height_right_foot_m", 0), 3) if jump_phase_results.get("height_right_foot_m") is not None else None,
+            "height_avg_feet_m": round(jump_phase_results.get("height_avg_feet_m", 0), 3) if jump_phase_results.get("height_avg_feet_m") is not None else None,
+            "left_takeoff_time_s": round(jump_phase_results.get("left_takeoff_time_s", 0), 3) if jump_phase_results.get("left_takeoff_time_s") is not None else None,
+            "right_takeoff_time_s": round(jump_phase_results.get("right_takeoff_time_s", 0), 3) if jump_phase_results.get("right_takeoff_time_s") is not None else None,
+            "left_landing_time_s": round(jump_phase_results.get("left_landing_time_s", 0), 3) if jump_phase_results.get("left_landing_time_s") is not None else None,
+            "right_landing_time_s": round(jump_phase_results.get("right_landing_time_s", 0), 3) if jump_phase_results.get("right_landing_time_s") is not None else None,
         }
 
         # Collect all relevant data for the database (complete CSV)
@@ -1533,7 +1533,7 @@ def process_mediapipe_data(input_file, output_dir):
             # Energies
             "potential_energy_J": potential_energy,
             "kinetic_energy_J": kinetic_energy,
-            "total_energy_J": potential_energy + kinetic_energy,
+            "total_energy_J": (potential_energy + kinetic_energy) if (potential_energy is not None and kinetic_energy is not None) else None,
             # Powers
             "power_takeoff_W": power_takeoff,
             "power_avg_propulsion_W": power_avg_propulsion,
@@ -1804,25 +1804,25 @@ def process_jump_data(input_file, output_dir, use_time_of_flight):
             # Append the results for each row
             results.append(
                 {
-                    "height_m": round(height, 3),
+                    "height_m": round(height, 3) if height is not None else None,
                     "liftoff_force_N": (
-                        round(liftoff_force, 3) if liftoff_force else None
+                        round(liftoff_force, 3) if liftoff_force is not None else None
                     ),
-                    "velocity_m/s": round(velocity, 3),
-                    "potential_energy_J": round(potential_energy, 3),
-                    "kinetic_energy_J": round(kinetic_energy, 3),
+                    "velocity_m/s": round(velocity, 3) if velocity is not None else None,
+                    "potential_energy_J": round(potential_energy, 3) if potential_energy is not None else None,
+                    "kinetic_energy_J": round(kinetic_energy, 3) if kinetic_energy is not None else None,
                     "average_power_W": (
-                        round(average_power, 3) if average_power else None
+                        round(average_power, 3) if average_power is not None else None
                     ),
                     "relative_power_W/kg": (
-                        round(relative_power, 3) if relative_power else None
+                        round(relative_power, 3) if relative_power is not None else None
                     ),
                     "jump_performance_index": (
                         round(jump_performance_index, 3)
-                        if jump_performance_index
+                        if jump_performance_index is not None
                         else None
                     ),
-                    "total_time_s": round(total_time, 3) if total_time else None,
+                    "total_time_s": round(total_time, 3) if total_time is not None else None,
                 }
             )
 
