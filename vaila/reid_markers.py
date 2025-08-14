@@ -25,8 +25,9 @@ from rich import print
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from matplotlib.widgets import Button, RangeSlider, CheckButtons, TextBox, RadioButtons
+from matplotlib.widgets import Button, RangeSlider, CheckButtons, TextBox, RadioButtons, SpanSelector
 from tkinter import Tk, filedialog, messagebox, Frame, Label, Button as TkButton
+from tkinter import simpledialog
 import tkinter as tk
 from scipy.interpolate import interp1d
 import json
@@ -36,6 +37,7 @@ import shutil  # Para operações de diretório
 from tkinter import ttk
 import matplotlib
 matplotlib.use('TkAgg')  # Força backend interativo
+from pathlib import Path
 
 
 def load_markers_file():
@@ -666,6 +668,10 @@ def visualize_markers_dynamic(df, frame_col, coord_cols, marker_ids=None):
         frames_slider_ax, "Frames", 0, len(df) - 1, valinit=(0, len(df) - 1)
     )
     
+    # Track current slider values to avoid NameError and enable optional bindings
+    start_var = tk.IntVar(value=0)
+    end_var = tk.IntVar(value=len(df) - 1)
+    
     def update_plot():
         # Clear current axes
         for ax in axes:
@@ -903,6 +909,10 @@ def create_gui_menu():
             visualize_markers_dynamic(df, frame_col, coord_cols)
         elif action_type == "arima":
             auto_fill_gaps_arima_with_data(df, file_path)
+        elif action_type == "reidswap_auto":
+            run_reid_swap_auto_with_data(df, file_path)
+        elif action_type == "reidswap_manual":
+            run_reid_swap_manual_with_data(df, file_path)
 
     # Row 1 - Main functions
     option1_btn = TkButton(
@@ -938,23 +948,21 @@ def create_gui_menu():
     # Row 2 - Additional functions
     option4_btn = TkButton(
         main_frame,
-        text="Batch Processing\n(Coming Soon)",
+        text="Auto Swap L/R\n(reidmplrswap)",
         width=btn_width,
         height=btn_height,
         font=font_size,
-        state="disabled",  # Disabled for now
-        command=lambda: print("Batch Processing selected"),
+        command=lambda: load_and_process("reidswap_auto"),
     )
     option4_btn.grid(row=3, column=0, padx=15, pady=15)
 
     option5_btn = TkButton(
         main_frame,
-        text="Export Analysis\n(Coming Soon)",
+        text="Manual Swap L/R\n(reidmplrswap)",
         width=btn_width,
         height=btn_height,
         font=font_size,
-        state="disabled",  # Disabled for now
-        command=lambda: print("Export Analysis selected"),
+        command=lambda: load_and_process("reidswap_manual"),
     )
     option5_btn.grid(row=3, column=1, padx=15, pady=15)
 
@@ -991,6 +999,157 @@ def create_gui_menu():
     author_label.pack()
 
     root.mainloop()
+def run_reid_swap_auto_with_data(df, file_path):
+    """Run automatic L/R swap detection using reidmplrswap on the provided df."""
+    try:
+        # Reuse logic from reidmplrswap: detect L/R pairs from columns
+        from vaila.reidmplrswap import find_lr_pairs, auto_fix_swaps, save_csv_with_suffix
+        pairs = find_lr_pairs(df)
+        if not pairs:
+            messagebox.showinfo("Info", "No L/R pairs detected in the selected columns.")
+            return
+        proposals = auto_fix_swaps(df, pairs, max_len=30, min_gap=1)
+        out_csv = save_csv_with_suffix(Path(file_path), df, suffix="_reidswap")
+        # Also write a quick report
+        from vaila.reidmplrswap import write_report
+        write_report(Path(file_path), proposals)
+        messagebox.showinfo("Done", f"Auto swaps applied. Saved: {out_csv}")
+    except Exception as exc:
+        messagebox.showerror("Error", f"Auto swap failed: {exc}")
+
+
+def run_reid_swap_manual_with_data(df, file_path):
+    """Prompt for a pair base name and frame range, and swap L/R using reidmplrswap."""
+    try:
+        from vaila.reidmplrswap import find_lr_pairs, apply_swap_for_pair, save_csv_with_suffix
+        pairs = find_lr_pairs(df)
+        if not pairs:
+            messagebox.showinfo("Info", "No L/R pairs detected in the selected columns.")
+            return
+        # Ask for pair (base name)
+        base_names = ", ".join(sorted({p.base_name for p in pairs}))
+        pair_name = simpledialog.askstring("Manual Swap", f"Enter pair base name (options: {base_names})")
+        if not pair_name:
+            return
+        # Find target pair (case-insensitive, allow partial)
+        target = None
+        for p in pairs:
+            if p.base_name.lower() == pair_name.lower() or pair_name.lower() in p.base_name.lower():
+                target = p
+                break
+        if target is None:
+            messagebox.showerror("Error", f"Pair '{pair_name}' not found.")
+            return
+        # Choose method: graphical or typing
+        use_graphical = messagebox.askyesno(
+            "Selection Method",
+            "Would you like to select the frame range graphically on X/Y plots?\nYes: graphical selection\nNo: type start/end",
+        )
+
+        if use_graphical:
+            import matplotlib.pyplot as plt
+            frames = df[df.columns[0]].values if len(df.columns) > 0 else np.arange(len(df))
+            colsLx = target.left.cols.get('x'); colsLy = target.left.cols.get('y')
+            colsRx = target.right.cols.get('x'); colsRy = target.right.cols.get('y')
+            if not colsLx or not colsLy or not colsRx or not colsRy:
+                messagebox.showerror("Error", "Selected pair does not have x/y columns.")
+                return
+            Lx = df[colsLx].values; Ly = df[colsLy].values
+            Rx = df[colsRx].values; Ry = df[colsRy].values
+
+            fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 7), sharex=True)
+            fig.subplots_adjust(bottom=0.22, top=0.92, hspace=0.25)
+            ax1.set_title(f"{target.base_name} - X (L/R)")
+            ax1.plot(frames, Lx, color='g', label='Lx')
+            ax1.plot(frames, Rx, color='orange', label='Rx')
+            ax1.legend(loc='upper right'); ax1.grid(True)
+            ax2.set_title(f"{target.base_name} - Y (L/R)")
+            ax2.plot(frames, Ly, color='g', label='Ly')
+            ax2.plot(frames, Ry, color='orange', label='Ry')
+            ax2.legend(loc='upper right'); ax2.grid(True)
+
+            start_ax = plt.axes([0.10, 0.08, 0.12, 0.05])
+            end_ax   = plt.axes([0.25, 0.08, 0.12, 0.05])
+            apply_ax = plt.axes([0.41, 0.08, 0.12, 0.05])
+            cancel_ax= plt.axes([0.56, 0.08, 0.12, 0.05])
+            start_tb = TextBox(start_ax, "Start", initial="0")
+            end_tb   = TextBox(end_ax,   "End",   initial=str(len(df)-1))
+            apply_bt = Button(apply_ax, "Apply Swap")
+            cancel_bt= Button(cancel_ax, "Cancel")
+
+            v1 = ax1.axvline(0, color='r', linestyle='--')
+            v2 = ax1.axvline(len(df)-1, color='r', linestyle='--')
+            w1 = ax2.axvline(0, color='r', linestyle='--')
+            w2 = ax2.axvline(len(df)-1, color='r', linestyle='--')
+            sel = {'start': 0, 'end': len(df)-1}
+
+            def _update_lines():
+                s = int(max(0, min(len(df)-1, sel['start'])))
+                e = int(max(0, min(len(df)-1, sel['end'])))
+                v1.set_xdata([s, s]); v2.set_xdata([e, e])
+                w1.set_xdata([s, s]); w2.set_xdata([e, e])
+                fig.canvas.draw_idle()
+
+            def on_select(xmin, xmax):
+                s = int(round(min(xmin, xmax)))
+                e = int(round(max(xmin, xmax)))
+                s = max(0, min(len(df)-1, s))
+                e = max(0, min(len(df)-1, e))
+                sel['start'] = s; sel['end'] = e
+                start_tb.set_val(str(s)); end_tb.set_val(str(e))
+                _update_lines()
+
+            # Use a Matplotlib-compatible signature across versions (no span_stays/interactive)
+            SpanSelector(ax2, on_select, 'horizontal', useblit=True)
+
+            def on_start_submit(text):
+                try:
+                    sel['start'] = int(text); _update_lines()
+                except Exception:
+                    pass
+
+            def on_end_submit(text):
+                try:
+                    sel['end'] = int(text); _update_lines()
+                except Exception:
+                    pass
+
+            start_tb.on_submit(on_start_submit)
+            end_tb.on_submit(on_end_submit)
+
+            result = {'done': False}
+            def do_apply(event):
+                s = int(min(sel['start'], sel['end']))
+                e = int(max(sel['start'], sel['end']))
+                if e <= s:
+                    return
+                apply_swap_for_pair(df, target, s, e)
+                out_csv = save_csv_with_suffix(Path(file_path), df, suffix="_reidswap")
+                print(f"Manual swap applied for '{target.base_name}' {s}-{e}. Saved: {out_csv}")
+                result['done'] = True
+                plt.close(fig)
+
+            def do_cancel(event):
+                plt.close(fig)
+
+            apply_bt.on_clicked(do_apply)
+            cancel_bt.on_clicked(do_cancel)
+            plt.show()
+            if not result['done']:
+                return
+            messagebox.showinfo("Done", f"Manual swap applied for '{target.base_name}'.")
+        else:
+            start = simpledialog.askinteger("Manual Swap", "Start frame:", minvalue=0, maxvalue=len(df)-1)
+            end = simpledialog.askinteger("Manual Swap", "End frame:", minvalue=0, maxvalue=len(df)-1)
+            if start is None or end is None or end <= start:
+                messagebox.showerror("Error", "Invalid frame range.")
+                return
+            apply_swap_for_pair(df, target, start, end)
+            out_csv = save_csv_with_suffix(Path(file_path), df, suffix="_reidswap")
+            messagebox.showinfo("Done", f"Manual swap applied for '{target.base_name}' {start}-{end}. Saved: {out_csv}")
+    except Exception as exc:
+        messagebox.showerror("Error", f"Manual swap failed: {exc}")
+
 
 
 def advanced_reid_gui_with_data(df, file_path, frame_col, coord_cols):
@@ -1230,8 +1389,26 @@ def advanced_reid_gui_with_data(df, file_path, frame_col, coord_cols):
         messagebox.showinfo("Info", "Merge Markers function not yet implemented.")
     
     def on_swap_markers():
-        # TODO: Implement marker swapping functionality
-        messagebox.showinfo("Info", "Swap Markers function not yet implemented.")
+        # Manual swap within GUI for two selected markers using start/end
+        visible_markers = get_selected_markers()
+        if len(visible_markers) != 2:
+            messagebox.showinfo("Info", "Select exactly two markers to swap.")
+            return
+        start_frame, end_frame = [int(v) for v in frames_range.val]
+        if end_frame <= start_frame:
+            messagebox.showerror("Error", "Invalid frame range.")
+            return
+        # Perform swap across all available coords
+        m1, m2 = visible_markers
+        for coord in coord_types:
+            c1 = markers[m1].get(coord)
+            c2 = markers[m2].get(coord)
+            if c1 and c2 and c1 in df.columns and c2 in df.columns:
+                tmp = df.loc[start_frame:end_frame, c1].copy()
+                df.loc[start_frame:end_frame, c1] = df.loc[start_frame:end_frame, c2].values
+                df.loc[start_frame:end_frame, c2] = tmp.values
+        update_plot()
+        messagebox.showinfo("Done", f"Swapped {m1} and {m2} in {start_frame}-{end_frame}.")
     
     def on_delete_marker():
         # TODO: Implement marker deletion functionality
