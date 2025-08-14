@@ -6,9 +6,9 @@ Author: Prof. Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 24 Oct 2024
-Update Date: 30 May 2025
-Version: 0.0.7
-Python Version: 3.12.9
+Update Date: 13 Aug 2025
+Version: 0.0.8
+Python Version: 3.12.11
 
 Description:
 ------------
@@ -133,6 +133,136 @@ from datetime import datetime
 from pathlib import Path
 from rich import print
 import matplotlib.pyplot as plt
+import webbrowser
+from typing import Optional, Dict
+
+try:  # Python 3.11+
+    import tomllib as _toml_reader  # type: ignore[attr-defined]
+except Exception:  # pragma: no cover
+    _toml_reader = None  # type: ignore[assignment]
+
+# -----------------------
+# Jump context management
+# -----------------------
+_JUMP_CONTEXT: Optional[Dict[str, float]] = None
+
+
+def _open_jump_help() -> None:
+    try:
+        help_html = Path(__file__).parent / "help" / "vaila_and_jump_help.html"
+        help_md = Path(__file__).parent / "help" / "vaila_and_jump_help.md"
+        if help_html.exists():
+            webbrowser.open_new_tab(help_html.as_uri())
+        elif help_md.exists():
+            webbrowser.open_new_tab(help_md.as_uri())
+        else:
+            messagebox.showinfo("Help", "Help file not found.")
+    except Exception as e:
+        try:
+            messagebox.showerror("Help", f"Could not open help file: {e}")
+        except Exception:
+            print(f"Help open error: {e}")
+
+
+def _load_jump_context_from_toml(base_dir: Optional[Path] = None) -> Optional[Dict[str, float]]:
+    """Try to load vaila_and_jump_config.toml (prefer the data directory)."""
+    search_paths = []
+    if base_dir is not None:
+        search_paths.append(Path(base_dir) / "vaila_and_jump_config.toml")
+    search_paths.extend([
+        Path(__file__).parent / "vaila_and_jump_config.toml",
+        Path(__file__).parent / "models" / "vaila_and_jump_config.toml",
+    ])
+    for p in search_paths:
+        if p.exists():
+            try:
+                if _toml_reader is None:
+                    import toml  # type: ignore
+                    data = toml.load(str(p))
+                else:
+                    with open(p, "rb") as f:
+                        data = _toml_reader.load(f)  # type: ignore[attr-defined]
+                cfg = data.get("jump_context", {})
+                mass = float(cfg.get("mass_kg", 0))
+                fps = float(cfg.get("fps", 0))
+                shank = float(cfg.get("shank_length_m", 0.0))
+                if mass > 0 and fps > 0 and shank > 0:
+                    return {"mass_kg": mass, "fps": int(fps), "shank_length_m": shank}
+            except Exception:
+                pass
+    return None
+
+
+def _save_jump_context_template(dest: Path, ctx: Dict[str, float]) -> None:
+    content = (
+        "# ================================================\n"
+        "# vaila_and_jump configuration (per-folder)\n"
+        "# ================================================\n"
+        "# Place this file alongside the CSV files you will analyze.\n"
+        "# It will be loaded automatically so you are not prompted every run.\n"
+        "#\n"
+        "# Fields:\n"
+        "# - mass_kg: Subject mass in kilograms (e.g., 75.0)\n"
+        "# - fps: Video frame rate (Hz). Use CAPTURE FPS for slow-motion (e.g., 240)\n"
+        "# - shank_length_m: Estimated shank length (m), used to scale to meters\n"
+        "#\n"
+        "# Optional (informative) fields you may add under [notes]:\n"
+        "# [notes]\n"
+        "# subject_id = \"S01\"\n"
+        "# session = \"pre\"\n"
+        "# comment = \"CMJ test set\"\n"
+        "# ================================================\n"
+        "[jump_context]\n"
+        f"mass_kg = {ctx.get('mass_kg', 75.0):.3f}\n"
+        f"fps = {int(ctx.get('fps', 240))}\n"
+        f"shank_length_m = {ctx.get('shank_length_m', 0.40):.3f}\n"
+    )
+    dest.write_text(content, encoding="utf-8")
+
+
+def _get_or_ask_jump_context(base_dir: Optional[Path] = None) -> Optional[Dict[str, float]]:
+    global _JUMP_CONTEXT
+    if _JUMP_CONTEXT is not None:
+        return _JUMP_CONTEXT
+    # Try TOML first
+    ctx = _load_jump_context_from_toml(base_dir=base_dir)
+    if ctx:
+        _JUMP_CONTEXT = ctx
+        print(f"Loaded jump context from TOML: mass={ctx['mass_kg']} kg, fps={ctx['fps']}, shank={ctx['shank_length_m']} m")
+        return _JUMP_CONTEXT
+    # Ask once via dialogs
+    root = Tk()
+    root.withdraw()
+    try:
+        root.attributes("-topmost", True)
+    except Exception:
+        pass
+    try:
+        mass = simpledialog.askfloat("Mass (kg)", "Enter subject mass (kg):", parent=root, minvalue=20.0, maxvalue=200.0)
+        if mass is None:
+            return None
+        fps = simpledialog.askinteger("FPS", "Enter video FPS (frames/s):", parent=root, minvalue=1, maxvalue=240)
+        if fps is None:
+            fps = 30
+        shank = simpledialog.askfloat("Shank length (m)", "Enter shank length in meters (e.g., 0.40):", parent=root, minvalue=0.1, maxvalue=1.0)
+        if shank is None:
+            shank = 0.40
+        _JUMP_CONTEXT = {"mass_kg": float(mass), "fps": int(fps), "shank_length_m": float(shank)}
+        # Offer to save template
+        try:
+            if messagebox.askyesno("Save Config", "Save these values to vaila_and_jump_config.toml in the data folder for batch runs?"):
+                dest_dir = Path(base_dir) if base_dir is not None else Path(__file__).parent
+                dest = dest_dir / "vaila_and_jump_config.toml"
+                _save_jump_context_template(dest, _JUMP_CONTEXT)
+                messagebox.showinfo("Saved", f"Template saved at: {dest}")
+        except Exception:
+            pass
+        return _JUMP_CONTEXT
+    finally:
+        try:
+            root.destroy()
+        except Exception:
+            pass
 
 
 def calculate_force(mass, gravity=9.81):
@@ -297,7 +427,7 @@ def calculate_baseline(data, n_frames=10):
     return feet_baseline, cg_y_baseline
 
 
-def identify_jump_phases(data, feet_baseline, cg_baseline, fps):
+def identify_jump_phases(data, feet_baseline, _cg_baseline, fps):
     """
     Improved identification of jump phases with three different height calculation methods.
     
@@ -1070,6 +1200,20 @@ def generate_html_report(data, results, plot_files, output_dir, base_name):
         </div>
         """
 
+    # Try to embed an animated GIF if it exists in the output directory
+    try:
+        maybe_gifs = [p for p in os.listdir(output_dir) if p.lower().endswith('.gif')]
+        if maybe_gifs:
+            gif_name = sorted(maybe_gifs)[0]
+            html_content += f"""
+            <div class="img-container">
+                <img src="{gif_name}" alt="Jump animation (stick figure)">
+                <p><em>{gif_name} — compact stick-figure animation over the jump</em></p>
+            </div>
+            """
+    except Exception:
+        pass
+
     # Add references section at the end
     html_content += """
         <div class="references">
@@ -1120,50 +1264,15 @@ def process_mediapipe_data(input_file, output_dir):
         for col in [c for c in data.columns if c.endswith("_y")]:
             data[col] = 1.0 - data[col]
 
-        # Request mass and FPS
-        root = Tk()
-        root.withdraw()
-        root.attributes("-topmost", True)  # Force dialogs to be on top
-
-        mass = simpledialog.askfloat(
-            "Mass Input",
-            "Enter the subject's mass (kg):",
-            parent=root,  # Set parent window
-            minvalue=20.0,
-            maxvalue=200.0,
-        )
-        root.lift()  # Bring window to the front
-
-        if mass is None:
-            print(f"Processing cancelled for {input_file} - no mass provided.")
+        # Request mass/FPS/shank only once per batch via shared context
+        data_folder = Path(input_file).parent
+        ctx = _get_or_ask_jump_context(base_dir=data_folder)
+        if ctx is None:
+            print("Cancelled by user (context).")
             return
-
-        fps = simpledialog.askinteger(
-            "FPS Input",
-            "Enter the video FPS (frames per second):",
-            parent=root,  # Set parent window
-            minvalue=1,
-            maxvalue=240,
-        )
-        root.lift()  # Bring window to the front
-
-        if fps is None:
-            fps = 30
-            print(f"Using default FPS value: {fps}")
-
-        # Define a scale factor for meters
-        shank_length_real = simpledialog.askfloat(
-            "Scale Factor",
-            "Enter the approximate shank length in meters (e.g., 0.4):",
-            parent=root,  # Set parent window
-            minvalue=0.1,
-            maxvalue=1.0,
-        )
-        root.lift()  # Bring window to the front
-        if shank_length_real is None:
-            shank_length_real = 0.4  # Default value
-
-        root.destroy()  # Clean up the root window
+        mass = ctx["mass_kg"]
+        fps = ctx["fps"]
+        shank_length_real = ctx["shank_length_m"]
 
         # Calculate the conversion factor for normalized pixels to meters
         # Use keyword argument to avoid misplacing into 'knee'
@@ -1235,12 +1344,12 @@ def process_mediapipe_data(input_file, output_dir):
         # Y coordinates relative to CG reference
         for col in [c for c in data.columns if c.endswith("_y_m")]:
             rel_cols[f"{col}_rel"] = data[col] - cg_y_ref
-            print(f"  Created {col}_rel column")
+            # print(f"  Created {col}_rel column")
 
         # X coordinates relative to CG reference
         for col in [c for c in data.columns if c.endswith("_x_m")]:
             rel_cols[f"{col}_rel"] = data[col] - cg_x_ref
-            print(f"  Created {col}_rel column")
+            # print(f"  Created {col}_rel column")
 
         # Add all column
         data = pd.concat([data, pd.DataFrame(rel_cols)], axis=1)
@@ -1303,7 +1412,7 @@ def process_mediapipe_data(input_file, output_dir):
         power = force_vertical * vel_cg
         data["power"] = power
 
-       # Calculate power metrics during propulsion
+        # Calculate power metrics during propulsion
         takeoff_frame = jump_phase_results["takeoff_frame"]
         squat_frame = jump_phase_results["propulsion_start_frame"]
         
@@ -1314,9 +1423,9 @@ def process_mediapipe_data(input_file, output_dir):
             # Calculate average power during propulsion phase
             avg_power_propulsion = np.mean(power_propulsion) if len(power_propulsion) > 0 else 0
             
-            # CORREÇÃO: Encontrar o índice do valor máximo de power em toda a série
-            idx_max_power = np.argmax(power)  # Agora pega o índice do máximo valor em toda a série power
-            time_max_power = idx_max_power / fps  # Converte o índice para tempo
+            # Corrected: Find the index of the maximum value in the power series
+            idx_max_power = np.argmax(power)  # Now get the index of the maximum value in the power series
+            time_max_power = idx_max_power / fps  # Convert the index to time
             
             # Calculate takeoff power
             power_takeoff = power[takeoff_frame] if takeoff_frame < len(power) else 0
@@ -1489,6 +1598,16 @@ def process_mediapipe_data(input_file, output_dir):
         other_plot_files = generate_jump_plots(data, results, output_dir, base_name)
         plot_files.extend(other_plot_files)
 
+        # 5. Generate compact animated GIF over the jump cycle (key frames + intermediates)
+        gif_path = generate_jump_animation_gif(
+            data,
+            jump_phase_results,
+            output_dir,
+            base_name,
+            frames_between=3,
+            figsize=(5, 5),
+        )
+
         # Save calibrated data
         orig_cols = list(data.columns)
         rel_cols = [c for c in data.columns if c.endswith("_rel")]
@@ -1593,7 +1712,10 @@ def process_all_mediapipe_files(target_dir):
 
     for input_file in csv_files:
         print(f"Processing MediaPipe file: {input_file}")
-        process_mediapipe_data(input_file, output_dir)
+        base_name = os.path.splitext(os.path.basename(input_file))[0]
+        per_file_dir = os.path.join(output_dir, base_name)
+        os.makedirs(per_file_dir, exist_ok=True)
+        process_mediapipe_data(input_file, per_file_dir)
     print("All MediaPipe files have been processed successfully.")
 
 
@@ -1913,7 +2035,10 @@ def process_all_files_in_directory(target_dir, use_time_of_flight):
     # Process each .csv file
     for input_file in csv_files:
         print(f"Processing file: {input_file}")
-        process_jump_data(input_file, output_dir, use_time_of_flight)
+        base_name = os.path.splitext(os.path.basename(input_file))[0]
+        per_file_dir = os.path.join(output_dir, base_name)
+        os.makedirs(per_file_dir, exist_ok=True)
+        process_jump_data(input_file, per_file_dir, use_time_of_flight)
 
     print("All files have been processed successfully.")
 
@@ -2309,6 +2434,162 @@ def plot_jump_stickfigures_with_cg(
     return output_file
 
 
+def generate_jump_animation_gif(
+    data,
+    jump_phase_results,
+    output_dir,
+    base_name,
+    frames_between: int = 3,
+    figsize=(6, 6),
+):
+    try:
+        import imageio
+    except Exception:
+        print("Warning: imageio not available; skipping GIF generation")
+        return None
+
+    frame_initial = 0
+    frame_squat = int(jump_phase_results.get("propulsion_start_frame", 0))
+    frame_takeoff = int(jump_phase_results.get("takeoff_frame", frame_squat))
+    frame_peak = int(jump_phase_results.get("max_height_frame", frame_takeoff))
+    frame_landing = int(jump_phase_results.get("landing_frame", len(data) - 1))
+
+    key_frames = [frame_initial, frame_squat, frame_takeoff, frame_peak, frame_landing]
+    key_frames = [int(max(0, min(len(data) - 1, f))) for f in key_frames]
+
+    frames = []
+    for a, b in zip(key_frames[:-1], key_frames[1:]):
+        if a > b:
+            a, b = b, a
+        frames.append(a)
+        if b > a:
+            step = (b - a) / (frames_between + 1)
+            for i in range(1, frames_between + 1):
+                frames.append(int(round(a + i * step)))
+    frames.append(key_frames[-1])
+    frames = sorted(set(frames))
+
+    # Use scalar references (first row) if columns exist; fall back to 0.0
+    try:
+        ref_cg_x = float(data["reference_cg_x"].iloc[0]) if "reference_cg_x" in data.columns else 0.0
+    except Exception:
+        ref_cg_x = 0.0
+    try:
+        ref_cg_y = float(data["reference_cg_y"].iloc[0]) if "reference_cg_y" in data.columns else 0.0
+    except Exception:
+        ref_cg_y = 0.0
+
+    body_segments = [
+        # Legs
+        ("left_ankle", "left_knee"),
+        ("left_knee", "left_hip"),
+        ("right_ankle", "right_knee"),
+        ("right_knee", "right_hip"),
+        # Feet
+        ("left_heel", "left_foot_index"),
+        ("right_heel", "right_foot_index"),
+        # Pelvis & Trunk
+        ("left_hip", "right_hip"),
+        ("left_shoulder", "right_shoulder"),
+        ("left_hip", "left_shoulder"),
+        ("right_hip", "right_shoulder"),
+        # Arms
+        ("left_shoulder", "left_elbow"),
+        ("left_elbow", "left_wrist"),
+        ("right_shoulder", "right_elbow"),
+        ("right_elbow", "right_wrist"),
+    ]
+
+    def get_point(row, name, suffix="_m"):
+        x_col = f"{name}_x{suffix}"
+        y_col = f"{name}_y{suffix}"
+        if x_col in row.index and y_col in row.index and not (pd.isna(row[x_col]) or pd.isna(row[y_col])):
+            return float(row[x_col]) - ref_cg_x, float(row[y_col]) - ref_cg_y
+        return None
+
+    # Determine axis limits across all frames
+    xs, ys = [], []
+    for f in frames:
+        row = data.iloc[int(f)]
+        for a, b in body_segments:
+            pa = get_point(row, a)
+            pb = get_point(row, b)
+            if pa and pb:
+                xs.extend([pa[0], pb[0]])
+                ys.extend([pa[1], pb[1]])
+    if xs and ys:
+        x_min, x_max = min(xs), max(xs)
+        y_min, y_max = min(ys), max(ys)
+        xr = x_max - x_min
+        yr = y_max - y_min
+        x_pad = xr * 0.2 if xr > 0 else 0.2
+        y_pad = yr * 0.2 if yr > 0 else 0.2
+        x_min -= x_pad
+        x_max += x_pad
+        y_min -= y_pad
+        y_max += y_pad
+    else:
+        x_min, x_max, y_min, y_max = -1, 1, -1, 1
+
+    images = []
+    for f in frames:
+        row = data.iloc[int(f)]
+        fig, ax = plt.subplots(figsize=figsize)
+        for a, b in body_segments:
+            pa = get_point(row, a)
+            pb = get_point(row, b)
+            if pa and pb:
+                ax.plot([pa[0], pb[0]], [pa[1], pb[1]], color="black", lw=2)
+
+        # Add neck line from shoulders midpoint to nose if available
+        ls = get_point(row, "left_shoulder")
+        rs = get_point(row, "right_shoulder")
+        nose = get_point(row, "nose")
+        if ls and rs and nose:
+            mid = ((ls[0] + rs[0]) / 2.0, (ls[1] + rs[1]) / 2.0)
+            ax.plot([mid[0], nose[0]], [mid[1], nose[1]], color="black", lw=2)
+
+        # Draw Center of Gravity (relative to reference)
+        try:
+            if "cg_x_m" in data.columns and "cg_y_m" in data.columns:
+                cgx = float(row["cg_x_m"]) - ref_cg_x
+                cgy = float(row["cg_y_m"]) - ref_cg_y
+                ax.plot(cgx, cgy, "o", color="orange", markersize=6, markeredgecolor="black")
+        except Exception:
+            pass
+
+        ax.set_xlim(x_min, x_max)
+        ax.set_ylim(y_min, y_max)
+        ax.set_aspect("equal", "box")
+        ax.axis("off")
+        # Render using Agg canvas to reliably extract pixel buffer
+        try:
+            from matplotlib.backends.backend_agg import FigureCanvasAgg as _FigureCanvasAgg
+            canvas = _FigureCanvasAgg(fig)
+            canvas.draw()
+            w, h = canvas.get_width_height()
+            buf = canvas.buffer_rgba()
+            img = np.frombuffer(buf, dtype=np.uint8).reshape(h, w, 4)
+            images.append(img[:, :, :3].copy())  # drop alpha
+        except Exception as e:
+            print(f"GIF frame render failed at frame {f}: {e}")
+        plt.close(fig)
+
+    if not images:
+        print("GIF generation skipped: no images rendered")
+        return None
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    gif_path = os.path.join(output_dir, f"{base_name}_jump_anim_{timestamp}.gif")
+    try:
+        # loop=0 makes the GIF loop infinitely
+        imageio.mimsave(gif_path, images, duration=0.08, loop=0)
+        print(f"Saved GIF animation: {gif_path}")
+        return gif_path
+    except Exception as e:
+        print(f"Failed to save GIF: {e}")
+        return None
+
 def plot_jump_stickfigures_subplot(
     csv_file,
     output_file,
@@ -2692,7 +2973,7 @@ def vaila_and_jump():
         "Select the type of data in your CSV files:\n\n"
         "1. Time of Flight Data\n"
         "2. Jump Height Data\n"
-        "3. MediaPipe Ankle Data",
+        "3. MediaPipe Shank Length Data",
         parent=root,  # Set parent window
         minvalue=1,
         maxvalue=3,
@@ -2718,7 +2999,7 @@ def vaila_and_jump():
     elif data_type == 2:
         msg += "Input data type: Jump Height\n"
     else:
-        msg += "Input data type: MediaPipe Ankle\n"
+        msg += "Input data type: MediaPipe Shank Length\n"
     msg += f"Output directory: {os.path.join(target_dir, 'vaila_verticaljump_*')}"
     messagebox.showinfo("Success", msg, parent=root)
 
