@@ -1,31 +1,53 @@
 """
-Project: vailá
-Script: reid_yolotrack.py
+Project: vailá Multimodal Toolbox
+Script: reid_yolotrack.py - ReID with YOLOTrack
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
-Creation Date: 20 March 2025
-Version: 0.01
+Creation Date: 29 July 2024
+Update Date: 10 August 2025
+Version: 0.1.0
 
 Description:
-    This script performs post-processing on tracker CSV files to correct ID inconsistencies:
-    - Merges multiple IDs that belong to the same person
-    - Corrects ID switches between different people
-    - Uses ReID (re-identification) features from boxmot for identity matching
-    - Creates corrected CSV files and an updated visualization video
+This script performs batch processing of videos for ReID using YOLOTrack. It processes videos from a specified input directory,
+and exports both normalized and pixel-based landmark coordinates to CSV files. The script also generates a
+video with the landmarks overlaid on the original frames.
 
 Usage:
-    Run the script from the command line:
-        python reid_yolotrack.py
+    python -m vaila.reid_yolotrack
+    or
+    python -m vaila.reid_yolotrack --input_dir path/to/input_directory
+    or
+    python -m vaila.reid_yolotrack --input_dir path/to/input_directory --output_dir path/to/output_directory
+    or
+    python -m vaila.reid_yolotrack --input_dir path/to/input_directory --output_dir path/to/output_directory --reid_threshold 0.6
+    or
+    python -m vaila.reid_yolotrack --input_dir path/to/input_directory --output_dir path/to/output_directory --reid_threshold 0.6 --video_file path/to/video_file
 
 Requirements:
-    - Python 3.x
-    - OpenCV
-    - PyTorch
-    - boxmot (for ReID feature extraction)
-    - numpy, pandas (for data processing)
-    - Additional dependencies as imported
+    - Python 3.12.11
+    - OpenCV (`pip install opencv-python`)
+    - MediaPipe (`pip install mediapipe`)
+    - Tkinter (usually included with Python installations)
+    - Pillow (if using image manipulation: `pip install Pillow`)
+    - Pandas (for coordinate conversion: `pip install pandas`)
+    - boxmot (for ReID: `pip install boxmot`)
+
+Output:
+    - A video with the landmarks overlaid on the original frames.
+    - A CSV file with the corrected IDs.
+    - A CSV file with the original IDs.
+
+License:
+    This project is licensed under the terms of GNU General Public License v3.0.
+
+Notes:
+    - This script uses the boxmot library for ReID.
+    - The script uses the osnet_x0_25_msmt17.pt model for ReID.
+    - The script uses the default threshold of 0.6 for ReID.
+    - The script uses the default device of cuda if available, otherwise cpu.
+    - The script uses the default output directory of reid_corrected.
 """
 
 import os
