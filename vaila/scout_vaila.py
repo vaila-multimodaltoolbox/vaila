@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 12 August 2025
-Update Date: 13 August 2025
-Version: 0.1.1
+Update Date: 14 August 2025
+Version: 0.1.2
 
 Description:
     Integrated GUI to annotate sports events on a virtual soccer field and generate
@@ -167,20 +167,20 @@ def _default_config() -> Dict:
                 },
             },
         },
-        # Prefer structured actions with symbol, hotkey and color. If user provides a simple list of strings,
+        # Prefer structured actions with symbol and color. If user provides a simple list of strings,
         # the app will convert them to this structure with defaults.
         "actions": [
-            {"name": "Pass", "code": 1, "symbol": "o", "key": "p", "color": "#FFD700"},
-            {"name": "First touch", "code": 2, "symbol": "P", "key": "f", "color": "#8c564b"},
-            {"name": "Control", "code": 3, "symbol": "s", "key": "c", "color": "#9467bd"},
-            {"name": "Dribble", "code": 4, "symbol": "D", "key": "d", "color": "#17becf"},
-            {"name": "Shield", "code": 5, "symbol": "h", "key": "h", "color": "#7f7f7f"},
-            {"name": "Shot", "code": 6, "symbol": "*", "key": "g", "color": "#FF4500"},
-            {"name": "Header", "code": 7, "symbol": "^", "key": "e", "color": "#2ca02c"},
-            {"name": "Cross", "code": 8, "symbol": "+", "key": "x", "color": "#1f77b4"},
-            {"name": "Tackle", "code": 9, "symbol": "x", "key": "t", "color": "#d62728"},
-            {"name": "Interception", "code": 10, "symbol": "X", "key": "i", "color": "#bcbd22"},
-            {"name": "Goalkeeping", "code": 11, "symbol": "s", "key": "k", "color": "#8c564b"},
+            {"name": "Pass", "code": 1, "symbol": "o", "color": "#FFD700"},
+            {"name": "First touch", "code": 2, "symbol": "P", "color": "#8c564b"},
+            {"name": "Control", "code": 3, "symbol": "s", "color": "#9467bd"},
+            {"name": "Dribble", "code": 4, "symbol": "D", "color": "#17becf"},
+            {"name": "Shield", "code": 5, "symbol": "h", "color": "#7f7f7f"},
+            {"name": "Shot", "code": 6, "symbol": "*", "color": "#FF4500"},
+            {"name": "Header", "code": 7, "symbol": "^", "color": "#2ca02c"},
+            {"name": "Cross", "code": 8, "symbol": "+", "color": "#1f77b4"},
+            {"name": "Tackle", "code": 9, "symbol": "x", "color": "#d62728"},
+            {"name": "Interception", "code": 10, "symbol": "X", "color": "#bcbd22"},
+            {"name": "Goalkeeping", "code": 11, "symbol": "s", "color": "#8c564b"},
         ],
         "results": ["success", "fail", "neutral"],
         "drawing": {
@@ -280,7 +280,6 @@ def _toml_template_with_comments(cfg: Dict) -> str:
             name = str(a.get("name", "Action"))
             code = a.get("code", "")
             symbol = str(a.get("symbol", "o"))
-            key = str(a.get("key", ""))
             color = str(a.get("color", "#FFD700"))
             actions_blocks.append(
                 "\n".join([
@@ -288,7 +287,6 @@ def _toml_template_with_comments(cfg: Dict) -> str:
                     f'name = "{name}"',
                     (f"code = {int(code)}" if str(code).isdigit() else f'code = "{code}"') if code != "" else "code = -1",
                     f'symbol = "{symbol}"',
-                    f'key = "{key}"',
                     f'color = "{color}"',
                     "",
                 ])
@@ -302,7 +300,6 @@ def _toml_template_with_comments(cfg: Dict) -> str:
                     f'name = "{str(n)}"',
                     "code = -1",
                     'symbol = "o"',
-                    f'key = "{str(n)[:1].lower()}"',
                     'color = "#FFD700"',
                     "",
                 ])
@@ -368,7 +365,7 @@ player_name_size = {int(drawing.get('player_name_size', 8))}
 results = [{_quote_list_str(results)}]
 
 # Actions are listed at the end for readability. Each action has a display name,
-# a plot symbol/marker, an optional keyboard key, and a color used for the symbol.
+# a plot symbol/marker, and a color used for the symbol.
 # Common symbols: o, *, +, x, ^, s (square), P (plus filled), D (diamond), h (hexagon).
 {''.join(actions_blocks)}
 """.strip() + "\n"
@@ -529,7 +526,6 @@ class ScoutApp(tk.Tk):
         self.actions_cfg = self._normalize_actions_config(cfg.get("actions", []))
         self.action_names = [a["name"] for a in self.actions_cfg]
         self.name_to_action = {a["name"]: a for a in self.actions_cfg}
-        self.key_to_action = {str(a.get("key", "")).lower(): a for a in self.actions_cfg if a.get("key")}
         first_action = self.action_names[0] if self.action_names else ""
         self.action_var = tk.StringVar(value=first_action)
         self.action_cb = ttk.Combobox(controls, textvariable=self.action_var, values=self.action_names, width=16, state="readonly")
@@ -588,6 +584,9 @@ class ScoutApp(tk.Tk):
         self.auto_number_players = False
         self.unique_player_per_click = False
         self.next_player_number_by_team: Dict[str, int] = {}
+        
+        # Ctrl state tracking for remove functionality
+        self._ctrl_pressed = False
 
         # Sync players list on team change
         # No visible team combobox; keep hotkey 'T' to toggle team
@@ -608,6 +607,13 @@ class ScoutApp(tk.Tk):
         self.bind_all("t", lambda e: self._toggle_team())
         self.bind_all("T", lambda e: self._toggle_team())
         # self.bind_all("<Control-t>", lambda e: self.rename_teams())  # optional
+        
+        # Ctrl state tracking for remove functionality
+        self.bind_all("<KeyPress-Control_L>", lambda e: self._set_ctrl_pressed(True))
+        self.bind_all("<KeyPress-Control_R>", lambda e: self._set_ctrl_pressed(True))
+        self.bind_all("<KeyRelease-Control_L>", lambda e: self._set_ctrl_pressed(False))
+        self.bind_all("<KeyRelease-Control_R>", lambda e: self._set_ctrl_pressed(False))
+        
         # Space toggles timer - will be bound after _toggle_timer is defined
         # Action hotkeys from config (single-letter) - DISABLED, using numeric codes instead
         # for k, act in self.key_to_action.items():
@@ -780,9 +786,17 @@ class ScoutApp(tk.Tk):
         if not (0 <= x_m <= self.field_w and 0 <= y_m <= self.field_h):
             return
 
+        # Check for Ctrl + right click to remove events
+        btn = int(getattr(event, "button", 1) or 1)
+        
+        # Check for Ctrl + right click to remove events
+        if btn == 3 and self._ctrl_pressed:
+            # Ctrl + right click: remove events near this position
+            self._remove_events_near_position(x_m, y_m)
+            return
+
         timestamp = self._get_current_time_s()
         # Result via mouse button: 1=left→success, 2=middle→neutral, 3=right→fail
-        btn = int(getattr(event, "button", 1) or 1)
         if btn == 1:
             clicked_result = "success"
         elif btn == 3:
@@ -1030,6 +1044,40 @@ class ScoutApp(tk.Tk):
             players.append(player)
         self.cfg["teams"][key].setdefault("players_names", {}).setdefault(str(player), "")
     
+    def _remove_events_near_position(self, x_m: float, y_m: float, radius_m: float = 1.0) -> None:
+        """Remove the most recent event within radius_m meters of the given position."""
+        if not self.events:
+            return
+            
+        # Find events to remove (sorted by timestamp, most recent first)
+        events_to_remove = []
+        for ev in self.events:
+            distance = ((ev.pos_x_m - x_m) ** 2 + (ev.pos_y_m - y_m) ** 2) ** 0.5
+            if distance <= radius_m:
+                events_to_remove.append(ev)
+        
+        if not events_to_remove:
+            return
+            
+        # Sort by timestamp (most recent first) and remove only the most recent one
+        events_to_remove.sort(key=lambda ev: ev.timestamp_s, reverse=True)
+        event_to_remove = events_to_remove[0]
+        
+        # Remove the most recent event
+        self.events.remove(event_to_remove)
+        
+        # Redraw field
+        self._redraw_field()
+        for ev in self.events:
+            self._draw_player_marker_with_action(ev.pos_x_m, ev.pos_y_m, ev)
+        self.field_canvas.draw()
+        
+        print(f"Removed event at ({event_to_remove.pos_x_m:.1f}, {event_to_remove.pos_y_m:.1f}) - {event_to_remove.team} {event_to_remove.player} {event_to_remove.action}")
+    
+    def _set_ctrl_pressed(self, pressed: bool) -> None:
+        """Set the Ctrl key pressed state."""
+        self._ctrl_pressed = pressed
+    
     # --- Drawing helpers
     def _get_team_color(self, team_name: str) -> str:
         key = self._team_key_from_name(team_name)
@@ -1073,28 +1121,36 @@ class ScoutApp(tk.Tk):
                 bbox=dict(boxstyle="round,pad=0.2", fc="black", ec="none", alpha=0.6),
             )
 
-        # Action symbol
-        show_symbol = bool(self.cfg.get("drawing", {}).get("show_action_symbol", False))
-        if show_symbol:
-            act = self.name_to_action.get(ev.action, None)
-            if act is not None:
-                symbol = str(act.get("symbol", "o"))
-                a_color = str(act.get("color", "yellow"))
-                off = circle_r * 1.2
-                mx, my = x_m + off, y_m + off
-                marker_map = {"o": "o", "*": "*", "+": "+", "x": "x", "X": "x", "^": "^", "s": "s", "P": "P", "D": "D", "h": "h"}
-                m = marker_map.get(symbol, None)
-                if m is not None and len(m) == 1:
-                    unfilled = m in {"+", "x"}
-                    if unfilled:
-                        self.field_ax.scatter([mx], [my], s=action_symbol_size, c=a_color, marker=m, zorder=8)
-                    else:
-                        self.field_ax.scatter([mx], [my], s=action_symbol_size, c=a_color, edgecolors=result_edge, marker=m, zorder=8)
+        # Action symbol - always show for better distinction
+        act = self.name_to_action.get(ev.action, None)
+        if act is not None:
+            symbol = str(act.get("symbol", "o"))
+            a_color = str(act.get("color", "yellow"))
+            off = circle_r * 1.2
+            mx, my = x_m + off, y_m + off
+            
+            # Enhanced symbol drawing with better visibility
+            marker_map = {"o": "o", "*": "*", "+": "+", "x": "x", "X": "x", "^": "^", "s": "s", "P": "P", "D": "D", "h": "h"}
+            m = marker_map.get(symbol, None)
+            
+            if m is not None and len(m) == 1:
+                unfilled = m in {"+", "x"}
+                if unfilled:
+                    # For unfilled markers, use larger size and add background
+                    self.field_ax.scatter([mx], [my], s=action_symbol_size * 1.5, c=a_color, marker=m, 
+                                        linewidth=2, edgecolors="black", zorder=8)
                 else:
-                    self.field_ax.text(mx, my, symbol, color=a_color, fontsize=number_size + 2, weight="bold", zorder=8)
+                    # For filled markers, add edge for better visibility
+                    self.field_ax.scatter([mx], [my], s=action_symbol_size, c=a_color, 
+                                        edgecolors="black", linewidth=1, marker=m, zorder=8)
+            else:
+                # For text symbols, add background for better visibility
+                self.field_ax.text(mx, my, symbol, color=a_color, fontsize=number_size + 3, 
+                                 weight="bold", zorder=8, ha="center", va="center",
+                                 bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="black", alpha=0.8))
     # --- Actions helpers
     def _normalize_actions_config(self, actions_cfg: List) -> List[Dict[str, str]]:
-        """Accepts either list[str] or list[dict] and returns list of dicts with keys name,code,symbol,key,color."""
+        """Accepts either list[str] or list[dict] and returns list of dicts with keys name,code,symbol,color."""
         out: List[Dict[str, str]] = []
         if not actions_cfg:
             return _default_config()["actions"]
@@ -1105,14 +1161,13 @@ class ScoutApp(tk.Tk):
                     "name": str(a.get("name", "Action")),
                     "code": int(a.get("code", -1)) if str(a.get("code", "")).isdigit() else a.get("code", -1),
                     "symbol": str(a.get("symbol", "o")),
-                    "key": str(a.get("key", "")),
                     "color": str(a.get("color", "#FFD700")),
                 })
             return out
         # assume list of names
         for idx, n in enumerate(actions_cfg, start=1):
             name = str(n)
-            out.append({"name": name, "code": idx, "symbol": "o", "key": (name[:1].lower() if name else ""), "color": "#FFD700"})
+            out.append({"name": name, "code": idx, "symbol": "o", "color": "#FFD700"})
         return out
 
     def _set_action_by_name(self, name: str) -> None:
@@ -1158,7 +1213,6 @@ class ScoutApp(tk.Tk):
         self.actions_cfg = self._normalize_actions_config(cfg.get("actions", []))
         self.action_names = [a["name"] for a in self.actions_cfg]
         self.name_to_action = {a["name"]: a for a in self.actions_cfg}
-        self.key_to_action = {str(a.get("key", "")).lower(): a for a in self.actions_cfg if a.get("key")}
         self.action_cb.config(values=self.action_names)
         if self.action_names:
             self.action_var.set(self.action_names[0])
@@ -1269,6 +1323,7 @@ class ScoutApp(tk.Tk):
             ("Ctrl+T", "Rename teams"),
             ("Digits 0–9", "Enter action code; Enter apply; Backspace edit; Esc clear"),
             ("Mouse", "Left=success, Right=fail, Middle=neutral"),
+            ("Ctrl+Right Click", "Remove events near clicked position (hold Ctrl, right click)"),
         ]
 
         for i, (keys, desc) in enumerate(shortcuts, start=1):
