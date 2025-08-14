@@ -1,27 +1,48 @@
 """
 numberframes.py
+===============================================================================
+Author: Paulo R. P. Santiago
+Email: paulosantiago@usp.br
+GitHub: https://github.com/vaila-multimodaltoolbox/vaila
+Creation Date: 10 October 2024
+Update Date: 13 August 2025
+Version: 0.1.2
+Python Version: 3.12.11
 
 Description:
+------------
 This script allows users to analyze video files within a selected directory and extract metadata such as frame count, frame rate (FPS), resolution, codec, and duration. The script generates a summary of this information, displays it in a user-friendly graphical interface, and saves the metadata to text files. The "basic" file contains essential metadata, while the "full" file includes all possible metadata extracted using `ffprobe`.
 
-Version: 0.5
-Created: 25 April 2024
-Last Updated: 10 May 2025
-Author: Prof. Paulo R. P. Santiago
+Key Features:
+-------------
+1. Fast metadata extraction using a single ffprobe JSON call.
+2. Detection of capture FPS via Android tag com.android.capture.fps when present.
+3. Parallel processing of multiple videos for faster analysis.
 
-Dependencies:
-- Python 3.x
-- OpenCV
-- Tkinter
-- FFmpeg/FFprobe
+Notes:
+------
+- The script uses the `ffprobe` command-line tool to extract metadata.
+- The script uses the `ThreadPoolExecutor` to process multiple videos in parallel.
+- The script uses the `as_completed` function to process the videos in parallel.
+- The script uses the `tkinter` library to create a user-friendly graphical interface.
+
 
 Usage:
 - Run the script, select a directory containing video files, and let the tool analyze the videos.
 - View the metadata in the GUI and check the saved text files in the selected directory for details.
 - Use the "full" file for complete metadata in JSON format.
+
+License:
+--------
+This program is licensed under the GNU Lesser General Public License v3.0.
+For more details, visit: https://www.gnu.org/licenses/lgpl-3.0.html
+===============================================================================
 """
 
 import os
+import json
+from fractions import Fraction
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from rich import print
 import cv2
 import tkinter as tk
@@ -30,174 +51,147 @@ from datetime import datetime
 import subprocess
 
 
+def _ffprobe_json(video_path: str) -> dict:
+    """
+    Single, fast ffprobe call returning JSON with format + all streams and related sections.
+    Avoids -count_frames and -show_frames for speed.
+    """
+    cmd = [
+        "ffprobe",
+        "-v",
+        "error",
+        "-print_format",
+        "json",
+        "-show_format",
+        "-show_streams",
+        "-show_chapters",
+        "-show_programs",
+        "-show_stream_groups",
+        video_path,
+    ]
+    try:
+        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        out = proc.stdout.strip() or "{}"
+        return json.loads(out)
+    except Exception as exc:  # noqa: BLE001
+        print(f"Warning: ffprobe JSON failed for {video_path}: {exc}")
+        return {}
+
+
+def _to_float_fps(fr_str: str | None) -> float | None:
+    if not fr_str or fr_str == "0/0":
+        return None
+    try:
+        return float(Fraction(fr_str))
+    except Exception:
+        try:
+            return float(fr_str)
+        except Exception:
+            return None
+
+
+def _extract_capture_fps(meta: dict) -> float | None:
+    """Search known Android slow-motion capture FPS tags across format and streams."""
+    keys = [
+        "com.android.capture.fps",
+        "com.android.capturer.fps",
+        "com.android.slowMotion.capture.fps",
+    ]
+    # Check format tags first (as in user's JSON)
+    fmt_tags = (meta.get("format", {}) or {}).get("tags", {}) or {}
+    for k in keys:
+        val = fmt_tags.get(k)
+        if val is not None:
+            try:
+                return float(val)
+            except Exception:
+                pass
+    # Then check any stream tags (video stream usually index 0)
+    for st in meta.get("streams", []) or []:
+        tags = st.get("tags", {}) or {}
+        for k in keys:
+            val = tags.get(k)
+            if val is not None:
+                try:
+                    return float(val)
+                except Exception:
+                    pass
+    return None
+
+
 def get_video_info(video_path):
     """
-    Extract video metadata using ffprobe.
+    Fast metadata extractor using a single ffprobe JSON call.
+    Also detects capture FPS via Android tag com.android.capture.fps when present.
     """
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
 
     try:
-        # 1. Obter duração do vídeo
-        duration_cmd = [
-            "ffprobe",
-            "-v",
-            "error",
-            "-show_entries",
-            "format=duration",
-            "-of",
-            "default=noprint_wrappers=1:nokey=1",
-            video_path,
-        ]
-        duration = float(
-            subprocess.run(
-                duration_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-            ).stdout.strip()
-        )
+        meta = _ffprobe_json(video_path)
+        fmt = meta.get("format", {}) or {}
+        streams = meta.get("streams", []) or []
+        v0 = streams[0] if streams else {}
 
-        # 2. Obter resolução - CORRIGIDO E MAIS ROBUSTO
-        resolution_cmd = [
-            "ffprobe",
-            "-v",
-            "error",
-            "-select_streams",
-            "v:0",
-            "-show_entries",
-            "stream=width,height",
-            "-of",
-            "csv=s=x:p=0",
-            video_path,
-        ]
-        resolution_output_str = subprocess.run(
-            resolution_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-        ).stdout.strip()
+        width = v0.get("width")
+        height = v0.get("height")
+        r_frame_rate = _to_float_fps(v0.get("r_frame_rate"))
+        avg_frame_rate = _to_float_fps(v0.get("avg_frame_rate"))
+        duration = float(fmt.get("duration")) if fmt.get("duration") else None
 
-        width, height = None, None
+        # Codec and container info
+        codec_name = v0.get("codec_name")
+        codec_long_name = v0.get("codec_long_name")
+        container_format = fmt.get("format_name")
+        container_long_name = fmt.get("format_long_name")
 
-        if resolution_output_str:
-            # Processa a primeira linha não vazia da saída que parece ser uma resolução WxH
-            first_parsable_line = ""
-            for line in resolution_output_str.splitlines():
-                stripped_line = line.strip()
-                if stripped_line:  # Encontrou a primeira linha não vazia
-                    first_parsable_line = stripped_line
-                    break
+        # container-reported frame count (fast). If absent, estimate by avg_fps * duration
+        nb_frames = None
+        try:
+            if "nb_frames" in v0 and v0["nb_frames"] not in (None, "N/A", ""):
+                nb_frames = int(v0["nb_frames"])
+        except Exception:
+            nb_frames = None
 
-            if first_parsable_line and "x" in first_parsable_line:
-                try:
-                    w_str, h_str = first_parsable_line.split("x")
-                    width = int(w_str)
-                    height = int(h_str)
-                except ValueError:
-                    # A primeira linha não pôde ser parseada como WxH, limpamos para tentar o fallback
-                    width, height = None, None
-                    print(
-                        f"Warning: Failed to parse resolution '{first_parsable_line}' from {video_path} using csv format."
-                    )
-            else:
-                print(
-                    f"Warning: CSV output for resolution from {video_path} was not in 'WxH' format. Raw: '{resolution_output_str}'."
-                )
+        if nb_frames is None and duration and (avg_frame_rate or r_frame_rate):
+            fps_for_estimation = avg_frame_rate or r_frame_rate
+            if fps_for_estimation:
+                nb_frames = int(round(fps_for_estimation * duration))
 
-        # Se a tentativa primária falhou (width ou height ainda é None)
-        if width is None or height is None:
-            print(
-                f"Attempting fallback: getting width and height separately for {video_path}."
-            )
-            width_cmd_fallback = [
-                "ffprobe",
-                "-v",
-                "error",
-                "-select_streams",
-                "v:0",
-                "-show_entries",
-                "stream=width",
-                "-of",
-                "default=noprint_wrappers=1:nokey=1",
-                video_path,
-            ]
-            height_cmd_fallback = [
-                "ffprobe",
-                "-v",
-                "error",
-                "-select_streams",
-                "v:0",
-                "-show_entries",
-                "stream=height",
-                "-of",
-                "default=noprint_wrappers=1:nokey=1",
-                video_path,
-            ]
+        # Real capture rate for slow-motion, if present (scan format and streams)
+        capture_fps = _extract_capture_fps(meta)
 
-            width_str_fb = subprocess.run(
-                width_cmd_fallback, stdout=subprocess.PIPE, text=True
-            ).stdout.strip()
-            height_str_fb = subprocess.run(
-                height_cmd_fallback, stdout=subprocess.PIPE, text=True
-            ).stdout.strip()
+        display_fps = r_frame_rate
+        avg_fps = avg_frame_rate
 
-            if width_str_fb and height_str_fb:
-                try:
-                    # Pega a primeira linha da saída de cada comando
-                    width = int(width_str_fb.splitlines()[0].strip())
-                    height = int(height_str_fb.splitlines()[0].strip())
-                except (ValueError, IndexError) as e_fb:
-                    detailed_error = f"Error parsing fallback width/height for {video_path}. W_out: '{width_str_fb}', H_out: '{height_str_fb}'. Error: {e_fb}"
-                    print(detailed_error)
-                    raise ValueError(detailed_error) from e_fb
-            else:
-                final_error_msg = f"Fallback ffprobe calls for width/height yielded insufficient results for {video_path}. W_out: '{width_str_fb}', H_out: '{height_str_fb}'"
-                print(final_error_msg)
-                raise ValueError(final_error_msg)
-
-        # 3. Obter número de frames
-        frames_cmd = [
-            "ffprobe",
-            "-v",
-            "error",
-            "-select_streams",
-            "v:0",
-            "-count_frames",
-            "-show_entries",
-            "stream=nb_read_frames",
-            "-of",
-            "default=noprint_wrappers=1:nokey=1",
-            video_path,
-        ]
-        total_frames = int(
-            subprocess.run(
-                frames_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-            ).stdout.strip()
-        )
-
-        # 4. Obter taxa de quadros
-        fps_cmd = [
-            "ffprobe",
-            "-v",
-            "error",
-            "-select_streams",
-            "v:0",
-            "-show_entries",
-            "stream=r_frame_rate",
-            "-of",
-            "default=noprint_wrappers=1:nokey=1",
-            video_path,
-        ]
-        fps_str = subprocess.run(
-            fps_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-        ).stdout.strip()
-        frame_rate = eval(fps_str)  # Convert "30000/1001" to float
+        recommended_sampling_hz = None
+        if capture_fps:
+            recommended_sampling_hz = capture_fps
+        elif duration and nb_frames:
+            recommended_sampling_hz = nb_frames / duration
+        else:
+            recommended_sampling_hz = display_fps
 
         print(
-            f"Video info: {width}x{height}, {frame_rate} fps, {duration:.2f}s, {total_frames} frames"
+            f"Video info: {width}x{height}, codec={codec_name}, container={container_format}, "
+            f"display≈{display_fps} fps, avg≈{avg_fps} fps, cap={capture_fps} Hz, "
+            f"dur={duration:.2f}s, frames={nb_frames}"
         )
 
         return {
             "file_name": os.path.basename(video_path),
-            "frame_count": total_frames,
-            "fps": frame_rate,
-            "resolution": f"{width}x{height}",
-            "duration": duration,
+            "frame_count": nb_frames,
+            "display_fps": display_fps,
+            "avg_fps": avg_fps,
+            "capture_fps": capture_fps,
+            "recommended_sampling_hz": recommended_sampling_hz,
+            "resolution": f"{width}x{height}" if width and height else "unknown",
+            "duration": duration if duration else 0.0,
+            "codec_name": codec_name,
+            "codec_long_name": codec_long_name,
+            "container_format": container_format,
+            "container_long_name": container_long_name,
+            "_raw_json": meta,
         }
 
     except Exception as e:
@@ -234,8 +228,17 @@ def display_video_info(video_infos, output_file):
     canvas.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
     scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
 
-    # Adding headers
-    headers = ["Video File", "Frames", "FPS", "Resolution", "Duration (s)"]
+    # Adding headers (exibe Display e Capture FPS lado a lado)
+    headers = [
+        "Video File",
+        "Frames",
+        "Display FPS",
+        "Capture FPS",
+        "Codec",
+        "Container",
+        "Resolution",
+        "Duration (s)",
+    ]
     for i, header in enumerate(headers):
         ttk.Label(scrollable_frame, text=header, font=("Arial", 10, "bold")).grid(
             row=0, column=i, padx=10, pady=5, sticky=tk.W
@@ -253,14 +256,23 @@ def display_video_info(video_infos, output_file):
             ttk.Label(scrollable_frame, text=info["frame_count"]).grid(
                 row=i, column=1, sticky=tk.W, padx=10
             )
-            ttk.Label(scrollable_frame, text=info["fps"]).grid(
+            ttk.Label(scrollable_frame, text=f"{(info.get('display_fps') or 0):.3f}").grid(
                 row=i, column=2, sticky=tk.W, padx=10
             )
-            ttk.Label(scrollable_frame, text=info["resolution"]).grid(
+            ttk.Label(scrollable_frame, text=(f"{info.get('capture_fps'):.3f}" if info.get('capture_fps') else "N/A")).grid(
                 row=i, column=3, sticky=tk.W, padx=10
             )
-            ttk.Label(scrollable_frame, text=f"{info['duration']:.2f}").grid(
+            ttk.Label(scrollable_frame, text=(info.get("codec_name") or "N/A")).grid(
                 row=i, column=4, sticky=tk.W, padx=10
+            )
+            ttk.Label(scrollable_frame, text=(info.get("container_format") or "N/A")).grid(
+                row=i, column=5, sticky=tk.W, padx=10
+            )
+            ttk.Label(scrollable_frame, text=info["resolution"]).grid(
+                row=i, column=6, sticky=tk.W, padx=10
+            )
+            ttk.Label(scrollable_frame, text=f"{info['duration']:.2f}").grid(
+                row=i, column=7, sticky=tk.W, padx=10
             )
 
     root.mainloop()
@@ -270,44 +282,58 @@ def save_basic_metadata_to_file(video_infos, directory_path):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_file = os.path.join(directory_path, f"video_metadata_basic_{timestamp}.txt")
 
-    with open(output_file, "w") as f:
+    with open(output_file, "w", encoding="utf-8") as f:
         for info in video_infos:
             if "error" in info:
                 f.write(f"File: {info['file_name']}\nError: {info['error']}\n\n")
             else:
                 f.write(f"File: {info['file_name']}\n")
                 f.write(f"Frames: {info['frame_count']}\n")
-                f.write(f"FPS: {info['fps']}\n")
+                # Mostrar ambos para evitar ambiguidade
+                disp = info.get("display_fps")
+                avg = info.get("avg_fps")
+                cap = info.get("capture_fps")
+                rec = info.get("recommended_sampling_hz")
+                f.write(f"Display_FPS: {disp:.3f}\n" if disp else "Display_FPS: N/A\n")
+                f.write(f"Avg_FPS: {avg:.3f}\n" if avg else "Avg_FPS: N/A\n")
+                f.write(f"Capture_FPS: {cap:.3f}\n" if cap else "Capture_FPS: N/A\n")
+                f.write(
+                    f"Recommended_Sampling_Hz: {rec:.3f}\n" if rec else "Recommended_Sampling_Hz: N/A\n"
+                )
+                if cap and disp:
+                    try:
+                        slowmo = cap / disp
+                        f.write(f"SlowMo_Factor: {slowmo:.3f}\n")
+                    except Exception:
+                        pass
+                # Codec/Container
+                codec = info.get("codec_name") or "N/A"
+                codec_long = info.get("codec_long_name") or ""
+                container = info.get("container_format") or "N/A"
+                container_long = info.get("container_long_name") or ""
+                f.write(f"Codec: {codec}{(' - ' + codec_long) if codec_long else ''}\n")
+                f.write(f"Container: {container}{(' - ' + container_long) if container_long else ''}\n")
                 f.write(f"Resolution: {info['resolution']}\n")
                 f.write(f"Duration (s): {info['duration']:.2f}\n\n")
 
     return output_file
 
 
-def save_full_metadata_to_file(directory_path, video_files):
+def save_full_metadata_to_file(directory_path, video_infos):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_dir = os.path.join(directory_path, f"metadata_full_{timestamp}")
     os.makedirs(output_dir, exist_ok=True)
 
-    for video_file in video_files:
-        video_path = os.path.join(directory_path, video_file)
-        json_file = os.path.join(output_dir, f"{os.path.splitext(video_file)[0]}.json")
-        command = [
-            "ffprobe",
-            "-v",
-            "quiet",
-            "-print_format",
-            "json",
-            "-show_format",
-            "-show_streams",
-            video_path,
-        ]
+    for info in video_infos:
+        json_file = os.path.join(
+            output_dir, f"{os.path.splitext(info['file_name'])[0]}.json"
+        )
         try:
-            with open(json_file, "w") as f:
-                subprocess.run(command, stdout=f)
-            print(f"Full metadata for {video_file} saved to {json_file}")
+            with open(json_file, "w", encoding="utf-8") as f:
+                json.dump(info.get("_raw_json", {}), f, ensure_ascii=False, indent=2)
+            print(f"Full metadata for {info['file_name']} saved to {json_file}")
         except Exception as e:
-            print(f"Error saving full metadata for {video_file}: {str(e)}")
+            print(f"Error saving full metadata for {info['file_name']}: {str(e)}")
 
     return output_dir
 
@@ -342,19 +368,25 @@ def count_frames_in_videos():
             if f.lower().endswith((".mp4", ".avi", ".mov", ".mkv"))
         ]
     )
+    # Processamento em paralelo para acelerar
+    abs_paths = [os.path.join(directory_path, f) for f in video_files]
     video_infos = []
-    for video_file in video_files:
-        video_path = os.path.join(directory_path, video_file)
-        video_info = get_video_info(video_path)
-        if video_info is not None:
-            video_infos.append(video_info)
-        else:
-            video_infos.append(
-                {"file_name": video_file, "error": "Error retrieving video info"}
-            )
+    max_workers = max(2, (os.cpu_count() or 4))
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_path = {executor.submit(get_video_info, p): p for p in abs_paths}
+        for fut in as_completed(future_to_path):
+            p = future_to_path[fut]
+            try:
+                info = fut.result()
+            except Exception as e:
+                info = {"file_name": os.path.basename(p), "error": f"{e}"}
+            video_infos.append(info)
+
+    # Mantém ordem por nome de arquivo
+    video_infos.sort(key=lambda d: d.get("file_name", ""))
 
     output_basic_file = save_basic_metadata_to_file(video_infos, directory_path)
-    output_full_file = save_full_metadata_to_file(directory_path, video_files)
+    output_full_file = save_full_metadata_to_file(directory_path, video_infos)
 
     print(f"Basic metadata saved to: {output_basic_file}")
     print(f"Full metadata saved to: {output_full_file}")
