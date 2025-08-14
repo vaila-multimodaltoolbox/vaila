@@ -12,7 +12,8 @@ Features
 - Player rosters displayed side-by-side (Home/Away).
 - Automatic players summary CSV when saving events.
 - Rename teams quickly (Tools → Rename Teams or Ctrl+T).
-- Action symbols drawn on field by default.
+- Action symbols drawn on field by default for better distinction.
+- Remove events with Ctrl + right click functionality.
 
 How to run
 ```bash
@@ -112,12 +113,14 @@ Hotkeys
 - Ctrl+T: Rename teams
 - Digits (0–9): Enter action code; Enter to apply; Backspace to edit; Esc to clear
 - Mouse: Left click = success, Right click = fail, Middle click = neutral
+- Ctrl + Right click: Remove the most recent event near clicked position (hold Ctrl, right click)
 
 Notes
 - Field coordinates use meters in the range [0, field_width] and [0, field_height].
 - Heatmap uses KDE from seaborn.
 - Action codes are numeric identifiers for quick input (1-11 by default).
 - Player markers show team color with result-based outline (blue=success, red=fail, white=neutral).
-- Action symbols are drawn by default next to player circles.
+- Action symbols are drawn by default next to player circles with enhanced visibility.
+- Event removal works within a 1-meter radius and removes only the most recent event.
 
 

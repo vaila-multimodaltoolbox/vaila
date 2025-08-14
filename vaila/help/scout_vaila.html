@@ -58,7 +58,8 @@ python vaila/scout_vaila.py   # or run the script file</code></pre>
       <li>Player rosters displayed side-by-side (Home/Away).</li>
       <li>Automatic per-player summary CSV when saving events.</li>
       <li>Quick team renaming and numeric entry for action codes.</li>
-      <li>Action symbols drawn on field by default.</li>
+      <li>Action symbols drawn on field by default for better distinction.</li>
+      <li>Remove events with Ctrl + right click functionality.</li>
     </ul>
 
     <h2>CSV Format</h2>
@@ -148,6 +149,7 @@ color = "#FF4500"
       <li><span class="kbd">Ctrl</span>+<span class="kbd">T</span>: Rename teams</li>
       <li>Digits 0–9: Enter action code; <span class="kbd">Enter</span> apply; <span class="kbd">Backspace</span> edit; <span class="kbd">Esc</span> clear</li>
       <li>Mouse: Left click = success, Right click = fail, Middle click = neutral</li>
+      <li><span class="kbd">Ctrl</span> + Right click: Remove the most recent event near clicked position (hold Ctrl, right click)</li>
     </ul>
 
     <h2>Notes</h2>
@@ -156,7 +158,8 @@ color = "#FF4500"
       <li>Heatmap uses seaborn KDE.</li>
       <li>Action codes are numeric identifiers for quick input (1-11 by default).</li>
       <li>Player markers show team color with result-based outline (blue=success, red=fail, white=neutral).</li>
-      <li>Action symbols are drawn by default next to player circles.</li>
+      <li>Action symbols are drawn by default next to player circles with enhanced visibility.</li>
+      <li>Event removal works within a 1-meter radius and removes only the most recent event.</li>
     </ul>
   </section>
 
@@ -180,7 +183,8 @@ python vaila/scout_vaila.py   # ou execute o arquivo do script</code></pre>
       <li>Rosters de jogadores exibidos lado a lado (Casa/Fora).</li>
       <li>Geração automática de CSV de resumo por jogador ao salvar.</li>
       <li>Renomeie times rapidamente e use entrada numérica para códigos de ação.</li>
-      <li>Símbolos de ação desenhados no campo por padrão.</li>
+      <li>Símbolos de ação desenhados no campo por padrão para melhor distinção.</li>
+      <li>Remover eventos com funcionalidade Ctrl + clique direito.</li>
     </ul>
 
     <h2>Formato CSV</h2>
@@ -268,6 +272,7 @@ color = "#FF4500"
       <li><span class="kbd">Ctrl</span>+<span class="kbd">T</span>: Renomear times</li>
       <li>Dígitos 0–9: digitar código de ação; <span class="kbd">Enter</span> aplica; <span class="kbd">Backspace</span> edita; <span class="kbd">Esc</span> limpa</li>
       <li>Mouse: Clique esquerdo = sucesso, Clique direito = falha, Clique do meio = neutro</li>
+      <li><span class="kbd">Ctrl</span> + Clique direito: Remover o evento mais recente próximo à posição clicada (segure Ctrl, clique direito)</li>
     </ul>
 
     <h2>Notas</h2>
@@ -276,7 +281,8 @@ color = "#FF4500"
       <li>Heatmap usa KDE do seaborn.</li>
       <li>Códigos de ação são identificadores numéricos para entrada rápida (1-11 por padrão).</li>
       <li>Marcadores de jogadores mostram cor do time com contorno baseado no resultado (azul=sucesso, vermelho=falha, branco=neutro).</li>
-      <li>Símbolos de ação são desenhados por padrão ao lado dos círculos dos jogadores.</li>
+      <li>Símbolos de ação são desenhados por padrão ao lado dos círculos dos jogadores com visibilidade aprimorada.</li>
+      <li>A remoção de eventos funciona dentro de um raio de 1 metro e remove apenas o evento mais recente.</li>
     </ul>
   </section>
 
