@@ -2,7 +2,7 @@
 ; vaila Installer Script
 
 #define MyAppName "vaila"
-#define MyAppVersion "0.10.10"
+#define MyAppVersion "0.10.17"
 #define MyAppPublisher "Prof. Dr. Paulo R. P. Santiago"
 #define MyAppURL "https://github.com/vaila-multimodaltoolbox/vaila"
 
