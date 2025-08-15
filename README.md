@@ -673,4 +673,9 @@ Don't hesitate to learn, explore, and experiment. Be bold, and don't be afraid t
 
 ## License
 
-This project is primarily licensed under the GNU Lesser General Public License v3.0. Please cite our work if you use the code or data. Let's collaborate and push the boundaries together!
+This project is licensed under the GNU Affero General Public License v3.0 (AGPLv3). 
+This license ensures that any use of vailá, including network/server usage, 
+maintains the freedom of the software and requires source code availability.
+
+For more details, see the [LICENSE](LICENSE) file or visit: 
+https://www.gnu.org/licenses/agpl-3.0.html
