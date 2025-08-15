@@ -32,7 +32,7 @@ The analysis of human movement is fundamental in both health and sports biomecha
 - [Description](#description)
 - [Installation and Setup](#installation-and-setup)
 - [Running the Application](#running-the-application)
-- [Uninstallation Instructions](#unistallation-instructions)
+- [Uninstallation Instructions](#uninstallation-instructions)
 - [Project Structure](#project-structure)
 - [Citing *vailá*](#citing-vailá)
 - [Authors](#authors)
@@ -130,11 +130,11 @@ If you need any further adjustments or have additional requests, feel free to le
    - Open **PowerShell** (with Anaconda/Miniconda initialized) or **Anaconda/Miniconda PowerShell Prompt**.
    - Navigate to the directory where *vailá* was downloaded or extracted.
     - - Normally use this command if you have downloaded *vailá* from Downloads
-     ```powershell
+     ```PowerShell
      cd "C:\Users\$env:USERNAME\Downloads\vaila"
      ```
    - Execute the installation script:
-     ```powershell
+     ```PowerShell
      .\install_vaila_win.ps1
      ```
 
@@ -166,7 +166,7 @@ If you need any further adjustments or have additional requests, feel free to le
      - From the **Windows Start Menu** under *vailá*.
      - From **Windows Terminal** via the pre-configured *vailá* profile.
      - Manually, by running the following commands:
-       ```powershell
+       ```PowerShell
        conda activate vaila
        python vaila.py
        ```
@@ -182,7 +182,7 @@ If you need any further adjustments or have additional requests, feel free to le
 sudo chmod +x install_vaila_linux.sh
 ```
 
-2. **Run instalation script**:
+2. **Run installation script**:
 
 ```bash
 ./install_vaila_linux.sh
@@ -261,9 +261,9 @@ and run command:
 
 - Windows: **From the Windows Terminal (Anaconda/Miniconda in path) or use Anaconda/Miniconda PowerShell**
 
-1. Open Anaconda Prompt, Miniconda Prompt, or Anaconda/Miniconda Powershell Prompt (PowerShell is recommended) and run command:
+1. Open Anaconda Prompt, Miniconda Prompt, or Anaconda/Miniconda PowerShell Prompt (PowerShell is recommended) and run command:
 
-```Anaconda/Miniconda Powershell
+```Anaconda/Miniconda PowerShell
 conda activate vaila
 python vaila.py
 ```
@@ -325,7 +325,7 @@ sudo chmod +x ~/vaila/mac_launch_vaila.sh
 
 --- 
 
-## Unistallation Instructions
+## Uninstallation Instructions
 
 ## For Uninstallation on Linux
 
@@ -364,14 +364,14 @@ sudo chmod +x uninstall_vaila_mac.sh
 2. **Notes**:
 
 - Run the script as your regular user, not with sudo.
-- You will prompted for your password when the script uses `sudo` to remove the app from `/Applications`.
+- You will be prompted for your password when the script uses `sudo` to remove the app from `/Applications`.
 
 ## For Uninstallation on Windows
 
 1. **Run the uninstallation script as Administrator in Anaconda/Miniconda PowerShell Prompt**:
 
 - PowerShell Script:
-  ```powershell
+  ```PowerShell
   ExecutionPolicy Bypass -File .\uninstall_vaila_win.ps1
   .\uninstall_vaila_win.ps1
   ```
