@@ -99,8 +99,8 @@ Usage:
 
 License:
 --------
-This program is licensed under the GNU Lesser General Public License v3.0.
-For more details, visit: https://www.gnu.org/licenses/lgpl-3.0.html
+This program is licensed under the GNU Affero General Public License v3.0.
+For more details, visit: https://www.gnu.org/licenses/agpl-3.0.html
 Visit the project repository: https://github.com/vaila-multimodaltoolbox
 ===============================================================================
 """
@@ -1250,7 +1250,7 @@ class Vaila(tk.Tk):
         # Static label for the rest of the license text
         license_static = tk.Label(
             license_frame,
-            text=" - Multimodal Toolbox. Licensed under the GNU Lesser General Public License v3.0.",
+            text=" - Multimodal Toolbox. Licensed under the GNU Affero General Public License v3.0.",
             font=("default", 11),
             anchor="center",
         )
