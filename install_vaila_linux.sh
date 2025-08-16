@@ -113,13 +113,69 @@ cat <<EOF > "$DESKTOP_ENTRY_PATH"
 [Desktop Entry]
 Version=1.0
 Name=vaila
-Comment=Multimodal Toolbox
+GenericName=Multimodal Toolbox
+Comment=Multimodal Toolbox for Biomechanics and Motion Analysis
 Exec=$RUN_SCRIPT
-Icon=$VAILA_HOME/docs/images/vaila.png
+Icon=$VAILA_HOME/vaila/images/vaila_ico.png
 Terminal=true
 Type=Application
-Categories=Utility;
+Categories=Science;Education;Utility;
+Keywords=biomechanics;motion;analysis;multimodal;
+StartupNotify=true
+StartupWMClass=vaila
 EOF
+
+# Update desktop database for all desktop environments
+echo "Updating desktop database..."
+if command -v update-desktop-database &> /dev/null; then
+    update-desktop-database "$HOME/.local/share/applications"
+fi
+
+# For KDE Plasma, also create a .desktop file in the system applications directory
+if [ -d "/usr/share/applications" ]; then
+    echo "Creating system-wide desktop entry for KDE compatibility..."
+    sudo tee "/usr/share/applications/vaila.desktop" > /dev/null <<EOF
+[Desktop Entry]
+Version=1.0
+Name=vaila
+GenericName=Multimodal Toolbox
+Comment=Multimodal Toolbox for Biomechanics and Motion Analysis
+Exec=$RUN_SCRIPT
+Icon=$VAILA_HOME/vaila/images/vaila_ico.png
+Terminal=true
+Type=Application
+Categories=Science;Education;Utility;
+Keywords=biomechanics;motion;analysis;multimodal;
+StartupNotify=true
+StartupWMClass=vaila
+EOF
+    sudo update-desktop-database
+fi
+
+# For XFCE, ensure the desktop entry is properly registered
+if command -v xfce4-appfinder &> /dev/null; then
+    echo "XFCE detected. Ensuring desktop entry is properly registered..."
+    # XFCE may need a refresh of the application menu
+    if command -v xfce4-panel &> /dev/null; then
+        echo "Refreshing XFCE panel..."
+        xfce4-panel --restart
+    fi
+fi
+
+# For KDE Plasma, refresh the application menu
+if command -v kbuildsycoca5 &> /dev/null; then
+    echo "KDE Plasma detected. Refreshing application menu..."
+    kbuildsycoca5 --noincremental
+elif command -v kbuildsycoca6 &> /dev/null; then
+    echo "KDE Plasma 6 detected. Refreshing application menu..."
+    kbuildsycoca6 --noincremental
+fi
+
+# For GNOME, refresh the application menu
+if command -v gtk-update-icon-cache &> /dev/null; then
+    echo "GNOME detected. Updating icon cache..."
+    gtk-update-icon-cache -f -t "$HOME/.local/share/icons"
+fi
 
 # Ensure the application directory is owned by the user and has the correct permissions
 echo "Ensuring correct ownership and permissions for the application..."
@@ -261,3 +317,8 @@ echo "=================================================================="
 echo "vaila installation completed successfully!"
 echo "Instalação do vaila concluída com sucesso!"
 echo "=================================================================="
+echo ""
+echo "If the application doesn't appear in your application menu, run:"
+echo "Se o aplicativo não aparecer no menu de aplicações, execute:"
+echo "./fix_desktop_integration.sh"
+echo ""
