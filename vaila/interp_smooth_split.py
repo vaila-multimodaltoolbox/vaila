@@ -6,8 +6,8 @@ Author: Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 14 October 2024
-Update Date: 22 April 2025
-Version: 0.0.3
+Update Date: 18 August 2025
+Version: 0.0.5
 Python Version: 3.12.9
 
 Description:
@@ -199,12 +199,12 @@ class InterpolationConfigDialog(simpledialog.Dialog):
         super().__init__(parent, title="Interpolation Configuration")
 
     def body(self, master):
-        # Create main frame with scrollbar
+        # Create main container with scrollbar
         main_container = tk.Frame(master)
         main_container.pack(fill="both", expand=True)
-
+        
         # Create a canvas with scrollbar
-        canvas = tk.Canvas(main_container, width=800, height=600)
+        canvas = tk.Canvas(main_container, width=750, height=600)  # Reduced width to make scrollbar visible
         scrollbar = tk.Scrollbar(
             main_container, orient="vertical", command=canvas.yview
         )
@@ -220,12 +220,16 @@ class InterpolationConfigDialog(simpledialog.Dialog):
         canvas.pack(side="left", fill="both", expand=True, padx=5, pady=5)
         scrollbar.pack(side="right", fill="y")
 
-        # Create two columns
+        # Create two columns that occupy the full width
         left_column = tk.Frame(scrollable_frame)
         right_column = tk.Frame(scrollable_frame)
 
-        left_column.grid(row=0, column=0, sticky="nw", padx=10)
-        right_column.grid(row=0, column=1, sticky="nw", padx=10)
+        left_column.grid(row=0, column=0, sticky="nsew", padx=10)
+        right_column.grid(row=0, column=1, sticky="nsew", padx=10)
+        
+        # Configure grid weights to make columns expand
+        scrollable_frame.grid_columnconfigure(0, weight=1)
+        scrollable_frame.grid_columnconfigure(1, weight=1)
 
         # ====== LEFT COLUMN - METHODS SELECTION ======
 
@@ -357,7 +361,7 @@ class InterpolationConfigDialog(simpledialog.Dialog):
             text="Note: Gaps larger than this value will be left as NaN. Set to 0 to fill all gaps.",
             foreground="blue",
             justify="left",
-            wraplength=350,
+            wraplength=300,  # Reduced wraplength to fit better in smaller column
         ).pack(anchor="w", padx=5, pady=2)
 
         # Initialize the parameters frame
@@ -366,15 +370,26 @@ class InterpolationConfigDialog(simpledialog.Dialog):
         # Bind the mouse wheel to the canvas for scrolling
         self.bind_mousewheel(canvas)
 
-        # TOML buttons
-        toml_frame = tk.LabelFrame(master, text="Configuration via TOML", padx=10, pady=10)
-        toml_frame.pack(fill="x", pady=5)
+        # TOML buttons - inside the scrollable area
+        toml_frame = tk.LabelFrame(scrollable_frame, text="Configuration via TOML", padx=10, pady=10)
+        toml_frame.grid(row=1, column=0, columnspan=2, sticky="ew", padx=10, pady=10)
         btns_frame = tk.Frame(toml_frame)
         btns_frame.pack()
         tk.Button(btns_frame, text="Create TOML template", command=self.create_toml_template).pack(side="left", padx=5)
         tk.Button(btns_frame, text="Load TOML configuration", command=self.load_toml_config).pack(side="left", padx=5)
         self.toml_label = tk.Label(toml_frame, text="No TOML loaded", fg="gray")
         self.toml_label.pack()
+
+        # OK and Cancel buttons - inside the scrollable area
+        ok_cancel_frame = tk.Frame(scrollable_frame)
+        ok_cancel_frame.grid(row=2, column=0, columnspan=2, sticky="ew", padx=10, pady=10)
+        
+        # Create OK and Cancel buttons centered side by side
+        self.ok_button = tk.Button(ok_cancel_frame, text="OK", command=self.ok, width=10)
+        self.ok_button.pack(side="left", padx=5, expand=True)
+        
+        self.cancel_button = tk.Button(ok_cancel_frame, text="Cancel", command=self.cancel, width=10)
+        self.cancel_button.pack(side="right", padx=5, expand=True)
 
         return self.interp_entry  # Initial focus
 
@@ -1358,6 +1373,22 @@ Parameters have been confirmed and will be used for processing.
             self.arima_p.set(str(smoothing.get('p', 1)))
             self.arima_d.set(str(smoothing.get('d', 0)))
             self.arima_q.set(str(smoothing.get('q', 0)))
+
+    def buttonbox(self):
+        """Override to avoid default OK/Cancel outside the scroll area."""
+        # Do not create any external buttons - only use the ones inside scroll
+        pass
+
+    def ok(self):
+        """Handle OK button click"""
+        if self.validate():
+            self.apply()
+            self.destroy()
+
+    def cancel(self):
+        """Handle Cancel button click"""
+        self.result = None
+        self.destroy()
 
 
 def generate_report(dest_dir, config, processed_files):
