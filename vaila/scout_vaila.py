@@ -7,7 +7,7 @@ Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 12 August 2025
 Update Date: 19 August 2025
-Version: 0.1.3
+Version: 0.1.4
 
 Description:
     Integrated GUI to annotate sports events on a virtual soccer field and generate
@@ -61,7 +61,7 @@ import matplotlib.patches as patches
 import pandas as pd
 import seaborn as sns
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
+from tkinter import ttk, filedialog, messagebox, simpledialog
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from rich import print
 import webbrowser
@@ -89,7 +89,7 @@ def _default_config() -> Dict:
     return {
         "program": {
             "name": "vaila_scout",
-            "version": "0.1.3",
+            "version": "0.1.4",
             "author": "Paulo Roberto Pereira Santiago",
             "email": "paulosantiago@usp.br",
             "description": "Integrated scouting (annotation + analysis) for soccer.",
@@ -312,7 +312,7 @@ def _toml_template_with_comments(cfg: Dict) -> str:
 [program]
 # Metadata about this tool
 name = "{program.get('name', 'vaila_scout')}"
-version = "{program.get('version', '0.1.0')}"
+version = "{program.get('version', '0.1.4')}"
 author = "{program.get('author', '')}"
 email = "{program.get('email', '')}"
 description = "{program.get('description', 'Integrated scouting (annotation + analysis) for soccer.')}"
@@ -471,7 +471,7 @@ def draw_soccer_field(ax: plt.Axes, field_w: float, field_h: float) -> None:
 class ScoutApp(tk.Tk):
     def __init__(self, cfg: Dict):
         super().__init__()
-        self.title("vailá - Scout - v0.1.0")
+        self.title("vailá - Scout - v0.1.4")
         
         # Get screen dimensions for responsive sizing
         screen_width = self.winfo_screenwidth()
@@ -513,6 +513,8 @@ class ScoutApp(tk.Tk):
         tools_menu.add_command(label="Save Config	Ctrl+Shift+S", command=self.save_config)
         tools_menu.add_command(label="Create Template", command=self._create_template_config)
         tools_menu.add_command(label="Rename Teams	Ctrl+T", command=self.rename_teams)
+        tools_menu.add_separator()
+        tools_menu.add_command(label="Convert Skout to vailá", command=self.convert_skout_to_vaila)
         menubar.add_cascade(label="Tools", menu=tools_menu)
 
         help_menu = tk.Menu(menubar, tearoff=0)
@@ -1332,7 +1334,8 @@ class ScoutApp(tk.Tk):
             if not path_str:
                 return
             self.cfg_path = Path(path_str)
-        ok = write_toml_config(self.cfg_path, self.cfg)
+        # Use the same template format as _create_template_config
+        ok = write_toml_template(self.cfg_path, self.cfg)
         if ok:
             messagebox.showinfo("Config", f"Config saved to\n{self.cfg_path}")
         else:
@@ -1609,6 +1612,103 @@ class ScoutApp(tk.Tk):
             self.home_tv.master.configure(text=f"Home ({self.cfg['teams']['home']['name']})")
             self.away_tv.master.configure(text=f"Away ({self.cfg['teams']['away']['name']})")
             self._on_team_changed()
+
+
+    def convert_skout_to_vaila(self):
+        """Convert Skout.exe ASCII export to vailá scout CSV and TOML config."""
+        try:
+            # Import skout_bundle functionality
+            import subprocess
+            import sys
+            from pathlib import Path
+            
+            # Get input file
+            input_file = filedialog.askopenfilename(
+                title="Select Skout ASCII export file (.txt)",
+                filetypes=[("Text files", "*.txt"), ("All files", "*.*")]
+            )
+            
+            if not input_file:
+                return
+                
+            input_path = Path(input_file)
+            
+            # Get output directory
+            output_dir = filedialog.askdirectory(
+                title="Select output directory for CSV and TOML files"
+            )
+            
+            if not output_dir:
+                return
+                
+            output_path = Path(output_dir)
+            
+            # Get team name
+            team_name = simpledialog.askstring(
+                "Team Name", 
+                "Enter team name for the converted data:",
+                initialvalue="HOME"
+            )
+            
+            if not team_name:
+                team_name = "HOME"
+            
+            # Run skout_bundle.py
+            script_path = Path(__file__).parent / "skout_bundle.py"
+            
+            if not script_path.exists():
+                messagebox.showerror(
+                    "Error", 
+                    f"skout_bundle.py not found at {script_path}\n"
+                    "Please ensure the script is in the same directory as scout_vaila.py"
+                )
+                return
+            
+            # Prepare command
+            csv_output = output_path / f"{input_path.stem}_converted.csv"
+            toml_output = output_path / f"vaila_scout_config_{input_path.stem}.toml"
+            
+            cmd = [
+                sys.executable, str(script_path),
+                str(input_path),
+                "--csv-out", str(csv_output),
+                "--toml-out", str(toml_output),
+                "--team", team_name
+            ]
+            
+            # Run conversion
+            result = subprocess.run(cmd, capture_output=True, text=True, cwd=Path(__file__).parent)
+            
+            if result.returncode == 0:
+                messagebox.showinfo(
+                    "Success", 
+                    f"Conversion completed successfully!\n\n"
+                    f"CSV file: {csv_output}\n"
+                    f"TOML config: {toml_output}\n\n"
+                    f"You can now load the CSV file in vailá Scout."
+                )
+                
+                # Ask if user wants to load the generated config
+                if messagebox.askyesno("Load Config", "Do you want to load the generated TOML config?"):
+                    new_cfg = read_toml_config(toml_output)
+                    if new_cfg:
+                        self.cfg = new_cfg
+                        messagebox.showinfo("Success", "Configuration loaded successfully!")
+                    else:
+                        messagebox.showerror("Error", "Failed to load the generated config file.")
+                        
+            else:
+                error_msg = result.stderr if result.stderr else "Unknown error occurred"
+                messagebox.showerror(
+                    "Conversion Error", 
+                    f"Failed to convert Skout file:\n\n{error_msg}"
+                )
+                
+        except Exception as e:
+            messagebox.showerror(
+                "Error", 
+                f"An error occurred during conversion:\n\n{str(e)}"
+            )
 
 
 class RenameTeamsDialog(tk.Toplevel):
