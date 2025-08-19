@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 12 August 2025
-Update Date: 14 August 2025
-Version: 0.1.2
+Update Date: 19 August 2025
+Version: 0.1.3
 
 Description:
     Integrated GUI to annotate sports events on a virtual soccer field and generate
@@ -54,11 +54,10 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, asdict
 from pathlib import Path
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional
 
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
-import numpy as np
 import pandas as pd
 import seaborn as sns
 import tkinter as tk
@@ -90,7 +89,7 @@ def _default_config() -> Dict:
     return {
         "program": {
             "name": "vaila_scout",
-            "version": "0.1.0",
+            "version": "0.1.3",
             "author": "Paulo Roberto Pereira Santiago",
             "email": "paulosantiago@usp.br",
             "description": "Integrated scouting (annotation + analysis) for soccer.",
@@ -285,7 +284,7 @@ def _toml_template_with_comments(cfg: Dict) -> str:
                 "\n".join([
                     "[[actions]]",
                     f'name = "{name}"',
-                    (f"code = {int(code)}" if str(code).isdigit() else f'code = "{code}"') if code != "" else "code = -1",
+                    f"code = {int(code)}" if str(code).isdigit() and code != "" else (f'code = "{code}"' if code != "" else "code = -1"),
                     f'symbol = "{symbol}"',
                     f'color = "{color}"',
                     "",
@@ -395,10 +394,20 @@ def draw_soccer_field(ax: plt.Axes, field_w: float, field_h: float) -> None:
     ax.set_aspect("equal")
     ax.axis("off")
 
-    # Grass
+    # Field background (gray border for contrast with white lines)
+    margin = 2.0
+    # Gray border around the field
     ax.add_patch(
         patches.Rectangle(
-            (0, 0), field_w, field_h, facecolor="forestgreen", edgecolor="none", zorder=0
+            (-margin, -margin), field_w + 2*margin, field_h + 2*margin, 
+            facecolor="#2f4f2f", edgecolor="none", zorder=0
+        )
+    )
+    
+    # Grass field
+    ax.add_patch(
+        patches.Rectangle(
+            (0, 0), field_w, field_h, facecolor="forestgreen", edgecolor="none", zorder=1
         )
     )
 
@@ -463,7 +472,21 @@ class ScoutApp(tk.Tk):
     def __init__(self, cfg: Dict):
         super().__init__()
         self.title("vailá - Scout - v0.1.0")
-        self.geometry("1280x800")
+        
+        # Get screen dimensions for responsive sizing
+        screen_width = self.winfo_screenwidth()
+        screen_height = self.winfo_screenheight()
+        
+        # Calculate responsive window size based on screen resolution
+        if screen_width < 1500:  # Smaller screens like MacBook Air
+            window_width = min(int(screen_width * 0.95), 1400)
+            window_height = min(int(screen_height * 0.9), 900)
+        else:  # Larger screens
+            window_width = min(int(screen_width * 0.8), 1600)
+            window_height = min(int(screen_height * 0.8), 1000)
+        
+        self.geometry(f"{window_width}x{window_height}")
+        self.minsize(1000, 600)  # Minimum window size
 
         self.cfg = cfg
         self.cfg_path: Optional[Path] = None
@@ -499,15 +522,19 @@ class ScoutApp(tk.Tk):
 
         self.config(menu=menubar)
 
-        # --- Layout frames
+        # --- Layout frames - Simple fixed layout
         container = ttk.Frame(self)
         container.pack(fill=tk.BOTH, expand=True)
 
-        left_frame = ttk.Frame(container)
-        left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=8, pady=8)
+        # Left frame (field) - Much smaller size
+        left_frame = ttk.Frame(container, width=600)  # Reduced from 800 to 600
+        left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=4, pady=4)
+        left_frame.pack_propagate(False)  # Prevent shrinking
 
-        right_frame = ttk.Frame(container)
-        right_frame.pack(side=tk.LEFT, fill=tk.Y, expand=False, padx=8, pady=8)
+        # Right frame (controls) - Much larger size
+        right_frame = ttk.Frame(container, width=500)  # Increased from 400 to 500
+        right_frame.pack(side=tk.LEFT, fill=tk.Y, expand=False, padx=4, pady=4)
+        right_frame.pack_propagate(False)  # Prevent shrinking
 
         # --- Controls (top-right)
         controls = ttk.Frame(right_frame)
@@ -528,8 +555,8 @@ class ScoutApp(tk.Tk):
         self.name_to_action = {a["name"]: a for a in self.actions_cfg}
         first_action = self.action_names[0] if self.action_names else ""
         self.action_var = tk.StringVar(value=first_action)
-        self.action_cb = ttk.Combobox(controls, textvariable=self.action_var, values=self.action_names, width=16, state="readonly")
-        self.action_cb.grid(row=1, column=1, padx=2, pady=2)
+        self.action_cb = ttk.Combobox(controls, textvariable=self.action_var, values=self.action_names, width=12, state="readonly")
+        self.action_cb.grid(row=1, column=1, sticky=tk.W, padx=(4, 2), pady=2)  # Added padding to move dropdown right
 
         # Result selector
         ttk.Label(controls, text="Result:").grid(row=1, column=2, sticky=tk.W, padx=2, pady=2)
@@ -537,12 +564,12 @@ class ScoutApp(tk.Tk):
         if not self.results_list:
             self.results_list = _default_config()["results"]
         self.result_var = tk.StringVar(value=self.results_list[0])
-        self.result_cb = ttk.Combobox(controls, textvariable=self.result_var, values=self.results_list, width=10, state="readonly")
+        self.result_cb = ttk.Combobox(controls, textvariable=self.result_var, values=self.results_list, width=8, state="readonly")
         self.result_cb.grid(row=1, column=3, padx=2, pady=2)
 
         # Timer display and controls
         timer_frame = ttk.Frame(controls)
-        timer_frame.grid(row=2, column=0, columnspan=4, sticky=tk.W, padx=2, pady=(2, 4))
+        timer_frame.grid(row=2, column=0, columnspan=4, sticky=tk.W, padx=2, pady=(2, 4))  # Updated columnspan to 4
         ttk.Label(timer_frame, text="Clock:").pack(side=tk.LEFT)
         self.clock_var = tk.StringVar(value="00:00.0")
         self.clock_label = ttk.Label(timer_frame, textvariable=self.clock_var, font=("Segoe UI", 10, "bold"))
@@ -550,33 +577,46 @@ class ScoutApp(tk.Tk):
         ttk.Button(timer_frame, text="Start", command=self.start_timer).pack(side=tk.LEFT, padx=2)
         ttk.Button(timer_frame, text="Pause", command=self.pause_timer).pack(side=tk.LEFT, padx=2)
         ttk.Button(timer_frame, text="Reset", command=self.reset_timer).pack(side=tk.LEFT, padx=2)
-        self.manual_time_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(timer_frame, text="Manual time", variable=self.manual_time_var).pack(side=tk.LEFT, padx=(8, 2))
-        self.manual_time_entry = ttk.Entry(timer_frame, width=8)
+
+        # Manual time entry on separate line
+        manual_frame = ttk.Frame(controls)
+        manual_frame.grid(row=3, column=0, columnspan=4, sticky=tk.W, padx=2, pady=(2, 4))  # Updated columnspan to 4
+        ttk.Label(manual_frame, text="Manual time:").pack(side=tk.LEFT)
+        self.manual_time_entry = ttk.Entry(manual_frame, width=12)
         self.manual_time_entry.insert(0, "0.0")
-        self.manual_time_entry.pack(side=tk.LEFT)
-        ttk.Button(timer_frame, text="Set=Now", command=self._set_manual_time_now).pack(side=tk.LEFT, padx=(4, 0))
+        self.manual_time_entry.pack(side=tk.LEFT, padx=(4, 8))
+        ttk.Button(manual_frame, text="Set", command=self._set_manual_time_now).pack(side=tk.LEFT, padx=2)
 
         # Buttons
         btns = ttk.Frame(controls)
-        btns.grid(row=3, column=0, columnspan=4, sticky=tk.W, padx=2, pady=(6, 4))
-        ttk.Button(btns, text="Save CSV", command=self.save_csv).pack(side=tk.LEFT, padx=4)
-        ttk.Button(btns, text="Load CSV", command=self.load_csv).pack(side=tk.LEFT, padx=4)
-        ttk.Button(btns, text="Clear Events", command=self.clear_events).pack(side=tk.LEFT, padx=4)
-        ttk.Button(btns, text="Show Heatmap", command=self.draw_heatmap).pack(side=tk.LEFT, padx=12)
-        ttk.Button(btns, text="Reset Time", command=self.reset_timer).pack(side=tk.LEFT, padx=12)
+        btns.grid(row=4, column=0, columnspan=4, sticky=tk.W, padx=2, pady=(6, 4))  # Updated columnspan to 4
+        ttk.Button(btns, text="Save CSV", command=self.save_csv).pack(side=tk.LEFT, padx=1)
+        ttk.Button(btns, text="Load CSV", command=self.load_csv).pack(side=tk.LEFT, padx=1)
+        ttk.Button(btns, text="Clear Events", command=self.clear_events).pack(side=tk.LEFT, padx=1)
+        ttk.Button(btns, text="Heatmap", command=self.draw_heatmap).pack(side=tk.LEFT, padx=1)
+        ttk.Button(btns, text="Reset", command=self.reset_timer).pack(side=tk.LEFT, padx=1)
 
-        # Config buttons (without Edit Config)
+        # Config buttons
         cfg_btns = ttk.Frame(controls)
-        cfg_btns.grid(row=4, column=0, columnspan=4, sticky=tk.W, padx=2, pady=(2, 6))
+        cfg_btns.grid(row=5, column=0, columnspan=4, sticky=tk.W, padx=2, pady=(2, 6))  # Updated columnspan to 4
         ttk.Button(cfg_btns, text="Load Config", command=self.load_config).pack(side=tk.LEFT, padx=4)
         ttk.Button(cfg_btns, text="Save Config", command=self.save_config).pack(side=tk.LEFT, padx=4)
         ttk.Button(cfg_btns, text="Create Template", command=self._create_template_config).pack(side=tk.LEFT, padx=4)
+        
+        # Layout control button - Remove this section entirely
+        # layout_btns = ttk.Frame(controls)
+        # layout_btns.grid(row=5, column=0, columnspan=4, sticky=tk.W, padx=2, pady=(2, 6))
+        # ttk.Button(layout_btns, text="Reset Layout", command=self._reset_layout).pack(side=tk.LEFT, padx=4)
+        # ttk.Label(layout_btns, text="💡 Drag separator to resize columns").pack(side=tk.LEFT, padx=8)
 
-        # --- Field figure (left)
-        self.field_fig, self.field_ax = plt.subplots(figsize=(6.8, 4.3))
+        # --- Field figure (left) - Much smaller fixed size
+        self.field_fig, self.field_ax = plt.subplots(figsize=(5.5, 3.5))  # Reduced from (7.0, 4.5) to (5.5, 3.5)
         self.field_canvas = FigureCanvasTkAgg(self.field_fig, master=left_frame)
         self.field_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        
+        # Remove resize binding to avoid errors
+        # self.field_canvas.get_tk_widget().bind("<Configure>", self._on_field_resize)
+        
         self._redraw_field()
         self.field_canvas.mpl_connect("button_press_event", self._on_field_click)
 
@@ -587,6 +627,10 @@ class ScoutApp(tk.Tk):
         
         # Ctrl state tracking for remove functionality
         self._ctrl_pressed = False
+        
+        # Touchpad support: key combinations to simulate different mouse buttons
+        self._shift_pressed = False
+        self._alt_pressed = False
 
         # Sync players list on team change
         # No visible team combobox; keep hotkey 'T' to toggle team
@@ -614,19 +658,21 @@ class ScoutApp(tk.Tk):
         self.bind_all("<KeyRelease-Control_L>", lambda e: self._set_ctrl_pressed(False))
         self.bind_all("<KeyRelease-Control_R>", lambda e: self._set_ctrl_pressed(False))
         
-        # Space toggles timer - will be bound after _toggle_timer is defined
-        # Action hotkeys from config (single-letter) - DISABLED, using numeric codes instead
-        # for k, act in self.key_to_action.items():
-        #     if not k:
-        #         continue
-        #     def _mk_set_action(name: str):
-        #         return lambda _e: self._set_action_by_name(name)
-        #     self.bind_all(k, _mk_set_action(act["name"]))
+        # Touchpad support: Shift and Alt key tracking
+        self.bind_all("<KeyPress-Shift_L>", lambda e: self._set_shift_pressed(True))
+        self.bind_all("<KeyPress-Shift_R>", lambda e: self._set_shift_pressed(True))
+        self.bind_all("<KeyRelease-Shift_L>", lambda e: self._set_shift_pressed(False))
+        self.bind_all("<KeyRelease-Shift_R>", lambda e: self._set_shift_pressed(False))
+        
+        self.bind_all("<KeyPress-Alt_L>", lambda e: self._set_alt_pressed(True))
+        self.bind_all("<KeyPress-Alt_R>", lambda e: self._set_alt_pressed(True))
+        self.bind_all("<KeyRelease-Alt_L>", lambda e: self._set_alt_pressed(False))
+        self.bind_all("<KeyRelease-Alt_R>", lambda e: self._set_alt_pressed(False))
 
         # Quick action code buffer (digits map to action codes)
         self.quick_action_buffer = ""
         self.quick_label = ttk.Label(controls, text="Quick action code: (none)")
-        self.quick_label.grid(row=6, column=0, columnspan=4, sticky=tk.W, padx=2, pady=(2, 2))
+        self.quick_label.grid(row=7, column=0, columnspan=4, sticky=tk.W, padx=2, pady=(2, 2))
         for _d in list("0123456789"):
             self.bind_all(_d, self._on_digit_action)
         self.bind_all("<BackSpace>", self._on_backspace_action)
@@ -681,8 +727,6 @@ class ScoutApp(tk.Tk):
 
     # --- UI helpers
     def _on_team_changed(self, _evt=None):
-        team_name = self.team_var.get()
-        team_key = self._team_key_from_name(team_name)
         self._refresh_player_combobox()
         self._update_player_name_label()
         self._populate_rosters()
@@ -690,10 +734,49 @@ class ScoutApp(tk.Tk):
     def _on_player_changed(self, _evt=None):
         self._update_player_name_label()
 
+    def _on_field_resize(self, event):
+        """Handle field resize events to maintain proper aspect ratio."""
+        try:
+            if event.widget == self.field_canvas.get_tk_widget():
+                # Get new dimensions
+                width = event.width
+                height = event.height
+                
+                # Calculate new figure size maintaining aspect ratio
+                if width > 0 and height > 0 and self.field_h > 0:
+                    # Maintain field aspect ratio (105:68 ≈ 1.54)
+                    field_ratio = self.field_w / self.field_h  # ≈ 1.54
+                    
+                    if width / height > field_ratio:
+                        # Container is wider than field ratio
+                        new_width = height * field_ratio
+                        new_height = height
+                    else:
+                        # Container is taller than field ratio
+                        new_width = width
+                        new_height = width / field_ratio
+                    
+                    # Update figure size (ensure positive values)
+                    if new_width > 0 and new_height > 0:
+                        self.field_fig.set_size_inches(new_width/100, new_height/100)
+                        self._redraw_field()
+        except Exception as e:
+            print(f"Error in _on_field_resize: {e}")
+            # Continue without crashing
+
+    def _reset_layout(self):
+        """Reset the paned window layout to default proportions."""
+        # This function is no longer needed since we're not using PanedWindow
+        pass
+
     def _redraw_field(self):
-        draw_soccer_field(self.field_ax, self.field_w, self.field_h)
-        self.field_fig.tight_layout()
-        self.field_canvas.draw()
+        try:
+            draw_soccer_field(self.field_ax, self.field_w, self.field_h)
+            self.field_fig.tight_layout()
+            self.field_canvas.draw()
+        except Exception as e:
+            print(f"Error in _redraw_field: {e}")
+            # Continue without crashing
 
     # --- Timer helpers
     def _format_time(self, seconds: float) -> str:
@@ -774,36 +857,50 @@ class ScoutApp(tk.Tk):
 
     # --- Event handling
     def _on_field_click(self, event):
-        if event.inaxes != self.field_ax:
-            return
         try:
-            # Matplotlib gives data coordinates directly
-            x_m = float(event.xdata)
-            y_m = float(event.ydata)
-        except Exception:  # noqa: BLE001
-            return
+            if event.inaxes != self.field_ax:
+                return
+            try:
+                # Matplotlib gives data coordinates directly
+                x_m = float(event.xdata)
+                y_m = float(event.ydata)
+            except Exception:  # noqa: BLE001
+                return
 
-        if not (0 <= x_m <= self.field_w and 0 <= y_m <= self.field_h):
-            return
+            if not (0 <= x_m <= self.field_w and 0 <= y_m <= self.field_h):
+                return
 
-        # Check for Ctrl + right click to remove events
-        btn = int(getattr(event, "button", 1) or 1)
-        
-        # Check for Ctrl + right click to remove events
-        if btn == 3 and self._ctrl_pressed:
-            # Ctrl + right click: remove events near this position
-            self._remove_events_near_position(x_m, y_m)
+            # Get mouse button (1=left, 2=middle, 3=right)
+            btn = int(getattr(event, "button", 1) or 1)
+            
+            # Universal touchpad support: key combinations work on all platforms
+            # Ctrl + click = remove events (works on all touchpads)
+            if self._ctrl_pressed:
+                self._remove_events_near_position(x_m, y_m)
+                return
+            
+            # Determine result based on mouse button OR key combination
+            # Priority: key combinations first, then mouse button
+            if self._shift_pressed:
+                clicked_result = "fail"  # Shift + click = right click (fail)
+            elif self._alt_pressed:
+                clicked_result = "neutral"  # Alt + click = middle click (neutral)
+            elif btn == 1:
+                clicked_result = "success"  # Left click
+            elif btn == 3:
+                clicked_result = "fail"  # Right click
+            elif btn == 2:
+                clicked_result = "neutral"  # Middle click
+            else:
+                clicked_result = "success"  # Default to success
+            
+            self.result_var.set(clicked_result)
+            
+            # Debug: print what result was set
+            print(f"Click detected - Button: {btn}, Shift: {self._shift_pressed}, Alt: {self._alt_pressed}, Result: {clicked_result}")
+        except Exception as e:
+            print(f"Error in _on_field_click: {e}")
             return
-
-        timestamp = self._get_current_time_s()
-        # Result via mouse button: 1=left→success, 2=middle→neutral, 3=right→fail
-        if btn == 1:
-            clicked_result = "success"
-        elif btn == 3:
-            clicked_result = "fail"
-        else:
-            clicked_result = "neutral"
-        self.result_var.set(clicked_result)
         # Player assignment rules
         team_name = self.team_var.get()
         player_str = self.player_var.get()
@@ -835,7 +932,7 @@ class ScoutApp(tk.Tk):
         _act_code = int(_act.get("code", -1)) if _act else -1
 
         ev = ScoutEvent(
-            timestamp_s=round(timestamp, 2),
+            timestamp_s=round(self._get_current_time_s(), 2),
             team=team_name,
             player_name=self._get_player_name(self._team_key_from_name(team_name),
                                       self._parse_display_to_number(self.player_var.get())),
@@ -1093,15 +1190,18 @@ class ScoutApp(tk.Tk):
         show_player_name = bool(draw_cfg.get("show_player_name", True))
         player_name_size = int(draw_cfg.get("player_name_size", 8))
 
-        # Edge color by result
+        # Edge color by result - make colors more visible
         result_edge = {
-            "success": "#1E90FF",  # blue
-            "fail": "#FF0000",     # red
-            "neutral": "#FFFFFF",  # white
+            "success": "#00FF00",  # bright green
+            "fail": "#FF0000",     # bright red
+            "neutral": "#FFFF00",  # bright yellow
         }.get(str(ev.result).lower(), edge_default)
 
+        # Debug: print the result and color being used
+        print(f"Event result: '{ev.result}', Edge color: {result_edge}")
+
         team_color = self._get_team_color(ev.team)
-        circle = patches.Circle((x_m, y_m), radius=circle_r, facecolor=team_color, edgecolor=result_edge, linewidth=1.6, zorder=6)
+        circle = patches.Circle((x_m, y_m), radius=circle_r, facecolor=team_color, edgecolor=result_edge, linewidth=2.0, zorder=6)
         self.field_ax.add_patch(circle)
 
         # Number in center
@@ -1730,5 +1830,7 @@ def run_scout():
 
 if __name__ == "__main__":
     run_scout()
+
+
 
 
