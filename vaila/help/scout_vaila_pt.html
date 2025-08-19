@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>vailá Scout - Ferramenta de Observação Esportiva</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+        }
+        h2 {
+            color: #34495e;
+            margin-top: 40px;
+            margin-bottom: 20px;
+            border-left: 4px solid #3498db;
+            padding-left: 15px;
+        }
+        h3 {
+            color: #2c3e50;
+            margin-top: 30px;
+            margin-bottom: 15px;
+        }
+        h4 {
+            color: #34495e;
+            margin-top: 25px;
+            margin-bottom: 10px;
+        }
+        code {
+            background-color: #f8f9fa;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            color: #e74c3c;
+        }
+        pre {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            border-left: 4px solid #3498db;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #3498db;
+            color: white;
+        }
+        tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+        .feature-list {
+            background-color: #e8f4fd;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .feature-list ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+        .feature-list li {
+            margin-bottom: 8px;
+        }
+        .warning {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .info {
+            background-color: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .file-structure {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            white-space: pre;
+            overflow-x: auto;
+        }
+        .footer {
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
+            text-align: center;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>vailá Scout - Ferramenta de Observação Esportiva</h1>
+
+        <h2>Visão Geral</h2>
+        <p>O vailá Scout é uma aplicação GUI integrada para anotar eventos esportivos em um campo de futebol virtual e gerar análises rápidas (ex: mapas de calor). É projetado para se adequar ao estilo do projeto vailá e não requer imagens externas do campo - o campo é desenhado em escala usando dimensões padrão FIFA (105m x 68m).</p>
+
+        <h2>Funcionalidades</h2>
+
+        <h3>Funcionalidades Principais</h3>
+        <div class="feature-list">
+            <ul>
+                <li><strong>Anotação em tempo real</strong>: Clique no campo para marcar ações dos jogadores</li>
+                <li><strong>Controle de timer</strong>: Timer integrado com funcionalidades de iniciar/pausar/reiniciar</li>
+                <li><strong>Gerenciamento de equipes</strong>: Suporte para equipes da casa e visitante com escalações</li>
+                <li><strong>Rastreamento de ações</strong>: Tipos de ação personalizáveis com símbolos visuais</li>
+                <li><strong>Rastreamento de resultados</strong>: Resultados de sucesso/falha/neutro para cada ação</li>
+                <li><strong>Geração de mapa de calor</strong>: Análise visual dos padrões de movimento dos jogadores</li>
+            </ul>
+        </div>
+
+        <h3>Gerenciamento de Dados</h3>
+        <div class="feature-list">
+            <ul>
+                <li><strong>Importação/exportação CSV</strong>: Carregar e salvar dados de eventos em formato CSV</li>
+                <li><strong>Configuração TOML</strong>: Sistema de configuração flexível para equipes, ações e configurações do campo</li>
+                <li><strong>Conversão Skout</strong>: Converter dados do formato de exportação ASCII do Skout.exe</li>
+            </ul>
+        </div>
+
+        <h3>Interface do Usuário</h3>
+        <div class="feature-list">
+            <ul>
+                <li><strong>Design responsivo</strong>: Adapta-se a diferentes tamanhos de tela</li>
+                <li><strong>Atalhos de teclado</strong>: Acesso rápido a funções comuns</li>
+                <li><strong>Feedback visual</strong>: Eventos codificados por cor e marcadores de jogadores</li>
+                <li><strong>Gerenciamento de escalação</strong>: Seleção fácil de jogadores e troca de equipes</li>
+            </ul>
+        </div>
+
+        <h2>Instalação</h2>
+
+        <h3>Requisitos</h3>
+        <ul>
+            <li>Python 3.x</li>
+            <li>tkinter (GUI)</li>
+            <li>matplotlib</li>
+            <li>seaborn</li>
+            <li>pandas</li>
+            <li>rich (para impressões no console)</li>
+            <li>toml (para escrita de config) e tomllib/tomli (para leitura de config)</li>
+        </ul>
+
+        <h3>Executando a Aplicação</h3>
+
+        <h4>Opção 1: Da GUI do vailá</h4>
+        <p>Clique no botão "Scout" na interface principal do vailá.</p>
+
+        <h4>Opção 2: Linha de Comando</h4>
+        <pre><code>python vaila.py</code></pre>
+
+        <h4>Opção 3: Módulo Direto</h4>
+        <pre><code>python -m vaila.scout_vaila</code></pre>
+
+        <h4>Opção 4: Script Direto</h4>
+        <pre><code>cd vaila
+python scout_vaila.py</code></pre>
+
+        <h2>Guia de Uso</h2>
+
+        <h3>Começando</h3>
+        <ol>
+            <li><strong>Inicie a aplicação</strong> usando qualquer um dos métodos acima</li>
+            <li><strong>Carregue ou crie uma configuração</strong> (arquivo TOML) com suas equipes e ações</li>
+            <li><strong>Selecione sua equipe</strong> (use a tecla 'T' para alternar entre casa/visitante)</li>
+            <li><strong>Escolha uma ação</strong> do menu suspenso</li>
+            <li><strong>Defina o resultado</strong> (sucesso/falha/neutro)</li>
+            <li><strong>Clique no campo</strong> para marcar ações dos jogadores</li>
+            <li><strong>Use o timer</strong> para acompanhar o tempo do jogo</li>
+        </ol>
+
+        <h3>Fluxo de Trabalho Básico</h3>
+        <ol>
+            <li><strong>Configure as Equipes</strong>: Configure equipes da casa e visitante com escalações</li>
+            <li><strong>Defina as Ações</strong>: Crie tipos de ação personalizados (passe, chute, desarme, etc.)</li>
+            <li><strong>Anote os Eventos</strong>: Clique no campo para marcar ações dos jogadores</li>
+            <li><strong>Acompanhe o Tempo</strong>: Use o timer integrado ou entrada manual de tempo</li>
+            <li><strong>Salve os Dados</strong>: Exporte suas anotações para formato CSV</li>
+            <li><strong>Analise</strong>: Gere mapas de calor e outras visualizações</li>
+        </ol>
+
+        <h3>Interação com o Campo</h3>
+        <ul>
+            <li><strong>Clique Esquerdo</strong>: Marcar ação com resultado "sucesso"</li>
+            <li><strong>Clique Direito</strong>: Marcar ação com resultado "falha"</li>
+            <li><strong>Clique do Meio</strong>: Marcar ação com resultado "neutro"</li>
+            <li><strong>Ctrl + Clique</strong>: Remover eventos próximos à posição clicada</li>
+            <li><strong>Shift + Clique</strong>: Marcar ação com resultado "falha" (alternativa para touchpad)</li>
+            <li><strong>Alt + Clique</strong>: Marcar ação com resultado "neutro" (alternativa para touchpad)</li>
+        </ul>
+
+        <h2>Configuração</h2>
+
+        <h3>Arquivo de Configuração TOML</h3>
+        <p>A aplicação usa arquivos de configuração TOML para armazenar:</p>
+        <ul>
+            <li>Informações das equipes (nomes, cores, jogadores)</li>
+            <li>Definições de ações (nomes, códigos, símbolos, cores)</li>
+            <li>Configurações do campo (dimensões, unidades)</li>
+            <li>Preferências visuais (tamanhos de marcadores, cores)</li>
+        </ul>
+
+        <h3>Configuração Padrão</h3>
+        <p>Quando iniciada pela primeira vez, a aplicação cria uma configuração padrão com:</p>
+        <ul>
+            <li>Campo padrão FIFA (105m x 68m)</li>
+            <li>Duas equipes (CASA/VISITANTE) com jogadores de exemplo</li>
+            <li>Ações comuns de futebol (passe, chute, desarme, etc.)</li>
+            <li>Configurações visuais padrão</li>
+        </ul>
+
+        <h3>Criando Configurações Personalizadas</h3>
+        <ol>
+            <li>Use "Criar Modelo" para gerar uma configuração base</li>
+            <li>Edite o arquivo TOML manualmente ou use as ferramentas de configuração</li>
+            <li>Carregue sua configuração personalizada</li>
+            <li>Salve as alterações conforme necessário</li>
+        </ol>
+
+        <h2>Formato dos Dados</h2>
+
+        <h3>Formato de Exportação CSV</h3>
+        <p>Os eventos são exportados em formato CSV com as seguintes colunas:</p>
+        <pre><code>timestamp_s, team, player_name, player, action, action_code, result, pos_x_m, pos_y_m</code></pre>
+
+        <h4>Descrições das Colunas:</h4>
+        <ul>
+            <li><code>timestamp_s</code>: Tempo em segundos desde o início do jogo</li>
+            <li><code>team</code>: Nome da equipe (CASA/VISITANTE ou personalizado)</li>
+            <li><code>player_name</code>: Nome completo do jogador</li>
+            <li><code>player</code>: Número do jogador</li>
+            <li><code>action</code>: Nome da ação (passe, chute, etc.)</li>
+            <li><code>action_code</code>: Código numérico da ação</li>
+            <li><code>result</code>: sucesso/falha/neutro</li>
+            <li><code>pos_x_m</code>: Posição X em metros (0-105)</li>
+            <li><code>pos_y_m</code>: Posição Y em metros (0-68)</li>
+        </ul>
+
+        <h3>Sistema de Coordenadas</h3>
+        <ul>
+            <li><strong>Origem</strong>: Canto inferior esquerdo (0,0)</li>
+            <li><strong>Eixo X</strong>: Esquerda para direita (0-105m)</li>
+            <li><strong>Eixo Y</strong>: Baixo para cima (0-68m)</li>
+            <li><strong>Unidades</strong>: Metros (padrão FIFA)</li>
+        </ul>
+
+        <h2>Atalhos de Teclado</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Atalho</th>
+                    <th>Ação</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr><td><code>Ctrl+S</code></td><td>Salvar CSV</td></tr>
+                <tr><td><code>Ctrl+O</code></td><td>Carregar CSV</td></tr>
+                <tr><td><code>Ctrl+K</code></td><td>Limpar eventos</td></tr>
+                <tr><td><code>H</code></td><td>Mostrar mapa de calor</td></tr>
+                <tr><td><code>R</code></td><td>Reiniciar timer</td></tr>
+                <tr><td><code>Espaço</code></td><td>Iniciar/Pausar relógio</td></tr>
+                <tr><td><code>?</code></td><td>Abrir ajuda</td></tr>
+                <tr><td><code>T</code></td><td>Alternar equipe atual (casa/visitante)</td></tr>
+                <tr><td><code>Ctrl+L</code></td><td>Carregar configuração</td></tr>
+                <tr><td><code>Ctrl+Shift+S</code></td><td>Salvar configuração</td></tr>
+                <tr><td><code>Ctrl+T</code></td><td>Renomear equipes</td></tr>
+                <tr><td><code>Dígitos 0–9</code></td><td>Inserir código de ação; Enter aplicar; Backspace editar; Esc limpar</td></tr>
+                <tr><td><code>Mouse</code></td><td>Esquerdo=sucesso, Direito=falha, Meio=neutro</td></tr>
+                <tr><td><code>Ctrl+Clique Direito</code></td><td>Remover eventos próximos à posição clicada</td></tr>
+            </tbody>
+        </table>
+
+        <h2>Funcionalidades Avançadas</h2>
+
+        <h3>Geração de Mapa de Calor</h3>
+        <ol>
+            <li>Clique no botão "Mapa de Calor" ou pressione 'H'</li>
+            <li>Selecione filtros de equipe e/ou jogador</li>
+            <li>Visualize o gráfico de densidade das ações dos jogadores</li>
+            <li>Analise padrões de movimento e zonas quentes</li>
+        </ol>
+
+        <h3>Conversão de Dados Skout</h3>
+        <p>Converter dados do formato de exportação ASCII do Skout.exe:</p>
+        <ol>
+            <li>Vá para <strong>Ferramentas</strong> → <strong>Converter Skout para vailá</strong></li>
+            <li>Selecione seu arquivo Skout .txt</li>
+            <li>Escolha o diretório de saída</li>
+            <li>Digite o nome da equipe</li>
+            <li>Obtenha tanto arquivos CSV quanto de configuração TOML</li>
+        </ol>
+
+        <h3>Gerenciamento de Jogadores</h3>
+        <ul>
+            <li><strong>Visualização da Escalação</strong>: Veja todos os jogadores de ambas as equipes</li>
+            <li><strong>Seleção Rápida</strong>: Clique nos nomes dos jogadores para selecioná-los</li>
+            <li><strong>Numeração Automática</strong>: Opções de atribuição automática de jogadores</li>
+            <li><strong>Mapeamento de Nomes</strong>: Vincular números dos jogadores aos nomes completos</li>
+        </ul>
+
+        <h3>Funcionalidades do Timer</h3>
+        <ul>
+            <li><strong>Timer ao Vivo</strong>: Relógio do jogo em tempo real</li>
+            <li><strong>Entrada Manual</strong>: Definir timestamps específicos</li>
+            <li><strong>Pausar/Retomar</strong>: Controlar o tempo durante intervalos</li>
+            <li><strong>Reiniciar</strong>: Começar de novo com tempo limpo</li>
+        </ul>
+
+        <h2>Solução de Problemas</h2>
+
+        <h3>Problemas Comuns</h3>
+
+        <div class="warning">
+            <h4>A aplicação não inicia:</h4>
+            <ul>
+                <li>Verifique a versão do Python (3.x necessário)</li>
+                <li>Verifique se todas as dependências estão instaladas</li>
+                <li>Certifique-se de que o tkinter está disponível</li>
+            </ul>
+        </div>
+
+        <div class="warning">
+            <h4>Configuração não carrega:</h4>
+            <ul>
+                <li>Verifique a sintaxe do arquivo TOML</li>
+                <li>Verifique as permissões do arquivo</li>
+                <li>Use "Criar Modelo" para gerar config válida</li>
+            </ul>
+        </div>
+
+        <div class="warning">
+            <h4>Campo não exibe:</h4>
+            <ul>
+                <li>Verifique a instalação do matplotlib</li>
+                <li>Verifique as configurações de exibição</li>
+                <li>Tente redimensionar a janela</li>
+            </ul>
+        </div>
+
+        <div class="warning">
+            <h4>Dados não salvam:</h4>
+            <ul>
+                <li>Verifique as permissões de escrita no diretório de destino</li>
+                <li>Verifique a compatibilidade do formato CSV</li>
+                <li>Certifique-se de espaço suficiente em disco</li>
+            </ul>
+        </div>
+
+        <h3>Dicas de Performance</h3>
+        <div class="info">
+            <ul>
+                <li>Feche outros aplicativos ao trabalhar com grandes conjuntos de dados</li>
+                <li>Use dimensões apropriadas do campo para sua análise</li>
+                <li>Limite o número de eventos simultâneos para melhor performance</li>
+                <li>Salve o trabalho frequentemente para evitar perda de dados</li>
+            </ul>
+        </div>
+
+        <h2>Estrutura de Arquivos</h2>
+        <div class="file-structure">vaila/
+├── scout_vaila.py          # Aplicação principal
+├── help/
+│   ├── scout_vaila.md      # Esta documentação
+│   ├── scout_vaila.html    # Versão HTML
+│   ├── scout_vaila_pt.md   # Documentação em português
+│   └── scout_vaila_pt.html # Versão HTML em português
+└── models/
+    └── vaila_scout_config.toml  # Configuração padrão</div>
+
+        <h2>Licença</h2>
+        <p>Este programa é software livre: você pode redistribuí-lo e/ou modificá-lo sob os termos da Licença Pública Geral GNU conforme publicada pela Free Software Foundation, seja a versão 3 da Licença, ou (a seu critério) qualquer versão posterior.</p>
+
+        <h2>Suporte</h2>
+        <p>Para problemas, perguntas ou contribuições:</p>
+        <ul>
+            <li><strong>Email</strong>: paulosantiago@usp.br</li>
+            <li><strong>GitHub</strong>: <a href="https://github.com/vaila-multimodaltoolbox/vaila">https://github.com/vaila-multimodaltoolbox/vaila</a></li>
+            <li><strong>Documentação</strong>: Veja os arquivos de ajuda no diretório vaila/help</li>
+        </ul>
+
+        <div class="footer">
+            <p><strong>Versão</strong>: 0.1.4<br>
+            <strong>Última Atualização</strong>: 19 de Agosto de 2025<br>
+            <strong>Autor</strong>: Paulo Roberto Pereira Santiago</p>
+        </div>
+    </div>
+</body>
+</html>
