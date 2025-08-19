@@ -83,39 +83,93 @@ Try {
     Write-Warning "Failed to update conda or packages. Continuing anyway."
 }
 
-# Remove existing 'vaila' environment for a fresh install
-Write-Output "Checking for previous 'vaila' environment for clean install..."
+# Check if 'vaila' environment exists and ask user for installation type
+Write-Output "Checking for existing 'vaila' environment..."
 $envExists = conda env list | Select-String -Pattern "^vaila"
+$choice = ""  # Initialize choice variable
+
 If ($envExists) {
-    Try {
+    Write-Output ""
+    Write-Output "============================================================"
+    Write-Output "vaila environment already exists!"
+    Write-Output "============================================================"
+    Write-Output ""
+    Write-Output "Choose installation type:"
+    Write-Output "1. UPDATE - Keep existing environment and update vaila files only"
+    Write-Output "   (Preserves NVIDIA CUDA installations and other custom packages)"
+    Write-Output "2. RESET - Remove existing environment and create fresh installation"
+    Write-Output "   (Will require reinstalling NVIDIA CUDA and other custom packages)"
+    Write-Output ""
+    
+    Do {
+        $choice = Read-Host "Enter your choice (1 for UPDATE, 2 for RESET)"
+    } While ($choice -notin @("1", "2"))
+    
+    If ($choice -eq "1") {
+        Write-Output ""
+        Write-Output "Selected: UPDATE - Keeping existing environment"
+        Write-Output "Activating existing 'vaila' environment..."
+        conda activate vaila
+        
+        # Update existing environment with new packages from YAML
+        Write-Output "Updating existing environment with new packages..."
+        Try {
+            & conda env update -f "$vailaProgramPath\yaml_for_conda_env\vaila_win.yaml"
+            Write-Output "Environment updated successfully."
+        } Catch {
+            Write-Warning "Failed to update environment from YAML. Continuing anyway."
+        }
+    } Else {
+        Write-Output ""
+        Write-Output "Selected: RESET - Creating fresh environment"
         Write-Output "Removing old 'vaila' environment..."
-        conda deactivate
-        conda env remove -n vaila -y
-        Write-Output "Old 'vaila' environment removed successfully."
-    } Catch {
-        Write-Warning "Could not remove old environment. Continuing anyway."
+        Try {
+            conda deactivate
+            conda env remove -n vaila -y
+            Write-Output "Old 'vaila' environment removed successfully."
+        } Catch {
+            Write-Warning "Could not remove old environment. Continuing anyway."
+        }
+        
+        # Clean conda cache
+        Write-Output "Cleaning conda cache..."
+        conda clean --all -y
+        
+        # Create the vaila environment from YAML
+        Try {
+            Write-Output "Creating 'vaila' environment from YAML..."
+            & conda env create -f "$vailaProgramPath\yaml_for_conda_env\vaila_win.yaml"
+            Write-Output "'vaila' environment created successfully."
+        } Catch {
+            Write-Error "Failed to create the 'vaila' environment."
+            Exit
+        }
     }
 } Else {
-    Write-Output "'vaila' environment does not exist. Proceeding with creation."
+    Write-Output "'vaila' environment does not exist. Creating new environment..."
+    
+    # Clean conda cache
+    Write-Output "Cleaning conda cache..."
+    conda clean --all -y
+    
+    # Create the vaila environment from YAML
+    Try {
+        Write-Output "Creating 'vaila' environment from YAML..."
+        & conda env create -f "$vailaProgramPath\yaml_for_conda_env\vaila_win.yaml"
+        Write-Output "'vaila' environment created successfully."
+    } Catch {
+        Write-Error "Failed to create the 'vaila' environment."
+        Exit
+    }
 }
 
-# Clean conda cache
-Write-Output "Cleaning conda cache..."
-conda clean --all -y
-
-# Create the vaila environment from YAML
-Try {
-    Write-Output "Creating 'vaila' environment from YAML..."
-    & conda env create -f "$vailaProgramPath\yaml_for_conda_env\vaila_win.yaml"
-    Write-Output "'vaila' environment created successfully."
-} Catch {
-    Write-Error "Failed to create the 'vaila' environment."
-    Exit
+# Activate vaila environment (if not already activated in UPDATE mode)
+If ($choice -eq "1") {
+    Write-Output "Environment already activated for UPDATE mode."
+} Else {
+    Write-Output "Activating 'vaila' environment for pip upgrades..."
+    conda activate vaila
 }
-
-# Activate vaila environment
-Write-Output "Activating 'vaila' environment for pip upgrades..."
-conda activate vaila
 
 # Upgrade pip and install/upgrade pip dependencies
 Write-Output "Upgrading pip and required pip packages..."
