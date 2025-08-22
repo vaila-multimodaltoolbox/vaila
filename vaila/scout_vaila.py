@@ -2,12 +2,12 @@
 Project: vailá Multimodal Toolbox
 Script: scout_vaila.py - Integrated Sports Scouting (Annotation + Analysis)
 
-Author: Paulo Roberto Pereira Santiago
-Email: paulosantiago@usp.br
+Author: Paulo Roberto Pereira Santiago and Rafael Luiz Martins Montero
+Email: paulosantiago@usp.br and rafaell_mmonteiro@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 12 August 2025
-Update Date: 19 August 2025
-Version: 0.1.4
+Update Date: 22 August 2025
+Version: 0.1.5
 
 Description:
     Integrated GUI to annotate sports events on a virtual soccer field and generate
@@ -89,15 +89,15 @@ def _default_config() -> Dict:
     return {
         "program": {
             "name": "vaila_scout",
-            "version": "0.1.4",
-            "author": "Paulo Roberto Pereira Santiago",
-            "email": "paulosantiago@usp.br",
+            "version": "0.1.5",
+            "author": "Paulo Roberto Pereira Santiago and Rafael Luiz Martins Monteiro",
+            "email": "paulosantiago@usp.br and rafaell_mmonteiro@usp.br",
             "description": "Integrated scouting (annotation + analysis) for soccer.",
             "repository": "https://github.com/vaila-multimodaltoolbox/vaila",
             "license": "GPL-3.0-or-later",
             "homepage": "https://github.com/vaila-multimodaltoolbox/vaila",
             "created": "2025-08-12",
-            "updated": "2025-08-12",
+            "updated": "2025-08-22",
         },
         "project": {
             "name": "vaila_scout",
@@ -312,7 +312,7 @@ def _toml_template_with_comments(cfg: Dict) -> str:
 [program]
 # Metadata about this tool
 name = "{program.get('name', 'vaila_scout')}"
-version = "{program.get('version', '0.1.4')}"
+version = "{program.get('version', '0.1.5')}"
 author = "{program.get('author', '')}"
 email = "{program.get('email', '')}"
 description = "{program.get('description', 'Integrated scouting (annotation + analysis) for soccer.')}"
@@ -471,7 +471,7 @@ def draw_soccer_field(ax: plt.Axes, field_w: float, field_h: float) -> None:
 class ScoutApp(tk.Tk):
     def __init__(self, cfg: Dict):
         super().__init__()
-        self.title("vailá - Scout - v0.1.4")
+        self.title("vailá - Scout - v0.1.5")
         
         # Get screen dimensions for responsive sizing
         screen_width = self.winfo_screenwidth()
@@ -506,7 +506,11 @@ class ScoutApp(tk.Tk):
 
         view_menu = tk.Menu(menubar, tearoff=0)
         view_menu.add_command(label="Show Heatmap (H)", command=self.draw_heatmap)
+        view_menu.add_command(label="Scout visualization (V)", command=self.draw_action_view)
         menubar.add_cascade(label="View", menu=view_menu)
+
+        self.bind_all("v", lambda e: self.draw_action_view())
+        self.bind_all("V", lambda e: self.draw_action_view())
 
         tools_menu = tk.Menu(menubar, tearoff=0)
         tools_menu.add_command(label="Load Config	Ctrl+L", command=self.load_config)
@@ -1043,6 +1047,80 @@ class ScoutApp(tk.Tk):
             messagebox.showinfo("Loaded", f"Loaded: {path}")
         except Exception as exc:  # noqa: BLE001
             messagebox.showerror("Error", f"Failed to load CSV: {exc}")
+            
+    def draw_action_view(self):
+        if not self.events:
+            messagebox.showwarning("No data", "No events available for visualization.")
+            return
+
+        win = tk.Toplevel(self)
+        win.title("Scout visualization")
+        win.resizable(True, True)
+        win.minsize(600, 400)
+
+        ctrl = ttk.Frame(win)
+        ctrl.pack(side=tk.TOP, fill=tk.X, padx=6, pady=6)
+
+        df = pd.DataFrame([e.to_row() for e in self.events])
+
+        # --- Filtros ---
+        ttk.Label(ctrl, text="Action:").pack(side=tk.LEFT)
+        ALL = "All"
+        actions = [ALL] + sorted(df["action"].unique().tolist())
+        action_var = tk.StringVar(value=ALL)
+        action_cb = ttk.Combobox(ctrl, textvariable=action_var, values=actions, state="readonly", width=16)
+        action_cb.pack(side=tk.LEFT, padx=6)
+
+        show_correct = tk.BooleanVar(value=False)
+        show_wrong = tk.BooleanVar(value=False)
+        show_by_action = tk.BooleanVar(value=False)
+        show_centroid = tk.BooleanVar(value=False)
+
+        ttk.Checkbutton(ctrl, text="Success actions", variable=show_correct, command=lambda: plot()).pack(side=tk.LEFT, padx=4)
+        ttk.Checkbutton(ctrl, text="Fail actions", variable=show_wrong, command=lambda: plot()).pack(side=tk.LEFT, padx=4)
+        ttk.Checkbutton(ctrl, text="Colorful action result", variable=show_by_action, command=lambda: plot()).pack(side=tk.LEFT, padx=4)
+        ttk.Checkbutton(ctrl, text="Action central point", variable=show_centroid, command=lambda: plot()).pack(side=tk.LEFT, padx=4)
+
+        fig, ax = plt.subplots(figsize=(7.2, 4.8))
+        canvas = FigureCanvasTkAgg(fig, master=win)
+        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
+        def plot():
+            filt = df.copy()
+            sel_action = action_var.get()
+            if sel_action != ALL:
+                filt = filt[filt["action"] == sel_action]
+
+            if show_correct.get() and not show_wrong.get():
+                filt = filt[filt["result"].str.lower() == "success"]
+            elif show_wrong.get() and not show_correct.get():
+                filt = filt[filt["result"].str.lower() == "fail"]
+
+            ax.clear()
+            draw_soccer_field(ax, self.field_w, self.field_h)
+
+            if not filt.empty:
+                for _, row in filt.iterrows():
+                    if show_by_action.get():
+                        cor = "green" if row["result"].lower() == "success" else ("red" if row["result"].lower() == "fail" else "white")
+                    else:
+                        cor = "yellow"
+                    ax.scatter(row["pos_x_m"], row["pos_y_m"], c=cor, s=60, marker="o", edgecolors="black")
+
+                if show_centroid.get():
+                    x_mean = filt["pos_x_m"].mean()
+                    y_mean = filt["pos_y_m"].mean()
+                    ax.scatter(x_mean, y_mean, c="blue", s=200, marker="X", label="Centroide")
+
+            ax.set_xlim(0, self.field_w)
+            ax.set_ylim(0, self.field_h)
+            ax.set_title("Scout visualization")
+            canvas.draw()
+
+        ttk.Button(ctrl, text="Update", command=plot).pack(side=tk.LEFT, padx=8)
+        action_cb.bind("<<ComboboxSelected>>", lambda e: plot())
+
+        plot()
 
     def draw_heatmap(self):
         if not self.events:
@@ -1055,26 +1133,41 @@ class ScoutApp(tk.Tk):
         win.minsize(480, 360)
         ctrl = ttk.Frame(win)
         ctrl.pack(side=tk.TOP, fill=tk.X, padx=6, pady=6)
-
+    
+        df = pd.DataFrame([e.to_row() for e in self.events])
+        ALL = "All"
+    
         # Team filter
         ttk.Label(ctrl, text="Team:").pack(side=tk.LEFT)
-        ALL = "All"
         team_values = [ALL, self.cfg["teams"]["home"]["name"], self.cfg["teams"]["away"]["name"]]
         team_var = tk.StringVar(value=ALL)
         team_cb = ttk.Combobox(ctrl, textvariable=team_var, values=team_values, state="readonly", width=14)
         team_cb.pack(side=tk.LEFT, padx=6)
-
+    
         # Player filter
         ttk.Label(ctrl, text="Player:").pack(side=tk.LEFT)
         player_var = tk.StringVar(value=ALL)
         player_cb = ttk.Combobox(ctrl, textvariable=player_var, values=[ALL], state="readonly", width=12)
         player_cb.pack(side=tk.LEFT, padx=6)
-
+    
+        # Action filter
+        ttk.Label(ctrl, text="Action:").pack(side=tk.LEFT)
+        actions = [ALL] + sorted(df["action"].unique().tolist())
+        action_var = tk.StringVar(value=ALL)
+        action_cb = ttk.Combobox(ctrl, textvariable=action_var, values=actions, state="readonly", width=14)
+        action_cb.pack(side=tk.LEFT, padx=6)
+    
+        # Correct/Incorrect filters
+        show_correct = tk.BooleanVar(value=False)
+        show_wrong = tk.BooleanVar(value=False)
+        ttk.Checkbutton(ctrl, text="Show Correct", variable=show_correct, command=lambda: plot_heatmap()).pack(side=tk.LEFT, padx=4)
+        ttk.Checkbutton(ctrl, text="Show Wrong", variable=show_wrong, command=lambda: plot_heatmap()).pack(side=tk.LEFT, padx=4)
+    
         # Plot area
         fig, ax = plt.subplots(figsize=(7.2, 4.8))
         canvas = FigureCanvasTkAgg(fig, master=win)
         canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
-
+    
         def refresh_players(*_):
             sel_team = team_var.get()
             if sel_team == ALL:
@@ -1085,19 +1178,31 @@ class ScoutApp(tk.Tk):
                 values = [ALL] + list(self.cfg["teams"][key].get("players", []))
                 player_cb.config(values=values)
                 player_var.set(ALL)
-
+    
         def plot_heatmap():
             try:
-                df = pd.DataFrame([e.to_row() for e in self.events])
-                filt = df
+                filt = df.copy()
+    
                 sel_team = team_var.get()
                 sel_player = player_var.get()
+                sel_action = action_var.get()
+    
                 if sel_team != ALL:
                     filt = filt[filt["team"] == sel_team]
                 if sel_player != ALL:
                     filt = filt[filt["player"].astype(str) == str(sel_player)]
+                if sel_action != ALL:
+                    filt = filt[filt["action"] == sel_action]
+    
+                # correct/wrong filters
+                if show_correct.get() and not show_wrong.get():
+                    filt = filt[filt["result"].str.lower() == "success"]
+                elif show_wrong.get() and not show_correct.get():
+                    filt = filt[filt["result"].str.lower() == "fail"]
+    
                 ax.clear()
                 draw_soccer_field(ax, self.field_w, self.field_h)
+    
                 if len(filt) > 0:
                     sns.kdeplot(
                         data=filt,
@@ -1110,6 +1215,7 @@ class ScoutApp(tk.Tk):
                         thresh=0.05,
                         ax=ax,
                     )
+    
                 ax.set_xlim(0, self.field_w)
                 ax.set_ylim(0, self.field_h)
                 title = "Heatmap"
@@ -1117,11 +1223,13 @@ class ScoutApp(tk.Tk):
                     title += f" - {sel_team}"
                 if sel_player != ALL:
                     title += f" (player {sel_player})"
+                if sel_action != ALL:
+                    title += f" [{sel_action}]"
                 ax.set_title(title)
                 canvas.draw()
             except Exception as exc:  # noqa: BLE001
                 messagebox.showerror("Error", f"Failed to generate heatmap: {exc}")
-
+    
         ttk.Button(ctrl, text="Show", command=plot_heatmap).pack(side=tk.LEFT, padx=8)
         team_cb.bind("<<ComboboxSelected>>", refresh_players)
         plot_heatmap()
@@ -1417,6 +1525,7 @@ class ScoutApp(tk.Tk):
             ("Ctrl+O", "Load CSV"),
             ("Ctrl+K", "Clear events"),
             ("H", "Show heatmap"),
+            ("V", "Scout visualization"),
             ("R", "Reset timer"),
             ("Space", "Start/Pause clock"),
             ("?", "Open help"),

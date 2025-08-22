@@ -13,6 +13,7 @@ O vailá Scout é uma aplicação GUI integrada para anotar eventos esportivos e
 - **Rastreamento de ações**: Tipos de ação personalizáveis com símbolos visuais
 - **Rastreamento de resultados**: Resultados de sucesso/falha/neutro para cada ação
 - **Geração de mapa de calor**: Análise visual dos padrões de movimento dos jogadores
+- **Visualização dos scouts**: Análise visual das ações dos jogadores
 
 ### Gerenciamento de Dados
 - **Importação/exportação CSV**: Carregar e salvar dados de eventos em formato CSV
@@ -147,6 +148,7 @@ timestamp_s, team, player_name, player, action, action_code, result, pos_x_m, po
 | `Ctrl+O` | Carregar CSV |
 | `Ctrl+K` | Limpar eventos |
 | `H` | Mostrar mapa de calor |
+| `V` | Visualização Scout |
 | `R` | Reiniciar timer |
 | `Espaço` | Iniciar/Pausar relógio |
 | `?` | Abrir ajuda |
@@ -166,6 +168,12 @@ timestamp_s, team, player_name, player, action, action_code, result, pos_x_m, po
 2. Selecione filtros de equipe e/ou jogador
 3. Visualize o gráfico de densidade das ações dos jogadores
 4. Analise padrões de movimento e zonas quentes
+
+### Visualização do Scout
+
+1. Clique no botão "Scout visualization" ou pressione 'V'
+2. Selecione filtros de ação e/ou sucesso/falha
+3. Ver o gráfico de ações no campo
 
 ### Conversão de Dados Skout
 
@@ -248,6 +256,6 @@ Para problemas, perguntas ou contribuições:
 
 ---
 
-**Versão**: 0.1.4  
-**Última Atualização**: 19 de Agosto de 2025  
-**Autor**: Paulo Roberto Pereira Santiago
+**Versão**: 0.1.5  
+**Última Atualização**: 22 de Agosto de 2025  
+**Autor**: Paulo Roberto Pereira Santiago e Rafael Luiz Martins Monteiro

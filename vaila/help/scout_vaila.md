@@ -13,6 +13,7 @@ vailá Scout is an integrated GUI application for annotating sports events on a 
 - **Action tracking**: Customizable action types with visual symbols
 - **Result tracking**: Success/fail/neutral outcomes for each action
 - **Heatmap generation**: Visual analysis of player movement patterns
+- **Scout visualization**: Visual analysis of player actions
 
 ### Data Management
 - **CSV import/export**: Load and save event data in CSV format
@@ -147,6 +148,7 @@ timestamp_s, team, player_name, player, action, action_code, result, pos_x_m, po
 | `Ctrl+O` | Load CSV |
 | `Ctrl+K` | Clear events |
 | `H` | Show heatmap |
+| `V` | Scout visualization |
 | `R` | Reset timer |
 | `Space` | Start/Pause clock |
 | `?` | Open help |
@@ -166,6 +168,13 @@ timestamp_s, team, player_name, player, action, action_code, result, pos_x_m, po
 2. Select team and/or player filters
 3. View density plot of player actions
 4. Analyze movement patterns and hot zones
+
+### Scout visualization
+
+1. Click "Scout visualization" button or press 'V'
+2. Select action and/or success/fail filters
+3. View plot of actions on the field
+
 
 ### Skout Data Conversion
 
@@ -248,8 +257,8 @@ For issues, questions, or contributions:
 
 ---
 
-**Version**: 0.1.4  
-**Last Updated**: August 19, 2025  
-**Author**: Paulo Roberto Pereira Santiago
+**Version**: 0.1.5  
+**Last Updated**: August 22, 2025  
+**Author**: Paulo Roberto Pereira Santiago and Rafael Luiz Martins Monteiro
 
 
