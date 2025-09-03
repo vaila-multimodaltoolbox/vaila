@@ -1,9 +1,12 @@
 """
-File: readc3d_export.py
-
-Updated Version: 0.2.0
-Date: 28 February 2025
-Author: Prof. Paulo Santiago
+===============================================================================
+readc3d_export.py
+===============================================================================
+Author: Prof. Paulo R. P. Santiago
+Version: 25 September 2024 
+Update: 03 September 2025
+Version updated: 0.0.2
+Python Version: 3.12.11
 
 Description:
 This script processes .c3d files, extracting marker data, analog data, events, and points residuals,
@@ -83,6 +86,7 @@ Citation:
 """
 
 import os
+from pathlib import Path
 from rich import print
 import pandas as pd
 from ezc3d import c3d
@@ -98,7 +102,7 @@ def save_info_file(datac3d, file_name, output_dir):
     """
     print(f"Saving all data to .info file for {file_name}")
 
-    info_file_path = os.path.join(output_dir, f"{file_name}.info")
+    info_file_path = Path(output_dir) / f"{file_name}.info"
     # Use encoding='utf-8' and ignore errors
     with open(info_file_path, "w", encoding="utf-8", errors="ignore") as info_file:
         # Write header information
@@ -138,7 +142,7 @@ def save_short_info_file(
     Save a simplified version of the info file with only the main parameters and headers.
     """
     print(f"Saving short info file for {file_name}")
-    short_info_file_path = os.path.join(dir_name, f"{file_name}_short.info")
+    short_info_file_path = Path(dir_name) / f"{file_name}_short.info"
     # Use encoding='utf-8' and ignore errors
     with open(short_info_file_path, "w", encoding="utf-8", errors="ignore") as f:
         f.write(f"Marker frequency: {marker_freq} Hz\n")
@@ -162,14 +166,14 @@ def save_events(datac3d, file_name, output_dir):
     # Verify if the necessary parameters for events are available
     if "EVENT" not in datac3d["parameters"]:
         print(f"No events found for {file_name}, saving empty file.")
-        save_empty_file(os.path.join(output_dir, f"{file_name}_events.csv"))
+        save_empty_file(Path(output_dir) / f"{file_name}_events.csv")
         return
 
     event_params = datac3d["parameters"]["EVENT"]
     required_keys = ["CONTEXTS", "LABELS", "TIMES"]
     if not all(key in event_params for key in required_keys):
         print(f"Event parameters incomplete for {file_name}, saving empty file.")
-        save_empty_file(os.path.join(output_dir, f"{file_name}_events.csv"))
+        save_empty_file(Path(output_dir) / f"{file_name}_events.csv")
         return
 
     # Collect the event data
@@ -188,7 +192,7 @@ def save_events(datac3d, file_name, output_dir):
 
     # Save to a CSV file
     events_df = pd.DataFrame(events_data)
-    events_file_path = os.path.join(output_dir, f"{file_name}_events.csv")
+    events_file_path = Path(output_dir) / f"{file_name}_events.csv"
     events_df.to_csv(events_file_path, index=False)
     print(f"Events CSV saved at: {events_file_path}")
 
@@ -198,12 +202,14 @@ def importc3d(dat):
     Import C3D file data and parameters.
     """
     # Print the directory and name of the script being executed
-    print(f"Running script: {os.path.basename(__file__)}")
-    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
-
+    print(f"Running script: {Path(__file__).name}")
+    print(f"Script directory: {Path(__file__).parent}")
+    print("Running C3D to CSV conversion")
+    print("================================================")
     # Load the C3D file with force platform data extraction
     datac3d = c3d(dat, extract_forceplat_data=True)
     print(f"\nProcessing file: {dat}")
+    print("================================================")
     print(f'Number of markers = {datac3d["parameters"]["POINT"]["USED"]["value"][0]}')
 
     point_data = datac3d["data"]["points"]
@@ -268,7 +274,7 @@ def save_platform_data(datac3d, file_name, output_dir):
 
     if "platform" not in datac3d["data"] or not datac3d["data"]["platform"]:
         print(f"No force platform data found for {file_name}")
-        save_empty_file(os.path.join(output_dir, f"{file_name}_cop_all.csv"))
+        save_empty_file(Path(output_dir) / f"{file_name}_cop_all.csv")
         return
 
     platforms = datac3d["data"]["platform"]
@@ -305,9 +311,7 @@ def save_platform_data(datac3d, file_name, output_dir):
             )
 
             # Save individual platform COP data to CSV
-            cop_file_path = os.path.join(
-                output_dir, f"{file_name}_platform{platform_idx}_cop.csv"
-            )
+            cop_file_path = Path(output_dir) / f"{file_name}_platform{platform_idx}_cop.csv"
             cop_df.to_csv(cop_file_path, index=False)
             print(f"COP data saved to: {cop_file_path}")
 
@@ -332,9 +336,7 @@ def save_platform_data(datac3d, file_name, output_dir):
             )
 
             # Save to CSV
-            force_file_path = os.path.join(
-                output_dir, f"{file_name}_platform{platform_idx}_force.csv"
-            )
+            force_file_path = Path(output_dir) / f"{file_name}_platform{platform_idx}_force.csv"
             force_df.to_csv(force_file_path, index=False)
             print(f"Force data saved to: {force_file_path}")
 
@@ -356,9 +358,7 @@ def save_platform_data(datac3d, file_name, output_dir):
             )
 
             # Save to CSV
-            moment_file_path = os.path.join(
-                output_dir, f"{file_name}_platform{platform_idx}_moment.csv"
-            )
+            moment_file_path = Path(output_dir) / f"{file_name}_platform{platform_idx}_moment.csv"
             moment_df.to_csv(moment_file_path, index=False)
             print(f"Moment data saved to: {moment_file_path}")
 
@@ -396,13 +396,13 @@ def save_platform_data(datac3d, file_name, output_dir):
 
         # Save combined COP data
         combined_cop_df = pd.DataFrame(combined_cop)
-        combined_cop_path = os.path.join(output_dir, f"{file_name}_cop_all.csv")
+        combined_cop_path = Path(output_dir) / f"{file_name}_cop_all.csv"
         combined_cop_df.to_csv(combined_cop_path, index=False)
         print(f"Combined COP data saved to: {combined_cop_path}")
 
     # Save a summary file with platform information
     try:
-        platform_info_path = os.path.join(output_dir, f"{file_name}_platform_info.csv")
+        platform_info_path = Path(output_dir) / f"{file_name}_platform_info.csv"
         platform_info = []
 
         for platform_idx, platform in enumerate(platforms):
@@ -430,8 +430,8 @@ def save_platform_data(datac3d, file_name, output_dir):
         if platform_info:
             pd.DataFrame(platform_info).to_csv(platform_info_path, index=False)
             print(f"Platform information saved to: {platform_info_path}")
-    except Exception as e:
-        print(f"Error saving platform information: {e}")
+    except Exception:
+        print("Error saving platform information")
 
 
 def save_rotation_data(datac3d, file_name, output_dir):
@@ -443,12 +443,12 @@ def save_rotation_data(datac3d, file_name, output_dir):
         rotation_data = datac3d["data"]["rotations"]
         # Process and save rotation data...
         rotation_df = pd.DataFrame(rotation_data)
-        rotation_path = os.path.join(output_dir, f"{file_name}_rotations.csv")
+        rotation_path = Path(output_dir) / f"{file_name}_rotations.csv"
         rotation_df.to_csv(rotation_path, index=False)
         print(f"Rotation data saved to: {rotation_path}")
     else:
         print(f"No rotation data found for {file_name}")
-        save_empty_file(os.path.join(output_dir, f"{file_name}_rotations.csv"))
+        save_empty_file(Path(output_dir) / f"{file_name}_rotations.csv")
 
 
 def save_meta_points_data(datac3d, file_name, output_dir):
@@ -488,9 +488,7 @@ def save_meta_points_data(datac3d, file_name, output_dir):
                             df.insert(0, "Time", time_values)
 
                             # Save to CSV
-                            meta_path = os.path.join(
-                                output_dir, f"{file_name}_meta_{meta_key}_layer{i}.csv"
-                            )
+                            meta_path = Path(output_dir) / f"{file_name}_meta_{meta_key}_layer{i}.csv"
                             df.to_csv(meta_path, index=False)
                             print(
                                 f"Meta points {meta_key} layer {i} saved to: {meta_path}"
@@ -505,9 +503,7 @@ def save_meta_points_data(datac3d, file_name, output_dir):
                             meta_data.T
                         )  # Transpose to get frames as rows
                         df.insert(0, "Time", time_values)
-                        meta_path = os.path.join(
-                            output_dir, f"{file_name}_meta_{meta_key}.csv"
-                        )
+                        meta_path = Path(output_dir) / f"{file_name}_meta_{meta_key}.csv"
                         df.to_csv(meta_path, index=False)
                         print(f"Meta points {meta_key} saved to: {meta_path}")
 
@@ -524,7 +520,7 @@ def save_header_summary(datac3d, file_name, output_dir):
     """Save a summary of all header information"""
     print(f"Saving header summary for {file_name}")
 
-    header_path = os.path.join(output_dir, f"{file_name}_header.csv")
+    header_path = Path(output_dir) / f"{file_name}_header.csv"
 
     # Flatten header structure into rows
     header_rows = []
@@ -552,7 +548,7 @@ def save_parameter_groups(datac3d, file_name, output_dir):
 
     for group in key_groups:
         if group in datac3d["parameters"]:
-            group_path = os.path.join(output_dir, f"{file_name}_params_{group}.csv")
+            group_path = Path(output_dir) / f"{file_name}_params_{group}.csv"
 
             # Flatten parameter structure into rows
             param_rows = []
@@ -567,7 +563,7 @@ def save_parameter_groups(datac3d, file_name, output_dir):
                                 value_str = f"Array shape {value.shape}, sample: {value.flatten()[:5]}..."
                             else:
                                 value_str = str(value)
-                        except:
+                        except Exception:
                             value_str = "Array (could not convert to string)"
                     else:
                         value_str = str(value)
@@ -632,7 +628,7 @@ def save_data_statistics(datac3d, file_name, output_dir):
             and "NAME" in datac3d["parameters"]["SUBJECT"]
         ):
             stats["Subject"] = str(datac3d["parameters"]["SUBJECT"]["NAME"]["value"])
-    except:
+    except Exception:
         pass
 
     stats_path = os.path.join(output_dir, f"{file_name}_statistics.csv")
@@ -806,8 +802,10 @@ def convert_c3d_to_csv():
     Main function to convert C3D files to CSV and .info files.
     """
     # Print the directory and name of the script being executed
-    print(f"Running script: {os.path.basename(__file__)}")
-    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    print(f"Running script: {Path(__file__).name}")
+    print(f"Script directory: {Path(__file__).parent}")
+    print("Running C3D to CSV conversion")
+    print("================================================")
     root = Tk()
     root.withdraw()
 
@@ -860,7 +858,7 @@ def convert_c3d_to_csv():
                 ) = importc3d(file_path)
                 file_name = os.path.splitext(c3d_file)[0]
                 # Save the extracted data in CSV files and .info files within the execution save directory
-                out_dir = save_to_files(
+                save_to_files(
                     markers,
                     marker_labels,
                     marker_freq,
@@ -907,5 +905,120 @@ def print_complete_data_structure(data, prefix=""):
         print(f"{prefix}Shape: {data.shape}, Type: {data.dtype}")
 
 
+def batch_convert_c3d_to_csv():
+    """
+    Main function to convert all C3D files in a directory to CSV and .info files.
+    """
+    # Print the directory and name of the script being executed
+    print(f"Running script: {Path(__file__).name}")
+    print(f"Script directory: {Path(__file__).parent}")
+    print("Running C3D to CSV conversion")
+    print("================================================")
+    
+    root = Tk()
+    root.withdraw()
+
+    save_excel = messagebox.askyesno(
+        "Save as Excel",
+        "Do you want to save the data as Excel files? This process can be very slow.",
+    )
+    print(f"Debug: save_excel = {save_excel}")
+
+    input_directory = filedialog.askdirectory(title="Select Input Directory with C3D Files")
+    print(f"Debug: input_directory = {input_directory}")
+
+    output_directory = filedialog.askdirectory(title="Select Output Directory")
+    print(f"Debug: output_directory = {output_directory}")
+
+    root.destroy()  # Close the Tkinter resources
+
+    if input_directory and output_directory:
+        c3d_files = sorted(
+            [f for f in os.listdir(input_directory) if f.endswith(".c3d")]
+        )
+        
+        if not c3d_files:
+            messagebox.showerror("Error", f"No C3D files found in {input_directory}")
+            return
+            
+        print(f"Found {len(c3d_files)} .c3d files in the input directory.")
+
+        # Create the root directory for saving with timestamp in the name
+        run_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        run_save_dir = os.path.join(
+            output_directory, f"c3d2csv_{run_timestamp}"
+        )
+        os.makedirs(run_save_dir, exist_ok=True)
+        print(f"Run-level save directory created: {run_save_dir}")
+
+        progress_bar = tqdm(
+            total=len(c3d_files), desc="Processing C3D files", unit="file"
+        )
+
+        successful_conversions = 0
+        failed_conversions = 0
+
+        for c3d_file in c3d_files:
+            print(f"Processing file: {c3d_file}")
+            try:
+                file_path = os.path.join(input_directory, c3d_file)
+                (
+                    markers,
+                    marker_labels,
+                    marker_freq,
+                    analogs,
+                    points_residuals,
+                    analog_labels,
+                    analog_units,
+                    analog_freq,
+                    datac3d,
+                ) = importc3d(file_path)
+                file_name = os.path.splitext(c3d_file)[0]
+                # Save the extracted data in CSV files and .info files within the execution save directory
+                save_to_files(
+                    markers,
+                    marker_labels,
+                    marker_freq,
+                    analogs,
+                    points_residuals,
+                    analog_labels,
+                    analog_units,
+                    analog_freq,
+                    file_name,
+                    run_save_dir,
+                    save_excel,
+                    datac3d,
+                )
+                successful_conversions += 1
+            except Exception as e:
+                failed_conversions += 1
+                print(f"Error processing {c3d_file}: {e}")
+                messagebox.showerror("Error", f"Failed to process {c3d_file}: {e}")
+            progress_bar.update(1)
+
+        progress_bar.close()
+        
+        # Show final results
+        message = f"Batch conversion completed!\n\nSuccessful: {successful_conversions}\nFailed: {failed_conversions}\n\nOutput directory: {run_save_dir}"
+        messagebox.showinfo("Batch Conversion Complete", message)
+        print("All files have been processed and saved successfully!")
+        print(f"Results saved to: {run_save_dir}")
+    else:
+        print("Input or output directory not selected.")
+        messagebox.showwarning("Warning", "Input or output directory not selected.")
+
+
 if __name__ == "__main__":
-    convert_c3d_to_csv()
+    # Ask user if they want batch processing or single file
+    root = Tk()
+    root.withdraw()
+    
+    choice = messagebox.askyesno(
+        "Processing Mode", 
+        "Do you want to process all C3D files in a directory?\n\nYes = Batch processing\nNo = Single file processing"
+    )
+    
+    if choice:
+        batch_convert_c3d_to_csv()
+    else:
+        convert_c3d_to_csv()
