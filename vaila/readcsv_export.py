@@ -1,7 +1,12 @@
 """
+===============================================================================
 readcsv_export.py
-Author: Paulo R. P. Santiago
-Version: 2024-09-25 11:07:00
+===============================================================================
+Author: Prof. Paulo R. P. Santiago
+Version: 25 September 2024 
+Update: 04 September 2025
+Version updated: 0.1.1
+Python Version: 3.12.11
 
 Description:
 This script provides functionality to convert CSV files containing point and analog data
@@ -15,6 +20,8 @@ Main Features:
 - Handles user input for data rates, unit conversions, and sorting preferences.
 - Converts the CSV data into a C3D file with appropriately formatted point and analog data.
 - Provides a user interface for selecting files and entering required information using Tkinter.
+- **NEW**: Batch processing capability to convert multiple CSV files in a directory automatically.
+- **NEW**: Automatic output directory creation with timestamps for organized file management.
 
 Functions:
 - sanitize_header: Cleans and formats CSV headers to conform to expected data formats.
@@ -22,6 +29,8 @@ Functions:
 - create_c3d_from_csv: Constructs the C3D file from the sanitized data.
 - validate_and_filter_columns: Validates and filters CSV columns to ensure correct formatting.
 - get_conversion_factor: Provides a user interface for unit conversion selection.
+- **NEW**: batch_convert_csv_to_c3d: Processes all CSV files in a directory automatically.
+- **NEW**: auto_create_c3d_from_csv: Creates C3D files without user prompts for batch processing.
 
 Dependencies:
 - numpy: For numerical data handling.
@@ -30,12 +39,22 @@ Dependencies:
 - tkinter: For GUI elements, including file dialogs and message boxes.
 
 Usage:
-Run the script, select the necessary CSV files for point and analog data, provide the required
-parameters, and save the resulting C3D file to the desired location.
+Run the script and choose between:
+1. **Single File Processing**: Select individual CSV files and convert them one by one.
+2. **Batch Processing**: Process all CSV files in a directory automatically with common parameters.
+
+For batch processing, the script will:
+- Ask for input directory containing CSV files
+- Request output directory for results
+- Apply common parameters to all files
+- Create timestamped output directory
+- Process all files automatically
+- Show summary of successful/failed conversions
 
 """
 
 import os
+from pathlib import Path
 from rich import print
 import numpy as np
 import pandas as pd
@@ -43,6 +62,7 @@ import re
 import ezc3d
 import tkinter as tk
 from tkinter import filedialog, simpledialog, messagebox
+from datetime import datetime
 
 # Dictionary for metric unit conversions with abbreviations
 CONVERSIONS = {
@@ -204,11 +224,29 @@ def convert_csv_to_c3d():
     Handle the CSV to C3D conversion process, including file selection and user inputs.
     """
     # Print the directory and name of the script being executed
-    print(f"Running script: {os.path.basename(__file__)}")
-    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    print(f"Running script: {Path(__file__).name}")
+    print(f"Script directory: {Path(__file__).parent}")
+    print("Running CSV to C3D conversion")
+    print("================================================")
+    
+    # Always ask user first if they want batch processing
     root = tk.Tk()
     root.withdraw()
-
+    
+    print("Asking user for processing mode...")
+    choice = messagebox.askyesno(
+        "Processing Mode", 
+        "Do you want to process all CSV files in a directory?\n\nYes = Batch processing (recommended)\nNo = Single file processing"
+    )
+    
+    if choice:
+        print("User chose BATCH processing")
+        batch_convert_csv_to_c3d()
+        return
+    
+    print("User chose SINGLE file processing")
+    
+    # Single file processing
     point_file_path = filedialog.askopenfilename(
         title="Select Point Data CSV", filetypes=[("CSV files", "*.csv")]
     )
@@ -363,6 +401,206 @@ def create_c3d_from_csv(
         messagebox.showwarning("Warning", "Save operation cancelled.")
 
 
+def batch_convert_csv_to_c3d():
+    """
+    Handle batch CSV to C3D conversion process for all CSV files in a directory.
+    """
+    print("="*60)
+    print("BATCH CSV TO C3D CONVERSION")
+    print("="*60)
+    print(f"Running script: {Path(__file__).name}")
+    print(f"Script directory: {Path(__file__).parent}")
+    print("Starting BATCH processing mode...")
+    print("="*60)
+    
+    root = tk.Tk()
+    root.withdraw()
+
+    print("Step 1: Selecting input directory...")
+    # Select input directory containing CSV files
+    input_directory = filedialog.askdirectory(title="Select Input Directory with CSV Files")
+    if not input_directory:
+        print("No input directory selected. Exiting.")
+        messagebox.showerror("Error", "No input directory selected.")
+        return
+    
+    print(f"Input directory selected: {input_directory}")
+
+    print("Step 2: Selecting output directory...")
+    # Select output directory
+    output_directory = filedialog.askdirectory(title="Select Output Directory")
+    if not output_directory:
+        print("No output directory selected. Exiting.")
+        messagebox.showerror("Error", "No output directory selected.")
+        return
+    
+    print(f"Output directory selected: {output_directory}")
+
+    print("Step 3: Scanning for CSV files...")
+    # Get all CSV files in the input directory
+    csv_files = [f for f in os.listdir(input_directory) if f.endswith('.csv')]
+    if not csv_files:
+        print(f"ERROR: No CSV files found in {input_directory}")
+        messagebox.showerror("Error", f"No CSV files found in {input_directory}")
+        return
+
+    print(f"Found {len(csv_files)} total CSV files in directory")
+
+    # Filter out analog files to avoid double processing
+    point_csv_files = []
+    for csv_file in csv_files:
+        if not any(suffix in csv_file.lower() for suffix in ['_analog', '_force', '_emg', '_sensor', '_analog_data']):
+            point_csv_files.append(csv_file)
+    
+    if not point_csv_files:
+        print(f"ERROR: No point data CSV files found in {input_directory}")
+        messagebox.showerror("Error", f"No point data CSV files found in {input_directory}")
+        return
+
+    print(f"Processing {len(point_csv_files)} point data files:")
+    for f in point_csv_files:
+        print(f"  - {f}")
+    
+    print(f"Filtered out {len(csv_files) - len(point_csv_files)} analog/data files")
+
+    print("Step 4: Getting user parameters...")
+    # Ask user for common parameters
+    point_rate = simpledialog.askinteger(
+        "Point Rate", "Enter the point data rate (Hz):", minvalue=1, initialvalue=100
+    )
+    if not point_rate:
+        print("No point rate specified. Using default: 100 Hz")
+        point_rate = 100
+    
+    print(f"Point rate set to: {point_rate} Hz")
+    
+    use_analog = messagebox.askyesno(
+        "Analog Data", "Do you have analog data CSV files to add? (Should be in same directory)"
+    )
+    print(f"Analog data processing: {'Yes' if use_analog else 'No'}")
+    
+    analog_rate = 1000
+    if use_analog:
+        analog_rate = simpledialog.askinteger(
+            "Analog Rate",
+            "Enter the analog data rate (Hz):",
+            minvalue=1,
+            initialvalue=1000,
+        )
+        if not analog_rate:
+            print("No analog rate specified. Using default: 1000 Hz")
+            analog_rate = 1000
+        print(f"Analog rate set to: {analog_rate} Hz")
+
+    print("Getting conversion factor...")
+    conversion_factor = get_conversion_factor()
+    print(f"Conversion factor: {conversion_factor}")
+    
+    sort_markers = messagebox.askyesno(
+        "Sort Markers", "Do you want to sort markers alphabetically?"
+    )
+    print(f"Sort markers: {'Yes' if sort_markers else 'No'}")
+
+    print("Step 5: Creating output directory...")
+    # Create output directory with timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    batch_output_dir = os.path.join(output_directory, f"csv2c3d_{timestamp}")
+    os.makedirs(batch_output_dir, exist_ok=True)
+    
+    print(f"Batch output directory created: {batch_output_dir}")
+    print(f"Timestamp: {timestamp}")
+
+    print("Step 6: Starting batch processing...")
+    print("="*50)
+    
+    # Process each CSV file
+    successful_conversions = 0
+    failed_conversions = 0
+    
+    for i, csv_file in enumerate(point_csv_files, 1):
+        print(f"\nProcessing file {i}/{len(point_csv_files)}: {csv_file}")
+        try:
+            print(f"\nProcessing: {csv_file}")
+            
+            # Read the CSV file
+            csv_path = os.path.join(input_directory, csv_file)
+            point_df = pd.read_csv(csv_path)
+            
+            # Sanitize headers
+            point_df.columns = sanitize_header(point_df.columns)
+            
+            # Look for corresponding analog file (more flexible naming)
+            analog_df = None
+            if use_analog:
+                # Try multiple naming patterns for analog files
+                possible_analog_names = [
+                    csv_file.replace('.csv', '_analog.csv'),
+                    csv_file.replace('.csv', '_analog_data.csv'),
+                    csv_file.replace('.csv', '_analog.csv'),
+                    csv_file.replace('.csv', '_force.csv'),
+                    csv_file.replace('.csv', '_emg.csv'),
+                    csv_file.replace('.csv', '_sensor.csv')
+                ]
+                
+                for analog_name in possible_analog_names:
+                    analog_path = os.path.join(input_directory, analog_name)
+                    if os.path.exists(analog_path):
+                        try:
+                            analog_df = pd.read_csv(analog_path)
+                            analog_df.columns = sanitize_header(analog_df.columns)
+                            print(f"Found analog file: {analog_name}")
+                            break
+                        except Exception as e:
+                            print(f"Warning: Could not read analog file {analog_name}: {e}")
+                            continue
+            
+            # Create output filename
+            base_name = os.path.splitext(csv_file)[0]
+            output_filename = f"{base_name}.c3d"
+            output_path = os.path.join(batch_output_dir, output_filename)
+            
+            # Convert to C3D
+            auto_create_c3d_from_csv(
+                point_df,
+                output_path,
+                analog_df,
+                point_rate,
+                analog_rate,
+                conversion_factor,
+                sort_markers,
+            )
+            
+            successful_conversions += 1
+            print(f"Successfully converted: {csv_file} -> {output_filename}")
+            
+        except Exception as e:
+            failed_conversions += 1
+            print(f"ERROR processing {csv_file}: {e}")
+            print("Continuing with next file...")
+            continue
+
+    # Show final results
+    print(f"\n{'='*60}")
+    print("BATCH CONVERSION COMPLETED")
+    print(f"{'='*60}")
+    print(f"Total files found: {len(csv_files)}")
+    print(f"Point data files processed: {len(point_csv_files)}")
+    print(f"Successful conversions: {successful_conversions}")
+    print(f"Failed conversions: {failed_conversions}")
+    print(f"Output directory: {batch_output_dir}")
+    print(f"{'='*60}")
+    
+    if failed_conversions == 0:
+        print("PERFECT! All files converted successfully!")
+    elif successful_conversions > failed_conversions:
+        print("Good! Most files converted successfully.")
+    else:
+        print("Warning: Many files failed to convert.")
+    
+    message = f"Batch conversion completed!\n\nTotal files: {len(csv_files)}\nPoint data files: {len(point_csv_files)}\nSuccessful: {successful_conversions}\nFailed: {failed_conversions}\n\nOutput directory: {batch_output_dir}"
+    messagebox.showinfo("Batch Conversion Complete", message)
+
+
 def auto_create_c3d_from_csv(
     points_df,
     output_path,
@@ -375,7 +613,7 @@ def auto_create_c3d_from_csv(
     """
     Create a C3D file from the given points DataFrame and automatically
     saves it to the specified output_path without prompting the user.
-
+    
     Args:
         points_df (pd.DataFrame): DataFrame containing point data with headers.
         output_path (str): Full file path where the C3D file should be saved.
@@ -384,7 +622,7 @@ def auto_create_c3d_from_csv(
         analog_rate (int): Analog data sampling rate.
         conversion_factor (float): Conversion factor for the point coordinates.
         sort_markers (bool): Whether to sort marker labels alphabetically.
-
+    
     Raises:
         Exception: If there is an error writing the C3D file.
     """
@@ -436,4 +674,48 @@ def auto_create_c3d_from_csv(
 
 
 if __name__ == "__main__":
-    convert_csv_to_c3d()
+    import sys
+    
+    print("="*60)
+    print("CSV TO C3D CONVERTER - VAILA")
+    print("="*60)
+    print("Starting application...")
+    
+    # Check command line arguments for batch mode
+    if len(sys.argv) > 1 and sys.argv[1] == "--batch":
+        print("BATCH MODE forced via command line argument")
+        try:
+            batch_convert_csv_to_c3d()
+        except Exception as e:
+            print(f"Error in batch processing: {e}")
+            messagebox.showerror("Error", f"Batch processing failed: {e}")
+        sys.exit(0)
+    
+    # Ask user if they want batch processing or single file
+    root = tk.Tk()
+    root.withdraw()
+    
+    print("Showing processing mode selection dialog...")
+    choice = messagebox.askyesno(
+        "Processing Mode", 
+        "Do you want to process all CSV files in a directory?\n\nYes = Batch processing (recommended)\nNo = Single file processing"
+    )
+    
+    print(f"User choice: {'Batch processing' if choice else 'Single file processing'}")
+    
+    if choice:
+        print("Starting BATCH processing...")
+        try:
+            batch_convert_csv_to_c3d()
+        except Exception as e:
+            print(f"Error in batch processing: {e}")
+            messagebox.showerror("Error", f"Batch processing failed: {e}")
+    else:
+        print("Starting SINGLE file processing...")
+        try:
+            convert_csv_to_c3d()
+        except Exception as e:
+            print(f"Error in single file processing: {e}")
+            messagebox.showerror("Error", f"Single file processing failed: {e}")
+    
+    print("Application finished.")
