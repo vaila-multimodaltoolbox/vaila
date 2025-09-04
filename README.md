@@ -104,8 +104,11 @@ cd vaila
 
 ## 🔵 For Windows:
 
-## YouTube How to install *vailá* Windows 11
-[How to Install Vailá on Windows 11 | Step-by-Step Guide](https://youtu.be/w2iZfeD_j30)
+### YouTube: How to Install *vailá* on Windows 11
+
+[![How to Install Vailá on Windows 11 | Step-by-Step Guide](https://img.youtube.com/vi/w2iZfeD_j30/0.jpg)](https://youtu.be/w2iZfeD_j30)
+
+---
 
 ### **Important Notice Before Installation**
 
@@ -683,5 +686,6 @@ maintains the freedom of the software and requires source code availability.
 
 For more details, see the [LICENSE](LICENSE) file or visit: 
 https://www.gnu.org/licenses/agpl-3.0.html
+
 
 
