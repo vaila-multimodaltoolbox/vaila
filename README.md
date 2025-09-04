@@ -334,7 +334,7 @@ sudo chmod +x ~/vaila/mac_launch_vaila.sh
 
 ## Unistallation Instructions
 
-## For Uninstallation on Linux
+## For Uninstallation on Linux 🐧
 
 1. **Run the uninstall script**:
 
@@ -353,7 +353,7 @@ sudo chmod +x uninstall_vaila_linux.sh
 - Run the script `./uninstall_vaila_linux.sh` as your regular user, not with sudo.
 - Ensure that Conda is added to your PATH and accessible from the command line.
 
-## For Uninstallation on macOs
+## For Uninstallation on macOs 🍎
 
 1. **Run the uninstall script**:
 
@@ -373,7 +373,7 @@ sudo chmod +x uninstall_vaila_mac.sh
 - Run the script as your regular user, not with sudo.
 - You will prompted for your password when the script uses `sudo` to remove the app from `/Applications`.
 
-## For Uninstallation on Windows
+## For Uninstallation on Windows 🪟
 
 1. **Run the uninstallation script as Administrator in Anaconda/Miniconda PowerShell Prompt**:
 
@@ -686,6 +686,7 @@ maintains the freedom of the software and requires source code availability.
 
 For more details, see the [LICENSE](LICENSE) file or visit: 
 https://www.gnu.org/licenses/agpl-3.0.html
+
 
 
 
