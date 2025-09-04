@@ -615,6 +615,7 @@ vaila
 
 If you use *vailá* in your research or project, please consider citing our work:
 
+
 ```bibtex
 @misc{vaila2024,
   title={vailá - Versatile Anarcho Integrated Liberation Ánalysis in Multimodal Toolbox},
@@ -686,6 +687,7 @@ maintains the freedom of the software and requires source code availability.
 
 For more details, see the [LICENSE](LICENSE) file or visit: 
 https://www.gnu.org/licenses/agpl-3.0.html
+
 
 
 
