@@ -437,14 +437,14 @@ def batch_convert_csv_to_c3d():
     print(f"Output directory selected: {output_directory}")
 
     print("Step 3: Scanning for CSV files...")
-    # Get all CSV files in the input directory
-    csv_files = [f for f in os.listdir(input_directory) if f.endswith('.csv')]
+    # Get all CSV files in the input directory (excluding hidden files that start with '.')
+    csv_files = [f for f in os.listdir(input_directory) if f.endswith('.csv') and not f.startswith('.')]
     if not csv_files:
-        print(f"ERROR: No CSV files found in {input_directory}")
-        messagebox.showerror("Error", f"No CSV files found in {input_directory}")
+        print(f"ERROR: No visible CSV files found in {input_directory}")
+        messagebox.showerror("Error", f"No visible CSV files found in {input_directory}")
         return
 
-    print(f"Found {len(csv_files)} total CSV files in directory")
+    print(f"Found {len(csv_files)} visible CSV files in directory")
 
     # Filter out analog files to avoid double processing
     point_csv_files = []
@@ -535,7 +535,7 @@ def batch_convert_csv_to_c3d():
     log_file.write(f"Analog Rate: {analog_rate} Hz\n")
     log_file.write(f"Conversion Factor: {conversion_factor}\n")
     log_file.write(f"Sort Markers: {'Yes' if sort_markers else 'No'}\n")
-    log_file.write(f"Total CSV Files Found: {len(csv_files)}\n")
+    log_file.write(f"Visible CSV Files Found: {len(csv_files)}\n")
     log_file.write(f"Point Data Files to Process: {len(point_csv_files)}\n")
     log_file.write("="*80 + "\n\n")
     
@@ -633,7 +633,7 @@ def batch_convert_csv_to_c3d():
     log_file.write("\n" + "="*80 + "\n")
     log_file.write("CONVERSION SUMMARY\n")
     log_file.write("="*80 + "\n")
-    log_file.write(f"Total files found: {len(csv_files)}\n")
+    log_file.write(f"Visible CSV files found: {len(csv_files)}\n")
     log_file.write(f"Point data files processed: {len(point_csv_files)}\n")
     log_file.write(f"Successful conversions: {successful_conversions}\n")
     log_file.write(f"Failed conversions: {failed_conversions}\n")
@@ -675,7 +675,7 @@ def batch_convert_csv_to_c3d():
     print(f"\n{'='*60}")
     print("BATCH CONVERSION COMPLETED")
     print(f"{'='*60}")
-    print(f"Total files found: {len(csv_files)}")
+    print(f"Visible CSV files found: {len(csv_files)}")
     print(f"Point data files processed: {len(point_csv_files)}")
     print(f"Successful conversions: {successful_conversions}")
     print(f"Failed conversions: {failed_conversions}")
@@ -709,7 +709,7 @@ def batch_convert_csv_to_c3d():
         for i, (error_msg, count) in enumerate(sorted_errors[:5]):
             print(f"  {i+1}. {error_msg[:100]}{'...' if len(error_msg) > 100 else ''} ({count} files)")
     
-    message = f"Batch conversion completed!\n\nTotal files: {len(csv_files)}\nPoint data files: {len(point_csv_files)}\nSuccessful: {successful_conversions}\nFailed: {failed_conversions}\nSuccess rate: {(successful_conversions/len(point_csv_files)*100):.1f}%\n\nOutput directory: {batch_output_dir}\nDetailed log: {os.path.basename(log_file_path)}"
+    message = f"Batch conversion completed!\n\nVisible CSV files: {len(csv_files)}\nPoint data files: {len(point_csv_files)}\nSuccessful: {successful_conversions}\nFailed: {failed_conversions}\nSuccess rate: {(successful_conversions/len(point_csv_files)*100):.1f}%\n\nOutput directory: {batch_output_dir}\nDetailed log: {os.path.basename(log_file_path)}"
     messagebox.showinfo("Batch Conversion Complete", message)
 
 
