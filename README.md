@@ -11,15 +11,15 @@
       <th>Conda Environment Status</th>
     </tr>
     <tr>
-      <td><strong>Linux</strong></td>
+      <td><strong>🐧 Linux</strong></td>
       <td>✅ OK</td>
     </tr>
     <tr>
-      <td><strong>macOS</strong></td>
+      <td><strong>🍎 macOS</strong></td>
       <td>✅ OK</td>
     </tr>
     <tr>
-      <td><strong>Windows</strong></td>
+      <td><strong>🪟 Windows</strong></td>
       <td>✅ OK</td>
     </tr>
   </table>
@@ -102,7 +102,7 @@ cd vaila
 
 ---
 
-## 🔵 For Windows:
+## 🪟 For Windows:
 
 ### YouTube: How to Install *vailá* on Windows 11
 
@@ -179,7 +179,7 @@ If you need any further adjustments or have additional requests, feel free to le
        ```
 ---
 
-## 🟠 For Linux:
+## 🐧 For Linux:
 
 **Note**: These scripts work with both Anaconda and Miniconda installations.
 
@@ -210,7 +210,7 @@ sudo chmod +x install_vaila_linux.sh
 
 ---
 
-## ⚪ For macOS:
+## 🍎 For macOS:
 
 **Note**: These scripts work with both Anaconda and Miniconda installations.
 
@@ -247,7 +247,7 @@ sudo chmod +x install_vaila_mac.sh
 
 ### Running the Application After installation, you can launch *vailá* from your applications menu or directly from the terminal, depending on your operating system.
 
-- 🟠 Linux and ⚪ macOS: **From the Terminal bash or zsh**
+- 🐧 Linux and 🍎 macOS: **From the Terminal bash or zsh**
 
 1. Navigate to the `vaila` directory:
    
@@ -262,7 +262,7 @@ and run command:
   python3 vaila.py
   ```
 
-- 🔵 Windows
+- 🪟 Windows
 
 - Click on the `vailá` icon in the Applications menu or use the shortcut in desktop or Windows Terminal.
 
@@ -279,7 +279,7 @@ python vaila.py
 
 ## If preferred, you can also run *vailá* from the launch scripts.
 
-### For 🟠 Linux and ⚪ macOS 
+### For 🐧 Linux and 🍎 macOS 
 
 - From the Applications Menu:
   
@@ -289,11 +289,11 @@ python vaila.py
 
 #### From the Terminal If you prefer to run *vailá* from the terminal or if you encounter issues with the applications menu, you can use the provided launch scripts.
 
-##### 🟠Linux and ⚪ macOS
+##### 🐧Linux and 🍎 macOS
 
 - **Make the script executable** (if you haven't already):
 
-- 🟠 **Linux**
+- 🐧 **Linux**
   
 ```bash
 sudo chmod +x ~/vaila/linux_launch_vaila.sh
@@ -305,7 +305,7 @@ sudo chmod +x ~/vaila/linux_launch_vaila.sh
 ~/vaila/linux_launch_vaila.sh 
 ```
 
-- ⚪ **macOS**
+- 🍎 **macOS**
   
 ```bash
 sudo chmod +x ~/vaila/mac_launch_vaila.sh
@@ -317,7 +317,7 @@ sudo chmod +x ~/vaila/mac_launch_vaila.sh
 ~/vaila/mac_launch_vaila.sh 
 ```
 
-#### Notes for 🟠 Linux and ⚪ macOS 
+#### Notes for 🐧 Linux and 🍎 macOS 
 
 - **Ensure Conda is in the Correct Location**:
   - The launch scripts assume that Conda is installed in `~/anaconda3` or `~/miniconda3`. 
@@ -686,6 +686,7 @@ maintains the freedom of the software and requires source code availability.
 
 For more details, see the [LICENSE](LICENSE) file or visit: 
 https://www.gnu.org/licenses/agpl-3.0.html
+
 
 
 
