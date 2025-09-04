@@ -5,20 +5,11 @@
 </p>
 
 <div align="center">
-  <table>
-    <tr>
-      <th>Build Type</th>
-      <th>Linux</th>
-      <th>macOS</th>
-      <th>Windows</th>
-    </tr>
-    <tr>
-      <td><strong>Build Status</strong></td>
-      <td><img src="https://img.shields.io/badge/Build-OK-brightgreen.svg" alt="Linux Build Status"></td>
-      <td><img src="https://img.shields.io/badge/Build-OK-brightgreen.svg" alt="macOS Build Status"></td>
-      <td><img src="https://img.shields.io/badge/Build-OK-brightgreen.svg" alt="Windows Build Status"></td>
-    </tr>
-  </table>
+  | Operating System | Conda Environment Status |
+  |---|---|
+  | Linux | ✅ OK |
+  | macOS | ✅ OK |
+  | Windows | ✅ OK |
 </div>
 
 ## Development of *vailá*: Versatile Anarcho Integrated Liberation Ánalysis in Multimodal Toolbox
@@ -679,3 +670,4 @@ maintains the freedom of the software and requires source code availability.
 
 For more details, see the [LICENSE](LICENSE) file or visit: 
 https://www.gnu.org/licenses/agpl-3.0.html
+
