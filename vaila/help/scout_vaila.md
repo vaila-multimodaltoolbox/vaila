@@ -7,6 +7,7 @@ vailá Scout is an integrated GUI application for annotating sports events on a 
 ## Features
 
 ### Core Functionality
+
 - **Real-time annotation**: Click on the field to mark player actions
 - **Timer control**: Built-in timer with start/pause/reset functionality
 - **Team management**: Support for home and away teams with player rosters
@@ -16,11 +17,13 @@ vailá Scout is an integrated GUI application for annotating sports events on a 
 - **Scout visualization**: Visual analysis of player actions
 
 ### Data Management
+
 - **CSV import/export**: Load and save event data in CSV format
 - **TOML configuration**: Flexible configuration system for teams, actions, and field settings
 - **Skout conversion**: Convert data from Skout.exe ASCII export format
 
 ### User Interface
+
 - **Responsive design**: Adapts to different screen sizes
 - **Keyboard shortcuts**: Quick access to common functions
 - **Visual feedback**: Color-coded events and player markers
@@ -29,6 +32,7 @@ vailá Scout is an integrated GUI application for annotating sports events on a 
 ## Installation
 
 ### Requirements
+
 - Python 3.x
 - tkinter (GUI)
 - matplotlib
@@ -40,19 +44,23 @@ vailá Scout is an integrated GUI application for annotating sports events on a 
 ### Running the Application
 
 #### Option 1: From vailá GUI
+
 Click the "Scout" button in the main vailá interface.
 
 #### Option 2: Command Line
+
 ```bash
 python vaila.py
 ```
 
 #### Option 3: Direct Module
+
 ```bash
 python -m vaila.scout_vaila
 ```
 
 #### Option 4: Direct Script
+
 ```bash
 cd vaila
 python scout_vaila.py
@@ -93,6 +101,7 @@ python scout_vaila.py
 ### TOML Configuration File
 
 The application uses TOML configuration files to store:
+
 - Team information (names, colors, players)
 - Action definitions (names, codes, symbols, colors)
 - Field settings (dimensions, units)
@@ -101,6 +110,7 @@ The application uses TOML configuration files to store:
 ### Default Configuration
 
 When first launched, the application creates a default configuration with:
+
 - FIFA standard field (105m x 68m)
 - Two teams (HOME/AWAY) with sample players
 - Common soccer actions (pass, shot, tackle, etc.)
@@ -118,11 +128,13 @@ When first launched, the application creates a default configuration with:
 ### CSV Export Format
 
 Events are exported in CSV format with the following columns:
-```
+
+```csv
 timestamp_s, team, player_name, player, action, action_code, result, pos_x_m, pos_y_m
 ```
 
 **Column Descriptions:**
+
 - `timestamp_s`: Time in seconds from game start
 - `team`: Team name (HOME/AWAY or custom)
 - `player_name`: Player's full name
@@ -175,10 +187,10 @@ timestamp_s, team, player_name, player, action, action_code, result, pos_x_m, po
 2. Select action and/or success/fail filters
 3. View plot of actions on the field
 
-
 ### Skout Data Conversion
 
 Convert data from Skout.exe ASCII export format:
+
 1. Go to **Tools** → **Convert Skout to vailá**
 2. Select your Skout .txt file
 3. Choose output directory
@@ -203,22 +215,26 @@ Convert data from Skout.exe ASCII export format:
 
 ### Common Issues
 
-**Application won't start:**
+#### Application won't start
+
 - Check Python version (3.x required)
 - Verify all dependencies are installed
 - Ensure tkinter is available
 
-**Configuration not loading:**
+#### Configuration not loading
+
 - Check TOML file syntax
 - Verify file permissions
 - Use "Create Template" to generate valid config
 
-**Field not displaying:**
+#### Field not displaying
+
 - Check matplotlib installation
 - Verify display settings
 - Try resizing the window
 
-**Data not saving:**
+#### Data not saving
+
 - Check write permissions in target directory
 - Verify CSV format compatibility
 - Ensure sufficient disk space
@@ -232,7 +248,7 @@ Convert data from Skout.exe ASCII export format:
 
 ## File Structure
 
-```
+```bash
 vaila/
 ├── scout_vaila.py          # Main application
 ├── help/
@@ -251,8 +267,9 @@ This program is free software: you can redistribute it and/or modify it under th
 ## Support
 
 For issues, questions, or contributions:
-- **Email**: paulosantiago@usp.br
-- **GitHub**: https://github.com/vaila-multimodaltoolbox/vaila
+
+- **Email**: <paulosantiago@usp.br>
+- **GitHub**: [https://github.com/vaila-multimodaltoolbox/vaila](https://github.com/vaila-multimodaltoolbox/vaila)
 - **Documentation**: See help files in the vaila/help directory
 
 ---
@@ -260,5 +277,3 @@ For issues, questions, or contributions:
 **Version**: 0.1.5  
 **Last Updated**: August 22, 2025  
 **Author**: Paulo Roberto Pereira Santiago and Rafael Luiz Martins Monteiro
-
-

@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 20 July 2025
-Version: 0.0.3
+Update Date: 03 September 2025
+Version: 0.0.4
 
 Description:
     This script provides tools for reading CSV files and displaying their contents.
@@ -40,16 +40,17 @@ Change History:
 """
 
 import os
+from pathlib import Path
 import pandas as pd
 import tkinter as tk
-from tkinter import filedialog, Toplevel, Button, Label, Listbox, Frame, messagebox
+from tkinter import filedialog, Button, Label, Listbox, Frame, messagebox
 import numpy as np
 import time
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider, Button as MplButton, TextBox
 from matplotlib import animation
 from rich import print
-from typing import Union, Optional, List, cast
+from typing import cast
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.backend_bases import TimerBase
 
@@ -74,7 +75,7 @@ def _load_with_cache(csv_path: str, use_cache: bool = True):
             print(f"Cache loading failed: {e}")
     
     # Load from CSV and save cache
-    print(f"[bold yellow]Loading from CSV and creating cache...[/bold yellow]")
+    print("[bold yellow]Loading from CSV and creating cache...[/bold yellow]")
     index_vector, marker_data, valid_markers, delimiter = read_csv_generic(csv_path)
     points = np.stack([marker_data[m] for m in valid_markers.keys()], axis=1)
     
@@ -140,7 +141,7 @@ def show_csv_optimized(file_path=None, *, use_cache=True, turbo=False, fps=30, s
     marker_indices = [marker_names.index(m) for m in selected_markers]
     points = points[:, marker_indices, :]
     
-    print(f"[bold green]Data ready for visualization![/bold green]")
+    print("[bold green]Data ready for visualization![/bold green]")
     print(f"Shape: {points.shape}, FPS: {fps}")
     
     if turbo:
@@ -574,11 +575,8 @@ def show_csv_open3d(points, marker_names, fps=30):
         marker_names: list of marker names corresponding to the second dimension
         fps: frames per second for animation
     """
-    try:
-        import open3d as o3d
-    except ImportError:
-        print("open3d is not installed. Install it with 'pip install open3d'.")
-        return
+    # Open3D visualization stub - not yet implemented
+    pass
 
     num_frames, num_markers, _ = points.shape
     print(f"Open3D visualization stub: {num_frames} frames, {num_markers} markers.")
@@ -613,7 +611,7 @@ def show_csv_matplotlib(points, marker_names, fps=30):
     num_frames, num_markers, _ = points.shape
     fig = plt.figure(figsize=(10, 8))
     ax = cast(Axes3D, fig.add_subplot(111, projection="3d"))
-    scatter = ax.scatter(
+    ax.scatter(
         points[0, :, 0], points[0, :, 1], points[0, :, 2], c="blue", s=20
     )
     ax.set_title(
@@ -800,7 +798,7 @@ def ask_user_units():
         str: 'mm' for millimeters, 'm' for meters, 'auto' for automatic detection
     """
     import tkinter as tk
-    from tkinter import messagebox, simpledialog
+    from tkinter import messagebox
     
     try:
         # Try simple dialog first (more compatible)
@@ -967,10 +965,10 @@ def read_csv_generic(file_path):
             min_value = np.min(valid_coords)
             max_value = np.max(valid_coords)
             
-            print(f"\nCoordinate data statistics:")
+            print("\nCoordinate data statistics:")
             print(f"  Mean absolute value: {mean_abs_value:.3f}")
             print(f"  Range: [{min_value:.3f}, {max_value:.3f}]")
-            print(f"  Data preview (first marker, first 3 records):")
+            print("  Data preview (first marker, first 3 records):")
             first_marker = list(marker_data.keys())[0]
             preview_data = marker_data[first_marker][:3]
             for i, coords in enumerate(preview_data):
@@ -978,7 +976,7 @@ def read_csv_generic(file_path):
                     print(f"    Record {i}: X={coords[0]:.6f}, Y={coords[1]:.6f}, Z={coords[2]:.6f}")
             
             # Ask user about units
-            print(f"\nPlease select units in the dialog box...")
+            print("\nPlease select units in the dialog box...")
             user_units = ask_user_units()
             print(f"User selected: {user_units}")
             
@@ -990,7 +988,7 @@ def read_csv_generic(file_path):
                 print("Unit conversion completed: mm → m")
                 
                 # Show converted preview
-                print(f"After conversion (first marker, first 3 records):")
+                print("After conversion (first marker, first 3 records):")
                 preview_data = marker_data[first_marker][:3]
                 for i, coords in enumerate(preview_data):
                     if not np.isnan(coords).any():
@@ -1011,7 +1009,7 @@ def read_csv_generic(file_path):
                 print("Auto-detection: Data appears to be already in meters.")
 
         # Check for and filter extreme outliers after unit conversion
-        print(f"\nChecking for extreme outliers...")
+        print("\nChecking for extreme outliers...")
         temp_points_converted = np.stack([marker_data[marker] for marker in valid_markers.keys()], axis=1)
         valid_coords = temp_points_converted[~np.isnan(temp_points_converted)]
         
@@ -1032,7 +1030,7 @@ def read_csv_generic(file_path):
             outlier_count = np.sum(outliers)
             outlier_percentage = (outlier_count / len(valid_coords)) * 100
             
-            print(f"Data quality check:")
+            print("Data quality check:")
             print(f"  Median: {median:.3f}")
             print(f"  Q25-Q75: [{q25:.3f}, {q75:.3f}]")
             print(f"  IQR: {iqr:.3f}")
@@ -1040,9 +1038,9 @@ def read_csv_generic(file_path):
             print(f"  Outliers found: {outlier_count}/{len(valid_coords)} ({outlier_percentage:.1f}%)")
             
             if outlier_percentage > 5:  # If more than 5% outliers
-                print(f"Warning: High percentage of outliers detected!")
-                print(f"This may indicate data quality issues or incorrect units.")
-                print(f"Consider reviewing your data source.")
+                print("Warning: High percentage of outliers detected!")
+                print("This may indicate data quality issues or incorrect units.")
+                print("Consider reviewing your data source.")
 
     else:
         print("Warning: No valid coordinate data found.")
@@ -1067,8 +1065,10 @@ def show_csv(file_path=None):
         file_path (str, optional): Path to the CSV file. If None, opens file dialog.
     """
     # Print the directory and name of the script being executed
-    print(f"Running script: {os.path.basename(__file__)}")
-    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    print(f"Running script: {Path(__file__).name}")
+    print(f"Script directory: {Path(__file__).parent}")
+    print("Running CSV viewer")
+    print("================================================")
     
     # If no file path provided, show file dialog
     if file_path is None:
@@ -1081,7 +1081,7 @@ def show_csv(file_path=None):
     else:
         # Validate file exists
         if not os.path.exists(file_path):
-            print(f"[bold red]Error:[/bold red] File not found: {file_path}")
+            print("[bold red]Error:[/bold red] File not found: {file_path}")
             return
         if not os.path.isfile(file_path):
             print(f"[bold red]Error:[/bold red] Path is not a file: {file_path}")
@@ -1095,13 +1095,13 @@ def show_csv(file_path=None):
 
     # List the available markers
     available_markers = list(valid_markers.keys())
-    print(f"\n[bold green]File loaded successfully![/bold green]")
+    print("\n[bold green]File loaded successfully![/bold green]")
     print(f"File: {file_path}")
     print(f"Delimiter detected: '{delimiter}'")
     print(f"First column: '{index_vector.name}' (contains {index_vector.dtype} data)")
     print(f"Number of records: {len(index_vector)}")
     print(f"Number of markers found: {len(available_markers)}")
-    print(f"\n[bold]Available markers:[/bold]")
+    print("\n[bold]Available markers:[/bold]")
     for i, marker in enumerate(available_markers, 1):
         print(f"  {i:2d}. {marker}")
 
@@ -1125,7 +1125,7 @@ def show_csv(file_path=None):
     file_name = os.path.basename(file_path)
 
     # Debug: Print first few coordinate values to verify correctness
-    print(f"\n[bold]Debug Info:[/bold]")
+    print("\n[bold]Debug Info:[/bold]")
     print(f"Points array shape: {points.shape}")
     if num_markers > 0:
         first_marker = selected_markers[0]
@@ -1146,9 +1146,9 @@ def show_csv(file_path=None):
     valid_points_frame0 = points[0][valid_mask]
     
     if len(valid_points_frame0) > 0:
-        scat = ax.scatter(valid_points_frame0[:, 0], valid_points_frame0[:, 1], valid_points_frame0[:, 2], c="blue", s=30)
+        ax.scatter(valid_points_frame0[:, 0], valid_points_frame0[:, 1], valid_points_frame0[:, 2], c="blue", s=30)
     else:
-        scat = ax.scatter(0, 0, 0, c="blue", s=30, alpha=0)
+        ax.scatter(0, 0, 0, c="blue", s=30, alpha=0)
 
     ax.set_xlabel("X")
     ax.set_ylabel("Y")
@@ -1198,7 +1198,7 @@ def show_csv(file_path=None):
     ax.set_ylim((y_min, y_max))
     ax.set_zlim((z_min, z_max))
 
-    print(f"Final coordinate ranges:")
+    print("Final coordinate ranges:")
     print(f"  X: [{x_min:.6f}, {x_max:.6f}]")
     print(f"  Y: [{y_min:.6f}, {y_max:.6f}]")
     print(f"  Z: [{z_min:.6f}, {z_max:.6f}]")
@@ -1312,7 +1312,6 @@ def show_csv(file_path=None):
     connections = []
 
     # Pre-generate color schemes
-    blue_colors = ['blue'] * num_markers
     multicolor_colors = plt.cm.tab10(np.linspace(0, 1, min(num_markers, 10)))
     if num_markers > 10:
         extra_colors = plt.cm.Set3(np.linspace(0, 1, num_markers - 10))
@@ -1397,7 +1396,7 @@ def show_csv(file_path=None):
             handles, labels = ax.get_legend_handles_labels()
             if handles and labels:  # Only create legend if we have valid handles and labels
                 # Filter out empty labels
-                filtered_handles_labels = [(h, l) for h, l in zip(handles, labels) if l is not None and l != '']
+                filtered_handles_labels = [(h, label) for h, label in zip(handles, labels) if label is not None and label != '']
                 if filtered_handles_labels:
                     filtered_handles, filtered_labels = zip(*filtered_handles_labels)
                     ax.legend(filtered_handles, filtered_labels, loc='upper right', fontsize=8, 
@@ -1597,7 +1596,7 @@ def show_csv(file_path=None):
             
             export_df.to_csv(export_path, index=False)
             
-            print(f"\n[bold green]Data exported successfully![/bold green]")
+            print("\n[bold green]Data exported successfully![/bold green]")
             print(f"File: {export_path}")
             print(f"Records: {num_frames}, Markers: {len(selected_markers)}")
             
