@@ -22,6 +22,8 @@ Main Features:
 - Provides a user interface for selecting files and entering required information using Tkinter.
 - **NEW**: Batch processing capability to convert multiple CSV files in a directory automatically.
 - **NEW**: Automatic output directory creation with timestamps for organized file management.
+- **NEW**: Comprehensive logging and error reporting system.
+- **NEW**: Cross-platform path handling using pathlib.Path.
 
 Functions:
 - sanitize_header: Cleans and formats CSV headers to conform to expected data formats.
@@ -50,10 +52,10 @@ For batch processing, the script will:
 - Create timestamped output directory
 - Process all files automatically
 - Show summary of successful/failed conversions
+- Generate detailed conversion log file
 
 """
 
-import os
 from pathlib import Path
 from rich import print
 import numpy as np
@@ -438,7 +440,8 @@ def batch_convert_csv_to_c3d():
 
     print("Step 3: Scanning for CSV files...")
     # Get all CSV files in the input directory (excluding hidden files that start with '.')
-    csv_files = [f for f in os.listdir(input_directory) if f.endswith('.csv') and not f.startswith('.')]
+    input_path = Path(input_directory)
+    csv_files = [f.name for f in input_path.iterdir() if f.is_file() and f.suffix.lower() == '.csv' and not f.name.startswith('.')]
     if not csv_files:
         print(f"ERROR: No visible CSV files found in {input_directory}")
         messagebox.showerror("Error", f"No visible CSV files found in {input_directory}")
@@ -504,8 +507,8 @@ def batch_convert_csv_to_c3d():
     print("Step 5: Creating output directory...")
     # Create output directory with timestamp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    batch_output_dir = os.path.join(output_directory, f"csv2c3d_{timestamp}")
-    os.makedirs(batch_output_dir, exist_ok=True)
+    batch_output_dir = Path(output_directory) / f"csv2c3d_{timestamp}"
+    batch_output_dir.mkdir(parents=True, exist_ok=True)
     
     print(f"Batch output directory created: {batch_output_dir}")
     print(f"Timestamp: {timestamp}")
@@ -521,7 +524,7 @@ def batch_convert_csv_to_c3d():
     failed_files = []
     
     # Create log file
-    log_file_path = os.path.join(batch_output_dir, "conversion_log.txt")
+    log_file_path = batch_output_dir / "conversion_log.txt"
     log_file = open(log_file_path, 'w', encoding='utf-8')
     
     # Write header to log file
@@ -549,7 +552,7 @@ def batch_convert_csv_to_c3d():
             log_file.write(f"Status: Processing started\n")
             
             # Read the CSV file
-            csv_path = os.path.join(input_directory, csv_file)
+            csv_path = Path(input_directory) / csv_file
             point_df = pd.read_csv(csv_path)
             
             log_file.write(f"CSV loaded successfully - Shape: {point_df.shape}\n")
@@ -573,8 +576,8 @@ def batch_convert_csv_to_c3d():
                 ]
                 
                 for analog_name in possible_analog_names:
-                    analog_path = os.path.join(input_directory, analog_name)
-                    if os.path.exists(analog_path):
+                    analog_path = Path(input_directory) / analog_name
+                    if analog_path.exists():
                         try:
                             analog_df = pd.read_csv(analog_path)
                             analog_df.columns = sanitize_header(analog_df.columns)
@@ -587,9 +590,9 @@ def batch_convert_csv_to_c3d():
                             continue
             
             # Create output filename
-            base_name = os.path.splitext(csv_file)[0]
+            base_name = Path(csv_file).stem
             output_filename = f"{base_name}.c3d"
-            output_path = os.path.join(batch_output_dir, output_filename)
+            output_path = batch_output_dir / output_filename
             
             # Convert to C3D
             auto_create_c3d_from_csv(
@@ -709,7 +712,7 @@ def batch_convert_csv_to_c3d():
         for i, (error_msg, count) in enumerate(sorted_errors[:5]):
             print(f"  {i+1}. {error_msg[:100]}{'...' if len(error_msg) > 100 else ''} ({count} files)")
     
-    message = f"Batch conversion completed!\n\nVisible CSV files: {len(csv_files)}\nPoint data files: {len(point_csv_files)}\nSuccessful: {successful_conversions}\nFailed: {failed_conversions}\nSuccess rate: {(successful_conversions/len(point_csv_files)*100):.1f}%\n\nOutput directory: {batch_output_dir}\nDetailed log: {os.path.basename(log_file_path)}"
+    message = f"Batch conversion completed!\n\nVisible CSV files: {len(csv_files)}\nPoint data files: {len(point_csv_files)}\nSuccessful: {successful_conversions}\nFailed: {failed_conversions}\nSuccess rate: {(successful_conversions/len(point_csv_files)*100):.1f}%\n\nOutput directory: {batch_output_dir}\nDetailed log: {log_file_path.name}"
     messagebox.showinfo("Batch Conversion Complete", message)
 
 
@@ -865,8 +868,10 @@ def auto_create_c3d_from_csv(
             print("Continuing without analog data...")
 
     try:
-        c3d.write(output_path)
-        print(f"C3D file saved successfully to {output_path}")
+        # Convert Path object to string for ezc3d compatibility
+        output_path_str = str(output_path)
+        c3d.write(output_path_str)
+        print(f"C3D file saved successfully to {output_path_str}")
     except Exception as e:
         raise Exception(f"Failed to save C3D file to {output_path}: {e}")
 
