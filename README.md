@@ -5,11 +5,24 @@
 </p>
 
 <div align="center">
-  | Operating System | Conda Environment Status |
-  |---|---|
-  | Linux | ✅ OK |
-  | macOS | ✅ OK |
-  | Windows | ✅ OK |
+  <table>
+    <tr>
+      <th>Operating System</th>
+      <th>Conda Environment Status</th>
+    </tr>
+    <tr>
+      <td><strong>Linux</strong></td>
+      <td>✅ OK</td>
+    </tr>
+    <tr>
+      <td><strong>macOS</strong></td>
+      <td>✅ OK</td>
+    </tr>
+    <tr>
+      <td><strong>Windows</strong></td>
+      <td>✅ OK</td>
+    </tr>
+  </table>
 </div>
 
 ## Development of *vailá*: Versatile Anarcho Integrated Liberation Ánalysis in Multimodal Toolbox
@@ -670,4 +683,5 @@ maintains the freedom of the software and requires source code availability.
 
 For more details, see the [LICENSE](LICENSE) file or visit: 
 https://www.gnu.org/licenses/agpl-3.0.html
+
 
