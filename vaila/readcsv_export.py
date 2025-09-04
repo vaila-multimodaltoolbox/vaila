@@ -513,21 +513,51 @@ def batch_convert_csv_to_c3d():
     print("Step 6: Starting batch processing...")
     print("="*50)
     
-    # Process each CSV file
+    # Initialize tracking variables
     successful_conversions = 0
     failed_conversions = 0
+    error_details = []
+    successful_files = []
+    failed_files = []
     
+    # Create log file
+    log_file_path = os.path.join(batch_output_dir, "conversion_log.txt")
+    log_file = open(log_file_path, 'w', encoding='utf-8')
+    
+    # Write header to log file
+    log_file.write("="*80 + "\n")
+    log_file.write("CSV TO C3D BATCH CONVERSION LOG\n")
+    log_file.write("="*80 + "\n")
+    log_file.write(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+    log_file.write(f"Input Directory: {input_directory}\n")
+    log_file.write(f"Output Directory: {batch_output_dir}\n")
+    log_file.write(f"Point Rate: {point_rate} Hz\n")
+    log_file.write(f"Analog Rate: {analog_rate} Hz\n")
+    log_file.write(f"Conversion Factor: {conversion_factor}\n")
+    log_file.write(f"Sort Markers: {'Yes' if sort_markers else 'No'}\n")
+    log_file.write(f"Total CSV Files Found: {len(csv_files)}\n")
+    log_file.write(f"Point Data Files to Process: {len(point_csv_files)}\n")
+    log_file.write("="*80 + "\n\n")
+    
+    # Process each CSV file
     for i, csv_file in enumerate(point_csv_files, 1):
         print(f"\nProcessing file {i}/{len(point_csv_files)}: {csv_file}")
+        log_file.write(f"\n--- Processing File {i}/{len(point_csv_files)}: {csv_file} ---\n")
+        
         try:
             print(f"\nProcessing: {csv_file}")
+            log_file.write(f"Status: Processing started\n")
             
             # Read the CSV file
             csv_path = os.path.join(input_directory, csv_file)
             point_df = pd.read_csv(csv_path)
             
+            log_file.write(f"CSV loaded successfully - Shape: {point_df.shape}\n")
+            log_file.write(f"Original columns: {list(point_df.columns)}\n")
+            
             # Sanitize headers
             point_df.columns = sanitize_header(point_df.columns)
+            log_file.write(f"Sanitized columns: {list(point_df.columns)}\n")
             
             # Look for corresponding analog file (more flexible naming)
             analog_df = None
@@ -549,9 +579,11 @@ def batch_convert_csv_to_c3d():
                             analog_df = pd.read_csv(analog_path)
                             analog_df.columns = sanitize_header(analog_df.columns)
                             print(f"Found analog file: {analog_name}")
+                            log_file.write(f"Analog file found: {analog_name} - Shape: {analog_df.shape}\n")
                             break
                         except Exception as e:
                             print(f"Warning: Could not read analog file {analog_name}: {e}")
+                            log_file.write(f"Warning: Could not read analog file {analog_name}: {e}\n")
                             continue
             
             # Create output filename
@@ -571,14 +603,74 @@ def batch_convert_csv_to_c3d():
             )
             
             successful_conversions += 1
+            successful_files.append(csv_file)
             print(f"Successfully converted: {csv_file} -> {output_filename}")
+            log_file.write(f"Status: SUCCESS - C3D file created: {output_filename}\n")
             
         except Exception as e:
             failed_conversions += 1
+            failed_files.append(csv_file)
+            error_msg = str(e)
+            error_details.append((csv_file, error_msg))
+            
             print(f"ERROR processing {csv_file}: {e}")
             print("Continuing with next file...")
+            
+            log_file.write(f"Status: FAILED - Error: {error_msg}\n")
+            log_file.write(f"Error type: {type(e).__name__}\n")
+            
+            # Add more context for common errors
+            if "utf-8" in error_msg.lower():
+                log_file.write(f"Context: This appears to be a UTF-8 encoding issue\n")
+            elif "keyerror" in error_msg.lower():
+                log_file.write(f"Context: This appears to be a column/key access issue\n")
+            elif "shape" in error_msg.lower():
+                log_file.write(f"Context: This appears to be a data shape/dimension issue\n")
+            
             continue
 
+    # Write summary to log file
+    log_file.write("\n" + "="*80 + "\n")
+    log_file.write("CONVERSION SUMMARY\n")
+    log_file.write("="*80 + "\n")
+    log_file.write(f"Total files found: {len(csv_files)}\n")
+    log_file.write(f"Point data files processed: {len(point_csv_files)}\n")
+    log_file.write(f"Successful conversions: {successful_conversions}\n")
+    log_file.write(f"Failed conversions: {failed_conversions}\n")
+    log_file.write(f"Success rate: {(successful_conversions/len(point_csv_files)*100):.1f}%\n")
+    
+    if successful_files:
+        log_file.write(f"\nSUCCESSFUL CONVERSIONS ({len(successful_files)}):\n")
+        for file in successful_files:
+            log_file.write(f"  ✓ {file}\n")
+    
+    if failed_files:
+        log_file.write(f"\nFAILED CONVERSIONS ({len(failed_files)}):\n")
+        for file, error in error_details:
+            log_file.write(f"  ✗ {file} - Error: {error}\n")
+    
+    # Analyze error patterns
+    if error_details:
+        log_file.write(f"\nERROR ANALYSIS:\n")
+        error_types = {}
+        for file, error in error_details:
+            error_type = type(error).__name__ if hasattr(error, '__class__') else "Unknown"
+            if error_type not in error_types:
+                error_types[error_type] = []
+            error_types[error_type].append(file)
+        
+        for error_type, files in error_types.items():
+            log_file.write(f"  {error_type}: {len(files)} files\n")
+            for file in files:
+                log_file.write(f"    - {file}\n")
+    
+    log_file.write(f"\nOutput directory: {batch_output_dir}\n")
+    log_file.write(f"Log file: {log_file_path}\n")
+    log_file.write("="*80 + "\n")
+    log_file.close()
+    
+    print(f"\nDetailed log saved to: {log_file_path}")
+    
     # Show final results
     print(f"\n{'='*60}")
     print("BATCH CONVERSION COMPLETED")
@@ -587,7 +679,9 @@ def batch_convert_csv_to_c3d():
     print(f"Point data files processed: {len(point_csv_files)}")
     print(f"Successful conversions: {successful_conversions}")
     print(f"Failed conversions: {failed_conversions}")
+    print(f"Success rate: {(successful_conversions/len(point_csv_files)*100):.1f}%")
     print(f"Output directory: {batch_output_dir}")
+    print(f"Detailed log: {log_file_path}")
     print(f"{'='*60}")
     
     if failed_conversions == 0:
@@ -597,7 +691,25 @@ def batch_convert_csv_to_c3d():
     else:
         print("Warning: Many files failed to convert.")
     
-    message = f"Batch conversion completed!\n\nTotal files: {len(csv_files)}\nPoint data files: {len(point_csv_files)}\nSuccessful: {successful_conversions}\nFailed: {failed_conversions}\n\nOutput directory: {batch_output_dir}"
+    # Show error summary if there were failures
+    if failed_conversions > 0:
+        print("\nERROR SUMMARY:")
+        print(f"Failed files: {failed_conversions}")
+        print("Most common errors:")
+        
+        error_counts = {}
+        for file, error in error_details:
+            error_msg = str(error)
+            if error_msg not in error_counts:
+                error_counts[error_msg] = 0
+            error_counts[error_msg] += 1
+        
+        # Show top 5 most common errors
+        sorted_errors = sorted(error_counts.items(), key=lambda x: x[1], reverse=True)
+        for i, (error_msg, count) in enumerate(sorted_errors[:5]):
+            print(f"  {i+1}. {error_msg[:100]}{'...' if len(error_msg) > 100 else ''} ({count} files)")
+    
+    message = f"Batch conversion completed!\n\nTotal files: {len(csv_files)}\nPoint data files: {len(point_csv_files)}\nSuccessful: {successful_conversions}\nFailed: {failed_conversions}\nSuccess rate: {(successful_conversions/len(point_csv_files)*100):.1f}%\n\nOutput directory: {batch_output_dir}\nDetailed log: {os.path.basename(log_file_path)}"
     messagebox.showinfo("Batch Conversion Complete", message)
 
 
@@ -627,50 +739,136 @@ def auto_create_c3d_from_csv(
         Exception: If there is an error writing the C3D file.
     """
     print("Creating C3D from CSV (auto mode)...")
-    c3d = ezc3d.c3d()
-    points_df = validate_and_filter_columns(points_df)
-    marker_labels = [col.rsplit("_", 1)[0] for col in points_df.columns[1::3]]
-    if sort_markers:
-        marker_labels.sort()
-    print("Marker labels for C3D:", marker_labels)
-    c3d["parameters"]["POINT"]["UNITS"]["value"] = ["m"]
-    c3d["parameters"]["POINT"]["LABELS"]["value"] = marker_labels
-    c3d["parameters"]["POINT"]["RATE"]["value"] = [point_rate]
+    
+    try:
+        c3d = ezc3d.c3d()
+        print("Initialized empty C3D object.")
+    except Exception as e:
+        raise Exception(f"Failed to initialize C3D object: {e}")
+    
+    try:
+        points_df = validate_and_filter_columns(points_df)
+        print("Filtered and sanitized columns for points:", points_df.columns.tolist())
+    except Exception as e:
+        raise Exception(f"Failed to validate and filter columns: {e}")
+    
+    try:
+        marker_labels = [col.rsplit("_", 1)[0] for col in points_df.columns[1::3]]
+        if sort_markers:
+            marker_labels.sort()
+        print("Marker labels for C3D:", marker_labels)
+        
+        if not marker_labels:
+            raise Exception("No valid marker labels found. Check if CSV has proper X, Y, Z column structure.")
+    except Exception as e:
+        raise Exception(f"Failed to extract marker labels: {e}")
+    
+    try:
+        c3d["parameters"]["POINT"]["UNITS"]["value"] = ["m"]
+        c3d["parameters"]["POINT"]["LABELS"]["value"] = marker_labels
+        c3d["parameters"]["POINT"]["RATE"]["value"] = [point_rate]
+    except Exception as e:
+        raise Exception(f"Failed to set C3D point parameters: {e}")
 
     num_markers = len(marker_labels)
     num_frames = len(points_df)
     print(f"Number of markers: {num_markers}, Number of frames: {num_frames}")
+    
+    if num_frames == 0:
+        raise Exception("CSV file contains no data rows")
+    
+    if num_markers == 0:
+        raise Exception("No valid markers found in CSV data")
 
-    points_data = np.zeros((4, num_markers, num_frames))
+    try:
+        points_data = np.zeros((4, num_markers, num_frames))
+        print("Initialized points data array with shape:", points_data.shape)
+    except Exception as e:
+        raise Exception(f"Failed to initialize points data array: {e}")
+    
+    # Populate points data with better error handling
     for i, label in enumerate(marker_labels):
         try:
-            points_data[0, i, :] = points_df[f"{label}_X"].values * conversion_factor
-            points_data[1, i, :] = points_df[f"{label}_Y"].values * conversion_factor
-            points_data[2, i, :] = points_df[f"{label}_Z"].values * conversion_factor
-            points_data[3, i, :] = 1
+            x_col = f"{label}_X"
+            y_col = f"{label}_Y"
+            z_col = f"{label}_Z"
+            
+            # Check if columns exist
+            if x_col not in points_df.columns:
+                raise KeyError(f"Column {x_col} not found in CSV")
+            if y_col not in points_df.columns:
+                raise KeyError(f"Column {y_col} not found in CSV")
+            if z_col not in points_df.columns:
+                raise KeyError(f"Column {z_col} not found in CSV")
+            
+            # Check for NaN values
+            x_data = points_df[x_col].values
+            y_data = points_df[y_col].values
+            z_data = points_df[z_col].values
+            
+            if np.any(np.isnan(x_data)) or np.any(np.isnan(y_data)) or np.any(np.isnan(z_data)):
+                print(f"Warning: NaN values found in marker {label}, replacing with 0")
+                x_data = np.nan_to_num(x_data, nan=0.0)
+                y_data = np.nan_to_num(y_data, nan=0.0)
+                z_data = np.nan_to_num(z_data, nan=0.0)
+            
+            points_data[0, i, :] = x_data * conversion_factor
+            points_data[1, i, :] = y_data * conversion_factor
+            points_data[2, i, :] = z_data * conversion_factor
+            points_data[3, i, :] = 1  # Homogeneous coordinate
+            
         except KeyError as e:
             raise KeyError(f"Error accessing data for marker '{label}': {e}")
-    c3d["data"]["points"] = points_data
+        except Exception as e:
+            raise Exception(f"Error processing data for marker '{label}': {e}")
+    
+    try:
+        c3d["data"]["points"] = points_data
+        print("Points data assigned to C3D successfully.")
+    except Exception as e:
+        raise Exception(f"Failed to assign points data to C3D: {e}")
 
+    # Handle analog data if provided
     if analog_df is not None:
-        analog_labels = list(analog_df.columns[1:])
-        num_analog = len(analog_labels)
-        c3d["parameters"]["ANALOG"]["LABELS"]["value"] = analog_labels
-        c3d["parameters"]["ANALOG"]["RATE"]["value"] = [analog_rate]
-        num_analog_frames = analog_df.shape[0]
-        analog_data = np.zeros((1, num_analog, num_analog_frames))
-        for i, label in enumerate(analog_labels):
-            try:
-                analog_data[0, i, :] = analog_df[label].values
-            except KeyError as e:
-                raise KeyError(f"Error accessing analog data for marker '{label}': {e}")
-        c3d["data"]["analogs"] = analog_data
+        try:
+            analog_labels = list(analog_df.columns[1:])
+            num_analog = len(analog_labels)
+            print(f"Processing {num_analog} analog channels")
+            
+            if num_analog > 0:
+                c3d["parameters"]["ANALOG"]["LABELS"]["value"] = analog_labels
+                c3d["parameters"]["ANALOG"]["RATE"]["value"] = [analog_rate]
+                
+                num_analog_frames = analog_df.shape[0]
+                analog_data = np.zeros((1, num_analog, num_analog_frames))
+                
+                for i, label in enumerate(analog_labels):
+                    try:
+                        analog_values = analog_df[label].values
+                        # Handle NaN values in analog data
+                        if np.any(np.isnan(analog_values)):
+                            print(f"Warning: NaN values found in analog channel {label}, replacing with 0")
+                            analog_values = np.nan_to_num(analog_values, nan=0.0)
+                        analog_data[0, i, :] = analog_values
+                    except KeyError as e:
+                        raise KeyError(f"Error accessing analog data for channel '{label}': {e}")
+                    except Exception as e:
+                        raise Exception(f"Error processing analog data for channel '{label}': {e}")
+                
+                c3d["data"]["analogs"] = analog_data
+                print(f"Analog data assigned to C3D successfully. Shape: {analog_data.shape}")
+            else:
+                print("No analog channels found, skipping analog data")
+                
+        except Exception as e:
+            print(f"Warning: Failed to process analog data: {e}")
+            print("Continuing without analog data...")
 
     try:
         c3d.write(output_path)
         print(f"C3D file saved successfully to {output_path}")
     except Exception as e:
-        raise Exception(f"Failed to save C3D file: {e}")
+        raise Exception(f"Failed to save C3D file to {output_path}: {e}")
 
 
 if __name__ == "__main__":
