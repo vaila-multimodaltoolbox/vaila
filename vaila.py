@@ -4,8 +4,8 @@ vaila.py
 ===============================================================================
 Author: Prof. Paulo R. P. Santiago
 Date:  07 October 2024
-Update:  03 September 2025
-Version updated: 0.10.25
+Update:  04 September 2025
+Version updated: 0.10.26
 Python Version: 3.12.11
 
 Description:
@@ -136,7 +136,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 03.September.2025 v0.10.25 (Python 3.12.11)
+vailá - 04.September.2025 v0.10.26 (Python 3.12.11)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -235,7 +235,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 03.September.2025 v0.10.25 (Python 3.12.11)")
+        self.title("vailá - 04.September.2025 v0.10.26 (Python 3.12.11)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -1851,8 +1851,8 @@ class Vaila(tk.Tk):
 
         """
         print("C_A_r1_c2 - def convert_c3d_csv on code line number 1589")
-        from vaila import convert_c3d_to_csv
-        from vaila import convert_csv_to_c3d
+        from vaila.readcsv_export import convert_csv_to_c3d
+        from vaila.readc3d_export import convert_c3d_to_csv
 
         window = Toplevel()
         window.title("Choose Action")

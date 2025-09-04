@@ -575,11 +575,8 @@ def show_csv_open3d(points, marker_names, fps=30):
         marker_names: list of marker names corresponding to the second dimension
         fps: frames per second for animation
     """
-    try:
-        import open3d as o3d
-    except ImportError:
-        print("open3d is not installed. Install it with 'pip install open3d'.")
-        return
+    # Open3D visualization stub - not yet implemented
+    pass
 
     num_frames, num_markers, _ = points.shape
     print(f"Open3D visualization stub: {num_frames} frames, {num_markers} markers.")
@@ -614,7 +611,7 @@ def show_csv_matplotlib(points, marker_names, fps=30):
     num_frames, num_markers, _ = points.shape
     fig = plt.figure(figsize=(10, 8))
     ax = cast(Axes3D, fig.add_subplot(111, projection="3d"))
-    scatter = ax.scatter(
+    ax.scatter(
         points[0, :, 0], points[0, :, 1], points[0, :, 2], c="blue", s=20
     )
     ax.set_title(
@@ -1149,9 +1146,9 @@ def show_csv(file_path=None):
     valid_points_frame0 = points[0][valid_mask]
     
     if len(valid_points_frame0) > 0:
-        scat = ax.scatter(valid_points_frame0[:, 0], valid_points_frame0[:, 1], valid_points_frame0[:, 2], c="blue", s=30)
+        ax.scatter(valid_points_frame0[:, 0], valid_points_frame0[:, 1], valid_points_frame0[:, 2], c="blue", s=30)
     else:
-        scat = ax.scatter(0, 0, 0, c="blue", s=30, alpha=0)
+        ax.scatter(0, 0, 0, c="blue", s=30, alpha=0)
 
     ax.set_xlabel("X")
     ax.set_ylabel("Y")
@@ -1315,7 +1312,6 @@ def show_csv(file_path=None):
     connections = []
 
     # Pre-generate color schemes
-    blue_colors = ['blue'] * num_markers
     multicolor_colors = plt.cm.tab10(np.linspace(0, 1, min(num_markers, 10)))
     if num_markers > 10:
         extra_colors = plt.cm.Set3(np.linspace(0, 1, num_markers - 10))
@@ -1400,7 +1396,7 @@ def show_csv(file_path=None):
             handles, labels = ax.get_legend_handles_labels()
             if handles and labels:  # Only create legend if we have valid handles and labels
                 # Filter out empty labels
-                filtered_handles_labels = [(h, l) for h, l in zip(handles, labels) if l is not None and l != '']
+                filtered_handles_labels = [(h, label) for h, label in zip(handles, labels) if label is not None and label != '']
                 if filtered_handles_labels:
                     filtered_handles, filtered_labels = zip(*filtered_handles_labels)
                     ax.legend(filtered_handles, filtered_labels, loc='upper right', fontsize=8, 
