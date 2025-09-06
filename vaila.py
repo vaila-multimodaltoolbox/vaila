@@ -5,7 +5,7 @@ vaila.py
 Author: Prof. Paulo R. P. Santiago
 Date:  07 October 2024
 Update:  06 September 2025
-Version updated: 0.10.27
+Version updated: 0.11.0
 Python Version: 3.12.11
 
 Description:
@@ -136,7 +136,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 06.September.2025 v0.10.27 (Python 3.12.11)
+vailá - 06.September.2025 v0.11.0 (Python 3.12.11)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -184,7 +184,7 @@ C_A_r4_c1 - ReID Marker   C_A_r4_c2 - vailá          C_A_r4_c3 - vailá
 
 -> C_B: Video and Image
 C_B_r1_c1 - Video<-->PNG  C_B_r1_c2 - vailá          C_B_r1_c3 - Draw Box
-C_B_r2_c1 - CompressH264  C_B_r2_c2 - CompressH265   C_B_r2_c3 - Make Sync file
+C_B_r2_c1 - Compress  C_B_r2_c2 - vailá          C_B_r2_c3 - Make Sync file
 C_B_r3_c1 - GetPixelCoord C_B_r3_c2 - Metadata info  C_B_r3_c3 - Merge Videos
 C_B_r4_c1 - Distort video C_B_r4_c2 - Cut Video      C_B_r4_c3 - Resize Video
 C_B_r5_c1 - YT Downloader C_B_r5_c2 - Insert Audio   C_B_r5_c3 - rm Dup PNG
@@ -235,11 +235,13 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 06.September.2025 v0.10.27 (Python 3.12.11)")
+        self.title("vailá - 06.September.2025 v0.11.0 (Python 3.12.11)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
-
+        
+        self.resizable(False, False)
+        
         # Configure the window icon based on the operating system
         icon_path_ico = os.path.join(
             os.path.dirname(__file__), "vaila", "images", "vaila.ico"
@@ -1008,19 +1010,19 @@ class Vaila(tk.Tk):
             tools_col2, text="Draw Box", command=self.draw_box, width=button_width
         )
 
-        # C_B_r2_c1 - Video: Compress H.264
-        compress_videos_h264_btn = tk.Button(
+        # C_B_r2_c1 - Video: Compress H264, H265, H266
+        compress_videos_gui_btn = tk.Button(
             tools_col2,
-            text="Compress H264",
-            command=self.compress_videos_h264_gui,
+            text="Compress Video",
+            command=self.compress_videos_gui,
             width=button_width,
         )
 
-        # C_B_r2_c2 - Video: Compress H.265
-        compress_videos_h265_btn = tk.Button(
+        # C_B_r2_c2 - Video: vailá
+        vaila_btn_compress = tk.Button(
             tools_col2,
-            text="Compress H265",
-            command=self.compress_videos_h265_gui,
+            text="vailá",
+            command=self.show_vaila_message,
             width=button_width,
         )
 
@@ -1107,8 +1109,8 @@ class Vaila(tk.Tk):
         extract_png_btn.grid(row=0, column=0, padx=2, pady=2)
         vaila_btn_sync.grid(row=0, column=1, padx=2, pady=2)  # Replaced with vaila
         draw_box_btn.grid(row=0, column=2, padx=2, pady=2)
-        compress_videos_h264_btn.grid(row=1, column=0, padx=2, pady=2)
-        compress_videos_h265_btn.grid(row=1, column=1, padx=2, pady=2)
+        compress_videos_gui_btn.grid(row=1, column=0, padx=2, pady=2)
+        vaila_btn_compress.grid(row=1, column=1, padx=2, pady=2)
         make_sync_file_btn.grid(row=1, column=2, padx=2, pady=2)  # Second button
         getpixelvideo_btn.grid(row=2, column=0, padx=2, pady=2)
         count_frames_btn.grid(row=2, column=1, padx=2, pady=2)
@@ -2031,20 +2033,122 @@ class Vaila(tk.Tk):
         drawboxe.run_drawboxe()
 
     # C_B_r2_c1
-    def compress_videos_h264_gui(self):
-        """Runs the video compression module for H.264 format.
+    def compress_videos_gui(self):
+        """Runs the video compression module with format selection dialog.
 
-        This function runs the video compression module for H.264 format, which can be used to
-        compress video files. The module will prompt the user to select the directory containing
-        the video files and input the sample rate and start and end indices for analysis.
+        This function opens a dialog to choose between H.264, H.265, and H.266 compression formats,
+        then launches the appropriate compression module.
 
         """
-        from vaila import compress_videos_h264
+        # Create dialog window for compression format selection
+        dialog = tk.Toplevel(self)
+        dialog.title("Select Video Compression Format")
+        dialog.geometry("400x600")
+        dialog.transient(self)  # Make dialog modal
+        dialog.grab_set()
 
-        compress_videos_h264.compress_videos_h264_gui()
+        # Main frame with padding
+        main_frame = tk.Frame(dialog, padx=20, pady=20)
+        main_frame.pack(fill="both", expand=True)
+
+        # Title
+        tk.Label(
+            main_frame, 
+            text="Select Video Compression Format", 
+            font=("Arial", 14, "bold")
+        ).pack(pady=(0, 20))
+
+        # Description
+        tk.Label(
+            main_frame,
+            text="Choose the compression format for your videos:",
+            font=("Arial", 10)
+        ).pack(pady=(0, 20))
+
+        # Button frame
+        button_frame = tk.Frame(main_frame)
+        button_frame.pack(pady=10)
+
+        def run_h264():
+            dialog.destroy()
+            try:
+                from vaila import compress_videos_h264
+                compress_videos_h264.compress_videos_h264_gui()
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to launch H.264 compression: {e}")
+
+        def run_h265():
+            dialog.destroy()
+            try:
+                from vaila import compress_videos_h265
+                compress_videos_h265.compress_videos_h265_gui()
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to launch H.265 compression: {e}")
+
+        def run_h266():
+            dialog.destroy()
+            try:
+                from vaila import compress_videos_h266
+                compress_videos_h266.compress_videos_h266_gui()
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to launch H.266 compression: {e}")
+
+        # H.264 button
+        h264_btn = tk.Button(
+            button_frame,
+            text="H.264 (AVC)\nFast encoding, larger files",
+            command=run_h264,
+            width=25,
+            height=3,
+            font=("Arial", 10)
+        )
+        h264_btn.pack(pady=5)
+
+        # H.265 button
+        h265_btn = tk.Button(
+            button_frame,
+            text="H.265 (HEVC)\nSlower encoding, smaller files",
+            command=run_h265,
+            width=25,
+            height=3,
+            font=("Arial", 10)
+        )
+        h265_btn.pack(pady=5)
+
+        # H.266 button
+        h266_btn = tk.Button(
+            button_frame,
+            text="H.266 (VVC)\nVery slow encoding, smallest files",
+            command=run_h266,
+            width=25,
+            height=3,
+            font=("Arial", 10)
+        )
+        h266_btn.pack(pady=5)
+
+        # Cancel button
+        cancel_btn = tk.Button(
+            button_frame,
+            text="Cancel",
+            command=dialog.destroy,
+            width=15,
+            height=2
+        )
+        cancel_btn.pack(pady=10)
+
+        # Center the dialog on screen
+        dialog.update_idletasks()
+        width = dialog.winfo_width()
+        height = dialog.winfo_height()
+        x = (dialog.winfo_screenwidth() // 2) - (width // 2)
+        y = (dialog.winfo_screenheight() // 2) - (height // 2)
+        dialog.geometry(f"{width}x{height}+{x}+{y}")
+
+        # Wait for the dialog to be closed
+        self.wait_window(dialog)
 
     # C_B_r2_c2
-    def compress_videos_h265_gui(self):
+    def vaila_gui(self):
         """Runs the video compression module for H.265 format.
 
         This function runs the video compression module for H.265 format, which can be used to
@@ -2052,9 +2156,9 @@ class Vaila(tk.Tk):
         the video files and input the sample rate and start and end indices for analysis.
 
         """
-        from vaila import compress_videos_h265
+        from vaila import vaila
 
-        compress_videos_h265.compress_videos_h265_gui()
+        vaila.vaila_gui()
 
     # C_B_r2_c3
     def sync_videos(self):
