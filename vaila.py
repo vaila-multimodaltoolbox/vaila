@@ -4,8 +4,8 @@ vaila.py
 ===============================================================================
 Author: Prof. Paulo R. P. Santiago
 Date:  07 October 2024
-Update:  04 September 2025
-Version updated: 0.10.26
+Update:  06 September 2025
+Version updated: 0.10.27
 Python Version: 3.12.11
 
 Description:
@@ -136,7 +136,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 04.September.2025 v0.10.26 (Python 3.12.11)
+vailá - 06.September.2025 v0.10.27 (Python 3.12.11)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -235,7 +235,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 04.September.2025 v0.10.26 (Python 3.12.11)")
+        self.title("vailá - 06.September.2025 v0.10.27 (Python 3.12.11)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -273,7 +273,7 @@ class Vaila(tk.Tk):
         Adjusts the window dimensions, button width, and font size based on the operating system.
         """
         if platform.system() == "Darwin":  # macOS
-            self.geometry("1920x1080")  # Wider window for macOS
+            self.geometry("1024x920")  # Wider window for macOS
             self.button_width = 12  # Slightly wider buttons
             self.font_size = 11  # Standard font size
         elif platform.system() == "Windows":  # Windows
