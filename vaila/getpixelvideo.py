@@ -841,19 +841,12 @@ def play_video_with_controls(video_path, coordinates=None):
         # Fazer backup do atual antes de carregar um novo
         make_backup()
 
-        # Use simple tkinter dialog like in cutvideo.py
-        from tkinter import filedialog, Tk
-        
-        root = Tk()
-        root.withdraw()
-        
-        input_file = filedialog.askopenfilename(
-            title="Select Keypoints File",
-            filetypes=[("CSV Files", "*.csv"), ("All files", "*.*")],
-            initialdir=os.path.dirname(video_path) if video_path else None
+        # Use subprocess to avoid GNOME freezing (same as cutvideo.py approach)
+        input_file = run_file_dialog_subprocess(
+            "Select Keypoints File",
+            [("CSV Files", "*.csv"), ("All files", "*.*")],
+            os.path.dirname(video_path) if video_path else None
         )
-        
-        root.destroy()
         
         if not input_file:
             save_message_text = "Loading canceled."
