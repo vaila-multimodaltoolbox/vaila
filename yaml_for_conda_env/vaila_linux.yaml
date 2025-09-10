@@ -80,7 +80,7 @@ dependencies:
       - ezc3d
       - h5py
       - paramiko
-      - pykalman==0.10.0
+      - pykalman
       - scp
       - spm1d
       - ydata_profiling
