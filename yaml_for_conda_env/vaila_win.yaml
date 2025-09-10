@@ -83,7 +83,7 @@ dependencies:
       - paramiko
       - scp
       - spm1d
-      - pykalman==0.10.0
+      - pykalman
       - ydata_profiling
       - 'xonsh[full]'
       - boxmot
