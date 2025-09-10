@@ -6,8 +6,8 @@ vailá - Multimodal Toolbox
 Author: Prof. Dr. Paulo R. P. Santiago
 https://github.com/paulopreto/vaila-multimodaltoolbox
 Date: 22 July 2025
-Update: 29 July 2025
-Version: 0.0.8
+Update: 10 September 2025
+Version: 0.0.9
 Python Version: 3.12.11
 
 Description:
@@ -39,8 +39,34 @@ python getpixelvideo.py
 import os
 from pathlib import Path
 from rich import print
-import pygame
-import cv2
+
+# Configure SDL environment variables BEFORE importing pygame
+# to prevent EGL/OpenGL warnings on Linux systems
+import platform
+import sys
+import io
+from contextlib import redirect_stderr
+
+if platform.system() == 'Linux':
+    os.environ['SDL_VIDEODRIVER'] = 'x11'
+    os.environ['SDL_RENDER_DRIVER'] = 'software'
+    # Additional variables to suppress OpenGL/EGL warnings
+    os.environ['LIBGL_ALWAYS_SOFTWARE'] = '1'
+    os.environ['SDL_VIDEO_X11_FORCE_EGL'] = '0'
+    os.environ['QT_LOGGING_RULES'] = '*.debug=false;qt.qpa.*=false'
+    
+    # Suppress stderr during imports to hide EGL warnings
+    # These warnings come from both pygame and cv2 on some Linux systems
+    f = io.StringIO()
+    with redirect_stderr(f):
+        import pygame
+        import cv2
+    
+    # Import cv2 again normally to ensure it's available in the global scope
+    import cv2
+else:
+    import pygame
+    import cv2
 import pandas as pd
 import numpy as np
 from tkinter import Tk, filedialog, messagebox
@@ -586,7 +612,7 @@ def play_video_with_controls(video_path, coordinates=None):
         nonlocal coordinates, one_line_markers, selected_marker_idx, showing_save_message, save_message_timer, save_message_text
 
         if one_line_mode:
-            # No modo 1 line, encontrar o maior número de marcador visível
+            # In one-line mode, find the largest visible marker index
             visible_markers = []
             for idx, _ in enumerate(one_line_markers):
                 if idx not in deleted_markers:
@@ -597,15 +623,15 @@ def play_video_with_controls(video_path, coordinates=None):
             else:
                 new_idx = 0
 
-            # Adicionar marcador vazio no frame atual (usando None em vez de 0,0)
+            # Add empty marker at the current frame (using None instead of 0,0)
             one_line_markers.append((frame_count, None, None))
             selected_marker_idx = new_idx
 
-            save_message_text = f"Adicionado novo marcador vazio {new_idx+1}"
+            save_message_text = f"Added new empty marker {new_idx+1}"
             showing_save_message = True
             save_message_timer = 60
         else:
-            # No modo normal, vamos verificar o número máximo de marcadores visíveis
+            # In normal mode, we'll check the maximum number of visible markers
             max_visible_marker = -1
 
             for frame in range(total_frames):
@@ -615,74 +641,74 @@ def play_video_with_controls(video_path, coordinates=None):
 
             new_marker_idx = max_visible_marker + 1
 
-            # Adicionar mais um marcador a cada frame com posição vazia (None, None)
+            # Add one more marker at each frame with empty position (None, None)
             for frame in range(total_frames):
                 while len(coordinates[frame]) <= new_marker_idx:
                     coordinates[frame].append((None, None))
 
-                # Adicione o marcador como "deletado" em todos os frames exceto o atual
+                # Add the marker as "deleted" in all frames except the current one
                 if frame != frame_count:
                     deleted_positions[frame].add(new_marker_idx)
 
-            # Remova o marcador da lista de deletados no frame atual para torná-lo visível
+            # Remove the marker from the deleted list in the current frame to make it visible
             if new_marker_idx in deleted_positions[frame_count]:
                 deleted_positions[frame_count].remove(new_marker_idx)
 
-            # Selecione o novo marcador adicionado
+            # Select the new added marker
             selected_marker_idx = new_marker_idx
 
-            save_message_text = f"Adicionado novo marcador vazio {new_marker_idx+1}"
+            save_message_text = f"Added new empty marker {new_marker_idx+1}"
             showing_save_message = True
             save_message_timer = 60
 
-        # Fazer backup automático do arquivo original
+        # Make automatic backup of the original file
         make_backup()
 
     def remove_marker():
-        """Remove o marcador selecionado apenas no frame atual"""
+        """Remove the selected marker only in the current frame"""
         nonlocal coordinates, one_line_markers, selected_marker_idx, showing_save_message, save_message_timer, save_message_text
 
         if one_line_mode:
             if selected_marker_idx >= 0:
-                # Encontre e remova o marcador selecionado apenas no frame atual
+                # Find and remove the selected marker only in the current frame
                 for i, (f_num, _, _) in enumerate(one_line_markers):
                     if i == selected_marker_idx and f_num == frame_count:
-                        # Em vez de remover completamente, adicione à lista de marcadores deletados
+                        # Instead of removing completely, add to the deleted markers list
                         deleted_markers.add(selected_marker_idx)
                         save_message_text = (
-                            f"Removido marcador {selected_marker_idx+1} no frame atual"
+                            f"Removed marker {selected_marker_idx+1} in the current frame"
                         )
                         showing_save_message = True
                         save_message_timer = 60
                         break
             else:
-                save_message_text = "Nenhum marcador selecionado para remover"
+                save_message_text = "No marker selected to remove"
                 showing_save_message = True
                 save_message_timer = 60
         else:
             if selected_marker_idx >= 0:
-                # Adicione o marcador selecionado à lista de deletados apenas no frame atual
+                # Add the selected marker to the deleted list only in the current frame
                 if selected_marker_idx < len(coordinates[frame_count]):
                     deleted_positions[frame_count].add(selected_marker_idx)
                     save_message_text = (
-                        f"Removido marcador {selected_marker_idx+1} no frame atual"
+                    f"Removed marker {selected_marker_idx+1} in the current frame"
                     )
                     showing_save_message = True
                     save_message_timer = 60
                 else:
-                    save_message_text = "Marcador não existe neste frame"
+                    save_message_text = "Marker does not exist in this frame"
                     showing_save_message = True
                     save_message_timer = 60
             else:
-                save_message_text = "Nenhum marcador selecionado para remover"
+                save_message_text = "No marker selected to remove"
                 showing_save_message = True
                 save_message_timer = 60
 
-        # Fazer backup automático do arquivo original
+        # Make automatic backup of the original file
         make_backup()
 
     def make_backup():
-        """Faz um backup do arquivo original de coordenadas com timestamp"""
+        """Make a backup of the original coordinates file with timestamp"""
         if not os.path.exists(video_path):
             return
 
@@ -692,7 +718,7 @@ def play_video_with_controls(video_path, coordinates=None):
         # Get current timestamp
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-        # Verifica se existe um arquivo de coordenadas normal
+        # Check if there is a normal coordinates file
         coords_file = os.path.join(video_dir, f"{base_name}_markers.csv")
         if os.path.exists(coords_file):
             backup_file = os.path.join(
@@ -704,9 +730,9 @@ def play_video_with_controls(video_path, coordinates=None):
                 shutil.copy2(coords_file, backup_file)
                 print(f"Backup created: {backup_file}")
             except Exception as e:
-                print(f"Erro ao fazer backup: {e}")
+                print(f"Error making backup: {e}")
 
-        # Verifica se existe arquivo sequential
+        # Check if there is a sequential file
         seq_file = os.path.join(video_dir, f"{base_name}_markers_sequential.csv")
         if os.path.exists(seq_file):
             backup_file = os.path.join(
@@ -718,9 +744,9 @@ def play_video_with_controls(video_path, coordinates=None):
                 shutil.copy2(seq_file, backup_file)
                 print(f"Sequential backup created: {backup_file}")
             except Exception as e:
-                print(f"Erro ao fazer backup sequential: {e}")
+                print(f"Error making sequential backup: {e}")
 
-        # Também verifica o arquivo de 1 line
+        # Also check the 1 line file
         line_file = os.path.join(video_dir, f"{base_name}_markers_1_line.csv")
         if os.path.exists(line_file):
             backup_file = os.path.join(
@@ -738,16 +764,19 @@ def play_video_with_controls(video_path, coordinates=None):
         """Load a new coordinates file during execution"""
         nonlocal coordinates, one_line_markers, deleted_markers, deleted_positions, selected_marker_idx, one_line_mode, save_message_text, showing_save_message, save_message_timer
 
-        # Fazer backup do atual antes de carregar um novo
+        # Make backup of the current before loading a new one
         make_backup()
 
-        # Criar uma nova instância do Tkinter para o diálogo de arquivo
+        # Create a new instance of Tkinter for the file dialog
         root = Tk()
         root.withdraw()
+        root.update()  # Force update of the window on Linux
         input_file = filedialog.askopenfilename(
             title="Select Keypoints File",
             filetypes=[("CSV Files", "*.csv")],
         )
+        root.destroy()  # Destroy the Tkinter instance to avoid conflicts
+        
         if not input_file:
             save_message_text = "Loading canceled."
             showing_save_message = True
@@ -774,7 +803,7 @@ def play_video_with_controls(video_path, coordinates=None):
                                 )
 
                 save_message_text = (
-                    f"Carregado arquivo de 1 line: {os.path.basename(input_file)}"
+                    f"Loaded 1 line file: {os.path.basename(input_file)}"
                 )
                 # If it was in normal mode, switch to 1 line mode
                 one_line_mode = True
@@ -785,14 +814,14 @@ def play_video_with_controls(video_path, coordinates=None):
 
                 for _, row in df.iterrows():
                     frame_num = int(row["frame"])
-                    for i in range(1, 1001):  # Aumentado para suportar até 1000 marcadores
+                    for i in range(1, 1001):  # Increased to support up to 1000 markers
                         x_col = f"p{i}_x"
                         y_col = f"p{i}_y"
                         if x_col in df.columns and y_col in df.columns:
                             if pd.notna(row[x_col]) and pd.notna(row[y_col]):
                                 coordinates[frame_num].append((row[x_col], row[y_col]))
 
-                save_message_text = f"Carregado arquivo: {os.path.basename(input_file)}"
+                save_message_text = f"Loaded file: {os.path.basename(input_file)}"
                 # If it was in 1 line mode, switch to normal mode
                 one_line_mode = False
 
@@ -803,7 +832,7 @@ def play_video_with_controls(video_path, coordinates=None):
             save_message_timer = 90
 
         except Exception as e:
-            save_message_text = f"Erro ao carregar arquivo: {e}"
+            save_message_text = f"Error loading file: {e}"
             showing_save_message = True
             save_message_timer = 90
 
@@ -1575,10 +1604,13 @@ def play_video_with_controls(video_path, coordinates=None):
 def load_coordinates_from_file(total_frames, video_width=None, video_height=None):
     root = Tk()
     root.withdraw()
+    root.update()  # Força atualização da janela no Linux
     input_file = filedialog.askopenfilename(
         title="Select Keypoint File",
         filetypes=[("CSV Files", "*.csv")],
     )
+    root.destroy()  # Destroi a instância do Tkinter para evitar conflitos
+    
     if not input_file:
         print("No keypoint file selected. Starting fresh.")
         return {i: [] for i in range(total_frames)}
@@ -1686,10 +1718,8 @@ def save_coordinates(
                     df.at[frame_num, f"p{i+1}_y"] = float(y)
                 # Se for None, deixar como NaN (o que se tornará "" no CSV)
 
-    # Substitui os valores NaN por strings vazias.
-    df.fillna("", inplace=True)
-
-    df.to_csv(output_file, index=False)
+    # Salva o CSV com valores NaN representados como strings vazias
+    df.to_csv(output_file, index=False, na_rep="")
     print(f"Coordinates saved to: {output_file}")
     return output_file
 
@@ -1697,10 +1727,12 @@ def save_coordinates(
 def get_video_path():
     root = Tk()
     root.withdraw()
+    root.update()  # Força atualização da janela no Linux
     video_path = filedialog.askopenfilename(
         title="Select Video File",
         filetypes=[("Video Files", "*.mp4 *.MP4 *.avi *.AVI *.mov *.MOV *.mkv *.MKV")],
     )
+    root.destroy()  # Destroi a instância do Tkinter para evitar conflitos
     return video_path
 
 
@@ -1716,10 +1748,15 @@ def run_getpixelvideo():
         print("No video selected. Exiting.")
         return
 
+    # Create Tkinter root for messagebox
+    root = Tk()
+    root.withdraw()
+    root.update()  # Force update of the window on Linux
     load_existing = messagebox.askyesno(
         "Load Existing Keypoints",
         "Do you want to load existing keypoints from a saved file?",
     )
+    root.destroy()  # Destroy the Tkinter instance to avoid conflicts
 
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
