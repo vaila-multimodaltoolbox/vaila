@@ -74,8 +74,6 @@ def play_video_with_controls(video_path, coordinates=None):
     original_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     original_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    vw = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    vh = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = int(cap.get(cv2.CAP_PROP_FPS))
 
     # Initialize Pygame
@@ -744,6 +742,15 @@ def play_video_with_controls(video_path, coordinates=None):
         # Criar uma nova instância do Tkinter para o diálogo de arquivo
         root = Tk()
         root.withdraw()
+        
+        # Fix for Linux/GNOME GUI freezing issues
+        try:
+            root.attributes('-topmost', True)
+            root.update()
+            root.attributes('-topmost', False)
+        except Exception:
+            pass
+            
         input_file = filedialog.askopenfilename(
             title="Select Keypoints File",
             filetypes=[("CSV Files", "*.csv")],
@@ -1575,6 +1582,15 @@ def play_video_with_controls(video_path, coordinates=None):
 def load_coordinates_from_file(total_frames, video_width=None, video_height=None):
     root = Tk()
     root.withdraw()
+    
+    # Fix for Linux/GNOME GUI freezing issues
+    try:
+        root.attributes('-topmost', True)
+        root.update()
+        root.attributes('-topmost', False)
+    except Exception:
+        pass
+        
     input_file = filedialog.askopenfilename(
         title="Select Keypoint File",
         filetypes=[("CSV Files", "*.csv")],
@@ -1697,6 +1713,15 @@ def save_coordinates(
 def get_video_path():
     root = Tk()
     root.withdraw()
+    
+    # Fix for Linux/GNOME GUI freezing issues
+    try:
+        root.attributes('-topmost', True)
+        root.update()
+        root.attributes('-topmost', False)
+    except Exception:
+        pass
+        
     video_path = filedialog.askopenfilename(
         title="Select Video File",
         filetypes=[("Video Files", "*.mp4 *.MP4 *.avi *.AVI *.mov *.MOV *.mkv *.MKV")],
@@ -1716,6 +1741,18 @@ def run_getpixelvideo():
         print("No video selected. Exiting.")
         return
 
+    # Create root for messagebox to prevent Linux/GNOME freezing
+    root = Tk()
+    root.withdraw()
+    
+    # Fix for Linux/GNOME GUI freezing issues
+    try:
+        root.attributes('-topmost', True)
+        root.update()
+        root.attributes('-topmost', False)
+    except Exception:
+        pass
+    
     load_existing = messagebox.askyesno(
         "Load Existing Keypoints",
         "Do you want to load existing keypoints from a saved file?",
@@ -1726,12 +1763,12 @@ def run_getpixelvideo():
         print("Error opening video file.")
         return
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    vw = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    vh = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    video_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    video_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     cap.release()
 
     if load_existing:
-        coordinates = load_coordinates_from_file(total_frames, vw, vh)
+        coordinates = load_coordinates_from_file(total_frames, video_width, video_height)
     else:
         coordinates = None
 
