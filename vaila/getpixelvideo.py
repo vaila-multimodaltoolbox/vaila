@@ -6,8 +6,8 @@ vailá - Multimodal Toolbox
 Author: Prof. Dr. Paulo R. P. Santiago
 https://github.com/paulopreto/vaila-multimodaltoolbox
 Date: 22 July 2025
-Update: 09 September 2025
-Version: 0.0.9
+Update: 29 July 2025
+Version: 0.0.8
 Python Version: 3.12.11
 
 Description:
@@ -19,16 +19,15 @@ points, and save results in CSV format.
 
 New Features in This Version:
 ------------------------------
-1. Direct video loading without initial keypoint prompts.
-2. Load keypoints anytime using the Load button.
+1. Prompts the user to load existing keypoints from a saved file before starting.
+2. Allows the user to choose the keypoint file via a file dialog.
 3. Select keypoint number in the video frame.
-4. Speed in play automarker.
-5. Auto-timeout after 60 seconds if no video is selected.
+4. Speed in play automarker
 
 How to use:
 ------------
 1. Select the video file to process.
-2. Optionally load existing keypoints using the Load button.
+2. Select the keypoint file to load.
 3. Mark points in the video frame.
 4. Save the results in CSV format.
 
@@ -38,115 +37,14 @@ python getpixelvideo.py
 """
 
 import os
-import sys
 from pathlib import Path
 from rich import print
 import pygame
 import cv2
 import pandas as pd
 import numpy as np
-import subprocess
-import tempfile
-import json
+from tkinter import Tk, filedialog, messagebox
 from datetime import datetime
-
-
-def run_file_dialog_subprocess(title, filetypes, initial_dir=None):
-    """Run file dialog in a separate subprocess to avoid GNOME freezing"""
-    script_content = f'''
-import tkinter as tk
-from tkinter import filedialog
-import sys
-import json
-
-root = tk.Tk()
-root.withdraw()
-
-try:
-    file_path = filedialog.askopenfilename(
-        title="{title}",
-        filetypes={filetypes},
-        initialdir="{initial_dir or os.getcwd()}"
-    )
-    result = {{"success": True, "file_path": file_path}}
-except Exception as e:
-    result = {{"success": False, "error": str(e)}}
-
-print(json.dumps(result))
-sys.stdout.flush()
-root.destroy()
-'''
-    
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
-        f.write(script_content)
-        temp_script = f.name
-    
-    try:
-        result = subprocess.run([sys.executable, temp_script], 
-                              capture_output=True, text=True, timeout=30)
-        if result.returncode == 0:
-            output = result.stdout.strip()
-            if output:
-                data = json.loads(output)
-                if data["success"]:
-                    return data["file_path"] if data["file_path"] else None
-        return None
-    except Exception:
-        return None
-    finally:
-        try:
-            os.unlink(temp_script)
-        except Exception:
-            pass
-
-
-def run_messagebox_subprocess(title, message, msg_type="yesno"):
-    """Run messagebox in a separate subprocess to avoid GNOME freezing"""
-    script_content = f'''
-import tkinter as tk
-from tkinter import messagebox
-import sys
-import json
-
-root = tk.Tk()
-root.withdraw()
-
-try:
-    if "{msg_type}" == "yesno":
-        result = messagebox.askyesno("{title}", "{message}")
-    else:
-        result = messagebox.askokcancel("{title}", "{message}")
-    
-    data = {{"success": True, "result": result}}
-except Exception as e:
-    data = {{"success": False, "error": str(e)}}
-
-print(json.dumps(data))
-sys.stdout.flush()
-root.destroy()
-'''
-    
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
-        f.write(script_content)
-        temp_script = f.name
-    
-    try:
-        result = subprocess.run([sys.executable, temp_script], 
-                              capture_output=True, text=True, timeout=30)
-        if result.returncode == 0:
-            output = result.stdout.strip()
-            if output:
-                data = json.loads(output)
-                if data["success"]:
-                    return data["result"]
-        return False
-    except Exception:
-        return False
-    finally:
-        try:
-            os.unlink(temp_script)
-        except Exception:
-            pass
 
 
 def get_color_for_id(marker_id):
@@ -176,6 +74,8 @@ def play_video_with_controls(video_path, coordinates=None):
     original_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     original_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    vw = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    vh = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = int(cap.get(cv2.CAP_PROP_FPS))
 
     # Initialize Pygame
@@ -841,13 +741,13 @@ def play_video_with_controls(video_path, coordinates=None):
         # Fazer backup do atual antes de carregar um novo
         make_backup()
 
-        # Use subprocess to avoid GNOME freezing (same as cutvideo.py approach)
-        input_file = run_file_dialog_subprocess(
-            "Select Keypoints File",
-            [("CSV Files", "*.csv"), ("All files", "*.*")],
-            os.path.dirname(video_path) if video_path else None
+        # Criar uma nova instância do Tkinter para o diálogo de arquivo
+        root = Tk()
+        root.withdraw()
+        input_file = filedialog.askopenfilename(
+            title="Select Keypoints File",
+            filetypes=[("CSV Files", "*.csv")],
         )
-        
         if not input_file:
             save_message_text = "Loading canceled."
             showing_save_message = True
@@ -1673,18 +1573,12 @@ def play_video_with_controls(video_path, coordinates=None):
         print("Coordinates were not saved.")
 
 def load_coordinates_from_file(total_frames, video_width=None, video_height=None):
-    # Use simple tkinter dialog like in cutvideo.py
-    from tkinter import filedialog, Tk
-    
     root = Tk()
     root.withdraw()
-    
     input_file = filedialog.askopenfilename(
         title="Select Keypoint File",
-        filetypes=[("CSV Files", "*.csv"), ("All files", "*.*")]
+        filetypes=[("CSV Files", "*.csv")],
     )
-    
-    root.destroy()
     if not input_file:
         print("No keypoint file selected. Starting fresh.")
         return {i: [] for i in range(total_frames)}
@@ -1801,42 +1695,12 @@ def save_coordinates(
 
 
 def get_video_path():
-    # Use simple tkinter dialog like in cutvideo.py
-    from tkinter import filedialog, Tk
-    import threading
-    import time
-    
-    video_path = None
-    dialog_closed = False
-    
-    def open_dialog():
-        nonlocal video_path, dialog_closed
-        root = Tk()
-        root.withdraw()
-        
-        video_path = filedialog.askopenfilename(
-            title="Select Video File",
-            filetypes=[("Video Files", "*.mp4 *.MP4 *.avi *.AVI *.mov *.MOV *.mkv *.MKV"), ("All files", "*.*")]
-        )
-        
-        root.destroy()
-        dialog_closed = True
-    
-    # Start dialog in a separate thread
-    dialog_thread = threading.Thread(target=open_dialog, daemon=True)
-    dialog_thread.start()
-    
-    # Wait for dialog to close or timeout after 60 seconds
-    timeout = 60
-    start_time = time.time()
-    
-    while not dialog_closed and (time.time() - start_time) < timeout:
-        time.sleep(0.1)
-    
-    if not dialog_closed:
-        print("Video selection timeout after 60 seconds. Exiting...")
-        return None
-    
+    root = Tk()
+    root.withdraw()
+    video_path = filedialog.askopenfilename(
+        title="Select Video File",
+        filetypes=[("Video Files", "*.mp4 *.MP4 *.avi *.AVI *.mov *.MOV *.mkv *.MKV")],
+    )
     return video_path
 
 
@@ -1852,14 +1716,24 @@ def run_getpixelvideo():
         print("No video selected. Exiting.")
         return
 
+    load_existing = messagebox.askyesno(
+        "Load Existing Keypoints",
+        "Do you want to load existing keypoints from a saved file?",
+    )
+
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         print("Error opening video file.")
         return
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    vw = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    vh = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     cap.release()
 
-    # Start fresh - user can load coordinates later using the Load button
-    coordinates = None
+    if load_existing:
+        coordinates = load_coordinates_from_file(total_frames, vw, vh)
+    else:
+        coordinates = None
 
     play_video_with_controls(video_path, coordinates)
 
