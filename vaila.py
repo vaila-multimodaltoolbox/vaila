@@ -2185,9 +2185,18 @@ class Vaila(tk.Tk):
         and sample rate for analysis.
 
         """
-        from vaila import getpixelvideo
-
-        getpixelvideo.run_getpixelvideo()
+        try:
+            # Launch in separate process to avoid Tkinter conflicts
+            subprocess.Popen([sys.executable, "-m", "vaila.getpixelvideo"])
+        except Exception as e:
+            print(f"Error launching getpixelvideo: {e}")
+            # Fallback: try to run the script file directly
+            try:
+                script_path = os.path.join(os.path.dirname(__file__), "vaila", "getpixelvideo.py")
+                subprocess.Popen([sys.executable, script_path])
+            except Exception as e2:
+                print(f"Fallback also failed: {e2}")
+                messagebox.showerror("Error", f"Could not launch getpixelvideo module:\n{e}\n\n{e2}")
 
     # C_B_r3_c2
     def count_frames_in_videos(self):
