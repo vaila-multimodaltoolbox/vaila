@@ -37,14 +37,115 @@ python getpixelvideo.py
 """
 
 import os
+import sys
 from pathlib import Path
 from rich import print
 import pygame
 import cv2
 import pandas as pd
 import numpy as np
-from tkinter import Tk, filedialog, messagebox
+import subprocess
+import tempfile
+import json
 from datetime import datetime
+
+
+def run_file_dialog_subprocess(title, filetypes, initial_dir=None):
+    """Run file dialog in a separate subprocess to avoid GNOME freezing"""
+    script_content = f'''
+import tkinter as tk
+from tkinter import filedialog
+import sys
+import json
+
+root = tk.Tk()
+root.withdraw()
+
+try:
+    file_path = filedialog.askopenfilename(
+        title="{title}",
+        filetypes={filetypes},
+        initialdir="{initial_dir or os.getcwd()}"
+    )
+    result = {{"success": True, "file_path": file_path}}
+except Exception as e:
+    result = {{"success": False, "error": str(e)}}
+
+print(json.dumps(result))
+sys.stdout.flush()
+root.destroy()
+'''
+    
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+        f.write(script_content)
+        temp_script = f.name
+    
+    try:
+        result = subprocess.run([sys.executable, temp_script], 
+                              capture_output=True, text=True, timeout=30)
+        if result.returncode == 0:
+            output = result.stdout.strip()
+            if output:
+                data = json.loads(output)
+                if data["success"]:
+                    return data["file_path"] if data["file_path"] else None
+        return None
+    except Exception:
+        return None
+    finally:
+        try:
+            os.unlink(temp_script)
+        except Exception:
+            pass
+
+
+def run_messagebox_subprocess(title, message, msg_type="yesno"):
+    """Run messagebox in a separate subprocess to avoid GNOME freezing"""
+    script_content = f'''
+import tkinter as tk
+from tkinter import messagebox
+import sys
+import json
+
+root = tk.Tk()
+root.withdraw()
+
+try:
+    if "{msg_type}" == "yesno":
+        result = messagebox.askyesno("{title}", "{message}")
+    else:
+        result = messagebox.askokcancel("{title}", "{message}")
+    
+    data = {{"success": True, "result": result}}
+except Exception as e:
+    data = {{"success": False, "error": str(e)}}
+
+print(json.dumps(data))
+sys.stdout.flush()
+root.destroy()
+'''
+    
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+        f.write(script_content)
+        temp_script = f.name
+    
+    try:
+        result = subprocess.run([sys.executable, temp_script], 
+                              capture_output=True, text=True, timeout=30)
+        if result.returncode == 0:
+            output = result.stdout.strip()
+            if output:
+                data = json.loads(output)
+                if data["success"]:
+                    return data["result"]
+        return False
+    except Exception:
+        return False
+    finally:
+        try:
+            os.unlink(temp_script)
+        except Exception:
+            pass
 
 
 def get_color_for_id(marker_id):
@@ -739,23 +840,11 @@ def play_video_with_controls(video_path, coordinates=None):
         # Fazer backup do atual antes de carregar um novo
         make_backup()
 
-        # Criar uma nova instância do Tkinter para o diálogo de arquivo
-        root = Tk()
-        root.withdraw()
-        
-        # Fix for Linux/GNOME GUI freezing issues
-        try:
-            root.attributes('-topmost', True)
-            root.update()
-            root.attributes('-topmost', False)
-        except Exception:
-            pass
-            
-        input_file = filedialog.askopenfilename(
-            title="Select Keypoints File",
-            filetypes=[("CSV Files", "*.csv")],
+        # Use subprocess to avoid GNOME freezing
+        input_file = run_file_dialog_subprocess(
+            "Select Keypoints File",
+            [("CSV Files", "*.csv")]
         )
-        root.destroy()  # Close the Tkinter window to prevent blocking
         if not input_file:
             save_message_text = "Loading canceled."
             showing_save_message = True
@@ -1581,22 +1670,11 @@ def play_video_with_controls(video_path, coordinates=None):
         print("Coordinates were not saved.")
 
 def load_coordinates_from_file(total_frames, video_width=None, video_height=None):
-    root = Tk()
-    root.withdraw()
-    
-    # Fix for Linux/GNOME GUI freezing issues
-    try:
-        root.attributes('-topmost', True)
-        root.update()
-        root.attributes('-topmost', False)
-    except Exception:
-        pass
-        
-    input_file = filedialog.askopenfilename(
-        title="Select Keypoint File",
-        filetypes=[("CSV Files", "*.csv")],
+    # Use subprocess to avoid GNOME freezing
+    input_file = run_file_dialog_subprocess(
+        "Select Keypoint File",
+        [("CSV Files", "*.csv")]
     )
-    root.destroy()  # Close the Tkinter window to prevent blocking
     if not input_file:
         print("No keypoint file selected. Starting fresh.")
         return {i: [] for i in range(total_frames)}
@@ -1713,22 +1791,11 @@ def save_coordinates(
 
 
 def get_video_path():
-    root = Tk()
-    root.withdraw()
-    
-    # Fix for Linux/GNOME GUI freezing issues
-    try:
-        root.attributes('-topmost', True)
-        root.update()
-        root.attributes('-topmost', False)
-    except Exception:
-        pass
-        
-    video_path = filedialog.askopenfilename(
-        title="Select Video File",
-        filetypes=[("Video Files", "*.mp4 *.MP4 *.avi *.AVI *.mov *.MOV *.mkv *.MKV")],
+    # Use subprocess to avoid GNOME freezing
+    video_path = run_file_dialog_subprocess(
+        "Select Video File",
+        [("Video Files", "*.mp4 *.MP4 *.avi *.AVI *.mov *.MOV *.mkv *.MKV")]
     )
-    root.destroy()  # Close the Tkinter window to prevent blocking
     return video_path
 
 
@@ -1744,23 +1811,12 @@ def run_getpixelvideo():
         print("No video selected. Exiting.")
         return
 
-    # Create root for messagebox to prevent Linux/GNOME freezing
-    root = Tk()
-    root.withdraw()
-    
-    # Fix for Linux/GNOME GUI freezing issues
-    try:
-        root.attributes('-topmost', True)
-        root.update()
-        root.attributes('-topmost', False)
-    except Exception:
-        pass
-    
-    load_existing = messagebox.askyesno(
+    # Use subprocess to avoid GNOME freezing
+    load_existing = run_messagebox_subprocess(
         "Load Existing Keypoints",
         "Do you want to load existing keypoints from a saved file?",
+        "yesno"
     )
-    root.destroy()  # Close the Tkinter window to prevent blocking
 
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
