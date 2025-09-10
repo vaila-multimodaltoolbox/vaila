@@ -22,7 +22,8 @@ New Features in This Version:
 1. Direct video loading without initial keypoint prompts.
 2. Load keypoints anytime using the Load button.
 3. Select keypoint number in the video frame.
-4. Speed in play automarker
+4. Speed in play automarker.
+5. Auto-timeout after 60 seconds if no video is selected.
 
 How to use:
 ------------
@@ -1809,16 +1810,40 @@ def save_coordinates(
 def get_video_path():
     # Use simple tkinter dialog like in cutvideo.py
     from tkinter import filedialog, Tk
+    import threading
+    import time
     
-    root = Tk()
-    root.withdraw()
+    video_path = None
+    dialog_closed = False
     
-    video_path = filedialog.askopenfilename(
-        title="Select Video File",
-        filetypes=[("Video Files", "*.mp4 *.MP4 *.avi *.AVI *.mov *.MOV *.mkv *.MKV"), ("All files", "*.*")]
-    )
+    def open_dialog():
+        nonlocal video_path, dialog_closed
+        root = Tk()
+        root.withdraw()
+        
+        video_path = filedialog.askopenfilename(
+            title="Select Video File",
+            filetypes=[("Video Files", "*.mp4 *.MP4 *.avi *.AVI *.mov *.MOV *.mkv *.MKV"), ("All files", "*.*")]
+        )
+        
+        root.destroy()
+        dialog_closed = True
     
-    root.destroy()
+    # Start dialog in a separate thread
+    dialog_thread = threading.Thread(target=open_dialog, daemon=True)
+    dialog_thread.start()
+    
+    # Wait for dialog to close or timeout after 60 seconds
+    timeout = 60
+    start_time = time.time()
+    
+    while not dialog_closed and (time.time() - start_time) < timeout:
+        time.sleep(0.1)
+    
+    if not dialog_closed:
+        print("Video selection timeout after 60 seconds. Exiting...")
+        return None
+    
     return video_path
 
 
