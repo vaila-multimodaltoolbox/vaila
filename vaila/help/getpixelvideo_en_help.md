@@ -78,6 +78,7 @@ Used for object tracking and detection data.
 **Format:** `Frame, Tracker ID, Label, X_min, Y_min, X_max, Y_max, Confidence, Color_R, Color_G, Color_B`
 
 **Example:**
+
 ```csv
 Frame,Tracker ID,Label,X_min,Y_min,X_max,Y_max,Confidence,Color_R,Color_G,Color_B
 0,1,person,100,200,200,300,0.9,255,0,0
@@ -87,11 +88,13 @@ Frame,Tracker ID,Label,X_min,Y_min,X_max,Y_max,Confidence,Color_R,Color_G,Color_
 **Visualization:** Bounding boxes with labels and tracker IDs
 
 ### vailá Standard Format
+
 Standard coordinate format used by vailá toolbox.
 
 **Format:** `frame, p1_x, p1_y, p2_x, p2_y, p3_x, p3_y, ...`
 
 **Example:**
+
 ```csv
 frame,p1_x,p1_y,p2_x,p2_y
 0,100.5,200.3,150.2,250.1
@@ -248,6 +251,7 @@ The tool automatically detects CSV format based on column structure:
 
 ### Backup and Recovery
 Built-in backup system for data safety:
+
 - **Backup:** Press B to create backup
 - **Reload:** Press L to reload from file
 - **Auto-backup:** Automatic backups before major operations
