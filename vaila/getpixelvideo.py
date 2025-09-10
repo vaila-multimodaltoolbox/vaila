@@ -755,6 +755,7 @@ def play_video_with_controls(video_path, coordinates=None):
             title="Select Keypoints File",
             filetypes=[("CSV Files", "*.csv")],
         )
+        root.destroy()  # Close the Tkinter window to prevent blocking
         if not input_file:
             save_message_text = "Loading canceled."
             showing_save_message = True
@@ -1595,6 +1596,7 @@ def load_coordinates_from_file(total_frames, video_width=None, video_height=None
         title="Select Keypoint File",
         filetypes=[("CSV Files", "*.csv")],
     )
+    root.destroy()  # Close the Tkinter window to prevent blocking
     if not input_file:
         print("No keypoint file selected. Starting fresh.")
         return {i: [] for i in range(total_frames)}
@@ -1726,6 +1728,7 @@ def get_video_path():
         title="Select Video File",
         filetypes=[("Video Files", "*.mp4 *.MP4 *.avi *.AVI *.mov *.MOV *.mkv *.MKV")],
     )
+    root.destroy()  # Close the Tkinter window to prevent blocking
     return video_path
 
 
@@ -1757,6 +1760,7 @@ def run_getpixelvideo():
         "Load Existing Keypoints",
         "Do you want to load existing keypoints from a saved file?",
     )
+    root.destroy()  # Close the Tkinter window to prevent blocking
 
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
