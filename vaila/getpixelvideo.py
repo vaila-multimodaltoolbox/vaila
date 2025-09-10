@@ -6,8 +6,8 @@ vailá - Multimodal Toolbox
 Author: Prof. Dr. Paulo R. P. Santiago
 https://github.com/paulopreto/vaila-multimodaltoolbox
 Date: 22 July 2025
-Update: 29 July 2025
-Version: 0.0.8
+Update: 09 September 2025
+Version: 0.0.9
 Python Version: 3.12.11
 
 Description:
@@ -19,15 +19,15 @@ points, and save results in CSV format.
 
 New Features in This Version:
 ------------------------------
-1. Prompts the user to load existing keypoints from a saved file before starting.
-2. Allows the user to choose the keypoint file via a file dialog.
+1. Direct video loading without initial keypoint prompts.
+2. Load keypoints anytime using the Load button.
 3. Select keypoint number in the video frame.
 4. Speed in play automarker
 
 How to use:
 ------------
 1. Select the video file to process.
-2. Select the keypoint file to load.
+2. Optionally load existing keypoints using the Load button.
 3. Mark points in the video frame.
 4. Save the results in CSV format.
 
@@ -840,11 +840,20 @@ def play_video_with_controls(video_path, coordinates=None):
         # Fazer backup do atual antes de carregar um novo
         make_backup()
 
-        # Use subprocess to avoid GNOME freezing
-        input_file = run_file_dialog_subprocess(
-            "Select Keypoints File",
-            [("CSV Files", "*.csv")]
+        # Use simple tkinter dialog like in cutvideo.py
+        from tkinter import filedialog, Tk
+        
+        root = Tk()
+        root.withdraw()
+        
+        input_file = filedialog.askopenfilename(
+            title="Select Keypoints File",
+            filetypes=[("CSV Files", "*.csv"), ("All files", "*.*")],
+            initialdir=os.path.dirname(video_path) if video_path else None
         )
+        
+        root.destroy()
+        
         if not input_file:
             save_message_text = "Loading canceled."
             showing_save_message = True
@@ -1670,11 +1679,18 @@ def play_video_with_controls(video_path, coordinates=None):
         print("Coordinates were not saved.")
 
 def load_coordinates_from_file(total_frames, video_width=None, video_height=None):
-    # Use subprocess to avoid GNOME freezing
-    input_file = run_file_dialog_subprocess(
-        "Select Keypoint File",
-        [("CSV Files", "*.csv")]
+    # Use simple tkinter dialog like in cutvideo.py
+    from tkinter import filedialog, Tk
+    
+    root = Tk()
+    root.withdraw()
+    
+    input_file = filedialog.askopenfilename(
+        title="Select Keypoint File",
+        filetypes=[("CSV Files", "*.csv"), ("All files", "*.*")]
     )
+    
+    root.destroy()
     if not input_file:
         print("No keypoint file selected. Starting fresh.")
         return {i: [] for i in range(total_frames)}
@@ -1791,11 +1807,18 @@ def save_coordinates(
 
 
 def get_video_path():
-    # Use subprocess to avoid GNOME freezing
-    video_path = run_file_dialog_subprocess(
-        "Select Video File",
-        [("Video Files", "*.mp4 *.MP4 *.avi *.AVI *.mov *.MOV *.mkv *.MKV")]
+    # Use simple tkinter dialog like in cutvideo.py
+    from tkinter import filedialog, Tk
+    
+    root = Tk()
+    root.withdraw()
+    
+    video_path = filedialog.askopenfilename(
+        title="Select Video File",
+        filetypes=[("Video Files", "*.mp4 *.MP4 *.avi *.AVI *.mov *.MOV *.mkv *.MKV"), ("All files", "*.*")]
     )
+    
+    root.destroy()
     return video_path
 
 
@@ -1811,26 +1834,14 @@ def run_getpixelvideo():
         print("No video selected. Exiting.")
         return
 
-    # Use subprocess to avoid GNOME freezing
-    load_existing = run_messagebox_subprocess(
-        "Load Existing Keypoints",
-        "Do you want to load existing keypoints from a saved file?",
-        "yesno"
-    )
-
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         print("Error opening video file.")
         return
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    video_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    video_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     cap.release()
 
-    if load_existing:
-        coordinates = load_coordinates_from_file(total_frames, video_width, video_height)
-    else:
-        coordinates = None
+    # Start fresh - user can load coordinates later using the Load button
+    coordinates = None
 
     play_video_with_controls(video_path, coordinates)
 
