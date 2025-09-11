@@ -5,7 +5,8 @@
                  configures Desktop/Start Menu shortcuts, Windows Terminal profiles,
                  and robustly avoids copying __pycache__ or .pyc files.
     Creation Date: 17 December 2024
-    Updated Date: 18 July 2025
+    Updated Date: 11 September 2025
+    Version: 0.0.11
     Authors: Paulo R. P. Santiago (USP) & David Williams (UNF)
 #>
 
@@ -51,8 +52,12 @@ Try {
     Write-Warning "No internet connection detected. Some features may not work properly."
 }
 
-# Copy project files, excluding __pycache__ and .pyc files
-Write-Output "Copying vaila files (excluding __pycache__ and .pyc)..."
+# Clean destination directory and copy project files, excluding __pycache__ and .pyc files
+Write-Output "Cleaning destination directory and copying vaila files (excluding __pycache__ and .pyc)..."
+If (Test-Path $vailaProgramPath) {
+    Write-Output "Removing existing files from destination directory..."
+    Get-ChildItem -Path $vailaProgramPath -Recurse -Force | Remove-Item -Force -Recurse
+}
 Get-ChildItem -Path $sourcePath -Recurse -Force | Where-Object {
     -not ($_.PSIsContainer -and $_.Name -eq '__pycache__') -and
     -not ($_.Extension -eq '.pyc')

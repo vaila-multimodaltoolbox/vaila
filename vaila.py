@@ -4,8 +4,8 @@ vaila.py
 ===============================================================================
 Author: Prof. Paulo R. P. Santiago
 Date:  07 October 2024
-Update:  10 September 2025
-Version updated: 0.11.2
+Update:  11 September 2025
+Version updated: 0.11.3
 Python Version: 3.12.11
 
 Description:
@@ -136,7 +136,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 10.September.2025 v0.11.2 (Python 3.12.11)
+vailá - 11.September.2025 v0.11.3 (Python 3.12.11)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -235,7 +235,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 10.September.2025 v0.11.2 (Python 3.12.11)")
+        self.title("vailá - 11.September.2025 v0.11.3 (Python 3.12.11)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
