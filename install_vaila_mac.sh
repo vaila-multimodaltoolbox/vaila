@@ -19,8 +19,8 @@
 #                                                                                       #
 # Author: Prof. Dr. Paulo R. P. Santiago                                                #
 # Date: September 22, 2024                                                              #
-# Updated Date: 18 July 2025                                                            #
-# Version: 0.0.9                                                                        #
+# Updated Date: 11 September 2025                                                            #
+# Version: 0.0.11                                                                        #
 # OS: macOS                                                                             #
 #########################################################################################
 
@@ -59,8 +59,12 @@ VAILA_HOME="${USER_HOME}/vaila"
 APP_PATH="${VAILA_HOME}/vaila.app"
 ICON_PATH="$(pwd)/docs/images/vaila.icns"
 
-# Copy the entire vaila program to the user's home directory, including the .git folder
-echo "Copying vaila program to the user's home directory..."
+# Clean destination directory and copy the entire vaila program to the user's home directory, including the .git folder
+echo "Cleaning destination directory and copying vaila program to the user's home directory..."
+if [ -d "${VAILA_HOME}" ]; then
+    echo "Removing existing files from destination directory..."
+    rm -rf "${VAILA_HOME}"/*
+fi
 mkdir -p "${VAILA_HOME}"
 cp -Rfa "$(pwd)/." "${VAILA_HOME}/"
 
