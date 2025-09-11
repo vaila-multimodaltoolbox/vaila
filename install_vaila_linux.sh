@@ -19,8 +19,8 @@
 #                                                                                       #
 # Author: Prof. Dr. Paulo R. P. Santiago                                                #
 # Date: September 17, 2024                                                              #
-# Updated Date: 16 August 2025                                                            #
-# Version: 0.0.10                                                                        #
+# Updated Date: 11 September 2025                                                            #
+# Version: 0.0.11                                                                        #
 # OS: Ubuntu, Kubuntu, Linux Mint, Pop_OS!, Zorin OS, etc.                              #
 #########################################################################################
 
@@ -85,8 +85,12 @@ USER_HOME="$HOME"
 VAILA_HOME="$USER_HOME/vaila"
 DESKTOP_ENTRY_PATH="$HOME/.local/share/applications/vaila.desktop"
 
-# Copy the entire vaila program to the user's home directory using cp -Rfa
-echo "Copying vaila program to the user's home directory..."
+# Clean destination directory and copy the entire vaila program to the user's home directory
+echo "Cleaning destination directory and copying vaila program to the user's home directory..."
+if [ -d "$VAILA_HOME" ]; then
+    echo "Removing existing files from destination directory..."
+    rm -rf "$VAILA_HOME"/*
+fi
 mkdir -p "$VAILA_HOME"
 cp -Rfa "$(pwd)/." "$VAILA_HOME/"
 
