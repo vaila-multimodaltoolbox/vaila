@@ -17,8 +17,8 @@
 #                                                                                       #
 # Author: Prof. Dr. Paulo R. P. Santiago                                                #
 # Date: September 17, 2024                                                              #
-# Updated Date: 18 July 2025                                                            #
-# Version: 0.0.9                                                                        #
+# Updated Date: 11 September 2025                                                            #
+# Version: 0.0.11                                                                        #
 # OS: macOS                                                                             #
 #########################################################################################
 
