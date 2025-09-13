@@ -114,6 +114,38 @@ import platform
 import subprocess
 import webbrowser
 
+# Add the vaila directory to Python path to ensure modules can be found
+# This is especially important when vaila is installed and not run from the source directory
+vaila_dir = os.path.dirname(os.path.abspath(__file__))
+if vaila_dir not in sys.path:
+    sys.path.insert(0, vaila_dir)
+
+def run_vaila_module(module_name, script_path=None):
+    """
+    Helper function to run vaila modules with proper path configuration.
+    
+    Args:
+        module_name (str): The module name to run (e.g., "vaila.markerless_2d_analysis")
+        script_path (str, optional): Alternative script path if module import fails
+    """
+    try:
+        # Try to run the module directly
+        subprocess.Popen([sys.executable, "-m", module_name], 
+                       cwd=vaila_dir, env={**os.environ, "PYTHONPATH": vaila_dir})
+    except Exception as e:
+        print(f"Error launching {module_name}: {e}")
+        if script_path:
+            # Fallback: try to run the script file directly
+            try:
+                full_script_path = os.path.join(vaila_dir, script_path)
+                subprocess.Popen([sys.executable, full_script_path], 
+                               cwd=vaila_dir, env={**os.environ, "PYTHONPATH": vaila_dir})
+            except Exception as e2:
+                print(f"Fallback also failed: {e2}")
+                messagebox.showerror("Error", f"Could not launch {module_name}:\n{e}\n\n{e2}")
+        else:
+            messagebox.showerror("Error", f"Could not launch {module_name}: {e}")
+
 # Third-party imports
 import tkinter as tk
 from tkinter import messagebox, ttk, Toplevel, Label, Button, simpledialog
@@ -1450,9 +1482,9 @@ class Vaila(tk.Tk):
                 
                 # Launch in separate process
                 if version_choice == "1":
-                    subprocess.Popen([sys.executable, "-m", "vaila.markerless_2d_analysis"])
+                    run_vaila_module("vaila.markerless_2d_analysis")
                 else:
-                    subprocess.Popen([sys.executable, "-m", "vaila.markerless2d_analysis_v2"])
+                    run_vaila_module("vaila.markerless2d_analysis_v2")
                     
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to launch markerless analysis: {e}")
@@ -1511,9 +1543,9 @@ class Vaila(tk.Tk):
                 
                 # Launch in separate process
                 if version_choice == "1":
-                    subprocess.Popen([sys.executable, "-m", "vaila.markerless_3d_analysis"])
+                    run_vaila_module("vaila.markerless_3d_analysis")
                 else:
-                    subprocess.Popen([sys.executable, "-m", "vaila.markerless3d_analysis_v2"])
+                    run_vaila_module("vaila.markerless3d_analysis_v2")
                     
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to launch markerless 3D analysis: {e}")
@@ -1810,18 +1842,7 @@ class Vaila(tk.Tk):
     # B_r5_c3 - Scout
     def scout(self):
         """Runs the Scout module in a separate process to avoid Tk conflicts."""
-        try:
-            # Try to run the Scout module directly
-            subprocess.Popen([sys.executable, "-m", "vaila.scout_vaila"])
-        except Exception as e:
-            print(f"Error launching Scout: {e}")
-            # Fallback: try to run the script file directly
-            try:
-                script_path = os.path.join(os.path.dirname(__file__), "vaila", "scout_vaila.py")
-                subprocess.Popen([sys.executable, script_path])
-            except Exception as e2:
-                print(f"Fallback also failed: {e2}")
-                messagebox.showerror("Error", f"Could not launch Scout module:\n{e}\n\n{e2}")
+        run_vaila_module("vaila.scout_vaila", "vaila/scout_vaila.py")
 
     # C_r1_c1
     def reorder_csv_data(self):
@@ -2185,18 +2206,7 @@ class Vaila(tk.Tk):
         and sample rate for analysis.
 
         """
-        try:
-            # Launch in separate process to avoid Tkinter conflicts
-            subprocess.Popen([sys.executable, "-m", "vaila.getpixelvideo"])
-        except Exception as e:
-            print(f"Error launching getpixelvideo: {e}")
-            # Fallback: try to run the script file directly
-            try:
-                script_path = os.path.join(os.path.dirname(__file__), "vaila", "getpixelvideo.py")
-                subprocess.Popen([sys.executable, script_path])
-            except Exception as e2:
-                print(f"Fallback also failed: {e2}")
-                messagebox.showerror("Error", f"Could not launch getpixelvideo module:\n{e}\n\n{e2}")
+        run_vaila_module("vaila.getpixelvideo", "vaila/getpixelvideo.py")
 
     # C_B_r3_c2
     def count_frames_in_videos(self):
