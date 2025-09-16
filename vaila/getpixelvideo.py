@@ -69,7 +69,6 @@ else:
     import cv2
 import pandas as pd
 import numpy as np
-import sys
 import os
 from datetime import datetime
 
@@ -120,8 +119,6 @@ def play_video_with_controls(video_path, coordinates=None):
     original_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     original_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    vw = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    vh = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = int(cap.get(cv2.CAP_PROP_FPS))
 
     # Initialize Pygame
@@ -787,11 +784,33 @@ def play_video_with_controls(video_path, coordinates=None):
         # Make backup of the current before loading a new one
         make_backup()
 
-        # Use native file dialog for file selection
+        # Use native file dialog for file selection with fallback
         input_file = open_native_file_dialog(
             title="Select Keypoints File",
             file_types=[("*.csv", "CSV Files")]
         )
+        
+        # Fallback to tkinter if native dialog fails
+        if not input_file:
+            try:
+                import tkinter as tk
+                from tkinter import filedialog
+                
+                # Create a hidden root window
+                root = tk.Tk()
+                root.withdraw()  # Hide the root window
+                
+                # Open file dialog
+                input_file = filedialog.askopenfilename(
+                    title="Select Keypoints File",
+                    filetypes=[("CSV Files", "*.csv"), ("All Files", "*.*")]
+                )
+                
+                root.destroy()  # Clean up
+                
+            except Exception as e:
+                print(f"Error with tkinter fallback: {e}")
+                input_file = None
         
         if not input_file:
             save_message_text = "Loading canceled."
@@ -1618,76 +1637,282 @@ def play_video_with_controls(video_path, coordinates=None):
         print("Coordinates were not saved.")
 
 def load_coordinates_from_file(total_frames, video_width=None, video_height=None):
+    # Try native dialog first
     input_file = open_native_file_dialog(
         title="Select Keypoint File",
         file_types=[("*.csv", "CSV Files")]
     )
+    
+    # Fallback to tkinter if native dialog fails
+    if not input_file:
+        try:
+            import tkinter as tk
+            from tkinter import filedialog
+            
+            # Create a hidden root window
+            root = tk.Tk()
+            root.withdraw()  # Hide the root window
+            
+            # Open file dialog
+            input_file = filedialog.askopenfilename(
+                title="Select Keypoint File",
+                filetypes=[("CSV Files", "*.csv"), ("All Files", "*.*")]
+            )
+            
+            root.destroy()  # Clean up
+            
+        except Exception as e:
+            print(f"Error with tkinter fallback: {e}")
+            input_file = None
     
     if not input_file:
         print("No keypoint file selected. Starting fresh.")
         return {i: [] for i in range(total_frames)}
 
     try:
+        print(f"Attempting to load coordinates from: {input_file}")
         df = pd.read_csv(input_file)
+        print("File loaded successfully!")
+        print(f"File columns: {list(df.columns)}")
+        print(f"DataFrame shape: {df.shape}")
+        
+        # Validate that we have data
+        if df.empty:
+            print("WARNING: File is empty!")
+            return {i: [] for i in range(total_frames)}
+            
+    except pd.errors.EmptyDataError:
+        print(f"ERROR: File {input_file} is empty or contains no data")
+        return {i: [] for i in range(total_frames)}
+    except pd.errors.ParserError as e:
+        print(f"ERROR: Failed to parse CSV file {input_file}: {e}")
+        print("This might be due to malformed CSV data or wrong file format")
+        return {i: [] for i in range(total_frames)}
+    except FileNotFoundError:
+        print(f"ERROR: File not found: {input_file}")
+        return {i: [] for i in range(total_frames)}
+    except PermissionError:
+        print(f"ERROR: Permission denied accessing file: {input_file}")
+        return {i: [] for i in range(total_frames)}
+    except Exception as e:
+        print(f"ERROR: Unexpected error reading file {input_file}: {e}")
+        print(f"Error type: {type(e).__name__}")
+        import traceback
+        traceback.print_exc()
+        return {i: [] for i in range(total_frames)}
 
-        # Case A: vailá format (frame + pN_x/pN_y)
-        if "frame" in df.columns and any(col.startswith("p") and col.endswith("_x") for col in df.columns):
-            coordinates = {i: [] for i in range(total_frames)}
-            max_marker = 0
-            for i in range(1, 5001):
-                if f"p{i}_x" in df.columns:
-                    max_marker = i
-            for _, row in df.iterrows():
+    # Case A: vailá format (frame + pN_x/pN_y) - from markerless_2d_analysis.py
+    if "frame" in df.columns and any(col.startswith("p") and col.endswith("_x") for col in df.columns):
+        print("Detected format: vailá (pN_x, pN_y)")
+        coordinates = {i: [] for i in range(total_frames)}
+        
+        # Find the maximum marker number
+        max_marker = 0
+        for col in df.columns:
+            if col.startswith("p") and col.endswith("_x"):
+                try:
+                    marker_num = int(col[1:-2])  # Extract number from "pN_x"
+                    max_marker = max(max_marker, marker_num)
+                except ValueError:
+                    continue
+        
+        print(f"Found {max_marker} markers in vailá format")
+        
+        for row_idx, row in df.iterrows():
+            try:
                 frame_num = int(row.get("frame", 0)) if pd.notna(row.get("frame")) else 0
                 pts = []
                 for i in range(1, max_marker + 1):
-                    x_val = row.get(f"p{i}_x")
-                    y_val = row.get(f"p{i}_y")
-                    if pd.isna(x_val) or pd.isna(y_val):
+                    try:
+                        x_val = row.get(f"p{i}_x")
+                        y_val = row.get(f"p{i}_y")
+                        if pd.notna(x_val) and pd.notna(y_val):
+                            pts.append((float(x_val), float(y_val)))
+                        else:
+                            pts.append((None, None))
+                    except Exception as e:
+                        print(f"ERROR processing marker p{i} in row {row_idx}: {e}")
                         pts.append((None, None))
-                    else:
-                        pts.append((float(x_val), float(y_val)))
+                
+                # Remove trailing None values
                 while pts and (pts[-1][0] is None or pts[-1][1] is None):
                     pts.pop()
+                
                 coordinates[frame_num] = pts
-            print(f"Coordinates successfully loaded (vailá): {input_file}")
-            return coordinates
+                
+            except Exception as e:
+                print(f"ERROR processing row {row_idx} in vailá format: {e}")
+                print(f"Row data: {dict(row)}")
+                # Add empty coordinates for this frame
+                coordinates[row_idx] = []
+        
+        print(f"Coordinates successfully loaded (vailá format): {max_marker} markers")
+        return coordinates
 
-        # Case B: MediaPipe CSV (frame_index + landmark_x/y)
-        if "frame_index" in df.columns and any(col.endswith("_x") for col in df.columns):
-            base_names = sorted({col[:-2] for col in df.columns if col.endswith("_x") and f"{col[:-2]}_y" in df.columns})
-            def _is_normalized(sample_cols):
-                try:
-                    sample_vals = pd.concat([df[c].dropna().head(200) for c in sample_cols])
-                    return (sample_vals.max() <= 1.2) and (sample_vals.min() >= -0.2)
-                except Exception:
-                    return False
-            sample_cols = [f"{base}_x" for base in base_names[:min(5, len(base_names))]]
-            is_norm = _is_normalized(sample_cols)
+    # Case B: MediaPipe format (frame_index + landmark_x/y/z) - from markerless_2d_analysis.py
+    if "frame_index" in df.columns and any(col.endswith("_x") for col in df.columns):
+        print("Detected format: MediaPipe (landmark_x, landmark_y, landmark_z)")
+        
+        # Get landmark base names (e.g., "nose", "left_eye", etc.)
+        base_names = []
+        for col in df.columns:
+            if col.endswith("_x") and col != "frame_index":
+                base_name = col[:-2]  # Remove "_x"
+                if f"{base_name}_y" in df.columns:
+                    base_names.append(base_name)
+        
+        base_names = sorted(base_names)
+        print(f"Found {len(base_names)} landmarks: {base_names[:5]}...")  # Show first 5
+        
+        # Detect if coordinates are normalized (0-1) or pixel values
+        def _is_normalized(sample_cols):
+            try:
+                sample_vals = pd.concat([df[c].dropna().head(200) for c in sample_cols])
+                max_val = sample_vals.max()
+                min_val = sample_vals.min()
+                # Normalized coordinates typically range from 0-1, pixel coordinates are much larger
+                is_norm = (max_val <= 1.2) and (min_val >= -0.2)
+                print(f"Coordinate range: {min_val:.3f} to {max_val:.3f} - {'Normalized' if is_norm else 'Pixel'}")
+                return is_norm
+            except Exception as e:
+                print(f"ERROR detecting normalization: {e}")
+                print(f"Error type: {type(e).__name__}")
+                import traceback
+                traceback.print_exc()
+                return False
+        
+        # Check a sample of columns to determine if normalized
+        sample_cols = [f"{base}_x" for base in base_names[:min(5, len(base_names))]]
+        is_norm = _is_normalized(sample_cols)
+        
+        # Determine file type based on filename
+        filename_lower = input_file.lower()
+        if "_norm.csv" in filename_lower:
+            file_type = "normalized"
+            print("Detected _norm.csv file - will convert normalized coordinates to pixel")
+            # Force conversion for normalized files
+            sx = video_width if video_width else 1.0
+            sy = video_height if video_height else 1.0
+            print(f"Converting normalized coordinates to pixel coordinates using video dimensions: {video_width}x{video_height}")
+        elif "_pixel.csv" in filename_lower:
+            file_type = "pixel"
+            print("Detected _pixel.csv file - using pixel coordinates directly (ignoring Z)")
+            # Use pixel coordinates as-is
+            sx = 1.0
+            sy = 1.0
+            print("Using coordinates as-is (pixel coordinates, no scaling)")
+        else:
+            file_type = "auto"
+            print("Auto-detecting coordinate type")
+            # Use auto-detection
             sx = video_width if (is_norm and video_width) else 1.0
             sy = video_height if (is_norm and video_height) else 1.0
-            coordinates = {i: [] for i in range(total_frames)}
-            for _, row in df.iterrows():
+            if is_norm and video_width and video_height:
+                print(f"Converting normalized coordinates to pixel coordinates using video dimensions: {video_width}x{video_height}")
+            else:
+                print("Using coordinates as-is (no scaling)")
+        
+        coordinates = {i: [] for i in range(total_frames)}
+        
+        for row_idx, row in df.iterrows():
+            try:
                 frame_num = int(row.get("frame_index", 0))
                 pts = []
+                
                 for base in base_names:
-                    x_val = row.get(f"{base}_x")
-                    y_val = row.get(f"{base}_y")
-                    if pd.notna(x_val) and pd.notna(y_val):
-                        pts.append((float(x_val) * sx, float(y_val) * sy))
-                    else:
+                    try:
+                        x_val = row.get(f"{base}_x")
+                        y_val = row.get(f"{base}_y")
+                        # Note: We ignore the Z coordinate (f"{base}_z") as requested
+                        
+                        if pd.notna(x_val) and pd.notna(y_val):
+                            # Apply scaling if coordinates are normalized
+                            x_coord = float(x_val) * sx
+                            y_coord = float(y_val) * sy
+                            pts.append((x_coord, y_coord))
+                        else:
+                            pts.append((None, None))
+                    except Exception as e:
+                        print(f"ERROR processing landmark {base} in row {row_idx}: {e}")
                         pts.append((None, None))
+                
+                # Remove trailing None values
                 while pts and (pts[-1][0] is None or pts[-1][1] is None):
                     pts.pop()
+                
                 coordinates[frame_num] = pts
-            print(f"Coordinates successfully loaded (MediaPipe): {input_file}")
-            return coordinates
+                
+            except Exception as e:
+                print(f"ERROR processing row {row_idx}: {e}")
+                print(f"Row data: {dict(row)}")
+                # Add empty coordinates for this frame
+                coordinates[row_idx] = []
+        
+        print(f"Coordinates successfully loaded (MediaPipe {file_type} format): {len(base_names)} landmarks")
+        return coordinates
 
-        print(f"Formato de arquivo não reconhecido: {input_file}. Starting fresh.")
-        return {i: [] for i in range(total_frames)}
-    except Exception as e:
-        print(f"Error loading coordinates from {input_file}: {e}. Starting fresh.")
-        return {i: [] for i in range(total_frames)}
+    # Case C: Legacy format or other CSV formats
+    print(f"Unknown format detected. Columns: {list(df.columns)}")
+    print("Attempting to load as generic CSV format...")
+    
+    # Try to find coordinate columns
+    coord_cols = []
+    for col in df.columns:
+        if any(suffix in col.lower() for suffix in ['_x', '_y', 'x', 'y']):
+            coord_cols.append(col)
+    
+    if coord_cols:
+        print(f"Found coordinate-like columns: {coord_cols}")
+        coordinates = {i: [] for i in range(total_frames)}
+        
+        # Try to determine frame column
+        frame_col = None
+        for col in df.columns:
+            if 'frame' in col.lower() or col == '0':
+                frame_col = col
+                break
+        
+        if frame_col is None:
+            frame_col = df.columns[0]  # Use first column as frame
+        
+        print(f"Using '{frame_col}' as frame column")
+        
+        for _, row in df.iterrows():
+                frame_num = int(row.get(frame_col, 0)) if pd.notna(row.get(frame_col)) else 0
+                pts = []
+                
+                # Group x,y pairs
+                i = 0
+                while i < len(coord_cols) - 1:
+                    x_col = coord_cols[i]
+                    y_col = coord_cols[i + 1]
+                    
+                    x_val = row.get(x_col)
+                    y_val = row.get(y_col)
+                    
+                    if pd.notna(x_val) and pd.notna(y_val):
+                        pts.append((float(x_val), float(y_val)))
+                    else:
+                        pts.append((None, None))
+                    
+                    i += 2
+                
+                # Remove trailing None values
+                while pts and (pts[-1][0] is None or pts[-1][1] is None):
+                    pts.pop()
+                
+                coordinates[frame_num] = pts
+        
+        print(f"Coordinates loaded (generic CSV format): {len(coord_cols)//2} coordinate pairs")
+        return coordinates
+
+    print(f"File format not recognized: {input_file}. Starting fresh.")
+    print("Supported formats:")
+    print("  1. vailá format: 'frame', 'p1_x', 'p1_y', 'p2_x', 'p2_y', ...")
+    print("  2. MediaPipe format: 'frame_index', 'landmark_x', 'landmark_y', 'landmark_z', ...")
+    print("  3. Generic CSV with coordinate columns")
+    return {i: [] for i in range(total_frames)}
+
 
 
 def save_coordinates(
@@ -1738,10 +1963,35 @@ def save_coordinates(
 
 def get_video_path():
     file_types = [("*.mp4", "MP4 Files"), ("*.MP4", "MP4 Files"), ("*.avi", "AVI Files"), ("*.AVI", "AVI Files"), ("*.mov", "MOV Files"), ("*.MOV", "MOV Files"), ("*.mkv", "MKV Files"), ("*.MKV", "MKV Files")]
+    
+    # Try native dialog first
     video_path = open_native_file_dialog(
         title="Select Video File",
         file_types=file_types
     )
+    
+    # Fallback to tkinter if native dialog fails
+    if not video_path:
+        try:
+            import tkinter as tk
+            from tkinter import filedialog
+            
+            # Create a hidden root window
+            root = tk.Tk()
+            root.withdraw()  # Hide the root window
+            
+            # Open file dialog
+            video_path = filedialog.askopenfilename(
+                title="Select Video File",
+                filetypes=file_types
+            )
+            
+            root.destroy()  # Clean up
+            
+        except Exception as e:
+            print(f"Error with tkinter fallback: {e}")
+            video_path = None
+    
     return video_path
 
 
@@ -1757,11 +2007,33 @@ def run_getpixelvideo():
         print("No video selected. Exiting.")
         return
 
-    # Use native dialog for message box
+    # Use native dialog for message box with fallback
     load_existing = open_yes_no_dialog(
         title="Load Existing Keypoints",
         message="Do you want to load existing keypoints from a saved file?"
     )
+    
+    # Fallback to tkinter if native dialog fails
+    if load_existing is None:
+        try:
+            import tkinter as tk
+            from tkinter import messagebox
+            
+            # Create a hidden root window
+            root = tk.Tk()
+            root.withdraw()  # Hide the root window
+            
+            # Show message box
+            load_existing = messagebox.askyesno(
+                title="Load Existing Keypoints",
+                message="Do you want to load existing keypoints from a saved file?"
+            )
+            
+            root.destroy()  # Clean up
+            
+        except Exception as e:
+            print(f"Error with tkinter fallback: {e}")
+            load_existing = False
 
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
