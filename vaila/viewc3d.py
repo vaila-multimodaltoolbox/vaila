@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 ================================================================================
 Author: Paulo Santiago
-Version: 0.0.8
+Version: 0.0.9
 Created: 06 February 2025
-Last Updated: 07 August 2025
+Last Updated: 15 September 2025
 
 Description:
 ------------
@@ -127,7 +127,6 @@ def detect_c3d_units(pts):
     
     # Method 1: Check absolute magnitude of values
     mean_abs_value = np.mean(np.abs(valid_data))
-    median_abs_value = np.median(np.abs(valid_data))
     
     if mean_abs_value > 100:
         confidence_score += 3
@@ -801,11 +800,17 @@ def check_display_environment():
         str: Description of the environment
     """
     import os
+    import platform
     
     # Check if we're in a remote session or headless environment
     if 'SSH_CLIENT' in os.environ or 'SSH_TTY' in os.environ:
         return False, "SSH remote session detected"
     
+    # macOS doesn't use DISPLAY variable - it has its own display system
+    if platform.system() == 'Darwin':  # macOS
+        return True, "macOS display environment"
+    
+    # For Linux and other Unix-like systems, check DISPLAY
     if 'DISPLAY' not in os.environ and os.name != 'nt':
         return False, "No DISPLAY environment variable (headless system)"
     
@@ -824,6 +829,8 @@ def check_opengl_support():
         bool: True if supported, False otherwise
         str: Error message if not supported
     """
+    import platform
+    
     # First check display environment
     display_ok, display_msg = check_display_environment()
     if not display_ok:
@@ -842,7 +849,11 @@ def check_opengl_support():
             
     except Exception as e:
         error_msg = str(e).lower()
-        if 'glx' in error_msg or 'glfw' in error_msg:
+        
+        # Special handling for macOS GLFW issues
+        if platform.system() == 'Darwin' and 'glfw' in error_msg:
+            return False, f"macOS GLFW error (common on Apple Silicon M-series): {str(e)}"
+        elif 'glx' in error_msg or 'glfw' in error_msg:
             return False, f"OpenGL/GLX error: {str(e)}"
         elif 'mesa' in error_msg or 'swrast' in error_msg:
             return False, f"Mesa/software rendering issue: {str(e)}"
@@ -1040,9 +1051,17 @@ def run_viewc3d():
     opengl_supported, error_msg = check_opengl_support()
     
     if not opengl_supported:
+        import platform
         print("[yellow] OpenGL/Open3D not supported on this system:[/yellow]")
         print(f"[yellow]  {error_msg}[/yellow]")
-        print("[yellow]  This is common on older Linux systems or remote connections[/yellow]")
+        
+        # Platform-specific messages
+        if platform.system() == 'Darwin':
+            print("[yellow]  This is common on macOS with Apple Silicon (M1/M2/M3/M4) due to GLFW compatibility issues[/yellow]")
+            print("[yellow]  The matplotlib fallback provides full functionality for C3D visualization[/yellow]")
+        else:
+            print("[yellow]  This is common on older Linux systems or remote connections[/yellow]")
+        
         print("[cyan] Switching to matplotlib fallback visualization...[/cyan]")
         
         success = run_viewc3d_fallback(points, filepath, fps, marker_labels, selected_indices)
@@ -1079,8 +1098,18 @@ def run_viewc3d():
             return
             
     except Exception as e:
-        print(f"[red] Open3D window creation failed: {str(e)}[/red]")
-        print("[cyan] Trying matplotlib fallback...[/cyan]")
+        import platform
+        error_msg = str(e).lower()
+        
+        # Special handling for macOS Apple Silicon GLFW issues
+        if platform.system() == 'Darwin' and 'glfw' in error_msg:
+            print(f"[yellow] macOS GLFW error (common on Apple Silicon M1/M2/M3/M4): {str(e)}[/yellow]")
+            print("[yellow] This is a known issue with Open3D on Apple Silicon Macs[/yellow]")
+            print("[cyan] Switching to matplotlib fallback visualization...[/cyan]")
+        else:
+            print(f"[red] Open3D window creation failed: {str(e)}[/red]")
+            print("[cyan] Trying matplotlib fallback...[/cyan]")
+        
         success = run_viewc3d_fallback(points, filepath, fps, marker_labels, selected_indices)
         return
 
