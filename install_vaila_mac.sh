@@ -32,17 +32,76 @@ if ! command -v conda &> /dev/null; then
     exit 1
 fi
 
-# Check if the "vaila" environment already exists
+# Check if the "vaila" environment already exists and ask user for installation type
+echo "Checking for existing 'vaila' environment..."
 if conda info --envs | grep -q "^vaila"; then
-    echo "Conda environment 'vaila' already exists. Updating..."
-    conda env update -f yaml_for_conda_env/vaila_mac.yaml --prune
-    if [ $? -eq 0 ]; then
-        echo "'vaila' environment updated successfully."
-    else
-        echo "Failed to update 'vaila' environment."
-        exit 1
-    fi
+    echo ""
+    echo "============================================================"
+    echo "vaila environment already exists!"
+    echo "============================================================"
+    echo ""
+    echo "Choose installation type:"
+    echo "1. UPDATE - Keep existing environment and update vaila files only"
+    echo "   (Preserves NVIDIA CUDA installations and other custom packages)"
+    echo "2. RESET - Remove existing environment and create fresh installation"
+    echo "   (Will require reinstalling NVIDIA CUDA and other custom packages)"
+    echo ""
+    
+    while true; do
+        read -p "Enter your choice (1 for UPDATE, 2 for RESET): " choice
+        case $choice in
+            1)
+                echo ""
+                echo "Selected: UPDATE - Keeping existing environment"
+                echo "Updating existing 'vaila' environment..."
+                conda env update -f yaml_for_conda_env/vaila_mac.yaml --prune
+                if [ $? -eq 0 ]; then
+                    echo "'vaila' environment updated successfully."
+                else
+                    echo "Failed to update 'vaila' environment."
+                    exit 1
+                fi
+                break
+                ;;
+            2)
+                echo ""
+                echo "Selected: RESET - Creating fresh environment"
+                echo "Removing old 'vaila' environment..."
+                conda env remove -n vaila -y
+                if [ $? -eq 0 ]; then
+                    echo "Old 'vaila' environment removed successfully."
+                else
+                    echo "Warning: Could not remove old environment. Continuing anyway."
+                fi
+                
+                # Clean conda cache
+                echo "Cleaning conda cache..."
+                conda clean --all -y
+                
+                # Create the environment
+                echo "Creating Conda environment from vaila_mac.yaml..."
+                conda env create -f yaml_for_conda_env/vaila_mac.yaml
+                if [ $? -eq 0 ]; then
+                    echo "'vaila' environment created successfully on macOS."
+                else
+                    echo "Failed to create 'vaila' environment."
+                    exit 1
+                fi
+                break
+                ;;
+            *)
+                echo "Invalid choice. Please enter 1 or 2."
+                ;;
+        esac
+    done
 else
+    echo "'vaila' environment does not exist. Creating new environment..."
+    
+    # Clean conda cache
+    echo "Cleaning conda cache..."
+    conda clean --all -y
+    
+    # Create the environment
     echo "Creating Conda environment from vaila_mac.yaml..."
     conda env create -f yaml_for_conda_env/vaila_mac.yaml
     if [ $? -eq 0 ]; then

@@ -4,8 +4,8 @@ vaila.py
 ===============================================================================
 Author: Prof. Paulo R. P. Santiago
 Date:  07 October 2024
-Update:  16 September 2025
-Version updated: 0.11.5
+Update:  17 September 2025
+Version updated: 0.11.6
 Python Version: 3.12.11
 
 Description:
@@ -168,7 +168,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 16.September.2025 v0.11.5 (Python 3.12.11)
+vailá - 17.September.2025 v0.11.6 (Python 3.12.11)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -267,7 +267,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 16.September.2025 v0.11.5 (Python 3.12.11)")
+        self.title("vailá - 17.September.2025 v0.11.6 (Python 3.12.11)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -913,7 +913,7 @@ class Vaila(tk.Tk):
         # C_A_r1_c3 - Data Files: GapFill - interpolation and split data csv
         gapfill_btn = tk.Button(
             tools_col1,
-            text="Smooth_Fill_Split",
+            text="Smooth & Filter",
             command=self.gapfill_split,  # Assuming this correctly calls the method in the Vaila class
             width=button_width,
         )
