@@ -6,8 +6,8 @@ vailá - Multimodal Toolbox
 Author: Prof. Dr. Paulo R. P. Santiago
 https://github.com/paulopreto/vaila-multimodaltoolbox
 Date: 22 July 2025
-Update: 10 September 2025
-Version: 0.0.9
+Update: 16 September 2025
+Version: 0.1.0
 Python Version: 3.12.11
 
 Description:
@@ -69,8 +69,28 @@ else:
     import cv2
 import pandas as pd
 import numpy as np
-from tkinter import Tk, filedialog, messagebox
+import sys
+import os
 from datetime import datetime
+
+# Add current directory to path to import native_file_dialog
+try:
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+except NameError:
+    # If __file__ is not defined, use the current working directory
+    current_dir = os.getcwd()
+
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
+
+try:
+    from native_file_dialog import open_native_file_dialog, open_yes_no_dialog
+except ImportError:
+    # Fallback: try to import from the vaila directory
+    vaila_dir = os.path.join(current_dir, 'vaila') if 'vaila' not in current_dir else current_dir
+    if vaila_dir not in sys.path:
+        sys.path.insert(0, vaila_dir)
+    from native_file_dialog import open_native_file_dialog, open_yes_no_dialog
 
 
 def get_color_for_id(marker_id):
@@ -767,15 +787,11 @@ def play_video_with_controls(video_path, coordinates=None):
         # Make backup of the current before loading a new one
         make_backup()
 
-        # Create a new instance of Tkinter for the file dialog
-        root = Tk()
-        root.withdraw()
-        root.update()  # Force update of the window on Linux
-        input_file = filedialog.askopenfilename(
+        # Use native file dialog for file selection
+        input_file = open_native_file_dialog(
             title="Select Keypoints File",
-            filetypes=[("CSV Files", "*.csv")],
+            file_types=[("*.csv", "CSV Files")]
         )
-        root.destroy()  # Destroy the Tkinter instance to avoid conflicts
         
         if not input_file:
             save_message_text = "Loading canceled."
@@ -1602,14 +1618,10 @@ def play_video_with_controls(video_path, coordinates=None):
         print("Coordinates were not saved.")
 
 def load_coordinates_from_file(total_frames, video_width=None, video_height=None):
-    root = Tk()
-    root.withdraw()
-    root.update()  # Força atualização da janela no Linux
-    input_file = filedialog.askopenfilename(
+    input_file = open_native_file_dialog(
         title="Select Keypoint File",
-        filetypes=[("CSV Files", "*.csv")],
+        file_types=[("*.csv", "CSV Files")]
     )
-    root.destroy()  # Destroi a instância do Tkinter para evitar conflitos
     
     if not input_file:
         print("No keypoint file selected. Starting fresh.")
@@ -1725,14 +1737,11 @@ def save_coordinates(
 
 
 def get_video_path():
-    root = Tk()
-    root.withdraw()
-    root.update()  # Força atualização da janela no Linux
-    video_path = filedialog.askopenfilename(
+    file_types = [("*.mp4", "MP4 Files"), ("*.MP4", "MP4 Files"), ("*.avi", "AVI Files"), ("*.AVI", "AVI Files"), ("*.mov", "MOV Files"), ("*.MOV", "MOV Files"), ("*.mkv", "MKV Files"), ("*.MKV", "MKV Files")]
+    video_path = open_native_file_dialog(
         title="Select Video File",
-        filetypes=[("Video Files", "*.mp4 *.MP4 *.avi *.AVI *.mov *.MOV *.mkv *.MKV")],
+        file_types=file_types
     )
-    root.destroy()  # Destroi a instância do Tkinter para evitar conflitos
     return video_path
 
 
@@ -1748,15 +1757,11 @@ def run_getpixelvideo():
         print("No video selected. Exiting.")
         return
 
-    # Create Tkinter root for messagebox
-    root = Tk()
-    root.withdraw()
-    root.update()  # Force update of the window on Linux
-    load_existing = messagebox.askyesno(
-        "Load Existing Keypoints",
-        "Do you want to load existing keypoints from a saved file?",
+    # Use native dialog for message box
+    load_existing = open_yes_no_dialog(
+        title="Load Existing Keypoints",
+        message="Do you want to load existing keypoints from a saved file?"
     )
-    root.destroy()  # Destroy the Tkinter instance to avoid conflicts
 
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
