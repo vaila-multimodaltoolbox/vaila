@@ -4,8 +4,8 @@ readc3d_export.py
 ===============================================================================
 Author: Prof. Paulo R. P. Santiago
 Version: 25 September 2024 
-Update: 03 September 2025
-Version updated: 0.0.2
+Update: 15 September 2025
+Version updated: 0.0.3
 Python Version: 3.12.11
 
 Description:
@@ -1051,7 +1051,7 @@ def batch_convert_c3d_to_csv():
         
         try:
             print(f"\nProcessing: {c3d_file}")
-            log_file.write(f"Status: Processing started\n")
+            log_file.write("Status: Processing started\n")
             
             # Process the C3D file
             file_path = Path(input_directory) / c3d_file
@@ -1067,7 +1067,7 @@ def batch_convert_c3d_to_csv():
                 datac3d,
             ) = importc3d(str(file_path))
             
-            log_file.write(f"C3D file loaded successfully\n")
+            log_file.write("C3D file loaded successfully\n")
             log_file.write(f"Markers: {len(marker_labels)}, Analog channels: {len(analog_labels)}\n")
             log_file.write(f"Marker frequency: {marker_freq} Hz, Analog frequency: {analog_freq} Hz\n")
             
@@ -1092,7 +1092,7 @@ def batch_convert_c3d_to_csv():
             successful_conversions += 1
             successful_files.append(c3d_file)
             print(f"Successfully converted: {c3d_file}")
-            log_file.write(f"Status: SUCCESS - All files created successfully\n")
+            log_file.write("Status: SUCCESS - All files created successfully\n")
             
         except Exception as e:
             failed_conversions += 1
@@ -1108,13 +1108,13 @@ def batch_convert_c3d_to_csv():
             
             # Add more context for common errors
             if "utf-8" in error_msg.lower():
-                log_file.write(f"Context: This appears to be a UTF-8 encoding issue\n")
+                log_file.write("Context: This appears to be a UTF-8 encoding issue\n")
             elif "keyerror" in error_msg.lower():
-                log_file.write(f"Context: This appears to be a parameter/key access issue\n")
+                log_file.write("Context: This appears to be a parameter/key access issue\n")
             elif "shape" in error_msg.lower():
-                log_file.write(f"Context: This appears to be a data shape/dimension issue\n")
+                log_file.write("Context: This appears to be a data shape/dimension issue\n")
             elif "ezc3d" in error_msg.lower():
-                log_file.write(f"Context: This appears to be a C3D file reading issue\n")
+                log_file.write("Context: This appears to be a C3D file reading issue\n")
             
             continue
 
@@ -1139,7 +1139,7 @@ def batch_convert_c3d_to_csv():
     
     # Analyze error patterns
     if error_details:
-        log_file.write(f"\nERROR ANALYSIS:\n")
+        log_file.write("\nERROR ANALYSIS:\n")
         error_types = {}
         for file, error in error_details:
             error_type = type(error).__name__ if hasattr(error, '__class__') else "Unknown"

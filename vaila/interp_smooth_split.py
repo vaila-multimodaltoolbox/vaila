@@ -6,8 +6,8 @@ Author: Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 14 October 2024
-Update Date: 18 August 2025
-Version: 0.0.5
+Update Date: 15 September 2025
+Version: 0.0.6
 Python Version: 3.12.9
 
 Description:
@@ -61,7 +61,7 @@ import numpy as np
 from pykalman import KalmanFilter
 from scipy.signal import savgol_filter
 from statsmodels.nonparametric.smoothers_lowess import lowess
-from tkinter import filedialog, messagebox, Toplevel, Button, Label, simpledialog
+from tkinter import filedialog, messagebox
 from scipy.interpolate import UnivariateSpline
 import tkinter as tk
 from rich import print
@@ -69,6 +69,8 @@ from statsmodels.tsa.arima.model import ARIMA
 import sys
 import toml
 import datetime
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.figure import Figure
 
 # Import filter_utils - handle both relative and absolute imports
 try:
@@ -177,9 +179,13 @@ def load_config_from_toml(filepath):
     return config
 
 
-class InterpolationConfigDialog(simpledialog.Dialog):
-    def __init__(self, parent):
-        # Initialize StringVar variables with default values before calling parent constructor
+class InterpolationConfigDialog(tk.Tk):
+    def __init__(self):
+        # Call parent constructor first
+        super().__init__()
+        self.title("Interpolation Configuration")
+        
+        # Initialize StringVar variables after parent constructor
         self.savgol_window = tk.StringVar(value="7")  # Default window length
         self.savgol_poly = tk.StringVar(value="3")  # Default polynomial order
         self.lowess_frac = tk.StringVar(value="0.3")  # Default fraction
@@ -194,52 +200,220 @@ class InterpolationConfigDialog(simpledialog.Dialog):
         self.arima_q = tk.StringVar(value="0")  # MA order
         self.loaded_toml = None
         self.use_toml = False
+        self.test_data = None  # Store test data for analysis
+        self.test_data_path = None
+        self.result = None
+        
+        # Configure window for better macOS compatibility
+        self.configure_window_for_macos()
+        
+        # Additional aggressive window configuration
+        self.aggressive_window_setup()
+        
+        # Create the dialog content
+        self.create_dialog_content()
+        
+        # Force window to update and show content
+        self.update()
+        self.update_idletasks()
+        
+        # Center and focus after content is created
+        self.center_window()
+        self.focus_set()
+        
+        # Start the main loop
+        self.mainloop()
 
-        # Call parent constructor after initializing variables
-        super().__init__(parent, title="Interpolation Configuration")
+    def configure_window_for_macos(self):
+        """Configure window settings for better macOS compatibility"""
+        import platform
+        
+        # Force window to be resizable - this is crucial!
+        self.resizable(True, True)
+        
+        # Set a much larger initial size
+        self.geometry("1600x1200")
+        
+        # Set minimum size to ensure it's never too small
+        self.minsize(1200, 800)
+        
+        # Force window to appear and update
+        self.update()
+        self.update_idletasks()
+        
+        # Center window on screen after setting size
+        self.center_window()
+        
+        # Force another update to ensure everything is applied
+        self.update()
+        
+        # macOS specific configurations
+        if platform.system() == 'Darwin':
+            try:
+                # Make window appear in the dock properly
+                self.wm_attributes('-topmost', False)
+                # Ensure window can be resized
+                self.wm_attributes('-zoomed', False)
+                # Force window to be visible and interactive
+                self.lift()
+                self.focus_force()
+            except tk.TclError:
+                pass  # Ignore if not supported
+        
+        # Final update to ensure all changes are applied
+        self.update()
+        self.update_idletasks()
 
-    def body(self, master):
-        # Create main container with scrollbar
-        main_container = tk.Frame(master)
+    def aggressive_window_setup(self):
+        """Aggressively force window to be large and resizable"""
+        try:
+            # Force window to be resizable immediately
+            self.resizable(True, True)
+            
+            # Set a very large initial size
+            self.geometry("1800x1400")
+            
+            # Set minimum size
+            self.minsize(1400, 900)
+            
+            # Force multiple updates
+            for _ in range(3):
+                self.update()
+                self.update_idletasks()
+            
+            # Center the window
+            self.center_window()
+            
+            # Force window to be visible
+            self.lift()
+            self.focus_force()
+            
+            # Additional macOS specific settings
+            import platform
+            if platform.system() == 'Darwin':
+                try:
+                    # Force window to be resizable on macOS
+                    self.wm_attributes('-zoomed', False)
+                    self.wm_attributes('-topmost', False)
+                    # Make sure window can be resized
+                    self.wm_attributes('-resizable', True)
+                except Exception:
+                    pass
+            
+            print("AGGRESSIVE WINDOW SETUP COMPLETED")
+            print(f"Window geometry: {self.geometry()}")
+            print(f"Window resizable: {self.resizable()}")
+            print(f"Window size: {self.winfo_width()}x{self.winfo_height()}")
+            
+        except Exception as e:
+            print(f"Error in aggressive window setup: {e}")
+
+    def center_window(self):
+        """Center the window on the screen with robust sizing"""
+        self.update_idletasks()
+        
+        # Force window to update its dimensions
+        self.update()
+        
+        # Get window dimensions
+        width = self.winfo_width()
+        height = self.winfo_height()
+        
+        # Only force size if window is extremely small (likely not yet rendered)
+        if width < 100 or height < 100:
+            width, height = 1600, 1200
+            self.geometry(f"{width}x{height}")
+            self.update()
+            
+        # Get screen dimensions
+        screen_width = self.winfo_screenwidth()
+        screen_height = self.winfo_screenheight()
+        
+        # Calculate center position
+        x = max(0, (screen_width - width) // 2)
+        y = max(0, (screen_height - height) // 2)
+        
+        # Set the final geometry
+        self.geometry(f'{width}x{height}+{x}+{y}')
+        
+        # Force final update
+        self.update()
+
+    def on_window_resize(self, event):
+        """Handle window resize events for better responsiveness"""
+        try:
+            # Update canvas scroll region when window is resized
+            if hasattr(self, 'canvas'):
+                self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+            
+            # Ensure window stays resizable
+            if event.widget == self:
+                self.resizable(True, True)
+                
+        except Exception as e:
+            print(f"Error in window resize handler: {e}")
+
+
+    def create_dialog_content(self):
+        print("Creating dialog content...")
+        
+        # Create main container with proper padding - FORCE EXPANSION
+        main_container = tk.Frame(self, padx=15, pady=15)
         main_container.pack(fill="both", expand=True)
         
-        # Create a canvas with scrollbar
-        canvas = tk.Canvas(main_container, width=750, height=600)  # Reduced width to make scrollbar visible
-        scrollbar = tk.Scrollbar(
-            main_container, orient="vertical", command=canvas.yview
-        )
-        scrollable_frame = tk.Frame(canvas)
+        # Create a canvas with scrollbar - FORCE FULL EXPANSION
+        canvas_frame = tk.Frame(main_container)
+        canvas_frame.pack(fill="both", expand=True)
+        
+        # Make canvas much larger and more responsive
+        canvas = tk.Canvas(canvas_frame, highlightthickness=0, width=1400, height=1000)
+        self.canvas = canvas  # Store reference for resize handling
+        scrollbar = tk.Scrollbar(canvas_frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = tk.Frame(canvas, width=1400, height=1000)
 
+        # Bind mousewheel to canvas for better scrolling
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        
+        # Bind canvas resize and window resize
         scrollable_frame.bind(
             "<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
         )
+        self.bind("<Configure>", self.on_window_resize)
 
         canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
 
-        canvas.pack(side="left", fill="both", expand=True, padx=5, pady=5)
+        canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
 
-        # Create two columns that occupy the full width
-        left_column = tk.Frame(scrollable_frame)
-        right_column = tk.Frame(scrollable_frame)
+        # Create responsive two-column layout - FORCE EXPANSION
+        left_column = tk.Frame(scrollable_frame, width=700, height=1000)
+        right_column = tk.Frame(scrollable_frame, width=700, height=1000)
 
-        left_column.grid(row=0, column=0, sticky="nsew", padx=10)
-        right_column.grid(row=0, column=1, sticky="nsew", padx=10)
+        left_column.grid(row=0, column=0, sticky="nsew", padx=(0, 20))
+        right_column.grid(row=0, column=1, sticky="nsew", padx=(20, 0))
         
-        # Configure grid weights to make columns expand
-        scrollable_frame.grid_columnconfigure(0, weight=1)
-        scrollable_frame.grid_columnconfigure(1, weight=1)
+        # Configure grid weights to make columns expand properly - LARGER MINIMUM SIZES
+        scrollable_frame.grid_columnconfigure(0, weight=1, minsize=600)
+        scrollable_frame.grid_columnconfigure(1, weight=1, minsize=600)
+        scrollable_frame.grid_rowconfigure(0, weight=1)
+        
+        # Force columns to expand
+        left_column.grid_propagate(False)
+        right_column.grid_propagate(False)
 
         # ====== LEFT COLUMN - METHODS SELECTION ======
 
-        # Frame for the gap filling method
+        # Frame for the gap filling method - LARGER
         interp_frame = tk.LabelFrame(
-            left_column, text="Gap Filling Method", padx=5, pady=5
+            left_column, text="Gap Filling Method", padx=15, pady=12, font=("Arial", 12, "bold")
         )
-        interp_frame.pack(fill="x", pady=5, anchor="n")
+        interp_frame.pack(fill="both", expand=True, pady=(0, 15), anchor="n")
 
-        # List of interpolation methods
+        # List of interpolation methods - LARGER FONT
         interp_text = """
 1 - Linear Interpolation (simple, works well for most cases)
 2 - Cubic Spline (smooth transitions between points)
@@ -248,24 +422,24 @@ class InterpolationConfigDialog(simpledialog.Dialog):
 5 - None (leave gaps as NaN)
 6 - Skip (keep original data, apply only smoothing)"""
 
-        tk.Label(interp_frame, text=interp_text, justify="left").pack(
-            anchor="w", padx=5
+        tk.Label(interp_frame, text=interp_text, justify="left", font=("Arial", 11)).pack(
+            anchor="w", padx=10, pady=5
         )
 
-        tk.Label(interp_frame, text="Enter gap filling method (1-6):").pack(
-            anchor="w", padx=5, pady=5
+        tk.Label(interp_frame, text="Enter gap filling method (1-6):", font=("Arial", 11, "bold")).pack(
+            anchor="w", padx=10, pady=8
         )
-        self.interp_entry = tk.Entry(interp_frame)
+        self.interp_entry = tk.Entry(interp_frame, font=("Arial", 12))
         self.interp_entry.insert(0, "1")  # Default: linear
-        self.interp_entry.pack(fill="x", padx=5)
+        self.interp_entry.pack(fill="x", padx=10, pady=5)
 
-        # Frame for smoothing method
+        # Frame for smoothing method - LARGER
         smooth_frame = tk.LabelFrame(
-            left_column, text="Smoothing Method", padx=5, pady=5
+            left_column, text="Smoothing Method", padx=15, pady=12, font=("Arial", 12, "bold")
         )
-        smooth_frame.pack(fill="x", pady=5, anchor="n")
+        smooth_frame.pack(fill="both", expand=True, pady=(0, 15), anchor="n")
 
-        # List of smoothing methods
+        # List of smoothing methods - LARGER FONT
         smooth_text = """
 1 - None (no smoothing)
 2 - Savitzky-Golay Filter (preserves peaks and valleys)
@@ -275,131 +449,189 @@ class InterpolationConfigDialog(simpledialog.Dialog):
 6 - Spline Smoothing (flexible curve fitting)
 7 - ARIMA (time series modeling and filtering)"""
 
-        tk.Label(smooth_frame, text=smooth_text, justify="left").pack(
-            anchor="w", padx=5
+        tk.Label(smooth_frame, text=smooth_text, justify="left", font=("Arial", 11)).pack(
+            anchor="w", padx=10, pady=5
         )
 
-        # Important explanatory note
+        # Important explanatory note - LARGER FONT
         tk.Label(
             smooth_frame,
             text="Note: Smoothing is applied to the entire data after filling gaps",
             foreground="blue",
             justify="left",
-        ).pack(anchor="w", padx=5)
+            font=("Arial", 11, "bold")
+        ).pack(anchor="w", padx=10, pady=5)
 
-        tk.Label(smooth_frame, text="Enter smoothing method (1-7):").pack(
-            anchor="w", padx=5, pady=5
+        tk.Label(smooth_frame, text="Enter smoothing method (1-7):", font=("Arial", 11, "bold")).pack(
+            anchor="w", padx=10, pady=8
         )
-        self.smooth_entry = tk.Entry(smooth_frame)
+        self.smooth_entry = tk.Entry(smooth_frame, font=("Arial", 12))
         self.smooth_entry.insert(0, "1")  # Default: no smoothing
-        self.smooth_entry.pack(fill="x", padx=5)
+        self.smooth_entry.pack(fill="x", padx=10, pady=5)
 
-        # Add button to update parameters based on selection
+        # Add button to update parameters based on selection - LARGER
         update_button = tk.Button(
-            smooth_frame, text="Update Parameters", command=self.update_params_frame
+            smooth_frame, text="Update Parameters", command=self.update_params_frame,
+            font=("Arial", 11, "bold"), height=2
         )
-        update_button.pack(pady=5)
+        update_button.pack(pady=10, padx=10, fill="x")
 
-        # Frame for split option
+        # Frame for split option - LARGER
         split_frame = tk.LabelFrame(
-            left_column, text="Split Configuration", padx=5, pady=5
+            left_column, text="Split Configuration", padx=15, pady=12, font=("Arial", 12, "bold")
         )
-        split_frame.pack(fill="x", pady=5, anchor="n")
+        split_frame.pack(fill="x", pady=(0, 15), anchor="n")
 
         self.split_var = tk.BooleanVar(value=False)
         tk.Checkbutton(
-            split_frame, text="Split data into two parts", variable=self.split_var
-        ).pack(anchor="w")
+            split_frame, text="Split data into two parts", variable=self.split_var,
+            font=("Arial", 11)
+        ).pack(anchor="w", padx=10, pady=5)
 
         # ====== RIGHT COLUMN - PARAMETERS ======
 
-        # Frame for specific method parameters
+        # Frame for specific method parameters - LARGER
         self.params_frame = tk.LabelFrame(
-            right_column, text="Method Parameters", padx=5, pady=5
+            right_column, text="Method Parameters", padx=15, pady=12, font=("Arial", 12, "bold")
         )
-        self.params_frame.pack(fill="x", pady=5, anchor="n")
+        self.params_frame.pack(fill="both", expand=True, pady=(0, 15), anchor="n")
 
         # Create empty widgets for parameters
         self.params_widgets = []
         self.param_entries = {}  # Dictionary to keep track of parameter entries
 
-        # Add confirmation button
+        # Add confirmation button - LARGER
         self.confirm_button = tk.Button(
             right_column,
             text="Confirm Parameters",
             command=self.confirm_parameters,
             bg="lightgreen",
-            font=("Arial", 10, "bold"),
+            font=("Arial", 12, "bold"),
+            height=3
         )
-        self.confirm_button.pack(pady=10)
+        self.confirm_button.pack(pady=15, padx=15, fill="x")
 
-        # Frame for padding
+        # Frame for padding - LARGER
         padding_frame = tk.LabelFrame(
-            right_column, text="Padding Configuration", padx=5, pady=5
+            right_column, text="Padding Configuration", padx=15, pady=12, font=("Arial", 12, "bold")
         )
-        padding_frame.pack(fill="x", pady=5, anchor="n")
+        padding_frame.pack(fill="x", pady=(0, 15), anchor="n")
 
-        tk.Label(padding_frame, text="Padding length (% of data):").pack(anchor="w")
-        self.padding_entry = tk.Entry(padding_frame)
+        tk.Label(padding_frame, text="Padding length (% of data):", font=("Arial", 11, "bold")).pack(anchor="w", padx=10, pady=5)
+        self.padding_entry = tk.Entry(padding_frame, font=("Arial", 12))
         self.padding_entry.insert(0, "10")  # Default 10%
-        self.padding_entry.pack(fill="x", padx=5)
+        self.padding_entry.pack(fill="x", padx=10, pady=5)
 
-        # Frame for gap configuration
+        # Frame for gap configuration - LARGER
         gap_frame = tk.LabelFrame(
-            right_column, text="Gap Configuration", padx=5, pady=5
+            right_column, text="Gap Configuration", padx=15, pady=12, font=("Arial", 12, "bold")
         )
-        gap_frame.pack(fill="x", pady=5, anchor="n")
+        gap_frame.pack(fill="x", pady=(0, 15), anchor="n")
 
-        tk.Label(gap_frame, text="Maximum gap size to fill (frames):").pack(anchor="w")
-        self.max_gap_entry = tk.Entry(gap_frame)
+        tk.Label(gap_frame, text="Maximum gap size to fill (frames):", font=("Arial", 11, "bold")).pack(anchor="w", padx=10, pady=5)
+        self.max_gap_entry = tk.Entry(gap_frame, font=("Arial", 12))
         self.max_gap_entry.insert(0, "60")  # Default 60 frames
-        self.max_gap_entry.pack(fill="x", padx=5)
+        self.max_gap_entry.pack(fill="x", padx=10, pady=5)
 
-        # Explanatory label
+        # Explanatory label - LARGER FONT
         tk.Label(
             gap_frame,
             text="Note: Gaps larger than this value will be left as NaN. Set to 0 to fill all gaps.",
             foreground="blue",
             justify="left",
-            wraplength=300,  # Reduced wraplength to fit better in smaller column
-        ).pack(anchor="w", padx=5, pady=2)
+            wraplength=500,  # Increased wraplength for larger column
+            font=("Arial", 10)
+        ).pack(anchor="w", padx=10, pady=5)
 
         # Initialize the parameters frame
         self.update_params_frame()
 
-        # Bind the mouse wheel to the canvas for scrolling
-        self.bind_mousewheel(canvas)
+        # Force window to be properly sized and resizable after everything is created
+        self.after(100, self.force_window_size)
 
-        # TOML buttons - inside the scrollable area
-        toml_frame = tk.LabelFrame(scrollable_frame, text="Configuration via TOML", padx=10, pady=10)
-        toml_frame.grid(row=1, column=0, columnspan=2, sticky="ew", padx=10, pady=10)
+        # Analysis button - inside the scrollable area - LARGER
+        analysis_frame = tk.LabelFrame(scrollable_frame, text="Quality Analysis", padx=15, pady=12, font=("Arial", 12, "bold"))
+        analysis_frame.grid(row=1, column=0, columnspan=2, sticky="ew", padx=15, pady=(20, 10))
+        analysis_btns_frame = tk.Frame(analysis_frame)
+        analysis_btns_frame.pack(pady=10)
+        
+        # Add test data button - LARGER
+        tk.Button(analysis_btns_frame, text="Load Test Data", command=self.load_test_data, 
+                 width=18, height=2, bg="#2196F3", fg="white", font=("Arial", 11, "bold")).pack(side="left", padx=10)
+        
+        # Add analyze quality button - LARGER
+        tk.Button(analysis_btns_frame, text="Analyze Quality", command=self.analyze_quality, 
+                 width=18, height=2, bg="#4CAF50", fg="white", font=("Arial", 11, "bold")).pack(side="left", padx=10)
+        
+        self.test_data_label = tk.Label(analysis_frame, text="No test data loaded", fg="gray", font=("Arial", 11))
+        self.test_data_label.pack(pady=10)
+
+        # TOML buttons - inside the scrollable area - LARGER
+        toml_frame = tk.LabelFrame(scrollable_frame, text="Configuration via TOML", padx=15, pady=12, font=("Arial", 12, "bold"))
+        toml_frame.grid(row=2, column=0, columnspan=2, sticky="ew", padx=15, pady=(10, 10))
         btns_frame = tk.Frame(toml_frame)
-        btns_frame.pack()
-        tk.Button(btns_frame, text="Create TOML template", command=self.create_toml_template).pack(side="left", padx=5)
-        tk.Button(btns_frame, text="Load TOML configuration", command=self.load_toml_config).pack(side="left", padx=5)
-        self.toml_label = tk.Label(toml_frame, text="No TOML loaded", fg="gray")
-        self.toml_label.pack()
+        btns_frame.pack(pady=10)
+        tk.Button(btns_frame, text="Create TOML template", command=self.create_toml_template, 
+                 width=18, height=2, font=("Arial", 11, "bold")).pack(side="left", padx=10)
+        tk.Button(btns_frame, text="Load TOML configuration", command=self.load_toml_config, 
+                 width=20, height=2, font=("Arial", 11, "bold")).pack(side="left", padx=10)
+        self.toml_label = tk.Label(toml_frame, text="No TOML loaded", fg="gray", font=("Arial", 11))
+        self.toml_label.pack(pady=10)
 
-        # OK and Cancel buttons - inside the scrollable area
+        # OK and Cancel buttons - inside the scrollable area - LARGER
         ok_cancel_frame = tk.Frame(scrollable_frame)
-        ok_cancel_frame.grid(row=2, column=0, columnspan=2, sticky="ew", padx=10, pady=10)
+        ok_cancel_frame.grid(row=3, column=0, columnspan=2, sticky="ew", padx=15, pady=(20, 30))
         
         # Create OK and Cancel buttons centered side by side
-        self.ok_button = tk.Button(ok_cancel_frame, text="OK", command=self.ok, width=10)
-        self.ok_button.pack(side="left", padx=5, expand=True)
+        button_frame = tk.Frame(ok_cancel_frame)
+        button_frame.pack(expand=True)
         
-        self.cancel_button = tk.Button(ok_cancel_frame, text="Cancel", command=self.cancel, width=10)
-        self.cancel_button.pack(side="right", padx=5, expand=True)
+        self.ok_button = tk.Button(button_frame, text="OK", command=self.ok, width=15, height=3, 
+                                 bg="#4CAF50", fg="white", font=("Arial", 12, "bold"))
+        self.ok_button.pack(side="left", padx=15)
+        
+        self.cancel_button = tk.Button(button_frame, text="Cancel", command=self.cancel, width=15, height=3,
+                                     bg="#f44336", fg="white", font=("Arial", 12, "bold"))
+        self.cancel_button.pack(side="right", padx=15)
+        
+        print("Dialog content creation completed")
 
-        return self.interp_entry  # Initial focus
-
-    def bind_mousewheel(self, canvas):
-        """Bind mouse wheel to scrolling canvas"""
-
-        def _on_mousewheel(event):
-            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-
-        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+    def force_window_size(self):
+        """Force the window to be the correct size and resizable after creation"""
+        try:
+            # Force window to be resizable
+            self.resizable(True, True)
+            
+            # Get current size
+            current_width = self.winfo_width()
+            current_height = self.winfo_height()
+            
+            # If window is too small, force it to be MUCH larger
+            if current_width < 1400 or current_height < 900:
+                self.geometry("1800x1400")
+                self.update()
+                self.center_window()
+            
+            # Ensure minimum size is large
+            self.minsize(1400, 900)
+            
+            # Force window to be visible and on top
+            self.lift()
+            self.focus_force()
+            
+            # Final check and force if still too small
+            final_width = self.winfo_width()
+            final_height = self.winfo_height()
+            if final_width < 1400 or final_height < 900:
+                self.geometry("1800x1400")
+                self.update()
+            
+            print("FORCE WINDOW SIZE COMPLETED")
+            print(f"Window size forced to: {self.winfo_width()}x{self.winfo_height()}")
+            print(f"Window resizable: {self.resizable()}")
+            
+        except Exception as e:
+            print(f"Error forcing window size: {e}")
 
     def update_params_frame(self):
         try:
@@ -996,7 +1228,6 @@ class InterpolationConfigDialog(simpledialog.Dialog):
                         "Error", "Kalman mode must be 1 (1D) or 2 (2D)"
                     )
                     return False
-                smooth_params = {"n_iter": n_iter, "mode": mode}
                 params_text = f"EM Iterations: {n_iter}, Processing Mode: {mode}"
                 print(f"APPLY: Kalman settings - n_iter={n_iter}, mode={mode}")
             elif smooth_method == 5:  # Butterworth
@@ -1383,12 +1614,347 @@ Parameters have been confirmed and will be used for processing.
         """Handle OK button click"""
         if self.validate():
             self.apply()
-            self.destroy()
+            self.quit()
 
     def cancel(self):
         """Handle Cancel button click"""
         self.result = None
-        self.destroy()
+        self.quit()
+    
+    def load_test_data(self):
+        """Load a CSV file for testing the configuration"""
+        file_path = filedialog.askopenfilename(
+            title="Select CSV file for testing",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")]
+        )
+        
+        if file_path:
+            try:
+                self.test_data = pd.read_csv(file_path)
+                self.test_data_path = file_path
+                self.test_data_label.config(
+                    text=f"Test data: {os.path.basename(file_path)} ({len(self.test_data)} rows, {len(self.test_data.columns)} columns)",
+                    fg="green"
+                )
+                messagebox.showinfo("Success", f"Loaded test data: {os.path.basename(file_path)}")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to load test data: {str(e)}")
+                self.test_data = None
+                self.test_data_path = None
+                self.test_data_label.config(text="Failed to load test data", fg="red")
+    
+    def analyze_quality(self):
+        """Analyze the quality of smoothing/interpolation on test data"""
+        if self.test_data is None:
+            messagebox.showwarning("Warning", "Please load test data first!")
+            return
+            
+        # Create a new window for analysis
+        analysis_window = tk.Toplevel(self)
+        analysis_window.title("Quality Analysis")
+        analysis_window.geometry("1200x800")
+        
+        # Get all numeric columns for analysis
+        numeric_cols = self.test_data.select_dtypes(include=[np.number]).columns.tolist()
+        
+        if len(numeric_cols) == 0:
+            messagebox.showerror("Error", "No numeric columns found in test data!")
+            analysis_window.destroy()
+            return
+        
+        # Create column selection frame
+        selection_frame = tk.Frame(analysis_window, padx=10, pady=10)
+        selection_frame.pack(side=tk.TOP, fill=tk.X)
+        
+        tk.Label(selection_frame, text="Select column to analyze:").pack(side=tk.LEFT, padx=5)
+        
+        # Column selection dropdown
+        selected_column = tk.StringVar(value=numeric_cols[0])
+        column_menu = tk.OptionMenu(selection_frame, selected_column, *numeric_cols)
+        column_menu.pack(side=tk.LEFT, padx=5)
+        
+        # Analyze button
+        tk.Button(
+            selection_frame, 
+            text="Analyze Column", 
+            command=lambda: self.perform_analysis(analysis_window, selected_column.get()),
+            bg="#4CAF50", 
+            fg="white"
+        ).pack(side=tk.LEFT, padx=5)
+        
+        # Close button
+        tk.Button(
+            selection_frame, 
+            text="Close", 
+            command=analysis_window.destroy,
+            bg="#f44336", 
+            fg="white"
+        ).pack(side=tk.RIGHT, padx=5)
+        
+        # Create frame for plots
+        self.plot_frame = tk.Frame(analysis_window)
+        self.plot_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # Perform initial analysis on first column
+        self.perform_analysis(analysis_window, numeric_cols[0])
+    
+    def perform_analysis(self, window, column_name):
+        """Perform quality analysis on selected column"""
+        # Clear previous plots
+        for widget in self.plot_frame.winfo_children():
+            widget.destroy()
+            
+        # Get current configuration
+        config = self.get_current_analysis_config()
+        
+        # Process the selected column
+        original_data = self.test_data[column_name].values
+        
+        # Use first column as frame numbers if it's numeric, otherwise create index
+        if self.test_data.select_dtypes(include=[np.number]).columns[0] == self.test_data.columns[0]:
+            frame_numbers = self.test_data.iloc[:, 0].values
+        else:
+            frame_numbers = np.arange(len(original_data))
+        
+        # Apply current configuration to process data
+        processed_data, padded_data = self.process_column_for_analysis(original_data, config)
+        
+        # Calculate derivatives
+        first_derivative = np.gradient(processed_data)
+        second_derivative = np.gradient(first_derivative)
+        
+        # Calculate residuals (only where original data is not NaN)
+        valid_mask = ~np.isnan(original_data)
+        residuals = np.full_like(original_data, np.nan)
+        residuals[valid_mask] = original_data[valid_mask] - processed_data[valid_mask]
+        
+        # Create figure with subplots
+        fig = Figure(figsize=(12, 10))
+        
+        # Plot 1: Original vs Processed Data
+        ax1 = fig.add_subplot(3, 2, 1)
+        ax1.plot(frame_numbers, original_data, 'b.-', label='Original', alpha=0.6, markersize=4)
+        ax1.plot(frame_numbers, processed_data, 'r-', label='Processed', linewidth=2)
+        ax1.set_title(f'Original vs Processed - {column_name}')
+        ax1.set_xlabel('Frame')
+        ax1.set_ylabel('Value')
+        ax1.legend()
+        ax1.grid(True, alpha=0.3)
+        
+        # Plot 2: Residuals
+        ax2 = fig.add_subplot(3, 2, 2)
+        ax2.plot(frame_numbers[valid_mask], residuals[valid_mask], 'g.-', markersize=4)
+        ax2.axhline(y=0, color='k', linestyle='--', alpha=0.5)
+        ax2.set_title('Residuals (Original - Processed)')
+        ax2.set_xlabel('Frame')
+        ax2.set_ylabel('Residual')
+        ax2.grid(True, alpha=0.3)
+        
+        # Calculate and display RMS error
+        rms_error = np.sqrt(np.nanmean(residuals**2))
+        ax2.text(0.02, 0.98, f'RMS Error: {rms_error:.4f}', 
+                transform=ax2.transAxes, va='top', 
+                bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+        
+        # Plot 3: First Derivative
+        ax3 = fig.add_subplot(3, 2, 3)
+        ax3.plot(frame_numbers, first_derivative, 'm-', linewidth=1.5)
+        ax3.set_title('First Derivative (Velocity)')
+        ax3.set_xlabel('Frame')
+        ax3.set_ylabel('dY/dX')
+        ax3.grid(True, alpha=0.3)
+        
+        # Plot 4: Second Derivative
+        ax4 = fig.add_subplot(3, 2, 4)
+        ax4.plot(frame_numbers, second_derivative, 'c-', linewidth=1.5)
+        ax4.set_title('Second Derivative (Acceleration)')
+        ax4.set_xlabel('Frame')
+        ax4.set_ylabel('d²Y/dX²')
+        ax4.grid(True, alpha=0.3)
+        
+        # Plot 5: Histogram of Residuals
+        ax5 = fig.add_subplot(3, 2, 5)
+        if np.any(valid_mask):
+            ax5.hist(residuals[valid_mask], bins=30, edgecolor='black', alpha=0.7)
+            ax5.set_title('Distribution of Residuals')
+            ax5.set_xlabel('Residual Value')
+            ax5.set_ylabel('Frequency')
+            ax5.grid(True, alpha=0.3, axis='y')
+            
+            # Add normal distribution overlay
+            from scipy import stats
+            mu = np.nanmean(residuals)
+            sigma = np.nanstd(residuals)
+            x = np.linspace(np.nanmin(residuals), np.nanmax(residuals), 100)
+            ax5.plot(x, stats.norm.pdf(x, mu, sigma) * len(residuals[valid_mask]) * (x[1]-x[0]) * 30, 
+                    'r-', linewidth=2, label=f'Normal(μ={mu:.3f}, σ={sigma:.3f})')
+            ax5.legend()
+        
+        # Plot 6: Spectral Analysis (FFT of processed signal)
+        ax6 = fig.add_subplot(3, 2, 6)
+        if len(processed_data) > 1:
+            # Remove mean and apply window
+            signal = processed_data - np.mean(processed_data)
+            window = np.hanning(len(signal))
+            signal_windowed = signal * window
+            
+            # Compute FFT
+            fft = np.fft.rfft(signal_windowed)
+            freq = np.fft.rfftfreq(len(signal), 1.0)  # Assuming 1 frame = 1 time unit
+            
+            ax6.semilogy(freq[1:], np.abs(fft[1:]), 'b-')
+            ax6.set_title('Frequency Spectrum (FFT)')
+            ax6.set_xlabel('Frequency (cycles/frame)')
+            ax6.set_ylabel('Magnitude')
+            ax6.grid(True, alpha=0.3)
+        
+        # Adjust layout
+        fig.tight_layout()
+        
+        # Add configuration info
+        config_text = f"Config: {config['interp_method']} interp, {config['smooth_method']} smooth"
+        if config['smooth_method'] != 'none':
+            params_str = ', '.join([f"{k}={v}" for k, v in config['smooth_params'].items()])
+            config_text += f" ({params_str})"
+        fig.suptitle(config_text, y=0.995)
+        
+        # Embed the figure in tkinter
+        canvas = FigureCanvasTkAgg(fig, master=self.plot_frame)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        
+        # Add toolbar for navigation
+        from matplotlib.backends.backend_tkagg import NavigationToolbar2Tk
+        toolbar = NavigationToolbar2Tk(canvas, self.plot_frame)
+        toolbar.update()
+        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+    
+    def get_current_analysis_config(self):
+        """Get current configuration for analysis"""
+        try:
+            interp_map = {
+                1: "linear", 2: "cubic", 3: "nearest", 4: "kalman", 5: "none", 6: "skip"
+            }
+            smooth_map = {
+                1: "none", 2: "savgol", 3: "lowess", 4: "kalman", 5: "butterworth", 6: "splines", 7: "arima"
+            }
+            
+            smooth_method = int(self.smooth_entry.get())
+            smooth_params = {}
+            
+            if smooth_method == 2:  # Savitzky-Golay
+                smooth_params = {
+                    "window_length": int(self.savgol_window.get()),
+                    "polyorder": int(self.savgol_poly.get())
+                }
+            elif smooth_method == 3:  # LOWESS
+                smooth_params = {
+                    "frac": float(self.lowess_frac.get()),
+                    "it": int(self.lowess_it.get())
+                }
+            elif smooth_method == 4:  # Kalman
+                smooth_params = {
+                    "n_iter": int(self.kalman_iterations.get()),
+                    "mode": int(self.kalman_mode.get())
+                }
+            elif smooth_method == 5:  # Butterworth
+                smooth_params = {
+                    "cutoff": float(self.butter_cutoff.get()),
+                    "fs": float(self.butter_fs.get())
+                }
+            elif smooth_method == 6:  # Splines
+                smooth_params = {
+                    "smoothing_factor": float(self.spline_smoothing.get())
+                }
+            elif smooth_method == 7:  # ARIMA
+                smooth_params = {
+                    "p": int(self.arima_p.get()),
+                    "d": int(self.arima_d.get()),
+                    "q": int(self.arima_q.get())
+                }
+            
+            return {
+                "interp_method": interp_map[int(self.interp_entry.get())],
+                "smooth_method": smooth_map[smooth_method],
+                "smooth_params": smooth_params,
+                "padding": float(self.padding_entry.get()),
+                "max_gap": int(self.max_gap_entry.get())
+            }
+        except Exception:
+            # Return default config if any error
+            return {
+                "interp_method": "linear",
+                "smooth_method": "none",
+                "smooth_params": {},
+                "padding": 10,
+                "max_gap": 60
+            }
+    
+    def process_column_for_analysis(self, data, config):
+        """Process a single column with current configuration for analysis"""
+        # Apply padding if necessary
+        padding_percent = config["padding"]
+        pad_len = int(len(data) * padding_percent / 100) if padding_percent > 0 else 0
+        
+        if pad_len > 0:
+            # Pad with edge values
+            padded_data = np.pad(data, pad_len, mode='edge')
+        else:
+            padded_data = data.copy()
+        
+        # Apply interpolation
+        if config["interp_method"] not in ["none", "skip"]:
+            # Create pandas series for interpolation
+            series = pd.Series(padded_data)
+            
+            if config["interp_method"] == "linear":
+                series = series.interpolate(method="linear", limit_direction="both")
+            elif config["interp_method"] == "cubic":
+                series = series.interpolate(method="cubic", limit_direction="both")
+            elif config["interp_method"] == "nearest":
+                series = series.interpolate(method="nearest", limit_direction="both")
+            
+            padded_data = series.values
+        
+        # Apply smoothing
+        if config["smooth_method"] != "none":
+            try:
+                if config["smooth_method"] == "savgol":
+                    params = config["smooth_params"]
+                    padded_data = savgol_smooth(padded_data, params["window_length"], params["polyorder"])
+                elif config["smooth_method"] == "lowess":
+                    params = config["smooth_params"]
+                    padded_data = lowess_smooth(padded_data, params["frac"], params["it"])
+                elif config["smooth_method"] == "kalman":
+                    params = config["smooth_params"]
+                    padded_data = kalman_smooth(padded_data, params["n_iter"], params["mode"]).flatten()
+                elif config["smooth_method"] == "butterworth":
+                    params = config["smooth_params"]
+                    if not np.isnan(padded_data).all():
+                        padded_data = butter_filter(
+                            padded_data, 
+                            fs=params["fs"], 
+                            filter_type="low",
+                            cutoff=params["cutoff"], 
+                            order=4
+                        )
+                elif config["smooth_method"] == "splines":
+                    params = config["smooth_params"]
+                    padded_data = spline_smooth(padded_data, s=params["smoothing_factor"])
+                elif config["smooth_method"] == "arima":
+                    params = config["smooth_params"]
+                    order = (params["p"], params["d"], params["q"])
+                    padded_data = arima_smooth(padded_data, order=order)
+            except Exception as e:
+                print(f"Error in smoothing: {str(e)}")
+        
+        # Remove padding
+        if pad_len > 0:
+            processed_data = padded_data[pad_len:-pad_len]
+        else:
+            processed_data = padded_data
+            
+        return processed_data, padded_data
 
 
 def generate_report(dest_dir, config, processed_files):
@@ -1406,7 +1972,7 @@ def generate_report(dest_dir, config, processed_files):
     with open(report_path, "w", encoding="utf-8") as f:
         # Header
         f.write("=" * 80 + "\n")
-        f.write(f"PROCESSING REPORT - VAILA INTERPOLATION AND SMOOTHING TOOL\n")
+        f.write("PROCESSING REPORT - VAILA INTERPOLATION AND SMOOTHING TOOL\n")
         f.write(f"Date and Time: {timestamp}\n")
         f.write("=" * 80 + "\n\n")
 
@@ -1816,7 +2382,6 @@ def kalman_smooth(data, n_iter=5, mode=1):
     if data.ndim == 1:
         data = data.reshape(-1, 1)
 
-    n_samples = data.shape[0]
     n_features = data.shape[1]
 
     try:
@@ -2403,16 +2968,16 @@ def process_file(file_path, dest_dir, config):
 
 
 def run_fill_split_dialog():
-    print(f"Running script: {os.path.basename(__file__)}")
-    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    print(f"Running script: {Path(__file__).name}")
+    print(f"Script directory: {Path(__file__).parent}")
+    print("Starting script: interp_smooth_split.py")
+    print("================================================")
 
-    root = tk.Tk()
-    root.withdraw()
-
-    # Open configuration dialog
-    config_dialog = InterpolationConfigDialog(root)
+    # Open configuration dialog as main window
+    config_dialog = InterpolationConfigDialog()
     if not hasattr(config_dialog, "result") or config_dialog.result is None:
         print("Operation canceled by user.")
+        print("================================================")
         return
 
     config = config_dialog.result
@@ -2420,6 +2985,8 @@ def run_fill_split_dialog():
     # Select source directory
     source_dir = filedialog.askdirectory(title="Select Source Directory")
     if not source_dir:
+        print("Operation canceled by user.")
+        print("================================================")
         return
 
     # Create destination directory with method names
@@ -2444,7 +3011,7 @@ def run_fill_split_dialog():
                 frac = config["smooth_params"].get("frac", 0.3)
                 it = config["smooth_params"].get("it", 3)
                 smooth_info += f"_frac{int(frac*100)}_it{it}"
-                print(f"\nDEBUG - LOWESS Configuration:")
+                print("\nDEBUG - LOWESS Configuration:")
                 print(f"Fraction: {frac}")
                 print(f"Iterations: {it}")
             elif config["smooth_method"] == "kalman":
