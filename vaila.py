@@ -114,6 +114,11 @@ import platform
 import subprocess
 import webbrowser
 
+# Third-party imports
+import tkinter as tk
+from tkinter import messagebox, ttk, Toplevel, Label, Button, simpledialog
+from PIL import Image, ImageTk
+
 # Add the vaila directory to Python path to ensure modules can be found
 # This is especially important when vaila is installed and not run from the source directory
 vaila_dir = os.path.dirname(os.path.abspath(__file__))
@@ -145,11 +150,6 @@ def run_vaila_module(module_name, script_path=None):
                 messagebox.showerror("Error", f"Could not launch {module_name}:\n{e}\n\n{e2}")
         else:
             messagebox.showerror("Error", f"Could not launch {module_name}: {e}")
-
-# Third-party imports
-import tkinter as tk
-from tkinter import messagebox, ttk, Toplevel, Label, Button, simpledialog
-from PIL import Image, ImageTk
 
 # Conditionally import platform-specific functionality
 # Define a global variable to track if AppKit is available
@@ -1913,8 +1913,8 @@ class Vaila(tk.Tk):
         try:
             # Import and run with current window as parent
             from vaila.interp_smooth_split import run_fill_split_dialog
-            run_fill_split_dialog(parent=self)
-        except Exception as e:
+            run_fill_split_dialog()
+        except Exception:
             # Fallback: try subprocess if direct import fails
             try:
                 import subprocess
