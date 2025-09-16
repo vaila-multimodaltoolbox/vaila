@@ -1910,9 +1910,20 @@ class Vaila(tk.Tk):
         whether to perform linear interpolation or splitting.
 
         """
-        from vaila.interp_smooth_split import run_fill_split_dialog
-
-        run_fill_split_dialog()
+        try:
+            # Import and run with current window as parent
+            from vaila.interp_smooth_split import run_fill_split_dialog
+            run_fill_split_dialog(parent=self)
+        except Exception as e:
+            # Fallback: try subprocess if direct import fails
+            try:
+                import subprocess
+                import sys
+                import os
+                script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'vaila', 'interp_smooth_split.py')
+                subprocess.Popen([sys.executable, script_path])
+            except Exception as e2:
+                messagebox.showerror("Error", f"Failed to launch interpolation module: {e2}")
 
     # C_A_r2_c1
     def dlt2d(self):
