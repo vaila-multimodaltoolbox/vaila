@@ -1,16 +1,16 @@
 # numstepsmp
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Tools
-- **Arquivo:** `vaila/numstepsmp.py`
-- **Linhas:** 1473
-- **Tamanho:** 55909 caracteres
+- **Category:** Tools
+- **File:** `vaila/numstepsmp.py`
+- **Lines:** 1473
+- **Size:** 55909 characters
 
-- **Autor:** Paulo Roberto Pereira Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Author:** Paulo Roberto Pereira Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 numstepsmp.py
@@ -40,9 +40,9 @@ Dependencies:
     - matplotlib (optional, for visualization)
 
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 16
+**Total functions found:** 16
 
 - `butterworth_filter`
 - `filter_signals`
@@ -66,6 +66,6 @@ Dependencies:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

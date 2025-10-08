@@ -1,16 +1,16 @@
 # data_processing
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Processing
-- **Arquivo:** `vaila/data_processing.py`
-- **Linhas:** 81
-- **Tamanho:** 2324 caracteres
+- **Category:** Processing
+- **File:** `vaila/data_processing.py`
+- **Lines:** 81
+- **Size:** 2324 characters
 
 
-- **Interface Gráfica:** ❌ Não
+- **GUI Interface:** ❌ No
 
-## 📖 Descrição
+## 📖 Description
 
 
     Determines the number of header lines in a CSV file.
@@ -22,9 +22,9 @@
     int: The number of header lines.
     
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 4
+**Total functions found:** 4
 
 - `determine_header_lines`
 - `determine_header_lines_mocap`
@@ -36,6 +36,6 @@
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

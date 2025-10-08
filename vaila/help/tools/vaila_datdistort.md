@@ -1,16 +1,16 @@
 # vaila_datdistort
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Tools
-- **Arquivo:** `vaila/vaila_datdistort.py`
-- **Linhas:** 269
-- **Tamanho:** 9032 caracteres
-- **Versão:** 0.0.2
-- **Autor:** Prof. Dr. Paulo R. P. Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Tools
+- **File:** `vaila/vaila_datdistort.py`
+- **Lines:** 269
+- **Size:** 9032 characters
+- **Version:** 0.0.2
+- **Author:** Prof. Dr. Paulo R. P. Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 ================================================================================
@@ -32,8 +32,8 @@ using the same camera calibration parameters as vaila_lensdistortvideo.py.
 New Features in This Version:
 ------------------------------
 1. Fixed issue with column order in output file.
-2. Improved error handling.
-3. Added more detailed error logging.
+2. Improved errorr handling.
+3. Added more detailed errorr logging.
 
 How to use:
 ------------
@@ -44,9 +44,9 @@ How to use:
 
 python vai...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 6
+**Total functions found:** 6
 
 - `load_distortion_parameters`
 - `undistort_points`
@@ -60,6 +60,6 @@ python vai...
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

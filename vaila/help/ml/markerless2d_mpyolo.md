@@ -1,16 +1,16 @@
 # markerless2d_mpyolo
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Ml
-- **Arquivo:** `vaila/markerless2d_mpyolo.py`
-- **Linhas:** 2300
-- **Tamanho:** 84006 caracteres
-- **Versão:** 0.1.0 - Enhanced
-- **Autor:** Prof. Dr. Paulo Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Ml
+- **File:** `vaila/markerless2d_mpyolo.py`
+- **Lines:** 2300
+- **Size:** 84006 characters
+- **Version:** 0.1.0 - Enhanced
+- **Author:** Prof. Dr. Paulo Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 Script: markerless2d_mpyolo.py
@@ -41,9 +41,9 @@ Usage:
 python markerless2d_mpyolo.py
 
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 20
+**Total functions found:** 20
 
 - `get_color_palette`
 - `get_color_for_id`
@@ -71,6 +71,6 @@ python markerless2d_mpyolo.py
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

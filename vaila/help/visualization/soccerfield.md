@@ -1,16 +1,16 @@
 # soccerfield
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Visualization
-- **Arquivo:** `vaila/soccerfield.py`
-- **Linhas:** 2072
-- **Tamanho:** 69405 caracteres
-- **Versão:** 0.0.5
-- **Autor:** Paulo Roberto Pereira Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Visualization
+- **File:** `vaila/soccerfield.py`
+- **Lines:** 2072
+- **Size:** 69405 characters
+- **Version:** 0.0.5
+- **Author:** Paulo Roberto Pereira Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 Project: vailá
@@ -48,9 +48,9 @@ License:
 
     This program is distributed in th...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 20
+**Total functions found:** 20
 
 - `draw_line`
 - `draw_circle`
@@ -78,6 +78,6 @@ License:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

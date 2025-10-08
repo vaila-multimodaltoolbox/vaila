@@ -1,16 +1,16 @@
 # rearrange_data
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Processing
-- **Arquivo:** `vaila/rearrange_data.py`
-- **Linhas:** 1772
-- **Tamanho:** 68536 caracteres
-- **Versão:** 0.0.6
-- **Autor:** Paulo Roberto Pereira Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Processing
+- **File:** `vaila/rearrange_data.py`
+- **Lines:** 1772
+- **Size:** 68536 characters
+- **Version:** 0.0.6
+- **Author:** Paulo Roberto Pereira Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 Project: vailá Multimodal Toolbox
@@ -47,9 +47,9 @@ Requirements:
 License:
     This project is licensed under the terms of GNU General Public ...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 20
+**Total functions found:** 20
 
 - `detect_column_precision_detailed`
 - `save_dataframe_with_precision`
@@ -77,6 +77,6 @@ License:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

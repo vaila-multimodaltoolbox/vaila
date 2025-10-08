@@ -1,16 +1,16 @@
 # markerless_live
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Analysis
-- **Arquivo:** `vaila/markerless_live.py`
-- **Linhas:** 1486
-- **Tamanho:** 56506 caracteres
-- **Versão:** 0.0.2
-- **Autor:** Moser José (https://moserjose.com/),  Prof. Dr. Paulo Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Analysis
+- **File:** `vaila/markerless_live.py`
+- **Lines:** 1486
+- **Size:** 56506 characters
+- **Version:** 0.0.2
+- **Author:** Moser José (https://moserjose.com/),  Prof. Dr. Paulo Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 Script: markerless_live.py
@@ -42,9 +42,9 @@ Features:
     - Angle plots over time
 ...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 12
+**Total functions found:** 12
 
 - `list_available_cameras`
 - `download_model`
@@ -64,6 +64,6 @@ Features:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

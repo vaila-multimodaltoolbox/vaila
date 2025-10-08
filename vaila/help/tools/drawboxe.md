@@ -1,16 +1,16 @@
 # drawboxe
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Tools
-- **Arquivo:** `vaila/drawboxe.py`
-- **Linhas:** 1368
-- **Tamanho:** 51486 caracteres
-- **Versão:** 0.0.7
-- **Autor:** Paulo Roberto Pereira Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Tools
+- **File:** `vaila/drawboxe.py`
+- **Lines:** 1368
+- **Size:** 51486 characters
+- **Version:** 0.0.7
+- **Author:** Paulo Roberto Pereira Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 Project: vailá Multimodal Toolbox
@@ -48,9 +48,9 @@ Change History:
     - v0.0.2: Added support for multiple videos
     - v...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 20
+**Total functions found:** 20
 
 - `save_first_frame`
 - `extract_frames`
@@ -78,6 +78,6 @@ Change History:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

@@ -1,16 +1,16 @@
 # compressvideo
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Utils
-- **Arquivo:** `vaila/compressvideo.py`
-- **Linhas:** 181
-- **Tamanho:** 5462 caracteres
+- **Category:** Utils
+- **File:** `vaila/compressvideo.py`
+- **Lines:** 181
+- **Size:** 5462 characters
 
 
-- **Interface Gráfica:** ✅ Sim
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 # vailá - Multimodal Toolbox
@@ -39,9 +39,9 @@
 # - Python 3.12.9
 # -...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 5
+**Total functions found:** 5
 
 - `check_ffmpeg_encoder`
 - `run_compress_videos`
@@ -54,6 +54,6 @@
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

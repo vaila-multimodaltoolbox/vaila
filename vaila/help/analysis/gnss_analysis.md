@@ -1,38 +1,38 @@
 # gnss_analysis
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Analysis
-- **Arquivo:** `vaila/gnss_analysis.py`
-- **Linhas:** 850
-- **Tamanho:** 29908 caracteres
-
-
-- **Interface Gráfica:** ✅ Sim
-
-## 📖 Descrição
+- **Category:** Analysis
+- **File:** `vaila/gnss_analysis.py`
+- **Lines:** 850
+- **Size:** 29908 characters
 
 
-Script para ler arquivos GPX e exportar os dados para um arquivo CSV.
+- **GUI Interface:** ✅ Yes
 
-Este script lê um arquivo GPX contendo informações de latitude, longitude, elevação, tempo, velocidade (speed) e cadência (cad).
-Os dados são extraídos e exportados para um arquivo CSV, incluindo uma coluna adicional chamada 'time_seconds' que
+## 📖 Description
+
+
+Script para ler files GPX e exportar os dados para um file CSV.
+
+Este script lê um file GPX contendo informações de latitude, longitude, elevação, tempo, velocidade (speed) e cadência (cad).
+Os dados são extraídos e exportados para um file CSV, incluindo uma coluna adicional chamada 'time_seconds' que
 representa o tempo decorrido em segundos desde o início do percurso.
 
 Uso:
-    python readgpx.py <arquivo_gpx> <arquivo_csv>
+    python readgpx.py <file_gpx> <file_csv>
 
 Argumentos:
-    <arquivo_gpx>   Caminho para o arquivo GPX de entrada.
-    <arquivo_csv>   Caminho para o arquivo CSV de saída.
+    <file_gpx>   Caminho para o file GPX de entrada.
+    <file_csv>   Caminho para o file CSV de saída.
 
-Autor: Seu Nome
+Author: Seu Nome
 Data: 2024-10-13
 
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 20
+**Total functions found:** 20
 
 - `read_gpx_file`
 - `export_to_csv`
@@ -60,6 +60,6 @@ Data: 2024-10-13
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

@@ -1,16 +1,16 @@
 # usound_biomec1
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Tools
-- **Arquivo:** `vaila/usound_biomec1.py`
-- **Linhas:** 639
-- **Tamanho:** 20695 caracteres
-- **Versão:** 0.0.7
+- **Category:** Tools
+- **File:** `vaila/usound_biomec1.py`
+- **Lines:** 639
+- **Size:** 20695 characters
+- **Version:** 0.0.7
 
-- **Interface Gráfica:** ✅ Sim
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 usound_biomec1.py
@@ -27,9 +27,9 @@ Version: 0.0.7
 - Additional edge-only comparison visualization
 
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 17
+**Total functions found:** 17
 
 - `list_images`
 - `redraw_annotations`
@@ -54,6 +54,6 @@ Version: 0.0.7
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

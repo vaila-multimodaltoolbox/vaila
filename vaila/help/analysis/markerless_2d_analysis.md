@@ -1,16 +1,16 @@
 # markerless_2d_analysis
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Analysis
-- **Arquivo:** `vaila/markerless_2d_analysis.py`
-- **Linhas:** 3171
-- **Tamanho:** 126209 caracteres
-- **Versão:** 0.6.0
-- **Autor:** Paulo Roberto Pereira Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Analysis
+- **File:** `vaila/markerless_2d_analysis.py`
+- **Lines:** 3171
+- **Size:** 126209 characters
+- **Version:** 0.6.0
+- **Author:** Paulo Roberto Pereira Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 Project: vailá Multimodal Toolbox
@@ -38,9 +38,9 @@ NEW: Integrated video resize functionality to improve pose detection for:
 The user can configure key MediaPipe parameters via a graphical interface,
 including detection confidence, tracking confidence, model...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 20
+**Total functions found:** 20
 
 - `butter_filter`
 - `savgol_smooth`
@@ -68,6 +68,6 @@ including detection confidence, tracking confidence, model...
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

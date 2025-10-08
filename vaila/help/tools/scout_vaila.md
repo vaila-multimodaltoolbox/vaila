@@ -1,16 +1,16 @@
 # scout_vaila
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Tools
-- **Arquivo:** `vaila/scout_vaila.py`
-- **Linhas:** 2510
-- **Tamanho:** 95343 caracteres
-- **Versão:** 0.1.5
-- **Autor:** Paulo Roberto Pereira Santiago and Rafael Luiz Martins Montero
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Tools
+- **File:** `vaila/scout_vaila.py`
+- **Lines:** 2510
+- **Size:** 95343 characters
+- **Version:** 0.1.5
+- **Author:** Paulo Roberto Pereira Santiago and Rafael Luiz Martins Montero
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 Project: vailá Multimodal Toolbox
@@ -45,9 +45,9 @@ Requirements:
     - matplotlib
     - seabo...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 20
+**Total functions found:** 20
 
 - `read_toml_config`
 - `write_toml_config`
@@ -75,6 +75,6 @@ Requirements:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

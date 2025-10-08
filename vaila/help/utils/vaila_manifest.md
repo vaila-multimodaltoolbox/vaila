@@ -1,16 +1,16 @@
 # vaila_manifest
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Utils
-- **Arquivo:** `vaila/vaila_manifest.py`
-- **Linhas:** 126
-- **Tamanho:** 5896 caracteres
-- **Versão:** 2024-09-22
-- **Autor:** Prof. Dr. Paulo R. P. Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Utils
+- **File:** `vaila/vaila_manifest.py`
+- **Lines:** 126
+- **Size:** 5896 characters
+- **Version:** 2024-09-22
+- **Author:** Prof. Dr. Paulo R. P. Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 Script: vaila_manifest.py
@@ -35,9 +35,9 @@ Notes:
     - The script automatically adjusts the image path based on the script's location, making
       it compatible with both terminal ...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 1
+**Total functions found:** 1
 
 - `show_vaila_message`
 
@@ -46,6 +46,6 @@ Notes:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

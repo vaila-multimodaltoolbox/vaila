@@ -1,16 +1,16 @@
 # native_file_dialog
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Utils
-- **Arquivo:** `vaila/native_file_dialog.py`
-- **Linhas:** 203
-- **Tamanho:** 7099 caracteres
-- **Versão:** 0.1.0
-- **Autor:** Prof. Dr. Paulo R. P. Santiago
-- **Interface Gráfica:** ❌ Não
+- **Category:** Utils
+- **File:** `vaila/native_file_dialog.py`
+- **Lines:** 203
+- **Size:** 7099 characters
+- **Version:** 0.1.0
+- **Author:** Prof. Dr. Paulo R. P. Santiago
+- **GUI Interface:** ❌ No
 
-## 📖 Descrição
+## 📖 Description
 
 
 ================================================================================
@@ -46,9 +46,9 @@ result = open_yes_no_dialog(
 
 ===================================================================...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 3
+**Total functions found:** 3
 
 - `open_native_file_dialog`
 - `open_yes_no_dialog`
@@ -59,6 +59,6 @@ result = open_yes_no_dialog(
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

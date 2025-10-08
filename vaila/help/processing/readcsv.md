@@ -1,16 +1,16 @@
 # readcsv
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Processing
-- **Arquivo:** `vaila/readcsv.py`
-- **Linhas:** 1842
-- **Tamanho:** 65822 caracteres
-- **Versão:** 0.0.4
-- **Autor:** Paulo Roberto Pereira Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Processing
+- **File:** `vaila/readcsv.py`
+- **Lines:** 1842
+- **Size:** 65822 characters
+- **Version:** 0.0.4
+- **Author:** Paulo Roberto Pereira Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 Project: vailá Multimodal Toolbox
@@ -51,9 +51,9 @@ Change History:
     - v0.0.3: Added support for CSV, TXT and TSV files, improved UI
     - v0.0.2: Added support for CS...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 20
+**Total functions found:** 20
 
 - `show_csv_optimized`
 - `show_csv_matplotlib_turbo`
@@ -81,6 +81,6 @@ Change History:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

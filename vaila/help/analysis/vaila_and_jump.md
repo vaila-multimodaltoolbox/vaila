@@ -1,16 +1,16 @@
 # vaila_and_jump
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Analysis
-- **Arquivo:** `vaila/vaila_and_jump.py`
-- **Linhas:** 3310
-- **Tamanho:** 120960 caracteres
-- **Versão:** 0.1.0
-- **Autor:** Prof. Paulo R. P. Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Analysis
+- **File:** `vaila/vaila_and_jump.py`
+- **Lines:** 3310
+- **Size:** 120960 characters
+- **Version:** 0.1.0
+- **Author:** Prof. Paulo R. P. Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 ===============================================================================
@@ -40,9 +40,9 @@ Features:
 ---------
 - Supports two calculation...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 20
+**Total functions found:** 20
 
 - `calculate_force`
 - `calculate_jump_height`
@@ -70,6 +70,6 @@ Features:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

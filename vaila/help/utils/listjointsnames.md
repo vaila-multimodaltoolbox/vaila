@@ -1,22 +1,22 @@
 # listjointsnames
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Utils
-- **Arquivo:** `vaila/listjointsnames.py`
-- **Linhas:** 15
-- **Tamanho:** 396 caracteres
-
-
-- **Interface Gráfica:** ❌ Não
-
-## 📖 Descrição
+- **Category:** Utils
+- **File:** `vaila/listjointsnames.py`
+- **Lines:** 15
+- **Size:** 396 characters
 
 
+- **GUI Interface:** ❌ No
 
-## 🔧 Funções Principais
+## 📖 Description
 
-**Total de funções encontradas:** 1
+
+
+## 🔧 Main Functions
+
+**Total functions found:** 1
 
 - `display_joint_names_from_c3d`
 
@@ -25,6 +25,6 @@
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

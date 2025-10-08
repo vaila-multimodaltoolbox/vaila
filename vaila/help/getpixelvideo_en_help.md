@@ -321,7 +321,7 @@ Built-in backup system for data safety:
 - Created comprehensive HTML documentation
 - Added quick access to full documentation via 'D' key
 - Improved help dialog with format information
-- Enhanced error handling and user feedback
+- Enhanced errorrr handling and user feedback
 
 ### Previous Versions
 - Version 0.0.7: Basic functionality with zoom and marker modes

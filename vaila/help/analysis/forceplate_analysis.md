@@ -1,16 +1,16 @@
 # forceplate_analysis
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Analysis
-- **Arquivo:** `vaila/forceplate_analysis.py`
-- **Linhas:** 279
-- **Tamanho:** 8826 caracteres
-- **Versão:** 0.7
-- **Autor:** Prof. Paulo Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Analysis
+- **File:** `vaila/forceplate_analysis.py`
+- **Lines:** 279
+- **Size:** 8826 characters
+- **Version:** 0.7
+- **Author:** Prof. Paulo Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 ================================================================================
@@ -36,9 +36,9 @@ Key Analyses Supported:
    multidirectional force vector analysis.
 2. Center of Pressure (CoP) Balance Analysis: Evaluat...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 14
+**Total functions found:** 14
 
 - `choose_analysis_type`
 - `run_force_cube_analysis`
@@ -60,6 +60,6 @@ Key Analyses Supported:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

@@ -1,16 +1,16 @@
 # interp_smooth_split
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Processing
-- **Arquivo:** `vaila/interp_smooth_split.py`
-- **Linhas:** 3283
-- **Tamanho:** 131102 caracteres
-- **Versão:** 0.0.7
-- **Autor:** Paulo R. P. Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Processing
+- **File:** `vaila/interp_smooth_split.py`
+- **Lines:** 3283
+- **Size:** 131102 characters
+- **Version:** 0.0.7
+- **Author:** Paulo R. P. Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 ===============================================================================
@@ -41,9 +41,9 @@ Key Features:
 
     padding_l...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 20
+**Total functions found:** 20
 
 - `save_config_to_toml`
 - `load_config_from_toml`
@@ -71,6 +71,6 @@ Key Features:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

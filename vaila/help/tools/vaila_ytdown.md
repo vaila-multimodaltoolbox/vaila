@@ -1,16 +1,16 @@
 # vaila_ytdown
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Tools
-- **Arquivo:** `vaila/vaila_ytdown.py`
-- **Linhas:** 1144
-- **Tamanho:** 46740 caracteres
-- **Versão:** 0.2.0
-- **Autor:** Prof. Dr. Paulo R. P. Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Tools
+- **File:** `vaila/vaila_ytdown.py`
+- **Lines:** 1144
+- **Size:** 46740 characters
+- **Version:** 0.2.0
+- **Author:** Prof. Dr. Paulo R. P. Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 ================================================================================
@@ -39,9 +39,9 @@ Requirements:
 - ffmpeg (must be installed on your system and in PATH)
 =======================================================================...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 14
+**Total functions found:** 14
 
 - `read_urls_from_file`
 - `run_ytdown`
@@ -63,6 +63,6 @@ Requirements:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

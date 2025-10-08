@@ -1,16 +1,16 @@
 # filtering
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Processing
-- **Arquivo:** `vaila/filtering.py`
-- **Linhas:** 64
-- **Tamanho:** 1819 caracteres
-- **Versão:** 0.0.1
-- **Autor:** Paulo Roberto Pereira Santiago
-- **Interface Gráfica:** ❌ Não
+- **Category:** Processing
+- **File:** `vaila/filtering.py`
+- **Lines:** 64
+- **Size:** 1819 characters
+- **Version:** 0.0.1
+- **Author:** Paulo Roberto Pereira Santiago
+- **GUI Interface:** ❌ No
 
-## 📖 Descrição
+## 📖 Description
 
 
 Project: vailá Multimodal Toolbox
@@ -42,9 +42,9 @@ Change History:
     - v0.0.1: First version
 
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 1
+**Total functions found:** 1
 
 - `apply_filter`
 
@@ -53,6 +53,6 @@ Change History:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

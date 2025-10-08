@@ -1,16 +1,16 @@
 # dlt2d
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Processing
-- **Arquivo:** `vaila/dlt2d.py`
-- **Linhas:** 362
-- **Tamanho:** 12974 caracteres
-- **Versão:** 0.0.3
-- **Autor:** Paulo Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Processing
+- **File:** `vaila/dlt2d.py`
+- **Lines:** 362
+- **Size:** 12974 characters
+- **Version:** 0.0.3
+- **Author:** Paulo Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 ================================================================================
@@ -34,9 +34,9 @@ Description:
     The script also allows users to create a template REF2D file from a pixel file, which can then be edited
     manually to include real-world coordinates. The main functionality i...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 7
+**Total functions found:** 7
 
 - `read_coordinates`
 - `dlt2d`
@@ -51,6 +51,6 @@ Description:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

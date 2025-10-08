@@ -1,16 +1,16 @@
 # merge_multivideos
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Tools
-- **Arquivo:** `vaila/merge_multivideos.py`
-- **Linhas:** 2172
-- **Tamanho:** 89274 caracteres
-- **Versão:** updated: 0.2.0
-- **Autor:** Paulo R. P. Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Tools
+- **File:** `vaila/merge_multivideos.py`
+- **Lines:** 2172
+- **Size:** 89274 characters
+- **Version:** updated: 0.2.0
+- **Author:** Paulo R. P. Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 merge_multivideos.py
@@ -39,12 +39,12 @@ Key Features:
 - Option to load video list from a text file
 - Preview of selected videos and their order
 - Ability to reorder videos before processing
-- Detailed console output for tracking progress and handling errors
+- Detailed console output for tracking progress and handling errorrs
 - Crea...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 20
+**Total functions found:** 20
 
 - `run_merge_multivideos`
 - `select_multiple_videos`
@@ -72,6 +72,6 @@ Key Features:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

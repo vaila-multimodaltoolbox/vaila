@@ -1,16 +1,16 @@
 # convert_videos_ts_to_mp4
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Tools
-- **Arquivo:** `vaila/convert_videos_ts_to_mp4.py`
-- **Linhas:** 152
-- **Tamanho:** 4749 caracteres
-- **Versão:** process will start automatically.
+- **Category:** Tools
+- **File:** `vaila/convert_videos_ts_to_mp4.py`
+- **Lines:** 152
+- **Size:** 4749 characters
+- **Version:** process will start automatically.
 
-- **Interface Gráfica:** ✅ Sim
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 vailá - Multimodal Toolbox
@@ -38,9 +38,9 @@ Requirements:
     - Tkinter (included with Python)
 
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 3
+**Total functions found:** 3
 
 - `find_ts_videos`
 - `run_convert_ts_to_mp4`
@@ -51,6 +51,6 @@ Requirements:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

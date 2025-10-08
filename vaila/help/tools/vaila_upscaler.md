@@ -1,22 +1,22 @@
 # vaila_upscaler
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Tools
-- **Arquivo:** `vaila/vaila_upscaler.py`
-- **Linhas:** 58
-- **Tamanho:** 1561 caracteres
-
-
-- **Interface Gráfica:** ❌ Não
-
-## 📖 Descrição
+- **Category:** Tools
+- **File:** `vaila/vaila_upscaler.py`
+- **Lines:** 58
+- **Size:** 1561 characters
 
 
+- **GUI Interface:** ❌ No
 
-## 🔧 Funções Principais
+## 📖 Description
 
-**Total de funções encontradas:** 3
+
+
+## 🔧 Main Functions
+
+**Total functions found:** 3
 
 - `check_device`
 - `load_pipeline`
@@ -27,6 +27,6 @@
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

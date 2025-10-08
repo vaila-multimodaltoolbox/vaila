@@ -1,16 +1,16 @@
 # filter_utils
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Processing
-- **Arquivo:** `vaila/filter_utils.py`
-- **Linhas:** 110
-- **Tamanho:** 3926 caracteres
-- **Versão:** 1.1
-- **Autor:** Prof. Dr. Paulo R. P. Santiago
-- **Interface Gráfica:** ❌ Não
+- **Category:** Processing
+- **File:** `vaila/filter_utils.py`
+- **Lines:** 110
+- **Size:** 3926 characters
+- **Version:** 1.1
+- **Author:** Prof. Dr. Paulo R. P. Santiago
+- **GUI Interface:** ❌ No
 
-## 📖 Descrição
+## 📖 Description
 
 
 Module: filter_utils.py
@@ -24,7 +24,7 @@ Changelog:
 - Version 1.1 (2024-09-12):
   - Modified `butter_filter` to handle multidimensional data.
   - Adjusted padding length dynamically based on data length.
-  - Fixed issues causing errors when data length is less than padding length.
+  - Fixed issues causing errorrs when data length is less than padding length.
 
 Usage Example:
 - Low-pass filter:
@@ -34,9 +34,9 @@ Usage Example:
   `filtered_data_band = butter_filter(data, fs=1000, filter_type='band', lowcut=5, highcut=15, order=4)`
 
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 1
+**Total functions found:** 1
 
 - `butter_filter`
 
@@ -45,6 +45,6 @@ Usage Example:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

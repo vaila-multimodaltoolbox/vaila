@@ -1,16 +1,16 @@
 # numberframes
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Tools
-- **Arquivo:** `vaila/numberframes.py`
-- **Linhas:** 409
-- **Tamanho:** 15222 caracteres
-- **Versão:** 0.1.2
-- **Autor:** Paulo R. P. Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Tools
+- **File:** `vaila/numberframes.py`
+- **Lines:** 409
+- **Size:** 15222 characters
+- **Version:** 0.1.2
+- **Author:** Paulo R. P. Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 numberframes.py
@@ -33,9 +33,9 @@ Key Features:
 2. Detection of capture FPS via Android tag com.android.capture.fps when present.
 3. Parallel processing of multiple videos for faster a...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 7
+**Total functions found:** 7
 
 - `get_video_info`
 - `display_video_info`
@@ -50,6 +50,6 @@ Key Features:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
