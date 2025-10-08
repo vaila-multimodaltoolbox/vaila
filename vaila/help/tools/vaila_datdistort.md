@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Tools
-- **Arquivo:** `vaila\vaila_datdistort.py`
+- **Arquivo:** `vaila/vaila_datdistort.py`
 - **Linhas:** 269
 - **Tamanho:** 9032 caracteres
 - **Versão:** 0.0.2
@@ -60,6 +60,6 @@ python vai...
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Analysis
-- **Arquivo:** `vaila\animal_open_field.py`
+- **Arquivo:** `vaila/animal_open_field.py`
 - **Linhas:** 1174
 - **Tamanho:** 40897 caracteres
 - **Versão:** 2.1.0
@@ -69,6 +69,6 @@ Key Features:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

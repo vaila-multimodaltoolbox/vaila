@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Utils
-- **Arquivo:** `vaila\vpython_c3d.py`
+- **Arquivo:** `vaila/vpython_c3d.py`
 - **Linhas:** 104
 - **Tamanho:** 3226 caracteres
 
@@ -34,6 +34,6 @@
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Tools
-- **Arquivo:** `vaila\merge_multivideos.py`
+- **Arquivo:** `vaila/merge_multivideos.py`
 - **Linhas:** 2172
 - **Tamanho:** 89274 caracteres
 - **Versão:** updated: 0.2.0
@@ -72,6 +72,6 @@ Key Features:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

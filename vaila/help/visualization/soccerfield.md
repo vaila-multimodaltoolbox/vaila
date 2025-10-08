@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Visualization
-- **Arquivo:** `vaila\soccerfield.py`
+- **Arquivo:** `vaila/soccerfield.py`
 - **Linhas:** 2072
 - **Tamanho:** 69405 caracteres
 - **Versão:** 0.0.5
@@ -78,6 +78,6 @@ License:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

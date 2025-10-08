@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Tools
-- **Arquivo:** `vaila\vaila_upscaler.py`
+- **Arquivo:** `vaila/vaila_upscaler.py`
 - **Linhas:** 58
 - **Tamanho:** 1561 caracteres
 
@@ -27,6 +27,6 @@
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

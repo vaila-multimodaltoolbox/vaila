@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Analysis
-- **Arquivo:** `vaila\markerless_2d_analysis.py`
+- **Arquivo:** `vaila/markerless_2d_analysis.py`
 - **Linhas:** 3171
 - **Tamanho:** 126209 caracteres
 - **Versão:** 0.6.0
@@ -68,6 +68,6 @@ including detection confidence, tracking confidence, model...
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

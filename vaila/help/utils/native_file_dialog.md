@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Utils
-- **Arquivo:** `vaila\native_file_dialog.py`
+- **Arquivo:** `vaila/native_file_dialog.py`
 - **Linhas:** 203
 - **Tamanho:** 7099 caracteres
 - **Versão:** 0.1.0
@@ -59,6 +59,6 @@ result = open_yes_no_dialog(
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Utils
-- **Arquivo:** `vaila\markerless_2d_analysis_nvidia.py`
+- **Arquivo:** `vaila/markerless_2d_analysis_nvidia.py`
 - **Linhas:** 594
 - **Tamanho:** 22338 caracteres
 - **Versão:** 0.3.0
@@ -55,6 +55,6 @@ New Features:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

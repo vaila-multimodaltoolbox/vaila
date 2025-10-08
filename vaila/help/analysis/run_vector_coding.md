@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Analysis
-- **Arquivo:** `vaila\run_vector_coding.py`
+- **Arquivo:** `vaila/run_vector_coding.py`
 - **Linhas:** 383
 - **Tamanho:** 11844 caracteres
 
@@ -29,6 +29,6 @@ Time normalize data to n_points.
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

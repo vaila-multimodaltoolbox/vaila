@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Visualization
-- **Arquivo:** `vaila\vailaplot2d.py`
+- **Arquivo:** `vaila/vailaplot2d.py`
 - **Linhas:** 768
 - **Tamanho:** 24620 caracteres
 - **Versão:** 0.0.2
@@ -68,6 +68,6 @@ Plot Types Supported:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

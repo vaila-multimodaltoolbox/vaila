@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Uncategorized
-- **Arquivo:** `vaila\__init__.py`
+- **Arquivo:** `vaila/__init__.py`
 - **Linhas:** 126
 - **Tamanho:** 3711 caracteres
 - **Versão:** 2024-08-16 12:00:00
@@ -38,6 +38,6 @@ Nenhuma função encontrada
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
