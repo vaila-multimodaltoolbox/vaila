@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Utils
-- **Arquivo:** `vaila\mphands.py`
+- **Arquivo:** `vaila/mphands.py`
 - **Linhas:** 319
 - **Tamanho:** 11909 caracteres
 
@@ -54,6 +54,6 @@ The "hand_landmarker.task" model will be downloaded to the project's "mod...
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

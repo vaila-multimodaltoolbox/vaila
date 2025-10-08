@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Utils
-- **Arquivo:** `vaila\reid_yolotrack.py`
+- **Arquivo:** `vaila/reid_yolotrack.py`
 - **Linhas:** 607
 - **Tamanho:** 21894 caracteres
 - **Versão:** 0.1.0
@@ -61,6 +61,6 @@ Usage:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

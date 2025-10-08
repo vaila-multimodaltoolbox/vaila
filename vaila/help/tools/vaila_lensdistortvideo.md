@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Tools
-- **Arquivo:** `vaila\vaila_lensdistortvideo.py`
+- **Arquivo:** `vaila/vaila_lensdistortvideo.py`
 - **Linhas:** 349
 - **Tamanho:** 11795 caracteres
 - **Versão:** 0.0.1
@@ -52,6 +52,6 @@ Intrinsic Camera Parameters:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
