@@ -68,6 +68,6 @@ whether to enable segmentation and smooth segmentation. The default set...
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 09:18:43  
+📅 **Gerado automaticamente em:** 08/10/2025 09:53:50  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

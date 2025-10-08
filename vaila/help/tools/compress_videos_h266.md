@@ -57,6 +57,6 @@ The compressed versions are saved in a subdirectory named 'compressed_h266'.
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 09:18:43  
+📅 **Gerado automaticamente em:** 08/10/2025 09:53:50  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

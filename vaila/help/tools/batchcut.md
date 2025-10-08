@@ -51,6 +51,6 @@ The script automatically removes duplicate ".mp4" extensions from the new file n
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 09:18:43  
+📅 **Gerado automaticamente em:** 08/10/2025 09:53:50  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

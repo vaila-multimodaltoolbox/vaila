@@ -6,7 +6,7 @@ Documentação automática gerada para todos os módulos Python do vailá Multim
 
 - **Total de módulos documentados:** 111
 - **Categorias:** 7
-- **Gerado em:** 08/10/2025 09:18:44
+- **Gerado em:** 08/10/2025 09:53:50
 
 ## 📂 Categorias de Módulos
 
