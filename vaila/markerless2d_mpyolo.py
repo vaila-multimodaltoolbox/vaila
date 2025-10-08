@@ -559,22 +559,34 @@ Multithreaded Tracking:
     mp_tracking_conf.grid(row=4, column=1)
 
     # Enhanced processing parameters
-    enhanced_frame = tk.LabelFrame(scrollable_frame, text="Enhanced Processing Parameters", padx=5, pady=5)
+    enhanced_frame = tk.LabelFrame(
+        scrollable_frame, text="Enhanced Processing Parameters", padx=5, pady=5
+    )
     enhanced_frame.pack(padx=10, pady=5, fill="x")
 
-    tk.Label(enhanced_frame, text="Bbox Scale Factor (2-8):").grid(row=0, column=0, sticky="e")
+    tk.Label(enhanced_frame, text="Bbox Scale Factor (2-8):").grid(
+        row=0, column=0, sticky="e"
+    )
     scale_factor = tk.Entry(enhanced_frame)
     scale_factor.insert(0, "4")
     scale_factor.grid(row=0, column=1)
-    tk.Label(enhanced_frame, text="Higher values = better quality but slower", 
-             font=("Arial", 8, "italic")).grid(row=1, column=0, columnspan=2)
+    tk.Label(
+        enhanced_frame,
+        text="Higher values = better quality but slower",
+        font=("Arial", 8, "italic"),
+    ).grid(row=1, column=0, columnspan=2)
 
-    tk.Label(enhanced_frame, text="Safety Margin (0.1-0.5):").grid(row=2, column=0, sticky="e")
+    tk.Label(enhanced_frame, text="Safety Margin (0.1-0.5):").grid(
+        row=2, column=0, sticky="e"
+    )
     safety_margin = tk.Entry(enhanced_frame)
     safety_margin.insert(0, "0.25")
     safety_margin.grid(row=2, column=1)
-    tk.Label(enhanced_frame, text="Larger values prevent landmarks from exploding outside bbox", 
-             font=("Arial", 8, "italic")).grid(row=3, column=0, columnspan=2)
+    tk.Label(
+        enhanced_frame,
+        text="Larger values prevent landmarks from exploding outside bbox",
+        font=("Arial", 8, "italic"),
+    ).grid(row=3, column=0, columnspan=2)
 
     def on_submit():
         try:
@@ -624,19 +636,21 @@ Multithreaded Tracking:
             params["mp_complexity"] = int(mp_complexity.get())
             params["mp_detection_conf"] = float(mp_detection_conf.get())
             params["mp_tracking_conf"] = float(mp_tracking_conf.get())
-            
+
             # Enhanced processing parameters
             scale_factor_val = int(scale_factor.get())
             safety_margin_val = float(safety_margin.get())
-            
+
             if not (2 <= scale_factor_val <= 8):
                 tk.messagebox.showerror("Error", "Scale Factor must be between 2 and 8")
                 return
-                
+
             if not (0.1 <= safety_margin_val <= 0.5):
-                tk.messagebox.showerror("Error", "Safety Margin must be between 0.1 and 0.5")
+                tk.messagebox.showerror(
+                    "Error", "Safety Margin must be between 0.1 and 0.5"
+                )
                 return
-                
+
             params["scale_factor"] = scale_factor_val
             params["safety_margin"] = safety_margin_val
 
@@ -657,11 +671,19 @@ Multithreaded Tracking:
 
 
 def process_person_with_mediapipe_enhanced(
-    frame, bbox, pose, width, height, mp_drawing, mp_pose, scale_factor=4, safety_margin=0.25
+    frame,
+    bbox,
+    pose,
+    width,
+    height,
+    mp_drawing,
+    mp_pose,
+    scale_factor=4,
+    safety_margin=0.25,
 ):
     """
     Enhanced MediaPipe processing with 4x scaling and safety margins to prevent landmarks from exploding outside bbox.
-    
+
     Args:
         frame: Original video frame
         bbox: YOLO bounding box [x1, y1, x2, y2]
@@ -672,7 +694,7 @@ def process_person_with_mediapipe_enhanced(
         mp_pose: MediaPipe pose solutions
         scale_factor: Factor to scale the bounding box (default 4)
         safety_margin: Safety margin as percentage of bbox size (default 0.25 = 25%)
-    
+
     Returns:
         landmarks_normalized: Landmarks in original frame coordinates (0-1)
         landmarks_pixels: Landmarks in original frame pixel coordinates
@@ -713,14 +735,15 @@ def process_person_with_mediapipe_enhanced(
 
         # Get original crop dimensions
         crop_height, crop_width = person_crop.shape[:2]
-        
+
         # Scale the crop by the scale factor for better MediaPipe accuracy
         new_width = int(crop_width * scale_factor)
         new_height = int(crop_height * scale_factor)
-        
+
         # Resize using high-quality interpolation
-        scaled_crop = cv2.resize(person_crop, (new_width, new_height), 
-                               interpolation=cv2.INTER_LINEAR)
+        scaled_crop = cv2.resize(
+            person_crop, (new_width, new_height), interpolation=cv2.INTER_LINEAR
+        )
 
         # Process with MediaPipe on the scaled image
         crop_rgb = cv2.cvtColor(scaled_crop, cv2.COLOR_BGR2RGB)
@@ -734,82 +757,96 @@ def process_person_with_mediapipe_enhanced(
         landmarks_pixels = []
 
         # Original bbox bounds for validation (with some tolerance)
-        original_x1, original_y1 = x1 - pad_x, y1 - pad_y  
+        original_x1, original_y1 = x1 - pad_x, y1 - pad_y
         original_x2, original_y2 = x2 + pad_x, y2 + pad_y
-        
+
         # Add extra tolerance for landmark validation
         tolerance = max(box_w, box_h) * 0.1  # 10% of largest dimension
-        
+
         valid_landmarks_count = 0
-        
+
         for landmark in results.pose_landmarks.landmark:
             # Landmark coordinates are in the scaled crop (0-1)
             # Convert to pixel coordinates in the scaled crop
             scaled_x = landmark.x * new_width
             scaled_y = landmark.y * new_height
-            
+
             # Convert back to original crop coordinates
             original_crop_x = scaled_x / scale_factor
             original_crop_y = scaled_y / scale_factor
-            
+
             # Convert to global frame coordinates (pixels)
             global_x = original_crop_x + x1_pad
             global_y = original_crop_y + y1_pad
-            
+
             # Validate landmark is within reasonable bounds (with tolerance)
-            if (original_x1 - tolerance <= global_x <= original_x2 + tolerance and 
-                original_y1 - tolerance <= global_y <= original_y2 + tolerance and
-                landmark.visibility > 0.3):  # Only accept visible landmarks
-                
+            if (
+                original_x1 - tolerance <= global_x <= original_x2 + tolerance
+                and original_y1 - tolerance <= global_y <= original_y2 + tolerance
+                and landmark.visibility > 0.3
+            ):  # Only accept visible landmarks
+
                 valid_landmarks_count += 1
-                
+
                 # Store pixel coordinates
-                landmarks_pixels.append({
-                    "x": int(global_x),
-                    "y": int(global_y),
-                    "z": landmark.z,
-                    "visibility": landmark.visibility,
-                })
-                
+                landmarks_pixels.append(
+                    {
+                        "x": int(global_x),
+                        "y": int(global_y),
+                        "z": landmark.z,
+                        "visibility": landmark.visibility,
+                    }
+                )
+
                 # Store normalized coordinates (0-1)
-                landmarks_normalized.append({
-                    "x": global_x / width,
-                    "y": global_y / height,
-                    "z": landmark.z,
-                    "visibility": landmark.visibility,
-                })
+                landmarks_normalized.append(
+                    {
+                        "x": global_x / width,
+                        "y": global_y / height,
+                        "z": landmark.z,
+                        "visibility": landmark.visibility,
+                    }
+                )
             else:
                 # Add invalid/outside landmarks as NaN
-                landmarks_pixels.append({
-                    "x": np.nan,
-                    "y": np.nan,
-                    "z": landmark.z,
-                    "visibility": 0.0,
-                })
-                
-                landmarks_normalized.append({
-                    "x": np.nan,
-                    "y": np.nan,
-                    "z": landmark.z,
-                    "visibility": 0.0,
-                })
+                landmarks_pixels.append(
+                    {
+                        "x": np.nan,
+                        "y": np.nan,
+                        "z": landmark.z,
+                        "visibility": 0.0,
+                    }
+                )
+
+                landmarks_normalized.append(
+                    {
+                        "x": np.nan,
+                        "y": np.nan,
+                        "z": landmark.z,
+                        "visibility": 0.0,
+                    }
+                )
 
         # Only accept results if we have enough valid landmarks (at least 10 out of 33)
         if valid_landmarks_count < 10:
-            print(f"Warning: Only {valid_landmarks_count}/33 landmarks are valid, rejecting detection")
+            print(
+                f"Warning: Only {valid_landmarks_count}/33 landmarks are valid, rejecting detection"
+            )
             return None, None, None, None
 
         # Create annotated crop from the scaled image for better visualization
         annotated_crop = scaled_crop.copy()
-        
+
         # Create a temporary landmarks object for drawing
-        temp_landmarks = type('', (), {})()
+        temp_landmarks = type("", (), {})()
         temp_landmarks.landmark = []
-        
+
         for i, landmark in enumerate(results.pose_landmarks.landmark):
-            if not (np.isnan(landmarks_pixels[i]["x"]) or np.isnan(landmarks_pixels[i]["y"])):
+            if not (
+                np.isnan(landmarks_pixels[i]["x"]) or np.isnan(landmarks_pixels[i]["y"])
+            ):
                 temp_landmarks.landmark.append(landmark)
-        
+
         # Draw landmarks on scaled crop if we have valid landmarks
         if len(temp_landmarks.landmark) > 0:
             mp_drawing.draw_landmarks(
@@ -817,16 +854,19 @@ def process_person_with_mediapipe_enhanced(
                 results.pose_landmarks,  # Use original landmarks for drawing
                 mp_pose.POSE_CONNECTIONS,
                 landmark_drawing_spec=mp_drawing.DrawingSpec(
-                    color=(0, 255, 0), thickness=3, circle_radius=4  # Green, larger for scaled image
+                    color=(0, 255, 0),
+                    thickness=3,
+                    circle_radius=4,  # Green, larger for scaled image
                 ),
                 connection_drawing_spec=mp_drawing.DrawingSpec(
                     color=(255, 255, 255), thickness=2  # White connections
                 ),
             )
-        
+
         # Resize annotated crop back to original size for consistency
-        annotated_crop = cv2.resize(annotated_crop, (crop_width, crop_height), 
-                                  interpolation=cv2.INTER_LINEAR)
+        annotated_crop = cv2.resize(
+            annotated_crop, (crop_width, crop_height), interpolation=cv2.INTER_LINEAR
+        )
 
         return (
             landmarks_normalized,
@@ -846,8 +886,15 @@ def process_person_with_mediapipe(
 ):
     """Original function - now calls the enhanced version with default parameters"""
     return process_person_with_mediapipe_enhanced(
-        frame, bbox, pose, width, height, mp_drawing, mp_pose, 
-        scale_factor=4, safety_margin=0.25
+        frame,
+        bbox,
+        pose,
+        width,
+        height,
+        mp_drawing,
+        mp_pose,
+        scale_factor=4,
+        safety_margin=0.25,
     )
 
 
@@ -1705,28 +1752,28 @@ def process_video_enhanced(video_path, output_dir, model, params, mp_pose, mp_dr
     """
     print(f"Starting enhanced processing with scale factor: {params['scale_factor']}x")
     print(f"Safety margin: {params['safety_margin']*100:.0f}%")
-    
+
     # Open video
     cap = cv2.VideoCapture(video_path)
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = cap.get(cv2.CAP_PROP_FPS)
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    
+
     print(f"Video info: {width}x{height}, {fps} fps, {total_frames} frames")
-    
+
     # Initialize MediaPipe pose estimator
     pose = mp_pose.Pose(
         static_image_mode=params["mp_static_mode"],
         model_complexity=params["mp_complexity"],
         min_detection_confidence=params["mp_detection_conf"],
-        min_tracking_confidence=params["mp_tracking_conf"]
+        min_tracking_confidence=params["mp_tracking_conf"],
     )
-    
+
     # Storage for tracking data and CSV files
     tracking_data = {}
     csv_files = {}
-    
+
     # Configure YOLO parameters
     model_params = {
         "conf": params["yolo_conf"],
@@ -1737,16 +1784,16 @@ def process_video_enhanced(video_path, output_dir, model, params, mp_pose, mp_dr
         "max_det": 100,
         "verbose": False,
     }
-    
+
     print("\nStarting enhanced YOLO tracking + MediaPipe pose estimation...")
-    
+
     # Process video with YOLO tracking
     results = model.track(source=video_path, **model_params)
-    
+
     frame_idx = 0
     successful_pose_detections = 0
     total_person_detections = 0
-    
+
     try:
         for result in results:
             if result.boxes.id is not None:
@@ -1754,113 +1801,161 @@ def process_video_enhanced(video_path, output_dir, model, params, mp_pose, mp_dr
                 ids = result.boxes.id.cpu().numpy()
                 clss = result.boxes.cls.cpu().numpy()
                 confs = result.boxes.conf.cpu().numpy()
-                
+
                 # Get the current frame for MediaPipe processing
                 cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
                 ret, frame = cap.read()
                 if not ret:
                     break
-                
+
                 for box, track_id, cls_id, conf in zip(boxes, ids, clss, confs):
                     class_id = int(cls_id)
                     object_id = int(track_id)
-                    
+
                     # Initialize tracking data structures
                     if class_id not in tracking_data:
                         tracking_data[class_id] = {}
                     if object_id not in tracking_data[class_id]:
                         tracking_data[class_id][object_id] = []
-                    
+
                     # Get color for this object
                     color = get_color_for_id(object_id)
-                    
+
                     # Store tracking data
-                    tracking_data[class_id][object_id].append({
-                        "frame": frame_idx,
-                        "bbox": box.tolist(),
-                        "confidence": float(conf),
-                        "color": color
-                    })
-                    
+                    tracking_data[class_id][object_id].append(
+                        {
+                            "frame": frame_idx,
+                            "bbox": box.tolist(),
+                            "confidence": float(conf),
+                            "color": color,
+                        }
+                    )
+
                     # Process persons (class 0) with enhanced MediaPipe
                     if class_id == 0:  # Person class
                         total_person_detections += 1
-                        
+
                         # Initialize CSV file for this person if needed
                         if object_id not in csv_files:
-                            csv_path = os.path.join(output_dir, f"person_{object_id}_enhanced.csv")
+                            csv_path = os.path.join(
+                                output_dir, f"person_{object_id}_enhanced.csv"
+                            )
                             csv_files[object_id] = csv_path
-                            
+
                             # Create CSV with enhanced headers
                             columns = [
-                                "frame", "person_id", "yolo_bbox_x1", "yolo_bbox_y1", 
-                                "yolo_bbox_x2", "yolo_bbox_y2", "yolo_confidence",
-                                "scale_factor", "safety_margin", "valid_landmarks_count"
+                                "frame",
+                                "person_id",
+                                "yolo_bbox_x1",
+                                "yolo_bbox_y1",
+                                "yolo_bbox_x2",
+                                "yolo_bbox_y2",
+                                "yolo_confidence",
+                                "scale_factor",
+                                "safety_margin",
+                                "valid_landmarks_count",
                             ]
                             for idx in range(33):
-                                columns.extend([
-                                    f"landmark_{idx}_x_norm", f"landmark_{idx}_y_norm", 
-                                    f"landmark_{idx}_z_norm", f"landmark_{idx}_visibility",
-                                    f"landmark_{idx}_x_px", f"landmark_{idx}_y_px"
-                                ])
-                            
+                                columns.extend(
+                                    [
+                                        f"landmark_{idx}_x_norm",
+                                        f"landmark_{idx}_y_norm",
+                                        f"landmark_{idx}_z_norm",
+                                        f"landmark_{idx}_visibility",
+                                        f"landmark_{idx}_x_px",
+                                        f"landmark_{idx}_y_px",
+                                    ]
+                                )
+
                             pd.DataFrame(columns=columns).to_csv(csv_path, index=False)
                             print(f"Created enhanced CSV for person ID:{object_id}")
-                        
+
                         # Apply enhanced MediaPipe processing
-                        landmarks_norm, landmarks_px, annotated_crop, final_bbox = process_person_with_mediapipe_enhanced(
-                            frame, box, pose, width, height, mp_drawing, mp_pose,
-                            scale_factor=params["scale_factor"],
-                            safety_margin=params["safety_margin"]
+                        landmarks_norm, landmarks_px, annotated_crop, final_bbox = (
+                            process_person_with_mediapipe_enhanced(
+                                frame,
+                                box,
+                                pose,
+                                width,
+                                height,
+                                mp_drawing,
+                                mp_pose,
+                                scale_factor=params["scale_factor"],
+                                safety_margin=params["safety_margin"],
+                            )
                         )
-                        
+
                         # Count valid landmarks
                         valid_count = 0
                         if landmarks_norm and landmarks_px:
-                            valid_count = sum(1 for lm in landmarks_px 
-                                            if not (np.isnan(lm["x"]) or np.isnan(lm["y"])))
+                            valid_count = sum(
+                                1
+                                for lm in landmarks_px
+                                if not (np.isnan(lm["x"]) or np.isnan(lm["y"]))
+                            )
                             successful_pose_detections += 1
-                        
+
                         # Save enhanced data to CSV
                         save_enhanced_person_data(
-                            csv_files[object_id], frame_idx, object_id, box, conf,
-                            landmarks_norm, landmarks_px, params, valid_count
+                            csv_files[object_id],
+                            frame_idx,
+                            object_id,
+                            box,
+                            conf,
+                            landmarks_norm,
+                            landmarks_px,
+                            params,
+                            valid_count,
                         )
-            
+
             frame_idx += 1
             if frame_idx % 30 == 0:
-                success_rate = (successful_pose_detections / max(total_person_detections, 1)) * 100
-                print(f"\rProcessing frame {frame_idx}/{total_frames} ({(frame_idx/total_frames)*100:.1f}%) - "
-                      f"Pose success: {success_rate:.1f}%", end="")
-        
+                success_rate = (
+                    successful_pose_detections / max(total_person_detections, 1)
+                ) * 100
+                print(
+                    f"\rProcessing frame {frame_idx}/{total_frames} ({(frame_idx/total_frames)*100:.1f}%) - "
+                    f"Pose success: {success_rate:.1f}%",
+                    end="",
+                )
+
         print(f"\nCompleted enhanced processing!")
         print(f"Total person detections: {total_person_detections}")
         print(f"Successful pose detections: {successful_pose_detections}")
-        print(f"Success rate: {(successful_pose_detections / max(total_person_detections, 1) * 100):.1f}%")
-        
+        print(
+            f"Success rate: {(successful_pose_detections / max(total_person_detections, 1) * 100):.1f}%"
+        )
+
         # Create enhanced visualization
-        create_enhanced_visualization_video(video_path, output_dir, tracking_data, params)
-        
+        create_enhanced_visualization_video(
+            video_path, output_dir, tracking_data, params
+        )
+
         # Save processing parameters
         params_file = os.path.join(output_dir, "enhanced_processing_parameters.json")
         with open(params_file, "w") as f:
             import json
+
             enhanced_params = params.copy()
             enhanced_params["total_person_detections"] = total_person_detections
             enhanced_params["successful_pose_detections"] = successful_pose_detections
-            enhanced_params["success_rate"] = successful_pose_detections / max(total_person_detections, 1) * 100
+            enhanced_params["success_rate"] = (
+                successful_pose_detections / max(total_person_detections, 1) * 100
+            )
             json.dump(enhanced_params, f, indent=4)
-        
+
     finally:
         cap.release()
         pose.close()
-    
+
     print(f"\nEnhanced processing complete! Results saved to: {output_dir}")
     print(f"Key improvements applied:")
     print(f"  - {params['scale_factor']}x bbox scaling for better pose detection")
-    print(f"  - {params['safety_margin']*100:.0f}% safety margin to prevent landmark explosion")
+    print(
+        f"  - {params['safety_margin']*100:.0f}% safety margin to prevent landmark explosion"
+    )
     print(f"  - Landmark validation with minimum 10/33 valid landmarks required")
-    
+
     # Try to open output folder
     try:
         if os.name == "nt":  # Windows
@@ -1871,8 +1966,17 @@ def process_video_enhanced(video_path, output_dir, model, params, mp_pose, mp_dr
         print(f"Could not open output directory: {e}")
 
 
-def save_enhanced_person_data(csv_path, frame_idx, person_id, bbox, confidence, 
-                            landmarks_norm=None, landmarks_px=None, params=None, valid_count=0):
+def save_enhanced_person_data(
+    csv_path,
+    frame_idx,
+    person_id,
+    bbox,
+    confidence,
+    landmarks_norm=None,
+    landmarks_px=None,
+    params=None,
+    valid_count=0,
+):
     """Save enhanced person detection and pose data to CSV."""
     row_data = {
         "frame": frame_idx,
@@ -1884,9 +1988,9 @@ def save_enhanced_person_data(csv_path, frame_idx, person_id, bbox, confidence,
         "yolo_confidence": confidence,
         "scale_factor": params["scale_factor"] if params else 4,
         "safety_margin": params["safety_margin"] if params else 0.25,
-        "valid_landmarks_count": valid_count
+        "valid_landmarks_count": valid_count,
     }
-    
+
     if landmarks_norm and landmarks_px:
         for idx, (norm, px) in enumerate(zip(landmarks_norm, landmarks_px)):
             prefix = f"landmark_{idx}"
@@ -1910,7 +2014,7 @@ def save_enhanced_person_data(csv_path, frame_idx, person_id, bbox, confidence,
             # Pixels
             row_data[f"{prefix}_x_px"] = np.nan
             row_data[f"{prefix}_y_px"] = np.nan
-    
+
     df = pd.DataFrame([row_data])
     df.to_csv(csv_path, mode="a", header=False, index=False)
 
@@ -1918,19 +2022,19 @@ def save_enhanced_person_data(csv_path, frame_idx, person_id, bbox, confidence,
 def create_enhanced_visualization_video(video_path, output_dir, tracking_data, params):
     """Create enhanced visualization video showing improved pose detection."""
     print("\nCreating enhanced visualization video...")
-    
+
     cap = cv2.VideoCapture(video_path)
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = int(cap.get(cv2.CAP_PROP_FPS))
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    
+
     video_name = os.path.splitext(os.path.basename(video_path))[0]
     output_video = os.path.join(output_dir, f"{video_name}_enhanced_visualization.mp4")
-    
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     out = cv2.VideoWriter(output_video, fourcc, fps, (width, height))
-    
+
     # Load pose data for persons from enhanced CSV files
     pose_data = {}
     for object_id in tracking_data.get(0, {}):
@@ -1942,100 +2046,146 @@ def create_enhanced_visualization_video(video_path, output_dir, tracking_data, p
                 print(f"Loaded enhanced pose data for person ID:{object_id}")
             except Exception as e:
                 print(f"Error loading pose data for person ID:{object_id}: {e}")
-    
+
     mp_pose = mp.solutions.pose
-    
+
     try:
         frame_idx = 0
         while cap.isOpened():
             ret, frame = cap.read()
             if not ret:
                 break
-            
+
             # Add enhanced processing info overlay
             info_text = f"Enhanced: {params['scale_factor']}x scaling, {params['safety_margin']*100:.0f}% margin"
-            cv2.putText(frame, info_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
-            
+            cv2.putText(
+                frame,
+                info_text,
+                (10, 30),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (0, 255, 255),
+                2,
+            )
+
             # Draw tracking boxes and enhanced pose for all detected persons
             for class_id, objects in tracking_data.items():
                 if class_id != 0:  # Only process persons (class 0)
                     continue
-                    
+
                 for object_id, detections in objects.items():
                     # Get detection data for current frame
                     frame_data = next(
-                        (data for data in detections if data["frame"] == frame_idx), 
-                        None
+                        (data for data in detections if data["frame"] == frame_idx),
+                        None,
                     )
                     if frame_data is None:
                         continue
-                    
+
                     bbox = frame_data["bbox"]
                     x1, y1, x2, y2 = map(int, bbox)
                     color = frame_data.get("color", get_color_for_id(object_id))
-                    
+
                     # Draw bounding box
                     cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-                    
+
                     # Draw enhanced label with pose info
                     if object_id in pose_data:
                         frame_landmarks = pose_data[object_id].get(frame_idx)
-                        valid_count = frame_landmarks.get("valid_landmarks_count", 0) if frame_landmarks else 0
+                        valid_count = (
+                            frame_landmarks.get("valid_landmarks_count", 0)
+                            if frame_landmarks
+                            else 0
+                        )
                         label = f"Person ID:{object_id} ({valid_count}/33)"
                     else:
                         label = f"Person ID:{object_id}"
-                    
+
                     (label_width, label_height), baseline = cv2.getTextSize(
                         label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2
                     )
                     cv2.rectangle(
-                        frame, (x1, y1 - label_height - 10),
-                        (x1 + label_width + 10, y1), color, -1
+                        frame,
+                        (x1, y1 - label_height - 10),
+                        (x1 + label_width + 10, y1),
+                        color,
+                        -1,
                     )
-                    cv2.putText(frame, label, (x1 + 5, y1 - 5),
-                              cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
-                    
+                    cv2.putText(
+                        frame,
+                        label,
+                        (x1 + 5, y1 - 5),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.6,
+                        (0, 0, 0),
+                        2,
+                    )
+
                     # Draw enhanced pose if available
                     if object_id in pose_data:
                         frame_landmarks = pose_data[object_id].get(frame_idx)
-                        
+
                         if frame_landmarks:
                             landmarks = []
                             for i in range(33):
                                 try:
                                     x = frame_landmarks.get(f"landmark_{i}_x_px")
                                     y = frame_landmarks.get(f"landmark_{i}_y_px")
-                                    vis = frame_landmarks.get(f"landmark_{i}_visibility", 0.0)
-                                    
-                                    if (x is not None and y is not None and 
-                                        not pd.isna(x) and not pd.isna(y)):
+                                    vis = frame_landmarks.get(
+                                        f"landmark_{i}_visibility", 0.0
+                                    )
+
+                                    if (
+                                        x is not None
+                                        and y is not None
+                                        and not pd.isna(x)
+                                        and not pd.isna(y)
+                                    ):
                                         landmarks.append((int(x), int(y), vis))
                                     else:
                                         landmarks.append(None)
                                 except (KeyError, TypeError):
                                     landmarks.append(None)
-                            
+
                             # Draw connections with enhanced styling
                             for connection in mp_pose.POSE_CONNECTIONS:
                                 start_idx, end_idx = connection
-                                if (landmarks[start_idx] is not None and 
-                                    landmarks[end_idx] is not None):
-                                    cv2.line(frame, landmarks[start_idx][:2],
-                                           landmarks[end_idx][:2], color, 3)  # Thicker lines
-                            
+                                if (
+                                    landmarks[start_idx] is not None
+                                    and landmarks[end_idx] is not None
+                                ):
+                                    cv2.line(
+                                        frame,
+                                        landmarks[start_idx][:2],
+                                        landmarks[end_idx][:2],
+                                        color,
+                                        3,
+                                    )  # Thicker lines
+
                             # Draw landmark points with enhanced visibility
                             for lm in landmarks:
                                 if lm is not None:
-                                    cv2.circle(frame, (int(lm[0]), int(lm[1])), 5, color, -1)  # Larger points
-                                    cv2.circle(frame, (int(lm[0]), int(lm[1])), 5, (255, 255, 255), 1)  # White border
-            
+                                    cv2.circle(
+                                        frame, (int(lm[0]), int(lm[1])), 5, color, -1
+                                    )  # Larger points
+                                    cv2.circle(
+                                        frame,
+                                        (int(lm[0]), int(lm[1])),
+                                        5,
+                                        (255, 255, 255),
+                                        1,
+                                    )  # White border
+
             out.write(frame)
             frame_idx += 1
             if frame_idx % 30 == 0:
-                print(f"\rCreating enhanced visualization: {(frame_idx/total_frames)*100:.1f}%", end="")
-        
+                print(
+                    f"\rCreating enhanced visualization: {(frame_idx/total_frames)*100:.1f}%",
+                    end="",
+                )
+
         print(f"\nEnhanced visualization video saved to: {output_video}")
-        
+
     finally:
         cap.release()
         out.release()
@@ -2046,7 +2196,7 @@ def run_markerless2d_mpyolo():
     # Print the script version and directory
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
-    
+
     # Update model path
     model_name = "yolo12x.pt"
 

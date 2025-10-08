@@ -3,7 +3,7 @@
 readc3d_export.py
 ===============================================================================
 Author: Prof. Paulo R. P. Santiago
-Version: 25 September 2024 
+Version: 25 September 2024
 Update: 15 September 2025
 Version updated: 0.0.3
 Python Version: 3.12.11
@@ -310,7 +310,9 @@ def save_platform_data(datac3d, file_name, output_dir):
             )
 
             # Save individual platform COP data to CSV
-            cop_file_path = Path(output_dir) / f"{file_name}_platform{platform_idx}_cop.csv"
+            cop_file_path = (
+                Path(output_dir) / f"{file_name}_platform{platform_idx}_cop.csv"
+            )
             cop_df.to_csv(cop_file_path, index=False)
             print(f"COP data saved to: {cop_file_path}")
 
@@ -335,7 +337,9 @@ def save_platform_data(datac3d, file_name, output_dir):
             )
 
             # Save to CSV
-            force_file_path = Path(output_dir) / f"{file_name}_platform{platform_idx}_force.csv"
+            force_file_path = (
+                Path(output_dir) / f"{file_name}_platform{platform_idx}_force.csv"
+            )
             force_df.to_csv(force_file_path, index=False)
             print(f"Force data saved to: {force_file_path}")
 
@@ -357,7 +361,9 @@ def save_platform_data(datac3d, file_name, output_dir):
             )
 
             # Save to CSV
-            moment_file_path = Path(output_dir) / f"{file_name}_platform{platform_idx}_moment.csv"
+            moment_file_path = (
+                Path(output_dir) / f"{file_name}_platform{platform_idx}_moment.csv"
+            )
             moment_df.to_csv(moment_file_path, index=False)
             print(f"Moment data saved to: {moment_file_path}")
 
@@ -487,7 +493,10 @@ def save_meta_points_data(datac3d, file_name, output_dir):
                             df.insert(0, "Time", time_values)
 
                             # Save to CSV
-                            meta_path = Path(output_dir) / f"{file_name}_meta_{meta_key}_layer{i}.csv"
+                            meta_path = (
+                                Path(output_dir)
+                                / f"{file_name}_meta_{meta_key}_layer{i}.csv"
+                            )
                             df.to_csv(meta_path, index=False)
                             print(
                                 f"Meta points {meta_key} layer {i} saved to: {meta_path}"
@@ -502,7 +511,9 @@ def save_meta_points_data(datac3d, file_name, output_dir):
                             meta_data.T
                         )  # Transpose to get frames as rows
                         df.insert(0, "Time", time_values)
-                        meta_path = Path(output_dir) / f"{file_name}_meta_{meta_key}.csv"
+                        meta_path = (
+                            Path(output_dir) / f"{file_name}_meta_{meta_key}.csv"
+                        )
                         df.to_csv(meta_path, index=False)
                         print(f"Meta points {meta_key} saved to: {meta_path}")
 
@@ -708,9 +719,7 @@ def save_to_files(
             ),
         )
         print(f"Saving markers CSV for {file_name}")
-        markers_df.to_csv(
-            file_dir / f"{file_name}_markers.csv", index=False
-        )
+        markers_df.to_csv(file_dir / f"{file_name}_markers.csv", index=False)
     else:
         print(f"No markers found for {file_name}, saving empty file.")
         save_empty_file(file_dir / f"{file_name}_markers.csv")
@@ -727,9 +736,7 @@ def save_to_files(
             ),
         )
         print(f"Saving analogs CSV for {file_name}")
-        analogs_df.to_csv(
-            file_dir / f"{file_name}_analogs.csv", index=False
-        )
+        analogs_df.to_csv(file_dir / f"{file_name}_analogs.csv", index=False)
     else:
         print(f"No analogs found for {file_name}, saving empty file.")
         save_empty_file(file_dir / f"{file_name}_analogs.csv")
@@ -800,14 +807,14 @@ def convert_c3d_to_csv():
     """
     Main function to convert C3D files to CSV and .info files.
     """
-    print("="*60)
+    print("=" * 60)
     print("SINGLE C3D TO CSV CONVERSION")
-    print("="*60)
+    print("=" * 60)
     print(f"Running script: {Path(__file__).name}")
     print(f"Script directory: {Path(__file__).parent}")
     print("Starting SINGLE file processing mode...")
-    print("="*60)
-    
+    print("=" * 60)
+
     root = Tk()
     root.withdraw()
 
@@ -819,7 +826,9 @@ def convert_c3d_to_csv():
     print(f"Excel export: {'Yes' if save_excel else 'No'}")
 
     print("Step 2: Selecting input directory...")
-    input_directory = filedialog.askdirectory(title="Select Input Directory with C3D Files")
+    input_directory = filedialog.askdirectory(
+        title="Select Input Directory with C3D Files"
+    )
     if not input_directory:
         print("No input directory selected. Exiting.")
         messagebox.showerror("Error", "No input directory selected.")
@@ -839,11 +848,17 @@ def convert_c3d_to_csv():
     print("Step 4: Scanning for C3D files...")
     # Get all C3D files in the input directory (excluding hidden files that start with '.')
     input_path = Path(input_directory)
-    c3d_files = [f.name for f in input_path.iterdir() if f.is_file() and f.suffix.lower() == '.c3d' and not f.name.startswith('.')]
-    
+    c3d_files = [
+        f.name
+        for f in input_path.iterdir()
+        if f.is_file() and f.suffix.lower() == ".c3d" and not f.name.startswith(".")
+    ]
+
     if not c3d_files:
         print(f"ERROR: No visible C3D files found in {input_directory}")
-        messagebox.showerror("Error", f"No visible C3D files found in {input_directory}")
+        messagebox.showerror(
+            "Error", f"No visible C3D files found in {input_directory}"
+        )
         root.destroy()
         return
 
@@ -859,16 +874,14 @@ def convert_c3d_to_csv():
     print(f"Run-level save directory created: {run_save_dir}")
 
     print("Step 6: Starting processing...")
-    print("="*50)
-    
+    print("=" * 50)
+
     # Initialize tracking variables
     successful_conversions = 0
     failed_conversions = 0
     error_details = []
 
-    progress_bar = tqdm(
-        total=len(c3d_files), desc="Processing C3D files", unit="file"
-    )
+    progress_bar = tqdm(total=len(c3d_files), desc="Processing C3D files", unit="file")
 
     for c3d_file in c3d_files:
         print(f"\nProcessing file: {c3d_file}")
@@ -886,7 +899,7 @@ def convert_c3d_to_csv():
                 datac3d,
             ) = importc3d(str(file_path))
             file_name = Path(c3d_file).stem
-            
+
             # Save the extracted data in CSV files and .info files within the execution save directory
             save_to_files(
                 markers,
@@ -904,17 +917,17 @@ def convert_c3d_to_csv():
             )
             successful_conversions += 1
             print(f"Successfully converted: {c3d_file}")
-            
+
         except Exception as e:
             failed_conversions += 1
             error_details.append((c3d_file, str(e)))
             print(f"ERROR processing {c3d_file}: {e}")
             messagebox.showerror("Error", f"Failed to process {c3d_file}: {e}")
-        
+
         progress_bar.update(1)
 
     progress_bar.close()
-    
+
     # Show final results
     print(f"\n{'='*60}")
     print("SINGLE CONVERSION COMPLETED")
@@ -925,7 +938,7 @@ def convert_c3d_to_csv():
     print(f"Success rate: {(successful_conversions/len(c3d_files)*100):.1f}%")
     print(f"Output directory: {run_save_dir}")
     print(f"{'='*60}")
-    
+
     if failed_conversions == 0:
         print("PERFECT! All files converted successfully!")
         messagebox.showinfo(
@@ -934,9 +947,10 @@ def convert_c3d_to_csv():
     else:
         print(f"Warning: {failed_conversions} files failed to convert.")
         messagebox.showwarning(
-            "Warning", f"Conversion completed with {failed_conversions} failures. Check console for details."
+            "Warning",
+            f"Conversion completed with {failed_conversions} failures. Check console for details.",
         )
-    
+
     root.destroy()  # Close the Tkinter resources
 
 
@@ -962,24 +976,26 @@ def batch_convert_c3d_to_csv():
     """
     Main function to convert all C3D files in a directory to CSV and .info files.
     """
-    print("="*60)
+    print("=" * 60)
     print("BATCH C3D TO CSV CONVERSION")
-    print("="*60)
+    print("=" * 60)
     print(f"Running script: {Path(__file__).name}")
     print(f"Script directory: {Path(__file__).parent}")
     print("Starting BATCH processing mode...")
-    print("="*60)
-    
+    print("=" * 60)
+
     root = Tk()
     root.withdraw()
 
     print("Step 1: Selecting input directory...")
-    input_directory = filedialog.askdirectory(title="Select Input Directory with C3D Files")
+    input_directory = filedialog.askdirectory(
+        title="Select Input Directory with C3D Files"
+    )
     if not input_directory:
         print("No input directory selected. Exiting.")
         messagebox.showerror("Error", "No input directory selected.")
         return
-    
+
     print(f"Input directory selected: {input_directory}")
 
     print("Step 2: Selecting output directory...")
@@ -988,17 +1004,23 @@ def batch_convert_c3d_to_csv():
         print("No output directory selected. Exiting.")
         messagebox.showerror("Error", "No output directory selected.")
         return
-    
+
     print(f"Output directory selected: {output_directory}")
 
     print("Step 3: Scanning for C3D files...")
     # Get all C3D files in the input directory (excluding hidden files that start with '.')
     input_path = Path(input_directory)
-    c3d_files = [f.name for f in input_path.iterdir() if f.is_file() and f.suffix.lower() == '.c3d' and not f.name.startswith('.')]
-    
+    c3d_files = [
+        f.name
+        for f in input_path.iterdir()
+        if f.is_file() and f.suffix.lower() == ".c3d" and not f.name.startswith(".")
+    ]
+
     if not c3d_files:
         print(f"ERROR: No visible C3D files found in {input_directory}")
-        messagebox.showerror("Error", f"No visible C3D files found in {input_directory}")
+        messagebox.showerror(
+            "Error", f"No visible C3D files found in {input_directory}"
+        )
         return
 
     print(f"Found {len(c3d_files)} visible C3D files in directory")
@@ -1020,39 +1042,39 @@ def batch_convert_c3d_to_csv():
     print(f"Run-level save directory created: {run_save_dir}")
 
     print("Step 6: Starting batch processing...")
-    print("="*50)
-    
+    print("=" * 50)
+
     # Initialize tracking variables
     successful_conversions = 0
     failed_conversions = 0
     error_details = []
     successful_files = []
     failed_files = []
-    
+
     # Create log file
     log_file_path = run_save_dir / "conversion_log.txt"
-    log_file = open(log_file_path, 'w', encoding='utf-8')
-    
+    log_file = open(log_file_path, "w", encoding="utf-8")
+
     # Write header to log file
-    log_file.write("="*80 + "\n")
+    log_file.write("=" * 80 + "\n")
     log_file.write("C3D TO CSV BATCH CONVERSION LOG\n")
-    log_file.write("="*80 + "\n")
+    log_file.write("=" * 80 + "\n")
     log_file.write(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
     log_file.write(f"Input Directory: {input_directory}\n")
     log_file.write(f"Output Directory: {run_save_dir}\n")
     log_file.write(f"Excel Export: {'Yes' if save_excel else 'No'}\n")
     log_file.write(f"Visible C3D Files Found: {len(c3d_files)}\n")
-    log_file.write("="*80 + "\n\n")
-    
+    log_file.write("=" * 80 + "\n\n")
+
     # Process each C3D file
     for i, c3d_file in enumerate(c3d_files, 1):
         print(f"\nProcessing file {i}/{len(c3d_files)}: {c3d_file}")
         log_file.write(f"\n--- Processing File {i}/{len(c3d_files)}: {c3d_file} ---\n")
-        
+
         try:
             print(f"\nProcessing: {c3d_file}")
             log_file.write("Status: Processing started\n")
-            
+
             # Process the C3D file
             file_path = Path(input_directory) / c3d_file
             (
@@ -1066,13 +1088,17 @@ def batch_convert_c3d_to_csv():
                 analog_freq,
                 datac3d,
             ) = importc3d(str(file_path))
-            
+
             log_file.write("C3D file loaded successfully\n")
-            log_file.write(f"Markers: {len(marker_labels)}, Analog channels: {len(analog_labels)}\n")
-            log_file.write(f"Marker frequency: {marker_freq} Hz, Analog frequency: {analog_freq} Hz\n")
-            
+            log_file.write(
+                f"Markers: {len(marker_labels)}, Analog channels: {len(analog_labels)}\n"
+            )
+            log_file.write(
+                f"Marker frequency: {marker_freq} Hz, Analog frequency: {analog_freq} Hz\n"
+            )
+
             file_name = Path(c3d_file).stem
-            
+
             # Save the extracted data in CSV files and .info files within the execution save directory
             save_to_files(
                 markers,
@@ -1088,77 +1114,85 @@ def batch_convert_c3d_to_csv():
                 save_excel,
                 datac3d,
             )
-            
+
             successful_conversions += 1
             successful_files.append(c3d_file)
             print(f"Successfully converted: {c3d_file}")
             log_file.write("Status: SUCCESS - All files created successfully\n")
-            
+
         except Exception as e:
             failed_conversions += 1
             failed_files.append(c3d_file)
             error_msg = str(e)
             error_details.append((c3d_file, error_msg))
-            
+
             print(f"ERROR processing {c3d_file}: {e}")
             print("Continuing with next file...")
-            
+
             log_file.write(f"Status: FAILED - Error: {error_msg}\n")
             log_file.write(f"Error type: {type(e).__name__}\n")
-            
+
             # Add more context for common errors
             if "utf-8" in error_msg.lower():
                 log_file.write("Context: This appears to be a UTF-8 encoding issue\n")
             elif "keyerror" in error_msg.lower():
-                log_file.write("Context: This appears to be a parameter/key access issue\n")
+                log_file.write(
+                    "Context: This appears to be a parameter/key access issue\n"
+                )
             elif "shape" in error_msg.lower():
-                log_file.write("Context: This appears to be a data shape/dimension issue\n")
+                log_file.write(
+                    "Context: This appears to be a data shape/dimension issue\n"
+                )
             elif "ezc3d" in error_msg.lower():
                 log_file.write("Context: This appears to be a C3D file reading issue\n")
-            
+
             continue
 
     # Write summary to log file
-    log_file.write("\n" + "="*80 + "\n")
+    log_file.write("\n" + "=" * 80 + "\n")
     log_file.write("CONVERSION SUMMARY\n")
-    log_file.write("="*80 + "\n")
+    log_file.write("=" * 80 + "\n")
     log_file.write(f"Visible C3D files found: {len(c3d_files)}\n")
     log_file.write(f"Successful conversions: {successful_conversions}\n")
     log_file.write(f"Failed conversions: {failed_conversions}\n")
-    log_file.write(f"Success rate: {(successful_conversions/len(c3d_files)*100):.1f}%\n")
-    
+    log_file.write(
+        f"Success rate: {(successful_conversions/len(c3d_files)*100):.1f}%\n"
+    )
+
     if successful_files:
         log_file.write(f"\nSUCCESSFUL CONVERSIONS ({len(successful_files)}):\n")
         for file in successful_files:
             log_file.write(f"  ✓ {file}\n")
-    
+
     if failed_files:
         log_file.write(f"\nFAILED CONVERSIONS ({len(failed_files)}):\n")
         for file, error in error_details:
             log_file.write(f"  ✗ {file} - Error: {error}\n")
-    
+
     # Analyze error patterns
     if error_details:
         log_file.write("\nERROR ANALYSIS:\n")
         error_types = {}
         for file, error in error_details:
-            error_type = type(error).__name__ if hasattr(error, '__class__') else "Unknown"
+            error_type = (
+                type(error).__name__ if hasattr(error, "__class__") else "Unknown"
+            )
             if error_type not in error_types:
                 error_types[error_type] = []
             error_types[error_type].append(file)
-        
+
         for error_type, files in error_types.items():
             log_file.write(f"  {error_type}: {len(files)} files\n")
             for file in files:
                 log_file.write(f"    - {file}\n")
-    
+
     log_file.write(f"\nOutput directory: {run_save_dir}\n")
     log_file.write(f"Log file: {log_file_path}\n")
-    log_file.write("="*80 + "\n")
+    log_file.write("=" * 80 + "\n")
     log_file.close()
-    
+
     print(f"\nDetailed log saved to: {log_file_path}")
-    
+
     # Show final results
     print(f"\n{'='*60}")
     print("BATCH CONVERSION COMPLETED")
@@ -1170,35 +1204,37 @@ def batch_convert_c3d_to_csv():
     print(f"Output directory: {run_save_dir}")
     print(f"Detailed log: {log_file_path}")
     print(f"{'='*60}")
-    
+
     if failed_conversions == 0:
         print("PERFECT! All files converted successfully!")
     elif successful_conversions > failed_conversions:
         print("Good! Most files converted successfully.")
     else:
         print("Warning: Many files failed to convert.")
-    
+
     # Show error summary if there were failures
     if failed_conversions > 0:
         print("\nERROR SUMMARY:")
         print(f"Failed files: {failed_conversions}")
         print("Most common errors:")
-        
+
         error_counts = {}
         for file, error in error_details:
             error_msg = str(error)
             if error_msg not in error_counts:
                 error_counts[error_msg] = 0
             error_counts[error_msg] += 1
-        
+
         # Show top 5 most common errors
         sorted_errors = sorted(error_counts.items(), key=lambda x: x[1], reverse=True)
         for i, (error_msg, count) in enumerate(sorted_errors[:5]):
-            print(f"  {i+1}. {error_msg[:100]}{'...' if len(error_msg) > 100 else ''} ({count} files)")
-    
+            print(
+                f"  {i+1}. {error_msg[:100]}{'...' if len(error_msg) > 100 else ''} ({count} files)"
+            )
+
     message = f"Batch conversion completed!\n\nVisible C3D files: {len(c3d_files)}\nSuccessful: {successful_conversions}\nFailed: {failed_conversions}\nSuccess rate: {(successful_conversions/len(c3d_files)*100):.1f}%\n\nOutput directory: {run_save_dir}\nDetailed log: {log_file_path.name}"
     messagebox.showinfo("Batch Conversion Complete", message)
-    
+
     root.destroy()  # Close the Tkinter resources
 
 
@@ -1206,12 +1242,12 @@ if __name__ == "__main__":
     # Ask user if they want batch processing or single file
     root = Tk()
     root.withdraw()
-    
+
     choice = messagebox.askyesno(
-        "Processing Mode", 
-        "Do you want to process all C3D files in a directory?\n\nYes = Batch processing\nNo = Single file processing"
+        "Processing Mode",
+        "Do you want to process all C3D files in a directory?\n\nYes = Batch processing\nNo = Single file processing",
     )
-    
+
     if choice:
         batch_convert_c3d_to_csv()
     else:
