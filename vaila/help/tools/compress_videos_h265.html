@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>vailá - compress_videos_h265</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            line-height: 1.6;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 30px; }
+        .module-info { background: #ecf0f1; padding: 15px; border-radius: 5px; margin: 20px 0; }
+        .functions { background: #f8f9fa; padding: 15px; border-left: 4px solid #28a745; margin: 15px 0; }
+        .docstring { background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 15px 0; }
+        .error { background: #f8d7da; padding: 15px; border-left: 4px solid #dc3545; margin: 15px 0; }
+        code { background: #e9ecef; padding: 2px 6px; border-radius: 3px; }
+        pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; }
+        .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #6c757d; font-size: 0.9em; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>vailá - compress_videos_h265</h1>
+
+        <div class="module-info">
+            <h3>📋 Informações do Módulo</h3>
+            <p><strong>Categoria:</strong> Tools</p>
+            <p><strong>Arquivo:</strong> vaila\compress_videos_h265.py</p>
+            <p><strong>Linhas:</strong> 657</p>
+            <p><strong>Tamanho:</strong> 23276 caracteres</p>
+            
+            
+            <p><strong>Interface Gráfica:</strong> ✅ Sim</p>
+        </div>
+
+        
+
+        <div class="docstring">
+            <h3>📖 Descrição</h3>
+            <pre>
+vailá - Multimodal Toolbox
+© Paulo Santiago, Guilherme Cesar, Ligia Mochida, Bruno Bedo
+https://github.com/paulopreto/vaila-multimodaltoolbox
+Please see AUTHORS for contributors.
+
+Licensed under GNU Lesser General Public License v3.0
+
+compress_videos_h265.py
+
+Description:
+This script compresses videos in a specified directory to H.265/HEVC format using the FFmpeg tool.
+It provides a GUI for selecting the directory containing the videos, and processes each video,
+saving the compressed versions in a subdirectory named 'compressed_h265'.
+The script supports GPU acceleration using NVIDIA NVENC if available, or falls back to CPU encoding
+with libx265.
+
+The script has been updated to work on Windows, Linux, and macOS.
+It includes cross-platform detection of NVIDIA GPUs to utilize GPU acceleration where possible.
+On systems without an NVIDIA GPU (e.g., macOS), the script defaults to CPU-based compression.
+
+Usage:
+- Run the script to open a GUI, select the directory containing the videos, and...</pre>
+        </div>
+
+        <div class="functions">
+            <h3>🔧 Funções Principais</h3>
+            <p><strong>Total de funções encontradas:</strong> 9</p>
+            <ul><li><code>is_nvidia_gpu_available</code></li><li><code>find_videos</code></li><li><code>create_temp_file_with_videos</code></li><li><code>run_compress_videos_h265</code></li><li><code>get_compression_parameters</code></li><li><code>compress_videos_h265_gui</code></li><li><code>on_ok</code></li><li><code>on_cancel</code></li><li><code>show_help</code></li></ul>
+        </div>
+
+        <div class="footer">
+            <p>📅 Gerado automaticamente em: 08/10/2025 09:18:43</p>
+            <p>🔗 Parte do vailá - Multimodal Toolbox</p>
+            <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
+        </div>
+    </div>
+</body>
+</html>

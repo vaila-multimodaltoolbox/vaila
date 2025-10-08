@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>vailá - markerless_2d_analysis_nvidia</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            line-height: 1.6;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 30px; }
+        .module-info { background: #ecf0f1; padding: 15px; border-radius: 5px; margin: 20px 0; }
+        .functions { background: #f8f9fa; padding: 15px; border-left: 4px solid #28a745; margin: 15px 0; }
+        .docstring { background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 15px 0; }
+        .error { background: #f8d7da; padding: 15px; border-left: 4px solid #dc3545; margin: 15px 0; }
+        code { background: #e9ecef; padding: 2px 6px; border-radius: 3px; }
+        pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; }
+        .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #6c757d; font-size: 0.9em; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>vailá - markerless_2d_analysis_nvidia</h1>
+
+        <div class="module-info">
+            <h3>📋 Informações do Módulo</h3>
+            <p><strong>Categoria:</strong> Utils</p>
+            <p><strong>Arquivo:</strong> vaila\markerless_2d_analysis_nvidia.py</p>
+            <p><strong>Linhas:</strong> 594</p>
+            <p><strong>Tamanho:</strong> 22338 caracteres</p>
+            <p><strong>Versão:</strong> 0.3.0</p>
+            <p><strong>Autor:</strong> Prof. Dr. Paulo Santiago</p>
+            <p><strong>Interface Gráfica:</strong> ✅ Sim</p>
+        </div>
+
+        
+
+        <div class="docstring">
+            <h3>📖 Descrição</h3>
+            <pre>
+Script: markerless_2d_analysis_nvidia.py
+Author: Prof. Dr. Paulo Santiago
+Version: 0.3.0
+Last Updated: 25 April 2025
+
+Description:
+This script performs batch processing of videos for 2D pose estimation using
+MediaPipe's Pose model. It processes videos from a specified input directory,
+overlays pose landmarks on each video frame, and exports both normalized and
+pixel-based landmark coordinates to CSV files.
+
+The user can configure key MediaPipe parameters via a graphical interface,
+including detection confidence, tracking confidence, model complexity, and
+whether to enable segmentation and smooth segmentation. The default settings
+prioritize the highest detection accuracy and tracking precision, which may
+increase computational cost.
+
+New Features:
+- Run in NVIDIA GPU in Linux
+- Configure NVIDIA CUDA and cuDNN in Linux first
+- Default values for MediaPipe parameters are set to maximize detection and
+  tracking accuracy:
+    - `min_detection_confidence=1.0`
+    - `min_tracking_confidenc...</pre>
+        </div>
+
+        <div class="functions">
+            <h3>🔧 Funções Principais</h3>
+            <p><strong>Total de funções encontradas:</strong> 7</p>
+            <ul><li><code>get_pose_config</code></li><li><code>apply_temporal_filter</code></li><li><code>estimate_occluded_landmarks</code></li><li><code>process_video</code></li><li><code>process_videos_in_directory</code></li><li><code>body</code></li><li><code>apply</code></li></ul>
+        </div>
+
+        <div class="footer">
+            <p>📅 Gerado automaticamente em: 08/10/2025 09:18:44</p>
+            <p>🔗 Parte do vailá - Multimodal Toolbox</p>
+            <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
+        </div>
+    </div>
+</body>
+</html>

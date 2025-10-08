@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>vailá - markerless3d_analysis_v2</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            line-height: 1.6;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 30px; }
+        .module-info { background: #ecf0f1; padding: 15px; border-radius: 5px; margin: 20px 0; }
+        .functions { background: #f8f9fa; padding: 15px; border-left: 4px solid #28a745; margin: 15px 0; }
+        .docstring { background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 15px 0; }
+        .error { background: #f8d7da; padding: 15px; border-left: 4px solid #dc3545; margin: 15px 0; }
+        code { background: #e9ecef; padding: 2px 6px; border-radius: 3px; }
+        pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; }
+        .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #6c757d; font-size: 0.9em; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>vailá - markerless3d_analysis_v2</h1>
+
+        <div class="module-info">
+            <h3>📋 Informações do Módulo</h3>
+            <p><strong>Categoria:</strong> Ml</p>
+            <p><strong>Arquivo:</strong> vaila\markerless3d_analysis_v2.py</p>
+            <p><strong>Linhas:</strong> 1020</p>
+            <p><strong>Tamanho:</strong> 37296 caracteres</p>
+            <p><strong>Versão:</strong> 0.0.1</p>
+            <p><strong>Autor:</strong> Prof. Dr. Paulo Santiago</p>
+            <p><strong>Interface Gráfica:</strong> ✅ Sim</p>
+        </div>
+
+        
+
+        <div class="docstring">
+            <h3>📖 Descrição</h3>
+            <pre>
+Script: markerless_3D_analysis.py
+Author: Prof. Dr. Paulo Santiago
+Version: 0.0.1
+Create:
+Last Updated: April 2025
+
+Description:
+Versão aprimorada do script markerless_3D_analysis.py que incorpora detecção prévia
+com YOLO para melhorar a precisão do MediaPipe na estimativa de pose, especialmente
+em casos de oclusão no plano sagital.
+
+Melhorias:
+- Detecção prévia de pessoas usando YOLO antes do MediaPipe
+- Processamento em regiões de interesse (ROI) para aumentar precisão
+- Rastreamento de múltiplas pessoas ao longo dos frames
+- Melhoria na detecção em plano sagital e casos de oclusão parcial
+- Mantém compatibilidade com o formato de saída original
+
+Usage:
+- Run the script to open a graphical interface for selecting the input directory
+  containing video files (.mp4, .avi, .mov), the output directory, and for
+  specifying the MediaPipe configuration parameters.
+- The script processes each video, generating an output video with overlaid pose
+  landmarks, and CSV files containing both no...</pre>
+        </div>
+
+        <div class="functions">
+            <h3>🔧 Funções Principais</h3>
+            <p><strong>Total de funções encontradas:</strong> 18</p>
+            <ul><li><code>get_pose_config</code></li><li><code>download_or_load_yolo_model</code></li><li><code>detect_persons_with_yolo</code></li><li><code>process_person_with_mediapipe</code></li><li><code>process_video</code></li><li><code>compute_iou</code></li><li><code>apply_kalman_filter</code></li><li><code>apply_savgol_filter</code></li><li><code>estimate_missing_landmarks</code></li><li><code>apply_anatomical_constraints</code></li><li><code>landmarks_to_mp_format</code></li><li><code>process_videos_in_directory</code></li><li><code>body</code></li><li><code>apply</code></li><li><code>register</code></li><li><code>deregister</code></li><li><code>get_best_match</code></li><li><code>update</code></li></ul>
+        </div>
+
+        <div class="footer">
+            <p>📅 Gerado automaticamente em: 08/10/2025 09:18:44</p>
+            <p>🔗 Parte do vailá - Multimodal Toolbox</p>
+            <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
+        </div>
+    </div>
+</body>
+</html>

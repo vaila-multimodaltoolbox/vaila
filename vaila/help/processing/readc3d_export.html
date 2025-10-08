@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>vailá - readc3d_export</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            line-height: 1.6;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 30px; }
+        .module-info { background: #ecf0f1; padding: 15px; border-radius: 5px; margin: 20px 0; }
+        .functions { background: #f8f9fa; padding: 15px; border-left: 4px solid #28a745; margin: 15px 0; }
+        .docstring { background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 15px 0; }
+        .error { background: #f8d7da; padding: 15px; border-left: 4px solid #dc3545; margin: 15px 0; }
+        code { background: #e9ecef; padding: 2px 6px; border-radius: 3px; }
+        pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; }
+        .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #6c757d; font-size: 0.9em; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>vailá - readc3d_export</h1>
+
+        <div class="module-info">
+            <h3>📋 Informações do Módulo</h3>
+            <p><strong>Categoria:</strong> Processing</p>
+            <p><strong>Arquivo:</strong> vaila\readc3d_export.py</p>
+            <p><strong>Linhas:</strong> 1255</p>
+            <p><strong>Tamanho:</strong> 47131 caracteres</p>
+            <p><strong>Versão:</strong> 25 September 2024</p>
+            <p><strong>Autor:</strong> Prof. Paulo R. P. Santiago</p>
+            <p><strong>Interface Gráfica:</strong> ✅ Sim</p>
+        </div>
+
+        
+
+        <div class="docstring">
+            <h3>📖 Descrição</h3>
+            <pre>
+===============================================================================
+readc3d_export.py
+===============================================================================
+Author: Prof. Paulo R. P. Santiago
+Version: 25 September 2024
+Update: 15 September 2025
+Version updated: 0.0.3
+Python Version: 3.12.11
+
+Description:
+This script processes .c3d files, extracting marker data, analog data, events, and points residuals,
+and saves them into CSV files. It also allows the option to save the data in Excel format.
+The script leverages Dask for efficient data handling and processing, particularly useful
+when working with large datasets.
+
+Features:
+- Extracts and saves marker data with time columns.
+- Extracts and saves analog data with time columns, including their units.
+- Extracts and saves events with their labels and times.
+- Extracts and saves points residuals with time columns.
+- Supports saving the data in CSV format.
+- Optionally saves the data in Excel format (can be slow for l...</pre>
+        </div>
+
+        <div class="functions">
+            <h3>🔧 Funções Principais</h3>
+            <p><strong>Total de funções encontradas:</strong> 15</p>
+            <ul><li><code>save_info_file</code></li><li><code>save_short_info_file</code></li><li><code>save_events</code></li><li><code>importc3d</code></li><li><code>save_empty_file</code></li><li><code>save_platform_data</code></li><li><code>save_rotation_data</code></li><li><code>save_meta_points_data</code></li><li><code>save_header_summary</code></li><li><code>save_parameter_groups</code></li><li><code>save_data_statistics</code></li><li><code>save_to_files</code></li><li><code>convert_c3d_to_csv</code></li><li><code>print_complete_data_structure</code></li><li><code>batch_convert_c3d_to_csv</code></li></ul>
+        </div>
+
+        <div class="footer">
+            <p>📅 Gerado automaticamente em: 08/10/2025 09:18:44</p>
+            <p>🔗 Parte do vailá - Multimodal Toolbox</p>
+            <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
+        </div>
+    </div>
+</body>
+</html>

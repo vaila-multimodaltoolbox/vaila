@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>vailá - sync_flash</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            line-height: 1.6;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 30px; }
+        .module-info { background: #ecf0f1; padding: 15px; border-radius: 5px; margin: 20px 0; }
+        .functions { background: #f8f9fa; padding: 15px; border-left: 4px solid #28a745; margin: 15px 0; }
+        .docstring { background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 15px 0; }
+        .error { background: #f8d7da; padding: 15px; border-left: 4px solid #dc3545; margin: 15px 0; }
+        code { background: #e9ecef; padding: 2px 6px; border-radius: 3px; }
+        pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; }
+        .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #6c757d; font-size: 0.9em; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>vailá - sync_flash</h1>
+
+        <div class="module-info">
+            <h3>📋 Informações do Módulo</h3>
+            <p><strong>Categoria:</strong> Tools</p>
+            <p><strong>Arquivo:</strong> vaila\sync_flash.py</p>
+            <p><strong>Linhas:</strong> 87</p>
+            <p><strong>Tamanho:</strong> 2732 caracteres</p>
+            
+            <p><strong>Autor:</strong> [Your Name]</p>
+            <p><strong>Interface Gráfica:</strong> ❌ Não</p>
+        </div>
+
+        
+
+        <div class="docstring">
+            <h3>📖 Descrição</h3>
+            <pre>
+sync_flash.py
+
+This script provides a function to automatically detect brightness levels in a specific
+region of a video file by calculating the median of the R, G, and B values in that region.
+This functionality can be used to help synchronize videos based on flashes or sudden
+changes in brightness.
+
+Features:
+- Extracts the median R, G, and B values from a specified region of each frame in a video.
+- The region for analysis can be customized by specifying coordinates and dimensions.
+- Can be used as a standalone tool or imported into another script for video synchronization.
+
+Dependencies:
+- cv2 (OpenCV): For video capture and processing.
+- numpy: For efficient numerical operations and median calculation.
+
+Usage:
+- Import the `get_median_brightness` function into another script or use it directly
+  in this script's `__main__` block for testing or standalone operation.
+
+Example:
+- To calculate the median brightness in a region (x=50, y=50, width=100, height=100)
+  of a video:
+
+    ``...</pre>
+        </div>
+
+        <div class="functions">
+            <h3>🔧 Funções Principais</h3>
+            <p><strong>Total de funções encontradas:</strong> 1</p>
+            <ul><li><code>get_median_brightness</code></li></ul>
+        </div>
+
+        <div class="footer">
+            <p>📅 Gerado automaticamente em: 08/10/2025 09:18:44</p>
+            <p>🔗 Parte do vailá - Multimodal Toolbox</p>
+            <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
+        </div>
+    </div>
+</body>
+</html>
