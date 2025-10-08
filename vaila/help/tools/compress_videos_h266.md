@@ -1,16 +1,16 @@
 # compress_videos_h266
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Tools
-- **Arquivo:** `vaila/compress_videos_h266.py`
-- **Linhas:** 352
-- **Tamanho:** 12061 caracteres
-- **Versão:** 0.0.1
+- **Category:** Tools
+- **File:** `vaila/compress_videos_h266.py`
+- **Lines:** 352
+- **Size:** 12061 characters
+- **Version:** 0.0.1
 
-- **Interface Gráfica:** ✅ Sim
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 compress_videos_h266.py
@@ -40,9 +40,9 @@ The compressed versions are saved in a subdirectory named 'compressed_h266'.
 !!! IMPORTANT !!!
 - H.266/VVC encoding is EXTREMELY SLOW and CPU-intensive. Expect long processing times....
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 7
+**Total functions found:** 7
 
 - `find_videos`
 - `create_temp_file_with_videos`
@@ -57,6 +57,6 @@ The compressed versions are saved in a subdirectory named 'compressed_h266'.
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

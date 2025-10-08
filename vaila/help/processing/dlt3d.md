@@ -1,16 +1,16 @@
 # dlt3d
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Processing
-- **Arquivo:** `vaila/dlt3d.py`
-- **Linhas:** 271
-- **Tamanho:** 10271 caracteres
-- **Versão:** 0.0.3
-- **Autor:** Paulo Roberto Pereira Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Processing
+- **File:** `vaila/dlt3d.py`
+- **Lines:** 271
+- **Size:** 10271 characters
+- **Version:** 0.0.3
+- **Author:** Paulo Roberto Pereira Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 ================================================================================
@@ -36,9 +36,9 @@ Description:
       - Generates a REF3D template (with _x, _y, _z columns) from the pixel file.
       - ...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 6
+**Total functions found:** 6
 
 - `read_pixel_file`
 - `read_ref3d_file`
@@ -52,6 +52,6 @@ Description:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

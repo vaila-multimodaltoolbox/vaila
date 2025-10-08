@@ -1,16 +1,16 @@
 # markerless_3d_analysis
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Analysis
-- **Arquivo:** `vaila/markerless_3d_analysis.py`
-- **Linhas:** 1075
-- **Tamanho:** 36486 caracteres
+- **Category:** Analysis
+- **File:** `vaila/markerless_3d_analysis.py`
+- **Lines:** 1075
+- **Size:** 36486 characters
 
 
-- **Interface Gráfica:** ✅ Sim
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 markerless_3d_gui.py — GUI configurator + TOML + batch runner for monocular 3D (meters by default)
@@ -29,9 +29,9 @@ Defaults set for your case
 - Pattern default: "*.mp4;*.mov;*.avi;*_mp_pixel.csv" (videos + existing 2D CSVs)
 - Leg length default = 0.42 m (can be changed per participant in...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 20
+**Total functions found:** 20
 
 - `dict_to_toml`
 - `normalize_screen_coordinates`
@@ -59,6 +59,6 @@ Defaults set for your case
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

@@ -1,16 +1,16 @@
 # cop_analysis
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Tools
-- **Arquivo:** `vaila/cop_analysis.py`
-- **Linhas:** 703
-- **Tamanho:** 24820 caracteres
-- **Versão:** 1.4 Date: 2024-09-12
-- **Autor:** Prof. Dr. Paulo R. P. Santiago Version: 1.4 Date: 2024-09-12
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Tools
+- **File:** `vaila/cop_analysis.py`
+- **Lines:** 703
+- **Size:** 24820 characters
+- **Version:** 1.4 Date: 2024-09-12
+- **Author:** Prof. Dr. Paulo R. P. Santiago Version: 1.4 Date: 2024-09-12
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 # Plot the CoP pathway with points only (no connecting lines)
@@ -25,9 +25,9 @@ Description: This module provides a comprehensive set of tools for analyzing Cen
              - Methods to calculate various postural stability metrics such as Mean Square Displacement (MSD), Power Spectral Density (PSD), and sway density.
              - Spectral feature analysis to quantify different frequency components of the CoP ...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 10
+**Total functions found:** 10
 
 - `convert_to_cm`
 - `read_csv_full`
@@ -45,6 +45,6 @@ Description: This module provides a comprehensive set of tools for analyzing Cen
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

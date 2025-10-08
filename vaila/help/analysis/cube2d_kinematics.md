@@ -1,16 +1,16 @@
 # cube2d_kinematics
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Analysis
-- **Arquivo:** `vaila/cube2d_kinematics.py`
-- **Linhas:** 722
-- **Tamanho:** 23935 caracteres
-- **Versão:** 0.0.3
-- **Autor:** Prof. Dr. Paulo Roberto Pereira Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Analysis
+- **File:** `vaila/cube2d_kinematics.py`
+- **Lines:** 722
+- **Size:** 23935 characters
+- **Version:** 0.0.3
+- **Author:** Prof. Dr. Paulo Roberto Pereira Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 ===============================================================================
@@ -42,9 +42,9 @@ Key Features:
   - File/directory selection
   - Parameter i...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 10
+**Total functions found:** 10
 
 - `show_instructions`
 - `load_quadrants`
@@ -62,6 +62,6 @@ Key Features:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

@@ -1,22 +1,22 @@
 # force_cmj
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Tools
-- **Arquivo:** `vaila/force_cmj.py`
-- **Linhas:** 2
-- **Tamanho:** 15 caracteres
-
-
-- **Interface Gráfica:** ❌ Não
-
-## 📖 Descrição
+- **Category:** Tools
+- **File:** `vaila/force_cmj.py`
+- **Lines:** 2
+- **Size:** 15 characters
 
 
+- **GUI Interface:** ❌ No
 
-## 🔧 Funções Principais
+## 📖 Description
 
-Nenhuma função encontrada
+
+
+## 🔧 Main Functions
+
+No functions found
 
 
 
@@ -24,6 +24,6 @@ Nenhuma função encontrada
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

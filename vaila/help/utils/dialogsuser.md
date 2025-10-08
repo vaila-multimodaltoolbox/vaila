@@ -1,16 +1,16 @@
 # dialogsuser
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Utils
-- **Arquivo:** `vaila/dialogsuser.py`
-- **Linhas:** 112
-- **Tamanho:** 4765 caracteres
-- **Versão:** 1.0
-- **Autor:** Prof. Dr. Paulo R. P. Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Utils
+- **File:** `vaila/dialogsuser.py`
+- **Lines:** 112
+- **Size:** 4765 characters
+- **Version:** 1.0
+- **Author:** Prof. Dr. Paulo R. P. Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 ================================================================================
@@ -31,11 +31,11 @@ Main Features:
         - Validates that the sample rate is a valid float and that the file type is either 'csv' or 'c3d'.
 
     2. Error Handling and Validation:
-        - Displays an error message if the sample rate is not a valid floa...
+        - Displays an errorr message if the sample rate is not a valid floa...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 2
+**Total functions found:** 2
 
 - `get_user_inputs`
 - `confirm`
@@ -45,6 +45,6 @@ Main Features:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

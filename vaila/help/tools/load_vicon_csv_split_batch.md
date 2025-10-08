@@ -1,16 +1,16 @@
 # load_vicon_csv_split_batch
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Tools
-- **Arquivo:** `vaila/load_vicon_csv_split_batch.py`
-- **Linhas:** 219
-- **Tamanho:** 8327 caracteres
-- **Versão:** 1.1
-- **Autor:** Prof. Dr. Paulo R. P. Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Tools
+- **File:** `vaila/load_vicon_csv_split_batch.py`
+- **Lines:** 219
+- **Size:** 8327 characters
+- **Version:** 1.1
+- **Author:** Prof. Dr. Paulo R. P. Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 ================================================================================
@@ -29,9 +29,9 @@ Main Features:
 1. **Batch Processing**: The script automatically finds and processes all CSV files in the specified directory (without subdirectories).
 2. **Header Merging and Cleaning**: It merges multiple header rows, replaces problematic characters, and sanitizes unit symb...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 6
+**Total functions found:** 6
 
 - `clean_header`
 - `merge_headers`
@@ -45,6 +45,6 @@ Main Features:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

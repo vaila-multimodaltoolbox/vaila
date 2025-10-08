@@ -1,16 +1,16 @@
 # markerless3d_analysis_v2
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Ml
-- **Arquivo:** `vaila/markerless3d_analysis_v2.py`
-- **Linhas:** 1020
-- **Tamanho:** 37296 caracteres
-- **Versão:** 0.0.1
-- **Autor:** Prof. Dr. Paulo Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Ml
+- **File:** `vaila/markerless3d_analysis_v2.py`
+- **Lines:** 1020
+- **Size:** 37296 characters
+- **Version:** 0.0.1
+- **Author:** Prof. Dr. Paulo Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 Script: markerless_3D_analysis.py
@@ -38,9 +38,9 @@ Usage:
 - The script processes each video, generating an output video with overlaid pose
   landmarks, and CSV files containing both no...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 18
+**Total functions found:** 18
 
 - `get_pose_config`
 - `download_or_load_yolo_model`
@@ -66,6 +66,6 @@ Usage:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

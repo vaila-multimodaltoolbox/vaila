@@ -1,16 +1,16 @@
 # compress_videos_h265
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Tools
-- **Arquivo:** `vaila/compress_videos_h265.py`
-- **Linhas:** 657
-- **Tamanho:** 23276 caracteres
+- **Category:** Tools
+- **File:** `vaila/compress_videos_h265.py`
+- **Lines:** 657
+- **Size:** 23276 characters
 
 
-- **Interface Gráfica:** ✅ Sim
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 vailá - Multimodal Toolbox
@@ -36,9 +36,9 @@ On systems without an NVIDIA GPU (e.g., macOS), the script defaults to CPU-based
 Usage:
 - Run the script to open a GUI, select the directory containing the videos, and...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 9
+**Total functions found:** 9
 
 - `is_nvidia_gpu_available`
 - `find_videos`
@@ -55,6 +55,6 @@ Usage:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

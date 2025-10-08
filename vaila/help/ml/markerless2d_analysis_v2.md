@@ -1,16 +1,16 @@
 # markerless2d_analysis_v2
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Ml
-- **Arquivo:** `vaila/markerless2d_analysis_v2.py`
-- **Linhas:** 797
-- **Tamanho:** 27887 caracteres
-- **Versão:** 0.2.0
-- **Autor:** Prof. Dr. Paulo Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Ml
+- **File:** `vaila/markerless2d_analysis_v2.py`
+- **Lines:** 797
+- **Size:** 27887 characters
+- **Version:** 0.2.0
+- **Author:** Prof. Dr. Paulo Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 Script: markerless_2D_analysis_v2.py
@@ -42,9 +42,9 @@ Requirements:
 - Tkinter (usually included with Python installations)
 
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 12
+**Total functions found:** 12
 
 - `get_hardware_info`
 - `get_pose_config`
@@ -64,6 +64,6 @@ Requirements:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

@@ -1,16 +1,16 @@
 # cutvideo
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Tools
-- **Arquivo:** `vaila/cutvideo.py`
-- **Linhas:** 925
-- **Tamanho:** 33593 caracteres
-- **Versão:** 0.0.8
-- **Autor:** Paulo Roberto Pereira Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Tools
+- **File:** `vaila/cutvideo.py`
+- **Lines:** 925
+- **Size:** 33593 characters
+- **Version:** 0.0.8
+- **Author:** Paulo Roberto Pereira Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 Project: vailá Multimodal Toolbox
@@ -45,9 +45,9 @@ Requirements:
 - Python 3.12.11
 - OpenC...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 16
+**Total functions found:** 16
 
 - `save_cuts_to_txt`
 - `load_sync_file`
@@ -71,6 +71,6 @@ Requirements:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

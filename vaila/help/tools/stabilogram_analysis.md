@@ -1,16 +1,16 @@
 # stabilogram_analysis
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Tools
-- **Arquivo:** `vaila/stabilogram_analysis.py`
-- **Linhas:** 389
-- **Tamanho:** 13025 caracteres
-- **Versão:** 1.3
-- **Autor:** Prof. Dr. Paulo R. P. Santiago
-- **Interface Gráfica:** ❌ Não
+- **Category:** Tools
+- **File:** `vaila/stabilogram_analysis.py`
+- **Lines:** 389
+- **Size:** 13025 characters
+- **Version:** 1.3
+- **Author:** Prof. Dr. Paulo R. P. Santiago
+- **GUI Interface:** ❌ No
 
-## 📖 Descrição
+## 📖 Description
 
 
 Module: stabilogram_analysis.py
@@ -23,9 +23,9 @@ The main features of this module include:
 - **Power Spectral Density (PSD) Analysis**: Computes the PSD of the CoP signals using Welch's method, providing insight into the frequency components of postural sway.
 - **Mean Square Displacement (MSD) Cal...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 11
+**Total functions found:** 11
 
 - `compute_rms`
 - `compute_speed`
@@ -44,6 +44,6 @@ The main features of this module include:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

@@ -1,16 +1,16 @@
 # emg_labiocom
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Analysis
-- **Arquivo:** `vaila/emg_labiocom.py`
-- **Linhas:** 1810
-- **Tamanho:** 62309 caracteres
-- **Versão:** 2025
-- **Autor:** Prof. Dr. Paulo R. P. Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Analysis
+- **File:** `vaila/emg_labiocom.py`
+- **Lines:** 1810
+- **Size:** 62309 characters
+- **Version:** 2025
+- **Author:** Prof. Dr. Paulo R. P. Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 ================================================================================
@@ -42,9 +42,9 @@ Key New Features:
 3. Mouse Controls:
    - Left click: ...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 20
+**Total functions found:** 20
 
 - `butter_lowpass`
 - `butter_lowpass_filter`
@@ -72,6 +72,6 @@ Key New Features:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

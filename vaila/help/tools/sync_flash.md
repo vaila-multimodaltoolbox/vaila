@@ -1,16 +1,16 @@
 # sync_flash
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Tools
-- **Arquivo:** `vaila/sync_flash.py`
-- **Linhas:** 87
-- **Tamanho:** 2732 caracteres
+- **Category:** Tools
+- **File:** `vaila/sync_flash.py`
+- **Lines:** 87
+- **Size:** 2732 characters
 
-- **Autor:** [Your Name]
-- **Interface Gráfica:** ❌ Não
+- **Author:** [Your Name]
+- **GUI Interface:** ❌ No
 
-## 📖 Descrição
+## 📖 Description
 
 
 sync_flash.py
@@ -39,9 +39,9 @@ Example:
 
     ``...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 1
+**Total functions found:** 1
 
 - `get_median_brightness`
 
@@ -50,6 +50,6 @@ Example:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

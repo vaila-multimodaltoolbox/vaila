@@ -134,14 +134,14 @@ Based on detected mood:
 - Install FluidSynth or TiMidity
 - Use online converters as alternative
 
-**Transcription errors**
+**Transcription errorrrs**
 - Check internet connection
 - Try different language settings
 - Speak more clearly
 
 **Music generation fails**
 - Install midiutil: `pip install midiutil`
-- Check Python script for errors
+- Check Python script for errorrrs
 
 ## 📊 Advanced Features
 

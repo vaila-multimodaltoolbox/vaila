@@ -1,25 +1,25 @@
 # common_utils
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Utils
-- **Arquivo:** `vaila/common_utils.py`
-- **Linhas:** 59
-- **Tamanho:** 1712 caracteres
-- **Versão:** 2024-07-15 20:00:00
+- **Category:** Utils
+- **File:** `vaila/common_utils.py`
+- **Lines:** 59
+- **Size:** 1712 characters
+- **Version:** 2024-07-15 20:00:00
 
-- **Interface Gráfica:** ❌ Não
+- **GUI Interface:** ❌ No
 
-## 📖 Descrição
+## 📖 Description
 
 
 common_utils.py
 Version: 2024-07-15 20:00:00
 
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 3
+**Total functions found:** 3
 
 - `determine_header_lines`
 - `headersidx`
@@ -30,6 +30,6 @@ Version: 2024-07-15 20:00:00
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

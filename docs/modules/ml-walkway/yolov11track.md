@@ -1,16 +1,16 @@
 # yolov11track
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Ml
-- **Arquivo:** `vaila\yolov11track.py`
-- **Linhas:** 1408
-- **Tamanho:** 51293 caracteres
-- **Versão:** 0.2.0
-- **Autor:** Paulo Roberto Pereira Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Ml
+- **File:** `vaila\yolov11track.py`
+- **Lines:** 1408
+- **Size:** 51293 characters
+- **Version:** 0.2.0
+- **Author:** Paulo Roberto Pereira Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 Project: vailá
@@ -41,9 +41,9 @@ Requirements:
     - OpenCV
     - PyTo...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 20
+**Total functions found:** 20
 
 - `initialize_csv`
 - `update_csv`
@@ -72,5 +72,5 @@ Requirements:
 ---
 
 📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+🔗 **Part of vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

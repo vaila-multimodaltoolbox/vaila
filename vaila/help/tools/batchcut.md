@@ -1,16 +1,16 @@
 # batchcut
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Tools
-- **Arquivo:** `vaila/batchcut.py`
-- **Linhas:** 191
-- **Tamanho:** 6825 caracteres
-- **Versão:** 1.1
-- **Autor:** Prof. PhD. Paulo Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Tools
+- **File:** `vaila/batchcut.py`
+- **Lines:** 191
+- **Size:** 6825 characters
+- **Version:** 1.1
+- **Author:** Prof. PhD. Paulo Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 Batch Video Cutting Script with GPU Acceleration
@@ -38,9 +38,9 @@ The script automatically removes duplicate ".mp4" extensions from the new file n
 ### Key Features:
 1. **Batch Video Processing**...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 3
+**Total functions found:** 3
 
 - `is_nvidia_gpu_available`
 - `batch_cut_videos`
@@ -51,6 +51,6 @@ The script automatically removes duplicate ".mp4" extensions from the new file n
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
