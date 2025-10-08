@@ -1,16 +1,16 @@
 # plotting
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Visualization
-- **Arquivo:** `vaila/plotting.py`
-- **Linhas:** 599
-- **Tamanho:** 21003 caracteres
-- **Versão:** 1.0
-- **Autor:** Prof. Dr. Paulo R. P. Santiago
-- **Interface Gráfica:** ❌ Não
+- **Category:** Visualization
+- **File:** `vaila/plotting.py`
+- **Lines:** 599
+- **Size:** 21003 characters
+- **Version:** 1.0
+- **Author:** Prof. Dr. Paulo R. P. Santiago
+- **GUI Interface:** ❌ No
 
-## 📖 Descrição
+## 📖 Description
 
 
 ================================================================================
@@ -33,9 +33,9 @@ Main Features:
     2. Static Visualization with Matplotlib:
         - `plot_orthonor...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 6
+**Total functions found:** 6
 
 - `get_colors`
 - `plot_orthonormal_bases_matplotlib`
@@ -49,6 +49,6 @@ Main Features:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

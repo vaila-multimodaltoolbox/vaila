@@ -1,22 +1,22 @@
 # vailaplot3d
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Visualization
-- **Arquivo:** `vaila/vailaplot3d.py`
-- **Linhas:** 31
-- **Tamanho:** 495 caracteres
-
-
-- **Interface Gráfica:** ✅ Sim
-
-## 📖 Descrição
+- **Category:** Visualization
+- **File:** `vaila/vailaplot3d.py`
+- **Lines:** 31
+- **Size:** 495 characters
 
 
+- **GUI Interface:** ✅ Yes
 
-## 🔧 Funções Principais
+## 📖 Description
 
-**Total de funções encontradas:** 1
+
+
+## 🔧 Main Functions
+
+**Total functions found:** 1
 
 - `run_plot_3d`
 
@@ -25,6 +25,6 @@
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

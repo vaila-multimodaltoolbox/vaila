@@ -1,16 +1,16 @@
 # rec3d
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Processing
-- **Arquivo:** `vaila/rec3d.py`
-- **Linhas:** 296
-- **Tamanho:** 11090 caracteres
-- **Versão:** 0.0.2
-- **Autor:** Paulo Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Processing
+- **File:** `vaila/rec3d.py`
+- **Lines:** 296
+- **Size:** 11090 characters
+- **Version:** 0.0.2
+- **Author:** Paulo Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 ================================================================================
@@ -38,9 +38,9 @@ Description:
     Optimizations:
     - Pre-allocat...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 3
+**Total functions found:** 3
 
 - `rec3d_multicam`
 - `process_files_in_directory`
@@ -51,6 +51,6 @@ Description:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

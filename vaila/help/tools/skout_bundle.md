@@ -1,16 +1,16 @@
 # skout_bundle
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Tools
-- **Arquivo:** `vaila/skout_bundle.py`
-- **Linhas:** 504
-- **Tamanho:** 14819 caracteres
+- **Category:** Tools
+- **File:** `vaila/skout_bundle.py`
+- **Lines:** 504
+- **Size:** 14819 characters
 
 
-- **Interface Gráfica:** ❌ Não
+- **GUI Interface:** ❌ No
 
-## 📖 Descrição
+## 📖 Description
 
 
 Skout bundle: convert Skout.exe ASCII export to vailá scout CSV and
@@ -43,9 +43,9 @@ Outputs
    timestamp_s, team, player_name, player, action, action_code, result, pos_x_m, pos_y_m
 2) TOML config aligned to vailá_scout, ...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 7
+**Total functions found:** 7
 
 - `parse_players`
 - `parse_actions`
@@ -60,6 +60,6 @@ Outputs
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

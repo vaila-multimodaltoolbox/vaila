@@ -1,16 +1,16 @@
 # standardize_header
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Tools
-- **Arquivo:** `vaila/standardize_header.py`
-- **Linhas:** 226
-- **Tamanho:** 8532 caracteres
-- **Versão:** 1.1
-- **Autor:** Prof. Dr. Paulo Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Tools
+- **File:** `vaila/standardize_header.py`
+- **Lines:** 226
+- **Size:** 8532 characters
+- **Version:** 1.1
+- **Author:** Prof. Dr. Paulo Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 Script: standardize_header.py
@@ -27,21 +27,21 @@ The processed files are saved in a timestamped directory to ensure version track
 Key Features:
 - Batch processing of CSV files in a selected directory.
 - Graphical User Interface (GUI) for selecting header lines and rows to delete.
-- Automatic error handling for parsing inconsistencies.
+- Automatic errorr handling for parsing inconsistencies.
 - Saves processed files in a new directory with a timestamp for version control.
 
 Changelog:
 ----------
 - Version 1.1 (2025-02-04):
-  - Improved error handling and user interaction for header selection.
+  - Improved errorr handling and user interaction for header selection.
   - Enhanced GUI to display file previews before processing.
   - Added automatic naming convention for processed files.
 - Version 1.0:
   - Initial...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 2
+**Total functions found:** 2
 
 - `standardize_header`
 - `choose_header_line`
@@ -51,6 +51,6 @@ Changelog:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

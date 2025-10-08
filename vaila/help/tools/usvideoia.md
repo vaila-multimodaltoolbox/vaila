@@ -1,16 +1,16 @@
 # usvideoia
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Tools
-- **Arquivo:** `vaila/usvideoia.py`
-- **Linhas:** 155
-- **Tamanho:** 4373 caracteres
-- **Versão:** 0.0.1
+- **Category:** Tools
+- **File:** `vaila/usvideoia.py`
+- **Lines:** 155
+- **Size:** 4373 characters
+- **Version:** 0.0.1
 
-- **Interface Gráfica:** ❌ Não
+- **GUI Interface:** ❌ No
 
-## 📖 Descrição
+## 📖 Description
 
 
 usvideoia.py
@@ -47,9 +47,9 @@ License:
 
 
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 4
+**Total functions found:** 4
 
 - `extract_frames`
 - `reconstruct_video`
@@ -61,6 +61,6 @@ License:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

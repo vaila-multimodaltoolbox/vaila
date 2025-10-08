@@ -545,6 +545,164 @@ To update this documentation, run the `generate_help_docs.py` script again.
 
     return {"html": html_content, "md": md_content}
 
+# Portuguese to English translations dictionary (shared by all translation functions)
+translations = {
+    # Module Information section
+    "📋 Informações do Módulo": "📋 Module Information",
+    "Categoria:": "Category:",
+    "Arquivo:": "File:",
+    "Linhas:": "Lines:",
+    "Tamanho:": "Size:",
+    "Versão:": "Version:",
+    "Autor:": "Author:",
+    "Interface Gráfica:": "GUI Interface:",
+    "Sim": "Yes",
+    "Não": "No",
+
+    # Description section
+    "📖 Descrição": "📖 Description",
+    "Sem descrição disponível": "No description available",
+
+    # Functions section
+    "🔧 Funções Principais": "🔧 Main Functions",
+    "Total de funções encontradas:": "Total functions found:",
+    "Nenhuma função encontrada": "No functions found",
+    "Total de funções encontradas:": "Total functions found:",
+
+    # Error section
+    "⚠️ Erro na Análise": "⚠️ Analysis Error",
+    "Erro desconhecido": "Unknown error",
+
+    # Footer
+    "📅 Gerado automaticamente em:": "📅 Generated automatically on:",
+    "🔗 Parte do vailá - Multimodal Toolbox": "🔗 Part of vailá - Multimodal Toolbox",
+    "🌐 GitHub Repository": "🌐 GitHub Repository",
+    "📧 Para dúvidas ou sugestões, entre em contato com a equipe de desenvolvimento": "📧 For questions or suggestions, contact the development team",
+
+    # Index page
+    "📚 vailá - Documentação de Help": "📚 vailá - Help Documentation",
+    "Documentação automática gerada para todos os módulos Python do vailá Multimodal Toolbox": "Automatically generated documentation for all Python modules in vailá Multimodal Toolbox",
+    "Total de módulos documentados:": "Total documented modules:",
+    "Categorias:": "Categories:",
+    "módulos": "modules",
+    "módulo": "module",
+    "módulos)": "modules)",
+    "módulo)": "module)",
+    "Gerado em:": "Generated on:",
+    "Parte do vailá - Multimodal Toolbox": "Part of vailá - Multimodal Toolbox",
+    "Para dúvidas ou sugestões, entre em contato com a equipe de desenvolvimento": "For questions or suggestions, contact the development team",
+
+    # Navigation buttons
+    "📄 HTML": "📄 HTML",
+    "📝 Markdown": "📝 Markdown",
+
+    # Other common terms
+    "módulo": "module",
+    "arquivo": "file",
+    "categoria": "category",
+    "linha": "line",
+    "linhas": "lines",
+    "tamanho": "size",
+    "caracteres": "characters",
+    "autor": "author",
+    "versão": "version",
+    "interface gráfica": "GUI interface",
+    "descrição": "description",
+    "função": "function",
+    "funções": "functions",
+    "principal": "main",
+    "principais": "main",
+    "erro": "error",
+    "análise": "analysis",
+    "total": "total",
+    "encontrado": "found",
+    "encontrada": "found",
+    "encontradas": "found",
+    "encontrado": "found",
+    "nenhum": "no",
+    "nenhuma": "no",
+    "nenhuns": "no",
+    "nenhumas": "no",
+}
+
+def translate_text(text):
+    """Translate Portuguese text to English"""
+    for pt, en in translations.items():
+        text = text.replace(pt, en)
+    return text
+
+def translate_html_file(html_file):
+    """Translate a single HTML file"""
+    try:
+        with open(html_file, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        # Translate content
+        translated_content = translate_text(content)
+
+        # Write back translated content
+        with open(html_file, 'w', encoding='utf-8') as f:
+            f.write(translated_content)
+
+        print(f"✅ Translated: {html_file}")
+
+    except Exception as e:
+        print(f"❌ Error translating {html_file}: {e}")
+
+def translate_md_file(md_file):
+    """Translate a single MD file"""
+    try:
+        with open(md_file, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        # Translate content
+        translated_content = translate_text(content)
+
+        # Write back translated content
+        with open(md_file, 'w', encoding='utf-8') as f:
+            f.write(translated_content)
+
+        print(f"✅ Translated: {md_file}")
+
+    except Exception as e:
+        print(f"❌ Error translating {md_file}: {e}")
+
+def translate_existing_help_files():
+    """Translates existing Portuguese help files to English"""
+    help_dir = Path("vaila/help")
+
+    # Find all HTML files in help directory
+    html_files = list(help_dir.rglob("*.html"))
+    md_files = list(help_dir.rglob("*.md"))
+
+    print(f"🔍 Found {len(html_files)} HTML files and {len(md_files)} MD files to translate")
+
+    # Translate HTML files
+    for html_file in html_files:
+        translate_html_file(str(html_file))
+
+    # Translate MD files
+    for md_file in md_files:
+        translate_md_file(str(md_file))
+
+    print("🎉 Translation complete!")
+
+def translate_docs_files():
+    """Translates existing Portuguese documentation files in docs/ to English"""
+    docs_dir = Path("docs")
+
+    # Find all MD files in docs directory (recursive)
+    md_files = list(docs_dir.rglob("*.md"))
+
+    print(f"🔍 Found {len(md_files)} MD files in docs/ to translate")
+
+    # Translate MD files in docs
+    for md_file in md_files:
+        translate_md_file(str(md_file))
+
+    print("🎉 Docs translation complete!")
 
 if __name__ == "__main__":
     main()
+    translate_existing_help_files()
+    translate_docs_files()

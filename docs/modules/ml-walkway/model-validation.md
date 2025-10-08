@@ -1,16 +1,16 @@
 # ml_valid_models
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Ml
-- **Arquivo:** `vaila\ml_valid_models.py`
-- **Linhas:** 302
-- **Tamanho:** 10392 caracteres
-- **Versão:** 1.0.0
-- **Autor:** Abel Gonçalves Chinaglia
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Ml
+- **File:** `vaila\ml_valid_models.py`
+- **Lines:** 302
+- **Size:** 10392 characters
+- **Version:** 1.0.0
+- **Author:** Abel Gonçalves Chinaglia
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 =============================================================================
@@ -41,9 +41,9 @@ Key Features:
 Execution:
 ...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 5
+**Total functions found:** 5
 
 - `calculate_metrics`
 - `select_file`
@@ -57,5 +57,5 @@ Execution:
 ---
 
 📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+🔗 **Part of vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

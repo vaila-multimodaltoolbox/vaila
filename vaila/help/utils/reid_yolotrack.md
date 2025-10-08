@@ -1,16 +1,16 @@
 # reid_yolotrack
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Utils
-- **Arquivo:** `vaila/reid_yolotrack.py`
-- **Linhas:** 607
-- **Tamanho:** 21894 caracteres
-- **Versão:** 0.1.0
-- **Autor:** Paulo Roberto Pereira Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Utils
+- **File:** `vaila/reid_yolotrack.py`
+- **Lines:** 607
+- **Size:** 21894 characters
+- **Version:** 0.1.0
+- **Author:** Paulo Roberto Pereira Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 Project: vailá Multimodal Toolbox
@@ -39,9 +39,9 @@ Usage:
     or
     python -m vaila.reid_yolotrac...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 12
+**Total functions found:** 12
 
 - `get_color_for_id`
 - `get_rgb_color_string`
@@ -61,6 +61,6 @@ Usage:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

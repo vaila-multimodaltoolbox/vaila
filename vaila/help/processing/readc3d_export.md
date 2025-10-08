@@ -1,16 +1,16 @@
 # readc3d_export
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Processing
-- **Arquivo:** `vaila/readc3d_export.py`
-- **Linhas:** 1255
-- **Tamanho:** 47131 caracteres
-- **Versão:** 25 September 2024
-- **Autor:** Prof. Paulo R. P. Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Processing
+- **File:** `vaila/readc3d_export.py`
+- **Lines:** 1255
+- **Size:** 47131 characters
+- **Version:** 25 September 2024
+- **Author:** Prof. Paulo R. P. Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 ===============================================================================
@@ -36,9 +36,9 @@ Features:
 - Supports saving the data in CSV format.
 - Optionally saves the data in Excel format (can be slow for l...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 15
+**Total functions found:** 15
 
 - `save_info_file`
 - `save_short_info_file`
@@ -61,6 +61,6 @@ Features:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

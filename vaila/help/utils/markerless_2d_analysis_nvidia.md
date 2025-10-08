@@ -1,16 +1,16 @@
 # markerless_2d_analysis_nvidia
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Utils
-- **Arquivo:** `vaila/markerless_2d_analysis_nvidia.py`
-- **Linhas:** 594
-- **Tamanho:** 22338 caracteres
-- **Versão:** 0.3.0
-- **Autor:** Prof. Dr. Paulo Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Utils
+- **File:** `vaila/markerless_2d_analysis_nvidia.py`
+- **Lines:** 594
+- **Size:** 22338 characters
+- **Version:** 0.3.0
+- **Author:** Prof. Dr. Paulo Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 Script: markerless_2d_analysis_nvidia.py
@@ -38,9 +38,9 @@ New Features:
     - `min_detection_confidence=1.0`
     - `min_tracking_confidenc...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 7
+**Total functions found:** 7
 
 - `get_pose_config`
 - `apply_temporal_filter`
@@ -55,6 +55,6 @@ New Features:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

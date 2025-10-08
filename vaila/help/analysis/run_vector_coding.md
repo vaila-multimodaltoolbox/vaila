@@ -1,22 +1,22 @@
 # run_vector_coding
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Analysis
-- **Arquivo:** `vaila/run_vector_coding.py`
-- **Linhas:** 383
-- **Tamanho:** 11844 caracteres
+- **Category:** Analysis
+- **File:** `vaila/run_vector_coding.py`
+- **Lines:** 383
+- **Size:** 11844 characters
 
 
-- **Interface Gráfica:** ✅ Sim
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 Time normalize data to n_points.
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 5
+**Total functions found:** 5
 
 - `get_coupling_angle`
 - `run_vector_coding`
@@ -29,6 +29,6 @@ Time normalize data to n_points.
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

@@ -1,16 +1,16 @@
 # videoprocessor
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Tools
-- **Arquivo:** `vaila/videoprocessor.py`
-- **Linhas:** 788
-- **Tamanho:** 29552 caracteres
-- **Versão:** merged.
+- **Category:** Tools
+- **File:** `vaila/videoprocessor.py`
+- **Lines:** 788
+- **Size:** 29552 characters
+- **Version:** merged.
 
-- **Interface Gráfica:** ✅ Sim
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 videoprocessor.py
@@ -35,9 +35,9 @@ Key Features:
 - If no text file is provided, the script processes all videos in the source directory.
 -...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 6
+**Total functions found:** 6
 
 - `check_ffmpeg_installed`
 - `detect_hardware_encoder`
@@ -51,6 +51,6 @@ Key Features:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

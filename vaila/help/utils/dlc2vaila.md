@@ -1,16 +1,16 @@
 # dlc2vaila
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Utils
-- **Arquivo:** `vaila/dlc2vaila.py`
-- **Linhas:** 192
-- **Tamanho:** 7719 caracteres
-- **Versão:** 1.0.0
-- **Autor:** Prof. Dr. Paulo Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Utils
+- **File:** `vaila/dlc2vaila.py`
+- **Lines:** 192
+- **Size:** 7719 characters
+- **Version:** 1.0.0
+- **Author:** Prof. Dr. Paulo Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 Script: dlc2vaila.py
@@ -35,9 +35,9 @@ Usage:
     - Run the script to select an input directory containing DLC CSV files.
     - The script will process each file and save the converted outputs i...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 2
+**Total functions found:** 2
 
 - `process_csv_files_with_numpy`
 - `batch_convert_dlc`
@@ -47,6 +47,6 @@ Usage:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
