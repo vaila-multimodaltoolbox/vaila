@@ -40,7 +40,7 @@ def apply_filter(
     # Print the directory and name of the script being executed
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
-    
+
     """Apply a specified filter to the data with padding."""
     nyquist = 0.5 * sample_rate
     normal_cutoff = cutoff / nyquist

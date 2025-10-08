@@ -105,13 +105,13 @@ def plot_field(df, show_reference_points=True, show_axis_values=False):
     ax.set_xlim(min_x - margin - 1, max_x + margin + 1)
     ax.set_ylim(min_y - margin - 1, max_y + margin + 1)
     ax.set_aspect("equal")
-    
+
     if show_axis_values:
         # Show axis values with grid
-        ax.grid(True, alpha=0.3, color='gray', linestyle='-', linewidth=0.5)
-        ax.set_xlabel('X (meters)', fontsize=10)
-        ax.set_ylabel('Y (meters)', fontsize=10)
-        ax.tick_params(axis='both', which='major', labelsize=8)
+        ax.grid(True, alpha=0.3, color="gray", linestyle="-", linewidth=0.5)
+        ax.set_xlabel("X (meters)", fontsize=10)
+        ax.set_ylabel("Y (meters)", fontsize=10)
+        ax.tick_params(axis="both", which="major", labelsize=8)
         # Set tick intervals based on field size
         x_ticks = np.arange(min_x - margin, max_x + margin + 1, 5)
         y_ticks = np.arange(min_y - margin, max_y + margin + 1, 5)
@@ -651,7 +651,7 @@ def load_and_plot_scout_events(
 ):
     """
     Loads scout_vaila CSV data and plots events on the soccer field.
-    
+
     Args:
         field_ax: Matplotlib axes of the field
         csv_path: Path to the CSV file with scout_vaila data
@@ -663,7 +663,7 @@ def load_and_plot_scout_events(
         selected_players: List of player numbers to display (None for all)
         selected_actions: List of action names to display (None for all)
     """
-    
+
     # Clear previous markers (CSV and manual)
     if field_ax:
         artists_to_remove = []
@@ -687,15 +687,23 @@ def load_and_plot_scout_events(
         events_df = pd.read_csv(csv_path)
         print(f"Scout CSV loaded: {csv_path}")
         print(f"Number of events: {len(events_df)}")
-        
+
         # Check if this is a scout_vaila CSV by looking for required columns
-        required_columns = {"timestamp_s", "team", "player", "action", "result", "pos_x_m", "pos_y_m"}
+        required_columns = {
+            "timestamp_s",
+            "team",
+            "player",
+            "action",
+            "result",
+            "pos_x_m",
+            "pos_y_m",
+        }
         if not required_columns.issubset(events_df.columns):
             print("Warning: This doesn't appear to be a scout_vaila CSV file.")
             print("Expected columns:", required_columns)
             print("Found columns:", set(events_df.columns))
             return
-            
+
     except Exception as e:
         print(f"Error loading scout CSV: {e}")
         return
@@ -705,13 +713,15 @@ def load_and_plot_scout_events(
 
     # Apply filters
     filtered_df = events_df.copy()
-    
+
     if selected_teams:
         filtered_df = filtered_df[filtered_df["team"].isin(selected_teams)]
-        
+
     if selected_players:
-        filtered_df = filtered_df[filtered_df["player"].astype(str).isin([str(p) for p in selected_players])]
-        
+        filtered_df = filtered_df[
+            filtered_df["player"].astype(str).isin([str(p) for p in selected_players])
+        ]
+
     if selected_actions:
         filtered_df = filtered_df[filtered_df["action"].isin(selected_actions)]
 
@@ -722,13 +732,13 @@ def load_and_plot_scout_events(
     # Get unique teams and players for color mapping
     teams = filtered_df["team"].unique()
     players = filtered_df["player"].unique()
-    
+
     # Define colors for teams
     team_colors = {
         "HOME": "#1f77b4",  # blue
         "AWAY": "#d62728",  # red
     }
-    
+
     # Generate additional colors for custom team names
     color_palette = plt.cm.Set3(np.linspace(0, 1, max(len(teams), 10)))
     for i, team in enumerate(teams):
@@ -738,7 +748,7 @@ def load_and_plot_scout_events(
     # Result colors
     result_colors = {
         "success": "#00FF00",  # bright green
-        "fail": "#FF0000",     # bright red
+        "fail": "#FF0000",  # bright red
         "neutral": "#FFFF00",  # bright yellow
     }
 
@@ -752,45 +762,47 @@ def load_and_plot_scout_events(
             action = str(event["action"])
             result = str(event["result"]).lower()
             timestamp = float(event["timestamp_s"])
-            
+
             # Skip invalid coordinates
             if pd.isna(x) or pd.isna(y):
                 continue
-                
+
             # Get colors
             team_color = team_colors.get(team, "#808080")
             result_color = result_colors.get(result, "#808080")
-            
+
             # Draw player circle
             circle = patches.Circle(
-                (x, y), 
-                radius=0.6, 
-                facecolor=team_color, 
-                edgecolor=result_color, 
-                linewidth=2.0, 
-                zorder=50
+                (x, y),
+                radius=0.6,
+                facecolor=team_color,
+                edgecolor=result_color,
+                linewidth=2.0,
+                zorder=50,
             )
             field_ax.add_patch(circle)
-            
+
             # Add player number
             field_ax.text(
-                x, y, player, 
-                color="white", 
-                ha="center", 
-                va="center", 
-                fontsize=8, 
+                x,
+                y,
+                player,
+                color="white",
+                ha="center",
+                va="center",
+                fontsize=8,
                 weight="bold",
-                zorder=51
+                zorder=51,
             )
-            
+
             # Add action symbol (top-right of player circle)
             action_symbol = "o"  # default symbol
             symbol_color = "#FFD700"  # default color
-            
+
             # Map common actions to symbols
             action_symbols = {
                 "pass": "o",
-                "shot": "*", 
+                "shot": "*",
                 "dribble": "D",
                 "tackle": "x",
                 "interception": "X",
@@ -799,62 +811,61 @@ def load_and_plot_scout_events(
                 "control": "s",
                 "first touch": "P",
                 "shield": "h",
-                "goalkeeping": "s"
+                "goalkeeping": "s",
             }
-            
+
             action_symbol = action_symbols.get(action.lower(), "o")
-            
+
             # Add symbol
             symbol_x = x + 0.8
             symbol_y = y + 0.8
-            
+
             if action_symbol in ["+", "x", "X"]:
                 # Unfilled markers - use larger size
                 field_ax.scatter(
-                    [symbol_x], [symbol_y], 
-                    s=120, 
-                    c=symbol_color, 
-                    marker=action_symbol, 
-                    linewidth=2, 
-                    edgecolors="black", 
-                    zorder=52
+                    [symbol_x],
+                    [symbol_y],
+                    s=120,
+                    c=symbol_color,
+                    marker=action_symbol,
+                    linewidth=2,
+                    edgecolors="black",
+                    zorder=52,
                 )
             else:
                 # Filled markers
                 field_ax.scatter(
-                    [symbol_x], [symbol_y], 
-                    s=90, 
-                    c=symbol_color, 
-                    edgecolors="black", 
-                    linewidth=1, 
-                    marker=action_symbol, 
-                    zorder=52
+                    [symbol_x],
+                    [symbol_y],
+                    s=90,
+                    c=symbol_color,
+                    edgecolors="black",
+                    linewidth=1,
+                    marker=action_symbol,
+                    zorder=52,
                 )
-            
+
             # Add timestamp label (small, bottom-left of player circle)
             time_str = f"{timestamp:.1f}s"
             field_ax.text(
-                x - 0.8, y - 0.8, time_str,
+                x - 0.8,
+                y - 0.8,
+                time_str,
                 color="black",
                 fontsize=6,
                 ha="center",
                 va="center",
-                bbox=dict(
-                    boxstyle="round,pad=0.2", 
-                    fc="white", 
-                    ec="black", 
-                    alpha=0.8
-                ),
-                zorder=53
+                bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="black", alpha=0.8),
+                zorder=53,
             )
-            
+
         except Exception as e:
             print(f"Error plotting event: {e}")
             continue
 
     # Update canvas
     canvas.draw()
-    
+
     print(f"Plotted {len(filtered_df)} scout events")
     print(f"Teams: {list(teams)}")
     print(f"Players: {list(players)}")
@@ -917,7 +928,11 @@ def run_soccerfield():
             print(f"Number of reference points: {len(df)}")
 
             # Create figure and embed in Tkinter
-            fig, ax = plot_field(df, show_reference_points=show_reference_points[0], show_axis_values=show_axis_values[0])
+            fig, ax = plot_field(
+                df,
+                show_reference_points=show_reference_points[0],
+                show_axis_values=show_axis_values[0],
+            )
 
             # Save current axis for later use
             current_ax[0] = ax
@@ -1679,20 +1694,26 @@ def run_soccerfield():
         except Exception as e:
             print(f"Error plotting scout events: {str(e)}")
             import traceback
+
             traceback.print_exc()
 
     def open_scout_filters_dialog():
         """Opens a dialog to select teams, players, and actions for scout data"""
         if not current_scout_csv[0] or not os.path.exists(current_scout_csv[0]):
-            messagebox.showerror("Error", "No scout CSV loaded. Load a scout CSV first.")
+            messagebox.showerror(
+                "Error", "No scout CSV loaded. Load a scout CSV first."
+            )
             return
 
         try:
             events_df = pd.read_csv(current_scout_csv[0])
-            
+
             # Get unique values
             teams = sorted(events_df["team"].unique())
-            players = sorted(events_df["player"].unique(), key=lambda x: int(x) if str(x).isdigit() else 0)
+            players = sorted(
+                events_df["player"].unique(),
+                key=lambda x: int(x) if str(x).isdigit() else 0,
+            )
             actions = sorted(events_df["action"].unique())
 
             if not teams or not players or not actions:
@@ -1707,20 +1728,27 @@ def run_soccerfield():
             frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
             # Teams selection
-            tk.Label(frame, text="Teams:", font=("Arial", 10, "bold")).pack(anchor=tk.W, pady=(0, 5))
+            tk.Label(frame, text="Teams:", font=("Arial", 10, "bold")).pack(
+                anchor=tk.W, pady=(0, 5)
+            )
             team_frame = Frame(frame)
             team_frame.pack(fill=tk.X, pady=(0, 10))
-            
+
             team_scrollbar = tk.Scrollbar(team_frame)
             team_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-            
-            team_listbox = tk.Listbox(team_frame, selectmode=tk.MULTIPLE, yscrollcommand=team_scrollbar.set, height=4)
+
+            team_listbox = tk.Listbox(
+                team_frame,
+                selectmode=tk.MULTIPLE,
+                yscrollcommand=team_scrollbar.set,
+                height=4,
+            )
             team_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
             team_scrollbar.config(command=team_listbox.yview)
-            
+
             for team in teams:
                 team_listbox.insert(tk.END, team)
-            
+
             # Set initial selection (previous selection or all)
             initial_teams = selected_teams[0] if selected_teams[0] else teams
             for i, team in enumerate(teams):
@@ -1728,20 +1756,27 @@ def run_soccerfield():
                     team_listbox.selection_set(i)
 
             # Players selection
-            tk.Label(frame, text="Players:", font=("Arial", 10, "bold")).pack(anchor=tk.W, pady=(10, 5))
+            tk.Label(frame, text="Players:", font=("Arial", 10, "bold")).pack(
+                anchor=tk.W, pady=(10, 5)
+            )
             player_frame = Frame(frame)
             player_frame.pack(fill=tk.X, pady=(0, 10))
-            
+
             player_scrollbar = tk.Scrollbar(player_frame)
             player_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-            
-            player_listbox = tk.Listbox(player_frame, selectmode=tk.MULTIPLE, yscrollcommand=player_scrollbar.set, height=6)
+
+            player_listbox = tk.Listbox(
+                player_frame,
+                selectmode=tk.MULTIPLE,
+                yscrollcommand=player_scrollbar.set,
+                height=6,
+            )
             player_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
             player_scrollbar.config(command=player_listbox.yview)
-            
+
             for player in players:
                 player_listbox.insert(tk.END, player)
-            
+
             # Set initial selection
             initial_players = selected_players[0] if selected_players[0] else players
             for i, player in enumerate(players):
@@ -1749,20 +1784,27 @@ def run_soccerfield():
                     player_listbox.selection_set(i)
 
             # Actions selection
-            tk.Label(frame, text="Actions:", font=("Arial", 10, "bold")).pack(anchor=tk.W, pady=(10, 5))
+            tk.Label(frame, text="Actions:", font=("Arial", 10, "bold")).pack(
+                anchor=tk.W, pady=(10, 5)
+            )
             action_frame = Frame(frame)
             action_frame.pack(fill=tk.X, pady=(0, 10))
-            
+
             action_scrollbar = tk.Scrollbar(action_frame)
             action_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-            
-            action_listbox = tk.Listbox(action_frame, selectmode=tk.MULTIPLE, yscrollcommand=action_scrollbar.set, height=6)
+
+            action_listbox = tk.Listbox(
+                action_frame,
+                selectmode=tk.MULTIPLE,
+                yscrollcommand=action_scrollbar.set,
+                height=6,
+            )
             action_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
             action_scrollbar.config(command=action_listbox.yview)
-            
+
             for action in actions:
                 action_listbox.insert(tk.END, action)
-            
+
             # Set initial selection
             initial_actions = selected_actions[0] if selected_actions[0] else actions
             for i, action in enumerate(actions):
@@ -1791,20 +1833,26 @@ def run_soccerfield():
                 action_listbox.selection_clear(0, tk.END)
 
             def apply_filters():
-                team_selections = [team_listbox.get(i) for i in team_listbox.curselection()]
-                player_selections = [player_listbox.get(i) for i in player_listbox.curselection()]
-                action_selections = [action_listbox.get(i) for i in action_listbox.curselection()]
-                
+                team_selections = [
+                    team_listbox.get(i) for i in team_listbox.curselection()
+                ]
+                player_selections = [
+                    player_listbox.get(i) for i in player_listbox.curselection()
+                ]
+                action_selections = [
+                    action_listbox.get(i) for i in action_listbox.curselection()
+                ]
+
                 if not team_selections:
                     selected_teams[0] = None
                 else:
                     selected_teams[0] = team_selections
-                    
+
                 if not player_selections:
                     selected_players[0] = None
                 else:
                     selected_players[0] = player_selections
-                    
+
                 if not action_selections:
                     selected_actions[0] = None
                 else:
@@ -1826,13 +1874,55 @@ def run_soccerfield():
                 select_window.destroy()
 
             # Buttons
-            tk.Button(button_frame, text="Select All Teams", command=select_all_teams, bg="#4CAF50", fg="white").pack(side=tk.LEFT, padx=2)
-            tk.Button(button_frame, text="Deselect All Teams", command=deselect_all_teams, bg="#f44336", fg="white").pack(side=tk.LEFT, padx=2)
-            tk.Button(button_frame, text="Select All Players", command=select_all_players, bg="#4CAF50", fg="white").pack(side=tk.LEFT, padx=2)
-            tk.Button(button_frame, text="Deselect All Players", command=deselect_all_players, bg="#f44336", fg="white").pack(side=tk.LEFT, padx=2)
-            tk.Button(button_frame, text="Select All Actions", command=select_all_actions, bg="#4CAF50", fg="white").pack(side=tk.LEFT, padx=2)
-            tk.Button(button_frame, text="Deselect All Actions", command=deselect_all_actions, bg="#f44336", fg="white").pack(side=tk.LEFT, padx=2)
-            tk.Button(button_frame, text="Apply", command=apply_filters, bg="#2196F3", fg="white").pack(side=tk.RIGHT, padx=2)
+            tk.Button(
+                button_frame,
+                text="Select All Teams",
+                command=select_all_teams,
+                bg="#4CAF50",
+                fg="white",
+            ).pack(side=tk.LEFT, padx=2)
+            tk.Button(
+                button_frame,
+                text="Deselect All Teams",
+                command=deselect_all_teams,
+                bg="#f44336",
+                fg="white",
+            ).pack(side=tk.LEFT, padx=2)
+            tk.Button(
+                button_frame,
+                text="Select All Players",
+                command=select_all_players,
+                bg="#4CAF50",
+                fg="white",
+            ).pack(side=tk.LEFT, padx=2)
+            tk.Button(
+                button_frame,
+                text="Deselect All Players",
+                command=deselect_all_players,
+                bg="#f44336",
+                fg="white",
+            ).pack(side=tk.LEFT, padx=2)
+            tk.Button(
+                button_frame,
+                text="Select All Actions",
+                command=select_all_actions,
+                bg="#4CAF50",
+                fg="white",
+            ).pack(side=tk.LEFT, padx=2)
+            tk.Button(
+                button_frame,
+                text="Deselect All Actions",
+                command=deselect_all_actions,
+                bg="#f44336",
+                fg="white",
+            ).pack(side=tk.LEFT, padx=2)
+            tk.Button(
+                button_frame,
+                text="Apply",
+                command=apply_filters,
+                bg="#2196F3",
+                fg="white",
+            ).pack(side=tk.RIGHT, padx=2)
 
             select_window.transient(root)
             select_window.grab_set()
