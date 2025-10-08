@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Visualization
-- **Arquivo:** `vaila\showc3d.py`
+- **Arquivo:** `vaila/showc3d.py`
 - **Linhas:** 245
 - **Tamanho:** 7994 caracteres
 
@@ -59,6 +59,6 @@ Usage:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

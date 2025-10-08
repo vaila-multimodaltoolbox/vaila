@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Ml
-- **Arquivo:** `vaila\yolov11track.py`
+- **Arquivo:** `vaila/yolov11track.py`
 - **Linhas:** 1408
 - **Tamanho:** 51293 caracteres
 - **Versão:** 0.2.0
@@ -71,6 +71,6 @@ Requirements:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

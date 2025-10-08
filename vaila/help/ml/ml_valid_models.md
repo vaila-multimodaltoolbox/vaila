@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Ml
-- **Arquivo:** `vaila\ml_valid_models.py`
+- **Arquivo:** `vaila/ml_valid_models.py`
 - **Linhas:** 302
 - **Tamanho:** 10392 caracteres
 - **Versão:** 1.0.0
@@ -56,6 +56,6 @@ Execution:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Processing
-- **Arquivo:** `vaila\data_processing.py`
+- **Arquivo:** `vaila/data_processing.py`
 - **Linhas:** 81
 - **Tamanho:** 2324 caracteres
 
@@ -36,6 +36,6 @@
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

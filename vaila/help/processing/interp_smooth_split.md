@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Processing
-- **Arquivo:** `vaila\interp_smooth_split.py`
+- **Arquivo:** `vaila/interp_smooth_split.py`
 - **Linhas:** 3283
 - **Tamanho:** 131102 caracteres
 - **Versão:** 0.0.7
@@ -71,6 +71,6 @@ Key Features:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Utils
-- **Arquivo:** `vaila\listjointsnames.py`
+- **Arquivo:** `vaila/listjointsnames.py`
 - **Linhas:** 15
 - **Tamanho:** 396 caracteres
 
@@ -25,6 +25,6 @@
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

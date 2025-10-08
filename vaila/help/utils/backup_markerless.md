@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Utils
-- **Arquivo:** `vaila\backup_markerless.py`
+- **Arquivo:** `vaila/backup_markerless.py`
 - **Linhas:** 2299
 - **Tamanho:** 94365 caracteres
 - **Versão:** 0.5.0
@@ -68,6 +68,6 @@ whether to enable segmentation and smooth segmentation. The default set...
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
