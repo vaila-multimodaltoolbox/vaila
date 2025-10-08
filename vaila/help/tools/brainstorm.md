@@ -1,16 +1,16 @@
 # brainstorm
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Tools
-- **Arquivo:** `vaila/brainstorm.py`
-- **Linhas:** 2574
-- **Tamanho:** 88961 caracteres
-- **Versão:** 0.3.1
-- **Autor:** Paulo Roberto Pereira Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Tools
+- **File:** `vaila/brainstorm.py`
+- **Lines:** 2574
+- **Size:** 88961 characters
+- **Version:** 0.3.1
+- **Author:** Paulo Roberto Pereira Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 Project: vailá
@@ -47,9 +47,9 @@ License:
     GNU General Public License v3.0
 
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 20
+**Total functions found:** 20
 
 - `run_brainstorm`
 - `show_message`
@@ -77,6 +77,6 @@ License:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

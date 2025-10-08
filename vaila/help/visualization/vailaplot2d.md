@@ -1,16 +1,16 @@
 # vailaplot2d
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Visualization
-- **Arquivo:** `vaila/vailaplot2d.py`
-- **Linhas:** 768
-- **Tamanho:** 24620 caracteres
-- **Versão:** 0.0.2
-- **Autor:** Prof. Paulo Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Visualization
+- **File:** `vaila/vailaplot2d.py`
+- **Lines:** 768
+- **Size:** 24620 characters
+- **Version:** 0.0.2
+- **Author:** Prof. Paulo Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 ================================================================================
@@ -38,9 +38,9 @@ Plot Types Supported:
    from the selected files.
 3...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 20
+**Total functions found:** 20
 
 - `clear_plots`
 - `clear_data`
@@ -68,6 +68,6 @@ Plot Types Supported:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

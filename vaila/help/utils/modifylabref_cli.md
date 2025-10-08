@@ -1,22 +1,22 @@
 # modifylabref_cli
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Utils
-- **Arquivo:** `vaila/modifylabref_cli.py`
-- **Linhas:** 120
-- **Tamanho:** 4196 caracteres
-
-
-- **Interface Gráfica:** ❌ Não
-
-## 📖 Descrição
+- **Category:** Utils
+- **File:** `vaila/modifylabref_cli.py`
+- **Lines:** 120
+- **Size:** 4196 characters
 
 
+- **GUI Interface:** ❌ No
 
-## 🔧 Funções Principais
+## 📖 Description
 
-**Total de funções encontradas:** 4
+
+
+## 🔧 Main Functions
+
+**Total functions found:** 4
 
 - `modify_lab_coords`
 - `get_labcoord_angles`
@@ -28,6 +28,6 @@
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

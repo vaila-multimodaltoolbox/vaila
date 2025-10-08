@@ -1,16 +1,16 @@
 # animal_open_field
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Analysis
-- **Arquivo:** `vaila/animal_open_field.py`
-- **Linhas:** 1174
-- **Tamanho:** 40897 caracteres
-- **Versão:** 2.1.0
-- **Autor:** Prof. Paulo R. P. Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Analysis
+- **File:** `vaila/animal_open_field.py`
+- **Lines:** 1174
+- **Size:** 40897 characters
+- **Version:** 2.1.0
+- **Author:** Prof. Paulo R. P. Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 ===============================================================================
@@ -39,9 +39,9 @@ Key Features:
   - Percentage and count of time in each zone.
   - Percentage and count of time in the center zone and border areas....
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 20
+**Total functions found:** 20
 
 - `load_and_preprocess_data`
 - `adjust_to_bounds`
@@ -69,6 +69,6 @@ Key Features:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

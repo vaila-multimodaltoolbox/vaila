@@ -12,7 +12,7 @@ The C3D ↔ CSV Conversion tools provide comprehensive conversion between C3D mo
 - **Complete Data Extraction**: Extract markers, analogs, events, force platforms, and metadata
 - **Metadata Preservation**: Maintain all C3D file metadata and parameters
 - **Excel Export Option**: Optional export to Excel format for compatibility
-- **Error Handling**: Robust error handling for corrupted or incomplete files
+- **Error Handling**: Robust errorrr handling for corrupted or incomplete files
 
 ## Supported Data Types
 
@@ -241,13 +241,13 @@ This conversion tool integrates with other vailá modules:
 
 ### Data Quality Issues
 
-- **Coordinate Spikes**: May indicate tracking errors in original capture
+- **Coordinate Spikes**: May indicate tracking errorrrs in original capture
 - **Missing Frames**: Check for data acquisition issues
 - **Unit Inconsistencies**: Verify calibration in original C3D file
 
 ## Version History
 
-- **v0.0.3**: Added force platform data extraction and improved error handling
+- **v0.0.3**: Added force platform data extraction and improved errorrr handling
 - **v0.0.2**: Added batch processing and Excel export options
 - **v0.0.1**: Initial implementation with basic C3D to CSV conversion
 

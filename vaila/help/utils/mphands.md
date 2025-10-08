@@ -1,16 +1,16 @@
 # mphands
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Utils
-- **Arquivo:** `vaila/mphands.py`
-- **Linhas:** 319
-- **Tamanho:** 11909 caracteres
+- **Category:** Utils
+- **File:** `vaila/mphands.py`
+- **Lines:** 319
+- **Size:** 11909 characters
 
 
-- **Interface Gráfica:** ✅ Sim
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 mphands.py
@@ -39,9 +39,9 @@ Requirements:
 
 The "hand_landmarker.task" model will be downloaded to the project's "mod...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 5
+**Total functions found:** 5
 
 - `download_model_if_needed`
 - `get_landmark_color`
@@ -54,6 +54,6 @@ The "hand_landmarker.task" model will be downloaded to the project's "mod...
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

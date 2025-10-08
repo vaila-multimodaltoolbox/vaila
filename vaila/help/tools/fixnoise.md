@@ -1,16 +1,16 @@
 # fixnoise
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Tools
-- **Arquivo:** `vaila/fixnoise.py`
-- **Linhas:** 273
-- **Tamanho:** 8988 caracteres
-- **Versão:** 0.02
-- **Autor:** Prof. Dr. Paulo R. P. Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Tools
+- **File:** `vaila/fixnoise.py`
+- **Lines:** 273
+- **Size:** 8988 characters
+- **Version:** 0.02
+- **Author:** Prof. Dr. Paulo R. P. Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 fixnoise_batch.py
@@ -37,9 +37,9 @@ Instructions:
 2. Select the directory containing the CSV files to be processed.
 3. Follow the instructions in the...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 13
+**Total functions found:** 13
 
 - `read_csv_full`
 - `select_headers_and_load_data`
@@ -60,6 +60,6 @@ Instructions:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

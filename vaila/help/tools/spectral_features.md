@@ -1,16 +1,16 @@
 # spectral_features
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Tools
-- **Arquivo:** `vaila/spectral_features.py`
-- **Linhas:** 174
-- **Tamanho:** 6014 caracteres
-- **Versão:** 1.1
-- **Autor:** Prof. Dr. Paulo R. P. Santiago
-- **Interface Gráfica:** ❌ Não
+- **Category:** Tools
+- **File:** `vaila/spectral_features.py`
+- **Lines:** 174
+- **Size:** 6014 characters
+- **Version:** 1.1
+- **Author:** Prof. Dr. Paulo R. P. Santiago
+- **GUI Interface:** ❌ No
 
-## 📖 Descrição
+## 📖 Description
 
 
 Module: spectral_features.py
@@ -37,9 +37,9 @@ Usage:
   # etc.
 
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 13
+**Total functions found:** 13
 
 - `adjust_frequency_range`
 - `total_power`
@@ -60,6 +60,6 @@ Usage:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

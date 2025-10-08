@@ -1,16 +1,16 @@
 # linear_interpolation_split
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Tools
-- **Arquivo:** `vaila/linear_interpolation_split.py`
-- **Linhas:** 163
-- **Tamanho:** 5935 caracteres
-- **Versão:** 1.1.2
-- **Autor:** Paulo R. P. Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Tools
+- **File:** `vaila/linear_interpolation_split.py`
+- **Lines:** 163
+- **Size:** 5935 characters
+- **Version:** 1.1.2
+- **Author:** Paulo R. P. Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 ===============================================================================
@@ -41,9 +41,9 @@ Usage:
   to perform linear interpolation on CSV files or to split them into two parts.
 - T...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 3
+**Total functions found:** 3
 
 - `run_fill_split_dialog`
 - `run_linear_interpolation`
@@ -54,6 +54,6 @@ Usage:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

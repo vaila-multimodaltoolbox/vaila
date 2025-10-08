@@ -1,16 +1,16 @@
 # vaila_distortvideo_gui
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Tools
-- **Arquivo:** `vaila/vaila_distortvideo_gui.py`
-- **Linhas:** 779
-- **Tamanho:** 27058 caracteres
-- **Versão:** 0.1.1
-- **Autor:** Prof. Paulo R. P. Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Tools
+- **File:** `vaila/vaila_distortvideo_gui.py`
+- **Lines:** 779
+- **Size:** 27058 characters
+- **Version:** 0.1.1
+- **Author:** Prof. Paulo R. P. Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 ===============================================================================
@@ -31,9 +31,9 @@ preview in real time.
 ===============================================================================
 
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 17
+**Total functions found:** 17
 
 - `load_distortion_parameters`
 - `process_video`
@@ -58,6 +58,6 @@ preview in real time.
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

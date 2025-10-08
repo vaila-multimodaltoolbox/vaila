@@ -1,16 +1,16 @@
 # syncvid
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Tools
-- **Arquivo:** `vaila/syncvid.py`
-- **Linhas:** 314
-- **Tamanho:** 10276 caracteres
-- **Versão:** 0.0.2
-- **Autor:** Paulo Roberto Pereira Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Tools
+- **File:** `vaila/syncvid.py`
+- **Lines:** 314
+- **Size:** 10276 characters
+- **Version:** 0.0.2
+- **Author:** Paulo Roberto Pereira Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 Project: vailá Multimodal Toolbox
@@ -56,9 +56,9 @@ License:
     This project is licensed under the terms of GNU General Public License v3.0.
 
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 10
+**Total functions found:** 10
 
 - `get_video_files`
 - `write_sync_file`
@@ -76,6 +76,6 @@ License:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

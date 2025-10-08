@@ -1,16 +1,16 @@
 # cluster_analysis
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Analysis
-- **Arquivo:** `vaila/cluster_analysis.py`
-- **Linhas:** 515
-- **Tamanho:** 18621 caracteres
-- **Versão:** 1.0
-- **Autor:** Prof. Dr. Paulo R. P. Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Analysis
+- **File:** `vaila/cluster_analysis.py`
+- **Lines:** 515
+- **Size:** 18621 characters
+- **Version:** 1.0
+- **Author:** Prof. Dr. Paulo R. P. Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 ================================================================================
@@ -35,9 +35,9 @@ Main Features:
     2. Orthonormal Bases and Euler Angles:
         - Calculates orthonormal bases for the anato...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 3
+**Total functions found:** 3
 
 - `save_results_to_csv`
 - `read_anatomical_csv`
@@ -48,6 +48,6 @@ Main Features:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

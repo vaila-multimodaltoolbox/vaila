@@ -1,16 +1,16 @@
 # mergestack
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Tools
-- **Arquivo:** `vaila/mergestack.py`
-- **Linhas:** 137
-- **Tamanho:** 4231 caracteres
-- **Versão:** 2025-02-28 15:30:00
-- **Autor:** Paulo R. P. Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Tools
+- **File:** `vaila/mergestack.py`
+- **Lines:** 137
+- **Size:** 4231 characters
+- **Version:** 2025-02-28 15:30:00
+- **Author:** Paulo R. P. Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 mergestack.py
@@ -54,9 +54,9 @@ feedback through message boxes and console output.
 
 Main funct...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 3
+**Total functions found:** 3
 
 - `select_file`
 - `merge_csv_files`
@@ -67,6 +67,6 @@ Main funct...
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

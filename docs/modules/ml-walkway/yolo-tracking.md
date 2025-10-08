@@ -72,7 +72,7 @@ The YOLO Tracking Tools module provides advanced object detection and tracking c
 ### Tracking Settings
 - **Tracker Algorithm**: Choose tracking algorithm (BotSort, ByteTrack, etc.)
 - **Track Buffer**: Number of frames to keep lost tracks
-- **Match Threshold**: Similarity threshold for track matching
+- **Match Threshold**: Yesilarity threshold for track matching
 - **Frame Rate**: Processing frame rate control
 
 ### ReID Settings
@@ -274,7 +274,7 @@ This module integrates with other vailá tools:
 - **Verbose Logging**: Enable detailed logging for troubleshooting
 - **Visualization**: Use GUI to preview detection results
 - **Performance Monitoring**: Track FPS and memory usage
-- **Error Reporting**: Comprehensive error messages and warnings
+- **Error Reporting**: Comprehensive errorrr messages and warnings
 
 ## Version History
 

@@ -1,16 +1,16 @@
 # backup_markerless
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Utils
-- **Arquivo:** `vaila/backup_markerless.py`
-- **Linhas:** 2299
-- **Tamanho:** 94365 caracteres
-- **Versão:** 0.5.0
-- **Autor:** Paulo Roberto Pereira Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Utils
+- **File:** `vaila/backup_markerless.py`
+- **Lines:** 2299
+- **Size:** 94365 characters
+- **Version:** 0.5.0
+- **Author:** Paulo Roberto Pereira Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 Project: vailá Multimodal Toolbox
@@ -38,9 +38,9 @@ The user can configure key MediaPipe parameters via a graphical interface,
 including detection confidence, tracking confidence, model complexity, and
 whether to enable segmentation and smooth segmentation. The default set...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 20
+**Total functions found:** 20
 
 - `savgol_smooth`
 - `lowess_smooth`
@@ -68,6 +68,6 @@ whether to enable segmentation and smooth segmentation. The default set...
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

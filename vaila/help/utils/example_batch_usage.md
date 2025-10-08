@@ -1,16 +1,16 @@
 # example_batch_usage
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Utils
-- **Arquivo:** `vaila/example_batch_usage.py`
-- **Linhas:** 98
-- **Tamanho:** 3250 caracteres
-- **Versão:** 03 September 2025
-- **Autor:** Prof. Paulo R. P. Santiago
-- **Interface Gráfica:** ❌ Não
+- **Category:** Utils
+- **File:** `vaila/example_batch_usage.py`
+- **Lines:** 98
+- **Size:** 3250 characters
+- **Version:** 03 September 2025
+- **Author:** Prof. Paulo R. P. Santiago
+- **GUI Interface:** ❌ No
 
-## 📖 Descrição
+## 📖 Description
 
 
 ===============================================================================
@@ -34,9 +34,9 @@ Usage:
 python example_batch_usage.py
 
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 2
+**Total functions found:** 2
 
 - `create_sample_csv_files`
 - `demonstrate_batch_processing`
@@ -46,6 +46,6 @@ python example_batch_usage.py
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

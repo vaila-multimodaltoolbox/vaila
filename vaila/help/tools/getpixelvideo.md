@@ -1,16 +1,16 @@
 # getpixelvideo
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Tools
-- **Arquivo:** `vaila/getpixelvideo.py`
-- **Linhas:** 2106
-- **Tamanho:** 89253 caracteres
-- **Versão:** 0.1.0
-- **Autor:** Prof. Dr. Paulo R. P. Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Tools
+- **File:** `vaila/getpixelvideo.py`
+- **Lines:** 2106
+- **Size:** 89253 characters
+- **Version:** 0.1.0
+- **Author:** Prof. Dr. Paulo R. P. Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 ================================================================================
@@ -38,9 +38,9 @@ New Features in This Version:
 3. Select keypoint number in the video frame.
 4. Speed in play automa...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 14
+**Total functions found:** 14
 
 - `get_color_for_id`
 - `play_video_with_controls`
@@ -62,6 +62,6 @@ New Features in This Version:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

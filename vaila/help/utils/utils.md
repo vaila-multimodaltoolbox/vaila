@@ -1,16 +1,16 @@
 # utils
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Utils
-- **Arquivo:** `vaila/utils.py`
-- **Linhas:** 147
-- **Tamanho:** 4575 caracteres
+- **Category:** Utils
+- **File:** `vaila/utils.py`
+- **Lines:** 147
+- **Size:** 4575 characters
 
 
-- **Interface Gráfica:** ✅ Sim
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 # vailá - Multimodal Toolbox
@@ -41,9 +41,9 @@
 # Installation of FFmpeg in Conda:
 #   conda install -c conda-forge ffmpeg...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 4
+**Total functions found:** 4
 
 - `get_box_coordinates`
 - `save_first_frame`
@@ -55,6 +55,6 @@
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
