@@ -47,6 +47,55 @@ Each function is accessible through buttons in the user-friendly GUI, automating
 
 🔧 **How to use:** Select your C3D files in the GUI/CLI, and the system will process the motion capture data.
 
+## 🔧 Complete Documentation
+
+The vailá Multimodal Toolbox now includes comprehensive documentation for all modules:
+
+### 📖 Module Documentation
+
+#### **Markerless Analysis**
+- **[2D Analysis](modules/markerless-analysis/markerless-2d-analysis.md)**: Advanced 2D pose estimation with MediaPipe
+- **[3D Analysis](modules/markerless-analysis/markerless-3d-analysis.md)**: 3D pose reconstruction from monocular video
+- **[Live Analysis](modules/markerless-analysis/markerless-live.md)**: Real-time markerless tracking
+
+#### **Motion Capture**
+- **[Full Body Analysis](modules/motion-capture/mocap-full-body.md)**: Complete motion capture data processing
+- **[Cluster Analysis](modules/motion-capture/cluster-analysis.md)**: Anatomical marker cluster analysis
+
+#### **Sensor Analysis**
+- **[IMU Analysis](modules/sensors/imu-analysis.md)**: Inertial measurement unit data processing
+- **[Force Plate Analysis](modules/sensors/force-plate.md)**: Ground reaction force analysis
+- **[EMG Analysis](modules/sensors/emg-analysis.md)**: Electromyography signal processing
+- **[GNSS/GPS Analysis](modules/sensors/gnss-gps.md)**: GPS trajectory analysis
+
+#### **Data Processing Tools**
+- **[C3D ↔ CSV Conversion](modules/tools/c3d-csv-conversion.md)**: Motion capture file format conversion
+- **[Data Filtering](modules/tools/data-filtering.md)**: Advanced signal processing algorithms
+- **[DLT Calibration](modules/tools/dlt-calibration.md)**: Camera calibration for 3D reconstruction
+
+#### **Video Processing Tools**
+- **[Video Tools](modules/tools/video-tools.md)**: Video manipulation and processing
+- **[Video Compression](modules/tools/video-compression.md)**: Multi-format video compression
+- **[Video Synchronization](modules/tools/video-sync.md)**: Multi-camera video synchronization
+
+#### **Visualization Tools**
+- **[2D Plotting](modules/visualization/plot-2d.md)**: Comprehensive 2D data visualization
+- **[3D Visualization](modules/visualization/plot-3d.md)**: 3D data plotting and analysis
+
+#### **Machine Learning**
+- **[ML Walkway](modules/ml-walkway/ml-walkway.md)**: Machine learning gait analysis
+- **[YOLO Tracking](modules/ml-walkway/yolo-tracking.md)**: Object detection and tracking
+
+#### **Specialized Tools**
+- **[Vector Coding](modules/tools/vector-coding.md)**: Joint coupling analysis
+- **[Open Field Analysis](modules/tools/open-field.md)**: Animal behavior analysis
+- **[Vertical Jump Analysis](modules/tools/vertical-jump.md)**: Jump performance metrics
+
+### 📚 API Reference
+
+- **[Complete Module List](api/modules.md)**: Comprehensive reference of all vailá modules
+- **[Function Reference](api/functions.md)**: Detailed function documentation
+
 ---
 
 ## 🛠 Installation & Setup
