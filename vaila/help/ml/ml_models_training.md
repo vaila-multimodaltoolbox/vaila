@@ -1,22 +1,22 @@
 # ml_models_training
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Ml
-- **Arquivo:** `vaila/ml_models_training.py`
-- **Linhas:** 354
-- **Tamanho:** 13078 caracteres
+- **Category:** Ml
+- **File:** `vaila/ml_models_training.py`
+- **Lines:** 354
+- **Size:** 13078 characters
 
 
-- **Interface Gráfica:** ✅ Sim
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 Plots the metrics for each model in a bar chart with different colors and similar scales, and saves them as PNG files.
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 5
+**Total functions found:** 5
 
 - `calculate_metrics`
 - `select_file`
@@ -29,6 +29,6 @@ Plots the metrics for each model in a bar chart with different colors and simila
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

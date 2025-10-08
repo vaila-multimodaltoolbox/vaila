@@ -1,16 +1,16 @@
 # __init__
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Uncategorized
-- **Arquivo:** `vaila/__init__.py`
-- **Linhas:** 126
-- **Tamanho:** 3711 caracteres
-- **Versão:** 2024-08-16 12:00:00
-- **Autor:** Prof. Paulo Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Uncategorized
+- **File:** `vaila/__init__.py`
+- **Lines:** 126
+- **Size:** 3711 characters
+- **Version:** 2024-08-16 12:00:00
+- **Author:** Prof. Paulo Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 Module: vaila
@@ -28,9 +28,9 @@ Changelog:
 Author: Prof. Paulo Santiago
 
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-Nenhuma função encontrada
+No functions found
 
 
 
@@ -38,6 +38,6 @@ Nenhuma função encontrada
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

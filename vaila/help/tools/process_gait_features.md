@@ -1,16 +1,16 @@
 # process_gait_features
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Tools
-- **Arquivo:** `vaila/process_gait_features.py`
-- **Linhas:** 241
-- **Tamanho:** 8731 caracteres
-- **Versão:** 3.12.9
-- **Autor:** Abel Gonçalves Chinaglia
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Tools
+- **File:** `vaila/process_gait_features.py`
+- **Lines:** 241
+- **Size:** 8731 characters
+- **Version:** 3.12.9
+- **Author:** Abel Gonçalves Chinaglia
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 ===============================================================================
@@ -37,9 +37,9 @@ Key Features:
 4. Automatically processes all .csv files in the selected directory.
 5. Saves the results in an output .csv file for further...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 4
+**Total functions found:** 4
 
 - `calculate_features`
 - `divide_into_blocks`
@@ -51,6 +51,6 @@ Key Features:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

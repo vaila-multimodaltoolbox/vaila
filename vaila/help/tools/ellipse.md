@@ -1,16 +1,16 @@
 # ellipse
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Tools
-- **Arquivo:** `vaila/ellipse.py`
-- **Linhas:** 234
-- **Tamanho:** 9374 caracteres
-- **Versão:** 1.0 Date: 2024-09-12
-- **Autor:** Prof. Dr. Paulo R. P. Santiago Version: 1.0 Date: 2024-09-12
-- **Interface Gráfica:** ❌ Não
+- **Category:** Tools
+- **File:** `vaila/ellipse.py`
+- **Lines:** 234
+- **Size:** 9374 characters
+- **Version:** 1.0 Date: 2024-09-12
+- **Author:** Prof. Dr. Paulo R. P. Santiago Version: 1.0 Date: 2024-09-12
+- **GUI Interface:** ❌ No
 
-## 📖 Descrição
+## 📖 Description
 
 
 Module: ellipse.py
@@ -20,16 +20,16 @@ Description: This module provides functions to compute and visualize confidence 
 
              The module includes:
              - `plot_ellipse_pca`: Calculates the parameters of a confidence ellipse using Principal Component Analysis (PCA).
-               PCA is employed to identify the principal axes of the data distribution, allowing for the computation of the ellipse
+               PCA is employed to identify the main axes of the data distribution, allowing for the computation of the ellipse
                that best fits the CoP data within a given confidence level. The function returns the ellipse's area, orientation,
                and boundary coordinates.
 
              - `plot_cop_pathway_with_ellipse`: Visualizes the CoP pathway along with the calculated confidence ellipse.
                This fu...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 2
+**Total functions found:** 2
 
 - `plot_ellipse_pca`
 - `plot_cop_pathway_with_ellipse`
@@ -39,6 +39,6 @@ Description: This module provides functions to compute and visualize confidence 
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

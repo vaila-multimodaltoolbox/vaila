@@ -1,16 +1,16 @@
 # resize_video
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Tools
-- **Arquivo:** `vaila/resize_video.py`
-- **Linhas:** 1293
-- **Tamanho:** 46650 caracteres
-- **Versão:** --------
-- **Autor:** -------
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Tools
+- **File:** `vaila/resize_video.py`
+- **Lines:** 1293
+- **Size:** 46650 characters
+- **Version:** --------
+- **Author:** -------
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 resize_video.py
@@ -44,9 +44,9 @@ Dependencies:
 - pandas (for coordinates conversion)
 
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 20
+**Total functions found:** 20
 
 - `get_video_info`
 - `resize_with_opencv`
@@ -74,6 +74,6 @@ Dependencies:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

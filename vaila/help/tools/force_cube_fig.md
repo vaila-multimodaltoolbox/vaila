@@ -1,16 +1,16 @@
 # force_cube_fig
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Tools
-- **Arquivo:** `vaila/force_cube_fig.py`
-- **Linhas:** 1930
-- **Tamanho:** 65744 caracteres
-- **Versão:** 0.5
-- **Autor:** Prof. Dr. Paulo R. P. Santiago Ligia
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Tools
+- **File:** `vaila/force_cube_fig.py`
+- **Lines:** 1930
+- **Size:** 65744 characters
+- **Version:** 0.5
+- **Author:** Prof. Dr. Paulo R. P. Santiago Ligia
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 ================================================================================
@@ -37,9 +37,9 @@ Key Functionalities:
    - Allows the user to select input CSV files containing biomechanical data.
    - Prompts the user to specify output directori...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 20
+**Total functions found:** 20
 
 - `select_source_directory`
 - `select_output_directory`
@@ -67,6 +67,6 @@ Key Functionalities:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

@@ -1,16 +1,16 @@
 # reidmplrswap
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Utils
-- **Arquivo:** `vaila/reidmplrswap.py`
-- **Linhas:** 830
-- **Tamanho:** 27842 caracteres
+- **Category:** Utils
+- **File:** `vaila/reidmplrswap.py`
+- **Lines:** 830
+- **Size:** 27842 characters
 
 
-- **Interface Gráfica:** ✅ Sim
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 reidmplrswap.py — Detect and fix abrupt left/right swaps in marker tracks
@@ -39,9 +39,9 @@ Outputs
 - Corrected CSV saved alongside original with suffix "_reidswap.csv"
 - Text r...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 17
+**Total functions found:** 17
 
 - `find_lr_pairs`
 - `propose_swaps_for_pair`
@@ -66,6 +66,6 @@ Outputs
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

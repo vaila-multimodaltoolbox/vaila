@@ -1,16 +1,16 @@
-# 📚 vailá - Documentação de Help
+# 📚 vailá - Help Documentation
 
-Documentação automática gerada para todos os módulos Python do vailá Multimodal Toolbox.
+Automatically generated documentation for all Python modules in vailá Multimodal Toolbox.
 
-## 📊 Estatísticas Gerais
+## 📊 General Statistics
 
-- **Total de módulos documentados:** 111
-- **Categorias:** 7
-- **Gerado em:** 08/10/2025 14:00:12
+- **Total documented modules:** 111
+- **Categories:** 7
+- **Generated on:** 08/10/2025 14:24:24
 
-## 📂 Categorias de Módulos
+## 📂 Module Categories
 
-### Ml (10 módulos)
+### Ml (10 modules)
 
 - **markerless2d_analysis_v2**
   - [📄 HTML](ml/markerless2d_analysis_v2.html)
@@ -52,7 +52,7 @@ Documentação automática gerada para todos os módulos Python do vailá Multim
   - [📄 HTML](ml/yolov12track.html)
   - [📝 Markdown](ml/yolov12track.md)
 
-### Tools (46 módulos)
+### Tools (46 modules)
 
 - **batchcut**
   - [📄 HTML](tools/batchcut.html)
@@ -238,7 +238,7 @@ Documentação automática gerada para todos os módulos Python do vailá Multim
   - [📄 HTML](tools/videoprocessor.html)
   - [📝 Markdown](tools/videoprocessor.md)
 
-### Utils (19 módulos)
+### Utils (19 modules)
 
 - **backup_markerless**
   - [📄 HTML](utils/backup_markerless.html)
@@ -316,7 +316,7 @@ Documentação automática gerada para todos os módulos Python do vailá Multim
   - [📄 HTML](utils/vpython_c3d.html)
   - [📝 Markdown](utils/vpython_c3d.md)
 
-### Processing (16 módulos)
+### Processing (16 modules)
 
 - **data_processing**
   - [📄 HTML](processing/data_processing.html)
@@ -382,7 +382,7 @@ Documentação automática gerada para todos os módulos Python do vailá Multim
   - [📄 HTML](processing/reid_markers.html)
   - [📝 Markdown](processing/reid_markers.md)
 
-### Analysis (13 módulos)
+### Analysis (13 modules)
 
 - **animal_open_field**
   - [📄 HTML](analysis/animal_open_field.html)
@@ -436,7 +436,7 @@ Documentação automática gerada para todos os módulos Python do vailá Multim
   - [📄 HTML](analysis/vaila_and_jump.html)
   - [📝 Markdown](analysis/vaila_and_jump.md)
 
-### Visualization (6 módulos)
+### Visualization (6 modules)
 
 - **plotting**
   - [📄 HTML](visualization/plotting.html)
@@ -462,26 +462,26 @@ Documentação automática gerada para todos os módulos Python do vailá Multim
   - [📄 HTML](visualization/viewc3d.html)
   - [📝 Markdown](visualization/viewc3d.md)
 
-### Uncategorized (1 módulos)
+### Uncategorized (1 modules)
 
 - **__init__**
   - [📄 HTML](uncategorized/__init__.html)
   - [📝 Markdown](uncategorized/__init__.md)
 
 
-## 🔗 Links Úteis
+## 🔗 Useful Links
 
 - [🌐 GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
-- [📖 Documentação Principal](https://vaila.readthedocs.io/)
-- [🛠️ Issues e Discussões](https://github.com/vaila-multimodaltoolbox/vaila/issues)
+- [📖 Main Documentation](https://vaila.readthedocs.io/)
+- [🛠️ Issues and Discussions](https://github.com/vaila-multimodaltoolbox/vaila/issues)
 
-## 📝 Sobre Esta Documentação
+## 📝 About This Documentation
 
-Esta documentação foi gerada automaticamente através da análise dos módulos Python do vailá. Cada arquivo de help contém:
+This documentation was automatically generated through analysis of vailá's Python modules. Each help file contains:
 
-- Informações básicas do módulo (autor, versão, categoria)
-- Descrição extraída do docstring
-- Lista de funções principais encontradas
-- Links para formatos HTML e Markdown
+- Basic module information (author, version, category)
+- Description extracted from docstring
+- List of main functions found
+- Links to HTML and Markdown formats
 
-Para atualizar esta documentação, execute o script `generate_help_docs.py` novamente.
+To update this documentation, run the `generate_help_docs.py` script again.
