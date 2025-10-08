@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Processing
-- **Arquivo:** `vaila\rec3d_one_dlt3d.py`
+- **Arquivo:** `vaila/rec3d_one_dlt3d.py`
 - **Linhas:** 432
 - **Tamanho:** 16550 caracteres
 - **Versão:** 0.0.4
@@ -48,6 +48,6 @@ Description:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

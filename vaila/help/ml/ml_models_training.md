@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Ml
-- **Arquivo:** `vaila\ml_models_training.py`
+- **Arquivo:** `vaila/ml_models_training.py`
 - **Linhas:** 354
 - **Tamanho:** 13078 caracteres
 
@@ -29,6 +29,6 @@ Plots the metrics for each model in a bar chart with different colors and simila
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

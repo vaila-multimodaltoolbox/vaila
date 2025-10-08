@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Tools
-- **Arquivo:** `vaila\convert_videos_ts_to_mp4.py`
+- **Arquivo:** `vaila/convert_videos_ts_to_mp4.py`
 - **Linhas:** 152
 - **Tamanho:** 4749 caracteres
 - **Versão:** process will start automatically.
@@ -51,6 +51,6 @@ Requirements:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

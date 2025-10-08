@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Utils
-- **Arquivo:** `vaila\reidvideogui.py`
+- **Arquivo:** `vaila/reidvideogui.py`
 - **Linhas:** 737
 - **Tamanho:** 24759 caracteres
 - **Versão:** 0.1.0
@@ -65,6 +65,6 @@ It allows for:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

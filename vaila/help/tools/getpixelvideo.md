@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Tools
-- **Arquivo:** `vaila\getpixelvideo.py`
+- **Arquivo:** `vaila/getpixelvideo.py`
 - **Linhas:** 2106
 - **Tamanho:** 89253 caracteres
 - **Versão:** 0.1.0
@@ -62,6 +62,6 @@ New Features in This Version:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

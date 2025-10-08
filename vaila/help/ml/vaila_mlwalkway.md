@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Ml
-- **Arquivo:** `vaila\vaila_mlwalkway.py`
+- **Arquivo:** `vaila/vaila_mlwalkway.py`
 - **Linhas:** 104
 - **Tamanho:** 2844 caracteres
 
@@ -45,6 +45,6 @@ Each button triggers the respective function that executes the corresponding ML 
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

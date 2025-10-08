@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Ml
-- **Arquivo:** `vaila\markerless2d_mpyolo.py`
+- **Arquivo:** `vaila/markerless2d_mpyolo.py`
 - **Linhas:** 2300
 - **Tamanho:** 84006 caracteres
 - **Versão:** 0.1.0 - Enhanced
@@ -71,6 +71,6 @@ python markerless2d_mpyolo.py
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
