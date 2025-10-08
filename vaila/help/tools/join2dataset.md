@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Tools
-- **Arquivo:** `vaila\join2dataset.py`
+- **Arquivo:** `vaila/join2dataset.py`
 - **Linhas:** 141
 - **Tamanho:** 5605 caracteres
 - **Versão:** 1.0
@@ -47,6 +47,6 @@ Key Functionalities:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

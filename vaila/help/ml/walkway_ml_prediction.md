@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Ml
-- **Arquivo:** `vaila\walkway_ml_prediction.py`
+- **Arquivo:** `vaila/walkway_ml_prediction.py`
 - **Linhas:** 356
 - **Tamanho:** 12316 caracteres
 
@@ -29,6 +29,6 @@ Função para carregar modelos e realizar previsões
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

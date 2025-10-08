@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Tools
-- **Arquivo:** `vaila\resize_video.py`
+- **Arquivo:** `vaila/resize_video.py`
 - **Linhas:** 1293
 - **Tamanho:** 46650 caracteres
 - **Versão:** --------
@@ -74,6 +74,6 @@ Dependencies:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

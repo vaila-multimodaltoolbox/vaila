@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Tools
-- **Arquivo:** `vaila\load_vicon_csv_split_batch.py`
+- **Arquivo:** `vaila/load_vicon_csv_split_batch.py`
 - **Linhas:** 219
 - **Tamanho:** 8327 caracteres
 - **Versão:** 1.1
@@ -45,6 +45,6 @@ Main Features:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

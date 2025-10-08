@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Tools
-- **Arquivo:** `vaila\cop_analysis.py`
+- **Arquivo:** `vaila/cop_analysis.py`
 - **Linhas:** 703
 - **Tamanho:** 24820 caracteres
 - **Versão:** 1.4 Date: 2024-09-12
@@ -45,6 +45,6 @@ Description: This module provides a comprehensive set of tools for analyzing Cen
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
