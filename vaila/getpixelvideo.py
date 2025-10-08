@@ -31,7 +31,7 @@ How to use:
 3. Mark points in the video frame.
 4. Save the results in CSV format.
 
-python getpixelvideo.py 
+python getpixelvideo.py
 
 ================================================================================
 """
@@ -47,21 +47,21 @@ import sys
 import io
 from contextlib import redirect_stderr
 
-if platform.system() == 'Linux':
-    os.environ['SDL_VIDEODRIVER'] = 'x11'
-    os.environ['SDL_RENDER_DRIVER'] = 'software'
+if platform.system() == "Linux":
+    os.environ["SDL_VIDEODRIVER"] = "x11"
+    os.environ["SDL_RENDER_DRIVER"] = "software"
     # Additional variables to suppress OpenGL/EGL warnings
-    os.environ['LIBGL_ALWAYS_SOFTWARE'] = '1'
-    os.environ['SDL_VIDEO_X11_FORCE_EGL'] = '0'
-    os.environ['QT_LOGGING_RULES'] = '*.debug=false;qt.qpa.*=false'
-    
+    os.environ["LIBGL_ALWAYS_SOFTWARE"] = "1"
+    os.environ["SDL_VIDEO_X11_FORCE_EGL"] = "0"
+    os.environ["QT_LOGGING_RULES"] = "*.debug=false;qt.qpa.*=false"
+
     # Suppress stderr during imports to hide EGL warnings
     # These warnings come from both pygame and cv2 on some Linux systems
     f = io.StringIO()
     with redirect_stderr(f):
         import pygame
         import cv2
-    
+
     # Import cv2 again normally to ensure it's available in the global scope
     import cv2
 else:
@@ -86,7 +86,11 @@ try:
     from native_file_dialog import open_native_file_dialog, open_yes_no_dialog
 except ImportError:
     # Fallback: try to import from the vaila directory
-    vaila_dir = os.path.join(current_dir, 'vaila') if 'vaila' not in current_dir else current_dir
+    vaila_dir = (
+        os.path.join(current_dir, "vaila")
+        if "vaila" not in current_dir
+        else current_dir
+    )
     if vaila_dir not in sys.path:
         sys.path.insert(0, vaila_dir)
     from native_file_dialog import open_native_file_dialog, open_yes_no_dialog
@@ -164,7 +168,7 @@ def play_video_with_controls(video_path, coordinates=None):
 
     # Add sequential mode variable
     sequential_mode = False
-    
+
     # Add auto-marking mode variable
     auto_marking_mode = False
 
@@ -208,16 +212,22 @@ def play_video_with_controls(video_path, coordinates=None):
 
         # Draw frame info above the slider.
         # Use a safe display total when total_frames is unknown/zero
-        display_total = total_frames if total_frames and total_frames > 0 else max(1, frame_count + 1)
+        display_total = (
+            total_frames
+            if total_frames and total_frames > 0
+            else max(1, frame_count + 1)
+        )
         frame_info = font.render(
             f"Frame: {frame_count + 1}/{display_total}", True, (255, 255, 255)
         )
         control_surface.blit(frame_info, (slider_margin_left, slider_y - 25))
-        
+
         # Draw auto-marking indicator if enabled
         if auto_marking_mode:
             auto_indicator = font.render("AUTO-MARKING ON", True, (255, 255, 0))
-            control_surface.blit(auto_indicator, (slider_margin_left + 300, slider_y - 25))
+            control_surface.blit(
+                auto_indicator, (slider_margin_left + 300, slider_y - 25)
+            )
 
         # Draw marker navigation and persistence info
         if one_line_mode:
@@ -347,7 +357,9 @@ def play_video_with_controls(video_path, coordinates=None):
         auto_color = (150, 50, 150) if auto_marking_mode else (100, 100, 100)
         pygame.draw.rect(control_surface, auto_color, auto_button_rect)
         auto_text = font.render("Auto", True, (255, 255, 255))
-        control_surface.blit(auto_text, auto_text.get_rect(center=auto_button_rect.center))
+        control_surface.blit(
+            auto_text, auto_text.get_rect(center=auto_button_rect.center)
+        )
 
         screen.blit(control_surface, (0, window_height))
         return (
@@ -692,9 +704,7 @@ def play_video_with_controls(video_path, coordinates=None):
                     if i == selected_marker_idx and f_num == frame_count:
                         # Instead of removing completely, add to the deleted markers list
                         deleted_markers.add(selected_marker_idx)
-                        save_message_text = (
-                            f"Removed marker {selected_marker_idx+1} in the current frame"
-                        )
+                        save_message_text = f"Removed marker {selected_marker_idx+1} in the current frame"
                         showing_save_message = True
                         save_message_timer = 60
                         break
@@ -708,7 +718,7 @@ def play_video_with_controls(video_path, coordinates=None):
                 if selected_marker_idx < len(coordinates[frame_count]):
                     deleted_positions[frame_count].add(selected_marker_idx)
                     save_message_text = (
-                    f"Removed marker {selected_marker_idx+1} in the current frame"
+                        f"Removed marker {selected_marker_idx+1} in the current frame"
                     )
                     showing_save_message = True
                     save_message_timer = 60
@@ -786,32 +796,31 @@ def play_video_with_controls(video_path, coordinates=None):
 
         # Use native file dialog for file selection with fallback
         input_file = open_native_file_dialog(
-            title="Select Keypoints File",
-            file_types=[("*.csv", "CSV Files")]
+            title="Select Keypoints File", file_types=[("*.csv", "CSV Files")]
         )
-        
+
         # Fallback to tkinter if native dialog fails
         if not input_file:
             try:
                 import tkinter as tk
                 from tkinter import filedialog
-                
+
                 # Create a hidden root window
                 root = tk.Tk()
                 root.withdraw()  # Hide the root window
-                
+
                 # Open file dialog
                 input_file = filedialog.askopenfilename(
                     title="Select Keypoints File",
-                    filetypes=[("CSV Files", "*.csv"), ("All Files", "*.*")]
+                    filetypes=[("CSV Files", "*.csv"), ("All Files", "*.*")],
                 )
-                
+
                 root.destroy()  # Clean up
-                
+
             except Exception as e:
                 print(f"Error with tkinter fallback: {e}")
                 input_file = None
-        
+
         if not input_file:
             save_message_text = "Loading canceled."
             showing_save_message = True
@@ -1146,7 +1155,7 @@ def play_video_with_controls(video_path, coordinates=None):
                 # Convert screen coordinates to video coordinates
                 video_x = (mouse_x + crop_x) / zoom_level
                 video_y = (mouse_y + crop_y) / zoom_level
-                
+
                 # Mark the point at the selected marker index
                 if selected_marker_idx >= 0:
                     # Update existing marker
@@ -1206,7 +1215,9 @@ def play_video_with_controls(video_path, coordinates=None):
                     )  # Reset selected marker when changing modes
                 elif event.key == pygame.K_m:
                     auto_marking_mode = not auto_marking_mode
-                    save_message_text = f"Auto-marking {'enabled' if auto_marking_mode else 'disabled'}"
+                    save_message_text = (
+                        f"Auto-marking {'enabled' if auto_marking_mode else 'disabled'}"
+                    )
                     showing_save_message = True
                     save_message_timer = 30
                 elif event.key == pygame.K_TAB:
@@ -1512,7 +1523,11 @@ def play_video_with_controls(video_path, coordinates=None):
                         dragging_slider = True
                         rel_x = x - slider_x
                         rel_x = max(0, min(rel_x, slider_width))
-                        denom_frames = total_frames if total_frames and total_frames > 0 else max(1, frame_count + 1)
+                        denom_frames = (
+                            total_frames
+                            if total_frames and total_frames > 0
+                            else max(1, frame_count + 1)
+                        )
                         # Map slider position proportionally; clamp when total_frames unknown
                         frame_count = int((rel_x / slider_width) * denom_frames)
                         if total_frames and total_frames > 0:
@@ -1613,7 +1628,11 @@ def play_video_with_controls(video_path, coordinates=None):
                 if dragging_slider:
                     rel_x = event.pos[0] - slider_x
                     rel_x = max(0, min(rel_x, slider_width))
-                    denom_frames = total_frames if total_frames and total_frames > 0 else max(1, frame_count + 1)
+                    denom_frames = (
+                        total_frames
+                        if total_frames and total_frames > 0
+                        else max(1, frame_count + 1)
+                    )
                     frame_count = int((rel_x / slider_width) * denom_frames)
                     if total_frames and total_frames > 0:
                         frame_count = max(0, min(frame_count, total_frames - 1))
@@ -1636,35 +1655,35 @@ def play_video_with_controls(video_path, coordinates=None):
     else:
         print("Coordinates were not saved.")
 
+
 def load_coordinates_from_file(total_frames, video_width=None, video_height=None):
     # Try native dialog first
     input_file = open_native_file_dialog(
-        title="Select Keypoint File",
-        file_types=[("*.csv", "CSV Files")]
+        title="Select Keypoint File", file_types=[("*.csv", "CSV Files")]
     )
-    
+
     # Fallback to tkinter if native dialog fails
     if not input_file:
         try:
             import tkinter as tk
             from tkinter import filedialog
-            
+
             # Create a hidden root window
             root = tk.Tk()
             root.withdraw()  # Hide the root window
-            
+
             # Open file dialog
             input_file = filedialog.askopenfilename(
                 title="Select Keypoint File",
-                filetypes=[("CSV Files", "*.csv"), ("All Files", "*.*")]
+                filetypes=[("CSV Files", "*.csv"), ("All Files", "*.*")],
             )
-            
+
             root.destroy()  # Clean up
-            
+
         except Exception as e:
             print(f"Error with tkinter fallback: {e}")
             input_file = None
-    
+
     if not input_file:
         print("No keypoint file selected. Starting fresh.")
         return {i: [] for i in range(total_frames)}
@@ -1675,12 +1694,12 @@ def load_coordinates_from_file(total_frames, video_width=None, video_height=None
         print("File loaded successfully!")
         print(f"File columns: {list(df.columns)}")
         print(f"DataFrame shape: {df.shape}")
-        
+
         # Validate that we have data
         if df.empty:
             print("WARNING: File is empty!")
             return {i: [] for i in range(total_frames)}
-            
+
     except pd.errors.EmptyDataError:
         print(f"ERROR: File {input_file} is empty or contains no data")
         return {i: [] for i in range(total_frames)}
@@ -1698,14 +1717,17 @@ def load_coordinates_from_file(total_frames, video_width=None, video_height=None
         print(f"ERROR: Unexpected error reading file {input_file}: {e}")
         print(f"Error type: {type(e).__name__}")
         import traceback
+
         traceback.print_exc()
         return {i: [] for i in range(total_frames)}
 
     # Case A: vailá format (frame + pN_x/pN_y) - from markerless_2d_analysis.py
-    if "frame" in df.columns and any(col.startswith("p") and col.endswith("_x") for col in df.columns):
+    if "frame" in df.columns and any(
+        col.startswith("p") and col.endswith("_x") for col in df.columns
+    ):
         print("Detected format: vailá (pN_x, pN_y)")
         coordinates = {i: [] for i in range(total_frames)}
-        
+
         # Find the maximum marker number
         max_marker = 0
         for col in df.columns:
@@ -1715,12 +1737,14 @@ def load_coordinates_from_file(total_frames, video_width=None, video_height=None
                     max_marker = max(max_marker, marker_num)
                 except ValueError:
                     continue
-        
+
         print(f"Found {max_marker} markers in vailá format")
-        
+
         for row_idx, row in df.iterrows():
             try:
-                frame_num = int(row.get("frame", 0)) if pd.notna(row.get("frame")) else 0
+                frame_num = (
+                    int(row.get("frame", 0)) if pd.notna(row.get("frame")) else 0
+                )
                 pts = []
                 for i in range(1, max_marker + 1):
                     try:
@@ -1733,26 +1757,26 @@ def load_coordinates_from_file(total_frames, video_width=None, video_height=None
                     except Exception as e:
                         print(f"ERROR processing marker p{i} in row {row_idx}: {e}")
                         pts.append((None, None))
-                
+
                 # Remove trailing None values
                 while pts and (pts[-1][0] is None or pts[-1][1] is None):
                     pts.pop()
-                
+
                 coordinates[frame_num] = pts
-                
+
             except Exception as e:
                 print(f"ERROR processing row {row_idx} in vailá format: {e}")
                 print(f"Row data: {dict(row)}")
                 # Add empty coordinates for this frame
                 coordinates[row_idx] = []
-        
+
         print(f"Coordinates successfully loaded (vailá format): {max_marker} markers")
         return coordinates
 
     # Case B: MediaPipe format (frame_index + landmark_x/y/z) - from markerless_2d_analysis.py
     if "frame_index" in df.columns and any(col.endswith("_x") for col in df.columns):
         print("Detected format: MediaPipe (landmark_x, landmark_y, landmark_z)")
-        
+
         # Get landmark base names (e.g., "nose", "left_eye", etc.)
         base_names = []
         for col in df.columns:
@@ -1760,10 +1784,10 @@ def load_coordinates_from_file(total_frames, video_width=None, video_height=None
                 base_name = col[:-2]  # Remove "_x"
                 if f"{base_name}_y" in df.columns:
                     base_names.append(base_name)
-        
+
         base_names = sorted(base_names)
         print(f"Found {len(base_names)} landmarks: {base_names[:5]}...")  # Show first 5
-        
+
         # Detect if coordinates are normalized (0-1) or pixel values
         def _is_normalized(sample_cols):
             try:
@@ -1772,31 +1796,40 @@ def load_coordinates_from_file(total_frames, video_width=None, video_height=None
                 min_val = sample_vals.min()
                 # Normalized coordinates typically range from 0-1, pixel coordinates are much larger
                 is_norm = (max_val <= 1.2) and (min_val >= -0.2)
-                print(f"Coordinate range: {min_val:.3f} to {max_val:.3f} - {'Normalized' if is_norm else 'Pixel'}")
+                print(
+                    f"Coordinate range: {min_val:.3f} to {max_val:.3f} - {'Normalized' if is_norm else 'Pixel'}"
+                )
                 return is_norm
             except Exception as e:
                 print(f"ERROR detecting normalization: {e}")
                 print(f"Error type: {type(e).__name__}")
                 import traceback
+
                 traceback.print_exc()
                 return False
-        
+
         # Check a sample of columns to determine if normalized
-        sample_cols = [f"{base}_x" for base in base_names[:min(5, len(base_names))]]
+        sample_cols = [f"{base}_x" for base in base_names[: min(5, len(base_names))]]
         is_norm = _is_normalized(sample_cols)
-        
+
         # Determine file type based on filename
         filename_lower = input_file.lower()
         if "_norm.csv" in filename_lower:
             file_type = "normalized"
-            print("Detected _norm.csv file - will convert normalized coordinates to pixel")
+            print(
+                "Detected _norm.csv file - will convert normalized coordinates to pixel"
+            )
             # Force conversion for normalized files
             sx = video_width if video_width else 1.0
             sy = video_height if video_height else 1.0
-            print(f"Converting normalized coordinates to pixel coordinates using video dimensions: {video_width}x{video_height}")
+            print(
+                f"Converting normalized coordinates to pixel coordinates using video dimensions: {video_width}x{video_height}"
+            )
         elif "_pixel.csv" in filename_lower:
             file_type = "pixel"
-            print("Detected _pixel.csv file - using pixel coordinates directly (ignoring Z)")
+            print(
+                "Detected _pixel.csv file - using pixel coordinates directly (ignoring Z)"
+            )
             # Use pixel coordinates as-is
             sx = 1.0
             sy = 1.0
@@ -1808,23 +1841,25 @@ def load_coordinates_from_file(total_frames, video_width=None, video_height=None
             sx = video_width if (is_norm and video_width) else 1.0
             sy = video_height if (is_norm and video_height) else 1.0
             if is_norm and video_width and video_height:
-                print(f"Converting normalized coordinates to pixel coordinates using video dimensions: {video_width}x{video_height}")
+                print(
+                    f"Converting normalized coordinates to pixel coordinates using video dimensions: {video_width}x{video_height}"
+                )
             else:
                 print("Using coordinates as-is (no scaling)")
-        
+
         coordinates = {i: [] for i in range(total_frames)}
-        
+
         for row_idx, row in df.iterrows():
             try:
                 frame_num = int(row.get("frame_index", 0))
                 pts = []
-                
+
                 for base in base_names:
                     try:
                         x_val = row.get(f"{base}_x")
                         y_val = row.get(f"{base}_y")
                         # Note: We ignore the Z coordinate (f"{base}_z") as requested
-                        
+
                         if pd.notna(x_val) and pd.notna(y_val):
                             # Apply scaling if coordinates are normalized
                             x_coord = float(x_val) * sx
@@ -1835,84 +1870,91 @@ def load_coordinates_from_file(total_frames, video_width=None, video_height=None
                     except Exception as e:
                         print(f"ERROR processing landmark {base} in row {row_idx}: {e}")
                         pts.append((None, None))
-                
+
                 # Remove trailing None values
                 while pts and (pts[-1][0] is None or pts[-1][1] is None):
                     pts.pop()
-                
+
                 coordinates[frame_num] = pts
-                
+
             except Exception as e:
                 print(f"ERROR processing row {row_idx}: {e}")
                 print(f"Row data: {dict(row)}")
                 # Add empty coordinates for this frame
                 coordinates[row_idx] = []
-        
-        print(f"Coordinates successfully loaded (MediaPipe {file_type} format): {len(base_names)} landmarks")
+
+        print(
+            f"Coordinates successfully loaded (MediaPipe {file_type} format): {len(base_names)} landmarks"
+        )
         return coordinates
 
     # Case C: Legacy format or other CSV formats
     print(f"Unknown format detected. Columns: {list(df.columns)}")
     print("Attempting to load as generic CSV format...")
-    
+
     # Try to find coordinate columns
     coord_cols = []
     for col in df.columns:
-        if any(suffix in col.lower() for suffix in ['_x', '_y', 'x', 'y']):
+        if any(suffix in col.lower() for suffix in ["_x", "_y", "x", "y"]):
             coord_cols.append(col)
-    
+
     if coord_cols:
         print(f"Found coordinate-like columns: {coord_cols}")
         coordinates = {i: [] for i in range(total_frames)}
-        
+
         # Try to determine frame column
         frame_col = None
         for col in df.columns:
-            if 'frame' in col.lower() or col == '0':
+            if "frame" in col.lower() or col == "0":
                 frame_col = col
                 break
-        
+
         if frame_col is None:
             frame_col = df.columns[0]  # Use first column as frame
-        
+
         print(f"Using '{frame_col}' as frame column")
-        
+
         for _, row in df.iterrows():
-                frame_num = int(row.get(frame_col, 0)) if pd.notna(row.get(frame_col)) else 0
-                pts = []
-                
-                # Group x,y pairs
-                i = 0
-                while i < len(coord_cols) - 1:
-                    x_col = coord_cols[i]
-                    y_col = coord_cols[i + 1]
-                    
-                    x_val = row.get(x_col)
-                    y_val = row.get(y_col)
-                    
-                    if pd.notna(x_val) and pd.notna(y_val):
-                        pts.append((float(x_val), float(y_val)))
-                    else:
-                        pts.append((None, None))
-                    
-                    i += 2
-                
-                # Remove trailing None values
-                while pts and (pts[-1][0] is None or pts[-1][1] is None):
-                    pts.pop()
-                
-                coordinates[frame_num] = pts
-        
-        print(f"Coordinates loaded (generic CSV format): {len(coord_cols)//2} coordinate pairs")
+            frame_num = (
+                int(row.get(frame_col, 0)) if pd.notna(row.get(frame_col)) else 0
+            )
+            pts = []
+
+            # Group x,y pairs
+            i = 0
+            while i < len(coord_cols) - 1:
+                x_col = coord_cols[i]
+                y_col = coord_cols[i + 1]
+
+                x_val = row.get(x_col)
+                y_val = row.get(y_col)
+
+                if pd.notna(x_val) and pd.notna(y_val):
+                    pts.append((float(x_val), float(y_val)))
+                else:
+                    pts.append((None, None))
+
+                i += 2
+
+            # Remove trailing None values
+            while pts and (pts[-1][0] is None or pts[-1][1] is None):
+                pts.pop()
+
+            coordinates[frame_num] = pts
+
+        print(
+            f"Coordinates loaded (generic CSV format): {len(coord_cols)//2} coordinate pairs"
+        )
         return coordinates
 
     print(f"File format not recognized: {input_file}. Starting fresh.")
     print("Supported formats:")
     print("  1. vailá format: 'frame', 'p1_x', 'p1_y', 'p2_x', 'p2_y', ...")
-    print("  2. MediaPipe format: 'frame_index', 'landmark_x', 'landmark_y', 'landmark_z', ...")
+    print(
+        "  2. MediaPipe format: 'frame_index', 'landmark_x', 'landmark_y', 'landmark_z', ..."
+    )
     print("  3. Generic CSV with coordinate columns")
     return {i: [] for i in range(total_frames)}
-
 
 
 def save_coordinates(
@@ -1962,36 +2004,43 @@ def save_coordinates(
 
 
 def get_video_path():
-    file_types = [("*.mp4", "MP4 Files"), ("*.MP4", "MP4 Files"), ("*.avi", "AVI Files"), ("*.AVI", "AVI Files"), ("*.mov", "MOV Files"), ("*.MOV", "MOV Files"), ("*.mkv", "MKV Files"), ("*.MKV", "MKV Files")]
-    
+    file_types = [
+        ("*.mp4", "MP4 Files"),
+        ("*.MP4", "MP4 Files"),
+        ("*.avi", "AVI Files"),
+        ("*.AVI", "AVI Files"),
+        ("*.mov", "MOV Files"),
+        ("*.MOV", "MOV Files"),
+        ("*.mkv", "MKV Files"),
+        ("*.MKV", "MKV Files"),
+    ]
+
     # Try native dialog first
     video_path = open_native_file_dialog(
-        title="Select Video File",
-        file_types=file_types
+        title="Select Video File", file_types=file_types
     )
-    
+
     # Fallback to tkinter if native dialog fails
     if not video_path:
         try:
             import tkinter as tk
             from tkinter import filedialog
-            
+
             # Create a hidden root window
             root = tk.Tk()
             root.withdraw()  # Hide the root window
-            
+
             # Open file dialog
             video_path = filedialog.askopenfilename(
-                title="Select Video File",
-                filetypes=file_types
+                title="Select Video File", filetypes=file_types
             )
-            
+
             root.destroy()  # Clean up
-            
+
         except Exception as e:
             print(f"Error with tkinter fallback: {e}")
             video_path = None
-    
+
     return video_path
 
 
@@ -2010,27 +2059,27 @@ def run_getpixelvideo():
     # Use native dialog for message box with fallback
     load_existing = open_yes_no_dialog(
         title="Load Existing Keypoints",
-        message="Do you want to load existing keypoints from a saved file?"
+        message="Do you want to load existing keypoints from a saved file?",
     )
-    
+
     # Fallback to tkinter if native dialog fails
     if load_existing is None:
         try:
             import tkinter as tk
             from tkinter import messagebox
-            
+
             # Create a hidden root window
             root = tk.Tk()
             root.withdraw()  # Hide the root window
-            
+
             # Show message box
             load_existing = messagebox.askyesno(
                 title="Load Existing Keypoints",
-                message="Do you want to load existing keypoints from a saved file?"
+                message="Do you want to load existing keypoints from a saved file?",
             )
-            
+
             root.destroy()  # Clean up
-            
+
         except Exception as e:
             print(f"Error with tkinter fallback: {e}")
             load_existing = False
