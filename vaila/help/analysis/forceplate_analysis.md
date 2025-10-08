@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Analysis
-- **Arquivo:** `vaila\forceplate_analysis.py`
+- **Arquivo:** `vaila/forceplate_analysis.py`
 - **Linhas:** 279
 - **Tamanho:** 8826 caracteres
 - **Versão:** 0.7
@@ -60,6 +60,6 @@ Key Analyses Supported:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

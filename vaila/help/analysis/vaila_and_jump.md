@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Analysis
-- **Arquivo:** `vaila\vaila_and_jump.py`
+- **Arquivo:** `vaila/vaila_and_jump.py`
 - **Linhas:** 3310
 - **Tamanho:** 120960 caracteres
 - **Versão:** 0.1.0
@@ -70,6 +70,6 @@ Features:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

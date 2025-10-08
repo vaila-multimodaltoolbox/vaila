@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Tools
-- **Arquivo:** `vaila\videoprocessor.py`
+- **Arquivo:** `vaila/videoprocessor.py`
 - **Linhas:** 788
 - **Tamanho:** 29552 caracteres
 - **Versão:** merged.
@@ -51,6 +51,6 @@ Key Features:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

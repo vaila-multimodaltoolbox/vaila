@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Analysis
-- **Arquivo:** `vaila\gnss_analysis.py`
+- **Arquivo:** `vaila/gnss_analysis.py`
 - **Linhas:** 850
 - **Tamanho:** 29908 caracteres
 
@@ -60,6 +60,6 @@ Data: 2024-10-13
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

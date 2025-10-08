@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Tools
-- **Arquivo:** `vaila\vaila_ytdown.py`
+- **Arquivo:** `vaila/vaila_ytdown.py`
 - **Linhas:** 1144
 - **Tamanho:** 46740 caracteres
 - **Versão:** 0.2.0
@@ -63,6 +63,6 @@ Requirements:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

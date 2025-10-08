@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Processing
-- **Arquivo:** `vaila\readcsv_export.py`
+- **Arquivo:** `vaila/readcsv_export.py`
 - **Linhas:** 971
 - **Tamanho:** 36912 caracteres
 - **Versão:** 25 September 2024
@@ -53,6 +53,6 @@ Main Features:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

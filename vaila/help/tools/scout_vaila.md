@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Tools
-- **Arquivo:** `vaila\scout_vaila.py`
+- **Arquivo:** `vaila/scout_vaila.py`
 - **Linhas:** 2510
 - **Tamanho:** 95343 caracteres
 - **Versão:** 0.1.5
@@ -75,6 +75,6 @@ Requirements:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
