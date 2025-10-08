@@ -99,5 +99,42 @@ nav:
   - "API Reference":
     - "Modules": api/modules.md
     - "Functions": api/functions.md
+    - "Markerless Analysis":
+      - "2D Analysis": modules/markerless-analysis/markerless-2d-analysis.md
+      - "3D Analysis": modules/markerless-analysis/markerless-3d-analysis.md
+      - "Live Analysis": modules/markerless-analysis/markerless-live.md
+    - "Motion Capture":
+      - "Full Body Analysis": modules/motion-capture/mocap-full-body.md
+      - "Cluster Analysis": modules/motion-capture/cluster-analysis.md
+    - "Sensor Analysis":
+      - "IMU Analysis": modules/sensors/imu-analysis.md
+      - "Force Plate": modules/sensors/force-plate.md
+      - "EMG Analysis": modules/sensors/emg-analysis.md
+      - "GNSS/GPS": modules/sensors/gnss-gps.md
+    - "Data Processing":
+      - "C3D/CSV Conversion": modules/tools/c3d-csv-conversion.md
+      - "Data Filtering": modules/tools/data-filtering.md
+      - "DLT Calibration": modules/tools/dlt-calibration.md
+    - "Video Processing":
+      - "Video Tools": modules/tools/video-tools.md
+      - "Compression": modules/tools/video-compression.md
+      - "Synchronization": modules/tools/video-sync.md
+    - "Visualization":
+      - "2D Plotting": modules/visualization/plot-2d.md
+      - "3D Visualization": modules/visualization/plot-3d.md
+    - "Machine Learning":
+      - "ML Walkway": modules/ml-walkway/ml-walkway.md
+      - "YOLO Tracking": modules/ml-walkway/yolo-tracking.md
+    - "Specialized Tools":
+      - "Vector Coding": modules/tools/vector-coding.md
+      - "Open Field Analysis": modules/tools/open-field.md
+      - "Vertical Jump": modules/tools/vertical-jump.md
+      - "Cube2D Kinematics": modules/tools/cube2d-kinematics.md
+      - "EMG Labicom": modules/tools/emg-labicom.md
+      - "Force Analysis": modules/tools/force-analysis.md
+      - "GNSS/GPS Analysis": modules/tools/gnss-gps.md
+      - "Ultrasound Analysis": modules/tools/ultrasound-analysis.md
+      - "Brainstorm": modules/tools/brainstorm.md
+      - "Scout Analysis": modules/tools/scout-analysis.md
   - "Additional Commands": additional-commands.md
   - "Walkway ML": walkway_ml.md
