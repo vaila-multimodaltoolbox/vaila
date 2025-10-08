@@ -2492,11 +2492,12 @@ class Vaila(tk.Tk):
     def display_help(self):
         """Displays the help file for the Multimodal Toolbox.
 
-        The help file is a static HTML file located in the "docs" directory
+        The help file is a static HTML file located in the "vaila/help" directory
         of the Multimodal Toolbox source code. If the file is not found,
         an error message is shown.
         """
-        help_file_path = os.path.join(os.path.dirname(__file__), "docs", "help.html")
+        # Correct path: vaila/help/index.html
+        help_file_path = os.path.join(os.path.dirname(__file__), "vaila", "help", "index.html")
         if os.path.exists(help_file_path):
             os.system(
                 f"start {help_file_path}"
