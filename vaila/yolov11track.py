@@ -181,19 +181,22 @@ def get_hardware_info():
     info = []
     info.append(f"Python version: {sys.version}")
     info.append(f"PyTorch version: {torch.__version__}")
-    
+
     if torch.cuda.is_available():
         info.append("CUDA available: Yes")
         info.append(f"CUDA version: {torch.version.cuda}")
         info.append(f"Number of GPUs: {torch.cuda.device_count()}")
         for i in range(torch.cuda.device_count()):
             info.append(f"GPU {i}: {torch.cuda.get_device_name(i)}")
-            info.append(f"  Memory: {torch.cuda.get_device_properties(i).total_memory / 1e9:.2f} GB")
+            info.append(
+                f"  Memory: {torch.cuda.get_device_properties(i).total_memory / 1e9:.2f} GB"
+            )
     else:
         info.append("CUDA available: No")
         info.append(f"CPU cores: {os.cpu_count()}")
-    
+
     return "\n".join(info)
+
 
 def detect_optimal_device():
     """Detect and return the optimal device for processing"""
@@ -201,14 +204,17 @@ def detect_optimal_device():
     if torch.cuda.is_available():
         gpu_count = torch.cuda.device_count()
         if gpu_count > 1:
-            print(f"Multiple GPUs detected ({gpu_count}). GPU 0 available for selection.")
-        
+            print(
+                f"Multiple GPUs detected ({gpu_count}). GPU 0 available for selection."
+            )
+
         # Clear cache for optimal performance
         torch.cuda.empty_cache()
         # Still return "cpu" as default for better compatibility
         return "cpu"
     else:
         return "cpu"
+
 
 def validate_device_choice(user_device):
     """Validate user device choice and provide feedback"""
@@ -234,43 +240,56 @@ class TrackerConfigDialog(tk.simpledialog.Dialog):
         # Hardware Info Frame
         hw_frame = tk.LabelFrame(master, text="Hardware Information", padx=5, pady=5)
         hw_frame.grid(row=0, column=0, columnspan=3, sticky="ew", padx=5, pady=5)
-        
-        hw_text = tk.Text(hw_frame, height=6, width=60, wrap="word", font=("Consolas", 8))
+
+        hw_text = tk.Text(
+            hw_frame, height=6, width=60, wrap="word", font=("Consolas", 8)
+        )
         hw_text.insert(tk.END, self.hardware_info)
         hw_text.config(state="disabled")
         hw_text.pack(padx=5, pady=5)
-        
+
         # Device Selection Frame
         device_frame = tk.LabelFrame(master, text="Device Selection", padx=5, pady=5)
         device_frame.grid(row=1, column=0, columnspan=3, sticky="ew", padx=5, pady=5)
-        
+
         # Device choice
-        tk.Label(device_frame, text="Processing Device:").grid(row=0, column=0, padx=5, pady=5)
-        
+        tk.Label(device_frame, text="Processing Device:").grid(
+            row=0, column=0, padx=5, pady=5
+        )
+
         self.device_var = tk.StringVar(value="cpu")  # Default to CPU
-        device_combo = ttk.Combobox(device_frame, textvariable=self.device_var, 
-                                   values=["cpu", "cuda"], state="readonly", width=10)
+        device_combo = ttk.Combobox(
+            device_frame,
+            textvariable=self.device_var,
+            values=["cpu", "cuda"],
+            state="readonly",
+            width=10,
+        )
         device_combo.grid(row=0, column=1, padx=5, pady=5)
-        
+
         # Device status
         self.device_status = tk.Label(device_frame, text="", fg="green")
         self.device_status.grid(row=0, column=2, padx=5, pady=5)
-        
+
         # Update status when device changes
         def update_device_status(*args):
             device = self.device_var.get()
             is_valid, message = validate_device_choice(device)
             if is_valid:
                 if device == "cpu":
-                    self.device_status.config(text="✓ " + message, fg="blue")  # Blue for CPU
+                    self.device_status.config(
+                        text="✓ " + message, fg="blue"
+                    )  # Blue for CPU
                 else:
-                    self.device_status.config(text="✓ " + message, fg="green")  # Green for GPU
+                    self.device_status.config(
+                        text="✓ " + message, fg="green"
+                    )  # Green for GPU
             else:
                 self.device_status.config(text="⚠ " + message, fg="orange")
-        
+
         self.device_var.trace("w", update_device_status)
         update_device_status()  # Initial update
-        
+
         # Help text for device selection
         help_text = tk.Label(device_frame, text="?", cursor="hand2", fg="blue")
         help_text.grid(row=0, column=3, padx=5, pady=5)
@@ -380,11 +399,11 @@ class TrackerConfigDialog(tk.simpledialog.Dialog):
             # Validate device choice
             device = self.device_var.get()
             is_valid, message = validate_device_choice(device)
-            
+
             if not is_valid:
                 messagebox.showwarning("Device Warning", message)
                 device = "cpu"  # Fallback to CPU
-            
+
             self.result = {
                 "conf": float(self.conf.get()),
                 "iou": float(self.iou.get()),
@@ -409,19 +428,21 @@ class ModelSelectorDialog(tk.simpledialog.Dialog):
         # Create main frame
         main_frame = tk.Frame(master)
         main_frame.pack(fill="both", expand=True, padx=10, pady=10)
-        
+
         # Title
-        title_label = tk.Label(main_frame, text="Select YOLO Model", font=("Arial", 12, "bold"))
+        title_label = tk.Label(
+            main_frame, text="Select YOLO Model", font=("Arial", 12, "bold")
+        )
         title_label.pack(pady=(0, 10))
-        
+
         # Create notebook for tabs
         notebook = ttk.Notebook(main_frame)
         notebook.pack(fill="both", expand=True)
-        
+
         # Tab 1: Pre-trained models
         pretrained_frame = tk.Frame(notebook)
         notebook.add(pretrained_frame, text="Pre-trained Models")
-        
+
         # Pre-trained models list
         models = [
             # Object Detection explanation: https://docs.ultralytics.com/tasks/detect/
@@ -453,55 +474,63 @@ class ModelSelectorDialog(tk.simpledialog.Dialog):
         # Create listbox with scrollbar for pre-trained models
         listbox_frame = tk.Frame(pretrained_frame)
         listbox_frame.pack(fill="both", expand=True, padx=5, pady=5)
-        
+
         self.pretrained_listbox = tk.Listbox(listbox_frame, width=50, height=12)
-        scrollbar = tk.Scrollbar(listbox_frame, orient="vertical", command=self.pretrained_listbox.yview)
+        scrollbar = tk.Scrollbar(
+            listbox_frame, orient="vertical", command=self.pretrained_listbox.yview
+        )
         self.pretrained_listbox.configure(yscrollcommand=scrollbar.set)
-        
+
         for model, desc in models:
             self.pretrained_listbox.insert(tk.END, f"{model} - {desc}")
-        
+
         self.pretrained_listbox.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
-        
+
         # Tab 2: Custom model
         custom_frame = tk.Frame(notebook)
         notebook.add(custom_frame, text="Custom Model")
-        
+
         # Custom model selection
-        custom_label = tk.Label(custom_frame, text="Select custom model file:", font=("Arial", 10))
+        custom_label = tk.Label(
+            custom_frame, text="Select custom model file:", font=("Arial", 10)
+        )
         custom_label.pack(pady=(10, 5))
-        
+
         # Frame for path display and browse button
         path_frame = tk.Frame(custom_frame)
         path_frame.pack(fill="x", padx=10, pady=5)
-        
+
         self.custom_path_var = tk.StringVar()
-        self.custom_path_entry = tk.Entry(path_frame, textvariable=self.custom_path_var, width=50)
+        self.custom_path_entry = tk.Entry(
+            path_frame, textvariable=self.custom_path_var, width=50
+        )
         self.custom_path_entry.pack(side="left", fill="x", expand=True, padx=(0, 5))
-        
-        browse_button = tk.Button(path_frame, text="Browse", command=self.browse_custom_model)
+
+        browse_button = tk.Button(
+            path_frame, text="Browse", command=self.browse_custom_model
+        )
         browse_button.pack(side="right")
-        
+
         # Help text for custom models
         help_text = tk.Label(
             custom_frame,
             text="Supported formats: .pt, .onnx, .engine\n"
-                 "Custom models should be trained with YOLO format\n"
-                 "Make sure the model file exists and is accessible",
+            "Custom models should be trained with YOLO format\n"
+            "Make sure the model file exists and is accessible",
             justify="left",
             font=("Arial", 9),
-            fg="gray"
+            fg="gray",
         )
         help_text.pack(pady=10)
-        
+
         # Store the selected tab
         self.selected_tab = "pretrained"
         self.custom_model_path = None
-        
+
         # Bind tab change event
         notebook.bind("<<NotebookTabChanged>>", self.on_tab_changed)
-        
+
         return self.pretrained_listbox
 
     def browse_custom_model(self):
@@ -512,8 +541,8 @@ class ModelSelectorDialog(tk.simpledialog.Dialog):
                 ("YOLO models", "*.pt"),
                 ("ONNX models", "*.onnx"),
                 ("TensorRT models", "*.engine"),
-                ("All files", "*.*")
-            ]
+                ("All files", "*.*"),
+            ],
         )
         if file_path:
             self.custom_path_var.set(file_path)
@@ -524,7 +553,7 @@ class ModelSelectorDialog(tk.simpledialog.Dialog):
         notebook = event.widget
         current_tab = notebook.select()
         tab_id = notebook.index(current_tab)
-        
+
         if tab_id == 0:  # Pre-trained models tab
             self.selected_tab = "pretrained"
         elif tab_id == 1:  # Custom model tab
@@ -541,13 +570,17 @@ class ModelSelectorDialog(tk.simpledialog.Dialog):
                 messagebox.showwarning("Warning", "Please select a custom model file")
                 return False
             if not os.path.exists(custom_path):
-                messagebox.showerror("Error", f"Custom model file not found: {custom_path}")
+                messagebox.showerror(
+                    "Error", f"Custom model file not found: {custom_path}"
+                )
                 return False
         return True
 
     def apply(self):
         if self.selected_tab == "pretrained":
-            selection = self.pretrained_listbox.get(self.pretrained_listbox.curselection())
+            selection = self.pretrained_listbox.get(
+                self.pretrained_listbox.curselection()
+            )
             self.result = selection.split(" - ")[0]
         elif self.selected_tab == "custom":
             self.result = self.custom_path_var.get().strip()
@@ -1080,11 +1113,15 @@ def run_yolov11track():
     tracker_name = tracker_dialog.result
 
     # Handle model path based on whether it's a custom model or pre-trained
-    if os.path.isabs(model_name) or model_name.startswith('./') or model_name.startswith('../'):
+    if (
+        os.path.isabs(model_name)
+        or model_name.startswith("./")
+        or model_name.startswith("../")
+    ):
         # Custom model - use the path directly
         model_path = model_name
         print(f"Using custom model: {model_path}")
-        
+
         # Validate custom model file
         if not os.path.exists(model_path):
             messagebox.showerror("Error", f"Custom model file not found: {model_path}")
@@ -1114,13 +1151,15 @@ def run_yolov11track():
         return
 
     config = config_dialog.result
-    
+
     # Print device information
     device = config["device"]
     print(f"\nSelected device: {device}")
     if device == "cuda":
         print(f"GPU: {torch.cuda.get_device_name(0)}")
-        print(f"GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f} GB")
+        print(
+            f"GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f} GB"
+        )
     else:
         print(f"CPU cores: {os.cpu_count()}")
 

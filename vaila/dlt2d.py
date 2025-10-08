@@ -9,7 +9,7 @@ Please see AUTHORS for contributors.
 
 Author: Paulo Santiago
 Version: 0.0.3
-Created: November 26, 2024  
+Created: November 26, 2024
 Last Updated: August 02, 2025
 ================================================================================
 Description:
