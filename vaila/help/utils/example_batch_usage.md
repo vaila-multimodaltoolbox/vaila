@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Utils
-- **Arquivo:** `vaila\example_batch_usage.py`
+- **Arquivo:** `vaila/example_batch_usage.py`
 - **Linhas:** 98
 - **Tamanho:** 3250 caracteres
 - **Versão:** 03 September 2025
@@ -46,6 +46,6 @@ python example_batch_usage.py
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

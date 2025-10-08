@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Processing
-- **Arquivo:** `vaila\filtering.py`
+- **Arquivo:** `vaila/filtering.py`
 - **Linhas:** 64
 - **Tamanho:** 1819 caracteres
 - **Versão:** 0.0.1
@@ -53,6 +53,6 @@ Change History:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

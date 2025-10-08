@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Tools
-- **Arquivo:** `vaila\vaila_distortvideo_gui.py`
+- **Arquivo:** `vaila/vaila_distortvideo_gui.py`
 - **Linhas:** 779
 - **Tamanho:** 27058 caracteres
 - **Versão:** 0.1.1
@@ -58,6 +58,6 @@ preview in real time.
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

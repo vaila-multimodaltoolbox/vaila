@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Tools
-- **Arquivo:** `vaila\mergestack.py`
+- **Arquivo:** `vaila/mergestack.py`
 - **Linhas:** 137
 - **Tamanho:** 4231 caracteres
 - **Versão:** 2025-02-28 15:30:00
@@ -67,6 +67,6 @@ Main funct...
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

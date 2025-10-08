@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Tools
-- **Arquivo:** `vaila\skout_bundle.py`
+- **Arquivo:** `vaila/skout_bundle.py`
 - **Linhas:** 504
 - **Tamanho:** 14819 caracteres
 
@@ -60,6 +60,6 @@ Outputs
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

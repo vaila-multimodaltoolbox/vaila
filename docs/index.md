@@ -71,20 +71,24 @@ The vailá Multimodal Toolbox now includes comprehensive documentation for all m
 #### **Data Processing Tools**
 - **[C3D ↔ CSV Conversion](modules/tools/c3d-csv-conversion.md)**: Motion capture file format conversion
 - **[Data Filtering](modules/tools/data-filtering.md)**: Advanced signal processing algorithms
-- **[DLT Calibration](modules/tools/dlt-calibration.md)**: Camera calibration for 3D reconstruction
 
 #### **Video Processing Tools**
 - **[Video Tools](modules/tools/video-tools.md)**: Video manipulation and processing
 - **[Video Compression](modules/tools/video-compression.md)**: Multi-format video compression
-- **[Video Synchronization](modules/tools/video-sync.md)**: Multi-camera video synchronization
 
 #### **Visualization Tools**
 - **[2D Plotting](modules/visualization/plot-2d.md)**: Comprehensive 2D data visualization
-- **[3D Visualization](modules/visualization/plot-3d.md)**: 3D data plotting and analysis
+- **[View 3D](modules/visualization/view3d.md)**: 3D data visualization
 
 #### **Machine Learning**
-- **[ML Walkway](modules/ml-walkway/ml-walkway.md)**: Machine learning gait analysis
-- **[YOLO Tracking](modules/ml-walkway/yolo-tracking.md)**: Object detection and tracking
+- **[ML Walkway](modules/ml-walkway/ml-walkway.md)**: Complete machine learning walkway analysis system
+- **[Model Training](modules/ml-walkway/model-training.md)**: Train custom ML models for gait analysis
+- **[Model Validation](modules/ml-walkway/model-validation.md)**: Validate trained ML models
+- **[Walkway Prediction](modules/ml-walkway/walkway-prediction.md)**: Use trained models for walkway predictions
+- **[YOLO Training](modules/ml-walkway/yolo-training.md)**: Train YOLO models for object detection
+- **[YOLOv11 Tracking](modules/ml-walkway/yolov11track.md)**: YOLOv11 based tracking system
+- **[YOLOv12 Tracking](modules/ml-walkway/yolov12track.md)**: YOLOv12 based tracking system
+- **[YOLO Tracking](modules/ml-walkway/yolo-tracking.md)**: YOLO object detection and tracking
 
 #### **Specialized Tools**
 - **[Vector Coding](modules/tools/vector-coding.md)**: Joint coupling analysis

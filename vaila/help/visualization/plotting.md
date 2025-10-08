@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Visualization
-- **Arquivo:** `vaila\plotting.py`
+- **Arquivo:** `vaila/plotting.py`
 - **Linhas:** 599
 - **Tamanho:** 21003 caracteres
 - **Versão:** 1.0
@@ -49,6 +49,6 @@ Main Features:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

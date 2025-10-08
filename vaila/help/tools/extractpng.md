@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Tools
-- **Arquivo:** `vaila\extractpng.py`
+- **Arquivo:** `vaila/extractpng.py`
 - **Linhas:** 497
 - **Tamanho:** 16763 caracteres
 - **Versão:** 2.1.0
@@ -60,6 +60,6 @@ The main features of the module include:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

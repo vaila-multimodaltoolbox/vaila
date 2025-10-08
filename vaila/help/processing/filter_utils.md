@@ -3,7 +3,7 @@
 ## 📋 Informações do Módulo
 
 - **Categoria:** Processing
-- **Arquivo:** `vaila\filter_utils.py`
+- **Arquivo:** `vaila/filter_utils.py`
 - **Linhas:** 110
 - **Tamanho:** 3926 caracteres
 - **Versão:** 1.1
@@ -45,6 +45,6 @@ Usage Example:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
 🔗 **Parte do vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
