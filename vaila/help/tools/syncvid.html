@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>vailá - syncvid</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            line-height: 1.6;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 30px; }
+        .module-info { background: #ecf0f1; padding: 15px; border-radius: 5px; margin: 20px 0; }
+        .functions { background: #f8f9fa; padding: 15px; border-left: 4px solid #28a745; margin: 15px 0; }
+        .docstring { background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 15px 0; }
+        .error { background: #f8d7da; padding: 15px; border-left: 4px solid #dc3545; margin: 15px 0; }
+        code { background: #e9ecef; padding: 2px 6px; border-radius: 3px; }
+        pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; }
+        .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #6c757d; font-size: 0.9em; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>vailá - syncvid</h1>
+
+        <div class="module-info">
+            <h3>📋 Informações do Módulo</h3>
+            <p><strong>Categoria:</strong> Tools</p>
+            <p><strong>Arquivo:</strong> vaila\syncvid.py</p>
+            <p><strong>Linhas:</strong> 314</p>
+            <p><strong>Tamanho:</strong> 10276 caracteres</p>
+            <p><strong>Versão:</strong> 0.0.2</p>
+            <p><strong>Autor:</strong> Paulo Roberto Pereira Santiago</p>
+            <p><strong>Interface Gráfica:</strong> ✅ Sim</p>
+        </div>
+
+        
+
+        <div class="docstring">
+            <h3>📖 Descrição</h3>
+            <pre>
+Project: vailá Multimodal Toolbox
+Script: syncvid.py - Sync Video
+
+Author: Paulo Roberto Pereira Santiago
+Email: paulosantiago@usp.br
+GitHub: https://github.com/vaila-multimodaltoolbox/vaila
+Creation Date: 29 July 2024
+Update Date: 28 July 2025
+Version: 0.0.2
+
+Description:
+This script performs batch processing of videos for sync videos.
+
+
+Features:
+- Added support for sync files.
+
+Usage:
+- Run the script to open a graphical interface for selecting the input directory
+  containing video files (.mp4, .avi, .mov), the output directory, and for
+  specifying the sync file.
+
+Requirements:
+- Python 3.12.11
+- Tkinter (usually included with Python installations)
+
+Output:
+The following files are generated for each processed video:
+1. Sync File (`*_sync.txt`):
+   The sync file with the sync data.
+
+Example:
+- Video: 1.mp4
+- Sync: 1_sync.txt
+- Output: 1_sync.mp4
+
+How to run:
+python syncvid.py
+
+License:
+    This project is licensed under the terms of GNU General Public License v3.0.
+</pre>
+        </div>
+
+        <div class="functions">
+            <h3>🔧 Funções Principais</h3>
+            <p><strong>Total de funções encontradas:</strong> 10</p>
+            <ul><li><code>get_video_files</code></li><li><code>write_sync_file</code></li><li><code>get_sync_info</code></li><li><code>sync_videos</code></li><li><code>create_widgets</code></li><li><code>on_next</code></li><li><code>select_main_camera</code></li><li><code>set_main_camera</code></li><li><code>get_sync_data</code></li><li><code>on_ok</code></li></ul>
+        </div>
+
+        <div class="footer">
+            <p>📅 Gerado automaticamente em: 08/10/2025 10:07:00</p>
+            <p>🔗 Parte do vailá - Multimodal Toolbox</p>
+            <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
+        </div>
+    </div>
+</body>
+</html>
