@@ -16,17 +16,17 @@ The ML Walkway system integrates multiple components:
 
 # vaila_mlwalkway
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Ml
-- **Arquivo:** `vaila\vaila_mlwalkway.py`
-- **Linhas:** 104
-- **Tamanho:** 2844 caracteres
+- **Category:** Ml
+- **File:** `vaila\vaila_mlwalkway.py`
+- **Lines:** 104
+- **Size:** 2844 characters
 
 
-- **Interface Gráfica:** ✅ Sim
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 vaila_mlwalkway.py
@@ -46,9 +46,9 @@ Each button triggers the respective function that executes the corresponding ML 
 
 
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 5
+**Total functions found:** 5
 
 - `run_process_gait_features`
 - `run_ml_models_training`
@@ -62,5 +62,5 @@ Each button triggers the respective function that executes the corresponding ML 
 ---
 
 📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+🔗 **Part of vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

@@ -1,16 +1,16 @@
 # grf_gait
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Tools
-- **Arquivo:** `vaila/grf_gait.py`
-- **Linhas:** 2007
-- **Tamanho:** 68150 caracteres
-- **Versão:** 1.0
-- **Autor:** [Your Name]
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Tools
+- **File:** `vaila/grf_gait.py`
+- **Lines:** 2007
+- **Size:** 68150 characters
+- **Version:** 1.0
+- **Author:** [Your Name]
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 ================================================================================
@@ -40,9 +40,9 @@ Key Functionalities:
    - Normalizes data, applies Butterworth filters, and computes key biomechanical metrics.
 3. Visualization:...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 20
+**Total functions found:** 20
 
 - `select_source_directory`
 - `select_output_directory`
@@ -70,6 +70,6 @@ Key Functionalities:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

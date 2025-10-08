@@ -251,7 +251,7 @@ This module integrates with other vailá tools:
 - **Input Validation**: Check data format and completeness
 - **Range Checking**: Verify calculated values are within physiological ranges
 - **Consistency Checks**: Ensure calculations are internally consistent
-- **Error Detection**: Identify and report calculation errors
+- **Error Detection**: Identify and report calculation errorrrs
 
 ### Performance Validation
 - **Ground Truth Comparison**: Validate against known jump heights
@@ -279,7 +279,7 @@ This module integrates with other vailá tools:
 
 - **v0.1.0**: Initial implementation with time-of-flight and jump height methods
 - **v0.0.9**: Added MediaPipe integration and coordinate transformation
-- **v0.0.8**: Enhanced calculation algorithms and error handling
+- **v0.0.8**: Enhanced calculation algorithms and errorrr handling
 - **v0.0.7**: Added comprehensive performance metrics
 - **v0.0.6**: Added HTML reporting and visualization suite
 - **v0.0.5**: Added batch processing capabilities

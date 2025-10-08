@@ -1,16 +1,16 @@
 # modifylabref
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Processing
-- **Arquivo:** `vaila/modifylabref.py`
-- **Linhas:** 491
-- **Tamanho:** 17284 caracteres
-- **Versão:** 0.0.3
-- **Autor:** Paulo Roberto Pereira Santiago
-- **Interface Gráfica:** ❌ Não
+- **Category:** Processing
+- **File:** `vaila/modifylabref.py`
+- **Lines:** 491
+- **Size:** 17284 characters
+- **Version:** 0.0.3
+- **Author:** Paulo Roberto Pereira Santiago
+- **GUI Interface:** ❌ No
 
-## 📖 Descrição
+## 📖 Description
 
 
 Project: vailá Multimodal Toolbox
@@ -39,9 +39,9 @@ Description:
         - Users can input custom angles in the format: [x, y, z]
      ...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 9
+**Total functions found:** 9
 
 - `rotdata`
 - `modify_lab_coords`
@@ -58,6 +58,6 @@ Description:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

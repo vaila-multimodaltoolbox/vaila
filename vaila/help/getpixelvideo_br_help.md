@@ -4,7 +4,7 @@
 
 A ferramenta Pixel Coordinate Tool (getpixelvideo.py) é uma ferramenta abrangente de anotação de vídeo que permite marcar e salvar coordenadas de pixels em quadros de vídeo. Desenvolvida pelo Prof. Dr. Paulo R. P. Santiago, esta ferramenta oferece recursos avançados incluindo zoom para anotações precisas, redimensionamento dinâmico da janela, navegação entre quadros, suporte a múltiplos formatos CSV e capacidades avançadas de visualização de dados.
 
-**Versão:** 0.0.8  
+**Version:** 0.0.8  
 **Data:** 27 de Julho de 2025  
 **Projeto:** vailá - Multimodal Toolbox
 
@@ -25,7 +25,7 @@ A ferramenta Pixel Coordinate Tool (getpixelvideo.py) é uma ferramenta abrangen
 - **Pygame:** Interface gráfica e visualização
 - **Pandas:** Manipulação de dados CSV
 - **NumPy:** Operações numéricas
-- **Tkinter:** Diálogos de arquivo (geralmente incluído com Python)
+- **Tkinter:** Diálogos de file (geralmente incluído com Python)
 
 ### Instalação
 
@@ -36,7 +36,7 @@ pip install opencv-python pygame pandas numpy
 ## Começando
 
 1. **Execute o script:** `python vaila/getpixelvideo.py`
-2. **Selecione arquivo de vídeo:** Escolha o vídeo para processar
+2. **Selecione file de vídeo:** Escolha o vídeo para processar
 3. **Carregue dados existentes:** Escolha se deseja carregar keypoints existentes
 4. **Selecione formato:** Se carregando dados, escolha o formato CSV:
    - **Auto-detectar (recomendado):** Detecta automaticamente o formato
@@ -53,7 +53,7 @@ A interface da ferramenta consiste em:
 - **Painel de controle** (seção inferior) com:
   - Informações do quadro atual
   - Slider para navegar entre quadros
-  - Botões para funções principais (Carregar, Salvar, Ajuda, 1 Line, Persistência, Sequencial)
+  - Botões para functions main (Carregar, Salvar, Ajuda, 1 Line, Persistência, Sequencial)
   - Controles de visualização específicos do formato
 
 ## Formatos de Arquivo Suportados
@@ -70,7 +70,7 @@ frame,landmark_0_x,landmark_0_y,landmark_0_z,landmark_1_x,landmark_1_y,landmark_
 1,105.2,205.1,0.0,155.3,255.2,0.0
 ```
 
-**Visualização:** Figuras de palitos com landmarks conectados por linhas
+**Visualização:** Figuras de palitos com landmarks conectados por lines
 
 ### Formato YOLO Tracking
 Usado para dados de tracking e detecção de objetos.
@@ -118,7 +118,7 @@ frame,p1_x,p1_y,p2_x,p2_y
 
 ### Modo Sequencial (tecla S)
 - Cada clique cria um novo marcador com IDs incrementais
-- Não é necessário selecionar marcadores primeiro
+- No é necessário selecionar marcadores primeiro
 - Disponível apenas no modo Normal
 - **Caso de uso:** Anotação rápida de múltiplos pontos
 - **Ativação:** Pressione tecla S para alternar
@@ -152,8 +152,8 @@ frame,p1_x,p1_y,p2_x,p2_y
 | **TAB** | Próximo marcador no quadro atual |
 | **SHIFT+TAB** | Marcador anterior no quadro atual |
 | **DELETE** | Excluir marcador selecionado |
-| **A** | Adicionar novo marcador vazio ao arquivo |
-| **R** | Remover último marcador do arquivo |
+| **A** | Adicionar novo marcador vazio ao file |
+| **R** | Remover último marcador do file |
 
 ### Controles de Modo
 | Tecla | Ação |
@@ -170,7 +170,7 @@ frame,p1_x,p1_y,p2_x,p2_y
 |-------|------|
 | **S** | Salvar marcadores atuais |
 | **B** | Fazer backup dos dados atuais |
-| **L** | Recarregar coordenadas do arquivo |
+| **L** | Recarregar coordenadas do file |
 | **H** | Mostrar diálogo de ajuda |
 | **D** | Abrir documentação completa (no help) |
 
@@ -219,21 +219,21 @@ O modo de persistência mostra marcadores de quadros anteriores, criando um "ras
 
 #### Salvamento Padrão (tecla S)
 - **Formato:** `frame, p1_x, p1_y, p2_x, p2_y, ...`
-- **Arquivo:** `{nome_do_video}_markers.csv`
-- **Localização:** Mesmo diretório do arquivo de vídeo
+- **File:** `{nome_do_video}_markers.csv`
+- **Localização:** Mesmo diretório do file de vídeo
 
 #### Salvamento 1 Line
 - **Formato:** `frame, p1_x, p1_y, p2_x, p2_y, ...`
-- **Arquivo:** `{nome_do_video}_markers_sequential.csv`
+- **File:** `{nome_do_video}_markers_sequential.csv`
 - **Uso:** Para traçado de caminhos e dados de contorno
 
 #### Salvamento Sequencial
 - **Formato:** `frame, p1_x, p1_y, p2_x, p2_y, ...`
-- **Arquivo:** `{nome_do_video}_markers_sequential.csv`
+- **File:** `{nome_do_video}_markers_sequential.csv`
 - **Uso:** Para anotações de múltiplos pontos
 
 ### Carregando Coordenadas
-- Selecione "Sim" quando perguntado ao iniciar
+- Selecione "Yes" quando perguntado ao iniciar
 - Ou clique no botão **Carregar** a qualquer momento
 - **Auto-detecção:** Detecta automaticamente formato CSV
 - **Seleção manual:** Escolha formato manualmente se necessário
@@ -249,7 +249,7 @@ A ferramenta detecta automaticamente formato CSV baseado na estrutura das coluna
 ### Backup e Recuperação
 Sistema de backup integrado para segurança dos dados:
 - **Backup:** Pressione B para criar backup
-- **Recarregar:** Pressione L para recarregar do arquivo
+- **Recarregar:** Pressione L para recarregar do file
 - **Auto-backup:** Backups automáticos antes de operações importantes
 
 ### Acesso à Documentação
@@ -265,22 +265,22 @@ Sistema de backup integrado para segurança dos dados:
 4. **Use zoom** para maior precisão ao marcar coordenadas
 5. **A tecla A** é útil para adicionar marcadores vazios que podem ser preenchidos posteriormente
 6. **O modo persistência** é ótimo para visualizar padrões de movimento
-7. **Auto-detecção** funciona melhor com arquivos CSV formatados corretamente
+7. **Auto-detecção** funciona melhor com files CSV formatados corretamente
 8. **Faça backup regularmente** usando a tecla B para evitar perda de dados
 
 ## Solução de Problemas
 
 ### Problemas Comuns
 
-#### Vídeo Não Carrega
-- Verifique se o arquivo de vídeo está corrompido
+#### Vídeo No Carrega
+- Verifique se o file de vídeo está corrompido
 - Certifique-se de que o formato de vídeo é suportado (MP4, AVI, MOV, MKV)
-- Verifique se o caminho do arquivo não contém caracteres especiais
+- Verifique se o caminho do file não contém characters especiais
 
-#### Formato CSV Não Detectado
-- Verifique se a estrutura do arquivo CSV corresponde ao formato esperado
+#### Formato CSV No Detectado
+- Verifique se a estrutura do file CSV corresponde ao formato esperado
 - Use seleção manual de formato se a auto-detecção falhar
-- Verifique se o arquivo CSV não está corrompido
+- Verifique se o file CSV não está corrompido
 
 #### Problemas de Performance
 - Reduza a resolução do vídeo para melhor performance
@@ -296,10 +296,10 @@ Sistema de backup integrado para segurança dos dados:
 
 | Erro | Solução |
 |------|---------|
-| "Error opening video file" | Verifique formato do vídeo e integridade do arquivo |
-| "No keypoint file selected" | Selecione um arquivo CSV válido ou comece do zero |
+| "Error opening video file" | Verifique formato do vídeo e integridade do file |
+| "No keypoint file selected" | Selecione um file CSV válido ou comece do zero |
 | "Unknown format" | Use seleção manual de formato |
-| "Error loading coordinates" | Verifique formato e estrutura do arquivo CSV |
+| "Error loading coordinates" | Verifique formato e estrutura do file CSV |
 
 ## Suporte e Documentação
 
@@ -317,7 +317,7 @@ Sistema de backup integrado para segurança dos dados:
 - Criada documentação HTML abrangente
 - Adicionado acesso rápido à documentação completa via tecla 'D'
 - Melhorado diálogo de ajuda com informações de formato
-- Aprimorado tratamento de erros e feedback do usuário
+- Aprimorado tratamento de errorrs e feedback do usuário
 
 ### Versões Anteriores
 - Versão 0.0.7: Funcionalidade básica com zoom e modos de marcadores

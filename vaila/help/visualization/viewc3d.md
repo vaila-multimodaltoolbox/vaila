@@ -1,16 +1,16 @@
 # viewc3d
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Visualization
-- **Arquivo:** `vaila/viewc3d.py`
-- **Linhas:** 3330
-- **Tamanho:** 122221 caracteres
-- **Versão:** 0.0.9
-- **Autor:** Paulo Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Visualization
+- **File:** `vaila/viewc3d.py`
+- **Lines:** 3330
+- **Size:** 122221 characters
+- **Version:** 0.0.9
+- **Author:** Paulo Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 ================================================================================
@@ -39,9 +39,9 @@ Features soccer field lines and penalty areas.
     - Adaptive visualization for small (lab) to large (soccer field) scales
     - Automatic unit detection...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 20
+**Total functions found:** 20
 
 - `detect_c3d_units`
 - `ask_user_units_c3d`
@@ -69,6 +69,6 @@ Features soccer field lines and penalty areas.
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

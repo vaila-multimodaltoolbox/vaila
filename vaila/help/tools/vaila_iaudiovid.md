@@ -1,16 +1,16 @@
 # vaila_iaudiovid
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Tools
-- **Arquivo:** `vaila/vaila_iaudiovid.py`
-- **Linhas:** 793
-- **Tamanho:** 28868 caracteres
-- **Versão:** 1.3.0
-- **Autor:** Prof. Dr. Paulo R. P. Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Tools
+- **File:** `vaila/vaila_iaudiovid.py`
+- **Lines:** 793
+- **Size:** 28868 characters
+- **Version:** 1.3.0
+- **Author:** Prof. Dr. Paulo R. P. Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 ================================================================================
@@ -42,9 +42,9 @@ Requirements:
 ================================================================================
 
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 17
+**Total functions found:** 17
 
 - `run_iaudiovid`
 - `set_video_directory`
@@ -69,6 +69,6 @@ Requirements:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

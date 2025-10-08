@@ -134,7 +134,7 @@
         <h1>vailá Scout - Ferramenta de Observação Esportiva</h1>
 
         <h2>Visão Geral</h2>
-        <p>O vailá Scout é uma aplicação GUI integrada para anotar eventos esportivos em um campo de futebol virtual e gerar análises rápidas (ex: mapas de calor). É projetado para se adequar ao estilo do projeto vailá e não requer imagens externas do campo - o campo é desenhado em escala usando dimensões padrão FIFA (105m x 68m).</p>
+        <p>O vailá Scout é uma aplicação GUI integrada para anotar eventos esportivos em um campo de futebol virtual e gerar analysiss rápidas (ex: mapas de calor). É projetado para se adequar ao estilo do projeto vailá e não requer imagens externas do campo - o campo é desenhado em escala usando dimensões padrão FIFA (105m x 68m).</p>
 
         <h2>Funcionalidades</h2>
 
@@ -156,15 +156,15 @@
             <ul>
                 <li><strong>Importação/exportação CSV</strong>: Carregar e salvar dados de eventos em formato CSV</li>
                 <li><strong>Configuração TOML</strong>: Sistema de configuração flexível para equipes, ações e configurações do campo</li>
-                <li><strong>Conversão Skout</strong>: Converter dados do formato de exportação ASCII do Skout.exe</li>
+                <li><strong>Conversion Skout</strong>: Converter dados do formato de exportação ASCII do Skout.exe</li>
             </ul>
         </div>
 
         <h3>Interface do Usuário</h3>
         <div class="feature-list">
             <ul>
-                <li><strong>Design responsivo</strong>: Adapta-se a diferentes tamanhos de tela</li>
-                <li><strong>Atalhos de teclado</strong>: Acesso rápido a funções comuns</li>
+                <li><strong>Design responsivo</strong>: Adapta-se a diferentes sizes de tela</li>
+                <li><strong>Atalhos de teclado</strong>: Acesso rápido a functions comuns</li>
                 <li><strong>Feedback visual</strong>: Eventos codificados por cor e marcadores de jogadores</li>
                 <li><strong>Gerenciamento de escalação</strong>: Seleção fácil de jogadores e troca de equipes</li>
             </ul>
@@ -186,7 +186,7 @@
         <h3>Executando a Aplicação</h3>
 
         <h4>Opção 1: Da GUI do vailá</h4>
-        <p>Clique no botão "Scout" na interface principal do vailá.</p>
+        <p>Clique no botão "Scout" na interface main do vailá.</p>
 
         <h4>Opção 2: Linha de Comando</h4>
         <pre><code>python vaila.py</code></pre>
@@ -203,7 +203,7 @@ python scout_vaila.py</code></pre>
         <h3>Começando</h3>
         <ol>
             <li><strong>Inicie a aplicação</strong> usando qualquer um dos métodos acima</li>
-            <li><strong>Carregue ou crie uma configuração</strong> (arquivo TOML) com suas equipes e ações</li>
+            <li><strong>Carregue ou crie uma configuração</strong> (file TOML) com suas equipes e ações</li>
             <li><strong>Selecione sua equipe</strong> (use a tecla 'T' para alternar entre casa/visitante)</li>
             <li><strong>Escolha uma ação</strong> do menu suspenso</li>
             <li><strong>Defina o resultado</strong> (sucesso/falha/neutro)</li>
@@ -234,12 +234,12 @@ python scout_vaila.py</code></pre>
         <h2>Configuração</h2>
 
         <h3>Arquivo de Configuração TOML</h3>
-        <p>A aplicação usa arquivos de configuração TOML para armazenar:</p>
+        <p>A aplicação usa files de configuração TOML para armazenar:</p>
         <ul>
             <li>Informações das equipes (nomes, cores, jogadores)</li>
             <li>Definições de ações (nomes, códigos, símbolos, cores)</li>
             <li>Configurações do campo (dimensões, unidades)</li>
-            <li>Preferências visuais (tamanhos de marcadores, cores)</li>
+            <li>Preferências visuais (sizes de marcadores, cores)</li>
         </ul>
 
         <h3>Configuração Padrão</h3>
@@ -254,7 +254,7 @@ python scout_vaila.py</code></pre>
         <h3>Criando Configurações Personalizadas</h3>
         <ol>
             <li>Use "Criar Modelo" para gerar uma configuração base</li>
-            <li>Edite o arquivo TOML manualmente ou use as ferramentas de configuração</li>
+            <li>Edite o file TOML manualmente ou use as ferramentas de configuração</li>
             <li>Carregue sua configuração personalizada</li>
             <li>Salve as alterações conforme necessário</li>
         </ol>
@@ -330,14 +330,14 @@ python scout_vaila.py</code></pre>
             <li>Ver o gráfico de ações no campo</li>
         </ol>
 
-        <h3>Conversão de Dados Skout</h3>
+        <h3>Conversion de Dados Skout</h3>
         <p>Converter dados do formato de exportação ASCII do Skout.exe:</p>
         <ol>
             <li>Vá para <strong>Ferramentas</strong> → <strong>Converter Skout para vailá</strong></li>
-            <li>Selecione seu arquivo Skout .txt</li>
+            <li>Selecione seu file Skout .txt</li>
             <li>Escolha o diretório de saída</li>
             <li>Digite o nome da equipe</li>
-            <li>Obtenha tanto arquivos CSV quanto de configuração TOML</li>
+            <li>Obtenha tanto files CSV quanto de configuração TOML</li>
         </ol>
 
         <h3>Gerenciamento de Jogadores</h3>
@@ -363,7 +363,7 @@ python scout_vaila.py</code></pre>
         <div class="warning">
             <h4>A aplicação não inicia:</h4>
             <ul>
-                <li>Verifique a versão do Python (3.x necessário)</li>
+                <li>Verifique a version do Python (3.x necessário)</li>
                 <li>Verifique se todas as dependências estão instaladas</li>
                 <li>Certifique-se de que o tkinter está disponível</li>
             </ul>
@@ -372,8 +372,8 @@ python scout_vaila.py</code></pre>
         <div class="warning">
             <h4>Configuração não carrega:</h4>
             <ul>
-                <li>Verifique a sintaxe do arquivo TOML</li>
-                <li>Verifique as permissões do arquivo</li>
+                <li>Verifique a sintaxe do file TOML</li>
+                <li>Verifique as permissões do file</li>
                 <li>Use "Criar Modelo" para gerar config válida</li>
             </ul>
         </div>
@@ -400,7 +400,7 @@ python scout_vaila.py</code></pre>
         <div class="info">
             <ul>
                 <li>Feche outros aplicativos ao trabalhar com grandes conjuntos de dados</li>
-                <li>Use dimensões apropriadas do campo para sua análise</li>
+                <li>Use dimensões apropriadas do campo para sua analysis</li>
                 <li>Limite o número de eventos simultâneos para melhor performance</li>
                 <li>Salve o trabalho frequentemente para evitar perda de dados</li>
             </ul>
@@ -408,7 +408,7 @@ python scout_vaila.py</code></pre>
 
         <h2>Estrutura de Arquivos</h2>
         <div class="file-structure">vaila/
-├── scout_vaila.py          # Aplicação principal
+├── scout_vaila.py          # Aplicação main
 ├── help/
 │   ├── scout_vaila.md      # Esta documentação
 │   ├── scout_vaila.html    # Versão HTML
@@ -418,14 +418,14 @@ python scout_vaila.py</code></pre>
     └── vaila_scout_config.toml  # Configuração padrão</div>
 
         <h2>Licença</h2>
-        <p>Este programa é software livre: você pode redistribuí-lo e/ou modificá-lo sob os termos da Licença Pública Geral GNU conforme publicada pela Free Software Foundation, seja a versão 3 da Licença, ou (a seu critério) qualquer versão posterior.</p>
+        <p>Este programa é software livre: você pode redistribuí-lo e/ou modificá-lo sob os termos da Licença Pública Geral GNU conforme publicada pela Free Software Foundation, seja a version 3 da Licença, ou (a seu critério) qualquer version posterior.</p>
 
         <h2>Suporte</h2>
         <p>Para problemas, perguntas ou contribuições:</p>
         <ul>
             <li><strong>Email</strong>: paulosantiago@usp.br</li>
             <li><strong>GitHub</strong>: <a href="https://github.com/vaila-multimodaltoolbox/vaila">https://github.com/vaila-multimodaltoolbox/vaila</a></li>
-            <li><strong>Documentação</strong>: Veja os arquivos de ajuda no diretório vaila/help</li>
+            <li><strong>Documentação</strong>: Veja os files de ajuda no diretório vaila/help</li>
         </ul>
 
         <div class="footer">

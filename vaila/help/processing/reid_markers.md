@@ -1,16 +1,16 @@
 # reid_markers
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Processing
-- **Arquivo:** `vaila/reid_markers.py`
-- **Linhas:** 2171
-- **Tamanho:** 75597 caracteres
-- **Versão:** 0.1.0
-- **Autor:** Adapted from getpixelvideo.py by Prof. Dr. Paulo R. P. Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Processing
+- **File:** `vaila/reid_markers.py`
+- **Lines:** 2171
+- **Size:** 75597 characters
+- **Version:** 0.1.0
+- **Author:** Adapted from getpixelvideo.py by Prof. Dr. Paulo R. P. Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 ================================================================================
@@ -33,9 +33,9 @@ by getpixelvideo.py. It offers the following functionalities:
 ================================================================================
 
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 20
+**Total functions found:** 20
 
 - `load_markers_file`
 - `save_markers_file`
@@ -63,6 +63,6 @@ by getpixelvideo.py. It offers the following functionalities:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

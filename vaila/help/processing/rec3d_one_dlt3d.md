@@ -1,16 +1,16 @@
 # rec3d_one_dlt3d
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Processing
-- **Arquivo:** `vaila/rec3d_one_dlt3d.py`
-- **Linhas:** 432
-- **Tamanho:** 16550 caracteres
-- **Versão:** 0.0.4
-- **Autor:** Paulo Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Processing
+- **File:** `vaila/rec3d_one_dlt3d.py`
+- **Lines:** 432
+- **Size:** 16550 characters
+- **Version:** 0.0.4
+- **Author:** Paulo Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 ================================================================================
@@ -35,9 +35,9 @@ Description:
       frame,p1_x,p1_y,p2_x,p2_y,...,pN_x,pN_y
     For each common frame found among the pixel files, the script reconstructs 3D points for all...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 3
+**Total functions found:** 3
 
 - `rec3d_multicam`
 - `save_rec3d_as_c3d`
@@ -48,6 +48,6 @@ Description:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

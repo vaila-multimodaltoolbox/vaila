@@ -1,16 +1,16 @@
 # imu_analysis
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Analysis
-- **Arquivo:** `vaila/imu_analysis.py`
-- **Linhas:** 410
-- **Tamanho:** 13033 caracteres
-- **Versão:** 1.2
-- **Autor:** Prof. Ph.D. Paulo Santiago (paulosantiago@usp.br)
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Analysis
+- **File:** `vaila/imu_analysis.py`
+- **Lines:** 410
+- **Size:** 13033 characters
+- **Version:** 1.2
+- **Author:** Prof. Ph.D. Paulo Santiago (paulosantiago@usp.br)
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 ================================================================================
@@ -39,9 +39,9 @@ Features:
 Requirements:
 -...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 6
+**Total functions found:** 6
 
 - `importc3d`
 - `imu_orientations`
@@ -55,6 +55,6 @@ Requirements:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

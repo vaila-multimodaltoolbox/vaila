@@ -1,16 +1,16 @@
 # extractpng
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Tools
-- **Arquivo:** `vaila/extractpng.py`
-- **Linhas:** 497
-- **Tamanho:** 16763 caracteres
-- **Versão:** 2.1.0
-- **Autor:** Prof. Dr. Paulo R. P. Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Tools
+- **File:** `vaila/extractpng.py`
+- **Lines:** 497
+- **Size:** 16763 characters
+- **Version:** 2.1.0
+- **Author:** Prof. Dr. Paulo R. P. Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 ================================================================================
@@ -40,9 +40,9 @@ The main features of the module include:
 - Create videos from PNG sequences
 - ...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 10
+**Total functions found:** 10
 
 - `extract_png_from_videos`
 - `extract_select_frames_from_video`
@@ -60,6 +60,6 @@ The main features of the module include:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

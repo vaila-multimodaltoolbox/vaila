@@ -1,16 +1,16 @@
 # mocap_analysis
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Analysis
-- **Arquivo:** `vaila/mocap_analysis.py`
-- **Linhas:** 403
-- **Tamanho:** 14857 caracteres
-- **Versão:** 0.5.1
-- **Autor:** Paulo Roberto Pereira Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Analysis
+- **File:** `vaila/mocap_analysis.py`
+- **Lines:** 403
+- **Size:** 14857 characters
+- **Version:** 0.5.1
+- **Author:** Paulo Roberto Pereira Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 Project: vailá Multimodal Toolbox
@@ -41,9 +41,9 @@ Features:
 Usage:
 - Run the script to open ...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 3
+**Total functions found:** 3
 
 - `save_results_to_csv`
 - `read_anatomical_csv`
@@ -54,6 +54,6 @@ Usage:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

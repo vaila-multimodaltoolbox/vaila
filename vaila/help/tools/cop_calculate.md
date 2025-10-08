@@ -1,16 +1,16 @@
 # cop_calculate
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Tools
-- **Arquivo:** `vaila/cop_calculate.py`
-- **Linhas:** 308
-- **Tamanho:** 9920 caracteres
-- **Versão:** 0.0.1
-- **Autor:** Prof. Dr. Paulo R. P. Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Tools
+- **File:** `vaila/cop_calculate.py`
+- **Lines:** 308
+- **Size:** 9920 characters
+- **Version:** 0.0.1
+- **Author:** Prof. Dr. Paulo R. P. Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 cop_calculate.py
@@ -34,9 +34,9 @@ License: GNU GPLv3
 vailá Multimodal Toolbox
 
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 8
+**Total functions found:** 8
 
 - `read_csv_full`
 - `select_headers`
@@ -52,6 +52,6 @@ vailá Multimodal Toolbox
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

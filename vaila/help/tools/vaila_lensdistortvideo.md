@@ -1,16 +1,16 @@
 # vaila_lensdistortvideo
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Tools
-- **Arquivo:** `vaila/vaila_lensdistortvideo.py`
-- **Linhas:** 349
-- **Tamanho:** 11795 caracteres
-- **Versão:** 0.0.1
-- **Autor:** Prof. Paulo R. P. Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Tools
+- **File:** `vaila/vaila_lensdistortvideo.py`
+- **Lines:** 349
+- **Size:** 11795 characters
+- **Version:** 0.0.1
+- **Author:** Prof. Paulo R. P. Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 ===============================================================================
@@ -37,9 +37,9 @@ Intrinsic Camera Parameters:
    - Calculated using the formula:
      fx = (width / 2) / tan(horizonta...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 5
+**Total functions found:** 5
 
 - `load_distortion_parameters`
 - `process_video`
@@ -52,6 +52,6 @@ Intrinsic Camera Parameters:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

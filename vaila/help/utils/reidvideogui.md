@@ -1,16 +1,16 @@
 # reidvideogui
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Utils
-- **Arquivo:** `vaila/reidvideogui.py`
-- **Linhas:** 737
-- **Tamanho:** 24759 caracteres
-- **Versão:** 0.1.0
-- **Autor:** Paulo R. P. Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Utils
+- **File:** `vaila/reidvideogui.py`
+- **Lines:** 737
+- **Size:** 24759 characters
+- **Version:** 0.1.0
+- **Author:** Paulo R. P. Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 ================================================================================
@@ -35,9 +35,9 @@ It allows for:
 ================================================================================
 
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 20
+**Total functions found:** 20
 
 - `main`
 - `initUI`
@@ -65,6 +65,6 @@ It allows for:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

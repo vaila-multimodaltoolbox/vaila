@@ -1,16 +1,16 @@
 # rotation
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Tools
-- **Arquivo:** `vaila/rotation.py`
-- **Linhas:** 330
-- **Tamanho:** 14118 caracteres
-- **Versão:** 1.0
-- **Autor:** Prof. Dr. Paulo R. P. Santiago
-- **Interface Gráfica:** ❌ Não
+- **Category:** Tools
+- **File:** `vaila/rotation.py`
+- **Lines:** 330
+- **Size:** 14118 characters
+- **Version:** 1.0
+- **Author:** Prof. Dr. Paulo R. P. Santiago
+- **GUI Interface:** ❌ No
 
-## 📖 Descrição
+## 📖 Description
 
 
 ================================================================================
@@ -33,9 +33,9 @@ Main Features:
     Rotation Matrix Calculation:
         - `calcmatrot`: C...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 6
+**Total functions found:** 6
 
 - `createortbase`
 - `createortbase_4points`
@@ -49,6 +49,6 @@ Main Features:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

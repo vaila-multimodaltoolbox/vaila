@@ -1,16 +1,16 @@
 # rm_duplicateframes
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Tools
-- **Arquivo:** `vaila/rm_duplicateframes.py`
-- **Linhas:** 437
-- **Tamanho:** 15976 caracteres
-- **Versão:** 0.0.1
-- **Autor:** Prof. Dr. Paulo R. P. Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Tools
+- **File:** `vaila/rm_duplicateframes.py`
+- **Lines:** 437
+- **Size:** 15976 characters
+- **Version:** 0.0.1
+- **Author:** Prof. Dr. Paulo R. P. Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 ================================================================================
@@ -45,9 +45,9 @@ Usage:
 Run the script and select the directory containing PNG frame sequences.
 Specify the ...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 9
+**Total functions found:** 9
 
 - `run_rm_duplicateframes`
 - `extract_frame_number`
@@ -64,6 +64,6 @@ Specify the ...
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
