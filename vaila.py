@@ -125,31 +125,41 @@ vaila_dir = os.path.dirname(os.path.abspath(__file__))
 if vaila_dir not in sys.path:
     sys.path.insert(0, vaila_dir)
 
+
 def run_vaila_module(module_name, script_path=None):
     """
     Helper function to run vaila modules with proper path configuration.
-    
+
     Args:
         module_name (str): The module name to run (e.g., "vaila.markerless_2d_analysis")
         script_path (str, optional): Alternative script path if module import fails
     """
     try:
         # Try to run the module directly
-        subprocess.Popen([sys.executable, "-m", module_name], 
-                       cwd=vaila_dir, env={**os.environ, "PYTHONPATH": vaila_dir})
+        subprocess.Popen(
+            [sys.executable, "-m", module_name],
+            cwd=vaila_dir,
+            env={**os.environ, "PYTHONPATH": vaila_dir},
+        )
     except Exception as e:
         print(f"Error launching {module_name}: {e}")
         if script_path:
             # Fallback: try to run the script file directly
             try:
                 full_script_path = os.path.join(vaila_dir, script_path)
-                subprocess.Popen([sys.executable, full_script_path], 
-                               cwd=vaila_dir, env={**os.environ, "PYTHONPATH": vaila_dir})
+                subprocess.Popen(
+                    [sys.executable, full_script_path],
+                    cwd=vaila_dir,
+                    env={**os.environ, "PYTHONPATH": vaila_dir},
+                )
             except Exception as e2:
                 print(f"Fallback also failed: {e2}")
-                messagebox.showerror("Error", f"Could not launch {module_name}:\n{e}\n\n{e2}")
+                messagebox.showerror(
+                    "Error", f"Could not launch {module_name}:\n{e}\n\n{e2}"
+                )
         else:
             messagebox.showerror("Error", f"Could not launch {module_name}: {e}")
+
 
 # Conditionally import platform-specific functionality
 # Define a global variable to track if AppKit is available
@@ -234,6 +244,7 @@ Use the button 'imagination!' to access command-line (xonsh) tools for advanced 
 
 print(text)
 
+
 def open_folder_cross_platform(path):
     if platform.system() == "Windows":
         os.startfile(path)
@@ -255,6 +266,7 @@ def open_folder_cross_platform(path):
                     except FileNotFoundError:
                         print(f"Could not open folder: {path}")
 
+
 class Vaila(tk.Tk):
     def __init__(self):
         """
@@ -271,9 +283,9 @@ class Vaila(tk.Tk):
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
-        
+
         self.resizable(True, True)
-        
+
         # Configure the window icon based on the operating system
         icon_path_ico = os.path.join(
             os.path.dirname(__file__), "vaila", "images", "vaila.ico"
@@ -1164,7 +1176,10 @@ class Vaila(tk.Tk):
 
         # C_C_r1_c2 - Visualization: Show CSV
         show_csv_btn = tk.Button(
-            tools_col3, text="Show CSV 3D", command=self.show_csv_file, width=button_width
+            tools_col3,
+            text="Show CSV 3D",
+            command=self.show_csv_file,
+            width=button_width,
         )
 
         # C_C_r2_c1 - Visualization: Plot 2D
@@ -1476,19 +1491,21 @@ class Vaila(tk.Tk):
                     "Select version:\n\n1: Standard (Faster, single-person)\n2: Advanced (Slower, multi-person with YOLO)\n\nEnter 1 or 2:",
                     initialvalue="1",
                 )
-                
+
                 if not version_choice or version_choice not in ["1", "2"]:
                     return
-                
+
                 # Launch in separate process
                 if version_choice == "1":
                     run_vaila_module("vaila.markerless_2d_analysis")
                 else:
                     run_vaila_module("vaila.markerless2d_analysis_v2")
-                    
+
             except Exception as e:
-                messagebox.showerror("Error", f"Failed to launch markerless analysis: {e}")
-                
+                messagebox.showerror(
+                    "Error", f"Failed to launch markerless analysis: {e}"
+                )
+
         else:
             # Option 2: Use existing root window (may have conflicts)
             try:
@@ -1498,19 +1515,21 @@ class Vaila(tk.Tk):
                     "Select version:\n\n1: Standard (Faster, single-person)\n2: Advanced (Slower, multi-person with YOLO)\n\nEnter 1 or 2:",
                     initialvalue="1",
                 )
-                
+
                 if not version_choice or version_choice not in ["1", "2"]:
                     return
-                
+
                 # Import and run in same process
                 if version_choice == "1":
                     from vaila.markerless_2d_analysis import process_videos_in_directory
                 else:
-                    from vaila.markerless2d_analysis_v2 import process_videos_in_directory
-                
+                    from vaila.markerless2d_analysis_v2 import (
+                        process_videos_in_directory,
+                    )
+
                 # Pass the existing root window to avoid creating new Tk
                 process_videos_in_directory(existing_root=self.root)
-                
+
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to run markerless analysis: {e}")
 
@@ -1537,19 +1556,21 @@ class Vaila(tk.Tk):
                     "Select version:\n\n1: Standard (Faster, single-person)\n2: Advanced (Slower, multi-person with YOLO)\n\nEnter 1 or 2:",
                     initialvalue="1",
                 )
-                
+
                 if not version_choice or version_choice not in ["1", "2"]:
                     return
-                
+
                 # Launch in separate process
                 if version_choice == "1":
                     run_vaila_module("vaila.markerless_3d_analysis")
                 else:
                     run_vaila_module("vaila.markerless3d_analysis_v2")
-                    
+
             except Exception as e:
-                messagebox.showerror("Error", f"Failed to launch markerless 3D analysis: {e}")
-                
+                messagebox.showerror(
+                    "Error", f"Failed to launch markerless 3D analysis: {e}"
+                )
+
         else:
             # Option 2: Use existing root window (may have conflicts)
             try:
@@ -1559,21 +1580,25 @@ class Vaila(tk.Tk):
                     "Select version:\n\n1: Standard (Faster, single-person)\n2: Advanced (Slower, multi-person with YOLO)\n\nEnter 1 or 2:",
                     initialvalue="1",
                 )
-                
+
                 if not version_choice or version_choice not in ["1", "2"]:
                     return
-                
+
                 # Import and run in same process
                 if version_choice == "1":
                     from vaila.markerless_3d_analysis import process_videos_in_directory
                 else:
-                    from vaila.markerless3d_analysis_v2 import process_videos_in_directory
-                
+                    from vaila.markerless3d_analysis_v2 import (
+                        process_videos_in_directory,
+                    )
+
                 # Pass the existing root window to avoid creating new Tk
                 process_videos_in_directory(existing_root=self.root)
-                
+
             except Exception as e:
-                messagebox.showerror("Error", f"Failed to run markerless 3D analysis: {e}")
+                messagebox.showerror(
+                    "Error", f"Failed to run markerless 3D analysis: {e}"
+                )
 
     # B_r2_c1
     def vector_coding(self):
@@ -1660,7 +1685,7 @@ class Vaila(tk.Tk):
         from vaila.vaila_manifest import show_vaila_message
 
         show_vaila_message()
-        #from vaila import hr_analysis
+        # from vaila import hr_analysis
         # hr_analysis.run_hr_analysis()
 
     # B_r3_c2
@@ -1913,6 +1938,7 @@ class Vaila(tk.Tk):
         try:
             # Import and run with current window as parent
             from vaila.interp_smooth_split import run_fill_split_dialog
+
             run_fill_split_dialog()
         except Exception:
             # Fallback: try subprocess if direct import fails
@@ -1920,10 +1946,17 @@ class Vaila(tk.Tk):
                 import subprocess
                 import sys
                 import os
-                script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'vaila', 'interp_smooth_split.py')
+
+                script_path = os.path.join(
+                    os.path.dirname(os.path.abspath(__file__)),
+                    "vaila",
+                    "interp_smooth_split.py",
+                )
                 subprocess.Popen([sys.executable, script_path])
             except Exception as e2:
-                messagebox.showerror("Error", f"Failed to launch interpolation module: {e2}")
+                messagebox.showerror(
+                    "Error", f"Failed to launch interpolation module: {e2}"
+                )
 
     # C_A_r2_c1
     def dlt2d(self):
@@ -1976,6 +2009,7 @@ class Vaila(tk.Tk):
         """Run DLT module in multiplatform."""
         try:
             from vaila import dlt3d
+
             dlt3d.main()
         except Exception as e:
             messagebox.showerror("Error", f"Error running dlt3d.py: {e}")
@@ -2085,16 +2119,16 @@ class Vaila(tk.Tk):
 
         # Title
         tk.Label(
-            main_frame, 
-            text="Select Video Compression Format", 
-            font=("Arial", 14, "bold")
+            main_frame,
+            text="Select Video Compression Format",
+            font=("Arial", 14, "bold"),
         ).pack(pady=(0, 20))
 
         # Description
         tk.Label(
             main_frame,
             text="Choose the compression format for your videos:",
-            font=("Arial", 10)
+            font=("Arial", 10),
         ).pack(pady=(0, 20))
 
         # Button frame
@@ -2105,25 +2139,34 @@ class Vaila(tk.Tk):
             dialog.destroy()
             try:
                 from vaila import compress_videos_h264
+
                 compress_videos_h264.compress_videos_h264_gui()
             except Exception as e:
-                messagebox.showerror("Error", f"Failed to launch H.264 compression: {e}")
+                messagebox.showerror(
+                    "Error", f"Failed to launch H.264 compression: {e}"
+                )
 
         def run_h265():
             dialog.destroy()
             try:
                 from vaila import compress_videos_h265
+
                 compress_videos_h265.compress_videos_h265_gui()
             except Exception as e:
-                messagebox.showerror("Error", f"Failed to launch H.265 compression: {e}")
+                messagebox.showerror(
+                    "Error", f"Failed to launch H.265 compression: {e}"
+                )
 
         def run_h266():
             dialog.destroy()
             try:
                 from vaila import compress_videos_h266
+
                 compress_videos_h266.compress_videos_h266_gui()
             except Exception as e:
-                messagebox.showerror("Error", f"Failed to launch H.266 compression: {e}")
+                messagebox.showerror(
+                    "Error", f"Failed to launch H.266 compression: {e}"
+                )
 
         # H.264 button
         h264_btn = tk.Button(
@@ -2132,7 +2175,7 @@ class Vaila(tk.Tk):
             command=run_h264,
             width=25,
             height=3,
-            font=("Arial", 10)
+            font=("Arial", 10),
         )
         h264_btn.pack(pady=5)
 
@@ -2143,7 +2186,7 @@ class Vaila(tk.Tk):
             command=run_h265,
             width=25,
             height=3,
-            font=("Arial", 10)
+            font=("Arial", 10),
         )
         h265_btn.pack(pady=5)
 
@@ -2154,17 +2197,13 @@ class Vaila(tk.Tk):
             command=run_h266,
             width=25,
             height=3,
-            font=("Arial", 10)
+            font=("Arial", 10),
         )
         h266_btn.pack(pady=5)
 
         # Cancel button
         cancel_btn = tk.Button(
-            button_frame,
-            text="Cancel",
-            command=dialog.destroy,
-            width=15,
-            height=2
+            button_frame, text="Cancel", command=dialog.destroy, width=15, height=2
         )
         cancel_btn.pack(pady=10)
 
@@ -2488,15 +2527,17 @@ class Vaila(tk.Tk):
         automatically and uses the appropriate conda path.
         """
         import os
-        
+
         if platform.system() == "Darwin":  # For macOS
             # Detect Conda installation (Anaconda or Miniconda)
             conda_path = None
             if os.path.exists(os.path.expanduser("~/anaconda3/etc/profile.d/conda.sh")):
                 conda_path = "~/anaconda3/etc/profile.d/conda.sh"
-            elif os.path.exists(os.path.expanduser("~/miniconda3/etc/profile.d/conda.sh")):
+            elif os.path.exists(
+                os.path.expanduser("~/miniconda3/etc/profile.d/conda.sh")
+            ):
                 conda_path = "~/miniconda3/etc/profile.d/conda.sh"
-            
+
             if conda_path:
                 subprocess.Popen(
                     [
@@ -2506,38 +2547,64 @@ class Vaila(tk.Tk):
                     ]
                 )
             else:
-                messagebox.showerror("Error", "Conda not found in anaconda3 or miniconda3.")
+                messagebox.showerror(
+                    "Error", "Conda not found in anaconda3 or miniconda3."
+                )
 
         elif platform.system() == "Windows":  # For Windows
             # Detect Conda installation (Anaconda or Miniconda)
             conda_hook = None
             user_profile = os.environ.get("USERPROFILE", "")
-            
-            if os.path.exists(os.path.join(user_profile, "anaconda3", "shell", "condabin", "conda-hook.ps1")):
-                conda_hook = os.path.join(user_profile, "anaconda3", "shell", "condabin", "conda-hook.ps1")
-            elif os.path.exists(os.path.join(user_profile, "miniconda3", "shell", "condabin", "conda-hook.ps1")):
-                conda_hook = os.path.join(user_profile, "miniconda3", "shell", "condabin", "conda-hook.ps1")
-            elif os.path.exists("C:\\ProgramData\\anaconda3\\shell\\condabin\\conda-hook.ps1"):
-                conda_hook = "C:\\ProgramData\\anaconda3\\shell\\condabin\\conda-hook.ps1"
-            elif os.path.exists("C:\\ProgramData\\miniconda3\\shell\\condabin\\conda-hook.ps1"):
-                conda_hook = "C:\\ProgramData\\miniconda3\\shell\\condabin\\conda-hook.ps1"
-            
+
+            if os.path.exists(
+                os.path.join(
+                    user_profile, "anaconda3", "shell", "condabin", "conda-hook.ps1"
+                )
+            ):
+                conda_hook = os.path.join(
+                    user_profile, "anaconda3", "shell", "condabin", "conda-hook.ps1"
+                )
+            elif os.path.exists(
+                os.path.join(
+                    user_profile, "miniconda3", "shell", "condabin", "conda-hook.ps1"
+                )
+            ):
+                conda_hook = os.path.join(
+                    user_profile, "miniconda3", "shell", "condabin", "conda-hook.ps1"
+                )
+            elif os.path.exists(
+                "C:\\ProgramData\\anaconda3\\shell\\condabin\\conda-hook.ps1"
+            ):
+                conda_hook = (
+                    "C:\\ProgramData\\anaconda3\\shell\\condabin\\conda-hook.ps1"
+                )
+            elif os.path.exists(
+                "C:\\ProgramData\\miniconda3\\shell\\condabin\\conda-hook.ps1"
+            ):
+                conda_hook = (
+                    "C:\\ProgramData\\miniconda3\\shell\\condabin\\conda-hook.ps1"
+                )
+
             if conda_hook:
                 subprocess.Popen(
-                    f'start pwsh -NoExit -Command "& \'{conda_hook}\'; conda activate vaila; xonsh"',
+                    f"start pwsh -NoExit -Command \"& '{conda_hook}'; conda activate vaila; xonsh\"",
                     shell=True,
                 )
             else:
-                messagebox.showerror("Error", "Conda not found in anaconda3 or miniconda3.")
+                messagebox.showerror(
+                    "Error", "Conda not found in anaconda3 or miniconda3."
+                )
 
         elif platform.system() == "Linux":  # For Linux
             # Detect Conda installation (Anaconda or Miniconda)
             conda_path = None
             if os.path.exists(os.path.expanduser("~/anaconda3/etc/profile.d/conda.sh")):
                 conda_path = "~/anaconda3/etc/profile.d/conda.sh"
-            elif os.path.exists(os.path.expanduser("~/miniconda3/etc/profile.d/conda.sh")):
+            elif os.path.exists(
+                os.path.expanduser("~/miniconda3/etc/profile.d/conda.sh")
+            ):
                 conda_path = "~/miniconda3/etc/profile.d/conda.sh"
-            
+
             if conda_path:
                 subprocess.Popen(
                     [
@@ -2550,7 +2617,9 @@ class Vaila(tk.Tk):
                     start_new_session=True,
                 )
             else:
-                messagebox.showerror("Error", "Conda not found in anaconda3 or miniconda3.")
+                messagebox.showerror(
+                    "Error", "Conda not found in anaconda3 or miniconda3."
+                )
 
     def quit_app(self):
         """Quits the Multimodal Toolbox application.

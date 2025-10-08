@@ -104,21 +104,21 @@ from rich import print
 def rotdata(data, xth=0, yth=0, zth=0, ordem="xyz"):
     """
     Rotate the data based on the specified angles and order.
-    
+
     Parameters:
     data (np.ndarray): The input data to be rotated, shape (3, n).
     xth, yth, zth (float): Rotation angles in degrees for x, y, and z axes.
     ordem (str): The order of rotation. Options are 'xyz', 'xzy', 'yxz', 'yzx', 'zxy', 'zyx'.
-    
+
     Returns:
     np.ndarray: The rotated data.
     """
     # Create the rotation object using Euler angles
     rotation_object = R.from_euler(ordem, [xth, yth, zth], degrees=True)
-    
+
     # Apply the rotation to the data
     datrot = rotation_object.apply(data.T).T
-    
+
     return datrot
 
 
@@ -138,49 +138,52 @@ def modify_lab_coords(data, labcoord_angles, ordem):
 def parse_custom_rotation_input(input_str):
     """
     Parse custom rotation input string and extract angles and rotation order.
-    
+
     Supported formats:
     - "[x, y, z]" (uses default 'xyz' order)
     - "[x, y, z], xyz" (custom angles and order)
-    
+
     Returns:
     tuple: (angles_list, rotation_order)
     """
     try:
         input_str = input_str.strip()
-        
+
         # Check if input contains rotation order specification
-        if ',' in input_str and any(order in input_str.lower() for order in ['xyz', 'xzy', 'yxz', 'yzx', 'zxy', 'zyx']):
+        if "," in input_str and any(
+            order in input_str.lower()
+            for order in ["xyz", "xzy", "yxz", "yzx", "zxy", "zyx"]
+        ):
             # Split by comma and find the rotation order
-            parts = input_str.split(',')
-            ordem = 'xyz'  # default
+            parts = input_str.split(",")
+            ordem = "xyz"  # default
             angles_parts = []
-            
+
             for part in parts:
                 part = part.strip().lower()
-                if part in ['xyz', 'xzy', 'yxz', 'yzx', 'zxy', 'zyx']:
+                if part in ["xyz", "xzy", "yxz", "yzx", "zxy", "zyx"]:
                     ordem = part
                 else:
                     angles_parts.append(part)
-            
-            angles_str = ','.join(angles_parts)
+
+            angles_str = ",".join(angles_parts)
         else:
-            ordem = 'xyz'
+            ordem = "xyz"
             angles_str = input_str
-        
+
         # Parse angles - remove brackets if present
         angles_str = angles_str.strip()
-        if angles_str.startswith('[') and angles_str.endswith(']'):
+        if angles_str.startswith("[") and angles_str.endswith("]"):
             angles_str = angles_str[1:-1]
-        
+
         # Convert to list of floats
-        angles = [float(x.strip()) for x in angles_str.split(',')]
-        
+        angles = [float(x.strip()) for x in angles_str.split(",")]
+
         if len(angles) != 3:
             raise ValueError(f"Expected 3 angles, got {len(angles)}")
-        
+
         return angles, ordem
-        
+
     except Exception as e:
         raise ValueError(f"Invalid rotation format: {e}")
 
@@ -188,10 +191,10 @@ def parse_custom_rotation_input(input_str):
 def get_labcoord_angles(option):
     """
     Get rotation angles and order based on the option provided.
-    
+
     Args:
         option (str): Rotation option - can be 'A', 'B', 'C', or a rotation string
-    
+
     Returns:
         tuple: (angles, suffix, rotation_order)
     """
@@ -206,11 +209,22 @@ def get_labcoord_angles(option):
         try:
             angles, ordem = parse_custom_rotation_input(option)
             # Clean suffix to avoid invalid filename characters
-            clean_angles = [str(int(angle)) if float(angle).is_integer() else str(angle).replace('.', 'p').replace('-', 'neg') for angle in angles]
-            suffix = f"_custom_{clean_angles[0]}_{clean_angles[1]}_{clean_angles[2]}_{ordem}"
-            print(f"Using custom rotation: X={angles[0]}, Y={angles[1]}, Z={angles[2]} degrees (order: {ordem.upper()})")
+            clean_angles = [
+                (
+                    str(int(angle))
+                    if float(angle).is_integer()
+                    else str(angle).replace(".", "p").replace("-", "neg")
+                )
+                for angle in angles
+            ]
+            suffix = (
+                f"_custom_{clean_angles[0]}_{clean_angles[1]}_{clean_angles[2]}_{ordem}"
+            )
+            print(
+                f"Using custom rotation: X={angles[0]}, Y={angles[1]}, Z={angles[2]} degrees (order: {ordem.upper()})"
+            )
             return angles, suffix, ordem
-            
+
         except ValueError as e:
             print(f"ERROR: Invalid rotation input: {e}")
             print("Using canonical base (no rotation).")
@@ -220,32 +234,32 @@ def get_labcoord_angles(option):
 def detect_column_precision(data, col_idx):
     """
     Detect the number of decimal places for a specific column.
-    
+
     Args:
         data (pd.DataFrame): The dataframe (as string)
         col_idx (int): Column index to analyze
-    
+
     Returns:
         int: Number of decimal places for this column
     """
     max_decimals = 0
-    
+
     # Sample multiple rows to get a representative precision
     sample_rows = min(10, len(data))
-    
+
     for row_idx in range(sample_rows):
         value_str = str(data.iloc[row_idx, col_idx])
-        if value_str != 'nan' and '.' in value_str:
-            decimal_part = value_str.split('.')[1]
+        if value_str != "nan" and "." in value_str:
+            decimal_part = value_str.split(".")[1]
             max_decimals = max(max_decimals, len(decimal_part))
-    
+
     return max_decimals
 
 
 def save_with_original_precision(data, original_data_str, output_path):
     """
     Save dataframe preserving the original precision of each column.
-    
+
     Args:
         data (pd.DataFrame): Data to save (numeric)
         original_data_str (pd.DataFrame): Original data as strings
@@ -256,26 +270,30 @@ def save_with_original_precision(data, original_data_str, output_path):
     for i in range(len(data.columns)):
         precision = detect_column_precision(original_data_str, i)
         column_formats[i] = precision
-    
+
     # Apply formatting to each column, but ensure minimum precision for rotated data
     formatted_data = data.copy()
     for i, col in enumerate(formatted_data.columns):
         precision = column_formats.get(i, 6)
-        
+
         # Check if the column has decimal values (indicating that rotation was applied)
         has_decimals = (formatted_data[col] % 1 != 0).any()
 
         if precision == 0 and has_decimals:
             # Override precision if rotation created decimal values
             precision = 6
-            
+
         if precision == 0 and not has_decimals:
             # Integer formatting only if truly integers
-            formatted_data[col] = formatted_data[col].apply(lambda x: f"{int(x)}" if pd.notna(x) else "")
+            formatted_data[col] = formatted_data[col].apply(
+                lambda x: f"{int(x)}" if pd.notna(x) else ""
+            )
         else:
             # Float formatting with specific precision
-            formatted_data[col] = formatted_data[col].apply(lambda x: f"{x:.{precision}f}" if pd.notna(x) else "")
-    
+            formatted_data[col] = formatted_data[col].apply(
+                lambda x: f"{x:.{precision}f}" if pd.notna(x) else ""
+            )
+
     # Save without additional float formatting since we already formatted
     formatted_data.to_csv(output_path, index=False)
 
@@ -294,7 +312,7 @@ def process_files(input_dir, labcoord_angles, suffix, ordem):
 
     for file_name in file_names:
         file_path = os.path.join(input_dir, file_name)
-        
+
         # Read the original data as string first to preserve precision info
         try:
             data_str = pd.read_csv(file_path, dtype=str)
@@ -310,7 +328,9 @@ def process_files(input_dir, labcoord_angles, suffix, ordem):
 
         # Verify if the file has at least 4 columns (first column + at least one trio X, Y, Z)
         if len(data.columns) < 4:
-            print(f"Warning: {file_name} has less than 4 columns. Expected format: [Time/Index, X1, Y1, Z1, ...]")
+            print(
+                f"Warning: {file_name} has less than 4 columns. Expected format: [Time/Index, X1, Y1, Z1, ...]"
+            )
             continue
 
         # Store precision info for each column before processing
@@ -337,7 +357,9 @@ def process_files(input_dir, labcoord_angles, suffix, ordem):
             else:
                 # If there are not 3 complete columns, warn and skip
                 remaining_cols = len(data.columns) - i
-                print(f"Warning: {file_name} has {remaining_cols} remaining columns at position {i}. Expected groups of 3 (X, Y, Z). Skipping incomplete group.")
+                print(
+                    f"Warning: {file_name} has {remaining_cols} remaining columns at position {i}. Expected groups of 3 (X, Y, Z). Skipping incomplete group."
+                )
 
         # Ensure that the first column is preserved
         modified_data.iloc[:, 0] = first_column
@@ -345,7 +367,7 @@ def process_files(input_dir, labcoord_angles, suffix, ordem):
         # Save with original precision preserved
         base_name, ext = os.path.splitext(file_name)
         output_file_path = os.path.join(output_dir, f"{base_name}{suffix}{ext}")
-        
+
         try:
             save_with_original_precision(modified_data, data_str, output_file_path)
             print(f"Processed and saved: {output_file_path}")
@@ -360,7 +382,7 @@ def process_files(input_dir, labcoord_angles, suffix, ordem):
 def run_modify_labref(option, input_dir):
     """
     Main function to execute rotation processing.
-    
+
     Args:
         option (str): Rotation option ('A', 'B', 'C', or custom rotation string)
         input_dir (str): Path to directory containing CSV files to process
@@ -376,12 +398,16 @@ def main():
 
     """Interactive main function for script execution."""
     print("\nCUSTOM 3D ROTATION PROCESSING TOOLKIT")
-    print("="*50)
-    
+    print("=" * 50)
+
     # Get input directory
     while True:
         try:
-            input_dir = input("\nEnter the path to your CSV files directory: ").strip().strip('"')
+            input_dir = (
+                input("\nEnter the path to your CSV files directory: ")
+                .strip()
+                .strip('"')
+            )
             if not input_dir:
                 print("Please enter a valid directory path.")
                 continue
@@ -395,35 +421,35 @@ def main():
         except KeyboardInterrupt:
             print("\nOperation cancelled.")
             return
-    
+
     # Check for CSV files
-    csv_files = [f for f in os.listdir(input_dir) if f.endswith('.csv')]
+    csv_files = [f for f in os.listdir(input_dir) if f.endswith(".csv")]
     if not csv_files:
         print(f"No CSV files found in directory: {input_dir}")
         return
-    
+
     print(f"\nFound {len(csv_files)} CSV file(s) to process:")
     for i, file in enumerate(csv_files[:5], 1):
         print(f"   {i}. {file}")
     if len(csv_files) > 5:
         print(f"   ... and {len(csv_files) - 5} more files")
-    
+
     # Get rotation option
     print("\nROTATION OPTIONS:")
     print("   A - 180 degree rotation around Z-axis")
-    print("   B - 90 degree clockwise rotation around Z-axis") 
+    print("   B - 90 degree clockwise rotation around Z-axis")
     print("   C - 90 degree counterclockwise rotation around Z-axis")
     print("   Custom - Enter format: [x, y, z] or [x, y, z], xyz")
     print("   Examples: [0, -45, 0] or [0, -45, 0], zyx")
-    
+
     while True:
         try:
             option = input("\nEnter your choice: ").strip()
             if not option:
                 print("Please enter a valid option.")
                 continue
-            
-            if option.upper() in ['A', 'B', 'C']:
+
+            if option.upper() in ["A", "B", "C"]:
                 option = option.upper()
                 break
             else:
@@ -435,25 +461,25 @@ def main():
                     print(f"Invalid rotation format: {e}")
                     print("Please try again. Use format: [x, y, z] or [x, y, z], xyz")
                     continue
-                    
+
         except KeyboardInterrupt:
             print("\nOperation cancelled.")
             return
-    
+
     # Confirm and execute
     print(f"\nReady to process {len(csv_files)} file(s) with rotation option: {option}")
     confirm = input("Proceed? (y/n): ").strip().lower()
-    
-    if confirm in ['y', 'yes', '']:
+
+    if confirm in ["y", "yes", ""]:
         print("\nPROCESSING...")
-        print("="*30)
-        
+        print("=" * 30)
+
         try:
             run_modify_labref(option, input_dir)
         except Exception as e:
             print(f"Error during processing: {e}")
             return
-        
+
         print(f"\nProcessing completed successfully!")
         print(f"Check the 'rotated_files' subfolder in: {input_dir}")
     else:

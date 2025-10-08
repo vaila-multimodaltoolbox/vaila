@@ -70,7 +70,9 @@ def _ffprobe_json(video_path: str) -> dict:
         video_path,
     ]
     try:
-        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        proc = subprocess.run(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+        )
         out = proc.stdout.strip() or "{}"
         return json.loads(out)
     except Exception as exc:  # noqa: BLE001
@@ -256,18 +258,23 @@ def display_video_info(video_infos, output_file):
             ttk.Label(scrollable_frame, text=info["frame_count"]).grid(
                 row=i, column=1, sticky=tk.W, padx=10
             )
-            ttk.Label(scrollable_frame, text=f"{(info.get('display_fps') or 0):.3f}").grid(
-                row=i, column=2, sticky=tk.W, padx=10
-            )
-            ttk.Label(scrollable_frame, text=(f"{info.get('capture_fps'):.3f}" if info.get('capture_fps') else "N/A")).grid(
-                row=i, column=3, sticky=tk.W, padx=10
-            )
+            ttk.Label(
+                scrollable_frame, text=f"{(info.get('display_fps') or 0):.3f}"
+            ).grid(row=i, column=2, sticky=tk.W, padx=10)
+            ttk.Label(
+                scrollable_frame,
+                text=(
+                    f"{info.get('capture_fps'):.3f}"
+                    if info.get("capture_fps")
+                    else "N/A"
+                ),
+            ).grid(row=i, column=3, sticky=tk.W, padx=10)
             ttk.Label(scrollable_frame, text=(info.get("codec_name") or "N/A")).grid(
                 row=i, column=4, sticky=tk.W, padx=10
             )
-            ttk.Label(scrollable_frame, text=(info.get("container_format") or "N/A")).grid(
-                row=i, column=5, sticky=tk.W, padx=10
-            )
+            ttk.Label(
+                scrollable_frame, text=(info.get("container_format") or "N/A")
+            ).grid(row=i, column=5, sticky=tk.W, padx=10)
             ttk.Label(scrollable_frame, text=info["resolution"]).grid(
                 row=i, column=6, sticky=tk.W, padx=10
             )
@@ -298,7 +305,9 @@ def save_basic_metadata_to_file(video_infos, directory_path):
                 f.write(f"Avg_FPS: {avg:.3f}\n" if avg else "Avg_FPS: N/A\n")
                 f.write(f"Capture_FPS: {cap:.3f}\n" if cap else "Capture_FPS: N/A\n")
                 f.write(
-                    f"Recommended_Sampling_Hz: {rec:.3f}\n" if rec else "Recommended_Sampling_Hz: N/A\n"
+                    f"Recommended_Sampling_Hz: {rec:.3f}\n"
+                    if rec
+                    else "Recommended_Sampling_Hz: N/A\n"
                 )
                 if cap and disp:
                     try:
@@ -312,7 +321,9 @@ def save_basic_metadata_to_file(video_infos, directory_path):
                 container = info.get("container_format") or "N/A"
                 container_long = info.get("container_long_name") or ""
                 f.write(f"Codec: {codec}{(' - ' + codec_long) if codec_long else ''}\n")
-                f.write(f"Container: {container}{(' - ' + container_long) if container_long else ''}\n")
+                f.write(
+                    f"Container: {container}{(' - ' + container_long) if container_long else ''}\n"
+                )
                 f.write(f"Resolution: {info['resolution']}\n")
                 f.write(f"Duration (s): {info['duration']:.2f}\n\n")
 

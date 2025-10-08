@@ -90,7 +90,7 @@ from tkinter import (
     RIGHT,
     Y,
     BOTH,
-    END
+    END,
 )
 from datetime import datetime
 from scipy.signal import butter, filtfilt
@@ -131,24 +131,26 @@ def show_instructions():
     """
     root = Tk()
     root.withdraw()  # Hide the main window
-    
+
     # Create instruction window
     instruction_window = Toplevel(root)
     instruction_window.title("CUBE 2D Kinematics Analysis - Instructions")
     instruction_window.geometry("700x600")
     instruction_window.grab_set()  # Make it modal
-    
+
     # Create scrollable text widget
     frame = Frame(instruction_window)
     frame.pack(fill=BOTH, expand=True, padx=10, pady=10)
-    
+
     scrollbar = Scrollbar(frame)
     scrollbar.pack(side=RIGHT, fill=Y)
-    
-    text_widget = Text(frame, wrap=WORD, yscrollcommand=scrollbar.set, font=("Arial", 11))
+
+    text_widget = Text(
+        frame, wrap=WORD, yscrollcommand=scrollbar.set, font=("Arial", 11)
+    )
     text_widget.pack(side="left", fill=BOTH, expand=True)
     scrollbar.config(command=text_widget.yview)
-    
+
     instructions = """
 CUBE 2D KINEMATICS ANALYSIS - SETUP INSTRUCTIONS
 
@@ -237,35 +239,46 @@ This tool analyzes 2D (meters) movement patterns in a cube/grid environment. Ple
 
 CLICK 'CONTINUE' TO START FILE SELECTION
 """
-    
+
     text_widget.insert("1.0", instructions)
     text_widget.config(state="disabled")  # Make text read-only
-    
+
     # Add continue button
     button_frame = Frame(instruction_window)
     button_frame.pack(pady=10)
-    
+
     continue_clicked = [False]  # Use list to allow modification in nested function
-    
+
     def on_continue():
         continue_clicked[0] = True
         instruction_window.destroy()
         root.quit()
-    
-    continue_button = Button(button_frame, text="CONTINUE", command=on_continue, 
-                           bg="#4CAF50", fg="white", font=("Arial", 12, "bold"),
-                           padx=20, pady=10)
+
+    continue_button = Button(
+        button_frame,
+        text="CONTINUE",
+        command=on_continue,
+        bg="#4CAF50",
+        fg="white",
+        font=("Arial", 12, "bold"),
+        padx=20,
+        pady=10,
+    )
     continue_button.pack()
-    
+
     # Center the window
     instruction_window.update_idletasks()
-    x = (instruction_window.winfo_screenwidth() // 2) - (instruction_window.winfo_width() // 2)
-    y = (instruction_window.winfo_screenheight() // 2) - (instruction_window.winfo_height() // 2)
+    x = (instruction_window.winfo_screenwidth() // 2) - (
+        instruction_window.winfo_width() // 2
+    )
+    y = (instruction_window.winfo_screenheight() // 2) - (
+        instruction_window.winfo_height() // 2
+    )
     instruction_window.geometry(f"+{x}+{y}")
-    
+
     root.mainloop()
     root.destroy()
-    
+
     return continue_clicked[0]
 
 
@@ -309,17 +322,17 @@ def load_data(input_file):
         # Handle single column case
         if data.ndim == 1:
             raise ValueError("File must contain at least 3 columns (any, X, Y)")
-        
+
         # Check if we have at least 3 columns
         if data.shape[1] < 3:
             raise ValueError("File must contain at least 3 columns (any, X, Y)")
-        
+
         # Always use column 1 as X and column 2 as Y
         x = data[:, 1]  # Column 1 = X coordinates
         y = data[:, 2]  # Column 2 = Y coordinates
 
         return x, y
-        
+
     except Exception as e:
         raise ValueError(f"Error loading data from {input_file}: {e}")
 
@@ -438,10 +451,26 @@ def plot_pathway_with_quadrants(x, y, quadrants_df, time_vector):
     line = ax.add_collection(lc)
 
     # Plot start point (green) and end point (red)
-    ax.scatter(x[0], y[0], color="green", s=150, zorder=5, 
-              label="Start", edgecolors="black", linewidth=2)
-    ax.scatter(x[-1], y[-1], color="red", s=150, zorder=5, 
-              label="End", edgecolors="black", linewidth=2)
+    ax.scatter(
+        x[0],
+        y[0],
+        color="green",
+        s=150,
+        zorder=5,
+        label="Start",
+        edgecolors="black",
+        linewidth=2,
+    )
+    ax.scatter(
+        x[-1],
+        y[-1],
+        color="red",
+        s=150,
+        zorder=5,
+        label="End",
+        edgecolors="black",
+        linewidth=2,
+    )
 
     # Add colorbar
     cbar = plt.colorbar(line, ax=ax, orientation="vertical", shrink=0.8)
@@ -450,7 +479,9 @@ def plot_pathway_with_quadrants(x, y, quadrants_df, time_vector):
     cbar.set_ticklabels([f"{time_vector[0]:.2f}", f"{time_vector[-1]:.2f}"])
 
     # Configure plot
-    ax.set_title("CUBE 2D Pathway with Time-Based Color Gradient", fontsize=16, fontweight="bold")
+    ax.set_title(
+        "CUBE 2D Pathway with Time-Based Color Gradient", fontsize=16, fontweight="bold"
+    )
     ax.set_xlabel("X - Medio-lateral (m)", fontsize=12)
     ax.set_ylabel("Y - Antero-posterior (m)", fontsize=12)
     ax.axhline(0, color="black", linewidth=1, alpha=0.5)
@@ -478,40 +509,45 @@ def process_file(file_path, quadrants_df, output_dir, fs, base_name):
         max_speed = np.max(speed)
         time_stationary = np.sum(speed < 0.05) / fs  # Time below 0.05 m/s
         total_time = len(x) / fs  # Total time in seconds
-        movement_percentage = ((total_time - time_stationary) / total_time * 100)
+        movement_percentage = (total_time - time_stationary) / total_time * 100
 
         # Create time vector
         time_vector = np.linspace(0, (len(x) - 1) / fs, len(x))
 
         # Plot and save pathway with quadrants
         fig = plot_pathway_with_quadrants(x, y, quadrants_df, time_vector)
-        plt.savefig(os.path.join(output_dir, f"{base_name}_cube2d_result.png"), 
-                   dpi=300, bbox_inches='tight')
+        plt.savefig(
+            os.path.join(output_dir, f"{base_name}_cube2d_result.png"),
+            dpi=300,
+            bbox_inches="tight",
+        )
         plt.close(fig)
 
         # Save metrics to CSV file (database-friendly format)
         results_csv = os.path.join(output_dir, f"{base_name}_cube2d_results.csv")
         results_data = {
-            'file_name': [base_name],
-            'analysis_date': [datetime.now().strftime('%Y-%m-%d')],
-            'analysis_time': [datetime.now().strftime('%H:%M:%S')],
-            'sampling_frequency_hz': [fs],
-            'total_distance_m': [round(total_distance, 3)],
-            'average_speed_ms': [round(avg_speed, 3)],
-            'maximum_speed_ms': [round(max_speed, 3)],
-            'time_stationary_s': [round(time_stationary, 3)],
-            'total_time_s': [round(total_time, 3)],
-            'movement_percentage': [round(movement_percentage, 1)],
-            'data_points': [len(x)]
+            "file_name": [base_name],
+            "analysis_date": [datetime.now().strftime("%Y-%m-%d")],
+            "analysis_time": [datetime.now().strftime("%H:%M:%S")],
+            "sampling_frequency_hz": [fs],
+            "total_distance_m": [round(total_distance, 3)],
+            "average_speed_ms": [round(avg_speed, 3)],
+            "maximum_speed_ms": [round(max_speed, 3)],
+            "time_stationary_s": [round(time_stationary, 3)],
+            "total_time_s": [round(total_time, 3)],
+            "movement_percentage": [round(movement_percentage, 1)],
+            "data_points": [len(x)],
         }
-        
+
         results_df = pd.DataFrame(results_data)
         results_df.to_csv(results_csv, index=False)
 
         # Also save detailed text file for human reading
-        with open(os.path.join(output_dir, f"{base_name}_cube2d_summary.txt"), "w") as f:
+        with open(
+            os.path.join(output_dir, f"{base_name}_cube2d_summary.txt"), "w"
+        ) as f:
             f.write("CUBE 2D KINEMATICS ANALYSIS RESULTS\n")
-            f.write("="*50 + "\n")
+            f.write("=" * 50 + "\n")
             f.write(f"File: {base_name}\n")
             f.write(f"Analysis date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
             f.write(f"Sampling frequency: {fs} Hz\n")
@@ -525,7 +561,7 @@ def process_file(file_path, quadrants_df, output_dir, fs, base_name):
             f.write(f"Movement percentage: {movement_percentage:.1f}%\n")
 
         return True
-        
+
     except Exception as e:
         print(f"Error processing file {file_path}: {e}")
         return False
@@ -533,7 +569,7 @@ def process_file(file_path, quadrants_df, output_dir, fs, base_name):
 
 def run_cube2d_kinematics():
     """Main function to run the CUBE 2D kinematics analysis."""
-    
+
     # Show instructions first
     if not show_instructions():
         print("Analysis cancelled by user.")
@@ -548,7 +584,9 @@ def run_cube2d_kinematics():
     print("Starting CUBE 2D Kinematics analysis...")
 
     # Select data directory
-    data_dir = filedialog.askdirectory(title="Select the Data Directory (containing CSV files)")
+    data_dir = filedialog.askdirectory(
+        title="Select the Data Directory (containing CSV files)"
+    )
     if not data_dir:
         print("No data directory selected. Exiting.")
         return
@@ -558,13 +596,13 @@ def run_cube2d_kinematics():
     if not csv_files:
         messagebox.showerror("Error", "No CSV files found in the selected directory!")
         return
-    
+
     print(f"Found {len(csv_files)} CSV files to process.")
 
     # Select quadrants file (optional)
     quadrants_file = filedialog.askopenfilename(
         title="Select the Quadrants File (optional - cancel for default)",
-        filetypes=[("Text files", "*.txt"), ("All files", "*.*")]
+        filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
     )
 
     # Select output directory
@@ -580,7 +618,7 @@ def run_cube2d_kinematics():
             fs_value = simpledialog.askstring(
                 "Sampling Frequency",
                 f"Enter the sampling frequency (fs) in Hz for all {len(csv_files)} files:\n\n"
-                "Common values: 30, 60, 100, 120, 250 Hz"
+                "Common values: 30, 60, 100, 120, 250 Hz",
             )
             if fs_value is None:
                 print("No sampling frequency entered. Exiting.")
@@ -589,8 +627,9 @@ def run_cube2d_kinematics():
             if fs <= 0:
                 raise ValueError("Sampling frequency must be positive")
         except ValueError as e:
-            messagebox.showerror("Invalid Input", 
-                               f"Error: {e}\nPlease enter a valid positive number.")
+            messagebox.showerror(
+                "Invalid Input", f"Error: {e}\nPlease enter a valid positive number."
+            )
 
     # Load quadrants
     quadrants_df = load_quadrants(quadrants_file)
@@ -605,7 +644,7 @@ def run_cube2d_kinematics():
     files_processed = 0
     files_failed = 0
     all_results = []  # Store all results for consolidated database
-    
+
     for file_name in csv_files:
         file_path = os.path.join(data_dir, file_name)
         base_name = os.path.splitext(file_name)[0]
@@ -621,13 +660,13 @@ def run_cube2d_kinematics():
         print(f"Processing: {file_name}")
         if process_file(file_path, quadrants_df, file_output_dir, fs, base_name):
             files_processed += 1
-            
+
             # Collect data for consolidated database
             try:
                 x, y = load_data(file_path)
                 x = butter_lowpass_filter(x, 6, fs)
                 y = butter_lowpass_filter(y, 6, fs)
-                
+
                 distance = calculate_distance(x, y)
                 speed = calculate_speed(distance, fs)
                 total_distance = np.sum(distance)
@@ -635,21 +674,23 @@ def run_cube2d_kinematics():
                 max_speed = np.max(speed)
                 time_stationary = np.sum(speed < 0.05) / fs
                 total_time = len(x) / fs
-                movement_percentage = ((total_time - time_stationary) / total_time * 100)
-                
-                all_results.append({
-                    'file_name': base_name,
-                    'analysis_date': datetime.now().strftime('%Y-%m-%d'),
-                    'analysis_time': datetime.now().strftime('%H:%M:%S'),
-                    'sampling_frequency_hz': fs,
-                    'total_distance_m': round(total_distance, 3),
-                    'average_speed_ms': round(avg_speed, 3),
-                    'maximum_speed_ms': round(max_speed, 3),
-                    'time_stationary_s': round(time_stationary, 3),
-                    'total_time_s': round(total_time, 3),
-                    'movement_percentage': round(movement_percentage, 1),
-                    'data_points': len(x)
-                })
+                movement_percentage = (total_time - time_stationary) / total_time * 100
+
+                all_results.append(
+                    {
+                        "file_name": base_name,
+                        "analysis_date": datetime.now().strftime("%Y-%m-%d"),
+                        "analysis_time": datetime.now().strftime("%H:%M:%S"),
+                        "sampling_frequency_hz": fs,
+                        "total_distance_m": round(total_distance, 3),
+                        "average_speed_ms": round(avg_speed, 3),
+                        "maximum_speed_ms": round(max_speed, 3),
+                        "time_stationary_s": round(time_stationary, 3),
+                        "total_time_s": round(total_time, 3),
+                        "movement_percentage": round(movement_percentage, 1),
+                        "data_points": len(x),
+                    }
+                )
             except Exception as e:
                 print(f"Error collecting data for consolidated database: {e}")
         else:
@@ -658,7 +699,9 @@ def run_cube2d_kinematics():
     # Create consolidated database CSV
     if all_results:
         consolidated_df = pd.DataFrame(all_results)
-        consolidated_csv = os.path.join(base_output_dir, "consolidated_cube2d_database.csv")
+        consolidated_csv = os.path.join(
+            base_output_dir, "consolidated_cube2d_database.csv"
+        )
         consolidated_df.to_csv(consolidated_csv, index=False)
         print(f"Consolidated database saved: {consolidated_csv}")
 
@@ -669,7 +712,7 @@ def run_cube2d_kinematics():
         message += f"Files failed: {files_failed}\n"
     message += f"\nOutput directory:\n{base_output_dir}\n\n"
     message += f"Database file: consolidated_cube2d_database.csv"
-    
+
     messagebox.showinfo("Processing Complete", message)
     print(f"Analysis complete. Results saved to: {base_output_dir}")
 
