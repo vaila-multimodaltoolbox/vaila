@@ -300,7 +300,7 @@ enabled = false
 - Customize processing per data type
 
 ### Quality Metrics
-- RMS error calculation
+- RMS errorrr calculation
 - Residual analysis
 - Frequency domain analysis
 - Statistical distribution analysis

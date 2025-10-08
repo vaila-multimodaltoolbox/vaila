@@ -1,16 +1,16 @@
 # showc3d
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Visualization
-- **Arquivo:** `vaila/showc3d.py`
-- **Linhas:** 245
-- **Tamanho:** 7994 caracteres
+- **Category:** Visualization
+- **File:** `vaila/showc3d.py`
+- **Lines:** 245
+- **Size:** 7994 characters
 
-- **Autor:** Prof. Paulo Roberto Pereira Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Author:** Prof. Paulo Roberto Pereira Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 Script: showc3d.py
@@ -38,9 +38,9 @@ Usage:
 3. Use the slider or Play/Pause button to control the animation.
 
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 11
+**Total functions found:** 11
 
 - `load_c3d_file`
 - `select_markers`
@@ -59,6 +59,6 @@ Usage:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

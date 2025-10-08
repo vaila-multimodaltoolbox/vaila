@@ -1,22 +1,22 @@
 # walkway_ml_prediction
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Ml
-- **Arquivo:** `vaila/walkway_ml_prediction.py`
-- **Linhas:** 356
-- **Tamanho:** 12316 caracteres
+- **Category:** Ml
+- **File:** `vaila/walkway_ml_prediction.py`
+- **Lines:** 356
+- **Size:** 12316 characters
 
 
-- **Interface Gráfica:** ✅ Sim
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 Função para carregar modelos e realizar previsões
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 5
+**Total functions found:** 5
 
 - `predict_metrics`
 - `run_prediction`
@@ -29,6 +29,6 @@ Função para carregar modelos e realizar previsões
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

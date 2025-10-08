@@ -24,7 +24,7 @@
 
 ## Inspirações e Melhorias
 
-- Blender: Grade adaptativa, desenho flexível de linhas, sistema de coordenadas robusto
+- Blender: Grade adaptativa, desenho flexível de lines, sistema de coordenadas robusto
 - Mokka BTK: Sistema de coordenadas aprimorado, anotações, visualização biomecânica
 
 ## Exemplo de Uso

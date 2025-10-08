@@ -2,7 +2,7 @@
 
 ## Visão Geral
 
-O vailá Scout é uma aplicação GUI integrada para anotar eventos esportivos em um campo de futebol virtual e gerar análises rápidas (ex: mapas de calor). É projetado para se adequar ao estilo do projeto vailá e não requer imagens externas do campo - o campo é desenhado em escala usando dimensões padrão FIFA (105m x 68m).
+O vailá Scout é uma aplicação GUI integrada para anotar eventos esportivos em um campo de futebol virtual e gerar analysiss rápidas (ex: mapas de calor). É projetado para se adequar ao estilo do projeto vailá e não requer imagens externas do campo - o campo é desenhado em escala usando dimensões padrão FIFA (105m x 68m).
 
 ## Funcionalidades
 
@@ -18,11 +18,11 @@ O vailá Scout é uma aplicação GUI integrada para anotar eventos esportivos e
 ### Gerenciamento de Dados
 - **Importação/exportação CSV**: Carregar e salvar dados de eventos em formato CSV
 - **Configuração TOML**: Sistema de configuração flexível para equipes, ações e configurações do campo
-- **Conversão Skout**: Converter dados do formato de exportação ASCII do Skout.exe
+- **Conversion Skout**: Converter dados do formato de exportação ASCII do Skout.exe
 
 ### Interface do Usuário
-- **Design responsivo**: Adapta-se a diferentes tamanhos de tela
-- **Atalhos de teclado**: Acesso rápido a funções comuns
+- **Design responsivo**: Adapta-se a diferentes sizes de tela
+- **Atalhos de teclado**: Acesso rápido a functions comuns
 - **Feedback visual**: Eventos codificados por cor e marcadores de jogadores
 - **Gerenciamento de escalação**: Seleção fácil de jogadores e troca de equipes
 
@@ -40,7 +40,7 @@ O vailá Scout é uma aplicação GUI integrada para anotar eventos esportivos e
 ### Executando a Aplicação
 
 #### Opção 1: Da GUI do vailá
-Clique no botão "Scout" na interface principal do vailá.
+Clique no botão "Scout" na interface main do vailá.
 
 #### Opção 2: Linha de Comando
 ```bash
@@ -63,7 +63,7 @@ python scout_vaila.py
 ### Começando
 
 1. **Inicie a aplicação** usando qualquer um dos métodos acima
-2. **Carregue ou crie uma configuração** (arquivo TOML) com suas equipes e ações
+2. **Carregue ou crie uma configuração** (file TOML) com suas equipes e ações
 3. **Selecione sua equipe** (use a tecla 'T' para alternar entre casa/visitante)
 4. **Escolha uma ação** do menu suspenso
 5. **Defina o resultado** (sucesso/falha/neutro)
@@ -92,11 +92,11 @@ python scout_vaila.py
 
 ### Arquivo de Configuração TOML
 
-A aplicação usa arquivos de configuração TOML para armazenar:
+A aplicação usa files de configuração TOML para armazenar:
 - Informações das equipes (nomes, cores, jogadores)
 - Definições de ações (nomes, códigos, símbolos, cores)
 - Configurações do campo (dimensões, unidades)
-- Preferências visuais (tamanhos de marcadores, cores)
+- Preferências visuais (sizes de marcadores, cores)
 
 ### Configuração Padrão
 
@@ -109,7 +109,7 @@ Quando iniciada pela primeira vez, a aplicação cria uma configuração padrão
 ### Criando Configurações Personalizadas
 
 1. Use "Criar Modelo" para gerar uma configuração base
-2. Edite o arquivo TOML manualmente ou use as ferramentas de configuração
+2. Edite o file TOML manualmente ou use as ferramentas de configuração
 3. Carregue sua configuração personalizada
 4. Salve as alterações conforme necessário
 
@@ -175,14 +175,14 @@ timestamp_s, team, player_name, player, action, action_code, result, pos_x_m, po
 2. Selecione filtros de ação e/ou sucesso/falha
 3. Ver o gráfico de ações no campo
 
-### Conversão de Dados Skout
+### Conversion de Dados Skout
 
 Converter dados do formato de exportação ASCII do Skout.exe:
 1. Vá para **Ferramentas** → **Converter Skout para vailá**
-2. Selecione seu arquivo Skout .txt
+2. Selecione seu file Skout .txt
 3. Escolha o diretório de saída
 4. Digite o nome da equipe
-5. Obtenha tanto arquivos CSV quanto de configuração TOML
+5. Obtenha tanto files CSV quanto de configuração TOML
 
 ### Gerenciamento de Jogadores
 
@@ -203,13 +203,13 @@ Converter dados do formato de exportação ASCII do Skout.exe:
 ### Problemas Comuns
 
 **A aplicação não inicia:**
-- Verifique a versão do Python (3.x necessário)
+- Verifique a version do Python (3.x necessário)
 - Verifique se todas as dependências estão instaladas
 - Certifique-se de que o tkinter está disponível
 
 **Configuração não carrega:**
-- Verifique a sintaxe do arquivo TOML
-- Verifique as permissões do arquivo
+- Verifique a sintaxe do file TOML
+- Verifique as permissões do file
 - Use "Criar Modelo" para gerar config válida
 
 **Campo não exibe:**
@@ -225,7 +225,7 @@ Converter dados do formato de exportação ASCII do Skout.exe:
 ### Dicas de Performance
 
 - Feche outros aplicativos ao trabalhar com grandes conjuntos de dados
-- Use dimensões apropriadas do campo para sua análise
+- Use dimensões apropriadas do campo para sua analysis
 - Limite o número de eventos simultâneos para melhor performance
 - Salve o trabalho frequentemente para evitar perda de dados
 
@@ -233,7 +233,7 @@ Converter dados do formato de exportação ASCII do Skout.exe:
 
 ```
 vaila/
-├── scout_vaila.py          # Aplicação principal
+├── scout_vaila.py          # Aplicação main
 ├── help/
 │   ├── scout_vaila.md      # Esta documentação
 │   ├── scout_vaila.html    # Versão HTML
@@ -245,14 +245,14 @@ vaila/
 
 ## Licença
 
-Este programa é software livre: você pode redistribuí-lo e/ou modificá-lo sob os termos da Licença Pública Geral GNU conforme publicada pela Free Software Foundation, seja a versão 3 da Licença, ou (a seu critério) qualquer versão posterior.
+Este programa é software livre: você pode redistribuí-lo e/ou modificá-lo sob os termos da Licença Pública Geral GNU conforme publicada pela Free Software Foundation, seja a version 3 da Licença, ou (a seu critério) qualquer version posterior.
 
 ## Suporte
 
 Para problemas, perguntas ou contribuições:
 - **Email**: paulosantiago@usp.br
 - **GitHub**: https://github.com/vaila-multimodaltoolbox/vaila
-- **Documentação**: Veja os arquivos de ajuda no diretório vaila/help
+- **Documentação**: Veja os files de ajuda no diretório vaila/help
 
 ---
 

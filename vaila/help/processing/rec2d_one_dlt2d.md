@@ -1,16 +1,16 @@
 # rec2d_one_dlt2d
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Processing
-- **Arquivo:** `vaila/rec2d_one_dlt2d.py`
-- **Linhas:** 211
-- **Tamanho:** 7327 caracteres
-- **Versão:** 0.0.3
-- **Autor:** Paulo Santiago
-- **Interface Gráfica:** ✅ Sim
+- **Category:** Processing
+- **File:** `vaila/rec2d_one_dlt2d.py`
+- **Lines:** 211
+- **Size:** 7327 characters
+- **Version:** 0.0.3
+- **Author:** Paulo Santiago
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 ================================================================================
@@ -38,9 +38,9 @@ Description:
     Optimizations:
     - Pre-allocated NumPy array...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 4
+**Total functions found:** 4
 
 - `read_coordinates`
 - `rec2d`
@@ -52,6 +52,6 @@ Description:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

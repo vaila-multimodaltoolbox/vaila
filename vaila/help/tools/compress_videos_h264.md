@@ -1,16 +1,16 @@
 # compress_videos_h264
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Tools
-- **Arquivo:** `vaila/compress_videos_h264.py`
-- **Linhas:** 635
-- **Tamanho:** 21986 caracteres
+- **Category:** Tools
+- **File:** `vaila/compress_videos_h264.py`
+- **Lines:** 635
+- **Size:** 21986 characters
 
 
-- **Interface Gráfica:** ✅ Sim
+- **GUI Interface:** ✅ Yes
 
-## 📖 Descrição
+## 📖 Description
 
 
 vailá - Multimodal Toolbox
@@ -42,9 +42,9 @@ Dependencies:
 - Tkinter (included with Python)
 - FFmpeg (...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 9
+**Total functions found:** 9
 
 - `is_nvidia_gpu_available`
 - `find_videos`
@@ -61,6 +61,6 @@ Dependencies:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

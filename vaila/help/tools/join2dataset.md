@@ -1,16 +1,16 @@
 # join2dataset
 
-## 📋 Informações do Módulo
+## 📋 Module Information
 
-- **Categoria:** Tools
-- **Arquivo:** `vaila/join2dataset.py`
-- **Linhas:** 141
-- **Tamanho:** 5605 caracteres
-- **Versão:** 1.0
-- **Autor:** Prof. Paulo Santiago
-- **Interface Gráfica:** ❌ Não
+- **Category:** Tools
+- **File:** `vaila/join2dataset.py`
+- **Lines:** 141
+- **Size:** 5605 characters
+- **Version:** 1.0
+- **Author:** Prof. Paulo Santiago
+- **GUI Interface:** ❌ No
 
-## 📖 Descrição
+## 📖 Description
 
 
 ================================================================================
@@ -36,9 +36,9 @@ Key Functionalities:
 3. Reorders columns to place "Subject" between "TimeStamp" and "Trial".
 4. Concatenates all found dataset...
 
-## 🔧 Funções Principais
+## 🔧 Main Functions
 
-**Total de funções encontradas:** 1
+**Total functions found:** 1
 
 - `join_datasets`
 
@@ -47,6 +47,6 @@ Key Functionalities:
 
 ---
 
-📅 **Gerado automaticamente em:** 08/10/2025 14:00:12  
-🔗 **Parte do vailá - Multimodal Toolbox**  
+📅 **Generated automatically on:** 08/10/2025 14:24:24
+🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
