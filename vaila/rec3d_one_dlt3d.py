@@ -21,7 +21,7 @@ Description:
       frame,p1_x,p1_y,p2_x,p2_y,...,pN_x,pN_y
     For each common frame found among the pixel files, the script reconstructs 3D points for all detected markers.
     The output includes CSV, 3D format, and C3D files with reconstructed coordinates (x,y,z) for each marker.
-    
+
     Optimizations:
     - Reduced debug output for cleaner processing feedback
     - Vectorized NumPy operations for faster computation
@@ -56,10 +56,10 @@ def rec3d_multicam(dlt_list, pixel_list):
     num_cameras = len(dlt_list)
     A_matrix = np.zeros((num_cameras * 2, 3))
     b_vector = np.zeros(num_cameras * 2)
-    
+
     for i, (A_params, (x, y)) in enumerate(zip(dlt_list, pixel_list)):
         a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11 = A_params
-        
+
         # Equations for camera i:
         # (a1 - x*a9)*X + (a2 - x*a10)*Y + (a3 - x*a11)*Z = x - a4
         # (a5 - y*a9)*X + (a6 - y*a10)*Y + (a7 - y*a11)*Z = y - a8
@@ -68,7 +68,7 @@ def rec3d_multicam(dlt_list, pixel_list):
         A_matrix[row_idx + 1] = [a5 - y * a9, a6 - y * a10, a7 - y * a11]
         b_vector[row_idx] = x - a4
         b_vector[row_idx + 1] = y - a8
-    
+
     solution, residuals, rank, s = lstsq(A_matrix, b_vector, rcond=None)
     return solution  # [X, Y, Z]
 
@@ -148,7 +148,7 @@ def run_rec3d_one_dlt3d():
     print(f"Script directory: {Path(__file__).parent}")
     print("Starting optimized rec3d_one_dlt3d.py...")
     print("-" * 80)
-    
+
     # --- New changes: Save files in a user-selected directory ---
     root = Tk()
     root.withdraw()
@@ -187,19 +187,23 @@ def run_rec3d_one_dlt3d():
         title="Select Output Directory for Results"
     )
     if not output_directory:
-        messagebox.showerror("Error", "No output directory selected. Operation cancelled.")
+        messagebox.showerror(
+            "Error", "No output directory selected. Operation cancelled."
+        )
         return
 
     # Step 4: Ask for data frequency
     print("Step 4: Setting data frequency...")
     point_rate = simpledialog.askinteger(
-        "Data Frequency", 
-        "Enter the point data rate (Hz):", 
-        minvalue=1, 
-        initialvalue=100
+        "Data Frequency",
+        "Enter the point data rate (Hz):",
+        minvalue=1,
+        initialvalue=100,
     )
     if point_rate is None:
-        messagebox.showerror("Error", "Point data rate is required. Operation cancelled.")
+        messagebox.showerror(
+            "Error", "Point data rate is required. Operation cancelled."
+        )
         return
 
     # Configuration summary
@@ -260,21 +264,21 @@ def run_rec3d_one_dlt3d():
     # Pre-allocate NumPy array for better performance
     total_frames = len(common_frames)
     total_cols = 1 + (num_markers * 3)  # frame + (x,y,z) for each marker
-    
+
     print(f"Pre-allocating array for {total_frames} frames x {num_markers} markers...")
     reconstruction_array = np.full((total_frames, total_cols), np.nan, dtype=np.float64)
-    
+
     # Set frame numbers in first column
     reconstruction_array[:, 0] = common_frames
-    
+
     # Progress tracking
     progress_step = max(1, total_frames // 20)  # Show progress every 5%
-    
+
     for frame_idx, frame in enumerate(common_frames):
         if frame_idx % progress_step == 0:
             progress = (frame_idx / total_frames) * 100
             print(f"Progress: {progress:.1f}% ({frame_idx}/{total_frames} frames)")
-        
+
         # Get frame data from all cameras at once
         frame_data = []
         valid_frame = True
@@ -284,15 +288,15 @@ def run_rec3d_one_dlt3d():
                 valid_frame = False
                 break
             frame_data.append(frame_row.iloc[0])
-        
+
         if not valid_frame:
             continue
-            
+
         # Loop through all detected markers
         for marker in range(1, num_markers + 1):
             pixel_obs_list = []
             valid_marker = True
-            
+
             for frame_row in frame_data:
                 try:
                     x_obs = float(frame_row[f"p{marker}_x"])
@@ -304,17 +308,17 @@ def run_rec3d_one_dlt3d():
                 except:
                     valid_marker = False
                     break
-                    
+
             # Calculate column indices for this marker
             col_start = 1 + (marker - 1) * 3  # x, y, z columns for this marker
-            
+
             if not valid_marker or len(pixel_obs_list) != len(dlt_params_list):
                 # NaN values already pre-allocated, so skip
                 pass
             else:
                 point3d = rec3d_multicam(dlt_params_list, pixel_obs_list)
-                reconstruction_array[frame_idx, col_start:col_start+3] = point3d
-    
+                reconstruction_array[frame_idx, col_start : col_start + 3] = point3d
+
     print("3D reconstruction completed!")
 
     # Prepare header for all markers
@@ -324,11 +328,11 @@ def run_rec3d_one_dlt3d():
 
     # Convert pre-allocated array to DataFrame
     rec3d_df = pd.DataFrame(reconstruction_array, columns=header)
-    
+
     # Remove frames that were skipped (all NaN except frame number)
     valid_frames_mask = ~rec3d_df.iloc[:, 1:].isna().all(axis=1)
     rec3d_df = rec3d_df[valid_frames_mask].reset_index(drop=True)
-    
+
     if rec3d_df.empty:
         messagebox.showerror("Error", "No valid 3D reconstruction could be performed!")
         return
@@ -409,7 +413,7 @@ def run_rec3d_one_dlt3d():
     print(f"  - {file_base}.3d (3D format)")
     print(f"  - {file_base}_m.c3d (C3D in meters)")
     print(f"  - {file_base}_mm.c3d (C3D in millimeters)")
-    
+
     messagebox.showinfo(
         "Processing Complete",
         f"3D reconstruction completed successfully!\n\n"
@@ -417,7 +421,7 @@ def run_rec3d_one_dlt3d():
         f"Output directory: {os.path.basename(new_dir)}\n\n"
         f"Files created:\n"
         f"• CSV and 3D format files\n"
-        f"• C3D files (meters and millimeters)"
+        f"• C3D files (meters and millimeters)",
     )
 
     root.destroy()
