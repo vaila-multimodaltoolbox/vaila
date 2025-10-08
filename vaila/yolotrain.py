@@ -40,15 +40,16 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, scrolledtext
 from ultralytics import YOLO
 import torch
+
 # import datetime
 # import re
-#import webbrowser
+# import webbrowser
 
 
 # --- Class to redirect the console output to the Text Widget ---
 class ConsoleRedirector:
     """Redirects stdout to both GUI and terminal."""
-    
+
     def __init__(self, text_widget):
         self.text_widget = text_widget
         self.original_stdout = sys.stdout
@@ -58,7 +59,7 @@ class ConsoleRedirector:
         self.text_widget.insert(tk.END, text)
         self.text_widget.see(tk.END)
         self.text_widget.update_idletasks()
-        
+
         # Also write to original terminal
         self.original_stdout.write(text)
         self.original_stdout.flush()
@@ -121,9 +122,9 @@ class YOLOTrainApp(tk.Tk):
 
         # Title
         title_label = tk.Label(
-            self, 
-            text="YOLO Training - AnyLabeling Interface", 
-            font=("Arial", 16, "bold")
+            self,
+            text="YOLO Training - AnyLabeling Interface",
+            font=("Arial", 16, "bold"),
         )
         title_label.grid(row=0, column=0, columnspan=3, pady=10)
 
@@ -134,7 +135,7 @@ class YOLOTrainApp(tk.Tk):
             command=self.show_anylabeling_help,
             bg="#2196F3",
             fg="white",
-            font=("Arial", 10)
+            font=("Arial", 10),
         )
         help_button.grid(row=1, column=0, columnspan=3, pady=5)
 
@@ -143,7 +144,7 @@ class YOLOTrainApp(tk.Tk):
             self,
             text="Models will be saved in: [dataset_folder]/runs/[run_name]/weights/",
             font=("Arial", 9),
-            fg="#666666"
+            fg="#666666",
         )
         model_info_label.grid(row=2, column=0, columnspan=3, pady=2)
 
@@ -151,7 +152,9 @@ class YOLOTrainApp(tk.Tk):
         tk.Label(self, text="AnyLabeling Dataset Folder:").grid(
             row=3, column=0, sticky="e", padx=5, pady=5
         )
-        dataset_entry = tk.Entry(self, textvariable=self.dataset_path, width=50, state="readonly")
+        dataset_entry = tk.Entry(
+            self, textvariable=self.dataset_path, width=50, state="readonly"
+        )
         dataset_entry.grid(row=3, column=1, padx=5, pady=5, sticky="ew")
         tk.Button(self, text="Browse", command=self.browse_dataset).grid(
             row=3, column=2, padx=5, pady=5
@@ -160,26 +163,30 @@ class YOLOTrainApp(tk.Tk):
         # YAML Options Frame
         yaml_frame = tk.Frame(self)
         yaml_frame.grid(row=4, column=0, columnspan=3, pady=5, sticky="ew")
-        
-        tk.Label(yaml_frame, text="YAML Configuration:").grid(row=0, column=0, sticky="w", padx=5)
-        
+
+        tk.Label(yaml_frame, text="YAML Configuration:").grid(
+            row=0, column=0, sticky="w", padx=5
+        )
+
         # YAML Path Entry
-        yaml_entry = tk.Entry(yaml_frame, textvariable=self.yaml_path, width=40, state="readonly")
+        yaml_entry = tk.Entry(
+            yaml_frame, textvariable=self.yaml_path, width=40, state="readonly"
+        )
         yaml_entry.grid(row=1, column=0, padx=5, pady=2, sticky="ew")
-        
+
         # YAML Buttons Frame
         yaml_buttons_frame = tk.Frame(yaml_frame)
         yaml_buttons_frame.grid(row=1, column=1, padx=5, pady=2)
-        
+
         # Browse YAML Button
-        tk.Button(yaml_buttons_frame, text="Browse YAML", command=self.browse_yaml).grid(
-            row=0, column=0, padx=2
-        )
-        
+        tk.Button(
+            yaml_buttons_frame, text="Browse YAML", command=self.browse_yaml
+        ).grid(row=0, column=0, padx=2)
+
         # Create YAML Button
-        tk.Button(yaml_buttons_frame, text="Create New YAML", command=self.create_new_yaml).grid(
-            row=0, column=1, padx=2
-        )
+        tk.Button(
+            yaml_buttons_frame, text="Create New YAML", command=self.create_new_yaml
+        ).grid(row=0, column=1, padx=2)
 
         # Start Training Button
         self.start_button = tk.Button(
@@ -189,7 +196,7 @@ class YOLOTrainApp(tk.Tk):
             bg="#4CAF50",
             fg="white",
             font=("Arial", 12, "bold"),
-            height=2
+            height=2,
         )
         self.start_button.grid(row=5, column=0, columnspan=3, pady=10, sticky="ew")
 
@@ -205,7 +212,7 @@ class YOLOTrainApp(tk.Tk):
     def _update_model_list(self, event=None):
         """Updates the model list based on selected category."""
         category = self.model_category.get()
-        
+
         # Filter models by category
         if category == "YOLO11":
             models = [m for m in self.available_models if m.startswith("yolo11")]
@@ -217,10 +224,10 @@ class YOLOTrainApp(tk.Tk):
             models = [m for m in self.available_models if m.startswith("yolov9")]
         else:
             models = self.available_models
-        
+
         # Update combobox values
-        self.model_combo['values'] = models
-        
+        self.model_combo["values"] = models
+
         # Set default model for category
         if models:
             if category == "YOLO11":
@@ -266,7 +273,7 @@ TRAINING CONSIDERATIONS:
 
 For more info: https://docs.ultralytics.com/models/
         """
-        
+
         messagebox.showinfo("YOLO Model Guide", help_text)
 
     def show_anylabeling_help(self):
@@ -303,15 +310,13 @@ ANYLABELING TO YOLO TRAINING GUIDE
 
 For more info: https://github.com/vietanhdev/anylabeling
         """
-        
+
         messagebox.showinfo("AnyLabeling Guide", help_text)
 
     def browse_dataset(self):
         """Browse for AnyLabeling dataset folder."""
-        path = filedialog.askdirectory(
-            title="Select AnyLabeling Dataset Folder"
-        )
-        
+        path = filedialog.askdirectory(title="Select AnyLabeling Dataset Folder")
+
         if path:
             self.dataset_path.set(path)
             # Check if YAML already exists
@@ -321,14 +326,14 @@ For more info: https://github.com/vietanhdev/anylabeling
                 messagebox.showinfo(
                     "YAML Found",
                     f"Found existing YAML file:\n{yaml_file}\n\n"
-                    "You can use this file or create a new one."
+                    "You can use this file or create a new one.",
                 )
             else:
                 # Ask user if they want to create YAML
                 result = messagebox.askyesno(
                     "Create YAML",
                     f"No YAML file found in:\n{path}\n\n"
-                    "Would you like to create a new YAML file?"
+                    "Would you like to create a new YAML file?",
                 )
                 if result:
                     self._auto_detect_and_create_yaml(path)
@@ -338,13 +343,13 @@ For more info: https://github.com/vietanhdev/anylabeling
         if not self.dataset_path.get():
             messagebox.showwarning("Warning", "Please select a dataset folder first!")
             return
-            
+
         yaml_file = filedialog.askopenfilename(
             title="Select YAML Configuration File",
             filetypes=[("YAML files", "*.yaml"), ("All files", "*.*")],
-            initialdir=self.dataset_path.get()
+            initialdir=self.dataset_path.get(),
         )
-        
+
         if yaml_file:
             self.yaml_path.set(yaml_file)
             print(f"Selected YAML file: {yaml_file}")
@@ -354,15 +359,15 @@ For more info: https://github.com/vietanhdev/anylabeling
         if not self.dataset_path.get():
             messagebox.showwarning("Warning", "Please select a dataset folder first!")
             return
-            
+
         # Ask for confirmation
         result = messagebox.askyesno(
             "Create New YAML",
             "This will create a new YAML file with default settings.\n"
             "Any existing YAML will be overwritten.\n\n"
-            "Continue?"
+            "Continue?",
         )
-        
+
         if result:
             success = self._auto_detect_and_create_yaml(self.dataset_path.get())
             if success:
@@ -373,56 +378,74 @@ For more info: https://github.com/vietanhdev/anylabeling
         # Check for classes.txt
         classes_file = os.path.join(dataset_path, "classes.txt")
         class_names = []
-        
+
         if os.path.exists(classes_file):
             try:
-                with open(classes_file, 'r', encoding='utf-8') as f:
+                with open(classes_file, "r", encoding="utf-8") as f:
                     class_names = [line.strip() for line in f if line.strip()]
                 print(f"Found {len(class_names)} classes in classes.txt")
             except Exception as e:
                 print(f"Error reading classes.txt: {e}")
-        
+
         # Check for AnyLabeling structure (train/val already created)
         train_images = os.path.join(dataset_path, "train", "images")
         val_images = os.path.join(dataset_path, "val", "images")
         test_images = os.path.join(dataset_path, "test", "images")
-        
+
         if not os.path.exists(train_images) or not os.path.exists(val_images):
             messagebox.showerror(
-                "Error", 
+                "Error",
                 "AnyLabeling structure not found!\n\n"
                 "Expected:\n"
                 f"  {dataset_path}/train/images/\n"
                 f"  {dataset_path}/val/images/\n"
                 f"  {dataset_path}/classes.txt\n\n"
-                "Please export from AnyLabeling in YOLO format."
+                "Please export from AnyLabeling in YOLO format.",
             )
             return False  # Return False to indicate failure
-        
+
         # Create comprehensive YAML with ABSOLUTE paths
         train_path = os.path.join(dataset_path, "train", "images")
         val_path = os.path.join(dataset_path, "val", "images")
-        test_path = os.path.join(dataset_path, "test", "images") if os.path.exists(test_images) else None
-        
+        test_path = (
+            os.path.join(dataset_path, "test", "images")
+            if os.path.exists(test_images)
+            else None
+        )
+
         # Convert to forward slashes for YAML compatibility
         train_path = train_path.replace("\\", "/")
         val_path = val_path.replace("\\", "/")
         if test_path:
             test_path = test_path.replace("\\", "/")
-        
-        yaml_content = self._create_comprehensive_yaml(train_path, val_path, test_path, class_names)
+
+        yaml_content = self._create_comprehensive_yaml(
+            train_path, val_path, test_path, class_names
+        )
         yaml_file_path = os.path.join(dataset_path, "data.yaml")
-        
+
         try:
-            with open(yaml_file_path, 'w', encoding='utf-8') as f:
+            with open(yaml_file_path, "w", encoding="utf-8") as f:
                 f.write(yaml_content)
-            
+
             self.yaml_path.set(yaml_file_path)
-            
+
             # Count files for verification
-            train_count = len([f for f in os.listdir(train_images) if f.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp'))])
-            val_count = len([f for f in os.listdir(val_images) if f.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp'))])
-            
+            train_count = len(
+                [
+                    f
+                    for f in os.listdir(train_images)
+                    if f.lower().endswith((".jpg", ".jpeg", ".png", ".bmp"))
+                ]
+            )
+            val_count = len(
+                [
+                    f
+                    for f in os.listdir(val_images)
+                    if f.lower().endswith((".jpg", ".jpeg", ".png", ".bmp"))
+                ]
+            )
+
             messagebox.showinfo(
                 "Success",
                 f"Dataset ready for training!\n\n"
@@ -432,11 +455,11 @@ For more info: https://github.com/vietanhdev/anylabeling
                 f"YAML: {yaml_file_path}\n\n"
                 f"The YAML file contains all available options commented.\n"
                 f"Uncomment and modify parameters as needed.\n\n"
-                f"You can now start training."
+                f"You can now start training.",
             )
-            
+
             return True  # Return True to indicate success
-            
+
         except Exception as e:
             messagebox.showerror("Error", f"Failed to create YAML: {str(e)}")
             return False  # Return False to indicate failure
@@ -444,10 +467,10 @@ For more info: https://github.com/vietanhdev/anylabeling
     def _create_comprehensive_yaml(self, train_path, val_path, test_path, class_names):
         """Creates comprehensive YAML file with all options commented."""
         names_str = str(class_names)
-        
+
         # Add test path if exists
         test_line = f"\ntest: {test_path}" if test_path else ""
-        
+
         # Create comprehensive YAML with ABSOLUTE paths
         yaml_content = f"""# YOLO Dataset Configuration
 # Generated by vailá for AnyLabeling
@@ -625,15 +648,17 @@ names: {names_str}  # class names
         if not self.dataset_path.get():
             messagebox.showerror("Error", "Please select a dataset folder first!")
             return
-        
+
         if not self.yaml_path.get():
-            messagebox.showerror("Error", "No YAML file selected! Please browse or create a YAML file.")
+            messagebox.showerror(
+                "Error", "No YAML file selected! Please browse or create a YAML file."
+            )
             return
-        
+
         # Validate YAML before starting
         if not self._validate_existing_yaml(self.yaml_path.get()):
             return
-        
+
         self.start_button.config(state=tk.DISABLED)
         self.console.delete("1.0", tk.END)
         self.console.insert(tk.END, "Starting training...\n")
@@ -660,33 +685,36 @@ names: {names_str}  # class names
             print(f"Dataset folder: {dataset_folder}")
             print(f"YAML file: {yaml_file}")
             # print(f"Model: {model_name}") # This line is removed
-            print(f"Run name: {self.project_name.get()}") # Keep project_name for consistency
+            print(
+                f"Run name: {self.project_name.get()}"
+            )  # Keep project_name for consistency
             print("=" * 60)
 
             # Validate YAML file
             print(f"\nValidating YAML file: {yaml_file}")
             if not os.path.exists(yaml_file):
                 raise FileNotFoundError(f"YAML file not found: {yaml_file}")
-            
+
             # Read and validate YAML content
             try:
                 import yaml
-                with open(yaml_file, 'r') as f:
+
+                with open(yaml_file, "r") as f:
                     yaml_data = yaml.safe_load(f)
                 print("YAML loaded successfully")
                 print(f"Classes: {yaml_data.get('nc', 'Not found')}")
                 print(f"Class names: {yaml_data.get('names', 'Not found')}")
                 print(f"Train path: {yaml_data.get('train', 'Not found')}")
                 print(f"Val path: {yaml_data.get('val', 'Not found')}")
-                
+
                 # Get training parameters from YAML (with defaults)
-                epochs = yaml_data.get('epochs', 100)
-                batch_size = yaml_data.get('batch', 16)
-                img_size = yaml_data.get('imgsz', 640)
-                device = yaml_data.get('device', 'cpu')
-                
+                epochs = yaml_data.get("epochs", 100)
+                batch_size = yaml_data.get("batch", 16)
+                img_size = yaml_data.get("imgsz", 640)
+                device = yaml_data.get("device", "cpu")
+
                 # Get model name from YAML (with default)
-                model_name = yaml_data.get('model', 'yolo11m.pt')
+                model_name = yaml_data.get("model", "yolo11m.pt")
 
                 print("\nTraining parameters from YAML:")
                 print(f"  Epochs: {epochs}")
@@ -694,28 +722,28 @@ names: {names_str}  # class names
                 print(f"  Image size: {img_size}")
                 print(f"  Device: {device}")
                 print(f"  Model: {model_name}")
-                
+
                 # Validate that the paths actually exist
-                train_path = yaml_data.get('train', '')
-                val_path = yaml_data.get('val', '')
-                
+                train_path = yaml_data.get("train", "")
+                val_path = yaml_data.get("val", "")
+
                 # Convert relative paths to absolute
-                if train_path.startswith('./'):
+                if train_path.startswith("./"):
                     train_path = os.path.join(dataset_folder, train_path[2:])
-                if val_path.startswith('./'):
+                if val_path.startswith("./"):
                     val_path = os.path.join(dataset_folder, val_path[2:])
-                
+
                 print(f"Absolute train path: {train_path}")
                 print(f"Absolute val path: {val_path}")
-                
+
                 if not os.path.exists(train_path):
                     raise FileNotFoundError(f"Train images not found: {train_path}")
                 if not os.path.exists(val_path):
                     raise FileNotFoundError(f"Val images not found: {val_path}")
-                
+
                 print(f"Train images found: {len(os.listdir(train_path))} files")
                 print(f"Val images found: {len(os.listdir(val_path))} files")
-                
+
             except Exception as e:
                 print(f"Error reading YAML: {e}")
                 raise
@@ -729,7 +757,7 @@ names: {names_str}  # class names
             print(f"Selected model: {model_name}")
             print(f"Models directory: {models_dir}")
             print(f"Model path: {model_path}")
-            
+
             # Show model characteristics
             self._show_model_characteristics(model_name)
 
@@ -737,23 +765,25 @@ names: {names_str}  # class names
             if not os.path.exists(model_path):
                 try:
                     print(f"\nDownloading model {model_name}...")
-                    print("This may take a few minutes depending on your internet connection.")
+                    print(
+                        "This may take a few minutes depending on your internet connection."
+                    )
                     print("Model size varies by type:")
                     print("  • Nano models (~6-20 MB)")
                     print("  • Small models (~20-50 MB)")
                     print("  • Medium models (~50-150 MB)")
                     print("  • Large models (~150-300 MB)")
                     print("  • Extra Large models (~300-600 MB)")
-                    
+
                     current_dir = os.getcwd()
                     os.chdir(models_dir)
-                    
+
                     # Download using YOLO with progress indication
                     print("\nInitiating download...")
                     model = YOLO(model_name)
-                    
+
                     os.chdir(current_dir)
-                    
+
                     # Check if file was actually downloaded
                     if os.path.exists(model_path):
                         size_mb = os.path.getsize(model_path) / (1024 * 1024)
@@ -761,8 +791,10 @@ names: {names_str}  # class names
                         print(f"  File size: {size_mb:.1f} MB")
                         print(f"  Location: {model_path}")
                     else:
-                        raise FileNotFoundError(f"Model file not found after download: {model_path}")
-                        
+                        raise FileNotFoundError(
+                            f"Model file not found after download: {model_path}"
+                        )
+
                 except Exception as e:
                     print(f"Error downloading model: {e}")
                     print("Possible solutions:")
@@ -782,7 +814,9 @@ names: {names_str}  # class names
 
             # Define output directory structure
             output_dir = os.path.join(dataset_folder, "runs")
-            run_output_dir = os.path.join(output_dir, self.project_name.get()) # Use project_name
+            run_output_dir = os.path.join(
+                output_dir, self.project_name.get()
+            )  # Use project_name
             weights_dir = os.path.join(run_output_dir, "weights")
 
             print("\n--- Training Configuration ---")
@@ -811,15 +845,15 @@ names: {names_str}  # class names
                 imgsz=img_size,
                 device=device,
                 project=output_dir,
-                name=self.project_name.get(), # Use project_name
+                name=self.project_name.get(),  # Use project_name
                 exist_ok=True,
-                verbose=True  # This ensures detailed output
+                verbose=True,  # This ensures detailed output
             )
 
             # Show completion with detailed info
             best_model_path = os.path.join(weights_dir, "best.pt")
             last_model_path = os.path.join(weights_dir, "last.pt")
-            
+
             print("\n" + "=" * 60)
             print("TRAINING COMPLETED SUCCESSFULLY!")
             print("=" * 60)
@@ -831,7 +865,7 @@ names: {names_str}  # class names
             print(f"   Training logs: {run_output_dir}")
             print(f"   Plots and graphs: {run_output_dir}")
             print("=" * 60)
-            
+
             # Check if files exist and show file sizes
             self._show_model_info(best_model_path, last_model_path, run_output_dir)
 
@@ -845,9 +879,9 @@ names: {names_str}  # class names
                     f"   Results folder: {run_output_dir}\n\n"
                     f"The 'best.pt' model has the highest validation accuracy.\n"
                     f"The 'last.pt' model is from the final epoch.\n\n"
-                    f"Open results folder?"
+                    f"Open results folder?",
                 )
-                
+
                 if result:
                     if sys.platform == "win32":
                         os.startfile(run_output_dir)
@@ -855,7 +889,7 @@ names: {names_str}  # class names
                         os.system(f"open '{run_output_dir}'")
                     else:
                         os.system(f"xdg-open '{run_output_dir}'")
-            
+
             self.after(0, show_completion)
 
         except Exception as e:
@@ -867,22 +901,27 @@ names: {names_str}  # class names
             print(f"Error message: {error_msg}")
             print(f"Error details: {e}")
             print("=" * 60)
-            
+
             # Also print to original stdout for terminal
             original_stdout.write(f"\nTRAINING ERROR: {error_msg}\n")
             original_stdout.flush()
-            
+
             # Fix the lambda scope issue
             error_type = type(e).__name__
-            error_details = str(e)  # noqa: F841 - Error details for potential future use
-            
-            self.after(0, lambda: messagebox.showerror(
-                "Training Error", 
-                f"Error during training:\n\n"
-                f"Type: {error_type}\n"
-                f"Message: {error_msg}\n\n"
-                f"Check the console output above for details."
-            ))
+            error_details = str(
+                e
+            )  # noqa: F841 - Error details for potential future use
+
+            self.after(
+                0,
+                lambda: messagebox.showerror(
+                    "Training Error",
+                    f"Error during training:\n\n"
+                    f"Type: {error_type}\n"
+                    f"Message: {error_msg}\n\n"
+                    f"Check the console output above for details.",
+                ),
+            )
         finally:
             sys.stdout = original_stdout
             self.after(0, lambda: self.start_button.config(state=tk.NORMAL))
@@ -890,34 +929,131 @@ names: {names_str}  # class names
     def _show_model_characteristics(self, model_name):
         """Shows characteristics of the selected model."""
         print("\nModel characteristics:")
-        
+
         # Model size and performance characteristics
         model_info = {
-            "yolo11n.pt": {"size": "~6MB", "speed": "Fastest", "accuracy": "Lower", "use": "Edge devices, real-time"},
-            "yolo11s.pt": {"size": "~20MB", "speed": "Fast", "accuracy": "Low", "use": "Mobile, embedded"},
-            "yolo11m.pt": {"size": "~50MB", "speed": "Medium", "accuracy": "Good", "use": "General purpose (recommended)"},
-            "yolo11l.pt": {"size": "~150MB", "speed": "Slow", "accuracy": "High", "use": "High accuracy needed"},
-            "yolo11x.pt": {"size": "~300MB", "speed": "Slowest", "accuracy": "Highest", "use": "Best accuracy"},
-            
-            "yolo12n.pt": {"size": "~6MB", "speed": "Fastest", "accuracy": "Lower", "use": "Edge devices, real-time"},
-            "yolo12s.pt": {"size": "~20MB", "speed": "Fast", "accuracy": "Low", "use": "Mobile, embedded"},
-            "yolo12m.pt": {"size": "~50MB", "speed": "Medium", "accuracy": "Good", "use": "General purpose"},
-            "yolo12l.pt": {"size": "~150MB", "speed": "Slow", "accuracy": "High", "use": "High accuracy needed"},
-            "yolo12x.pt": {"size": "~300MB", "speed": "Slowest", "accuracy": "Highest", "use": "Best accuracy"},
-            
-            "yolov8n.pt": {"size": "~6MB", "speed": "Fastest", "accuracy": "Lower", "use": "Edge devices, real-time"},
-            "yolov8s.pt": {"size": "~20MB", "speed": "Fast", "accuracy": "Low", "use": "Mobile, embedded"},
-            "yolov8m.pt": {"size": "~50MB", "speed": "Medium", "accuracy": "Good", "use": "General purpose"},
-            "yolov8l.pt": {"size": "~150MB", "speed": "Slow", "accuracy": "High", "use": "High accuracy needed"},
-            "yolov8x.pt": {"size": "~300MB", "speed": "Slowest", "accuracy": "Highest", "use": "Best accuracy"},
-            
-            "yolov9c.pt": {"size": "~10MB", "speed": "Fast", "accuracy": "Low", "use": "Compact, efficient"},
-            "yolov9s.pt": {"size": "~20MB", "speed": "Fast", "accuracy": "Low", "use": "Mobile, embedded"},
-            "yolov9m.pt": {"size": "~50MB", "speed": "Medium", "accuracy": "Good", "use": "General purpose"},
-            "yolov9l.pt": {"size": "~150MB", "speed": "Slow", "accuracy": "High", "use": "High accuracy needed"},
-            "yolov9e.pt": {"size": "~300MB", "speed": "Slowest", "accuracy": "Highest", "use": "Best accuracy"},
+            "yolo11n.pt": {
+                "size": "~6MB",
+                "speed": "Fastest",
+                "accuracy": "Lower",
+                "use": "Edge devices, real-time",
+            },
+            "yolo11s.pt": {
+                "size": "~20MB",
+                "speed": "Fast",
+                "accuracy": "Low",
+                "use": "Mobile, embedded",
+            },
+            "yolo11m.pt": {
+                "size": "~50MB",
+                "speed": "Medium",
+                "accuracy": "Good",
+                "use": "General purpose (recommended)",
+            },
+            "yolo11l.pt": {
+                "size": "~150MB",
+                "speed": "Slow",
+                "accuracy": "High",
+                "use": "High accuracy needed",
+            },
+            "yolo11x.pt": {
+                "size": "~300MB",
+                "speed": "Slowest",
+                "accuracy": "Highest",
+                "use": "Best accuracy",
+            },
+            "yolo12n.pt": {
+                "size": "~6MB",
+                "speed": "Fastest",
+                "accuracy": "Lower",
+                "use": "Edge devices, real-time",
+            },
+            "yolo12s.pt": {
+                "size": "~20MB",
+                "speed": "Fast",
+                "accuracy": "Low",
+                "use": "Mobile, embedded",
+            },
+            "yolo12m.pt": {
+                "size": "~50MB",
+                "speed": "Medium",
+                "accuracy": "Good",
+                "use": "General purpose",
+            },
+            "yolo12l.pt": {
+                "size": "~150MB",
+                "speed": "Slow",
+                "accuracy": "High",
+                "use": "High accuracy needed",
+            },
+            "yolo12x.pt": {
+                "size": "~300MB",
+                "speed": "Slowest",
+                "accuracy": "Highest",
+                "use": "Best accuracy",
+            },
+            "yolov8n.pt": {
+                "size": "~6MB",
+                "speed": "Fastest",
+                "accuracy": "Lower",
+                "use": "Edge devices, real-time",
+            },
+            "yolov8s.pt": {
+                "size": "~20MB",
+                "speed": "Fast",
+                "accuracy": "Low",
+                "use": "Mobile, embedded",
+            },
+            "yolov8m.pt": {
+                "size": "~50MB",
+                "speed": "Medium",
+                "accuracy": "Good",
+                "use": "General purpose",
+            },
+            "yolov8l.pt": {
+                "size": "~150MB",
+                "speed": "Slow",
+                "accuracy": "High",
+                "use": "High accuracy needed",
+            },
+            "yolov8x.pt": {
+                "size": "~300MB",
+                "speed": "Slowest",
+                "accuracy": "Highest",
+                "use": "Best accuracy",
+            },
+            "yolov9c.pt": {
+                "size": "~10MB",
+                "speed": "Fast",
+                "accuracy": "Low",
+                "use": "Compact, efficient",
+            },
+            "yolov9s.pt": {
+                "size": "~20MB",
+                "speed": "Fast",
+                "accuracy": "Low",
+                "use": "Mobile, embedded",
+            },
+            "yolov9m.pt": {
+                "size": "~50MB",
+                "speed": "Medium",
+                "accuracy": "Good",
+                "use": "General purpose",
+            },
+            "yolov9l.pt": {
+                "size": "~150MB",
+                "speed": "Slow",
+                "accuracy": "High",
+                "use": "High accuracy needed",
+            },
+            "yolov9e.pt": {
+                "size": "~300MB",
+                "speed": "Slowest",
+                "accuracy": "Highest",
+                "use": "Best accuracy",
+            },
         }
-        
+
         if model_name in model_info:
             info = model_info[model_name]
             print(f"  Size: {info['size']}")
@@ -927,7 +1063,7 @@ names: {names_str}  # class names
         else:
             print(f"   Model: {model_name}")
             print("  Note: Model characteristics not available")
-        
+
         # Show recommendations
         print("\nRecommendations:")
         if "n" in model_name:
@@ -949,7 +1085,7 @@ names: {names_str}  # class names
     def _show_model_info(self, best_model_path, last_model_path, run_output_dir):
         """Shows detailed information about saved models."""
         print("\nMODEL INFORMATION:")
-        
+
         # Check best model
         if os.path.exists(best_model_path):
             size_mb = os.path.getsize(best_model_path) / (1024 * 1024)
@@ -957,7 +1093,7 @@ names: {names_str}  # class names
             print(f"      Size: {size_mb:.1f} MB")
         else:
             print(f"   Best model not found: {best_model_path}")
-        
+
         # Check last model
         if os.path.exists(last_model_path):
             size_mb = os.path.getsize(last_model_path) / (1024 * 1024)
@@ -965,20 +1101,20 @@ names: {names_str}  # class names
             print(f"      Size: {size_mb:.1f} MB")
         else:
             print(f"   Last model not found: {last_model_path}")
-        
+
         # List all files in the run directory
         if os.path.exists(run_output_dir):
             print("\nFILES IN RESULTS FOLDER:")
             for root, dirs, files in os.walk(run_output_dir):
-                level = root.replace(run_output_dir, '').count(os.sep)
-                indent = ' ' * 2 * level
+                level = root.replace(run_output_dir, "").count(os.sep)
+                indent = " " * 2 * level
                 print(f"{indent}{os.path.basename(root)}/")
-                subindent = ' ' * 2 * (level + 1)
+                subindent = " " * 2 * (level + 1)
                 for file in files:
                     file_path = os.path.join(root, file)
                     size_mb = os.path.getsize(file_path) / (1024 * 1024)
                     print(f"{subindent}{file} ({size_mb:.1f} MB)")
-        
+
         print("\nUSAGE TIPS:")
         print("Use 'best.pt' for inference (highest accuracy)")
         print("Use 'last.pt' if you want to continue training")
@@ -989,54 +1125,53 @@ names: {names_str}  # class names
         """Validates existing YAML file."""
         try:
             import yaml
-            with open(yaml_file, 'r') as f:
+
+            with open(yaml_file, "r") as f:
                 yaml_data = yaml.safe_load(f)
-            
+
             # Check required fields
-            required_fields = ['train', 'val', 'nc', 'names']
-            missing_fields = [field for field in required_fields if field not in yaml_data]
-            
+            required_fields = ["train", "val", "nc", "names"]
+            missing_fields = [
+                field for field in required_fields if field not in yaml_data
+            ]
+
             if missing_fields:
                 messagebox.showerror(
                     "Invalid YAML",
                     f"Missing required fields: {missing_fields}\n\n"
-                    "Please use a valid YOLO YAML file."
+                    "Please use a valid YOLO YAML file.",
                 )
                 return False
-            
+
             # Check if paths exist
             dataset_dir = os.path.dirname(yaml_file)
-            train_path = yaml_data['train']
-            val_path = yaml_data['val']
-            
+            train_path = yaml_data["train"]
+            val_path = yaml_data["val"]
+
             # Convert relative paths to absolute
-            if train_path.startswith('./'):
+            if train_path.startswith("./"):
                 train_path = os.path.join(dataset_dir, train_path[2:])
-            if val_path.startswith('./'):
+            if val_path.startswith("./"):
                 val_path = os.path.join(dataset_dir, val_path[2:])
-            
+
             if not os.path.exists(train_path):
                 messagebox.showerror(
-                    "Invalid YAML",
-                    f"Train path not found: {train_path}"
+                    "Invalid YAML", f"Train path not found: {train_path}"
                 )
                 return False
-                
+
             if not os.path.exists(val_path):
-                messagebox.showerror(
-                    "Invalid YAML",
-                    f"Val path not found: {val_path}"
-                )
+                messagebox.showerror("Invalid YAML", f"Val path not found: {val_path}")
                 return False
-            
+
             print("YAML validation successful:")
             print(f"  Classes: {yaml_data['nc']}")
             print(f"  Class names: {yaml_data['names']}")
             print(f"  Train path: {train_path}")
             print(f"  Val path: {val_path}")
-            
+
             return True
-            
+
         except Exception as e:
             messagebox.showerror("YAML Error", f"Error reading YAML file: {str(e)}")
             return False

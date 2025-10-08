@@ -761,53 +761,59 @@ def transfer_file():
     try:
         # Get the directory where the current script is located
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        
+
         # Determine the correct script based on the operating system
         if platform.system() == "Windows":
             script_name = "transfer.bat"
             # Execute the batch script in a new command window
-            subprocess.Popen(['cmd', '/c', 'start', 'cmd', '/k', script_name], 
-                           shell=True, cwd=script_dir)
+            subprocess.Popen(
+                ["cmd", "/c", "start", "cmd", "/k", script_name],
+                shell=True,
+                cwd=script_dir,
+            )
         else:
             # Linux/macOS
             script_name = "transfer.sh"
             script_path = os.path.join(script_dir, script_name)
-            
+
             # Check if transfer.sh exists
             if not os.path.exists(script_path):
-                messagebox.showerror("Error", f"Transfer script not found: {script_path}")
+                messagebox.showerror(
+                    "Error", f"Transfer script not found: {script_path}"
+                )
                 return
-            
+
             # Make the script executable
             os.chmod(script_path, 0o755)
-            
+
             print(f"Executing transfer script: {script_path}")
-            
+
             # Execute the shell script in a new terminal
             if platform.system() == "Darwin":  # macOS
-                subprocess.Popen(['open', '-a', 'Terminal', script_path])
+                subprocess.Popen(["open", "-a", "Terminal", script_path])
             else:  # Linux
                 # Try different terminal emulators
-                terminals = ['gnome-terminal', 'xterm', 'konsole', 'lxterminal']
+                terminals = ["gnome-terminal", "xterm", "konsole", "lxterminal"]
                 for terminal in terminals:
                     try:
-                        subprocess.Popen([terminal, '-e', f'bash {script_path}'], 
-                                       cwd=script_dir)
+                        subprocess.Popen(
+                            [terminal, "-e", f"bash {script_path}"], cwd=script_dir
+                        )
                         break
                     except FileNotFoundError:
                         continue
                 else:
                     # Fallback: try to run directly
-                    subprocess.Popen(['bash', script_path], cwd=script_dir)
+                    subprocess.Popen(["bash", script_path], cwd=script_dir)
 
     except FileNotFoundError as e:
         messagebox.showerror(
-            "Error", 
+            "Error",
             f"Transfer script not found: {e.filename}\n"
-            f"Please ensure {script_name} is in the same directory as filemanager.py"
+            f"Please ensure {script_name} is in the same directory as filemanager.py",
         )
         print(f"Script not found: {e}")
-    
+
     except Exception as e:
         messagebox.showerror("Error", f"Unexpected error during transfer: {e}")
         print(f"Unexpected error: {e}")
