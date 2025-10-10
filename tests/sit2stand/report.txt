@@ -1,0 +1,26 @@
+Sit-to-Stand Analysis Results
+============================================================
+
+Configuration Used:
+------------------------------
+Force Column: None
+Butterworth Filter: Enabled
+  Cutoff Frequency: 10.0 Hz
+  Sampling Frequency: 100.0 Hz
+  Filter Order: 4
+Detection Parameters:
+  Force Threshold: 10.0 N
+  Min Duration: 0.5 s
+  Onset Threshold: 5.0 N
+
+============================================================
+
+File: sit2stantd.c3d
+Duration: 2.94 s
+Mean Force: -34.24 N
+Max Force: -0.83 N
+Min Force: -77.40 N
+Phases Detected: 1
+Total Movement Time: 2.46 s
+Average Phase Duration: 2.46 s
+Phases per Minute: 20.4

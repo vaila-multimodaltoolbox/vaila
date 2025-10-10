@@ -109,4 +109,6 @@ dependencies:
       - librosa
       - pydub
       - psutil
+      - "ydata-sdk[text,docx]"
       - ultralytics
+      

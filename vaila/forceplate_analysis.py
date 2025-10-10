@@ -4,8 +4,8 @@ forceplate_analysis.py
 ================================================================================
 Author: Prof. Paulo Santiago
 Date: 9 September 2024
-Update: 28 November 2024
-Version: 0.7
+Update:  10 October 2025
+Version: 0.8
 
 Description:
 ------------
@@ -85,6 +85,7 @@ Changelog:
 - 2024-09-10: Added support for CoP Balance Analysis (cop_analysis.py).
 - 2024-09-14: Added "Calculate CoP" button and functionality (cop_calculate.py).
 - 2024-11-27: Added "Gait Analysis (Single Strike)" button and functionality (gait_analysis.py).
+- 2025-10-10: Added "Sit to Stand" button and functionality (sit_to_stand.py).
 ================================================================================
 """
 
@@ -132,6 +133,11 @@ def choose_analysis_type():
         choice_window.quit()
         choice_window.destroy()
 
+    def select_sit_to_stand():
+        choice.append("sit_to_stand")
+        choice_window.quit()
+        choice_window.destroy()
+
     choice_window = tk.Toplevel()
     choice_window.title("Choose Analysis Type")
     # Set the desired size of the window (e.g., 500x300) and center it
@@ -171,6 +177,11 @@ def choose_analysis_type():
         command=select_gait_analysis,
     )
     btn_gait_analysis.pack(pady=7)
+
+    btn_sit_to_stand = tk.Button(
+        choice_window, text="Sit to Stand", command=select_sit_to_stand
+    )
+    btn_sit_to_stand.pack(pady=7)
 
     choice_window.mainloop()
 
@@ -249,6 +260,18 @@ def run_gait_analysis():
         print(f"Error importing gait_analysis: {e}")
 
 
+def run_sit_to_stand():
+    """
+    Runs the Sit to Stand.
+    """
+    try:
+        from . import sit2stand
+
+        sit2stand.main()
+    except ImportError as e:
+        print(f"Error importing sit2stand: {e}")
+
+
 def run_force_analysis():
     """
     Main function to execute the chosen force analysis.
@@ -270,6 +293,8 @@ def run_force_analysis():
         run_calculate_cop()
     elif analysis_type == "gait_analysis":
         run_gait_analysis()
+    elif analysis_type == "sit_to_stand":
+        run_sit_to_stand()
     else:
         print("No analysis type selected.")
 

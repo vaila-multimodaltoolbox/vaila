@@ -1,0 +1,2 @@
+filename,duration,mean_force,max_force,min_force,num_phases,total_movement_time,average_phase_duration,phases_per_minute,total_impulse,average_impulse,peak_power,average_power,force_rate_of_change,symmetry_index
+sit2stantd.c3d,2.9395,-34.237817482259814,-0.8278720293326243,-77.40161504228392,1,2.4625,2.4625,20.411634631740093,-65.22409266927457,-65.22409266927457,0,-26.48694118549221,42.843734294016905,
