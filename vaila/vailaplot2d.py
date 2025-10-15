@@ -57,16 +57,12 @@ from tkinter import (
     Button,
     filedialog,
     Toplevel,
-    Checkbutton,
-    BooleanVar,
-    Canvas,
     Scrollbar,
     Frame,
     messagebox,
     Label,
     LabelFrame,
     StringVar,
-    Entry,
     END,
     Listbox,
     MULTIPLE,
@@ -455,7 +451,7 @@ class FileSelectionWindow:
                     file_ext = file_path.lower().split('.')[-1]
                     
                     if file_ext == 'csv':
-                        loaded_data_cache[file_path] = read_csv_with_encoding(file_path)
+                        loaded_data_cache[file_path] = read_csv_with_encoding(file_path, skipfooter=0)
                     elif file_ext == 'xlsx':
                         loaded_data_cache[file_path] = read_excel_with_sheet_selection(file_path)
                     elif file_ext == 'ods':
@@ -467,7 +463,7 @@ class FileSelectionWindow:
                     elif file_ext == 'c3d':
                         loaded_data_cache[file_path] = read_c3d_file(file_path)
                     else:
-                        loaded_data_cache[file_path] = read_csv_with_encoding(file_path)
+                        loaded_data_cache[file_path] = read_csv_with_encoding(file_path, skipfooter=0)
                     
                     if loaded_data_cache[file_path] is None:
                         messagebox.showerror("Error", f"Failed to load file: {os.path.basename(file_path)}")
@@ -583,7 +579,7 @@ def plot_time_scatter():
             file_ext = file_path.lower().split('.')[-1]
             try:
                 if file_ext == 'csv':
-                    data = read_csv_with_encoding(file_path)
+                    data = read_csv_with_encoding(file_path, skipfooter=0)
                 elif file_ext == 'xlsx':
                     data = pd.read_excel(file_path)
                 elif file_ext == 'ods':
@@ -593,7 +589,7 @@ def plot_time_scatter():
                     if data is None:
                         continue
                 else:
-                    data = read_csv_with_encoding(file_path)  # Default fallback
+                    data = read_csv_with_encoding(file_path, skipfooter=0)  # Default fallback
 
                 loaded_data_cache[file_path] = data
             except Exception as e:
@@ -607,6 +603,17 @@ def plot_time_scatter():
 
         x_column = data.columns[0]
         print(f"[DEBUG] X-axis column: {x_column}")
+
+        # Check if Time column is problematic (only 0s and 1s or not increasing properly)
+        if x_column.lower() in ['time', 'tempo', 'frame']:
+            unique_time_values = sorted(data[x_column].unique())
+            if len(unique_time_values) <= 2 or not data[x_column].is_monotonic_increasing:
+                print(f"[WARNING] Time column has issues: {unique_time_values}")
+                print("[DEBUG] Using row index as X-axis instead")
+                # Create a proper time axis using row index
+                data = data.copy()
+                data.insert(0, 'Time_Index', range(1, len(data) + 1))
+                x_column = 'Time_Index'
 
         for header_idx, header in enumerate(selected_headers):
             print(f"[DEBUG] Checking header {header_idx + 1}/{len(selected_headers)}: {header}")
@@ -646,7 +653,7 @@ def plot_time_scatter():
             file_ext = selected_files[0].lower().split('.')[-1]
             try:
                 if file_ext == 'csv':
-                    first_file_data = read_csv_with_encoding(selected_files[0])
+                    first_file_data = read_csv_with_encoding(selected_files[0], skipfooter=1)
                 elif file_ext == 'xlsx':
                     if EXCEL_SUPPORT:
                         first_file_data = pd.read_excel(selected_files[0])
@@ -665,11 +672,18 @@ def plot_time_scatter():
                 first_file_data = None
 
         if first_file_data is not None and len(first_file_data.columns) > 0:
-            plt.xlabel(first_file_data.columns[0])
+            # Check if we're using Time_Index as x-axis
+            x_label = first_file_data.columns[0]
+            if x_label.lower() in ['time', 'tempo', 'frame']:
+                unique_time_values = sorted(first_file_data[x_label].unique())
+                if len(unique_time_values) <= 2 or not first_file_data[x_label].is_monotonic_increasing:
+                    x_label = 'Sample Index'
+            plt.xlabel(x_label)
 
     plt.ylabel("Values")
     plt.title("Time Series Plot")
     plt.legend(loc="best", fontsize="small")
+    plt.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.show()
 
@@ -694,7 +708,7 @@ def plot_angle_angle():
             file_ext = file_path.lower().split('.')[-1]
             try:
                 if file_ext == 'csv':
-                    data = read_csv_with_encoding(file_path)
+                    data = read_csv_with_encoding(file_path, skipfooter=0)
                 elif file_ext == 'xlsx':
                     data = pd.read_excel(file_path)
                 elif file_ext == 'ods':
@@ -704,7 +718,7 @@ def plot_angle_angle():
                     if data is None:
                         continue
                 else:
-                    data = read_csv_with_encoding(file_path)  # Default fallback
+                    data = read_csv_with_encoding(file_path, skipfooter=0)  # Default fallback
 
                 loaded_data_cache[file_path] = data
             except Exception as e:
@@ -763,7 +777,7 @@ def plot_confidence_interval():
             file_ext = file_path.lower().split('.')[-1]
             try:
                 if file_ext == 'csv':
-                    data = read_csv_with_encoding(file_path)
+                    data = read_csv_with_encoding(file_path, skipfooter=0)
                 elif file_ext == 'xlsx':
                     data = pd.read_excel(file_path)
                 elif file_ext == 'ods':
@@ -773,7 +787,7 @@ def plot_confidence_interval():
                     if data is None:
                         continue
                 else:
-                    data = read_csv_with_encoding(file_path)  # Default fallback
+                    data = read_csv_with_encoding(file_path, skipfooter=0)  # Default fallback
 
                 loaded_data_cache[file_path] = data
             except Exception as e:
@@ -858,7 +872,7 @@ def plot_boxplot():
             file_ext = file_path.lower().split('.')[-1]
             try:
                 if file_ext == 'csv':
-                    data = read_csv_with_encoding(file_path)
+                    data = read_csv_with_encoding(file_path, skipfooter=0)
                 elif file_ext == 'xlsx':
                     data = pd.read_excel(file_path)
                 elif file_ext == 'ods':
@@ -868,7 +882,7 @@ def plot_boxplot():
                     if data is None:
                         continue
                 else:
-                    data = read_csv_with_encoding(file_path)  # Default fallback
+                    data = read_csv_with_encoding(file_path, skipfooter=0)  # Default fallback
 
                 loaded_data_cache[file_path] = data
             except Exception as e:
@@ -926,7 +940,7 @@ def plot_spm():
             file_ext = file_path.lower().split('.')[-1]
             try:
                 if file_ext == 'csv':
-                    data = read_csv_with_encoding(file_path)
+                    data = read_csv_with_encoding(file_path, skipfooter=0)
                 elif file_ext == 'xlsx':
                     data = pd.read_excel(file_path)
                 elif file_ext == 'ods':
@@ -936,7 +950,7 @@ def plot_spm():
                     if data is None:
                         continue
                 else:
-                    data = read_csv_with_encoding(file_path)  # Default fallback
+                    data = read_csv_with_encoding(file_path, skipfooter=0)  # Default fallback
 
                 loaded_data_cache[file_path] = data
             except Exception as e:
@@ -1051,8 +1065,8 @@ def get_file_headers(file_path):
                 return columns
             except Exception as e:
                 print(f"Error reading CSV headers: {e}")
-                # Fallback to encoding detection
-                df = read_csv_with_encoding(file_path)
+                # Fallback to encoding detection with footer skip for problematic files
+                df = read_csv_with_encoding(file_path, skipfooter=0)
                 if df is not None:
                     loaded_data_cache[file_path] = df
                     columns = list(df.columns)
@@ -1361,15 +1375,28 @@ def read_c3d_file(file_path):
         return None
 
 
-def read_csv_with_encoding(file_path):
+def read_csv_with_encoding(file_path, skipfooter=0, engine=None):
     """Read CSV file with automatic encoding detection"""
     # Common encodings to try
     encodings = ['utf-8', 'utf-8-sig', 'latin1', 'cp1252', 'iso-8859-1']
 
+    # Prepare read_csv arguments
+    read_args = {'encoding': None}
+    if skipfooter > 0:
+        read_args['skipfooter'] = skipfooter
+        if engine is None:
+            engine = 'python'  # Force python engine when using skipfooter
+
+    if engine is not None:
+        read_args['engine'] = engine
+
     for encoding in encodings:
         try:
-            df = pd.read_csv(file_path, encoding=encoding)
+            read_args['encoding'] = encoding
+            df = pd.read_csv(file_path, **read_args)
             print(f"Successfully read {file_path} with encoding: {encoding}")
+            if skipfooter > 0:
+                print(f"  Skipped {skipfooter} footer lines")
             return df
         except UnicodeDecodeError:
             continue
@@ -1383,7 +1410,9 @@ def read_csv_with_encoding(file_path):
 
     # If all encodings fail, try with error handling
     try:
-        df = pd.read_csv(file_path, encoding='utf-8', errors='replace')
+        read_args['encoding'] = 'utf-8'
+        read_args['errors'] = 'replace'
+        df = pd.read_csv(file_path, **read_args)
         print(f"Read {file_path} with UTF-8 and error replacement")
         return df
     except Exception as e:
@@ -1547,5 +1576,38 @@ def run_plot_2d():
         )
 
 
+def test_csv_reading():
+    """Test function to verify CSV reading with skipfooter parameter"""
+    test_file = r"C:\Users\paulo\Preto\vaila\tests\sit2stand\processed\sit2stand_corrigido.csv"
+
+    print("Testing CSV reading WITHOUT skipfooter:")
+    try:
+        df_no_skip = read_csv_with_encoding(test_file, skipfooter=0)
+        print(f"  Shape without skipfooter: {df_no_skip.shape}")
+        print(f"  Last row first few values: {df_no_skip.iloc[-1, :5].values}")
+        print(f"  Contains problematic last row: {df_no_skip.iloc[-1, 0] == 1.0}")
+    except Exception as e:
+        print(f"  Error: {e}")
+
+    print("\nTesting CSV reading WITH skipfooter=1:")
+    try:
+        df_with_skip = read_csv_with_encoding(test_file, skipfooter=1)
+        print(f"  Shape with skipfooter: {df_with_skip.shape}")
+        print(f"  Last row first few values: {df_with_skip.iloc[-1, :5].values}")
+        print(f"  Contains problematic last row: {df_with_skip.iloc[-1, 0] == 1.0}")
+
+        # Check if Force.Fz3 column has non-zero values
+        if 'Force.Fz3' in df_with_skip.columns:
+            non_zero_count = (df_with_skip['Force.Fz3'] != 0).sum()
+            print(f"  Non-zero values in Force.Fz3: {non_zero_count}/{len(df_with_skip)}")
+        else:
+            print("  Force.Fz3 column not found in DataFrame")
+
+    except Exception as e:
+        print(f"  Error: {e}")
+
 if __name__ == "__main__":
+    # Uncomment the line below to test CSV reading
+    # test_csv_reading()
+
     run_plot_2d()

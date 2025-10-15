@@ -6,9 +6,9 @@ Author: Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 14 October 2024
-Update Date: 16 September 2025
-Version: 0.0.7
-Python Version: 3.12.9
+Update Date: 15 October 2025
+Version: 0.0.8
+Python Version: 3.12.11
 
 Description:
 ------------
@@ -2442,6 +2442,58 @@ def generate_report(dest_dir, config, processed_files):
     return report_path
 
 
+def sanitize_filename(name):
+    """Sanitize filename/directory name by removing or replacing special characters.
+    
+    Args:
+        name: String to sanitize
+        
+    Returns:
+        str: Sanitized string safe for filesystem use
+    """
+    # Replace dots and special characters with underscores
+    replacements = {
+        '.': '_',
+        '/': '_',
+        '\\': '_',
+        ':': '_',
+        '*': '_',
+        '?': '_',
+        '"': '_',
+        '<': '_',
+        '>': '_',
+        '|': '_',
+        ' ': '_',
+        '=': 'eq',
+        '+': 'plus',
+        '-': 'minus',
+        '(': '',
+        ')': '',
+        '[': '',
+        ']': '',
+        '{': '',
+        '}': '',
+        ',': '_'
+    }
+    
+    sanitized = name
+    for old_char, new_char in replacements.items():
+        sanitized = sanitized.replace(old_char, new_char)
+    
+    # Remove multiple consecutive underscores
+    while '__' in sanitized:
+        sanitized = sanitized.replace('__', '_')
+    
+    # Remove leading/trailing underscores
+    sanitized = sanitized.strip('_')
+    
+    # Ensure it's not empty
+    if not sanitized:
+        sanitized = 'sanitized'
+    
+    return sanitized
+
+
 def detect_float_format(original_path):
     """Detecta o formato de float com base no número máximo de casas decimais do arquivo original.
 
@@ -2835,8 +2887,12 @@ def process_file(file_path, dest_dir, config):
         if config["smooth_method"] != "none":
             method_suffix = config["smooth_method"]
 
-        # Create output filename with method suffix
-        output_filename = f"{base_filename}_{method_suffix}.csv"
+        # Sanitize both base filename and method suffix
+        sanitized_base = sanitize_filename(base_filename)
+        sanitized_method = sanitize_filename(method_suffix)
+
+        # Create output filename with sanitized method suffix
+        output_filename = f"{sanitized_base}_{sanitized_method}.csv"
         output_path = os.path.join(dest_dir, output_filename)
 
         file_info = {
@@ -3193,7 +3249,9 @@ def process_file(file_path, dest_dir, config):
     except Exception as e:
         # Return basic info with error in case of failure
         filename = os.path.basename(file_path)
-        output_filename = f"{os.path.splitext(filename)[0]}_processed.csv"
+        base_name = os.path.splitext(filename)[0]
+        sanitized_base = sanitize_filename(base_name)
+        output_filename = f"{sanitized_base}_processed.csv"
         output_path = os.path.join(dest_dir, output_filename)
 
         return {
@@ -3292,8 +3350,12 @@ def run_fill_split_dialog(parent=None):
             print(f"Warning: Error formatting smooth_info: {str(e)}")
             smooth_info = config["smooth_method"]  # Fallback to basic name
 
-    # Directory with informative name
-    dest_dir_name = f"processed_{interp_name}_{smooth_info}_{timestamp}"
+    # Sanitize all components of directory name
+    sanitized_interp = sanitize_filename(interp_name)
+    sanitized_smooth = sanitize_filename(smooth_info)
+
+    # Directory with informative name (all sanitized)
+    dest_dir_name = f"processed_{sanitized_interp}_{sanitized_smooth}_{timestamp}"
     dest_dir = os.path.join(source_dir, dest_dir_name)
     os.makedirs(dest_dir, exist_ok=True)
 

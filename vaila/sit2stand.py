@@ -21,15 +21,22 @@ Key Features:
 5. Column Selection: Interactive column selection with detailed file information
 6. C3D File Analysis: Full support for C3D files with analog channel extraction
 7. Force Plate Data Analysis: Focus on vertical force (Fz) data for sit-to-stand detection
+8. Advanced Peak Detection: Uses scipy.signal.find_peaks with configurable parameters
+9. Stability Analysis: Index of stability measuring deviation from horizontal baseline
+10. Time Vector Generation: Configurable FPS for proper time axis generation
+11. Energy Expenditure Analysis: Calculates mechanical work and metabolic energy based on body weight
 
 Analysis Capabilities:
 ----------------------
 - Sit-to-stand phase detection with configurable thresholds
 - Force impulse calculation with filtered data
-- Peak force identification and timing analysis
+- Peak force identification and timing analysis using scipy.signal.find_peaks
 - Movement timing analysis with onset detection
 - Balance assessment during transitions
 - Butterworth low-pass filtering for noise reduction
+- Stability index calculation measuring deviation from horizontal baseline
+- Noise and oscillation analysis during standing phase
+- Configurable FPS for proper time vector generation
 
 Configuration:
 --------------
@@ -42,6 +49,7 @@ TOML Configuration File Format:
 [analysis]
 # Column containing vertical force data
 force_column = "Fz"
+fps = 100.0  # Frames per second for time vector generation
 
 [filtering]
 # Butterworth filter parameters
@@ -55,6 +63,23 @@ order = 4
 force_threshold = 10.0  # N
 min_duration = 0.5  # seconds
 onset_threshold = 5.0  # N above baseline
+
+[detection.peak_detection]
+# scipy.signal.find_peaks parameters
+# height =  # Minimum height of peaks (omit for no minimum)
+# threshold =  # Minimum threshold of peaks (omit for no minimum)
+distance = 10  # Minimum distance between peaks (samples)
+prominence = 5.0  # Minimum prominence of peaks
+# width =  # Minimum width of peaks (omit for no minimum)
+rel_height = 0.5  # Relative height for width calculation
+
+[stability]
+# Stability analysis parameters
+enabled = true
+baseline_window = 0.5  # Seconds after first peak to consider as baseline
+stability_threshold = 2.0  # Maximum deviation for stable standing (N)
+noise_analysis = true  # Enable noise/oscillation analysis
+rolling_window = 0.1  # Rolling window for noise analysis (seconds)
 
 Usage:
 ------
@@ -81,6 +106,7 @@ This module is part of the VAILA toolbox and follows the same MIT License.
 """
 
 import os
+from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk, simpledialog
 import pandas as pd
@@ -90,7 +116,7 @@ try:
     TOML_SUPPORT = True
 except ImportError:
     try:
-        import tomli as toml  # Fallback
+        import tomli as toml  # Fallback for older Python
         TOML_SUPPORT = True
     except ImportError:
         try:
@@ -98,10 +124,10 @@ except ImportError:
             TOML_SUPPORT = True
         except ImportError:
             TOML_SUPPORT = False
-            print("Warning: No TOML library available. Config files won't work.")
+            print("Warning: No TOML library available. Install tomli: pip install tomli")
 import json
 import matplotlib.pyplot as plt
-from scipy.signal import butter, filtfilt
+from scipy.signal import butter, filtfilt, find_peaks
 from pathlib import Path
 
 # Try to import ezc3d for C3D file support
@@ -206,7 +232,9 @@ def get_default_config():
     """Returns default configuration for sit-to-stand analysis."""
     return {
         'analysis': {
-            'force_column': 'Fz'
+            'force_column': 'Fz',
+            'fps': 100.0,  # Frames per second for time vector generation
+            'body_weight': 70.0  # Body weight in kg for energy calculations
         },
         'filtering': {
             'enabled': True,
@@ -217,7 +245,19 @@ def get_default_config():
         'detection': {
             'force_threshold': 10.0,
             'min_duration': 0.5,
-            'onset_threshold': 5.0
+            'onset_threshold': 5.0,
+            'peak_detection': {
+                'distance': 10,  # Minimum distance between peaks (samples)
+                'prominence': 5.0,  # Minimum prominence of peaks
+                'rel_height': 0.5  # Relative height for width calculation
+            }
+        },
+        'stability': {
+            'enabled': True,
+            'baseline_window': 0.5,  # Seconds after first peak to consider as baseline
+            'stability_threshold': 2.0,  # Maximum deviation for stable standing (N)
+            'noise_analysis': True,  # Enable noise/oscillation analysis
+            'rolling_window': 0.1  # Rolling window for noise analysis (seconds)
         }
     }
 
@@ -522,9 +562,9 @@ def run_batch_analysis(files, config, output_dir):
     results = []
     column_name = config['analysis']['force_column']
 
-    # Create output subdirectories
-    plots_dir = os.path.join(output_dir, "plots")
-    os.makedirs(plots_dir, exist_ok=True)
+    # Create main results directory if it doesn't exist
+    main_results_dir = Path(output_dir) / "sit2stand_results"
+    main_results_dir.mkdir(parents=True, exist_ok=True)
 
     for i, file_path in enumerate(files):
         try:
@@ -534,7 +574,7 @@ def run_batch_analysis(files, config, output_dir):
             if file_path.lower().endswith('.c3d'):
                 data = read_c3d_file(file_path, column_name)
             else:
-                data = read_csv_file(file_path, column_name)
+                data = read_csv_file(file_path, column_name, config)
 
             if data is None:
                 print(f"  Skipping {file_path} - could not read data")
@@ -561,10 +601,15 @@ def run_batch_analysis(files, config, output_dir):
             # Analyze sit-to-stand movement
             analysis_result = analyze_sit_to_stand(data, config)
 
-            # Save force plot as PNG
-            plot_filename = f"{os.path.splitext(os.path.basename(file_path))[0]}_force_plot.png"
-            plot_path = os.path.join(plots_dir, plot_filename)
-            save_force_plot_png(data, analysis_result['sit_to_stand_phases'], plot_path, config)
+            # Create individual file directory
+            file_base_name = Path(file_path).stem
+            file_results_dir = main_results_dir / file_base_name
+            file_results_dir.mkdir(exist_ok=True)
+            
+            # Save force plot as PNG in the individual file directory
+            plot_filename = f"{file_base_name}_force_plot.png"
+            plot_path = file_results_dir / plot_filename
+            save_force_plot_png(data, analysis_result['sit_to_stand_phases'], str(plot_path), config)
 
             # Store results with file information
             result = {
@@ -572,11 +617,12 @@ def run_batch_analysis(files, config, output_dir):
                 'filename': os.path.basename(file_path),
                 'analysis': analysis_result,
                 'configuration': config.copy(),
-                'plot_path': plot_path
+                'plot_path': str(plot_path),
+                'results_dir': str(file_results_dir)
             }
 
             results.append(result)
-            print(f"  ✓ Completed: {os.path.basename(file_path)}")
+            print(f"  [OK] Completed: {os.path.basename(file_path)}")
 
         except Exception as e:
             print(f"Error processing {file_path}: {str(e)}")
@@ -589,9 +635,143 @@ def run_batch_analysis(files, config, output_dir):
     return results
 
 
+def generate_individual_report(result, config, output_dir):
+    """
+    Generates individual report for a single file analysis.
+    
+    Parameters:
+    -----------
+    result : dict
+        Analysis result for a single file
+    config : dict
+        Configuration used for analysis
+    output_dir : str
+        Output directory path
+    """
+    try:
+        filename = result['filename']
+        base_name = Path(filename).stem
+        analysis = result['analysis']
+        
+        # Create individual file directory path
+        main_results_dir = Path(output_dir) / "sit2stand_results"
+        file_results_dir = main_results_dir / base_name
+        
+        # Generate individual text report
+        txt_path = file_results_dir / f"{base_name}_analysis_report.txt"
+        
+        with open(txt_path, 'w', encoding='utf-8') as f:
+            f.write(f"Sit-to-Stand Analysis Report: {filename}\n")
+            f.write("=" * 60 + "\n\n")
+            
+            # Configuration summary
+            f.write("Configuration Used:\n")
+            f.write("-" * 30 + "\n")
+            f.write(f"Force Column: {config['analysis']['force_column']}\n")
+            if 'body_weight' in config['analysis']:
+                f.write(f"Body Weight: {config['analysis']['body_weight']} kg\n")
+            if 'fps' in config['analysis']:
+                f.write(f"FPS: {config['analysis']['fps']} Hz\n")
+            f.write(f"Butterworth Filter: {'Enabled' if config['filtering']['enabled'] else 'Disabled'}\n")
+            
+            if config['filtering']['enabled']:
+                f.write(f"  Cutoff Frequency: {config['filtering']['cutoff_frequency']} Hz\n")
+                f.write(f"  Sampling Frequency: {config['filtering']['sampling_frequency']} Hz\n")
+                f.write(f"  Filter Order: {config['filtering']['order']}\n")
+            
+            f.write(f"Detection Parameters:\n")
+            f.write(f"  Force Threshold: {config['detection']['force_threshold']} N\n")
+            f.write(f"  Min Duration: {config['detection']['min_duration']} s\n")
+            f.write(f"  Onset Threshold: {config['detection']['onset_threshold']} N\n")
+            f.write("\n" + "=" * 60 + "\n\n")
+            
+            # Basic metrics
+            f.write("BASIC FORCE METRICS:\n")
+            f.write(f"  Duration: {analysis['duration']:.2f} s\n")
+            f.write(f"  Mean Force: {analysis['mean_force']:.2f} N\n")
+            f.write(f"  Max Force: {analysis['max_force']:.2f} N\n")
+            f.write(f"  Min Force: {analysis['min_force']:.2f} N\n\n")
+            
+            # Movement detection
+            movement = analysis['movement_metrics']
+            f.write("MOVEMENT DETECTION:\n")
+            f.write(f"  Phases Detected: {movement['num_phases']}\n")
+            f.write(f"  Total Movement Time: {movement['total_movement_time']:.2f} s\n")
+            f.write(f"  Average Phase Duration: {movement['average_phase_duration']:.2f} s\n")
+            if movement['phases_per_minute'] > 0:
+                f.write(f"  Phases per Minute: {movement['phases_per_minute']:.1f}\n\n")
+            
+            # Energy expenditure analysis
+            energy = analysis.get('energy_metrics', {})
+            if energy:
+                f.write("ENERGY EXPENDITURE ANALYSIS:\n")
+                f.write(f"  Body Weight: {energy.get('body_weight_kg', 0):.1f} kg ({energy.get('body_weight_N', 0):.1f} N)\n")
+                f.write(f"  Total Movements: {energy.get('total_movements', 0)}\n")
+                f.write(f"  Total Mechanical Work: {energy.get('total_mechanical_work_J', 0):.2f} J ({energy.get('total_mechanical_work_J', 0)/4184:.3f} kcal)\n")
+                f.write(f"  Total Metabolic Energy: {energy.get('total_metabolic_energy_kcal', 0):.3f} kcal\n")
+                f.write(f"  Average Energy per Movement: {energy.get('average_energy_per_movement_kcal', 0):.3f} kcal\n")
+                f.write(f"  Energy Efficiency: {energy.get('energy_efficiency', 0):.1f}%\n\n")
+            
+            # Stability analysis
+            stability = analysis.get('stability_metrics', {})
+            if stability:
+                f.write("STABILITY ANALYSIS:\n")
+                f.write(f"  Stability Index: {stability.get('stability_index', 0):.3f} (0-1 scale)\n")
+                f.write(f"  Mean Deviation: {stability.get('mean_deviation', 0):.2f} N\n")
+                f.write(f"  Max Deviation: {stability.get('max_deviation', 0):.2f} N\n")
+                f.write(f"  Is Stable Standing: {'Yes' if stability.get('is_stable', False) else 'No'}\n\n")
+            
+            # Plot information
+            if 'plot_path' in result:
+                f.write(f"Plot saved: {Path(result['plot_path']).name}\n")
+        
+        # Generate individual CSV report
+        csv_path = file_results_dir / f"{base_name}_analysis_data.csv"
+        
+        # Create comprehensive CSV with all metrics
+        csv_data = {
+            'metric': [],
+            'value': [],
+            'unit': []
+        }
+        
+        # Basic metrics
+        csv_data['metric'].extend(['Duration', 'Mean Force', 'Max Force', 'Min Force', 'Total Samples'])
+        csv_data['value'].extend([analysis['duration'], analysis['mean_force'], analysis['max_force'], analysis['min_force'], analysis['total_samples']])
+        csv_data['unit'].extend(['s', 'N', 'N', 'N', 'samples'])
+        
+        # Movement metrics
+        csv_data['metric'].extend(['Phases Detected', 'Total Movement Time', 'Average Phase Duration', 'Phases per Minute'])
+        csv_data['value'].extend([movement['num_phases'], movement['total_movement_time'], movement['average_phase_duration'], movement['phases_per_minute']])
+        csv_data['unit'].extend(['count', 's', 's', 'phases/min'])
+        
+        # Energy metrics
+        if energy:
+            csv_data['metric'].extend(['Body Weight', 'Total Mechanical Work', 'Total Metabolic Energy', 'Average Energy per Movement', 'Energy Efficiency'])
+            csv_data['value'].extend([energy.get('body_weight_kg', 0), energy.get('total_mechanical_work_J', 0), energy.get('total_metabolic_energy_kcal', 0), energy.get('average_energy_per_movement_kcal', 0), energy.get('energy_efficiency', 0)])
+            csv_data['unit'].extend(['kg', 'J', 'kcal', 'kcal', '%'])
+        
+        # Stability metrics
+        if stability:
+            csv_data['metric'].extend(['Stability Index', 'Mean Deviation', 'Max Deviation', 'Is Stable'])
+            csv_data['value'].extend([stability.get('stability_index', 0), stability.get('mean_deviation', 0), stability.get('max_deviation', 0), stability.get('is_stable', False)])
+            csv_data['unit'].extend(['0-1 scale', 'N', 'N', 'boolean'])
+        
+        # Save CSV
+        df = pd.DataFrame(csv_data)
+        df.to_csv(csv_path, index=False)
+        
+        # print(f"  Individual reports saved: {os.path.basename(txt_path)}, {os.path.basename(csv_path)}")
+        
+    except Exception as e:
+        print(f"Error generating individual report for {result['filename']}: {e}")
+        import traceback
+        traceback.print_exc()
+
+
 def generate_batch_report(results, config, output_dir):
     """
-    Generates a comprehensive batch analysis report.
+    Generates a comprehensive batch analysis report and individual file reports.
 
     Parameters:
     -----------
@@ -603,16 +783,18 @@ def generate_batch_report(results, config, output_dir):
         Output directory path
     """
     try:
-        # Create reports directory
-        reports_dir = os.path.join(output_dir, "reports")
-        os.makedirs(reports_dir, exist_ok=True)
+        # Generate individual reports for each file first
+        for result in results:
+            if 'error' not in result:
+                generate_individual_report(result, config, output_dir)
 
         # Generate summary statistics
         successful_analyses = sum(1 for r in results if 'error' not in r)
         total_files = len(results)
 
-        # Generate text report
-        report_path = os.path.join(reports_dir, "batch_analysis_report.txt")
+        # Generate batch summary text report in main results directory
+        main_results_dir = Path(output_dir) / "sit2stand_results"
+        report_path = main_results_dir / "batch_analysis_summary.txt"
 
         with open(report_path, 'w', encoding='utf-8') as f:
             f.write("Sit-to-Stand Batch Analysis Report\n")
@@ -713,7 +895,47 @@ def generate_batch_report(results, config, output_dir):
                         if 'consistency_score' in first_phase:
                             f.write(f"  Movement Consistency: {first_phase['consistency_score']:.3f}\n")
                         if 'num_peaks' in first_phase:
-                            f.write(f"  Number of Peaks: {first_phase['num_peaks']}\n\n")
+                            f.write(f"  Number of Peaks: {first_phase['num_peaks']}\n")
+
+                    # === STABILITY METRICS ===
+                    stability = analysis.get('stability_metrics', {})
+                    if stability:
+                        f.write("\nSTABILITY ANALYSIS:\n")
+                        f.write(f"  Stability Index: {stability.get('stability_index', 0):.3f} (0-1 scale)\n")
+                        f.write(f"  Mean Deviation: {stability.get('mean_deviation', 0):.2f} N\n")
+                        f.write(f"  Max Deviation: {stability.get('max_deviation', 0):.2f} N\n")
+                        f.write(f"  Noise Level: {stability.get('noise_level', 0):.2f} N\n")
+                        f.write(f"  Oscillation Frequency: {stability.get('oscillation_frequency', 0):.2f} Hz\n")
+                        f.write(f"  Stability Duration: {stability.get('stability_duration', 0):.2f} s\n")
+                        f.write(f"  Is Stable Standing: {'Yes' if stability.get('is_stable', False) else 'No'}\n")
+                        f.write(f"  Baseline Force (standing): {stability.get('baseline_force', 0):.2f} N\n")
+
+                    # === ENERGY EXPENDITURE METRICS ===
+                    energy = analysis.get('energy_metrics', {})
+                    if energy:
+                        f.write("\nENERGY EXPENDITURE ANALYSIS:\n")
+                        f.write(f"  Body Weight: {energy.get('body_weight_kg', 0):.1f} kg ({energy.get('body_weight_N', 0):.1f} N)\n")
+                        f.write(f"  Total Movements: {energy.get('total_movements', 0)}\n")
+                        f.write(f"  Total Mechanical Work: {energy.get('total_mechanical_work_J', 0):.2f} J ({energy.get('total_mechanical_work_J', 0)/4184:.3f} kcal)\n")
+                        f.write(f"  Total Metabolic Energy: {energy.get('total_metabolic_energy_kcal', 0):.3f} kcal\n")
+                        f.write(f"  Average Energy per Movement: {energy.get('average_energy_per_movement_kcal', 0):.3f} kcal\n")
+                        f.write(f"  Energy Efficiency: {energy.get('energy_efficiency', 0):.1f}%\n")
+                        f.write(f"  Chair Height (reference): {energy.get('chair_height_m', 0):.3f} m\n")
+                        f.write(f"  Reference Study: {energy.get('reference_study', 'N/A')}\n\n")
+                        
+                        # Detailed phase energy data
+                        phases_energy = energy.get('phases_energy', [])
+                        if phases_energy:
+                            f.write("  MOVEMENT-BY-MOVEMENT ENERGY:\n")
+                            for phase_energy in phases_energy:
+                                f.write(f"    Phase {phase_energy['phase_number']} ({phase_energy['movement_type']}):\n")
+                                f.write(f"      Duration: {phase_energy['duration_s']:.2f} s\n")
+                                f.write(f"      Mechanical Work: {phase_energy['mechanical_work_J']:.2f} J\n")
+                                f.write(f"      Metabolic Energy: {phase_energy['metabolic_energy_kcal']:.3f} kcal\n")
+                                f.write(f"      Average Force: {phase_energy['average_force_N']:.1f} N\n")
+                                f.write(f"      Force above Body Weight: {phase_energy['force_above_body_weight_N']:.1f} N\n")
+                                f.write(f"      Energy Efficiency: {phase_energy['energy_efficiency_percent']:.1f}%\n")
+                            f.write("\n")
 
                     # Plot information
                     if 'plot_path' in result:
@@ -768,6 +990,27 @@ def generate_batch_report(results, config, output_dir):
                     
                     # Symmetry metrics
                     'symmetry_index': movement.get('symmetry_index', 0),
+                    
+                    # Stability metrics
+                    'stability_index': analysis.get('stability_metrics', {}).get('stability_index', 0),
+                    'mean_deviation_N': analysis.get('stability_metrics', {}).get('mean_deviation', 0),
+                    'max_deviation_N': analysis.get('stability_metrics', {}).get('max_deviation', 0),
+                    'noise_level_N': analysis.get('stability_metrics', {}).get('noise_level', 0),
+                    'oscillation_frequency_Hz': analysis.get('stability_metrics', {}).get('oscillation_frequency', 0),
+                    'stability_duration_s': analysis.get('stability_metrics', {}).get('stability_duration', 0),
+                    'is_stable': analysis.get('stability_metrics', {}).get('is_stable', False),
+                    'baseline_force_standing_N': analysis.get('stability_metrics', {}).get('baseline_force', 0),
+                    
+                    # Energy expenditure metrics
+                    'body_weight_kg': analysis.get('energy_metrics', {}).get('body_weight_kg', 0),
+                    'body_weight_N': analysis.get('energy_metrics', {}).get('body_weight_N', 0),
+                    'total_mechanical_work_J': analysis.get('energy_metrics', {}).get('total_mechanical_work_J', 0),
+                    'total_mechanical_work_kcal': analysis.get('energy_metrics', {}).get('total_mechanical_work_J', 0) / 4184 if analysis.get('energy_metrics', {}).get('total_mechanical_work_J', 0) > 0 else 0,
+                    'total_metabolic_energy_kcal': analysis.get('energy_metrics', {}).get('total_metabolic_energy_kcal', 0),
+                    'average_energy_per_movement_kcal': analysis.get('energy_metrics', {}).get('average_energy_per_movement_kcal', 0),
+                    'energy_per_movement_J': analysis.get('energy_metrics', {}).get('energy_per_movement_J', 0),
+                    'energy_efficiency_percent': analysis.get('energy_metrics', {}).get('energy_efficiency', 0),
+                    'total_movements': analysis.get('energy_metrics', {}).get('total_movements', 0),
                 }
                 
                 # Add RFD metrics from first phase if available
@@ -798,13 +1041,13 @@ def generate_batch_report(results, config, output_dir):
 
         if csv_data:
             df = pd.DataFrame(csv_data)
-            csv_path = os.path.join(reports_dir, "batch_analysis_summary.csv")
+            csv_path = main_results_dir / "batch_analysis_summary.csv"
             df.to_csv(csv_path, index=False)
 
         print(f"\nBatch report generated:")
-        print(f"  Text report: {report_path}")
-        print(f"  CSV summary: {csv_path}")
-        print(f"  Plots directory: {os.path.join(output_dir, 'plots')}")
+        print(f"  Batch summary report: {report_path}")
+        print(f"  Batch CSV summary: {csv_path}")
+        print(f"  Individual reports and plots saved in: {main_results_dir}")
 
     except Exception as e:
         print(f"Error generating batch report: {e}")
@@ -959,7 +1202,7 @@ def suggest_force_column(analog_labels):
     return None
 
 
-def read_csv_file(file_path, column_name):
+def read_csv_file(file_path, column_name, config=None):
     """
     Reads CSV file and extracts the specified column using pandas.
 
@@ -969,6 +1212,8 @@ def read_csv_file(file_path, column_name):
         Path to CSV file
     column_name : str
         Name of column to extract
+    config : dict, optional
+        Configuration dictionary containing FPS and other parameters
 
     Returns:
     --------
@@ -1012,6 +1257,24 @@ def read_csv_file(file_path, column_name):
 
         print(f"Using time column: {time_col}")
         print(f"Using force column: {column_name}")
+
+        # Check if Time column is problematic (only 0s and 1s or not increasing properly)
+        if time_col.lower() in ['time', 'tempo', 'frame', 't']:
+            unique_time_values = sorted(df[time_col].unique())
+            if len(unique_time_values) <= 2 or not df[time_col].is_monotonic_increasing:
+                print(f"[WARNING] Time column has issues: {unique_time_values}")
+                print("[DEBUG] Generating time vector from FPS configuration")
+                # Generate time vector using FPS from config
+                fps = 100.0  # Default FPS
+                if config and 'analysis' in config:
+                    fps = config['analysis'].get('fps', 100.0)
+                
+                # Create time vector based on FPS
+                df = df.copy()
+                time_vector = np.arange(len(df)) / fps
+                df.insert(0, 'Time_Generated', time_vector)
+                time_col = 'Time_Generated'
+                print(f"Generated time vector using FPS: {fps} Hz")
 
         # Extract relevant data
         force_data = df[[time_col, column_name]].copy()
@@ -1072,6 +1335,12 @@ def analyze_sit_to_stand(data, config):
         max_force = data['Force'].max()
         min_force = data['Force'].min()
 
+        # Detect peaks using scipy if enabled
+        all_peaks = []
+        if config.get('detection', {}).get('peak_detection'):
+            print("Using scipy.find_peaks for peak detection")
+            all_peaks = detect_peaks_scipy(data['Force'].values, data['Time'].values, config)
+
         # Detect sit-to-stand phases
         sit_to_stand_phases = detect_sit_to_stand_phases(
             data['Force'].values,
@@ -1080,6 +1349,18 @@ def analyze_sit_to_stand(data, config):
             min_duration,
             onset_threshold
         )
+
+        # Calculate stability metrics if enabled
+        stability_metrics = {}
+        if config.get('stability', {}).get('enabled', False) and all_peaks:
+            print("Calculating stability index...")
+            first_peak_time = all_peaks[0]['time'] if all_peaks else data['Time'].iloc[-1]
+            stability_metrics = calculate_stability_index(
+                data['Force'].values, 
+                data['Time'].values, 
+                first_peak_time, 
+                config
+            )
 
         # Calculate movement metrics
         movement_metrics = calculate_movement_metrics(data, sit_to_stand_phases)
@@ -1090,16 +1371,30 @@ def analyze_sit_to_stand(data, config):
         # Calculate time to peak metrics
         time_to_peak_metrics = calculate_time_to_peak_metrics(data, sit_to_stand_phases)
 
+        # Calculate energy expenditure if body weight is configured
+        energy_metrics = {}
+        if config.get('analysis', {}).get('body_weight'):
+            print("Calculating energy expenditure...")
+            energy_metrics = calculate_energy_expenditure(
+                data['Force'].values, 
+                data['Time'].values, 
+                sit_to_stand_phases, 
+                config
+            )
+
         results = {
             'total_samples': total_samples,
             'duration': duration,
             'mean_force': mean_force,
             'max_force': max_force,
             'min_force': min_force,
+            'all_peaks': all_peaks,
             'sit_to_stand_phases': sit_to_stand_phases,
             'movement_metrics': movement_metrics,
             'impulse_metrics': impulse_metrics,
             'time_to_peak_metrics': time_to_peak_metrics,
+            'stability_metrics': stability_metrics,
+            'energy_metrics': energy_metrics,
             'detection_threshold': force_threshold,
             'status': 'analyzed'
         }
@@ -1403,6 +1698,68 @@ def detect_ascending_threshold(force_data, time_data):
     return None
 
 
+def detect_peaks_scipy(force_data, time_data, config):
+    """
+    Detects peaks using scipy.signal.find_peaks with configurable parameters.
+    
+    Parameters:
+    -----------
+    force_data : array-like
+        Force values
+    time_data : array-like
+        Time values
+    config : dict
+        Configuration dictionary with peak detection parameters
+        
+    Returns:
+    --------
+    list
+        List of detected peaks with time, force, and index information
+    """
+    try:
+        peak_params = config.get('detection', {}).get('peak_detection', {})
+        
+        # Extract peak detection parameters
+        height = peak_params.get('height', None)
+        threshold = peak_params.get('threshold', None)
+        distance = peak_params.get('distance', 10)
+        prominence = peak_params.get('prominence', 5.0)
+        width = peak_params.get('width', None)
+        rel_height = peak_params.get('rel_height', 0.5)
+        
+        # Find peaks using scipy
+        peaks, properties = find_peaks(
+            force_data,
+            height=height,
+            threshold=threshold,
+            distance=distance,
+            prominence=prominence,
+            width=width,
+            rel_height=rel_height
+        )
+        
+        # Convert to list of dictionaries
+        peak_list = []
+        for i, peak_idx in enumerate(peaks):
+            peak_info = {
+                'index': int(peak_idx),
+                'time': float(time_data[peak_idx]),
+                'force': float(force_data[peak_idx]),
+                'prominence': float(properties['prominences'][i]) if 'prominences' in properties else 0.0,
+                'width': float(properties['widths'][i]) if 'widths' in properties else 0.0,
+                'height': float(properties['peak_heights'][i]) if 'peak_heights' in properties else force_data[peak_idx]
+            }
+            peak_list.append(peak_info)
+        
+        print(f"Detected {len(peak_list)} peaks using scipy.find_peaks")
+        return peak_list
+        
+    except Exception as e:
+        print(f"Error in scipy peak detection: {str(e)}")
+        # Fallback to simple peak detection
+        return detect_all_peaks_in_segment(force_data, time_data, np.percentile(force_data, 10))
+
+
 def detect_all_peaks_in_segment(forces, times, baseline_force, min_prominence=5.0):
     """
     Detects all significant peaks in a sit-to-stand segment with enhanced filtering.
@@ -1494,6 +1851,284 @@ def find_peaks_in_segment(forces, times):
     except Exception as e:
         print(f"Error finding peaks in segment: {str(e)}")
         return []
+
+
+def calculate_energy_expenditure(force_data, time_data, phases, config):
+    """
+    Calculates energy expenditure for sit-to-stand movements based on force data and body weight.
+    Uses both mechanical work and metabolic energy calculations.
+    
+    Parameters:
+    -----------
+    force_data : array-like
+        Force values in Newtons
+    time_data : array-like
+        Time values in seconds
+    phases : list
+        List of detected sit-to-stand phases
+    config : dict
+        Configuration dictionary with body weight and other parameters
+        
+    Returns:
+    --------
+    dict
+        Energy expenditure metrics including mechanical work and metabolic energy
+    """
+    try:
+        body_weight = config.get('analysis', {}).get('body_weight', 70.0)  # kg
+        gravity = 9.81  # m/s²
+        
+        # Calculate body weight in Newtons
+        body_weight_N = body_weight * gravity
+        
+        energy_metrics = {
+            'body_weight_kg': body_weight,
+            'body_weight_N': body_weight_N,
+            'total_mechanical_work_J': 0.0,
+            'total_metabolic_energy_kcal': 0.0,
+            'average_energy_per_movement_kcal': 0.0,
+            'energy_per_movement_J': 0.0,
+            'energy_efficiency': 0.0,
+            'phases_energy': []
+        }
+        
+        if not phases:
+            return energy_metrics
+        
+        total_mechanical_work = 0.0
+        total_metabolic_energy = 0.0
+        
+        # Typical chair height for sit-to-stand (0.45-0.50m)
+        # Using average of 0.475m as reference
+        chair_height = 0.475  # meters
+        
+        for i, phase in enumerate(phases):
+            # Extract phase data
+            start_idx = phase['start_index']
+            end_idx = phase['end_index']
+            phase_forces = force_data[start_idx:end_idx+1]
+            phase_times = time_data[start_idx:end_idx+1]
+            phase_duration = phase['duration']
+            
+            # === MECHANICAL WORK CALCULATION ===
+            # Method 1: Force-time integral (impulse)
+            impulse = np.trapz(phase_forces, phase_times)  # N⋅s
+            
+            # Method 2: Work = Force × Distance (assuming vertical movement)
+            # Average force during movement
+            avg_force = np.mean(phase_forces)
+            # Work = average_force × chair_height
+            mechanical_work = avg_force * chair_height  # Joules
+            
+            # Method 3: Net work above body weight
+            net_force_above_weight = avg_force - body_weight_N
+            net_work = max(0, net_force_above_weight) * chair_height  # Only positive work
+            
+            # === METABOLIC ENERGY CALCULATION ===
+            # Based on Nakagata et al. (2019) study:
+            # - STS-slow: 0.37 ± 0.12 kcal per movement
+            # - STS-normal: 0.26 ± 0.06 kcal per movement
+            
+            # Determine movement speed based on duration
+            if phase_duration > 2.0:  # Slow movement (>2s)
+                metabolic_energy_per_movement = 0.37  # kcal
+                movement_type = "slow"
+            else:  # Normal movement (≤2s)
+                metabolic_energy_per_movement = 0.26  # kcal
+                movement_type = "normal"
+            
+            # Adjust for body weight (study was with ~64kg subjects)
+            reference_weight = 64.0  # kg from the study
+            weight_factor = body_weight / reference_weight
+            adjusted_metabolic_energy = metabolic_energy_per_movement * weight_factor
+            
+            # === ENERGY EFFICIENCY ===
+            # Efficiency = Mechanical work / Metabolic energy
+            mechanical_work_kcal = mechanical_work / 4184  # Convert J to kcal
+            efficiency = (mechanical_work_kcal / adjusted_metabolic_energy) * 100 if adjusted_metabolic_energy > 0 else 0
+            
+            # Store phase energy data
+            phase_energy = {
+                'phase_number': i + 1,
+                'movement_type': movement_type,
+                'duration_s': phase_duration,
+                'mechanical_work_J': mechanical_work,
+                'mechanical_work_kcal': mechanical_work_kcal,
+                'net_work_J': net_work,
+                'impulse_Ns': impulse,
+                'average_force_N': avg_force,
+                'metabolic_energy_kcal': adjusted_metabolic_energy,
+                'energy_efficiency_percent': efficiency,
+                'force_above_body_weight_N': net_force_above_weight
+            }
+            
+            energy_metrics['phases_energy'].append(phase_energy)
+            total_mechanical_work += mechanical_work
+            total_metabolic_energy += adjusted_metabolic_energy
+        
+        # Calculate total energy metrics
+        energy_metrics['total_mechanical_work_J'] = total_mechanical_work
+        energy_metrics['total_metabolic_energy_kcal'] = total_metabolic_energy
+        energy_metrics['average_energy_per_movement_kcal'] = total_metabolic_energy / len(phases)
+        energy_metrics['energy_per_movement_J'] = total_mechanical_work / len(phases)
+        
+        # Overall energy efficiency
+        total_mechanical_work_kcal = total_mechanical_work / 4184
+        energy_metrics['energy_efficiency'] = (total_mechanical_work_kcal / total_metabolic_energy) * 100 if total_metabolic_energy > 0 else 0
+        
+        # Additional metrics
+        energy_metrics['total_movements'] = len(phases)
+        energy_metrics['chair_height_m'] = chair_height
+        energy_metrics['reference_study'] = "Nakagata et al. (2019) - PMC6473689"
+        
+        print(f"Energy Expenditure Analysis:")
+        print(f"  Body Weight: {body_weight:.1f} kg ({body_weight_N:.1f} N)")
+        print(f"  Total Movements: {len(phases)}")
+        print(f"  Total Mechanical Work: {total_mechanical_work:.2f} J ({total_mechanical_work_kcal:.3f} kcal)")
+        print(f"  Total Metabolic Energy: {total_metabolic_energy:.3f} kcal")
+        print(f"  Average per Movement: {energy_metrics['average_energy_per_movement_kcal']:.3f} kcal")
+        print(f"  Energy Efficiency: {energy_metrics['energy_efficiency']:.1f}%")
+        
+        return energy_metrics
+        
+    except Exception as e:
+        print(f"Error calculating energy expenditure: {str(e)}")
+        return {
+            'body_weight_kg': 0.0,
+            'body_weight_N': 0.0,
+            'total_mechanical_work_J': 0.0,
+            'total_metabolic_energy_kcal': 0.0,
+            'average_energy_per_movement_kcal': 0.0,
+            'energy_per_movement_J': 0.0,
+            'energy_efficiency': 0.0,
+            'error': str(e)
+        }
+
+
+def calculate_stability_index(force_data, time_data, first_peak_time, config):
+    """
+    Calculates stability index based on deviation from horizontal line from first peak to end.
+    Measures how stable the standing position is after the sit-to-stand movement.
+    
+    Parameters:
+    -----------
+    force_data : array-like
+        Force values
+    time_data : array-like
+        Time values
+    first_peak_time : float
+        Time of the first detected peak
+    config : dict
+        Configuration dictionary with stability parameters
+        
+    Returns:
+    --------
+    dict
+        Stability metrics including stability index and noise analysis
+    """
+    try:
+        stability_config = config.get('stability', {})
+        baseline_window = stability_config.get('baseline_window', 0.5)
+        stability_threshold = stability_config.get('stability_threshold', 2.0)
+        noise_analysis = stability_config.get('noise_analysis', True)
+        rolling_window = stability_config.get('rolling_window', 0.1)
+        
+        # Find the index corresponding to first peak time
+        first_peak_idx = np.argmin(np.abs(time_data - first_peak_time))
+        
+        # Define the stability period (from first peak to end)
+        stability_start_idx = first_peak_idx
+        stability_end_idx = len(force_data)
+        
+        if stability_end_idx <= stability_start_idx:
+            return {
+                'stability_index': 0.0,
+                'mean_deviation': 0.0,
+                'max_deviation': 0.0,
+                'noise_level': 0.0,
+                'oscillation_frequency': 0.0,
+                'stability_duration': 0.0,
+                'is_stable': False
+            }
+        
+        # Extract stability period data
+        stability_forces = force_data[stability_start_idx:stability_end_idx]
+        stability_times = time_data[stability_start_idx:stability_end_idx]
+        
+        # Calculate the baseline (mean force from first peak to end)
+        baseline_force = np.mean(stability_forces)
+        
+        # Calculate deviations from baseline
+        deviations = np.abs(stability_forces - baseline_force)
+        mean_deviation = np.mean(deviations)
+        max_deviation = np.max(deviations)
+        
+        # Calculate stability index (0-1 scale, higher = more stable)
+        # Based on how much the signal deviates from the horizontal baseline
+        stability_index = max(0.0, 1.0 - (mean_deviation / stability_threshold))
+        
+        # Determine if standing is stable
+        is_stable = mean_deviation <= stability_threshold
+        
+        # Noise analysis if enabled
+        noise_level = 0.0
+        oscillation_frequency = 0.0
+        
+        if noise_analysis and len(stability_forces) > 1:
+            # Calculate rolling standard deviation as noise measure
+            window_samples = int(rolling_window * len(stability_forces) / (stability_times[-1] - stability_times[0]))
+            if window_samples > 1:
+                rolling_std = []
+                for i in range(len(stability_forces) - window_samples + 1):
+                    window_data = stability_forces[i:i + window_samples]
+                    rolling_std.append(np.std(window_data))
+                
+                noise_level = np.mean(rolling_std) if rolling_std else 0.0
+                
+                # Estimate oscillation frequency from zero crossings
+                detrended = stability_forces - baseline_force
+                zero_crossings = np.where(np.diff(np.signbit(detrended)))[0]
+                if len(zero_crossings) > 1:
+                    oscillation_frequency = len(zero_crossings) / (2 * (stability_times[-1] - stability_times[0]))
+        
+        stability_duration = stability_times[-1] - stability_times[0]
+        
+        print(f"Stability Analysis:")
+        print(f"  Duration: {stability_duration:.2f} s")
+        print(f"  Baseline Force: {baseline_force:.2f} N")
+        print(f"  Mean Deviation: {mean_deviation:.2f} N")
+        print(f"  Max Deviation: {max_deviation:.2f} N")
+        print(f"  Stability Index: {stability_index:.3f}")
+        print(f"  Is Stable: {is_stable}")
+        print(f"  Noise Level: {noise_level:.2f} N")
+        print(f"  Oscillation Frequency: {oscillation_frequency:.2f} Hz")
+        
+        return {
+            'stability_index': float(stability_index),
+            'mean_deviation': float(mean_deviation),
+            'max_deviation': float(max_deviation),
+            'noise_level': float(noise_level),
+            'oscillation_frequency': float(oscillation_frequency),
+            'stability_duration': float(stability_duration),
+            'is_stable': bool(is_stable),
+            'baseline_force': float(baseline_force),
+            'stability_threshold': float(stability_threshold),
+            'stability_start_time': float(stability_times[0]),
+            'stability_end_time': float(stability_times[-1])
+        }
+        
+    except Exception as e:
+        print(f"Error calculating stability index: {str(e)}")
+        return {
+            'stability_index': 0.0,
+            'mean_deviation': 0.0,
+            'max_deviation': 0.0,
+            'noise_level': 0.0,
+            'oscillation_frequency': 0.0,
+            'stability_duration': 0.0,
+            'is_stable': False,
+            'error': str(e)
+        }
 
 
 def calculate_detailed_symmetry(all_peaks, forces, times):
@@ -1917,6 +2552,19 @@ def save_force_plot_png(data, phases, output_path, config):
         # Add comprehensive statistics text box
         if phases:
             first_phase = phases[0]
+            
+            # Get stability metrics if available
+            stability_text = ""
+            if hasattr(phases[0], 'stability_metrics') and phases[0].get('stability_metrics'):
+                stability = phases[0]['stability_metrics']
+                stability_text = f"""
+STABILITY:
+Index: {stability.get('stability_index', 0):.3f}
+Deviation: {stability.get('mean_deviation', 0):.2f} N
+Noise: {stability.get('noise_level', 0):.2f} N
+Stable: {'Yes' if stability.get('is_stable', False) else 'No'}
+"""
+            
             stats_text = f"""CLINICAL METRICS:
 Duration: {data['Time'].iloc[-1] - data['Time'].iloc[0]:.2f} s
 Phases: {len(phases)}
@@ -1937,7 +2585,7 @@ QUALITY:
 Force CV: {first_phase.get('force_cv', 0):.1f}%
 Bilateral Index: {first_phase.get('bilateral_index', 0):.2f}
 Consistency: {first_phase.get('consistency_score', 0):.2f}
-Peaks: {first_phase.get('num_peaks', 0)}
+Peaks: {first_phase.get('num_peaks', 0)}{stability_text}
 """
         else:
             stats_text = "No sit-to-stand phases detected"
