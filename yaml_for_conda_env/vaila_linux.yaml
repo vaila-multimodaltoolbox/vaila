@@ -108,7 +108,9 @@ dependencies:
       - gtts
       - librosa
       - pydub
+      - odfpy
       - psutil
       - "ydata-sdk[text,docx]"
       - ultralytics
+
       

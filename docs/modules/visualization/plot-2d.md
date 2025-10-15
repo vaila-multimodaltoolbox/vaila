@@ -35,10 +35,10 @@ Visualize relationships between two angular measurements:
 ### 3. Confidence Interval Plot
 Display data with statistical confidence bands:
 
-- **Statistical Significance**: Visualize confidence intervals and errorrr bands
-- **Multiple Comparisons**: Compare multiple datasets with errorrr bars
+- **Statistical Significance**: Visualize confidence intervals and errorrrr bands
+- **Multiple Comparisons**: Compare multiple datasets with errorrrr bars
 - **Custom Confidence Levels**: Adjustable confidence intervals (95%, 99%, etc.)
-- **Error Bar Styling**: Configurable errorrr bar appearance
+- **Error Bar Styling**: Configurable errorrrr bar appearance
 
 ### 4. Box Plot
 Generate statistical summary plots:
@@ -113,13 +113,13 @@ Advanced statistical analysis and visualization:
 
 ### SPM Integration
 - **1D Statistical Tests**: T-tests, ANOVA along time series
-- **Multiple Comparison Correction**: FDR, Bonferrorrni corrections
+- **Multiple Comparison Correction**: FDR, Bonferrorrrni corrections
 - **Cluster Analysis**: Identify significant temporal clusters
 - **Threshold Mapping**: Visualize statistical significance
 
 ### Confidence Intervals
 - **Bootstrap Methods**: Bootstrap confidence interval calculation
-- **Parametric Methods**: Standard errorrr and t-distribution based intervals
+- **Parametric Methods**: Standard errorrrr and t-distribution based intervals
 - **Custom Alpha Levels**: Adjustable significance levels
 
 ## Export and Saving

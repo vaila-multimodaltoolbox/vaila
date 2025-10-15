@@ -317,7 +317,7 @@ Sistema de backup integrado para segurança dos dados:
 - Criada documentação HTML abrangente
 - Adicionado acesso rápido à documentação completa via tecla 'D'
 - Melhorado diálogo de ajuda com informações de formato
-- Aprimorado tratamento de errorrs e feedback do usuário
+- Aprimorado tratamento de errorrrs e feedback do usuário
 
 ### Versões Anteriores
 - Versão 0.0.7: Funcionalidade básica com zoom e modos de marcadores

@@ -1811,12 +1811,28 @@ Parameters have been confirmed and will be used for processing.
 
     def perform_analysis(self, window, column_name):
         """Perform quality analysis on selected column"""
+        # Force update of all widgets before analysis
+        print("\n[DEBUG] Performing analysis...")
+        print(f"[DEBUG] Column: {column_name}")
+        
+        # Force focus to trigger any pending updates
+        self.window.focus_force()
+        self.window.update()
+        self.window.update_idletasks()
+        
         # Clear previous plots
         for widget in self.plot_frame.winfo_children():
             widget.destroy()
 
-        # Get current configuration
+        # Get current configuration with forced parameter update
         config = self.get_current_analysis_config()
+        
+        print(f"[DEBUG] Using config for analysis:")
+        print(f"  Interp method: {config['interp_method']}")
+        print(f"  Smooth method: {config['smooth_method']}")
+        print(f"  Smooth params: {config['smooth_params']}")
+        print(f"  Padding: {config['padding']}")
+        print(f"  Max gap: {config['max_gap']}")
 
         # Process the selected column
         original_data = self.test_data[column_name].values
@@ -1850,46 +1866,58 @@ Parameters have been confirmed and will be used for processing.
         # Create figure with subplots
         fig = Figure(figsize=(12, 10))
 
-        # Plot 1: Original vs Processed Data
+        # Plot 1: Original vs Processed Data (usando pontos para melhor visualização)
         ax1 = fig.add_subplot(3, 2, 1)
         ax1.plot(
             frame_numbers,
             original_data,
-            "b.-",
+            "o",
             label="Original",
-            alpha=0.6,
-            markersize=4,
+            alpha=0.5,
+            markersize=3,
+            color="blue",
         )
-        ax1.plot(frame_numbers, processed_data, "r-", label="Processed", linewidth=2)
-        ax1.set_title(f"Original vs Processed - {column_name}")
-        ax1.set_xlabel("Frame")
-        ax1.set_ylabel("Value")
-        ax1.legend()
-        ax1.grid(True, alpha=0.3)
+        ax1.plot(
+            frame_numbers, 
+            processed_data, 
+            ".", 
+            label="Processed", 
+            markersize=4,
+            color="red",
+            alpha=0.7
+        )
+        ax1.set_title(f"Original vs Processed - {column_name}", fontweight='bold')
+        ax1.set_xlabel("Frame", fontweight='bold')
+        ax1.set_ylabel("Value", fontweight='bold')
+        ax1.legend(loc='best')
+        ax1.grid(True, alpha=0.3, linestyle='--')
 
-        # Plot 2: Residuals (Original and Filtered)
+        # Plot 2: Residuals (Original and Filtered) - usando pontos
         ax2 = fig.add_subplot(3, 2, 2)
         ax2.plot(
             frame_numbers[valid_mask],
             residuals[valid_mask],
-            "g.-",
-            markersize=4,
+            "o",
+            markersize=3,
             label="Original Residuals",
-            alpha=0.6,
+            alpha=0.4,
+            color="green",
         )
         ax2.plot(
             frame_numbers[valid_mask],
             filtered_residuals[valid_mask],
-            "r-",
-            linewidth=2,
+            ".",
+            markersize=5,
             label="Filtered Residuals",
+            alpha=0.7,
+            color="red",
         )
-        ax2.axhline(y=0, color="k", linestyle="--", alpha=0.5)
-        ax2.set_title("Residuals (Original - Processed)")
-        ax2.set_xlabel("Frame")
-        ax2.set_ylabel("Residual")
-        ax2.legend()
-        ax2.grid(True, alpha=0.3)
+        ax2.axhline(y=0, color="k", linestyle="--", alpha=0.5, linewidth=1.5)
+        ax2.set_title("Residuals (Original - Processed)", fontweight='bold')
+        ax2.set_xlabel("Frame", fontweight='bold')
+        ax2.set_ylabel("Residual", fontweight='bold')
+        ax2.legend(loc='best')
+        ax2.grid(True, alpha=0.3, linestyle='--')
 
         # Calculate and display RMS error
         rms_error = np.sqrt(np.nanmean(residuals**2))
@@ -1902,30 +1930,32 @@ Parameters have been confirmed and will be used for processing.
             bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
         )
 
-        # Plot 3: First Derivative
+        # Plot 3: First Derivative (Velocity) - mantém linha
         ax3 = fig.add_subplot(3, 2, 3)
-        ax3.plot(frame_numbers, first_derivative, "m-", linewidth=1.5)
-        ax3.set_title("First Derivative (Velocity)")
-        ax3.set_xlabel("Frame")
-        ax3.set_ylabel("dY/dX")
-        ax3.grid(True, alpha=0.3)
+        ax3.plot(frame_numbers, first_derivative, "-", linewidth=1.5, color="magenta", alpha=0.7)
+        ax3.axhline(y=0, color="k", linestyle="-", alpha=0.3, linewidth=0.5)
+        ax3.set_title("First Derivative (Velocity)", fontweight='bold')
+        ax3.set_xlabel("Frame", fontweight='bold')
+        ax3.set_ylabel("dY/dX", fontweight='bold')
+        ax3.grid(True, alpha=0.3, linestyle='--')
 
-        # Plot 4: Second Derivative
+        # Plot 4: Second Derivative (Acceleration) - mantém linha
         ax4 = fig.add_subplot(3, 2, 4)
-        ax4.plot(frame_numbers, second_derivative, "c-", linewidth=1.5)
-        ax4.set_title("Second Derivative (Acceleration)")
-        ax4.set_xlabel("Frame")
-        ax4.set_ylabel("d²Y/dX²")
-        ax4.grid(True, alpha=0.3)
+        ax4.plot(frame_numbers, second_derivative, "-", linewidth=1.5, color="cyan", alpha=0.7)
+        ax4.axhline(y=0, color="k", linestyle="-", alpha=0.3, linewidth=0.5)
+        ax4.set_title("Second Derivative (Acceleration)", fontweight='bold')
+        ax4.set_xlabel("Frame", fontweight='bold')
+        ax4.set_ylabel("d²Y/dX²", fontweight='bold')
+        ax4.grid(True, alpha=0.3, linestyle='--')
 
-        # Plot 5: Histogram of Residuals
+        # Plot 5: Histogram of Residuals (melhorado)
         ax5 = fig.add_subplot(3, 2, 5)
         if np.any(valid_mask):
-            ax5.hist(residuals[valid_mask], bins=30, edgecolor="black", alpha=0.7)
-            ax5.set_title("Distribution of Residuals")
-            ax5.set_xlabel("Residual Value")
-            ax5.set_ylabel("Frequency")
-            ax5.grid(True, alpha=0.3, axis="y")
+            ax5.hist(residuals[valid_mask], bins=30, edgecolor="black", alpha=0.7, color='steelblue')
+            ax5.set_title("Distribution of Residuals", fontweight='bold')
+            ax5.set_xlabel("Residual Value", fontweight='bold')
+            ax5.set_ylabel("Frequency", fontweight='bold')
+            ax5.grid(True, alpha=0.3, linestyle='--', axis="y")
 
             # Add normal distribution overlay
             from scipy import stats
@@ -1945,7 +1975,7 @@ Parameters have been confirmed and will be used for processing.
             )
             ax5.legend()
 
-        # Plot 6: Spectral Analysis (FFT of processed signal)
+        # Plot 6: Spectral Analysis (FFT of processed signal) - melhorado
         ax6 = fig.add_subplot(3, 2, 6)
         if len(processed_data) > 1:
             # Remove mean and apply window
@@ -1957,11 +1987,11 @@ Parameters have been confirmed and will be used for processing.
             fft = np.fft.rfft(signal_windowed)
             freq = np.fft.rfftfreq(len(signal), 1.0)  # Assuming 1 frame = 1 time unit
 
-            ax6.semilogy(freq[1:], np.abs(fft[1:]), "b-")
-            ax6.set_title("Frequency Spectrum (FFT)")
-            ax6.set_xlabel("Frequency (cycles/frame)")
-            ax6.set_ylabel("Magnitude")
-            ax6.grid(True, alpha=0.3)
+            ax6.semilogy(freq[1:], np.abs(fft[1:]), "-", linewidth=1.5, color='darkblue', alpha=0.7)
+            ax6.set_title("Frequency Spectrum (FFT)", fontweight='bold')
+            ax6.set_xlabel("Frequency (cycles/frame)", fontweight='bold')
+            ax6.set_ylabel("Magnitude (log scale)", fontweight='bold')
+            ax6.grid(True, alpha=0.3, linestyle='--', which='both')
 
         # Add configuration info as title
         config_text = f"Config: {config['interp_method']} interp, {config['smooth_method']} smooth"
@@ -1989,8 +2019,29 @@ Parameters have been confirmed and will be used for processing.
         canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
     def get_current_analysis_config(self):
-        """Get current configuration for analysis"""
+        """Get current configuration for analysis - with forced parameter update"""
         try:
+            # Force update of all parameter values from Entry widgets
+            self.window.update_idletasks()
+            
+            # Force explicit update from param_entries if they exist
+            if hasattr(self, 'param_entries'):
+                if "cutoff" in self.param_entries:
+                    try:
+                        cutoff_value = self.param_entries["cutoff"].get()
+                        self.butter_cutoff.set(cutoff_value)
+                        print(f"[DEBUG] Updated cutoff to: {cutoff_value}")
+                    except Exception as e:
+                        print(f"[DEBUG] Error updating cutoff: {e}")
+                
+                if "fs" in self.param_entries:
+                    try:
+                        fs_value = self.param_entries["fs"].get()
+                        self.butter_fs.set(fs_value)
+                        print(f"[DEBUG] Updated fs to: {fs_value}")
+                    except Exception as e:
+                        print(f"[DEBUG] Error updating fs: {e}")
+            
             interp_map = {
                 1: "linear",
                 2: "cubic",
@@ -2017,38 +2068,51 @@ Parameters have been confirmed and will be used for processing.
                     "window_length": int(self.savgol_window.get()),
                     "polyorder": int(self.savgol_poly.get()),
                 }
+                print(f"[DEBUG] Savgol params: window={smooth_params['window_length']}, poly={smooth_params['polyorder']}")
             elif smooth_method == 3:  # LOWESS
                 smooth_params = {
                     "frac": float(self.lowess_frac.get()),
                     "it": int(self.lowess_it.get()),
                 }
+                print(f"[DEBUG] LOWESS params: frac={smooth_params['frac']}, it={smooth_params['it']}")
             elif smooth_method == 4:  # Kalman
                 smooth_params = {
                     "n_iter": int(self.kalman_iterations.get()),
                     "mode": int(self.kalman_mode.get()),
                 }
+                print(f"[DEBUG] Kalman params: n_iter={smooth_params['n_iter']}, mode={smooth_params['mode']}")
             elif smooth_method == 5:  # Butterworth
                 smooth_params = {
                     "cutoff": float(self.butter_cutoff.get()),
                     "fs": float(self.butter_fs.get()),
                 }
+                print(f"[DEBUG] Butterworth params: cutoff={smooth_params['cutoff']}, fs={smooth_params['fs']}")
             elif smooth_method == 6:  # Splines
                 smooth_params = {"smoothing_factor": float(self.spline_smoothing.get())}
+                print(f"[DEBUG] Splines params: smoothing={smooth_params['smoothing_factor']}")
             elif smooth_method == 7:  # ARIMA
                 smooth_params = {
                     "p": int(self.arima_p.get()),
                     "d": int(self.arima_d.get()),
                     "q": int(self.arima_q.get()),
                 }
+                print(f"[DEBUG] ARIMA params: p={smooth_params['p']}, d={smooth_params['d']}, q={smooth_params['q']}")
 
-            return {
+            config = {
                 "interp_method": interp_map[int(self.interp_entry.get())],
                 "smooth_method": smooth_map[smooth_method],
                 "smooth_params": smooth_params,
                 "padding": float(self.padding_entry.get()),
                 "max_gap": int(self.max_gap_entry.get()),
             }
-        except Exception:
+            
+            print(f"[DEBUG] Final analysis config: {config}")
+            return config
+            
+        except Exception as e:
+            print(f"[ERROR] Error getting analysis config: {e}")
+            import traceback
+            traceback.print_exc()
             # Return default config if any error
             return {
                 "interp_method": "linear",

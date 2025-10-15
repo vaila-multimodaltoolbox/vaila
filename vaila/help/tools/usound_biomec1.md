@@ -3,7 +3,7 @@
 ## 📋 Module Information
 
 - **Category:** Tools
-- **File:** `vaila/usound_biomec1.py`
+- **File:** `vaila\usound_biomec1.py`
 - **Lines:** 639
 - **Size:** 20695 characters
 - **Version:** 0.0.7
@@ -54,6 +54,6 @@ Version: 0.0.7
 
 ---
 
-📅 **Generated automatically on:** 08/10/2025 14:24:24
+📅 **Generated automatically on:** 15/10/2025 08:04:44
 🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

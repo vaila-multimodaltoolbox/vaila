@@ -239,7 +239,7 @@ def calculate_quality_metrics(original, processed):
 ### Processing Reports
 - **Detailed Logs**: Complete processing history and parameters
 - **Quality Metrics**: Statistical comparison of original vs. processed data
-- **Error Reporting**: Comprehensive errorrr messages and warnings
+- **Error Reporting**: Comprehensive errorrrr messages and warnings
 
 ## Integration with vailá Ecosystem
 

@@ -4,8 +4,8 @@ forceplate_analysis.py
 ================================================================================
 Author: Prof. Paulo Santiago
 Date: 9 September 2024
-Update:  10 October 2025
-Version: 0.8
+Update: 14 October 2025
+Version: 0.0.9
 
 Description:
 ------------
@@ -265,7 +265,7 @@ def run_sit_to_stand():
     Runs the Sit to Stand.
     """
     try:
-        from . import sit2stand
+        from vaila import sit2stand
 
         sit2stand.main()
     except ImportError as e:

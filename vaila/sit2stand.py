@@ -4,8 +4,8 @@ sit2stand.py - Sit to Stand Analysis Module
 ================================================================================
 Author: Prof. Paulo Santiago
 Create: 10 October 2025
-Update: 10 October 2025
-Version: 0.2
+Update: 14 October 2025
+Version: 0.0.3
 
 Description:
 ------------
@@ -85,7 +85,20 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk, simpledialog
 import pandas as pd
 import numpy as np
-import toml
+try:
+    import toml
+    TOML_SUPPORT = True
+except ImportError:
+    try:
+        import tomli as toml  # Fallback
+        TOML_SUPPORT = True
+    except ImportError:
+        try:
+            import tomllib as toml  # Python 3.11+ built-in
+            TOML_SUPPORT = True
+        except ImportError:
+            TOML_SUPPORT = False
+            print("Warning: No TOML library available. Config files won't work.")
 import json
 import matplotlib.pyplot as plt
 from scipy.signal import butter, filtfilt
@@ -100,32 +113,64 @@ except ImportError:
     print("Warning: ezc3d not found. C3D file support will be limited.")
 
 
-def main():
+def main(cli_args=None):
     """
-    Main function to run the sit-to-stand analysis in batch mode.
+    Main function to run the sit-to-stand analysis in batch mode or GUI mode.
     Processes multiple C3D and CSV files automatically using TOML configuration.
+
+    Parameters:
+    -----------
+    cli_args : list, optional
+        Command line arguments for CLI mode. If None, runs in GUI mode.
     """
-    print("Starting Sit-to-Stand Batch Analysis...")
+    print("Starting Sit-to-Stand Analysis...")
     print(f"Running script: {Path(__file__).name}")
     print(f"Script directory: {Path(__file__).parent}")
 
     # Parse command line arguments
     import sys
-    if len(sys.argv) < 3:
-        print("Usage: python sit2stand.py <config.toml> <input_directory> [output_directory]")
-        print("Example: python sit2stand.py config.toml /path/to/c3d/files /path/to/output")
+    if cli_args is None:
+        cli_args = sys.argv[1:]
+
+    # Check if we have CLI arguments
+    if len(cli_args) >= 2:
+        return run_cli_mode(cli_args)
+
+    # Otherwise, run in GUI mode
+    return run_gui_mode()
+
+
+def run_cli_mode(cli_args):
+    """
+    Runs the analysis in CLI mode with command line arguments.
+
+    Parameters:
+    -----------
+    cli_args : list
+        Command line arguments [config_file, input_directory, output_directory, file_format]
+    """
+    if len(cli_args) < 3:
+        print("Usage: python sit2stand.py <config.toml> <input_directory> [output_directory] [file_format]")
+        print("Example: python sit2stand.py config.toml /path/to/files /path/to/output auto")
+        print("File format: auto, c3d, csv")
         return
 
-    config_file = sys.argv[1]
-    input_dir = sys.argv[2]
-    output_dir = sys.argv[3] if len(sys.argv) > 3 else None
+    config_file = cli_args[0]
+    input_dir = cli_args[1]
+    output_dir = cli_args[2] if len(cli_args) > 2 else None
+    file_format = cli_args[3] if len(cli_args) > 3 else "auto"
 
     try:
-        # Step 1: Load TOML configuration
-        config = load_toml_config(config_file)
-        if not config:
-            print(f"Failed to load configuration from {config_file}")
-            return
+        # Handle empty config file (use defaults)
+        if not config_file or config_file == "":
+            config = get_default_config()
+            print("Using default configuration")
+        else:
+            # Step 1: Load TOML configuration
+            config = load_toml_config(config_file)
+            if not config:
+                print(f"Failed to load configuration from {config_file}")
+                return
 
         # Step 2: Set up output directory
         if not output_dir:
@@ -133,10 +178,10 @@ def main():
         os.makedirs(output_dir, exist_ok=True)
         print(f"Output directory: {output_dir}")
 
-        # Step 3: Find all C3D and CSV files
-        files = find_analysis_files(input_dir)
+        # Step 3: Find files based on format
+        files = find_analysis_files(input_dir, file_format)
         if not files:
-            print(f"No C3D or CSV files found in {input_dir}")
+            print(f"No files found in {input_dir} with format {file_format}")
             return
 
         print(f"Found {len(files)} files to process:")
@@ -157,9 +202,44 @@ def main():
         traceback.print_exc()
 
 
+def get_default_config():
+    """Returns default configuration for sit-to-stand analysis."""
+    return {
+        'analysis': {
+            'force_column': 'Fz'
+        },
+        'filtering': {
+            'enabled': True,
+            'cutoff_frequency': 10.0,
+            'sampling_frequency': 100.0,
+            'order': 4
+        },
+        'detection': {
+            'force_threshold': 10.0,
+            'min_duration': 0.5,
+            'onset_threshold': 5.0
+        }
+    }
+
+
+def run_gui_mode():
+    """
+    Runs the analysis in GUI mode for interactive file and configuration selection.
+    """
+    try:
+        # Create GUI for file selection and configuration
+        gui = SitToStandGUI()
+        gui.run()
+
+    except Exception as e:
+        print(f"Error in GUI mode: {e}")
+        import traceback
+        traceback.print_exc()
+
+
 def load_toml_config(config_file):
     """
-    Loads TOML configuration file.
+    Loads TOML configuration file with support for multiple TOML libraries.
 
     Parameters:
     -----------
@@ -172,11 +252,24 @@ def load_toml_config(config_file):
         Configuration dictionary or None if failed
     """
     try:
+        if not TOML_SUPPORT:
+            print("TOML support not available. Install toml or tomli library.")
+            return None
+            
         if not os.path.exists(config_file):
             print(f"Configuration file not found: {config_file}")
             return None
 
-        config = toml.load(config_file)
+        # Load TOML file - handle different library APIs
+        try:
+            # Try toml library (most common)
+            with open(config_file, 'r') as f:
+                config = toml.load(f)
+        except AttributeError:
+            # Try tomllib (Python 3.11+ built-in, binary mode)
+            with open(config_file, 'rb') as f:
+                config = toml.load(f)
+                
         print(f"Loaded configuration from: {config_file}")
 
         # Validate required sections
@@ -190,17 +283,21 @@ def load_toml_config(config_file):
 
     except Exception as e:
         print(f"Error loading TOML configuration: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 
-def find_analysis_files(input_dir):
+def find_analysis_files(input_dir, file_format="auto"):
     """
-    Finds all C3D and CSV files in the input directory.
+    Finds files in the input directory based on specified format.
 
     Parameters:
     -----------
     input_dir : str
         Input directory path
+    file_format : str
+        File format to search for: 'auto', 'c3d', 'csv'
 
     Returns:
     --------
@@ -215,12 +312,22 @@ def find_analysis_files(input_dir):
         print(f"Input directory not found: {input_dir}")
         return files
 
-    # Supported extensions
-    extensions = ['.c3d', '.csv']
+    # Determine extensions based on format
+    if file_format == "auto":
+        extensions = ['.c3d', '.csv']
+    elif file_format == "c3d":
+        extensions = ['.c3d']
+    elif file_format == "csv":
+        extensions = ['.csv']
+    else:
+        print(f"Unknown file format: {file_format}")
+        return files
 
     for ext in extensions:
         pattern = os.path.join(input_dir, f"*{ext}")
-        files.extend(glob.glob(pattern))
+        found_files = glob.glob(pattern)
+        files.extend(found_files)
+        print(f"Found {len(found_files)} {ext} files")
 
     # Sort files for consistent processing
     files.sort()
@@ -536,54 +643,93 @@ def generate_batch_report(results, config, output_dir):
             f.write(f"Failed analyses: {total_files - successful_analyses}\n")
             f.write(f"Success rate: {(successful_analyses/total_files*100):.1f}%\n\n")
 
-            # Detailed results
+            # Detailed results with comprehensive clinical metrics
             total_phases = 0
             for result in results:
                 if 'error' not in result:
-                    f.write(f"File: {result['filename']}\n")
+                    f.write(f"\nFile: {result['filename']}\n")
+                    f.write("=" * 60 + "\n")
                     analysis = result['analysis']
 
-                    # Basic metrics
+                    # === BASIC METRICS ===
+                    f.write("BASIC FORCE METRICS:\n")
                     f.write(f"  Duration: {analysis['duration']:.2f} s\n")
                     f.write(f"  Mean Force: {analysis['mean_force']:.2f} N\n")
                     f.write(f"  Max Force: {analysis['max_force']:.2f} N\n")
+                    f.write(f"  Min Force: {analysis['min_force']:.2f} N\n\n")
 
-                    # Movement metrics
+                    # === MOVEMENT DETECTION ===
                     movement = analysis['movement_metrics']
+                    f.write("MOVEMENT DETECTION:\n")
                     f.write(f"  Phases Detected: {movement['num_phases']}\n")
                     f.write(f"  Total Movement Time: {movement['total_movement_time']:.2f} s\n")
                     f.write(f"  Average Phase Duration: {movement['average_phase_duration']:.2f} s\n")
 
                     if movement['phases_per_minute'] > 0:
-                        f.write(f"  Phases per Minute: {movement['phases_per_minute']:.1f}\n")
+                        f.write(f"  Phases per Minute: {movement['phases_per_minute']:.1f}\n\n")
 
-                    # Impulse metrics
+                    # === TIME TO PEAK METRICS (CRITICAL FOR CP) ===
+                    time_to_peak = analysis['time_to_peak_metrics']
+                    f.write("TIME TO PEAK METRICS:\n")
+                    if time_to_peak.get('time_to_first_peak') is not None:
+                        f.write(f"  Time to First Peak: {time_to_peak['time_to_first_peak']:.3f} s\n")
+                    if time_to_peak.get('time_to_max_force') is not None:
+                        f.write(f"  Time to Max Force: {time_to_peak['time_to_max_force']:.3f} s\n")
+                    if time_to_peak.get('average_time_to_peak') > 0:
+                        f.write(f"  Average Time to Peak: {time_to_peak['average_time_to_peak']:.3f} s\n")
+                    if time_to_peak.get('time_to_peak_variation') > 0:
+                        f.write(f"  Time to Peak Variation: {time_to_peak['time_to_peak_variation']:.3f} s\n\n")
+
+                    # === RATE OF FORCE DEVELOPMENT (CRITICAL FOR CP) ===
+                    f.write("RATE OF FORCE DEVELOPMENT (RFD):\n")
+                    phases_data = analysis.get('sit_to_stand_phases', [])
+                    if phases_data:
+                        first_phase = phases_data[0]
+                        f.write(f"  Overall RFD: {first_phase.get('overall_rfd', 0):.2f} N/s\n")
+                        f.write(f"  Early RFD (first 100ms): {first_phase.get('early_rfd', 0):.2f} N/s\n")
+                        f.write(f"  Peak RFD: {first_phase.get('peak_rfd', 0):.2f} N/s\n")
+                        if first_phase.get('weight_transfer_time'):
+                            f.write(f"  Weight Transfer Time: {first_phase['weight_transfer_time']:.3f} s\n\n")
+
+                    # === IMPULSE METRICS ===
                     impulse = analysis['impulse_metrics']
+                    f.write("IMPULSE & POWER METRICS:\n")
                     f.write(f"  Total Impulse: {impulse['total_impulse']:.2f} N⋅s\n")
                     f.write(f"  Average Impulse: {impulse['average_impulse']:.2f} N⋅s\n")
+                    f.write(f"  Peak Power: {impulse['peak_power']:.2f} W\n")
+                    f.write(f"  Average Power: {impulse['average_power']:.2f} W\n")
+                    f.write(f"  Force Rate of Change: {impulse['force_rate_of_change']:.2f} N/s\n\n")
 
-                    # Time to peak metrics
-                    time_to_peak = analysis['time_to_peak_metrics']
-                    if time_to_peak['time_to_first_peak'] is not None:
-                        f.write(f"  Time to First Peak: {time_to_peak['time_to_first_peak']:.3f} s\n")
-                    if time_to_peak['time_to_max_force'] is not None:
-                        f.write(f"  Time to Max Force: {time_to_peak['time_to_max_force']:.3f} s\n")
+                    # === CLINICAL QUALITY METRICS ===
+                    if phases_data:
+                        first_phase = phases_data[0]
+                        f.write("MOVEMENT QUALITY METRICS:\n")
+                        if 'force_cv' in first_phase:
+                            f.write(f"  Force Coefficient of Variation: {first_phase['force_cv']:.2f}%\n")
+                        if 'force_jerk' in first_phase:
+                            f.write(f"  Force Smoothness (Jerk): {first_phase['force_jerk']:.2f}\n")
+                        if 'bilateral_index' in first_phase:
+                            f.write(f"  Bilateral Symmetry Index: {first_phase['peak_symmetry']:.3f}\n")
+                        if 'consistency_score' in first_phase:
+                            f.write(f"  Movement Consistency: {first_phase['consistency_score']:.3f}\n")
+                        if 'num_peaks' in first_phase:
+                            f.write(f"  Number of Peaks: {first_phase['num_peaks']}\n\n")
 
                     # Plot information
                     if 'plot_path' in result:
-                        f.write(f"  Plot saved: {os.path.basename(result['plot_path'])}\n")
+                        f.write(f"Plot saved: {os.path.basename(result['plot_path'])}\n")
 
-                    f.write("-" * 30 + "\n")
+                    f.write("=" * 60 + "\n")
                     total_phases += movement['num_phases']
                 else:
-                    f.write(f"ERROR - {result['filename']}: {result['error']}\n")
-                    f.write("-" * 30 + "\n")
+                    f.write(f"\nERROR - {result['filename']}: {result['error']}\n")
+                    f.write("=" * 60 + "\n")
 
             f.write(f"\nOverall Summary:\n")
             f.write(f"Total phases detected across all files: {total_phases}\n")
             f.write(f"Average phases per successful file: {total_phases/successful_analyses:.1f}\n")
 
-        # Generate CSV summary
+        # Generate comprehensive CSV summary with all clinical metrics
         csv_data = []
         for result in results:
             if 'error' not in result:
@@ -591,26 +737,63 @@ def generate_batch_report(results, config, output_dir):
                 movement = analysis['movement_metrics']
                 impulse = analysis['impulse_metrics']
                 time_to_peak = analysis['time_to_peak_metrics']
+                phases_data = analysis.get('sit_to_stand_phases', [])
 
+                # Base metrics
                 row = {
                     'filename': result['filename'],
-                    'duration': analysis['duration'],
-                    'mean_force': analysis['mean_force'],
-                    'max_force': analysis['max_force'],
-                    'min_force': analysis['min_force'],
+                    'duration_s': analysis['duration'],
+                    'mean_force_N': analysis['mean_force'],
+                    'max_force_N': analysis['max_force'],
+                    'min_force_N': analysis['min_force'],
+                    
+                    # Movement detection
                     'num_phases': movement['num_phases'],
-                    'total_movement_time': movement['total_movement_time'],
-                    'average_phase_duration': movement['average_phase_duration'],
+                    'total_movement_time_s': movement['total_movement_time'],
+                    'average_phase_duration_s': movement['average_phase_duration'],
                     'phases_per_minute': movement['phases_per_minute'],
-                    'total_impulse': impulse['total_impulse'],
-                    'average_impulse': impulse['average_impulse'],
-                    'peak_power': impulse['peak_power'],
-                    'average_power': impulse['average_power'],
-                    'force_rate_of_change': impulse['force_rate_of_change'],
-                    'time_to_first_peak': time_to_peak['time_to_first_peak'],
-                    'time_to_max_force': time_to_peak['time_to_max_force'],
-                    'symmetry_index': movement['symmetry_index']
+                    
+                    # Time to peak metrics (CRITICAL)
+                    'time_to_first_peak_s': time_to_peak.get('time_to_first_peak'),
+                    'time_to_max_force_s': time_to_peak.get('time_to_max_force'),
+                    'average_time_to_peak_s': time_to_peak.get('average_time_to_peak', 0),
+                    'time_to_peak_variation_s': time_to_peak.get('time_to_peak_variation', 0),
+                    
+                    # Impulse metrics
+                    'total_impulse_Ns': impulse['total_impulse'],
+                    'average_impulse_Ns': impulse['average_impulse'],
+                    'peak_power_W': impulse['peak_power'],
+                    'average_power_W': impulse['average_power'],
+                    'force_rate_of_change_Ns': impulse['force_rate_of_change'],
+                    
+                    # Symmetry metrics
+                    'symmetry_index': movement.get('symmetry_index', 0),
                 }
+                
+                # Add RFD metrics from first phase if available
+                if phases_data:
+                    first_phase = phases_data[0]
+                    row.update({
+                        'overall_rfd_Ns': first_phase.get('overall_rfd', 0),
+                        'early_rfd_Ns': first_phase.get('early_rfd', 0),
+                        'peak_rfd_Ns': first_phase.get('peak_rfd', 0),
+                        'weight_transfer_time_s': first_phase.get('weight_transfer_time'),
+                        'first_peak_force_N': first_phase.get('first_peak_force', 0),
+                        'max_peak_force_N': first_phase.get('max_peak_force', 0),
+                        'num_peaks_detected': first_phase.get('num_peaks', 0),
+                        'force_cv_percent': first_phase.get('force_cv', 0),
+                        'force_jerk': first_phase.get('force_jerk', 0),
+                        'peak_symmetry': first_phase.get('peak_symmetry', 0),
+                        'temporal_symmetry': first_phase.get('temporal_symmetry', 0),
+                        'bilateral_index': first_phase.get('bilateral_index', 0),
+                        'consistency_score': first_phase.get('consistency_score', 0),
+                        'has_unloading_phase': first_phase.get('has_unloading_phase', False),
+                        'force_range_N': first_phase.get('force_range', 0),
+                        'force_excursion_N': first_phase.get('force_excursion', 0),
+                        'mean_force_during_movement_N': first_phase.get('mean_force_during_movement', 0),
+                        'sampling_frequency_Hz': first_phase.get('sampling_frequency', 0)
+                    })
+                
                 csv_data.append(row)
 
         if csv_data:
@@ -936,9 +1119,253 @@ def analyze_sit_to_stand(data, config):
         }
 
 
-def detect_sit_to_stand_phases(force_data, time_data, force_threshold, min_duration, onset_threshold):
+def detect_sit_to_stand_phases(force_data, time_data, force_threshold, min_duration, onset_threshold, auto_threshold=True):
     """
-    Detects sit-to-stand phases in force data.
+    Detects sit-to-stand phases in force data with enhanced clinical biomechanical analysis.
+    Specifically designed for pediatric cerebral palsy assessment with comprehensive metrics.
+
+    Parameters:
+    -----------
+    force_data : array-like
+        Vertical force values (Fz) from force plate
+    time_data : array-like
+        Time values corresponding to force measurements
+    force_threshold : float
+        Minimum force threshold for movement detection (N)
+    min_duration : float
+        Minimum duration for a valid sit-to-stand phase (seconds)
+    onset_threshold : float
+        Threshold for movement onset detection above baseline (N)
+    auto_threshold : bool
+        Whether to use automatic threshold detection based on force profile
+
+    Returns:
+    --------
+    list
+        List of detected phases with comprehensive biomechanical metrics including:
+        - Time to first peak, time to max force
+        - Rate of force development (RFD) - critical for CP assessment
+        - Impulse and power metrics
+        - Peak detection and timing analysis
+        - Symmetry and consistency measures
+    """
+    phases = []
+
+    try:
+        # Auto-detect threshold if enabled (based on force gradient analysis)
+        if auto_threshold:
+            detected_threshold = detect_ascending_threshold(force_data, time_data)
+            if detected_threshold:
+                onset_threshold = detected_threshold
+                print(f"Auto-detected onset threshold: {onset_threshold:.2f} N")
+
+        # Find baseline (seated) force level - use 10th percentile for robustness
+        baseline_force = np.percentile(force_data, 10)
+        print(f"Baseline force (seated): {baseline_force:.2f} N")
+
+        # Detect movement onset (when force exceeds baseline + onset_threshold)
+        onset_indices = np.where(force_data > baseline_force + onset_threshold)[0]
+
+        if len(onset_indices) == 0:
+            print("No movement onset detected - check threshold settings")
+            return phases
+
+        # Find continuous segments representing distinct sit-to-stand movements
+        movement_segments = []
+        current_segment = [onset_indices[0]]
+
+        # Estimate sampling frequency
+        if len(time_data) > 1:
+            dt = np.mean(np.diff(time_data))
+            sampling_freq = 1.0 / dt if dt > 0 else 100.0
+        else:
+            sampling_freq = 100.0
+
+        min_samples = int(min_duration * sampling_freq)
+        print(f"Minimum samples for valid phase: {min_samples} (at {sampling_freq:.1f} Hz)")
+
+        for i in range(1, len(onset_indices)):
+            if onset_indices[i] == onset_indices[i-1] + 1:
+                current_segment.append(onset_indices[i])
+            else:
+                if len(current_segment) >= min_samples:
+                    movement_segments.append(current_segment)
+                current_segment = [onset_indices[i]]
+
+        # Add the last segment if valid
+        if len(current_segment) >= min_samples:
+            movement_segments.append(current_segment)
+
+        print(f"Detected {len(movement_segments)} potential sit-to-stand movement(s)")
+
+        # Convert segments to phase information with comprehensive biomechanical metrics
+        for phase_num, segment in enumerate(movement_segments):
+            start_idx = segment[0]
+            end_idx = segment[-1]
+
+            # Extract segment data
+            segment_forces = force_data[start_idx:end_idx+1]
+            segment_times = time_data[start_idx:end_idx+1]
+
+            # === PEAK DETECTION ===
+            # Find ALL peaks in this segment (important for multi-peak movements in CP)
+            all_peaks = detect_all_peaks_in_segment(segment_forces, segment_times, baseline_force)
+            
+            # Identify first peak (clinically important for initial force generation)
+            first_peak = all_peaks[0] if all_peaks else None
+            
+            # Identify maximum peak
+            max_peak = max(all_peaks, key=lambda p: p['force']) if all_peaks else None
+            
+            # Global peak in segment (for compatibility)
+            peak_idx = start_idx + np.argmax(segment_forces)
+            peak_force = force_data[peak_idx]
+            peak_time = time_data[peak_idx]
+
+            # === TEMPORAL METRICS ===
+            phase_duration = time_data[end_idx] - time_data[start_idx]
+            
+            # Time to first peak (onset to first peak) - Critical for CP assessment
+            time_to_first_peak = first_peak['time'] - segment_times[0] if first_peak else None
+            
+            # Time to maximum force
+            time_to_max_force = peak_time - segment_times[0]
+            
+            # === FORCE DEVELOPMENT METRICS ===
+            # Rate of Force Development (RFD) - multiple methods
+            
+            # 1. Overall RFD (onset to peak)
+            force_at_onset = segment_forces[0]
+            overall_rfd = (peak_force - force_at_onset) / time_to_max_force if time_to_max_force > 0 else 0
+            
+            # 2. Early RFD (first 100ms or 10% of movement, whichever is shorter)
+            early_window_time = min(0.1, phase_duration * 0.1)  # 100ms or 10%
+            early_window_samples = int(early_window_time * sampling_freq)
+            if early_window_samples > 1:
+                early_force_change = segment_forces[early_window_samples] - segment_forces[0]
+                early_rfd = early_force_change / early_window_time
+            else:
+                early_rfd = 0
+            
+            # 3. Peak RFD (maximum instantaneous rate)
+            force_gradient = np.gradient(segment_forces, segment_times)
+            peak_rfd = np.max(force_gradient)
+            peak_rfd_time = segment_times[np.argmax(force_gradient)]
+            
+            # === IMPULSE METRICS ===
+            # Total impulse (force-time integral)
+            total_impulse = np.trapz(segment_forces, segment_times)
+            
+            # Impulse above baseline (more clinically relevant)
+            impulse_above_baseline = np.trapz(segment_forces - baseline_force, segment_times)
+            
+            # Normalized impulse (per unit time)
+            normalized_impulse = total_impulse / phase_duration if phase_duration > 0 else 0
+            
+            # === POWER METRICS ===
+            # Average power
+            average_power = total_impulse / phase_duration if phase_duration > 0 else 0
+            
+            # Peak power (at point of maximum force)
+            peak_power = peak_force * peak_rfd if peak_rfd > 0 else 0
+            
+            # === FORCE VARIABILITY ===
+            # Coefficient of variation of force during movement
+            force_cv = (np.std(segment_forces) / np.mean(segment_forces)) * 100 if np.mean(segment_forces) > 0 else 0
+            
+            # Force smoothness (using jerk-like metric)
+            force_jerk = np.mean(np.abs(np.gradient(force_gradient, segment_times)))
+            
+            # === SYMMETRY AND CONSISTENCY ===
+            # Multiple peak analysis for bilateral assessment
+            symmetry_metrics = calculate_detailed_symmetry(all_peaks, segment_forces, segment_times)
+            
+            # === CLINICAL METRICS ===
+            # Weight transfer efficiency (how quickly force reaches threshold)
+            weight_transfer_time = None
+            threshold_idx = np.where(segment_forces >= (baseline_force + onset_threshold))[0]
+            if len(threshold_idx) > 0:
+                weight_transfer_time = segment_times[threshold_idx[0]] - segment_times[0]
+            
+            # Unloading phase (before standing) - negative force development
+            unloading_indices = np.where(force_gradient < 0)[0]
+            has_unloading = len(unloading_indices) > 0
+            
+            # Store comprehensive phase metrics
+            phases.append({
+                # Basic temporal metrics
+                'phase_number': phase_num + 1,
+                'start_time': time_data[start_idx],
+                'end_time': time_data[end_idx],
+                'duration': phase_duration,
+                'start_index': start_idx,
+                'end_index': end_idx,
+                
+                # Peak force metrics
+                'peak_force': peak_force,
+                'peak_time': peak_time,
+                'first_peak_force': first_peak['force'] if first_peak else peak_force,
+                'first_peak_time': first_peak['time'] if first_peak else peak_time,
+                'max_peak_force': max_peak['force'] if max_peak else peak_force,
+                'max_peak_time': max_peak['time'] if max_peak else peak_time,
+                'num_peaks': len(all_peaks),
+                'all_peaks': all_peaks,
+                
+                # Time to peak metrics (CRITICAL for CP assessment)
+                'time_to_first_peak': time_to_first_peak,
+                'time_to_max_force': time_to_max_force,
+                'weight_transfer_time': weight_transfer_time,
+                
+                # Rate of Force Development (RFD) - CRITICAL for CP assessment
+                'overall_rfd': overall_rfd,
+                'early_rfd': early_rfd,
+                'peak_rfd': peak_rfd,
+                'peak_rfd_time': peak_rfd_time,
+                'rate_of_force_development': overall_rfd,  # Legacy compatibility
+                
+                # Impulse metrics
+                'impulse': total_impulse,
+                'impulse_above_baseline': impulse_above_baseline,
+                'normalized_impulse': normalized_impulse,
+                
+                # Power metrics
+                'average_power': average_power,
+                'peak_power': peak_power,
+                'power': average_power,  # Legacy compatibility
+                
+                # Force variability and smoothness
+                'force_cv': force_cv,
+                'force_jerk': force_jerk,
+                
+                # Symmetry metrics
+                'symmetry': symmetry_metrics['overall_symmetry'],
+                'peak_symmetry': symmetry_metrics['peak_symmetry'],
+                'temporal_symmetry': symmetry_metrics['temporal_symmetry'],
+                
+                # Clinical indicators
+                'baseline_force': baseline_force,
+                'onset_threshold': onset_threshold,
+                'force_at_onset': force_at_onset,
+                'has_unloading_phase': has_unloading,
+                
+                # Additional biomechanical metrics
+                'force_range': peak_force - force_at_onset,
+                'force_excursion': np.max(segment_forces) - np.min(segment_forces),
+                'mean_force_during_movement': np.mean(segment_forces),
+                'sampling_frequency': sampling_freq
+            })
+
+    except Exception as e:
+        print(f"Error detecting sit-to-stand phases: {str(e)}")
+        import traceback
+        traceback.print_exc()
+
+    return phases
+
+
+def detect_ascending_threshold(force_data, time_data):
+    """
+    Automatically detects threshold based on ascending phase of sit-to-stand movement.
 
     Parameters:
     -----------
@@ -946,123 +1373,358 @@ def detect_sit_to_stand_phases(force_data, time_data, force_threshold, min_durat
         Force values
     time_data : array-like
         Time values
-    force_threshold : float
-        Minimum force threshold for movement detection
-    min_duration : float
-        Minimum duration for a valid phase
-    onset_threshold : float
-        Threshold for movement onset detection
 
     Returns:
     --------
-    list
-        List of detected phases with start/end times and metrics
+    float or None
+        Detected threshold value or None if not detected
     """
-    phases = []
-
     try:
-        # Find baseline (seated) force level
-        baseline_force = np.percentile(force_data, 10)  # Use 10th percentile as baseline
+        # Find baseline (first 10% of data)
+        baseline_force = np.percentile(force_data, 10)
 
-        # Detect movement onset (when force exceeds baseline + onset_threshold)
-        onset_indices = np.where(force_data > baseline_force + onset_threshold)[0]
+        # Find the ascending phase (where force starts increasing significantly)
+        # Look for the point where force derivative is maximum
+        force_derivative = np.gradient(force_data, time_data)
 
-        if len(onset_indices) == 0:
-            return phases
+        # Find the maximum derivative in the first half of the data
+        half_point = len(force_derivative) // 2
+        max_derivative_idx = np.argmax(force_derivative[:half_point])
 
-        # Find continuous segments
-        movement_segments = []
-        current_segment = [onset_indices[0]]
-
-        for i in range(1, len(onset_indices)):
-            if onset_indices[i] == onset_indices[i-1] + 1:
-                current_segment.append(onset_indices[i])
-            else:
-                if len(current_segment) >= min_duration * (len(time_data) / time_data[-1]):
-                    movement_segments.append(current_segment)
-                current_segment = [onset_indices[i]]
-
-        # Add the last segment if valid
-        if len(current_segment) >= min_duration * (len(time_data) / time_data[-1]):
-            movement_segments.append(current_segment)
-
-        # Convert segments to phase information
-        for segment in movement_segments:
-            start_idx = segment[0]
-            end_idx = segment[-1]
-
-            # Find peak force in this segment
-            segment_forces = force_data[start_idx:end_idx+1]
-            peak_idx = start_idx + np.argmax(segment_forces)
-            peak_force = force_data[peak_idx]
-            peak_time = time_data[peak_idx]
-
-            # Calculate phase duration
-            phase_duration = time_data[end_idx] - time_data[start_idx]
-
-            # Calculate force integral (impulse)
-            phase_impulse = np.trapz(segment_forces, time_data[start_idx:end_idx+1])
-
-            phases.append({
-                'start_time': time_data[start_idx],
-                'end_time': time_data[end_idx],
-                'duration': phase_duration,
-                'peak_force': peak_force,
-                'peak_time': peak_time,
-                'impulse': phase_impulse,
-                'start_index': start_idx,
-                'end_index': end_idx
-            })
+        if max_derivative_idx > 0:
+            # Set threshold as baseline + 20% of the force increase at max derivative point
+            force_at_max_deriv = force_data[max_derivative_idx]
+            threshold = baseline_force + 0.2 * (force_at_max_deriv - baseline_force)
+            return threshold
 
     except Exception as e:
-        print(f"Error detecting sit-to-stand phases: {str(e)}")
+        print(f"Error in automatic threshold detection: {str(e)}")
 
-    return phases
+    return None
+
+
+def detect_all_peaks_in_segment(forces, times, baseline_force, min_prominence=5.0):
+    """
+    Detects all significant peaks in a sit-to-stand segment with enhanced filtering.
+    Critical for identifying multiple force peaks in cerebral palsy patients.
+    
+    Parameters:
+    -----------
+    forces : array-like
+        Force values in the segment
+    times : array-like
+        Time values in the segment
+    baseline_force : float
+        Baseline force level for reference
+    min_prominence : float
+        Minimum peak prominence (height above surrounding valleys)
+    
+    Returns:
+    --------
+    list
+        List of detected peaks with time, force, and index information
+    """
+    try:
+        peaks = []
+        
+        # Method 1: Local maxima detection with prominence check
+        for i in range(1, len(forces) - 1):
+            is_local_max = forces[i] > forces[i-1] and forces[i] > forces[i+1]
+            
+            if is_local_max:
+                # Calculate prominence (height above nearby valleys)
+                left_valley = np.min(forces[max(0, i-10):i]) if i > 0 else forces[i]
+                right_valley = np.min(forces[i:min(len(forces), i+10)]) if i < len(forces)-1 else forces[i]
+                prominence = forces[i] - max(left_valley, right_valley)
+                
+                # Only include peaks with sufficient prominence and above baseline
+                if prominence >= min_prominence and forces[i] > baseline_force + min_prominence:
+                    peaks.append({
+                        'time': times[i],
+                        'force': forces[i],
+                        'index': i,
+                        'prominence': prominence,
+                        'above_baseline': forces[i] - baseline_force
+                    })
+        
+        # If no peaks found with prominence filter, find at least the maximum
+        if not peaks:
+            max_idx = np.argmax(forces)
+            peaks.append({
+                'time': times[max_idx],
+                'force': forces[max_idx],
+                'index': max_idx,
+                'prominence': forces[max_idx] - np.min(forces),
+                'above_baseline': forces[max_idx] - baseline_force
+            })
+        
+        # Sort peaks by time (chronological order)
+        peaks = sorted(peaks, key=lambda x: x['time'])
+        
+        return peaks
+
+    except Exception as e:
+        print(f"Error detecting peaks in segment: {str(e)}")
+        # Return at least the maximum as fallback
+        max_idx = np.argmax(forces)
+        return [{
+            'time': times[max_idx],
+            'force': forces[max_idx],
+            'index': max_idx,
+            'prominence': 0,
+            'above_baseline': forces[max_idx] - baseline_force
+        }]
+
+
+def find_peaks_in_segment(forces, times):
+    """Legacy function - kept for compatibility. Use detect_all_peaks_in_segment for new code."""
+    try:
+        # Simple peak detection - find local maxima
+        peaks = []
+        for i in range(1, len(forces) - 1):
+            if forces[i] > forces[i-1] and forces[i] > forces[i+1]:
+                peaks.append({
+                    'time': times[i],
+                    'force': forces[i],
+                    'index': i
+                })
+
+        return sorted(peaks, key=lambda x: x['force'], reverse=True)
+
+    except Exception as e:
+        print(f"Error finding peaks in segment: {str(e)}")
+        return []
+
+
+def calculate_detailed_symmetry(all_peaks, forces, times):
+    """
+    Calculates comprehensive symmetry metrics for bilateral movement assessment.
+    Important for evaluating compensatory strategies in cerebral palsy.
+    
+    Parameters:
+    -----------
+    all_peaks : list
+        List of all detected peaks with timing and force information
+    forces : array-like
+        Force values for the entire segment
+    times : array-like
+        Time values for the entire segment
+    
+    Returns:
+    --------
+    dict
+        Comprehensive symmetry metrics
+    """
+    metrics = {
+        'overall_symmetry': 1.0,
+        'peak_symmetry': 1.0,
+        'temporal_symmetry': 1.0,
+        'bilateral_index': 0.0,
+        'consistency_score': 1.0
+    }
+    
+    if len(all_peaks) < 2:
+        return metrics  # Perfect symmetry if only one peak
+    
+    try:
+        # Extract peak characteristics
+        peak_forces = [peak['force'] for peak in all_peaks]
+        peak_times = [peak['time'] for peak in all_peaks]
+        
+        # === PEAK FORCE SYMMETRY ===
+        # Coefficient of variation of peak forces (lower = more symmetric)
+        peak_force_cv = (np.std(peak_forces) / np.mean(peak_forces)) * 100 if np.mean(peak_forces) > 0 else 0
+        peak_symmetry = 1.0 - min(peak_force_cv / 100.0, 1.0)  # Convert to 0-1 scale
+        
+        # === TEMPORAL SYMMETRY ===
+        # Time distribution of peaks
+        time_range = max(peak_times) - min(peak_times)
+        if time_range > 0 and len(peak_times) > 1:
+            expected_spacing = time_range / (len(peak_times) - 1)
+            actual_spacings = [peak_times[i+1] - peak_times[i] for i in range(len(peak_times)-1)]
+            time_cv = (np.std(actual_spacings) / np.mean(actual_spacings)) * 100 if np.mean(actual_spacings) > 0 else 0
+            temporal_symmetry = 1.0 - min(time_cv / 100.0, 1.0)
+        else:
+            temporal_symmetry = 1.0
+        
+        # === BILATERAL INDEX ===
+        # For sit-to-stand, assess if there are two peaks (bilateral loading pattern)
+        if len(all_peaks) == 2:
+            # Ideal bilateral pattern
+            force_ratio = min(peak_forces) / max(peak_forces) if max(peak_forces) > 0 else 0
+            bilateral_index = force_ratio  # 1.0 = perfect bilateral symmetry
+        elif len(all_peaks) == 1:
+            bilateral_index = 0.5  # Single peak might indicate asymmetry
+        else:
+            bilateral_index = 0.3  # Multiple peaks might indicate instability
+        
+        # === OVERALL SYMMETRY ===
+        # Combined score weighting clinical relevance
+        overall_symmetry = (peak_symmetry * 0.4 + temporal_symmetry * 0.3 + bilateral_index * 0.3)
+        
+        # === CONSISTENCY SCORE ===
+        # How smooth and consistent is the force profile
+        force_gradient = np.gradient(forces, times)
+        gradient_variability = np.std(force_gradient) / (np.mean(np.abs(force_gradient)) + 1e-6)
+        consistency_score = 1.0 / (1.0 + gradient_variability)  # Higher = more consistent
+        
+        metrics['overall_symmetry'] = overall_symmetry
+        metrics['peak_symmetry'] = peak_symmetry
+        metrics['temporal_symmetry'] = temporal_symmetry
+        metrics['bilateral_index'] = bilateral_index
+        metrics['consistency_score'] = consistency_score
+        
+    except Exception as e:
+        print(f"Error calculating detailed symmetry: {str(e)}")
+    
+    return metrics
+
+
+def find_peaks_in_segment(forces, times):
+    """Legacy function - kept for compatibility. Use detect_all_peaks_in_segment for new code."""
+    try:
+        # Simple peak detection - find local maxima
+        peaks = []
+        for i in range(1, len(forces) - 1):
+            if forces[i] > forces[i-1] and forces[i] > forces[i+1]:
+                peaks.append({
+                    'time': times[i],
+                    'force': forces[i],
+                    'index': i
+                })
+
+        return sorted(peaks, key=lambda x: x['force'], reverse=True)
+
+    except Exception as e:
+        print(f"Error finding peaks in segment: {str(e)}")
+        return []
+
+
+def calculate_symmetry(peaks):
+    """
+    Legacy symmetry calculation - kept for backward compatibility.
+    For new code, use calculate_detailed_symmetry which provides more clinical metrics.
+    """
+    if len(peaks) < 2:
+        return 1.0  # Perfect symmetry if only one peak
+
+    try:
+        # Calculate symmetry based on timing and force distribution
+        times = [peak['time'] for peak in peaks]
+        forces = [peak['force'] for peak in peaks]
+
+        # Time-based symmetry (how evenly distributed in time)
+        time_range = max(times) - min(times)
+        if time_range > 0:
+            expected_spacing = time_range / (len(times) - 1)
+            actual_spacing = [times[i+1] - times[i] for i in range(len(times)-1)]
+            time_variance = np.var(actual_spacing) / (expected_spacing ** 2) if expected_spacing > 0 else 0
+        else:
+            time_variance = 0
+
+        # Force-based symmetry (how similar are the peak forces)
+        force_variance = np.var(forces) / (np.mean(forces) ** 2) if np.mean(forces) > 0 else 0
+
+        # Combined symmetry index (lower variance = higher symmetry)
+        symmetry = 1.0 - (time_variance + force_variance) / 2.0
+
+        return max(0.0, min(1.0, symmetry))  # Clamp between 0 and 1
+
+    except Exception as e:
+        print(f"Error calculating symmetry: {str(e)}")
+        return 0.5
 
 
 def calculate_movement_metrics(data, phases):
     """
-    Calculates movement-specific metrics from detected phases.
+    Calculates comprehensive movement-specific metrics from detected phases.
+    Enhanced for pediatric cerebral palsy clinical assessment.
 
     Parameters:
     -----------
     data : pandas.DataFrame
         DataFrame with Time and Force columns
     phases : list
-        List of detected sit-to-stand phases
+        List of detected sit-to-stand phases with enhanced metrics
 
     Returns:
     --------
     dict
-        Movement metrics
+        Movement metrics including time to peak, RFD, and clinical quality indicators
     """
     metrics = {
         'num_phases': len(phases),
         'total_movement_time': 0,
         'average_phase_duration': 0,
         'phases_per_minute': 0,
-        'symmetry_index': None
+        'symmetry_index': None,
+        'average_time_to_peak': 0,
+        'time_to_peak_variation': 0,
+        'average_rate_of_force_development': 0,
+        'peak_force_consistency': 0,
+        'movement_efficiency': 0,
+        'average_overall_rfd': 0,
+        'average_early_rfd': 0,
+        'average_peak_rfd': 0,
+        'average_bilateral_index': 0,
+        'average_consistency_score': 0
     }
 
     if not phases:
         return metrics
 
-    # Calculate basic metrics
-    durations = [phase['duration'] for phase in phases]
-    metrics['total_movement_time'] = sum(durations)
-    metrics['average_phase_duration'] = np.mean(durations)
-
-    # Calculate phases per minute if duration > 0
-    total_duration = data['Time'].iloc[-1] - data['Time'].iloc[0]
-    if total_duration > 0:
-        metrics['phases_per_minute'] = (len(phases) / total_duration) * 60
-
-    # Calculate symmetry if multiple phases
-    if len(phases) > 1:
-        # Simple symmetry measure based on peak force variation
+    try:
+        # Calculate basic temporal metrics
+        durations = [phase['duration'] for phase in phases]
+        
+        # Time to peak metrics (handle both new and legacy format)
+        time_to_max = [phase.get('time_to_max_force', phase.get('time_to_peak', 0)) for phase in phases]
+        time_to_first = [phase.get('time_to_first_peak', phase.get('time_to_peak', 0)) for phase in phases]
+        
         peak_forces = [phase['peak_force'] for phase in phases]
+        rates_of_force_dev = [phase.get('overall_rfd', phase.get('rate_of_force_development', 0)) for phase in phases]
+
+        metrics['total_movement_time'] = sum(durations)
+        metrics['average_phase_duration'] = np.mean(durations) if durations else 0
+        metrics['average_time_to_peak'] = np.mean(time_to_max) if time_to_max else 0
+        metrics['time_to_peak_variation'] = np.std(time_to_max) if len(time_to_max) > 1 else 0
+        metrics['average_rate_of_force_development'] = np.mean(rates_of_force_dev) if rates_of_force_dev else 0
+
+        # Enhanced RFD metrics
+        overall_rfds = [phase.get('overall_rfd', 0) for phase in phases]
+        early_rfds = [phase.get('early_rfd', 0) for phase in phases]
+        peak_rfds = [phase.get('peak_rfd', 0) for phase in phases]
+        
+        metrics['average_overall_rfd'] = np.mean(overall_rfds) if overall_rfds else 0
+        metrics['average_early_rfd'] = np.mean(early_rfds) if early_rfds else 0
+        metrics['average_peak_rfd'] = np.mean(peak_rfds) if peak_rfds else 0
+
+        # Calculate phases per minute if duration > 0
+        total_duration = data['Time'].iloc[-1] - data['Time'].iloc[0]
+        if total_duration > 0:
+            metrics['phases_per_minute'] = (len(phases) / total_duration) * 60
+
+        # Calculate peak force consistency
         if len(peak_forces) > 1:
-            metrics['symmetry_index'] = 1 - (np.std(peak_forces) / np.mean(peak_forces))
+            metrics['peak_force_consistency'] = 1 - (np.std(peak_forces) / (np.mean(peak_forces) + 1e-6))
+
+        # Calculate symmetry using enhanced method
+        symmetry_values = [phase.get('symmetry', phase.get('overall_symmetry', 1.0)) for phase in phases]
+        bilateral_indices = [phase.get('bilateral_index', 0.5) for phase in phases]
+        consistency_scores = [phase.get('consistency_score', 1.0) for phase in phases]
+        
+        metrics['symmetry_index'] = np.mean(symmetry_values) if symmetry_values else None
+        metrics['average_bilateral_index'] = np.mean(bilateral_indices) if bilateral_indices else 0
+        metrics['average_consistency_score'] = np.mean(consistency_scores) if consistency_scores else 0
+
+        # Calculate movement efficiency (time to peak / total duration ratio)
+        if metrics['total_movement_time'] > 0:
+            metrics['movement_efficiency'] = metrics['average_time_to_peak'] / metrics['total_movement_time']
+
+    except Exception as e:
+        print(f"Error calculating movement metrics: {str(e)}")
+        import traceback
+        traceback.print_exc()
 
     return metrics
 
@@ -1181,67 +1843,137 @@ def calculate_time_to_peak_metrics(data, phases):
 
 def save_force_plot_png(data, phases, output_path, config):
     """
-    Saves a PNG plot of the force data with detected phases.
+    Saves a comprehensive PNG plot of the force data with all clinical metrics.
+    Enhanced visualization for pediatric cerebral palsy assessment.
 
     Parameters:
     -----------
     data : pandas.DataFrame
         DataFrame with Time and Force columns
     phases : list
-        List of detected sit-to-stand phases
+        List of detected sit-to-stand phases with comprehensive metrics
     output_path : str
         Path where to save the PNG file
     config : dict
         Configuration dictionary
     """
     try:
-        plt.figure(figsize=(12, 8))
-
+        # Create figure with subplots
+        fig = plt.figure(figsize=(16, 10))
+        
+        # Main plot (force vs time)
+        ax1 = plt.subplot(2, 1, 1)
+        
         # Plot force data
-        plt.plot(data['Time'], data['Force'], 'b-', linewidth=1.5, alpha=0.7, label='Force Data')
+        ax1.plot(data['Time'], data['Force'], 'b-', linewidth=1.5, alpha=0.7, label='Force Data')
 
-        # Plot detected phases
-        colors = ['red', 'green', 'orange', 'purple', 'brown']
-        for i, phase in enumerate(phases[:5]):  # Show first 5 phases
+        # Plot detected phases with enhanced visualization
+        colors = ['red', 'green', 'orange', 'purple', 'brown', 'cyan', 'magenta', 'yellow']
+        for i, phase in enumerate(phases[:8]):  # Show up to 8 phases
             color = colors[i % len(colors)]
             phase_data = data[(data['Time'] >= phase['start_time']) &
                              (data['Time'] <= phase['end_time'])]
 
+            # Plot phase with enhanced info
+            rfd = phase.get('overall_rfd', 0)
             plt.plot(phase_data['Time'], phase_data['Force'],
                     color=color, linewidth=2.5, alpha=0.8,
-                    label=f'Phase {i+1} (Peak: {phase["peak_force"]:.1f}N)')
+                    label=f'Phase {i+1} (Peak: {phase["peak_force"]:.1f}N, RFD: {rfd:.0f}N/s)')
 
-            # Mark peak
-            peak_data = phase_data[phase_data['Force'] == phase['peak_force']]
-            if not peak_data.empty:
-                plt.plot(peak_data['Time'].iloc[0], peak_data['Force'].iloc[0],
-                        'o', color=color, markersize=8)
+            # Mark ALL peaks in this phase
+            if 'all_peaks' in phase:
+                for peak in phase['all_peaks']:
+                    peak_time = peak['time']
+                    peak_force = peak['force']
+                    ax1.plot(peak_time, peak_force, 'o', color=color, markersize=10, 
+                            markeredgecolor='black', markeredgewidth=1.5)
+                    # Annotate first peak
+                    if peak == phase['all_peaks'][0]:
+                        ax1.annotate(f'1st Peak\n{peak_force:.1f}N', 
+                                    xy=(peak_time, peak_force),
+                                    xytext=(10, 10), textcoords='offset points',
+                                    fontsize=8, fontweight='bold',
+                                    bbox=dict(boxstyle='round,pad=0.3', facecolor=color, alpha=0.7))
+
+            # Mark movement onset
+            ax1.plot(phase['start_time'], data.loc[phase['start_index'], 'Force'], 
+                    '^', color=color, markersize=8, label=f'Onset {i+1}')
 
         # Add baseline and threshold lines
         baseline = np.percentile(data['Force'], 10)
         threshold = config['detection']['force_threshold']
 
-        plt.axhline(y=baseline, color='gray', linestyle='--', alpha=0.7, label='Baseline')
-        plt.axhline(y=threshold, color='red', linestyle='--', alpha=0.7, label='Threshold')
+        ax1.axhline(y=baseline, color='gray', linestyle='--', linewidth=2, alpha=0.7, label='Baseline (seated)')
+        ax1.axhline(y=threshold, color='red', linestyle=':', linewidth=2, alpha=0.7, label='Detection Threshold')
 
-        # Customize plot
-        plt.xlabel('Time (s)', fontsize=12)
-        plt.ylabel('Force (N)', fontsize=12)
-        plt.title('Sit-to-Stand Force Analysis', fontsize=14, fontweight='bold')
-        plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-        plt.grid(True, alpha=0.3)
+        # Customize main plot
+        ax1.set_xlabel('Time (s)', fontsize=12, fontweight='bold')
+        ax1.set_ylabel('Vertical Force - Fz (N)', fontsize=12, fontweight='bold')
+        ax1.set_title('Sit-to-Stand Force Analysis - Comprehensive Clinical Assessment', 
+                     fontsize=14, fontweight='bold')
+        ax1.legend(bbox_to_anchor=(1.02, 1), loc='upper left', fontsize=9)
+        ax1.grid(True, alpha=0.3, linestyle='--')
 
-        # Add statistics text
-        stats_text = f"""
-        Total Duration: {data['Time'].iloc[-1] - data['Time'].iloc[0]:.2f} s
-        Mean Force: {data['Force'].mean():.2f} N
-        Max Force: {data['Force'].max():.2f} N
-        Phases Detected: {len(phases)}
-        """
+        # Add comprehensive statistics text box
+        if phases:
+            first_phase = phases[0]
+            stats_text = f"""CLINICAL METRICS:
+Duration: {data['Time'].iloc[-1] - data['Time'].iloc[0]:.2f} s
+Phases: {len(phases)}
 
-        plt.text(0.02, 0.98, stats_text, transform=plt.gca().transAxes,
-                verticalalignment='top', fontsize=10,
-                bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+FIRST PHASE:
+Time to 1st Peak: {first_phase.get('time_to_first_peak', 0):.3f} s
+Time to Max Force: {first_phase.get('time_to_max_force', 0):.3f} s
+Overall RFD: {first_phase.get('overall_rfd', 0):.1f} N/s
+Early RFD: {first_phase.get('early_rfd', 0):.1f} N/s
+Peak RFD: {first_phase.get('peak_rfd', 0):.1f} N/s
+
+FORCE:
+Max: {data['Force'].max():.1f} N
+Mean: {data['Force'].mean():.1f} N
+Range: {first_phase.get('force_range', 0):.1f} N
+
+QUALITY:
+Force CV: {first_phase.get('force_cv', 0):.1f}%
+Bilateral Index: {first_phase.get('bilateral_index', 0):.2f}
+Consistency: {first_phase.get('consistency_score', 0):.2f}
+Peaks: {first_phase.get('num_peaks', 0)}
+"""
+        else:
+            stats_text = "No sit-to-stand phases detected"
+
+        ax1.text(0.02, 0.98, stats_text, transform=ax1.transAxes,
+                verticalalignment='top', fontsize=9, family='monospace',
+                bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=0.9, edgecolor='black'))
+
+        # === SUBPLOT 2: Force Rate (RFD visualization) ===
+        ax2 = plt.subplot(2, 1, 2)
+        
+        # Calculate and plot force rate of change
+        force_rate = np.gradient(data['Force'].values, data['Time'].values)
+        ax2.plot(data['Time'], force_rate, 'g-', linewidth=1, alpha=0.6, label='Force Rate (RFD)')
+        
+        # Mark phases
+        for i, phase in enumerate(phases[:8]):
+            color = colors[i % len(colors)]
+            phase_data_idx = (data['Time'] >= phase['start_time']) & (data['Time'] <= phase['end_time'])
+            phase_time = data.loc[phase_data_idx, 'Time']
+            phase_rate = force_rate[phase_data_idx]
+            
+            ax2.plot(phase_time, phase_rate, color=color, linewidth=2, alpha=0.7)
+            
+            # Mark peak RFD
+            if 'peak_rfd_time' in phase:
+                peak_rfd_idx = np.argmin(np.abs(data['Time'] - phase['peak_rfd_time']))
+                ax2.plot(data['Time'].iloc[peak_rfd_idx], force_rate[peak_rfd_idx], 
+                        '*', color=color, markersize=15, markeredgecolor='black', markeredgewidth=1)
+
+        ax2.axhline(y=0, color='black', linestyle='-', linewidth=0.5, alpha=0.5)
+        ax2.set_xlabel('Time (s)', fontsize=12, fontweight='bold')
+        ax2.set_ylabel('Rate of Force Development (N/s)', fontsize=12, fontweight='bold')
+        ax2.set_title('Force Development Rate (RFD) - Critical for CP Motor Control Assessment', fontsize=12, fontweight='bold')
+        ax2.legend(loc='best', fontsize=9)
+        ax2.grid(True, alpha=0.3, linestyle='--')
 
         plt.tight_layout()
 
@@ -1249,13 +1981,260 @@ def save_force_plot_png(data, phases, output_path, config):
         plt.savefig(output_path, dpi=300, bbox_inches='tight')
         plt.close()
 
-        print(f"Force plot saved to: {output_path}")
+        print(f"Comprehensive force plot saved to: {output_path}")
 
     except Exception as e:
         print(f"Error saving force plot: {str(e)}")
+        import traceback
+        traceback.print_exc()
 
 
 # display_results function removed - not needed in batch mode, results are saved automatically
+
+
+class SitToStandGUI:
+    """
+    Simple GUI for sit-to-stand analysis configuration using basic tkinter.
+    Cross-platform compatible and minimalistic.
+    """
+
+    def __init__(self):
+        self.root = tk.Tk()
+        self.root.title("Sit-to-Stand Analysis")
+        self.root.geometry("500x300")
+        self.root.resizable(True, True)
+
+        # Variables for storing user selections
+        self.config_file = ""
+        self.input_dir = ""
+        self.output_dir = ""
+        self.file_format = tk.StringVar(value="auto")  # auto, c3d, csv
+
+        # Use defaults by default
+        self.use_defaults = True
+
+        self.create_widgets()
+
+    def create_widgets(self):
+        """Creates the simple GUI widgets."""
+        # Main frame
+        main_frame = tk.Frame(self.root, padx=10, pady=10)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+
+        # Title
+        title_label = tk.Label(main_frame, text="Sit-to-Stand Analysis Setup",
+                              font=("Arial", 14, "bold"))
+        title_label.pack(pady=(0, 20))
+
+        # Config file row
+        config_frame = tk.Frame(main_frame)
+        config_frame.pack(fill=tk.X, pady=(0, 10))
+
+        tk.Label(config_frame, text="Config file:").pack(side=tk.LEFT)
+        self.config_entry = tk.Entry(config_frame, width=40)
+        self.config_entry.pack(side=tk.LEFT, padx=(10, 5), fill=tk.X, expand=True)
+
+        config_btn = tk.Button(config_frame, text="Browse",
+                              command=self.browse_config_file, width=8)
+        config_btn.pack(side=tk.LEFT)
+
+        # Input directory row
+        input_frame = tk.Frame(main_frame)
+        input_frame.pack(fill=tk.X, pady=(0, 10))
+
+        tk.Label(input_frame, text="Input dir:").pack(side=tk.LEFT)
+        self.input_entry = tk.Entry(input_frame, width=40)
+        self.input_entry.pack(side=tk.LEFT, padx=(10, 5), fill=tk.X, expand=True)
+
+        input_btn = tk.Button(input_frame, text="Browse",
+                             command=self.browse_input_dir, width=8)
+        input_btn.pack(side=tk.LEFT)
+
+        # Output directory row
+        output_frame = tk.Frame(main_frame)
+        output_frame.pack(fill=tk.X, pady=(0, 10))
+
+        tk.Label(output_frame, text="Output dir:").pack(side=tk.LEFT)
+        self.output_entry = tk.Entry(output_frame, width=40)
+        self.output_entry.pack(side=tk.LEFT, padx=(10, 5), fill=tk.X, expand=True)
+
+        output_btn = tk.Button(output_frame, text="Browse",
+                              command=self.browse_output_dir, width=8)
+        output_btn.pack(side=tk.LEFT)
+
+        # File format selection
+        format_frame = tk.Frame(main_frame)
+        format_frame.pack(fill=tk.X, pady=(0, 10))
+
+        tk.Label(format_frame, text="File format:").pack(side=tk.LEFT)
+        format_combo = ttk.Combobox(format_frame, textvariable=self.file_format,
+                                   values=["auto", "c3d", "csv"], state="readonly", width=10)
+        format_combo.pack(side=tk.LEFT, padx=(10, 5))
+        format_combo.set("auto")
+
+        # Options frame
+        options_frame = tk.Frame(main_frame)
+        options_frame.pack(fill=tk.X, pady=(10, 20))
+
+        self.defaults_var = tk.BooleanVar(value=True)
+        defaults_cb = tk.Checkbutton(options_frame, text="Use default config",
+                                    variable=self.defaults_var,
+                                    command=self.toggle_defaults)
+        defaults_cb.pack(side=tk.LEFT)
+
+        # Create default config file button
+        create_config_btn = tk.Button(options_frame, text="Create Default Config",
+                                     command=self.create_default_config_file, width=20)
+        create_config_btn.pack(side=tk.LEFT, padx=(20, 0))
+
+        # Buttons frame
+        btn_frame = tk.Frame(main_frame)
+        btn_frame.pack(fill=tk.X, pady=(10, 0))
+
+        run_btn = tk.Button(btn_frame, text="Run Analysis",
+                           command=self.run_analysis, bg="#4CAF50", fg="white",
+                           font=("Arial", 10, "bold"), padx=20)
+        run_btn.pack(side=tk.RIGHT, padx=(10, 0))
+
+        cancel_btn = tk.Button(btn_frame, text="Cancel",
+                              command=self.root.quit, padx=20)
+        cancel_btn.pack(side=tk.RIGHT)
+
+        # Status label
+        self.status_label = tk.Label(main_frame, text="Ready",
+                                    font=("Arial", 9), fg="blue")
+        self.status_label.pack(pady=(10, 0))
+
+    def toggle_defaults(self):
+        """Toggles between default and custom config."""
+        self.use_defaults = self.defaults_var.get()
+        if self.use_defaults:
+            self.config_entry.delete(0, tk.END)
+            self.config_entry.config(state=tk.DISABLED)
+        else:
+            self.config_entry.config(state=tk.NORMAL)
+
+    def browse_config_file(self):
+        """Opens file dialog for TOML configuration file selection."""
+        if self.use_defaults:
+            return
+
+        filename = filedialog.askopenfilename(
+            title="Select TOML Configuration File",
+            filetypes=[("TOML files", "*.toml"), ("All files", "*.*")]
+        )
+        if filename:
+            self.config_file = filename
+            self.config_entry.delete(0, tk.END)
+            self.config_entry.insert(0, filename)
+
+    def browse_input_dir(self):
+        """Opens directory dialog for input files selection."""
+        dirname = filedialog.askdirectory(title="Select Input Directory")
+        if dirname:
+            self.input_dir = dirname
+            self.input_entry.delete(0, tk.END)
+            self.input_entry.insert(0, dirname)
+
+    def browse_output_dir(self):
+        """Opens directory dialog for output directory selection."""
+        dirname = filedialog.askdirectory(title="Select Output Directory")
+        if dirname:
+            self.output_dir = dirname
+            self.output_entry.delete(0, tk.END)
+            self.output_entry.insert(0, dirname)
+
+    def create_default_config_file(self):
+        """Creates a default TOML configuration file."""
+        default_config = get_default_config()
+
+        # Ask user where to save the config file
+        filename = filedialog.asksaveasfilename(
+            title="Save Default Configuration File",
+            defaultextension=".toml",
+            filetypes=[("TOML files", "*.toml"), ("All files", "*.*")]
+        )
+
+        if filename:
+            try:
+                import toml
+                with open(filename, 'w') as f:
+                    toml.dump(default_config, f)
+
+                self.status_label.config(text=f"Default config saved to: {filename}", fg="green")
+                print(f"Default configuration file created: {filename}")
+
+                # Optionally load the created file
+                if messagebox.askyesno("Load Config", "Load the created configuration file?"):
+                    self.config_file = filename
+                    self.config_entry.delete(0, tk.END)
+                    self.config_entry.insert(0, filename)
+                    self.use_defaults = False
+                    self.defaults_var.set(False)
+                    self.toggle_defaults()
+
+            except Exception as e:
+                self.status_label.config(text=f"Error creating config: {str(e)}", fg="red")
+                messagebox.showerror("Error", f"Failed to create config file: {str(e)}")
+
+    def run_analysis(self):
+        """Validates inputs and runs the analysis."""
+        # Get current values from entries
+        config_file = self.config_entry.get().strip() if not self.use_defaults else ""
+        input_dir = self.input_entry.get().strip()
+        output_dir = self.output_entry.get().strip()
+        file_format = self.file_format.get()
+
+        # Validation
+        if not input_dir:
+            self.status_label.config(text="Error: Please select input directory", fg="red")
+            return
+
+        if not self.use_defaults and not config_file:
+            self.status_label.config(text="Error: Please select config file or use defaults", fg="red")
+            return
+
+        # Prepare arguments for CLI mode
+        cli_args = []
+
+        # Add config file or empty for defaults
+        if self.use_defaults:
+            cli_args.append("")  # Will be handled as defaults in CLI mode
+        else:
+            cli_args.append(config_file)
+
+        # Add input directory
+        cli_args.append(input_dir)
+
+        # Add output directory if specified
+        if output_dir:
+            cli_args.append(output_dir)
+
+        # Add file format
+        cli_args.append(file_format)
+
+        # Update status
+        self.status_label.config(text="Running analysis...", fg="orange")
+        self.root.update()
+
+        try:
+            # Run in CLI mode with the prepared arguments
+            result = run_cli_mode(cli_args)
+
+            if result is None:  # Success
+                self.status_label.config(text="Analysis completed successfully!", fg="green")
+                messagebox.showinfo("Success", "Sit-to-Stand analysis completed successfully!")
+            else:
+                self.status_label.config(text="Analysis failed", fg="red")
+                messagebox.showerror("Error", "Analysis failed. Check console for details.")
+
+        except Exception as e:
+            self.status_label.config(text=f"Error: {str(e)}", fg="red")
+            messagebox.showerror("Error", f"Analysis failed: {str(e)}")
+
+    def run(self):
+        """Runs the GUI main loop."""
+        self.root.mainloop()
 
 
 if __name__ == "__main__":

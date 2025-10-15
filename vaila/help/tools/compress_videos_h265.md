@@ -3,7 +3,7 @@
 ## 📋 Module Information
 
 - **Category:** Tools
-- **File:** `vaila/compress_videos_h265.py`
+- **File:** `vaila\compress_videos_h265.py`
 - **Lines:** 657
 - **Size:** 23276 characters
 
@@ -55,6 +55,6 @@ Usage:
 
 ---
 
-📅 **Generated automatically on:** 08/10/2025 14:24:24
+📅 **Generated automatically on:** 15/10/2025 08:04:44
 🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
