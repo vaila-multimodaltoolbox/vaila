@@ -3,7 +3,7 @@
 ## 📋 Module Information
 
 - **Category:** Tools
-- **File:** `vaila/rm_duplicateframes.py`
+- **File:** `vaila\rm_duplicateframes.py`
 - **Lines:** 437
 - **Size:** 15976 characters
 - **Version:** 0.0.1
@@ -64,6 +64,6 @@ Specify the ...
 
 ---
 
-📅 **Generated automatically on:** 08/10/2025 14:24:24
+📅 **Generated automatically on:** 15/10/2025 08:04:44
 🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

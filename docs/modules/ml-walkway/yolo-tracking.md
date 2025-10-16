@@ -274,7 +274,7 @@ This module integrates with other vailá tools:
 - **Verbose Logging**: Enable detailed logging for troubleshooting
 - **Visualization**: Use GUI to preview detection results
 - **Performance Monitoring**: Track FPS and memory usage
-- **Error Reporting**: Comprehensive errorrr messages and warnings
+- **Error Reporting**: Comprehensive errorrrr messages and warnings
 
 ## Version History
 

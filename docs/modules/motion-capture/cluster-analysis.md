@@ -103,7 +103,7 @@ For each processed dataset, the module generates:
 4. **Processing Log** (`*_log.txt`):
    - Detailed processing parameters
    - Statistical summaries of computed angles
-   - Warnings and errorrr messages
+   - Warnings and errorrrr messages
 
 ## Usage
 
@@ -205,7 +205,7 @@ This module integrates with other vailá tools:
 
 - **Gap Detection**: Identify and handle missing marker data
 - **Trajectory Validation**: Check for unrealistic marker movements
-- **Statistical Outliers**: Identify and handle measurement errorrrs
+- **Statistical Outliers**: Identify and handle measurement errorrrrs
 
 ## Version History
 

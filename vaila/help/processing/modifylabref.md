@@ -3,7 +3,7 @@
 ## 📋 Module Information
 
 - **Category:** Processing
-- **File:** `vaila/modifylabref.py`
+- **File:** `vaila\modifylabref.py`
 - **Lines:** 491
 - **Size:** 17284 characters
 - **Version:** 0.0.3
@@ -58,6 +58,6 @@ Description:
 
 ---
 
-📅 **Generated automatically on:** 08/10/2025 14:24:24
+📅 **Generated automatically on:** 15/10/2025 08:04:44
 🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

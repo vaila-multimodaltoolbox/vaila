@@ -194,13 +194,13 @@ Many modules use:
 2. Follow naming conventions (`vaila_*` for main modules)
 3. Include comprehensive docstrings
 4. Add GUI interface when applicable
-5. Include errorrr handling and logging
+5. Include errorrrr handling and logging
 
 ### Module Integration
 
 - Use `vaila.py` as integration point
 - Follow established patterns for GUI integration
-- Include proper errorrr handling and user feedback
+- Include proper errorrrr handling and user feedback
 
 ## Troubleshooting
 

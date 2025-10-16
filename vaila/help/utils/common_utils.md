@@ -3,7 +3,7 @@
 ## 📋 Module Information
 
 - **Category:** Utils
-- **File:** `vaila/common_utils.py`
+- **File:** `vaila\common_utils.py`
 - **Lines:** 59
 - **Size:** 1712 characters
 - **Version:** 2024-07-15 20:00:00
@@ -30,6 +30,6 @@ Version: 2024-07-15 20:00:00
 
 ---
 
-📅 **Generated automatically on:** 08/10/2025 14:24:24
+📅 **Generated automatically on:** 15/10/2025 08:04:44
 🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

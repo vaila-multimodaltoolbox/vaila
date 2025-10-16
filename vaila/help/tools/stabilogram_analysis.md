@@ -3,7 +3,7 @@
 ## 📋 Module Information
 
 - **Category:** Tools
-- **File:** `vaila/stabilogram_analysis.py`
+- **File:** `vaila\stabilogram_analysis.py`
 - **Lines:** 389
 - **Size:** 13025 characters
 - **Version:** 1.3
@@ -44,6 +44,6 @@ The main features of this module include:
 
 ---
 
-📅 **Generated automatically on:** 08/10/2025 14:24:24
+📅 **Generated automatically on:** 15/10/2025 08:04:44
 🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
