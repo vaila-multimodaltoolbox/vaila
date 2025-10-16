@@ -3,7 +3,7 @@
 ## 📋 Module Information
 
 - **Category:** Analysis
-- **File:** `vaila/emg_labiocom.py`
+- **File:** `vaila\emg_labiocom.py`
 - **Lines:** 1810
 - **Size:** 62309 characters
 - **Version:** 2025
@@ -72,6 +72,6 @@ Key New Features:
 
 ---
 
-📅 **Generated automatically on:** 08/10/2025 14:24:24
+📅 **Generated automatically on:** 15/10/2025 08:04:44
 🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

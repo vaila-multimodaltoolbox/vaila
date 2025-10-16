@@ -3,7 +3,7 @@
 ## 📋 Module Information
 
 - **Category:** Processing
-- **File:** `vaila/rearrange_data.py`
+- **File:** `vaila\rearrange_data.py`
 - **Lines:** 1772
 - **Size:** 68536 characters
 - **Version:** 0.0.6
@@ -77,6 +77,6 @@ License:
 
 ---
 
-📅 **Generated automatically on:** 08/10/2025 14:24:24
+📅 **Generated automatically on:** 15/10/2025 08:04:44
 🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

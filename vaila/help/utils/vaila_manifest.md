@@ -3,7 +3,7 @@
 ## 📋 Module Information
 
 - **Category:** Utils
-- **File:** `vaila/vaila_manifest.py`
+- **File:** `vaila\vaila_manifest.py`
 - **Lines:** 126
 - **Size:** 5896 characters
 - **Version:** 2024-09-22
@@ -46,6 +46,6 @@ Notes:
 
 ---
 
-📅 **Generated automatically on:** 08/10/2025 14:24:24
+📅 **Generated automatically on:** 15/10/2025 08:04:44
 🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

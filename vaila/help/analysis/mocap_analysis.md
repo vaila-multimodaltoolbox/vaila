@@ -3,7 +3,7 @@
 ## 📋 Module Information
 
 - **Category:** Analysis
-- **File:** `vaila/mocap_analysis.py`
+- **File:** `vaila\mocap_analysis.py`
 - **Lines:** 403
 - **Size:** 14857 characters
 - **Version:** 0.5.1
@@ -54,6 +54,6 @@ Usage:
 
 ---
 
-📅 **Generated automatically on:** 08/10/2025 14:24:24
+📅 **Generated automatically on:** 15/10/2025 08:04:44
 🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

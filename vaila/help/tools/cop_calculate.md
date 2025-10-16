@@ -3,7 +3,7 @@
 ## 📋 Module Information
 
 - **Category:** Tools
-- **File:** `vaila/cop_calculate.py`
+- **File:** `vaila\cop_calculate.py`
 - **Lines:** 308
 - **Size:** 9920 characters
 - **Version:** 0.0.1
@@ -52,6 +52,6 @@ vailá Multimodal Toolbox
 
 ---
 
-📅 **Generated automatically on:** 08/10/2025 14:24:24
+📅 **Generated automatically on:** 15/10/2025 08:04:44
 🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

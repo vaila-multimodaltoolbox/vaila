@@ -3,7 +3,7 @@
 ## 📋 Module Information
 
 - **Category:** Tools
-- **File:** `vaila/grf_gait.py`
+- **File:** `vaila\grf_gait.py`
 - **Lines:** 2007
 - **Size:** 68150 characters
 - **Version:** 1.0
@@ -70,6 +70,6 @@ Key Functionalities:
 
 ---
 
-📅 **Generated automatically on:** 08/10/2025 14:24:24
+📅 **Generated automatically on:** 15/10/2025 08:04:44
 🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

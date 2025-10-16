@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rearrange Data - vailá Documentation</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+            border-bottom: 2px solid #ecf0f1;
+            padding-bottom: 5px;
+        }
+        h3 {
+            color: #2980b9;
+            margin-top: 20px;
+        }
+        .feature-box {
+            background-color: #e8f4f8;
+            border-left: 4px solid #3498db;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+        .example-box {
+            background-color: #f0f9ff;
+            border: 1px solid #3498db;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+        }
+        .warning-box {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+        .success-box {
+            background-color: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #3498db;
+            color: white;
+            font-weight: bold;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        code {
+            background-color: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            color: #c7254e;
+        }
+        pre {
+            background-color: #2c3e50;
+            color: #ecf0f1;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        pre code {
+            background-color: transparent;
+            color: #ecf0f1;
+            padding: 0;
+        }
+        .button-style {
+            display: inline-block;
+            background-color: #3498db;
+            color: white;
+            padding: 8px 15px;
+            border-radius: 4px;
+            text-decoration: none;
+            margin: 5px;
+        }
+        .toc {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .toc ul {
+            list-style-type: none;
+            padding-left: 20px;
+        }
+        .toc a {
+            color: #2980b9;
+            text-decoration: none;
+        }
+        .toc a:hover {
+            text-decoration: underline;
+        }
+        .footer {
+            text-align: center;
+            color: #7f8c8d;
+            margin-top: 40px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 Rearrange Data - CSV Data Processing Tool</h1>
+
+        <div class="toc">
+            <h3>📑 Table of Contents</h3>
+            <ul>
+                <li><a href="#overview">Overview</a></li>
+                <li><a href="#features">Features</a></li>
+                <li><a href="#custom-math">Custom Math Operations</a></li>
+                <li><a href="#unit-conversion">Unit Conversion</a></li>
+                <li><a href="#format-conversion">Format Conversions</a></li>
+                <li><a href="#gui-controls">GUI Controls</a></li>
+                <li><a href="#examples">Usage Examples</a></li>
+                <li><a href="#troubleshooting">Troubleshooting</a></li>
+            </ul>
+        </div>
+
+        <h2 id="overview">📖 Overview</h2>
+        <p>The <strong>Rearrange Data</strong> module is a comprehensive CSV data manipulation tool designed for biomechanical research, motion capture analysis, and data preprocessing. It provides an intuitive GUI for reorganizing, transforming, and processing CSV files from various sources.</p>
+
+        <div class="feature-box">
+            <h3>✨ Key Capabilities</h3>
+            <ul>
+                <li>Interactive column reordering and deletion</li>
+                <li>Custom mathematical operations with NumPy, Pandas, and SciPy</li>
+                <li>Comprehensive unit conversion system</li>
+                <li>Batch processing for multiple files</li>
+                <li>Format conversion from popular tracking systems</li>
+                <li>Coordinate system transformations</li>
+            </ul>
+        </div>
+
+        <h2 id="features">🔧 Core Features</h2>
+
+        <h3>1. Column Management</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Feature</th>
+                    <th>Shortcut</th>
+                    <th>Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Reorder Columns</td>
+                    <td><kbd>Enter</kbd></td>
+                    <td>Move selected columns to new position</td>
+                </tr>
+                <tr>
+                    <td>Delete Columns</td>
+                    <td><kbd>d</kbd></td>
+                    <td>Remove selected columns from all files</td>
+                </tr>
+                <tr>
+                    <td>Manual Range Select</td>
+                    <td><kbd>m</kbd></td>
+                    <td>Select column range (e.g., 5:15)</td>
+                </tr>
+                <tr>
+                    <td>Save Intermediate</td>
+                    <td><kbd>Ctrl+S</kbd></td>
+                    <td>Save current state with timestamp</td>
+                </tr>
+                <tr>
+                    <td>Undo</td>
+                    <td><kbd>Ctrl+Z</kbd></td>
+                    <td>Undo last operation</td>
+                </tr>
+                <tr>
+                    <td>Save &amp; Exit</td>
+                    <td><kbd>Esc</kbd></td>
+                    <td>Save final version and close</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h3>2. Row Operations</h3>
+        <ul>
+            <li><strong>Edit Rows</strong> (<kbd>l</kbd>): Save or delete specific row ranges</li>
+            <li><strong>Save 2nd Half</strong>: Split file and save second half</li>
+            <li><strong>Reset Index</strong>: Renumber first column from 0</li>
+        </ul>
+
+        <h2 id="custom-math">🧮 Custom Math Operations</h2>
+
+        <div class="success-box">
+            <h3>✅ New Feature: Apply Any Mathematical Operation!</h3>
+            <p>Apply NumPy, Pandas, or SciPy operations to any column(s) with a simple expression.</p>
+        </div>
+
+        <h3>How It Works</h3>
+        <ol>
+            <li>Click <strong>"Custom Math Operation"</strong> button</li>
+            <li>Select column(s) to process (supports multiple selection)</li>
+            <li>Enter mathematical expression using <code>x</code> for column values</li>
+            <li>Click <strong>"Test Expression"</strong> to preview results</li>
+            <li>Click <strong>"Apply Operation"</strong> to process all files</li>
+        </ol>
+
+        <h3>Supported Functions</h3>
+
+        <h4>NumPy Functions</h4>
+        <div class="example-box">
+<strong>Mathematical</strong>: np.sqrt(x), np.abs(x), np.power(x, n), np.exp(x)<br>
+<strong>Logarithms</strong>: np.log(x), np.log10(x), np.log2(x)<br>
+<strong>Trigonometric</strong>: np.sin(x), np.cos(x), np.tan(x), np.deg2rad(x), np.rad2deg(x)<br>
+<strong>Rounding</strong>: np.round(x, decimals), np.floor(x), np.ceil(x)<br>
+<strong>Statistics</strong>: np.mean(x), np.median(x), np.std(x), np.var(x)<br>
+<strong>Clipping</strong>: np.clip(x, min, max)
+        </div>
+
+        <h4>Pandas Operations</h4>
+        <div class="example-box">
+<strong>Moving Average</strong>: pd.Series(x).rolling(5).mean()<br>
+<strong>Cumulative Sum</strong>: pd.Series(x).cumsum()<br>
+<strong>Shifting</strong>: pd.Series(x).shift(1)<br>
+<strong>Interpolation</strong>: pd.Series(x).interpolate()
+        </div>
+
+        <h4>SciPy Signal Processing</h4>
+        <div class="example-box">
+<strong>Median Filter</strong>: scipy.signal.medfilt(x, 5)<br>
+<strong>Savitzky-Golay</strong>: scipy.signal.savgol_filter(x, window, polyorder)<br>
+<strong>FFT</strong>: scipy.fft.fft(x)
+        </div>
+
+        <h3>Expression Examples</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Operation</th>
+                    <th>Expression</th>
+                    <th>Output Filename</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Multiply by 2.5</td>
+                    <td><code>x * 2.5</code></td>
+                    <td><code>file_..._mathop_xmult2_5.csv</code></td>
+                </tr>
+                <tr>
+                    <td>MM to Meters</td>
+                    <td><code>x / 1000</code></td>
+                    <td><code>file_..._mathop_xdiv1000.csv</code></td>
+                </tr>
+                <tr>
+                    <td>Square Root</td>
+                    <td><code>np.sqrt(x)</code></td>
+                    <td><code>file_..._mathop_np_sqrtx.csv</code></td>
+                </tr>
+                <tr>
+                    <td>Absolute Value</td>
+                    <td><code>np.abs(x)</code></td>
+                    <td><code>file_..._mathop_np_absx.csv</code></td>
+                </tr>
+                <tr>
+                    <td>Median Filter</td>
+                    <td><code>scipy.signal.medfilt(x, 5)</code></td>
+                    <td><code>file_..._mathop_scipy_signal_medfiltx_5.csv</code></td>
+                </tr>
+                <tr>
+                    <td>Moving Average</td>
+                    <td><code>pd.Series(x).rolling(5).mean()</code></td>
+                    <td><code>file_..._mathop_pd_Seriesx_rolling5_mean.csv</code></td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="warning-box">
+            <h4>⚠️ Important Notes</h4>
+            <ul>
+                <li>Always use <code>np.</code> prefix for NumPy functions (e.g., <code>np.sqrt(x)</code>)</li>
+                <li>Test expressions before applying to all files</li>
+                <li>Be aware of division by zero and logarithm of negative numbers</li>
+                <li>Special characters in expressions are cleaned for safe filenames</li>
+            </ul>
+        </div>
+
+        <h2 id="unit-conversion">⚖️ Unit Conversion</h2>
+
+        <h3>Supported Unit Systems</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Category</th>
+                    <th>Available Units</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>Length</strong></td>
+                    <td>meters (m), centimeters (cm), millimeters (mm), kilometers (km), inches (in), feet (ft), yards (yd), miles (mi)</td>
+                </tr>
+                <tr>
+                    <td><strong>Time</strong></td>
+                    <td>seconds (s), minutes (min), hours (hr), days (day)</td>
+                </tr>
+                <tr>
+                    <td><strong>Angle</strong></td>
+                    <td>degrees (deg), radians (rad)</td>
+                </tr>
+                <tr>
+                    <td><strong>Electrical</strong></td>
+                    <td>volts (V), millivolts (mV), microvolts (µV)</td>
+                </tr>
+                <tr>
+                    <td><strong>Velocity</strong></td>
+                    <td>km/h, m/s, mph</td>
+                </tr>
+                <tr>
+                    <td><strong>Force</strong></td>
+                    <td>kilograms (kg), newtons (N)</td>
+                </tr>
+                <tr>
+                    <td><strong>Acceleration</strong></td>
+                    <td>m/s², gravitational force (g)</td>
+                </tr>
+                <tr>
+                    <td><strong>Angular Velocity</strong></td>
+                    <td>rps, rpm, rad/s</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h3>Conversion Options</h3>
+        <ul>
+            <li><strong>Convert ALL columns</strong>: Apply to entire dataset including first column</li>
+            <li><strong>Ignore FIRST column</strong>: Skip time/frame column (recommended)</li>
+        </ul>
+
+        <h2 id="format-conversion">🔄 Format Conversions</h2>
+
+        <h3>Supported Formats</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Source Format</th>
+                    <th>Button</th>
+                    <th>Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>MediaPipe</td>
+                    <td><span class="button-style">Convert MediaPipe to vailá</span></td>
+                    <td>Pose estimation landmarks to pixel coordinates</td>
+                </tr>
+                <tr>
+                    <td>Kinovea</td>
+                    <td><span class="button-style">Convert Kinovea to vailá</span></td>
+                    <td>Video analysis tracking data</td>
+                </tr>
+                <tr>
+                    <td>YOLO Tracker</td>
+                    <td><span class="button-style">Convert YOLO Tracker to vailá</span></td>
+                    <td>Object detection and tracking data</td>
+                </tr>
+                <tr>
+                    <td>DeepLabCut</td>
+                    <td><span class="button-style">Convert DLC to vailá</span></td>
+                    <td>Animal/human pose estimation data</td>
+                </tr>
+                <tr>
+                    <td>Dvideo</td>
+                    <td><span class="button-style">Convert Dvideo to vailá</span></td>
+                    <td>Dvideo .dat file tracking data</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2 id="gui-controls">🖱️ GUI Controls</h2>
+
+        <h3>Main Interface</h3>
+        <div class="feature-box">
+            <h4>Column List Display</h4>
+            <ul>
+                <li><strong>Number Column</strong>: Shows current column order (1, 2, 3, ...)</li>
+                <li><strong>Name Column</strong>: Displays column headers</li>
+                <li><strong>Shape Display</strong>: Shows (rows × columns)</li>
+            </ul>
+        </div>
+
+        <h3>Button Functions</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Button</th>
+                    <th>Function</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>Convert Units</strong></td>
+                    <td>Open unit conversion dialog</td>
+                </tr>
+                <tr>
+                    <td><strong>Modify Lab Ref System</strong></td>
+                    <td>Apply coordinate system rotations</td>
+                </tr>
+                <tr>
+                    <td><strong>Merge CSV</strong></td>
+                    <td>Combine files horizontally (add columns)</td>
+                </tr>
+                <tr>
+                    <td><strong>Stack/Append CSV</strong></td>
+                    <td>Combine files vertically (add rows)</td>
+                </tr>
+                <tr>
+                    <td><strong>Custom Math Operation</strong></td>
+                    <td>Apply mathematical expressions to columns</td>
+                </tr>
+                <tr>
+                    <td><strong>Save 2nd Half CSV</strong></td>
+                    <td>Split and save second half of data</td>
+                </tr>
+                <tr>
+                    <td><strong>Reset Index Col 0</strong></td>
+                    <td>Renumber first column sequentially</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2 id="examples">💡 Usage Examples</h2>
+
+        <h3>Example 1: Convert Force Data from Newtons to Body Weight Percentage</h3>
+        <div class="example-box">
+<strong>Scenario</strong>: You have force plate data in Newtons and want to express as % body weight<br>
+<strong>Body Weight</strong>: 70 kg = 686.5 N<br><br>
+<strong>Steps</strong>:<br>
+1. Click "Custom Math Operation"<br>
+2. Select force columns (Fz1, Fz2, etc.)<br>
+3. Expression: <code>x / 686.5 * 100</code><br>
+4. Test expression<br>
+5. Apply to all files<br><br>
+<strong>Result</strong>: Force values converted to % body weight
+        </div>
+
+        <h3>Example 2: Apply Low-Pass Filter to Noisy Data</h3>
+        <div class="example-box">
+<strong>Scenario</strong>: Kinematic data has high-frequency noise<br><br>
+<strong>Steps</strong>:<br>
+1. Click "Custom Math Operation"<br>
+2. Select coordinate columns (X, Y, Z)<br>
+3. Expression: <code>pd.Series(x).rolling(10, center=True).mean()</code><br>
+4. Test on sample data<br>
+5. Apply moving average filter<br><br>
+<strong>Result</strong>: Smoothed coordinate data
+        </div>
+
+        <h3>Example 3: Batch Convert MediaPipe Data</h3>
+        <div class="example-box">
+<strong>Scenario</strong>: Multiple MediaPipe CSV files need conversion<br><br>
+<strong>Steps</strong>:<br>
+1. Select directory with MediaPipe files<br>
+2. Click "Convert MediaPipe to vailá"<br>
+3. Wait for batch processing<br>
+4. Check output in <code>Convert_MediaPipe_to_vaila_[timestamp]/</code><br><br>
+<strong>Result</strong>: All files converted to pixel format
+        </div>
+
+        <h3>Example 4: Normalize EMG Data</h3>
+        <div class="example-box">
+<strong>Scenario</strong>: EMG signals need normalization to 0-1 range<br><br>
+<strong>Steps</strong>:<br>
+1. Click "Custom Math Operation"<br>
+2. Select EMG channels<br>
+3. Expression: <code>(x - np.min(x)) / (np.max(x) - np.min(x))</code><br>
+4. Note: This normalizes per-value, for column-wise use preprocessing<br>
+5. Apply to normalize data<br><br>
+<strong>Result</strong>: Normalized EMG values
+        </div>
+
+        <h3>Example 5: Convert Pixel Coordinates to Meters</h3>
+        <div class="example-box">
+<strong>Scenario</strong>: Video analysis with known calibration (1000 pixels = 2 meters)<br><br>
+<strong>Steps</strong>:<br>
+1. Click "Custom Math Operation"<br>
+2. Select coordinate columns (p1_x, p1_y, p2_x, p2_y, ...)<br>
+3. Expression: <code>x * 2.0 / 1000</code><br>
+4. Test expression<br>
+5. Apply to convert pixels to meters<br><br>
+<strong>Result</strong>: Real-world coordinates in meters
+        </div>
+
+        <h2 id="troubleshooting">🔧 Troubleshooting</h2>
+
+        <h3>Common Issues</h3>
+
+        <div class="warning-box">
+            <h4>Expression Errors</h4>
+            <p><strong>Problem</strong>: "NameError: name 'sqrt' is not defined"</p>
+            <p><strong>Solution</strong>: Use NumPy prefix: <code>np.sqrt(x)</code> instead of <code>sqrt(x)</code></p>
+        </div>
+
+        <div class="warning-box">
+            <h4>Division by Zero</h4>
+            <p><strong>Problem</strong>: Expression produces infinity or NaN</p>
+            <p><strong>Solution</strong>: Add safeguard: <code>x / (y + 1e-10)</code> or use <code>np.nan_to_num(x / y)</code></p>
+        </div>
+
+        <div class="warning-box">
+            <h4>Large File Performance</h4>
+            <p><strong>Problem</strong>: Slow processing for files &gt; 100 MB</p>
+            <p><strong>Solution</strong>: Tool automatically uses simplified mode. Process files individually if needed.</p>
+        </div>
+
+        <h3>Best Practices</h3>
+        <ul>
+            <li>✅ <strong>Always test expressions</strong> before applying to all files</li>
+            <li>✅ <strong>Backup important data</strong> before batch operations</li>
+            <li>✅ <strong>Check output files</strong> after complex operations</li>
+            <li>✅ <strong>Use descriptive expressions</strong> for easier tracking</li>
+            <li>✅ <strong>Keep original files</strong> - tool never modifies originals</li>
+        </ul>
+
+        <h2>🎯 Quick Start Guide</h2>
+
+        <ol>
+            <li><strong>Launch Tool</strong>: From vailá main menu, select "Rearrange Data"</li>
+            <li><strong>Select Directory</strong>: Choose folder with CSV files to process</li>
+            <li><strong>Review Columns</strong>: Check column list and structure</li>
+            <li><strong>Apply Operations</strong>:
+                <ul>
+                    <li>Reorder columns as needed</li>
+                    <li>Apply math operations</li>
+                    <li>Convert units if required</li>
+                    <li>Transform coordinate systems</li>
+                </ul>
+            </li>
+            <li><strong>Save Results</strong>: Press <kbd>Ctrl+S</kbd> or <kbd>Esc</kbd></li>
+            <li><strong>Check Output</strong>: Verify files in <code>data_rearranged/</code> folder</li>
+        </ol>
+
+        <h2>📦 Output Organization</h2>
+
+        <pre><code>original_directory/
+├── data_rearranged/
+│   ├── file1_20251015_120000_mathop_xdiv1000.csv
+│   ├── file1_20251015_120030_unit_mm_to_m_FIRST_IGNORED.csv
+│   ├── file2_20251015_120100_resetidx.csv
+│   └── file3_20251015_120130_final.csv
+├── Convert_MediaPipe_to_vaila_20251015_120200/
+│   └── converted_files...
+├── Convert_Kinovea_to_vaila_20251015_120300/
+│   └── converted_files...
+└── rotated_files/
+    └── coordinate_transformed_files...
+</code></pre>
+
+        <h2>🔗 Integration with vailá</h2>
+
+        <h3>Upstream Modules</h3>
+        <ul>
+            <li><strong>readc3d_export</strong>: C3D file exports</li>
+            <li><strong>markerless_2d_analysis</strong>: MediaPipe outputs</li>
+            <li><strong>yolo_tracking</strong>: YOLO tracker outputs</li>
+        </ul>
+
+        <h3>Downstream Modules</h3>
+        <ul>
+            <li><strong>vailaplot2d</strong>: 2D data visualization</li>
+            <li><strong>dlt3d</strong>: 3D reconstruction</li>
+            <li><strong>kinematics analysis</strong>: Motion analysis</li>
+            <li><strong>ML modules</strong>: Machine learning training</li>
+        </ul>
+
+        <h2>📚 Additional Resources</h2>
+
+        <ul>
+            <li><a href="data-filtering.md">Data Filtering</a>: Advanced filtering operations</li>
+            <li><a href="../visualization/plot-2d.md">2D Plotting</a>: Visualize processed data</li>
+            <li><a href="c3d-csv-conversion.md">C3D ↔ CSV Conversion</a>: Motion capture file conversion</li>
+        </ul>
+
+        <div class="success-box">
+            <h3>✨ Version 0.0.6 Highlights</h3>
+            <ul>
+                <li>New custom math operations with full NumPy/Pandas/SciPy support</li>
+                <li>Improved filename sanitization (no special characters)</li>
+                <li>Enhanced error handling and user feedback</li>
+                <li>Expression testing before batch application</li>
+            </ul>
+        </div>
+
+        <hr>
+        <footer class="footer">
+            <p>vailá Multimodal Toolbox - Rearrange Data Module v0.0.6</p>
+            <p>Author: Prof. Paulo Santiago | <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub</a></p>
+        </footer>
+    </div>
+</body>
+</html>
+

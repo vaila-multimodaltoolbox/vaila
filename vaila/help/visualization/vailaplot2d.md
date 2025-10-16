@@ -3,9 +3,9 @@
 ## 📋 Module Information
 
 - **Category:** Visualization
-- **File:** `vaila/vailaplot2d.py`
-- **Lines:** 768
-- **Size:** 24620 characters
+- **File:** `vaila\vailaplot2d.py`
+- **Lines:** 1450
+- **Size:** 52560 characters
 - **Version:** 0.0.2
 - **Author:** Prof. Paulo Santiago
 - **GUI Interface:** ✅ Yes
@@ -47,27 +47,27 @@ Plot Types Supported:
 - `new_figure`
 - `save_figure`
 - `select_plot_type`
-- `select_and_plot`
 - `plot_time_scatter`
 - `plot_angle_angle`
 - `plot_confidence_interval`
 - `plot_boxplot`
 - `plot_spm`
 - `select_file`
+- `read_excel_with_sheet_selection`
+- `get_file_headers`
+- `detect_c3d_units`
+- `read_c3d_file`
+- `read_csv_with_encoding`
 - `get_csv_headers`
 - `select_headers_gui`
 - `run_plot_2d`
-- `on_select_file`
-- `on_plot`
-- `on_add_more`
-- `on_clear`
-- `on_select`
+- `create_window`
 
 
 
 
 ---
 
-📅 **Generated automatically on:** 08/10/2025 14:24:24
+📅 **Generated automatically on:** 15/10/2025 08:04:44
 🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

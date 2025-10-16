@@ -3,10 +3,10 @@
 ## 📋 Module Information
 
 - **Category:** Analysis
-- **File:** `vaila/forceplate_analysis.py`
-- **Lines:** 279
-- **Size:** 8826 characters
-- **Version:** 0.7
+- **File:** `vaila\forceplate_analysis.py`
+- **Lines:** 304
+- **Size:** 9471 characters
+- **Version:** 0.0.9
 - **Author:** Prof. Paulo Santiago
 - **GUI Interface:** ✅ Yes
 
@@ -18,8 +18,8 @@ forceplate_analysis.py
 ================================================================================
 Author: Prof. Paulo Santiago
 Date: 9 September 2024
-Update: 28 November 2024
-Version: 0.7
+Update: 14 October 2025
+Version: 0.0.9
 
 Description:
 ------------
@@ -34,11 +34,11 @@ Key Analyses Supported:
 -----------------------
 1. Force Cube Analysis: Examines force data captured in a cubic arrangement, allowing for
    multidirectional force vector analysis.
-2. Center of Pressure (CoP) Balance Analysis: Evaluat...
+2. Center of Pressure (CoP) Balance Analysis: Evalua...
 
 ## 🔧 Main Functions
 
-**Total functions found:** 14
+**Total functions found:** 16
 
 - `choose_analysis_type`
 - `run_force_cube_analysis`
@@ -47,6 +47,7 @@ Key Analyses Supported:
 - `run_fix_noise`
 - `run_calculate_cop`
 - `run_gait_analysis`
+- `run_sit_to_stand`
 - `run_force_analysis`
 - `select_force_cube_fig`
 - `select_cop_balance`
@@ -54,12 +55,13 @@ Key Analyses Supported:
 - `select_fix_noise`
 - `select_calculate_cop`
 - `select_gait_analysis`
+- `select_sit_to_stand`
 
 
 
 
 ---
 
-📅 **Generated automatically on:** 08/10/2025 14:24:24
+📅 **Generated automatically on:** 15/10/2025 08:04:44
 🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

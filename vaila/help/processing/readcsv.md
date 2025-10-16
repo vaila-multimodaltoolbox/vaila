@@ -3,7 +3,7 @@
 ## 📋 Module Information
 
 - **Category:** Processing
-- **File:** `vaila/readcsv.py`
+- **File:** `vaila\readcsv.py`
 - **Lines:** 1842
 - **Size:** 65822 characters
 - **Version:** 0.0.4
@@ -81,6 +81,6 @@ Change History:
 
 ---
 
-📅 **Generated automatically on:** 08/10/2025 14:24:24
+📅 **Generated automatically on:** 15/10/2025 08:04:44
 🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

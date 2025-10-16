@@ -3,7 +3,7 @@
 ## 📋 Module Information
 
 - **Category:** Analysis
-- **File:** `vaila/markerless_live.py`
+- **File:** `vaila\markerless_live.py`
 - **Lines:** 1486
 - **Size:** 56506 characters
 - **Version:** 0.0.2
@@ -64,6 +64,6 @@ Features:
 
 ---
 
-📅 **Generated automatically on:** 08/10/2025 14:24:24
+📅 **Generated automatically on:** 15/10/2025 08:04:44
 🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
