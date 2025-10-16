@@ -3,7 +3,7 @@
 ## 📋 Module Information
 
 - **Category:** Analysis
-- **File:** `vaila/run_vector_coding.py`
+- **File:** `vaila\run_vector_coding.py`
 - **Lines:** 383
 - **Size:** 11844 characters
 
@@ -29,6 +29,6 @@ Time normalize data to n_points.
 
 ---
 
-📅 **Generated automatically on:** 08/10/2025 14:24:24
+📅 **Generated automatically on:** 15/10/2025 08:04:44
 🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

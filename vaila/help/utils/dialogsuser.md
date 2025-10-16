@@ -3,7 +3,7 @@
 ## 📋 Module Information
 
 - **Category:** Utils
-- **File:** `vaila/dialogsuser.py`
+- **File:** `vaila\dialogsuser.py`
 - **Lines:** 112
 - **Size:** 4765 characters
 - **Version:** 1.0
@@ -45,6 +45,6 @@ Main Features:
 
 ---
 
-📅 **Generated automatically on:** 08/10/2025 14:24:24
+📅 **Generated automatically on:** 15/10/2025 08:04:44
 🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

@@ -3,7 +3,7 @@
 ## 📋 Module Information
 
 - **Category:** Tools
-- **File:** `vaila/fixnoise.py`
+- **File:** `vaila\fixnoise.py`
 - **Lines:** 273
 - **Size:** 8988 characters
 - **Version:** 0.02
@@ -60,6 +60,6 @@ Instructions:
 
 ---
 
-📅 **Generated automatically on:** 08/10/2025 14:24:24
+📅 **Generated automatically on:** 15/10/2025 08:04:44
 🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

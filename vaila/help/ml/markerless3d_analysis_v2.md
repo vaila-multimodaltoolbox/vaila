@@ -3,7 +3,7 @@
 ## 📋 Module Information
 
 - **Category:** Ml
-- **File:** `vaila/markerless3d_analysis_v2.py`
+- **File:** `vaila\markerless3d_analysis_v2.py`
 - **Lines:** 1020
 - **Size:** 37296 characters
 - **Version:** 0.0.1
@@ -66,6 +66,6 @@ Usage:
 
 ---
 
-📅 **Generated automatically on:** 08/10/2025 14:24:24
+📅 **Generated automatically on:** 15/10/2025 08:04:44
 🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
