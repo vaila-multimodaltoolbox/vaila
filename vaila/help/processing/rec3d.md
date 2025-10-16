@@ -3,7 +3,7 @@
 ## 📋 Module Information
 
 - **Category:** Processing
-- **File:** `vaila/rec3d.py`
+- **File:** `vaila\rec3d.py`
 - **Lines:** 296
 - **Size:** 11090 characters
 - **Version:** 0.0.2
@@ -51,6 +51,6 @@ Description:
 
 ---
 
-📅 **Generated automatically on:** 08/10/2025 14:24:24
+📅 **Generated automatically on:** 15/10/2025 08:04:44
 🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

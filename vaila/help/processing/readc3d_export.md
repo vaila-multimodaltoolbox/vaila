@@ -3,7 +3,7 @@
 ## 📋 Module Information
 
 - **Category:** Processing
-- **File:** `vaila/readc3d_export.py`
+- **File:** `vaila\readc3d_export.py`
 - **Lines:** 1255
 - **Size:** 47131 characters
 - **Version:** 25 September 2024
@@ -61,6 +61,6 @@ Features:
 
 ---
 
-📅 **Generated automatically on:** 08/10/2025 14:24:24
+📅 **Generated automatically on:** 15/10/2025 08:04:44
 🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
