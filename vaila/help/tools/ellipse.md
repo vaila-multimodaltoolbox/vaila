@@ -3,7 +3,7 @@
 ## 📋 Module Information
 
 - **Category:** Tools
-- **File:** `vaila/ellipse.py`
+- **File:** `vaila\ellipse.py`
 - **Lines:** 234
 - **Size:** 9374 characters
 - **Version:** 1.0 Date: 2024-09-12
@@ -39,6 +39,6 @@ Description: This module provides functions to compute and visualize confidence 
 
 ---
 
-📅 **Generated automatically on:** 08/10/2025 14:24:24
+📅 **Generated automatically on:** 15/10/2025 08:04:44
 🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

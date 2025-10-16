@@ -3,7 +3,7 @@
 ## 📋 Module Information
 
 - **Category:** Tools
-- **File:** `vaila/vaila_iaudiovid.py`
+- **File:** `vaila\vaila_iaudiovid.py`
 - **Lines:** 793
 - **Size:** 28868 characters
 - **Version:** 1.3.0
@@ -69,6 +69,6 @@ Requirements:
 
 ---
 
-📅 **Generated automatically on:** 08/10/2025 14:24:24
+📅 **Generated automatically on:** 15/10/2025 08:04:44
 🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

@@ -3,7 +3,7 @@
 ## 📋 Module Information
 
 - **Category:** Tools
-- **File:** `vaila/batchcut.py`
+- **File:** `vaila\batchcut.py`
 - **Lines:** 191
 - **Size:** 6825 characters
 - **Version:** 1.1
@@ -51,6 +51,6 @@ The script automatically removes duplicate ".mp4" extensions from the new file n
 
 ---
 
-📅 **Generated automatically on:** 08/10/2025 14:24:24
+📅 **Generated automatically on:** 15/10/2025 08:04:44
 🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
