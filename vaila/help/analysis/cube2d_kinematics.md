@@ -3,7 +3,7 @@
 ## 📋 Module Information
 
 - **Category:** Analysis
-- **File:** `vaila/cube2d_kinematics.py`
+- **File:** `vaila\cube2d_kinematics.py`
 - **Lines:** 722
 - **Size:** 23935 characters
 - **Version:** 0.0.3
@@ -62,6 +62,6 @@ Key Features:
 
 ---
 
-📅 **Generated automatically on:** 08/10/2025 14:24:24
+📅 **Generated automatically on:** 15/10/2025 08:04:44
 🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

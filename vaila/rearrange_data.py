@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 08 Oct 2024
-Update Date: 25 Jul 2025
-Version: 0.0.6
+Update Date: 15 Oct 2025
+Version: 0.0.7
 
 Description:
     This script provides tools for rearranging and processing CSV data files.
@@ -34,6 +34,8 @@ License:
     This project is licensed under the terms of GNU General Public License v3.0.
 
 Change History:
+    - v0.0.7: Added custom math operation feature with NumPy, Pandas, and SciPy support
+    - v0.0.6: Added functionality to save the second half of each CSV file
     - v0.0.4: Added functionality to save the second half of each CSV file
     - v0.0.3: Added batch convert MediaPipe CSV files functionality
     - v0.0.2: Added automatic directory creation for saving converted MediaPipe data
@@ -43,7 +45,9 @@ Change History:
 import os
 import pathlib
 from rich import print
+import numpy as np
 import pandas as pd
+import scipy
 import tkinter as tk
 from tkinter import filedialog, simpledialog, messagebox, Scrollbar
 from datetime import datetime
@@ -52,7 +56,7 @@ from vaila.mergestack import select_file, merge_csv_files, stack_csv_files
 from vaila.standardize_header import standardize_header
 from vaila.dlc2vaila import batch_convert_dlc
 import gc
-import numpy as np
+
 
 # Dictionary for metric unit conversions with abbreviations
 CONVERSIONS = {
@@ -660,6 +664,12 @@ class ColumnReorderGUI(tk.Tk):
             button_frame, text="Reset Index Col 0", command=self.reset_index_column_0
         )
         reset_index_button.grid(row=11, column=0, padx=5, pady=5, sticky="n")
+
+        # Custom Math Operation button
+        custom_math_button = tk.Button(
+            button_frame, text="Custom Math Operation", command=self.custom_math_operation
+        )
+        custom_math_button.grid(row=12, column=0, padx=5, pady=5, sticky="n")
 
         # Configure bindings
         self.setup_bindings()
@@ -1461,6 +1471,345 @@ class ColumnReorderGUI(tk.Tk):
         messagebox.showinfo(
             "Success", f"Index of column 0 reset and saved in: {self.rearranged_path}"
         )
+
+    def custom_math_operation(self):
+        """
+        Apply custom mathematical operations to selected columns.
+        Allows user to enter any Python expression using numpy functions.
+        """
+        print(f"Running script: {pathlib.Path(__file__).name}")
+        print(f"Script directory: {pathlib.Path(__file__).parent}")
+
+        # Create custom operation window
+        operation_window = tk.Toplevel(self)
+        operation_window.title("Custom Math Operation")
+        operation_window.geometry("900x650")
+
+        # Title
+        title_label = tk.Label(
+            operation_window,
+            text="Apply Custom Mathematical Operation",
+            font=("default", 14, "bold")
+        )
+        title_label.pack(pady=10)
+
+        # Instructions
+        instructions_text = (
+            "Select column(s) and enter a mathematical expression.\n\n"
+            "Available: NumPy, Pandas, SciPy functions and operators\n"
+            "Use 'x' to represent the column value.\n\n"
+            "Examples:\n"
+            "  x * 2.5              → Multiply by 2.5\n"
+            "  x / 1000             → Divide by 1000 (mm to m)\n"
+            "  np.sqrt(x)           → Square root\n"
+            "  x ** 2               → Square\n"
+            "  np.abs(x)            → Absolute value\n"
+            "  np.log(x)            → Natural logarithm\n"
+            "  np.deg2rad(x)        → Degrees to radians\n"
+            "  scipy.signal.medfilt(x, 5)  → Median filter\n"
+            "  pd.Series(x).rolling(5).mean()  → Moving average\n"
+        )
+        instructions_label = tk.Label(
+            operation_window,
+            text=instructions_text,
+            font=("default", 9),
+            justify=tk.LEFT,
+            bg="lightyellow"
+        )
+        instructions_label.pack(pady=10, padx=10, fill=tk.X)
+
+        # Column selection frame
+        column_frame = tk.LabelFrame(
+            operation_window,
+            text="Select Columns to Apply Operation",
+            font=("default", 10, "bold")
+        )
+        column_frame.pack(pady=10, padx=10, fill=tk.BOTH, expand=True)
+
+        # Scrollbar and listbox for column selection
+        scrollbar = tk.Scrollbar(column_frame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        column_listbox = tk.Listbox(
+            column_frame,
+            selectmode=tk.MULTIPLE,
+            width=60,
+            height=10,
+            yscrollcommand=scrollbar.set
+        )
+        column_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
+        scrollbar.config(command=column_listbox.yview)
+
+        # Populate with current columns
+        for i, header in enumerate(self.current_order):
+            column_listbox.insert(tk.END, f"{i+1}: {header}")
+
+        # Select all / Clear all buttons
+        select_button_frame = tk.Frame(operation_window)
+        select_button_frame.pack(pady=5)
+
+        select_all_btn = tk.Button(
+            select_button_frame,
+            text="Select All",
+            command=lambda: column_listbox.select_set(0, tk.END)
+        )
+        select_all_btn.pack(side=tk.LEFT, padx=5)
+
+        clear_all_btn = tk.Button(
+            select_button_frame,
+            text="Clear Selection",
+            command=lambda: column_listbox.selection_clear(0, tk.END)
+        )
+        clear_all_btn.pack(side=tk.LEFT, padx=5)
+
+        # Expression input frame
+        expression_frame = tk.LabelFrame(
+            operation_window,
+            text="Mathematical Expression",
+            font=("default", 10, "bold")
+        )
+        expression_frame.pack(pady=10, padx=10, fill=tk.X)
+
+        expression_label = tk.Label(
+            expression_frame,
+            text="Enter expression (use 'x' for column value):",
+            font=("default", 10)
+        )
+        expression_label.pack(pady=5, padx=10, anchor=tk.W)
+
+        expression_entry = tk.Entry(expression_frame, width=60, font=("default", 11))
+        expression_entry.pack(pady=5, padx=10, fill=tk.X)
+        expression_entry.insert(0, "x * 1.0")  # Default example
+        expression_entry.focus()
+
+        # Test button
+        test_button = tk.Button(
+            expression_frame,
+            text="Test Expression",
+            command=lambda: self.test_expression(expression_entry.get(), column_listbox),
+            bg="lightblue"
+        )
+        test_button.pack(pady=5)
+
+        # Apply and Cancel buttons
+        button_frame = tk.Frame(operation_window)
+        button_frame.pack(pady=15)
+
+        apply_button = tk.Button(
+            button_frame,
+            text="Apply Operation",
+            command=lambda: self.apply_math_operation(
+                column_listbox, expression_entry.get(), operation_window
+            ),
+            font=("default", 11, "bold"),
+            bg="lightgreen",
+            width=15
+        )
+        apply_button.pack(side=tk.LEFT, padx=10)
+
+        cancel_button = tk.Button(
+            button_frame,
+            text="Cancel",
+            command=operation_window.destroy,
+            font=("default", 11),
+            width=15
+        )
+        cancel_button.pack(side=tk.LEFT, padx=10)
+
+        operation_window.transient(self)
+        operation_window.grab_set()
+        self.wait_window(operation_window)
+
+    def test_expression(self, expression, column_listbox):
+        """Test the mathematical expression with sample data"""
+        try:
+            # Import all necessary libraries first
+            import numpy as np
+            import pandas as pd
+            import scipy
+            import scipy.signal
+            
+            # Get selected columns
+            selected_idx = column_listbox.curselection()
+            if not selected_idx:
+                messagebox.showwarning("No Selection", "Please select at least one column to test.")
+                return
+
+            # Get first selected column for testing
+            first_selected = selected_idx[0]
+            column_name = self.current_order[first_selected]
+
+            # Load sample data from first file
+            if self.file_names[0] == "Empty":
+                messagebox.showwarning("No Data", "No CSV files loaded for testing.")
+                return
+
+            file_path = os.path.join(self.directory_path, self.file_names[0])
+            df = pd.read_csv(file_path, nrows=5)  # Read only first 5 rows for testing
+
+            if column_name not in df.columns:
+                messagebox.showerror("Error", f"Column '{column_name}' not found in file.")
+                return
+
+            # Get sample values
+            sample_values = df[column_name].values
+            
+            result_values = []
+            for val in sample_values:
+                x = val  # Make 'x' available in expression
+                try:
+                    result = eval(expression)
+                    # Handle pandas Series results (e.g., from rolling operations)
+                    if isinstance(result, pd.Series):
+                        result = result.iloc[0] if len(result) > 0 else np.nan
+                    result_values.append(result)
+                except Exception as e:
+                    messagebox.showerror(
+                        "Expression Error",
+                        f"Error evaluating expression with value {val}:\n{str(e)}\n\n"
+                        f"Make sure to use 'np.' prefix for NumPy functions (e.g., np.sqrt(x))"
+                    )
+                    return
+
+            # Show test results
+            test_result = f"Testing expression: {expression}\n"
+            test_result += f"Column: {column_name}\n\n"
+            test_result += "Sample Results (first 5 rows):\n"
+            test_result += "-" * 50 + "\n"
+            for i, (orig, result) in enumerate(zip(sample_values, result_values), 1):
+                test_result += f"Row {i}: {orig} → {result}\n"
+
+            messagebox.showinfo("Test Results", test_result)
+
+        except Exception as e:
+            messagebox.showerror("Test Error", f"Error testing expression:\n{str(e)}")
+
+    def apply_math_operation(self, column_listbox, expression, operation_window):
+        """Apply the mathematical operation to selected columns and save results"""
+        try:
+            # Get selected columns
+            selected_idx = column_listbox.curselection()
+            if not selected_idx:
+                messagebox.showwarning("No Selection", "Please select at least one column.")
+                return
+
+            if not expression or expression.strip() == "":
+                messagebox.showwarning("No Expression", "Please enter a mathematical expression.")
+                return
+
+            # Get selected column names
+            selected_columns = [self.current_order[i] for i in selected_idx]
+            
+            # Confirm operation
+            confirm_msg = (
+                f"Apply operation '{expression}' to {len(selected_columns)} column(s):\n"
+                f"{', '.join(selected_columns[:5])}"
+            )
+            if len(selected_columns) > 5:
+                confirm_msg += f"\n... and {len(selected_columns) - 5} more"
+            
+            if not messagebox.askyesno("Confirm Operation", confirm_msg):
+                return
+
+            # Create output directory
+            if not os.path.exists(self.rearranged_path):
+                os.makedirs(self.rearranged_path)
+
+            # Import all necessary libraries for eval
+            import numpy as np
+            import pandas as pd
+            import scipy
+            import scipy.signal
+
+            # Process each file
+            processed_files = 0
+            for file_name in self.file_names:
+                if file_name == "Empty" or not file_name.lower().endswith(".csv"):
+                    continue
+
+                file_path = os.path.join(self.directory_path, file_name)
+                df = pd.read_csv(file_path)
+
+                # Detect original precision
+                column_precision = detect_column_precision_detailed(file_path)
+
+                # Create a copy for modification
+                df_modified = df.copy()
+
+                # Apply operation to each selected column
+                for column_name in selected_columns:
+                    if column_name in df_modified.columns:
+                        print(f"Applying '{expression}' to column '{column_name}' in {file_name}")
+                        
+                        # Apply the expression to the column
+                        original_values = df_modified[column_name].values
+                        new_values = []
+                        
+                        for val in original_values:
+                            x = val  # Make 'x' available in expression
+                            try:
+                                result = eval(expression)
+                                # Handle pandas Series results
+                                if isinstance(result, pd.Series):
+                                    result = result.iloc[0] if len(result) > 0 else np.nan
+                                new_values.append(result)
+                            except Exception as e:
+                                print(f"Error evaluating expression for value {val}: {e}")
+                                new_values.append(np.nan)
+                        
+                        df_modified[column_name] = new_values
+                    else:
+                        print(f"Warning: Column '{column_name}' not found in {file_name}")
+
+                # Generate output filename - clean expression for safe filename
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                base_name = os.path.splitext(file_name)[0]
+                
+                # Create a safe filename by removing special characters
+                expr_clean = expression.replace(" ", "")
+                # Replace operators with words
+                replacements = {
+                    "*": "mult", "/": "div", "+": "plus", "-": "minus",
+                    "**": "pow", "(": "", ")": "", ".": "_",
+                    "[": "", "]": "", ",": "_", "=": "eq",
+                    "<": "lt", ">": "gt", "!": "not"
+                }
+                for old, new in replacements.items():
+                    expr_clean = expr_clean.replace(old, new)
+                
+                # Limit length and ensure alphanumeric
+                expr_clean = ''.join(c for c in expr_clean if c.isalnum() or c == '_')[:30]
+                
+                new_file_name = f"{base_name}_{timestamp}_mathop_{expr_clean}.csv"
+                new_file_path = os.path.join(self.rearranged_path, new_file_name)
+
+                # Save with original precision
+                save_dataframe_with_precision(df_modified, new_file_path, column_precision)
+                print(f"Saved: {new_file_path}")
+                processed_files += 1
+
+            # Show success message
+            if processed_files > 0:
+                success_message = (
+                    f"SUCCESS! Applied operation to {len(selected_columns)} column(s) in {processed_files} file(s).\n\n"
+                    f"Operation: {expression}\n"
+                    f"Columns: {', '.join(selected_columns[:3])}"
+                )
+                if len(selected_columns) > 3:
+                    success_message += f"... and {len(selected_columns) - 3} more"
+                success_message += f"\n\nFiles saved in: {self.rearranged_path}"
+                
+                messagebox.showinfo("Operation Complete", success_message)
+            else:
+                messagebox.showwarning("No Files Processed", "No valid CSV files were processed.")
+
+            operation_window.destroy()
+
+        except Exception as e:
+            print(f"Error applying math operation: {e}")
+            import traceback
+            traceback.print_exc()
+            messagebox.showerror("Error", f"An error occurred:\n{str(e)}")
 
 
 def convert_dvideo_to_vaila(file_path, save_directory):

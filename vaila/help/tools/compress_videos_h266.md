@@ -3,7 +3,7 @@
 ## 📋 Module Information
 
 - **Category:** Tools
-- **File:** `vaila/compress_videos_h266.py`
+- **File:** `vaila\compress_videos_h266.py`
 - **Lines:** 352
 - **Size:** 12061 characters
 - **Version:** 0.0.1
@@ -57,6 +57,6 @@ The compressed versions are saved in a subdirectory named 'compressed_h266'.
 
 ---
 
-📅 **Generated automatically on:** 08/10/2025 14:24:24
+📅 **Generated automatically on:** 15/10/2025 08:04:44
 🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

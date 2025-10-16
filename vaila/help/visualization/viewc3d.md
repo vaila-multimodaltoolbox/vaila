@@ -3,7 +3,7 @@
 ## 📋 Module Information
 
 - **Category:** Visualization
-- **File:** `vaila/viewc3d.py`
+- **File:** `vaila\viewc3d.py`
 - **Lines:** 3330
 - **Size:** 122221 characters
 - **Version:** 0.0.9
@@ -69,6 +69,6 @@ Features soccer field lines and penalty areas.
 
 ---
 
-📅 **Generated automatically on:** 08/10/2025 14:24:24
+📅 **Generated automatically on:** 15/10/2025 08:04:44
 🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
