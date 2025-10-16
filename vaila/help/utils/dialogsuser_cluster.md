@@ -3,7 +3,7 @@
 ## 📋 Module Information
 
 - **Category:** Utils
-- **File:** `vaila/dialogsuser_cluster.py`
+- **File:** `vaila\dialogsuser_cluster.py`
 - **Lines:** 169
 - **Size:** 7686 characters
 - **Version:** 1.1
@@ -42,6 +42,6 @@ Main Features:
 
 ---
 
-📅 **Generated automatically on:** 08/10/2025 14:24:24
+📅 **Generated automatically on:** 15/10/2025 08:04:44
 🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
