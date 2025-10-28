@@ -2,9 +2,13 @@
 ================================================================================
 IMU Analysis Tool - imu_analysis.py
 ================================================================================
-Author: Prof. Ph.D. Paulo Santiago (paulosantiago@usp.br)
-Date: 2024-11-21
-Version: 1.2
+Author: Paulo R. P. Santiago
+Email: paulosantiago@usp.br
+GitHub: https://github.com/vaila-multimodaltoolbox/vaila
+Creation Date: 21 October 2024
+Update Date: 28 October 2025
+Version: 0.1.2
+Python Version: 3.12.12
 
 Description:
 ------------
