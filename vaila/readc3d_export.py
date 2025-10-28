@@ -2,11 +2,12 @@
 ===============================================================================
 readc3d_export.py
 ===============================================================================
-Author: Prof. Paulo R. P. Santiago
-Version: 25 September 2024
-Update: 15 September 2025
-Version updated: 0.0.3
-Python Version: 3.12.11
+Author: Paulo R. P. Santiago
+Email: paulosantiago@usp.br
+GitHub: https://github.com/vaila-multimodaltoolbox/vaila
+Creation Date: 25 September 2024
+Update Date: 28 October 2025
+Version: 0.0.3
 
 Description:
 This script processes .c3d files, extracting marker data, analog data, events, and points residuals,
@@ -32,7 +33,7 @@ Features:
 - Saves a summary file with points residuals information.
 
 Dependencies:
-- Python 3.12.9
+- Python 3.12.12
 - ezc3d
 - Pandas
 - Tkinter
