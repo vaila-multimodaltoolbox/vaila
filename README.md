@@ -1,7 +1,7 @@
 # *vailá* - Multimodal Toolbox
 
 <p align="center">
-  <img src="docs/images/vaila.png" alt="vailá Logo" width="300"/>
+  <img src="docs/images/vaila.png" alt="vailá Logo" width="100"/>
 </p>
 
 <div align="center">
@@ -687,6 +687,7 @@ maintains the freedom of the software and requires source code availability.
 
 For more details, see the [LICENSE](LICENSE) file or visit: 
 https://www.gnu.org/licenses/agpl-3.0.html
+
 
 
 
