@@ -6,7 +6,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 18 February 2025
-Update Date: 02 Augst 2025
+Update Date: 29 October 2025
 Version: 0.0.3
 
 Description:
@@ -89,7 +89,7 @@ REID_MODELS = {
 
 def initialize_csv(output_dir, label, tracker_id, total_frames):
     """Initializes a CSV file for a specific tracker ID and label."""
-    csv_file = os.path.join(output_dir, f"{label}_id{tracker_id}.csv")
+    csv_file = os.path.join(output_dir, f"{label}_id_{int(tracker_id):02d}.csv")
     if not os.path.exists(csv_file):
         # Get color for this ID
         color = get_color_for_id(tracker_id)
@@ -967,13 +967,15 @@ def create_combined_person_csv(output_dir):
         Path to the created combined CSV file
     """
     # Find all person CSV files
-    person_csv_files = glob.glob(os.path.join(output_dir, "person_id*.csv"))
+    person_csv_files = glob.glob(os.path.join(output_dir, "person_id_*.csv"))
 
     if not person_csv_files:
         print(f"No person tracking files found in {output_dir}")
         return None
 
     print(f"Found {len(person_csv_files)} person tracking files")
+    for f in person_csv_files:
+        print(f"  - {os.path.basename(f)}")
 
     # First, get all unique frames and person IDs
     all_frames = set()
@@ -985,7 +987,7 @@ def create_combined_person_csv(output_dir):
         try:
             df = pd.read_csv(csv_file)
             filename = os.path.basename(csv_file)
-            person_id = int(filename.split("_id")[1].split(".")[0])
+            person_id = int(filename.split("_id_")[1].split(".")[0])
             person_ids.add(person_id)
 
             # Get frames where this person appears
@@ -1028,7 +1030,7 @@ def create_combined_person_csv(output_dir):
     for csv_file in person_csv_files:
         try:
             df = pd.read_csv(csv_file)
-            person_id = int(os.path.basename(csv_file).split("_id")[1].split(".")[0])
+            person_id = int(os.path.basename(csv_file).split("_id_")[1].split(".")[0])
 
             # Process only rows with valid detection data
             valid_data = df.dropna(subset=["X_min", "X_max", "Y_max"])
@@ -1064,6 +1066,162 @@ def create_combined_person_csv(output_dir):
     df_combined.to_csv(output_file, index=False)
     print(f"Combined person tracking data saved to: {output_file}")
     return output_file
+
+
+def create_combined_detection_csv(output_dir):
+    """
+    Build a wide CSV aligning all per-ID CSVs side-by-side with label+id suffixes.
+    Output: all_id_detection.csv
+    """
+    detection_csv_files = glob.glob(os.path.join(output_dir, "*_id_*.csv"))
+
+    if not detection_csv_files:
+        print(f"No detection tracking files found in {output_dir}")
+        return None
+
+    print(f"Found {len(detection_csv_files)} detection tracking files")
+    for f in detection_csv_files:
+        print(f"  - {os.path.basename(f)}")
+
+    # Determine total frames from files (they are pre-initialized 0..N-1)
+    max_frame = 0
+    for csv_file in detection_csv_files:
+        try:
+            df = pd.read_csv(csv_file, usecols=["Frame"])  # faster
+            if not df.empty and df["Frame"].notna().any():
+                max_frame = max(max_frame, int(df["Frame"].max()))
+        except Exception:
+            continue
+    total_frames = max_frame + 1
+
+    base = pd.DataFrame({"Frame": np.arange(int(total_frames))})
+
+    merged = base.copy()
+    for csv_file in detection_csv_files:
+        try:
+            filename = os.path.basename(csv_file)
+            label_part = filename.rsplit("_id_", 1)[0]
+            id_part = filename.rsplit("_id_", 1)[1].split(".")[0]
+            suffix = f"_{label_part}_id_{id_part}"
+
+            df = pd.read_csv(csv_file)
+
+            take_cols = [
+                "Frame",
+                "Tracker ID",
+                "Label",
+                "X_min",
+                "Y_min",
+                "X_max",
+                "Y_max",
+                "Confidence",
+                "Color_R",
+                "Color_G",
+                "Color_B",
+            ]
+            for col in take_cols:
+                if col not in df.columns:
+                    df[col] = np.nan
+
+            df = df[take_cols].copy()
+            rename_map = {c: (c if c == "Frame" else f"{c}{suffix}") for c in take_cols}
+            df = df.rename(columns=rename_map)
+
+            merged = merged.merge(df, on="Frame", how="left")
+        except Exception as e:
+            print(f"Error merging file {filename}: {e}")
+            continue
+
+    output_file = os.path.join(output_dir, "all_id_detection.csv")
+    merged.to_csv(output_file, index=False)
+    print(f"Combined detection tracking data saved to: {output_file}")
+    return output_file
+
+def create_merged_detection_csv(output_dir, total_frames):
+    """
+    Create wide per-label CSV(s) with one row per frame (0..N-1) merging all IDs.
+    Writes all_id_merge_<Label>.csv and an alias all_id_merge.csv if only one label.
+    """
+    csv_files = glob.glob(os.path.join(output_dir, "*_id_*.csv"))
+
+    if not csv_files:
+        print(f"No per-ID tracking files found in {output_dir}")
+        return None
+
+    print(f"Found {len(csv_files)} per-ID tracking files for merging")
+
+    rows = []
+    expected_columns = [
+        "Frame",
+        "Tracker ID",
+        "Label",
+        "X_min",
+        "Y_min",
+        "X_max",
+        "Y_max",
+        "Confidence",
+        "Color_R",
+        "Color_G",
+        "Color_B",
+    ]
+
+    for csv_file in csv_files:
+        try:
+            df = pd.read_csv(csv_file)
+            print(f"Reading {os.path.basename(csv_file)}: {len(df)} rows")
+            
+            for col in expected_columns:
+                if col not in df.columns:
+                    df[col] = np.nan
+            rows.append(df[expected_columns])
+        except Exception as e:
+            print(f"Error merging file {csv_file}: {e}")
+            continue
+
+    if not rows:
+        print(f"No valid rows to merge in {output_dir}")
+        return None
+
+    df = pd.concat(rows, ignore_index=True)
+    print(f"Total concatenated rows: {len(df)}")
+    
+    for col in ["Frame", "Tracker ID"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    # Drop rows with NaN in critical columns before grouping
+    df = df.dropna(subset=["Label"])
+    print(f"Rows after dropping NaN labels: {len(df)}")
+
+    out_paths = []
+    for label, df_label in df.groupby("Label"):
+        print(f"Processing label: {label} with {len(df_label)} rows")
+
+        df_label = df_label.dropna(subset=["Frame"]).copy()
+        df_label["Frame"] = df_label["Frame"].astype(int)
+
+        present_cols = ["X_min", "X_max", "Y_max"]
+        df_label["__present__"] = df_label[present_cols].notna().any(axis=1).astype(int)
+
+        df_label = df_label.sort_values(["Frame", "__present__"], ascending=[True, False])
+
+        picked = df_label.drop_duplicates(subset=["Frame"], keep="first").copy()
+        picked = picked.sort_values("Frame")
+
+        base = pd.DataFrame({"Frame": np.arange(int(total_frames))})
+        merged = base.merge(picked.drop(columns=["__present__"]), on="Frame", how="left")
+
+        out_path = os.path.join(output_dir, f"all_id_merge_{label}.csv")
+        merged.to_csv(out_path, index=False)
+        out_paths.append(out_path)
+        print(f"Merged (stack-sort-pick) data saved to: {out_path}")
+
+    if len(out_paths) == 1:
+        alias = os.path.join(output_dir, "all_id_merge.csv")
+        pd.read_csv(out_paths[0]).to_csv(alias, index=False)
+        print(f"Alias written: {alias}")
+        return alias
+    return out_paths
 
 
 def run_yolov12track():
@@ -1201,11 +1359,12 @@ def run_yolov12track():
             output_dir = os.path.join(main_output_dir, video_name)
             os.makedirs(output_dir, exist_ok=True)
 
-            # Read the dimensions of the original video
+            # Read the dimensions and total frames of the original video
             cap = cv2.VideoCapture(video_path)
             width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
             fps = int(cap.get(cv2.CAP_PROP_FPS))
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             cap.release()
 
             # Specify the output path for the processed video
@@ -1272,6 +1431,9 @@ def run_yolov12track():
             )
 
             tracker_csv_files = {}
+            # Map raw tracker IDs (from YOLO) to sequential per-label IDs starting at 1
+            label_to_raw2seq = {}
+            label_to_next = {}
 
             for result in results:
                 frame = result.orig_img
@@ -1294,16 +1456,27 @@ def run_yolov12track():
                     # Extract coordinates (this assumes the obb objects have a similar `xyxy` property)
                     x_min, y_min, x_max, y_max = map(int, box.xyxy[0].tolist())
                     conf = box.conf[0].item()
-                    tracker_id = int(box.id[0]) if box.id is not None else -1
+                    raw_id = int(box.id[0]) if box.id is not None else -1
                     class_id = int(box.cls[0].item()) if box.cls is not None else -1
                     label = (
                         model.names[class_id] if class_id in model.names else "unknown"
                     )
 
+                    # Skip invalid IDs
+                    if raw_id < 0:
+                        continue
+
+                    # Map raw ID to sequential per-label ID
+                    if label not in label_to_raw2seq:
+                        label_to_raw2seq[label] = {}
+                        label_to_next[label] = 1
+                    if raw_id not in label_to_raw2seq[label]:
+                        label_to_raw2seq[label][raw_id] = label_to_next[label]
+                        label_to_next[label] += 1
+                    tracker_id = label_to_raw2seq[label][raw_id]
+
                     # Get a unique color for this tracker ID
-                    color = (
-                        get_color_for_id(tracker_id) if tracker_id >= 0 else (0, 255, 0)
-                    )
+                    color = get_color_for_id(tracker_id)
 
                     label_text = f"{label}_id{tracker_id}, Conf: {conf:.2f}"
                     cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), color, 2)
@@ -1324,7 +1497,7 @@ def run_yolov12track():
                             output_dir,
                             label,
                             tracker_id,
-                            int(cap.get(cv2.CAP_PROP_FRAME_COUNT)),
+                            total_frames,
                         )
                     update_csv(
                         tracker_csv_files[key],
@@ -1361,10 +1534,14 @@ def run_yolov12track():
                 f"Processing completed for {video_file}. Results saved in '{output_dir}'."
             )
 
-            # Create combined person CSV after processing each video
+            # Create combined person CSV and merged long CSV after processing each video
             combined_csv = create_combined_person_csv(output_dir)
             if combined_csv:
                 print(f"Combined person tracking file created: {combined_csv}")
+
+            merged_csv = create_merged_detection_csv(output_dir, total_frames)
+            if merged_csv:
+                print(f"Merged detection tracking file created: {merged_csv}")
 
     root.destroy()
 
