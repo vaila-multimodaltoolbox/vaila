@@ -49,7 +49,19 @@ Each function is accessible through buttons in the user-friendly GUI, automating
 
 ## 🔧 Complete Documentation
 
-The vailá Multimodal Toolbox now includes comprehensive documentation for all modules:
+The vailá Multimodal Toolbox now includes comprehensive documentation for all modules and GUI buttons:
+
+### 🖱️ GUI Button Documentation
+
+All buttons in the vailá GUI (`vaila.py`) are documented in **[docs/vaila_buttons/](vaila_buttons/README.md)**:
+
+- **[File Manager Buttons](vaila_buttons/README.md#file-manager-frame-a)**: Rename, Import, Export, Copy, Move, Remove, Tree, Find, Transfer
+- **[Multimodal Analysis Buttons](vaila_buttons/README.md#multimodal-analysis-frame-b)**: IMU, MoCap, Markerless 2D/3D, Vector Coding, EMG, Force Plate, GNSS/GPS, and more
+- **[Tools Buttons](vaila_buttons/README.md#tools-frame-c)**: Data Files, Video Processing, Visualization tools
+
+**Quick Links:**
+- **[Markerless 2D Analysis](vaila_buttons/markerless-2d-button.md)** (B1_r1_c4) - Advanced pose estimation with MediaPipe and YOLOv11
+- **[All Button Documentation](vaila_buttons/README.md)** - Complete list of all GUI buttons
 
 ### 📖 Module Documentation
 
