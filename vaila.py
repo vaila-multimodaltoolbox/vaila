@@ -4,9 +4,15 @@ vaila.py
 ===============================================================================
 Author: Prof. Paulo R. P. Santiago
 Date: 07 October 2024
-Update: 29 October 2025
-Version updated: 0.12.2
+Update: 10 November 2025
+Version updated: 0.12.1
 Python Version: 3.12.12
+
+Example of usage:
+First activate the vaila environment:
+conda activate vaila
+Then run the vaila.py script:
+python vaila.py
 
 Description:
 ------------
@@ -178,7 +184,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 29.October.2025 v0.12.2 (Python 3.12.12)
+vailá - 10.November.2025 v0.12.3 (Python 3.12.12)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -190,7 +196,7 @@ Mocap fullbody_c3d           Markerless_3D      Markerless_2D_MP and YOLO
    CUBE2D  --> +---------------------------------------+ <-- Vector Coding
    IMU_csv --> |       vailá - multimodal toolbox      | <-- Cluster_csv
 Open Field --> +---------------------------------------+ <-- Force Plate
-              ^                   |                    ^ <-- YOLOv12 and MediaPipe
+              ^                   |                    ^ <-- YOLOv11 and MediaPipe
         EMG__/                    v                     \__Tracker YOLOv11 or YOLOv12
                +--------------------------------------+
                | Results: Processed Data and Figures  | 
@@ -279,11 +285,11 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 29.October.2025 v0.12.2 (Python 3.12.12)")
+        self.title("vailá - 10.November.2025 v0.12.3 (Python 3.12.12)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
-
+    
         self.resizable(True, True)
 
         # Configure the window icon based on the operating system
@@ -1472,66 +1478,27 @@ class Vaila(tk.Tk):
     def markerless_2d_analysis(self):
         """Runs the Markerless 2D Analysis module."""
 
-        # Option dialog using existing root
-        choice = simpledialog.askstring(
-            "Markerless 2D Analysis Options",
-            "Select launch method:\n\n1: Separate Process (Recommended - No Tkinter conflicts)\n2: Same Process (Uses existing window)\n\nEnter 1 or 2:",
-            initialvalue="1",
-        )
+        # Ask for version choice directly (removed launch method selection)
+        try:
+            version_choice = simpledialog.askstring(
+                "Markerless 2D Analysis Version",
+                "Select version:\n\n1: Standard (Faster, single-person)\n2: Advanced (Slower, multi-person with YOLO)\n\nEnter 1 or 2:",
+                initialvalue="1",
+            )
 
-        if not choice or choice not in ["1", "2"]:
-            return
+            if not version_choice or version_choice not in ["1", "2"]:
+                return
 
-        if choice == "1":
-            # Option 1: Launch in separate process (recommended)
-            try:
-                # First ask for version choice
-                version_choice = simpledialog.askstring(
-                    "Markerless 2D Analysis Version",
-                    "Select version:\n\n1: Standard (Faster, single-person)\n2: Advanced (Slower, multi-person with YOLO)\n\nEnter 1 or 2:",
-                    initialvalue="1",
-                )
+            # Launch in separate process (recommended - no Tkinter conflicts)
+            if version_choice == "1":
+                run_vaila_module("vaila.markerless_2d_analysis")
+            else:
+                run_vaila_module("vaila.markerless2d_analysis_v2")
 
-                if not version_choice or version_choice not in ["1", "2"]:
-                    return
-
-                # Launch in separate process
-                if version_choice == "1":
-                    run_vaila_module("vaila.markerless_2d_analysis")
-                else:
-                    run_vaila_module("vaila.markerless2d_analysis_v2")
-
-            except Exception as e:
-                messagebox.showerror(
-                    "Error", f"Failed to launch markerless analysis: {e}"
-                )
-
-        else:
-            # Option 2: Use existing root window (may have conflicts)
-            try:
-                # Version choice
-                version_choice = simpledialog.askstring(
-                    "Markerless 2D Analysis Version",
-                    "Select version:\n\n1: Standard (Faster, single-person)\n2: Advanced (Slower, multi-person with YOLO)\n\nEnter 1 or 2:",
-                    initialvalue="1",
-                )
-
-                if not version_choice or version_choice not in ["1", "2"]:
-                    return
-
-                # Import and run in same process
-                if version_choice == "1":
-                    from vaila.markerless_2d_analysis import process_videos_in_directory
-                else:
-                    from vaila.markerless2d_analysis_v2 import (
-                        process_videos_in_directory,
-                    )
-
-                # Pass the existing root window to avoid creating new Tk
-                process_videos_in_directory(existing_root=self.root)
-
-            except Exception as e:
-                messagebox.showerror("Error", f"Failed to run markerless analysis: {e}")
+        except Exception as e:
+            messagebox.showerror(
+                "Error", f"Failed to launch markerless analysis: {e}"
+            )
 
     # B_r1_c5
     def markerless_3d_analysis(self):
