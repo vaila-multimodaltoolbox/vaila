@@ -1,98 +1,175 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>vailá - mpangles</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 40px;
-            line-height: 1.6;
-            background-color: #f5f5f5;
-        }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            background: white;
-            padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
-        h2 { color: #34495e; margin-top: 30px; }
-        .module-info { background: #ecf0f1; padding: 15px; border-radius: 5px; margin: 20px 0; }
-        .functions { background: #f8f9fa; padding: 15px; border-left: 4px solid #28a745; margin: 15px 0; }
-        .docstring { background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 15px 0; }
-        .errorr { background: #f8d7da; padding: 15px; border-left: 4px solid #dc3545; margin: 15px 0; }
-        code { background: #e9ecef; padding: 2px 6px; border-radius: 3px; }
-        pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; }
-        .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #6c757d; font-size: 0.9em; }
-    </style>
+  <meta charset="UTF-8">
+  <title>MP Angles - MediaPipe Angle Calculation</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; max-width: 1200px; }
+    h1, h2, h3 { color: #2c3e50; }
+    h1 { border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+    h2 { border-bottom: 2px solid #ecf0f1; padding-bottom: 5px; margin-top: 30px; }
+    h3 { color: #34495e; margin-top: 20px; }
+    pre { background-color: #f4f4f4; padding: 15px; overflow: auto; border-left: 4px solid #3498db; }
+    code { background-color: #f4f4f4; padding: 3px 6px; border-radius: 3px; }
+    table { border-collapse: collapse; width: 100%; margin: 20px 0; }
+    th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+    th { background-color: #3498db; color: white; }
+    tr:nth-child(even) { background-color: #f2f2f2; }
+    .info-box { background-color: #e8f4f8; border-left: 4px solid #3498db; padding: 15px; margin: 20px 0; }
+    .warning-box { background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; }
+    ul, ol { margin: 10px 0; padding-left: 30px; }
+    li { margin: 5px 0; }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <h1>vailá - mpangles</h1>
+  <h1>MP Angles - MediaPipe Angle Calculation</h1>
 
-        <div class="module-info">
-            <h3>📋 Module Information</h3>
-            <p><strong>Category:</strong> Utils</p>
-            <p><strong>File:</strong> vaila\mpangles.py</p>
-            <p><strong>Lines:</strong> 2282</p>
-            <p><strong>Size:</strong> 74359 characters</p>
-            <p><strong>Version:</strong> 0.1.1</p>
-            <p><strong>Author:</strong> Paulo R. P. Santiago</p>
-            <p><strong>GUI Interface:</strong> ✅ Yes</p>
-        </div>
+  <div class="info-box">
+    <strong>Module Information:</strong><br>
+    Category: Utils | File: vaila/mpangles.py | Version: 0.0.2<br>
+    Author: Paulo R. P. Santiago | License: AGPL v3.0
+  </div>
 
-        
+  <h2>Description</h2>
+  <p>
+    The <strong>MP Angles</strong> module calculates absolute and relative joint angles from landmark coordinates obtained from MediaPipe pose estimation. This tool processes CSV files containing MediaPipe landmark data (33 landmarks) and generates comprehensive angle calculations for biomechanical analysis.
+  </p>
 
-        <div class="docstring">
-            <h3>📖 Description</h3>
-            <pre>
-===============================================================================
-mpangles.py
-===============================================================================
-Author: Paulo R. P. Santiago
-Email: paulosantiago@usp.br
-GitHub: https://github.com/vaila-multimodaltoolbox/vaila
-Creation Date: 31 March 2025
-Update Date: 11 April 2025
-Version: 0.1.1
-Python Version: 3.12.9
+  <h3>Key Features</h3>
+  <ul>
+    <li><strong>Absolute Angles:</strong> Calculates angles between body segments and the horizontal axis</li>
+    <li><strong>Relative Angles:</strong> Computes joint angles between connected body segments</li>
+    <li><strong>Video Visualization:</strong> Creates annotated videos with skeleton overlay and real-time angle display</li>
+  </ul>
 
-Description:
-------------
-This script calculates absolute and relative angles from landmark coordinates
-obtained from MediaPipe pose estimation. It processes CSV files containing
-landmark data and generates new CSV files with computed angles.
+  <h2>Supported Angles</h2>
+  
+  <h3>Relative Angles (Joint Angles)</h3>
+  <ul>
+    <li>Neck Angle</li>
+    <li>Trunk Angle</li>
+    <li>Shoulder Angle (left and right)</li>
+    <li>Elbow Angle (left and right)</li>
+    <li>Wrist Angle (left and right)</li>
+    <li>Hip Angle (left and right)</li>
+    <li>Knee Angle (left and right)</li>
+    <li>Ankle Angle (left and right)</li>
+  </ul>
 
-Key Features:
--------------
-1. Absolute Angles:
-   - Calculates angles between segments and horizontal axis
-   - Uses arctan2 for robust angle calculation
+  <h3>Absolute Angles (Segment Angles)</h3>
+  <ul>
+    <li>Upper arm, Forearm, Hand (left and right)</li>
+    <li>Thigh, Shank, Foot (left and right)</li>
+    <li>Trunk and Neck</li>
+  </ul>
 
-2. Relative Angles:
-   - Computes angles between connected segments
-   - Uses arctan2 for dot product angle calculation
+  <h2>Usage</h2>
 
-3. Supported Angles:
-    - Elbow angle (between upper arm and forearm)
-    - Shoulder angle (betw...</pre>
-        </div>
+  <h3>Method 1: GUI Mode (Recommended)</h3>
+  <ol>
+    <li>Click the <strong>"MP Angles"</strong> button (B4_r4_c4) in the vailá GUI</li>
+    <li>Select angle format: 0-360° or -180° to +180°</li>
+    <li>Choose processing type:
+      <ul>
+        <li><strong>Yes:</strong> Process video with visualization (requires CSV + video)</li>
+        <li><strong>No:</strong> Process CSV files only (faster, batch processing)</li>
+      </ul>
+    </li>
+    <li>Select input files/directory as prompted</li>
+    <li>Wait for processing to complete</li>
+  </ol>
 
-        <div class="functions">
-            <h3>🔧 Main Functions</h3>
-            <p><strong>Total functions found:</strong> 20</p>
-            <ul><li><code>select_directory</code></li><li><code>process_directory</code></li><li><code>get_vector_landmark</code></li><li><code>compute_midpoint</code></li><li><code>compute_absolute_angle</code></li><li><code>compute_relative_angle</code></li><li><code>compute_knee_angle</code></li><li><code>compute_hip_angle</code></li><li><code>compute_ankle_angle</code></li><li><code>compute_shoulder_angle</code></li><li><code>compute_elbow_angle</code></li><li><code>compute_neck_angle</code></li><li><code>compute_wrist_angle</code></li><li><code>process_absolute_angles</code></li><li><code>process_angles</code></li><li><code>draw_skeleton_and_angles</code></li><li><code>process_video_with_visualization</code></li><li><code>select_video_file</code></li><li><code>select_csv_file</code></li><li><code>run_mp_angles</code></li></ul>
-        </div>
+  <h3>Method 2: Command Line</h3>
+  <pre><code>conda activate vaila
+python -m vaila.mpangles</code></pre>
 
-        <div class="footer">
-            <p>📅 Generated automatically on: 15/10/2025 08:04:44</p>
-            <p>🔗 Part of vailá - Multimodal Toolbox</p>
-            <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
-        </div>
-    </div>
+  <h2>Input Requirements</h2>
+
+  <h3>CSV File Format</h3>
+  <p>Input CSV files must contain MediaPipe landmark coordinates:</p>
+  <ul>
+    <li><strong>First column:</strong> Frame index (0, 1, 2, ...)</li>
+    <li><strong>Subsequent columns:</strong> 33 landmarks × 2 coordinates = 66 columns</li>
+    <li><strong>Format:</strong> p0_x, p0_y, p1_x, p1_y, ..., p32_x, p32_y</li>
+    <li><strong>Total:</strong> 67 columns (1 frame + 66 coordinates)</li>
+  </ul>
+
+  <div class="info-box">
+    <strong>Note:</strong> CSV files from Markerless 2D Analysis are directly compatible with MP Angles.
+  </div>
+
+  <h2>Output Files</h2>
+
+  <h3>CSV Processing Mode</h3>
+  <p>Generates two CSV files per input file:</p>
+  <ol>
+    <li><strong>processed_{filename}_rel.csv</strong> - Relative angles (joint angles)</li>
+    <li><strong>processed_{filename}_abs.csv</strong> - Absolute angles (segment angles)</li>
+  </ol>
+
+  <h3>Video Processing Mode</h3>
+  <p>Generates:</p>
+  <ol>
+    <li><strong>angles_{videoname}.mp4</strong> - Annotated video with skeleton and angles</li>
+    <li><strong>{videoname}_rel.csv</strong> - Relative angles CSV</li>
+    <li><strong>{videoname}_abs.csv</strong> - Absolute angles CSV</li>
+  </ol>
+
+  <h2>Configuration</h2>
+
+  <h3>Angle Format</h3>
+  <ul>
+    <li><strong>0-360° Format:</strong> Absolute angles from 0° to 360° (no negative values)</li>
+    <li><strong>-180° to +180° Format:</strong> Absolute angles from -180° to +180° (biomechanical standard)</li>
+  </ul>
+
+  <h2>Troubleshooting</h2>
+
+  <h3>Common Issues</h3>
+  <table>
+    <tr>
+      <th>Issue</th>
+      <th>Solution</th>
+    </tr>
+    <tr>
+      <td>No CSV files found</td>
+      <td>Ensure CSV files are in the selected directory with .csv extension</td>
+    </tr>
+    <tr>
+      <td>Error reading CSV</td>
+      <td>Verify CSV format matches MediaPipe 33-landmark structure</td>
+    </tr>
+    <tr>
+      <td>Video/CSV mismatch</td>
+      <td>Ensure video and CSV have the same number of frames</td>
+    </tr>
+    <tr>
+      <td>Permission denied</td>
+      <td>Check write permissions and disk space</td>
+    </tr>
+  </table>
+
+  <h2>Requirements</h2>
+  <ul>
+    <li>Python 3.12.12+</li>
+    <li>pandas, numpy, opencv-python, tkinter, rich</li>
+    <li>FFmpeg (for video processing)</li>
+  </ul>
+
+  <h2>Integration</h2>
+  <p>
+    <strong>Input from:</strong> Markerless 2D Analysis, Markerless 3D Analysis, any MediaPipe-based analysis<br>
+    <strong>Output to:</strong> Data analysis tools, visualization software, statistical analysis
+  </p>
+
+  <h2>Related Documentation</h2>
+  <ul>
+    <li><a href="../../../docs/vaila_buttons/mp-angles-calculation.html">MP Angles Button Documentation</a></li>
+    <li><a href="../analysis/markerless_2d_analysis.html">Markerless 2D Analysis Help</a></li>
+    <li><a href="../../../docs/index.html">vailá Main Documentation</a></li>
+  </ul>
+
+  <hr>
+  <p><small>Last Updated: November 2025 | Part of vailá - Multimodal Toolbox</small></p>
 </body>
 </html>
