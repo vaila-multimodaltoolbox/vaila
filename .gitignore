@@ -17,6 +17,10 @@ vaila/models/
 *.avi
 *.AVI
 
+# YOLO models
+vaila/models/yolo11*.pt
+vaila/models/yolo11*-pose.pt
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
