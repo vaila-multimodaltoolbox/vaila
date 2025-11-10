@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Markerless 2D Analysis - Button B1_r1_c4 | vailá Documentation</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+            border-left: 4px solid #3498db;
+            padding-left: 15px;
+        }
+        h3 {
+            color: #555;
+            margin-top: 20px;
+        }
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .badge-primary { background: #3498db; color: white; }
+        .badge-success { background: #27ae60; color: white; }
+        .badge-warning { background: #f39c12; color: white; }
+        .code-block {
+            background: #f4f4f4;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            overflow-x: auto;
+            font-family: 'Courier New', monospace;
+            margin: 15px 0;
+        }
+        .feature-list {
+            list-style: none;
+            padding: 0;
+        }
+        .feature-list li {
+            padding: 8px 0;
+            padding-left: 25px;
+            position: relative;
+        }
+        .feature-list li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #27ae60;
+            font-weight: bold;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        table th, table td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        table th {
+            background: #3498db;
+            color: white;
+        }
+        table tr:nth-child(even) {
+            background: #f9f9f9;
+        }
+        .warning-box {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .info-box {
+            background: #d1ecf1;
+            border-left: 4px solid #17a2b8;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .success-box {
+            background: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .toc {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 4px;
+            margin: 20px 0;
+        }
+        .toc ul {
+            list-style: none;
+            padding-left: 0;
+        }
+        .toc li {
+            padding: 5px 0;
+        }
+        .toc a {
+            color: #3498db;
+            text-decoration: none;
+        }
+        .toc a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Markerless 2D Analysis <span class="badge badge-primary">Button B1_r1_c4</span></h1>
+        
+        <div class="toc">
+            <h3>Table of Contents</h3>
+            <ul>
+                <li><a href="#overview">Overview</a></li>
+                <li><a href="#versions">Available Versions</a></li>
+                <li><a href="#specifications">Technical Specifications</a></li>
+                <li><a href="#configuration">Configuration Parameters</a></li>
+                <li><a href="#workflow">Usage Workflow</a></li>
+                <li><a href="#integration">Integration with vailá</a></li>
+                <li><a href="#requirements">Requirements</a></li>
+                <li><a href="#troubleshooting">Troubleshooting</a></li>
+            </ul>
+        </div>
+
+        <h2 id="overview">Overview</h2>
+        <p>The <strong>Markerless 2D Analysis</strong> button (B1_r1_c4) in the vailá GUI provides access to advanced 2D pose estimation capabilities using state-of-the-art computer vision models. This module offers two processing modes: <strong>Standard</strong> (MediaPipe only) and <strong>Advanced</strong> (YOLOv11 + MediaPipe), allowing users to choose the optimal balance between speed and accuracy for their specific use case.</p>
+        
+        <div class="info-box">
+            <strong>Button Location:</strong> B1_r1_c4 (Button 1, Row 1, Column 4)<br>
+            <strong>GUI Category:</strong> Markerless Analysis<br>
+            <strong>Access Path:</strong> Main GUI → Markerless 2D Analysis
+        </div>
+
+        <h2 id="versions">Available Versions</h2>
+        
+        <h3>Version 1: Standard (MediaPipe Only)</h3>
+        <ul class="feature-list">
+            <li><strong>Script:</strong> <code>vaila/markerless_2d_analysis.py</code></li>
+            <li><strong>Speed:</strong> Faster processing</li>
+            <li><strong>Use Case:</strong> Single-person scenarios, real-time applications</li>
+            <li><strong>Accuracy:</strong> High for single-person detection</li>
+        </ul>
+        
+        <h4>Key Features:</h4>
+        <ul class="feature-list">
+            <li>MediaPipe Pose model (33 landmarks)</li>
+            <li>Video resize functionality (2x-8x upscaling)</li>
+            <li>Advanced filtering (Butterworth, Savitzky-Golay, LOWESS, Spline, Kalman, ARIMA)</li>
+            <li>Batch processing with memory management</li>
+            <li>CPU throttling for resource optimization</li>
+            <li>TOML configuration support</li>
+        </ul>
+
+        <h3>Version 2: Advanced (YOLOv11 + MediaPipe)</h3>
+        <ul class="feature-list">
+            <li><strong>Script:</strong> <code>vaila/markerless2d_analysis_v2.py</code></li>
+            <li><strong>Speed:</strong> Slower but more robust</li>
+            <li><strong>Use Case:</strong> Multi-person scenarios, complex environments</li>
+            <li><strong>Accuracy:</strong> Superior for multi-person and occluded scenarios</li>
+        </ul>
+        
+        <h4>Key Features:</h4>
+        <ul class="feature-list">
+            <li>YOLOv11 person detection + MediaPipe pose estimation</li>
+            <li>YOLO11-pose models (nano, small, medium, large, extra-large)</li>
+            <li>YOLO-only mode (17 keypoints from YOLO11-pose)</li>
+            <li>YOLO+MediaPipe hybrid mode</li>
+            <li>GPU/CPU automatic detection</li>
+            <li>Temporal filtering (Kalman, Savitzky-Golay)</li>
+            <li>Enhanced multi-person tracking</li>
+        </ul>
+
+        <h2 id="specifications">Technical Specifications</h2>
+        
+        <h3>Supported Input Formats</h3>
+        <table>
+            <tr>
+                <th>Format</th>
+                <th>Extensions</th>
+                <th>Notes</th>
+            </tr>
+            <tr>
+                <td>Video</td>
+                <td>.mp4, .avi, .mov</td>
+                <td>Any resolution, automatic batch processing for high-res</td>
+            </tr>
+        </table>
+
+        <h3>Output Files</h3>
+        <table>
+            <tr>
+                <th>File</th>
+                <th>Description</th>
+                <th>Format</th>
+            </tr>
+            <tr>
+                <td><code>*_mp.mp4</code></td>
+                <td>Annotated video with pose landmarks</td>
+                <td>MP4 (H.264 or mp4v)</td>
+            </tr>
+            <tr>
+                <td><code>*_mp_norm.csv</code></td>
+                <td>Normalized coordinates (0-1 scale)</td>
+                <td>CSV</td>
+            </tr>
+            <tr>
+                <td><code>*_mp_pixel.csv</code></td>
+                <td>Pixel coordinates</td>
+                <td>CSV</td>
+            </tr>
+            <tr>
+                <td><code>log_info.txt</code></td>
+                <td>Processing metadata and statistics</td>
+                <td>Text</td>
+            </tr>
+            <tr>
+                <td><code>configuration_used.toml</code></td>
+                <td>Configuration parameters used</td>
+                <td>TOML</td>
+            </tr>
+        </table>
+
+        <h2 id="configuration">Configuration Parameters</h2>
+        
+        <h3>MediaPipe Settings</h3>
+        <table>
+            <tr>
+                <th>Parameter</th>
+                <th>Range</th>
+                <th>Default</th>
+                <th>Description</th>
+            </tr>
+            <tr>
+                <td>min_detection_confidence</td>
+                <td>0.0 - 1.0</td>
+                <td>0.5</td>
+                <td>Threshold to start detecting poses</td>
+            </tr>
+            <tr>
+                <td>min_tracking_confidence</td>
+                <td>0.0 - 1.0</td>
+                <td>0.5</td>
+                <td>Threshold to keep tracking poses</td>
+            </tr>
+            <tr>
+                <td>model_complexity</td>
+                <td>0, 1, 2</td>
+                <td>2</td>
+                <td>0=fastest, 1=balanced, 2=most accurate</td>
+            </tr>
+            <tr>
+                <td>enable_segmentation</td>
+                <td>True/False</td>
+                <td>False</td>
+                <td>Draw person outline</td>
+            </tr>
+            <tr>
+                <td>estimate_occluded</td>
+                <td>True/False</td>
+                <td>True</td>
+                <td>Guess hidden body parts</td>
+            </tr>
+        </table>
+
+        <h3>YOLO Settings (Version 2 only)</h3>
+        <table>
+            <tr>
+                <th>Parameter</th>
+                <th>Options</th>
+                <th>Default</th>
+                <th>Description</th>
+            </tr>
+            <tr>
+                <td>yolo_mode</td>
+                <td>yolo_only, yolo_mediapipe</td>
+                <td>yolo_mediapipe</td>
+                <td>Processing mode</td>
+            </tr>
+            <tr>
+                <td>yolo_model</td>
+                <td>yolo11n/s/m/l/x-pose.pt</td>
+                <td>yolo11x-pose.pt</td>
+                <td>Model size (nano to extra-large)</td>
+            </tr>
+            <tr>
+                <td>yolo_conf</td>
+                <td>0.0 - 1.0</td>
+                <td>0.5</td>
+                <td>YOLO confidence threshold</td>
+            </tr>
+        </table>
+
+        <h2 id="workflow">Usage Workflow</h2>
+        <ol>
+            <li><strong>Launch Module:</strong> Click Markerless 2D Analysis button (B1_r1_c4)</li>
+            <li><strong>Select Version:</strong> Choose Standard (1) or Advanced (2)</li>
+            <li><strong>Configure Parameters:</strong> Set detection parameters via GUI or load TOML</li>
+            <li><strong>Select Directories:</strong> Choose input and output directories</li>
+            <li><strong>Process Videos:</strong> Module processes all videos automatically</li>
+            <li><strong>Review Results:</strong> Check annotated videos and CSV files</li>
+        </ol>
+
+        <h2 id="integration">Integration with vailá Ecosystem</h2>
+        <div class="success-box">
+            <strong>Data Flow:</strong><br>
+            Video Input → Pose Detection → Coordinate Extraction → CSV Export<br>
+            ↓<br>
+            Integration with: DLT Calibration, Visualization, ML Training, Multimodal Analysis
+        </div>
+
+        <h2 id="requirements">Requirements</h2>
+        <h3>System Requirements</h3>
+        <ul>
+            <li>Python 3.12.12+</li>
+            <li>OS: Linux, macOS, Windows</li>
+            <li>RAM: 4GB minimum (8GB+ recommended)</li>
+            <li>GPU: Optional but recommended for Version 2</li>
+        </ul>
+
+        <h3>Python Dependencies</h3>
+        <div class="code-block">
+# Core dependencies
+opencv-python>=4.8.0
+mediapipe>=0.10.0
+numpy>=1.24.0
+pandas>=2.0.0
+
+# Version 1 additional
+scipy>=1.10.0
+scikit-learn>=1.3.0
+statsmodels>=0.14.0
+pykalman>=0.9.5
+toml>=0.10.2
+psutil>=5.9.0
+
+# Version 2 additional
+ultralytics>=8.0.0
+torch>=2.0.0
+        </div>
+
+        <h2 id="troubleshooting">Troubleshooting</h2>
+        
+        <h3>Common Issues</h3>
+        <table>
+            <tr>
+                <th>Issue</th>
+                <th>Solution</th>
+            </tr>
+            <tr>
+                <td>Memory Errors</td>
+                <td>Use batch processing (automatic on Linux) or reduce video resolution</td>
+            </tr>
+            <tr>
+                <td>Slow Processing</td>
+                <td>Use lower model complexity or smaller YOLO model</td>
+            </tr>
+            <tr>
+                <td>Poor Detection</td>
+                <td>Enable video resize (2x-4x) or adjust confidence thresholds</td>
+            </tr>
+            <tr>
+                <td>Missing Landmarks</td>
+                <td>Enable occlusion estimation or use advanced filtering</td>
+            </tr>
+        </table>
+
+        <div class="warning-box">
+            <strong>Performance Tips:</strong>
+            <ul>
+                <li>Single-person videos: Use Version 1 (Standard)</li>
+                <li>Multi-person videos: Use Version 2 (Advanced)</li>
+                <li>High-resolution videos: Enable batch processing (automatic)</li>
+                <li>Low-quality videos: Enable resize (2x-4x)</li>
+            </ul>
+        </div>
+
+        <hr>
+        <p><strong>Last Updated:</strong> November 2025 | <strong>Maintained by:</strong> Paulo Roberto Pereira Santiago | <strong>License:</strong> AGPLv3.0</p>
+        <p><strong>Support:</strong> <a href="mailto:paulosantiago@usp.br">paulosantiago@usp.br</a> | <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub</a></p>
+    </div>
+</body>
+</html>
+

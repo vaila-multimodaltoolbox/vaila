@@ -1,33 +1,49 @@
 """
 Script: markerless2d_mpyolo.py
-Author: Prof. Dr. Paulo Santiago
-Version: 0.1.0 - Enhanced
+
+Author: Paulo Roberto Pereira Santiago
+Email: paulosantiago@usp.br
+GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Created: 18 February 2025
-Last Updated: 20 July 2025
+Last Updated: 10 November 2025
+Version: 0.0.2
 
 Description:
-This script combines YOLOv12 for person detection/tracking with MediaPipe for pose estimation.
+This script combines YOLOv11 for person detection/tracking with MediaPipe for pose estimation.
 
-🔥 ENHANCED VERSION with key improvements:
-- 4x bbox scaling for better MediaPipe accuracy
-- Configurable safety margins (25% default) to prevent landmark explosion outside bbox
-- Landmark validation (minimum 10/33 valid landmarks required)
-- Enhanced visualization with pose quality indicators
-- Real-time success rate monitoring
+Usage example:
+python markerless2d_mpyolo.py -i input_directory -o output_directory -c config.toml
 
-Key Features:
-✅ YOLO person detection and tracking
-✅ Enhanced MediaPipe pose estimation with scaling
-✅ Safety margins to contain landmarks within person region
-✅ Automatic coordinate conversion and validation
-✅ Enhanced CSV output with quality metrics
-✅ Improved visualization with pose confidence indicators
+Requirements:
+- Python 3.12.12
+- OpenCV (`pip install opencv-python`)
+- MediaPipe (`pip install mediapipe`)
+- Tkinter (usually included with Python installations)
+- Pillow (if using image manipulation: `pip install Pillow`)
+- Pandas (for coordinate conversion: `pip install pandas`)
+- psutil (pip install psutil) - for memory monitoring
 
-Usage:
-python markerless2d_mpyolo.py
+Output:
+The following files are generated for each processed video:
+1. Processed Video (`*_mp.mp4`):
+   The video with the 2D pose landmarks overlaid on the original frames.
+2. Normalized Landmark CSV (`*_mp_norm.csv`):
+   A CSV file containing the landmark coordinates normalized to a scale between 0 and 1
+   for each frame. These coordinates represent the relative positions of landmarks in the video.
+3. Pixel Landmark CSV (`*_mp_pixel.csv`):
+   A CSV file containing the landmark coordinates in pixel format. The x and y coordinates
+   are scaled to the video's resolution, representing the exact pixel positions of the landmarks.
+4. Original Coordinates CSV (`*_mp_original.csv`):
+   If resize was used, coordinates converted back to original video dimensions.
+5. Log File (`log_info.txt`):
+   A log file containing video metadata and processing information.
+
+License:
+    This project is licensed under the terms of AGPLv3.0.
 """
 
 import os
+from pathlib import Path
 import cv2
 import mediapipe as mp
 import numpy as np
@@ -220,7 +236,7 @@ def download_model(model_name):
     Download a specific YOLO model to the vaila/vaila/models directory.
 
     Args:
-        model_name: Name of the model to download (e.g., "yolo12x.pt")
+        model_name: Name of the model to download (e.g., "yolo11x.pt")
 
     Returns:
         Path to the downloaded model
@@ -1674,19 +1690,19 @@ def run_multithreaded_tracking():
     print(f"Output directory: {output_dir}")
 
     # Default tracker configuration (change as needed: e.g. "botsort.yaml" or "bytetrack.yaml")
-    tracker_config = "bytetrack.yaml"
+    tracker_config = "botsort.yaml"
     save_output = True
 
-    # Atualizar construção do caminho do modelo
-    model_name = "yolo12x.pt"
+    # Update the model path construction
+    model_name = "yolo11x.pt"
 
-    # Caminho correto para vaila/vaila/models
+    # Correct path to vaila/vaila/models
     script_dir = os.path.dirname(os.path.abspath(__file__))
     vaila_dir = os.path.dirname(script_dir)
     models_dir = os.path.join(vaila_dir, "vaila", "models")
     model_path = os.path.join(models_dir, model_name)
 
-    # Verificar se o modelo existe, baixar apenas se necessário
+    # Check if the model exists, download only if necessary
     if not os.path.exists(model_path):
         model_path = download_model(model_name)
     else:
@@ -2279,8 +2295,8 @@ def write_nan_row(csv_path, frame_idx, num_landmarks):
 
 if __name__ == "__main__":
     # Print the script version and directory
-    print(f"Running script: {os.path.basename(__file__)}")
-    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    print(f"Running script: {Path(__file__).name}")
+    print(f"Script directory: {Path(__file__).parent}")
 
     # Get parameters first
     params = get_parameters_dialog()
