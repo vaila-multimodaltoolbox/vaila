@@ -6,9 +6,9 @@ Author: Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 31 March 2025
-Update Date: 11 April 2025
-Version: 0.1.1
-Python Version: 3.12.9
+Update Date: 10 November 2025
+Version: 0.0.2
+Python Version: 3.12.12
 
 Description:
 ------------
@@ -36,23 +36,13 @@ Key Features:
     - Neck angle (between mid_shoulder and mid_ear)
     - Trunk angle (between mid_shoulder and mid_hip)
 
-Usage:
-------
-python relativeangle.py input_csv output_csv [--segments SEGMENTS]
-
-Arguments:
-  input_csv    Path to input CSV file with landmark coordinates
-  output_csv   Path to output CSV file for computed angles
-  --segments   Optional: List of segments to analyze (default: all)
-               Options: left_arm, right_arm, left_leg, right_leg, trunk
-
-Example:
-  python relativeangle.py pose_landmarks.csv angles.csv --segments left_arm,right_leg
+Usage example:
+--------------
+python mpangles.py
 
 License:
---------
-This program is licensed under the GNU Lesser General Public License v3.0.
-For more details, visit: https://www.gnu.org/licenses/lgpl-3.0.html
+---------
+This program is licensed under the AGPL v3.0.
 ===============================================================================
 """
 
