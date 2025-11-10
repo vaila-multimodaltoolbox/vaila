@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MP Angles - Button B4_r4_c4 | vailá Documentation</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+            border-left: 4px solid #3498db;
+            padding-left: 15px;
+        }
+        h3 {
+            color: #555;
+            margin-top: 20px;
+        }
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .badge-primary { background: #3498db; color: white; }
+        .badge-success { background: #27ae60; color: white; }
+        .badge-warning { background: #f39c12; color: white; }
+        .code-block {
+            background: #f4f4f4;
+            border-left: 4px solid #3498db;
+            padding: 15px;
+            margin: 20px 0;
+            overflow-x: auto;
+            border-radius: 4px;
+        }
+        .info-box {
+            background: #e8f4f8;
+            border-left: 4px solid #3498db;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .warning-box {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #3498db;
+            color: white;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        ul, ol {
+            margin: 10px 0;
+            padding-left: 30px;
+        }
+        li {
+            margin: 5px 0;
+        }
+        .step {
+            background: #f8f9fa;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+            border-left: 3px solid #3498db;
+        }
+        .step-number {
+            display: inline-block;
+            background: #3498db;
+            color: white;
+            width: 25px;
+            height: 25px;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 25px;
+            margin-right: 10px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>MP Angles <span class="badge badge-primary">B4_r4_c4</span></h1>
+
+        <div class="info-box">
+            <strong>Button Information:</strong><br>
+            Position: B4_r4_c4 (Button 4, Row 4, Column 4)<br>
+            Method: <code>mp_angles_calculation</code><br>
+            Category: Multimodal Analysis → Row 4
+        </div>
+
+        <h2>Overview</h2>
+        <p>
+            The <strong>MP Angles</strong> button provides access to the MediaPipe Angle Calculation module. This tool calculates absolute and relative joint angles from MediaPipe pose estimation landmark coordinates, enabling comprehensive biomechanical analysis of human movement.
+        </p>
+
+        <h2>Key Features</h2>
+        <ul>
+            <li><strong>Relative Angles (Joint Angles):</strong> Calculates angles between connected body segments (neck, trunk, shoulder, elbow, wrist, hip, knee, ankle)</li>
+            <li><strong>Absolute Angles (Segment Angles):</strong> Calculates angles of body segments relative to horizontal axis</li>
+            <li><strong>Video Visualization:</strong> Creates annotated videos with skeleton overlay and real-time angle display</li>
+            <li><strong>Batch Processing:</strong> Process multiple CSV files in one directory</li>
+            <li><strong>Flexible Format:</strong> Choose between 0-360° or -180° to +180° angle format</li>
+        </ul>
+
+        <h2>Usage Workflow</h2>
+
+        <div class="step">
+            <span class="step-number">1</span>
+            <strong>Launch the Module</strong><br>
+            Click the <strong>"MP Angles"</strong> button in the vailá GUI (B4_r4_c4)
+        </div>
+
+        <div class="step">
+            <span class="step-number">2</span>
+            <strong>Select Angle Format</strong><br>
+            Choose the format for absolute angles:
+            <ul>
+                <li><strong>"Yes"</strong>: 0-360° format (no negative values)</li>
+                <li><strong>"No"</strong>: -180° to +180° format (recommended for biomechanics)</li>
+            </ul>
+        </div>
+
+        <div class="step">
+            <span class="step-number">3</span>
+            <strong>Choose Processing Type</strong><br>
+            Select how you want to process the data:
+        </div>
+
+        <h3>Option A: Process Video with Visualization</h3>
+        <ol>
+            <li>Click <strong>"Yes"</strong> when asked about video processing</li>
+            <li><strong>Select CSV File:</strong> Choose the CSV file containing MediaPipe landmark coordinates</li>
+            <li><strong>Select Video File:</strong> Choose the corresponding video file</li>
+            <li>Wait for processing to complete</li>
+            <li><strong>Output:</strong> Annotated video + angle CSV files in <code>angles_video_YYYYMMDD_HHMMSS/</code></li>
+        </ol>
+
+        <h3>Option B: Process CSV Files Only</h3>
+        <ol>
+            <li>Click <strong>"No"</strong> when asked about video processing</li>
+            <li><strong>Select Directory:</strong> Choose directory containing CSV files</li>
+            <li>Wait for batch processing to complete</li>
+            <li><strong>Output:</strong> Angle CSV files in <code>processed_angles_YYYYMMDD_HHMMSS/</code></li>
+        </ol>
+
+        <h2>Input Requirements</h2>
+
+        <h3>CSV File Format</h3>
+        <p>Input CSV files must contain MediaPipe landmark coordinates:</p>
+        <ul>
+            <li><strong>Column 1:</strong> Frame index (0, 1, 2, ...)</li>
+            <li><strong>Columns 2-67:</strong> 33 landmarks × 2 coordinates = 66 columns</li>
+            <li><strong>Format:</strong> p0_x, p0_y, p1_x, p1_y, ..., p32_x, p32_y</li>
+            <li><strong>Total:</strong> 67 columns (1 frame + 66 coordinates)</li>
+        </ul>
+
+        <div class="info-box">
+            <strong>Compatibility:</strong> CSV files from Markerless 2D Analysis are directly compatible with MP Angles.
+        </div>
+
+        <h3>Video File Requirements (for visualization)</h3>
+        <ul>
+            <li><strong>Formats:</strong> .mp4, .avi, .mov, .mkv</li>
+            <li><strong>Correspondence:</strong> Video must match CSV file (same number of frames)</li>
+            <li><strong>Resolution:</strong> Should match coordinate system in CSV</li>
+        </ul>
+
+        <h2>Output Files</h2>
+
+        <h3>Relative Angles CSV (<code>*_rel.csv</code>)</h3>
+        <p>Contains joint angles in degrees:</p>
+        <table>
+            <tr>
+                <th>Column</th>
+                <th>Description</th>
+            </tr>
+            <tr><td>frame_index</td><td>Frame number</td></tr>
+            <tr><td>neck</td><td>Neck angle relative to trunk</td></tr>
+            <tr><td>trunk</td><td>Trunk angle</td></tr>
+            <tr><td>right_shoulder</td><td>Right shoulder joint angle</td></tr>
+            <tr><td>right_elbow</td><td>Right elbow joint angle</td></tr>
+            <tr><td>right_wrist</td><td>Right wrist joint angle</td></tr>
+            <tr><td>right_hip</td><td>Right hip joint angle</td></tr>
+            <tr><td>right_knee</td><td>Right knee joint angle</td></tr>
+            <tr><td>right_ankle</td><td>Right ankle joint angle</td></tr>
+            <tr><td>left_shoulder</td><td>Left shoulder joint angle</td></tr>
+            <tr><td>left_elbow</td><td>Left elbow joint angle</td></tr>
+            <tr><td>left_wrist</td><td>Left wrist joint angle</td></tr>
+            <tr><td>left_hip</td><td>Left hip joint angle</td></tr>
+            <tr><td>left_knee</td><td>Left knee joint angle</td></tr>
+            <tr><td>left_ankle</td><td>Left ankle joint angle</td></tr>
+        </table>
+
+        <h3>Absolute Angles CSV (<code>*_abs.csv</code>)</h3>
+        <p>Contains segment angles in degrees (format depends on user selection):</p>
+        <table>
+            <tr>
+                <th>Column</th>
+                <th>Description</th>
+            </tr>
+            <tr><td>frame_index</td><td>Frame number</td></tr>
+            <tr><td>neck_abs</td><td>Neck segment angle</td></tr>
+            <tr><td>trunk_abs</td><td>Trunk segment angle</td></tr>
+            <tr><td>right_upperarm_abs</td><td>Right upper arm angle</td></tr>
+            <tr><td>right_forearm_abs</td><td>Right forearm angle</td></tr>
+            <tr><td>right_hand_abs</td><td>Right hand angle</td></tr>
+            <tr><td>right_thigh_abs</td><td>Right thigh angle</td></tr>
+            <tr><td>right_shank_abs</td><td>Right shank angle</td></tr>
+            <tr><td>right_foot_abs</td><td>Right foot angle</td></tr>
+            <tr><td>left_upperarm_abs</td><td>Left upper arm angle</td></tr>
+            <tr><td>left_forearm_abs</td><td>Left forearm angle</td></tr>
+            <tr><td>left_hand_abs</td><td>Left hand angle</td></tr>
+            <tr><td>left_thigh_abs</td><td>Left thigh angle</td></tr>
+            <tr><td>left_shank_abs</td><td>Left shank angle</td></tr>
+            <tr><td>left_foot_abs</td><td>Left foot angle</td></tr>
+        </table>
+
+        <h3>Annotated Video (if video processing selected)</h3>
+        <p><strong>File:</strong> <code>angles_{videoname}.mp4</code></p>
+        <p><strong>Features:</strong></p>
+        <ul>
+            <li>Skeleton overlay (red: right side, blue: left side, white: trunk/neck)</li>
+            <li>Real-time display of relative angles (left side of screen)</li>
+            <li>Real-time display of absolute angles (right side of screen)</li>
+            <li>Color-coded text for easy identification</li>
+        </ul>
+
+        <h2>Angle Definitions</h2>
+
+        <h3>Relative Angles (Joint Angles)</h3>
+        <ul>
+            <li><strong>Elbow Angle:</strong> Angle between upper arm and forearm (180° = extended, 0° = flexed)</li>
+            <li><strong>Knee Angle:</strong> Angle between thigh and shank (180° = extended, 0° = flexed)</li>
+            <li><strong>Shoulder/Hip Angles:</strong> Measured relative to trunk orientation</li>
+            <li><strong>Ankle Angle:</strong> Measured using heel and foot_index landmarks</li>
+        </ul>
+
+        <h3>Absolute Angles (Segment Angles)</h3>
+        <ul>
+            <li>Angles of body segments relative to horizontal axis</li>
+            <li>Format: 0-360° or -180° to +180° (user selectable)</li>
+            <li>Useful for analyzing segment orientation in space</li>
+        </ul>
+
+        <h2>Integration</h2>
+
+        <h3>Input Sources</h3>
+        <ul>
+            <li><strong>Markerless 2D Analysis:</strong> Direct compatibility with output CSV files</li>
+            <li><strong>Markerless 3D Analysis:</strong> 2D projections can be used</li>
+            <li><strong>Any MediaPipe-based analysis:</strong> Compatible with standard format</li>
+        </ul>
+
+        <h3>Output Usage</h3>
+        <ul>
+            <li><strong>Data Analysis:</strong> Import CSV files into analysis software (pandas, numpy, MATLAB, etc.)</li>
+            <li><strong>Visualization:</strong> Use annotated videos for presentations</li>
+            <li><strong>Statistical Analysis:</strong> Angle data ready for statistical processing</li>
+            <li><strong>Biomechanical Analysis:</strong> Joint angles for gait analysis, movement studies, etc.</li>
+        </ul>
+
+        <h2>Example Use Cases</h2>
+
+        <h3>Gait Analysis</h3>
+        <ol>
+            <li>Record walking video</li>
+            <li>Extract landmarks using Markerless 2D Analysis</li>
+            <li>Calculate angles using MP Angles</li>
+            <li>Analyze knee and hip angles during gait cycle</li>
+            <li>Visualize results using annotated video</li>
+        </ol>
+
+        <h3>Sports Performance</h3>
+        <ol>
+            <li>Record sports movement (jump, throw, etc.)</li>
+            <li>Extract landmarks</li>
+            <li>Calculate joint angles</li>
+            <li>Analyze movement patterns</li>
+            <li>Compare with normative data</li>
+        </ol>
+
+        <h2>Troubleshooting</h2>
+
+        <table>
+            <tr>
+                <th>Issue</th>
+                <th>Solution</th>
+            </tr>
+            <tr>
+                <td>No CSV files found</td>
+                <td>Ensure CSV files are in the selected directory with .csv extension</td>
+            </tr>
+            <tr>
+                <td>Error reading CSV</td>
+                <td>Verify CSV format matches MediaPipe 33-landmark structure</td>
+            </tr>
+            <tr>
+                <td>Video/CSV mismatch</td>
+                <td>Ensure video and CSV have the same number of frames</td>
+            </tr>
+            <tr>
+                <td>Permission denied</td>
+                <td>Check write permissions and disk space</td>
+            </tr>
+        </table>
+
+        <h2>Requirements</h2>
+        <ul>
+            <li>Python 3.12.12+</li>
+            <li>pandas, numpy, opencv-python, tkinter, rich</li>
+            <li>FFmpeg (for video processing)</li>
+        </ul>
+
+        <h2>Related Documentation</h2>
+        <ul>
+            <li><a href="../../vaila/help/utils/mpangles.html">Script Help Documentation</a></li>
+            <li><a href="markerless-2d-button.html">Markerless 2D Analysis Button</a> - Input data source</li>
+            <li><a href="../index.html">vailá Main Documentation</a></li>
+        </ul>
+
+        <hr>
+        <p><small>Last Updated: November 2025 | Part of vailá - Multimodal Toolbox | License: AGPLv3.0</small></p>
+    </div>
+</body>
+</html>
+
