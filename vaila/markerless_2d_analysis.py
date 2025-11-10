@@ -1,13 +1,19 @@
 """
 Project: vailá Multimodal Toolbox
-Script: markerless_2D_analysis.py - Markerless 2D Analysis with Video Resize
+Script: markerless_2D_analysis.py
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 10 August 2025
-Version: 0.6.0
+Update Date: 10 November 2025
+Version: 0.7.0
+
+Example of usage:
+First activate the vaila environment:
+conda activate vaila
+Then run the markerless_2d_analysis.py script:
+python markerless_2d_analysis.py -i input_directory -o output_directory -c config.toml
 
 Description:
 This script performs batch processing of videos for 2D pose estimation using
@@ -16,28 +22,11 @@ overlays pose landmarks on each video frame, and exports both normalized and
 pixel-based landmark coordinates to CSV files. The script also generates a
 video with the landmarks overlaid on the original frames.
 
-NEW: Integrated video resize functionality to improve pose detection for:
-- Small/distant subjects in videos
-- Low resolution videos
-- Better landmark accuracy through upscaling
-
 The user can configure key MediaPipe parameters via a graphical interface,
 including detection confidence, tracking confidence, model complexity, and
 whether to enable segmentation and smooth segmentation. The default settings
 prioritize the highest detection accuracy and tracking precision, which may
 increase computational cost.
-
-Features:
-- Added temporal filtering to smooth landmark movements.
-- Added estimation of occluded landmarks based on anatomical constraints.
-- Added log file with video metadata and processing information.
-- Added progress bar for video processing.
-- Added memory management to avoid memory leaks.
-- Added support for multiple videos.
-- Added support for multiple output directories.
-- Added support for multiple output files.
-- NEW: Video resize integration (2x-8x scaling) for better pose detection
-- NEW: Automatic coordinate conversion back to original video dimensions
 
 Usage:
 - Run the script to open a graphical interface for selecting the input directory
@@ -49,12 +38,13 @@ Usage:
   coordinates in original video dimensions.
 
 Requirements:
-- Python 3.12.11
+- Python 3.12.12
 - OpenCV (`pip install opencv-python`)
 - MediaPipe (`pip install mediapipe`)
 - Tkinter (usually included with Python installations)
 - Pillow (if using image manipulation: `pip install Pillow`)
 - Pandas (for coordinate conversion: `pip install pandas`)
+- psutil (pip install psutil) - for memory monitoring
 
 Output:
 The following files are generated for each processed video:
@@ -72,7 +62,7 @@ The following files are generated for each processed video:
    A log file containing video metadata and processing information.
 
 License:
-    This project is licensed under the terms of GNU General Public License v3.0.
+    This project is licensed under the terms of AGPLv3.0.
 """
 
 import os
@@ -2402,6 +2392,8 @@ def process_video(video_path, output_dir, pose_config):
     print(f"\n{step_text}: Processing landmarks (total frames: {total_frames})")
 
     # --- Frame padding for MediaPipe stabilization ---
+    # Reset video to beginning
+    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
     ret, first_frame = cap.read()
     if not ret:
         print("Could not read first frame for padding.")
@@ -2416,92 +2408,185 @@ def process_video(video_path, output_dir, pose_config):
         f"Padding configuration: enable_padding={enable_padding}, pad_start_frames={pad_start_frames}"
     )
 
-    if enable_padding and pad_start_frames > 0:
-        print(f"Applying padding: adding {pad_start_frames} repeated frames at start")
-        padding_frames = [first_frame.copy() for _ in range(pad_start_frames)]
-        all_frames = padding_frames + [first_frame]  # Adiciona frames repetidos
-        print(
-            f"Total frames after padding: {len(all_frames)} (including {pad_start_frames} padding frames)"
-        )
-    else:
-        print("Padding disabled or pad_start_frames = 0")
-        all_frames = [first_frame]
-
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
-        all_frames.append(frame)
-
-    print(f"Total frames loaded: {len(all_frames)}")
-    cap.release()
+    # Store first frame for padding (only one copy, we'll reuse it)
+    padding_frame = first_frame.copy() if enable_padding and pad_start_frames > 0 else None
 
     # Check if batch processing should be used
     use_batch_processing = should_use_batch_processing(video_path, pose_config)
 
-    # Initialize frame_count for both modes
+    # Initialize frame_count and results lists
     frame_count = 0
+    normalized_landmarks_list = []
+    pixel_landmarks_list = []
+    frames_with_missing_data = []
+    landmarks_history = deque(maxlen=10)
 
     if use_batch_processing:
-        print("Using batch processing for high-resolution video")
+        print("Using batch processing for high-resolution video (frame-by-frame to avoid memory out)")
         batch_size = calculate_batch_size(video_path, pose_config)
 
-        # Process frames in batches
-        normalized_landmarks_list = []
-        pixel_landmarks_list = []
-        frames_with_missing_data = []
+        # Reset video to beginning
+        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+        
+        # Process padding frames first if enabled
+        if enable_padding and pad_start_frames > 0 and padding_frame is not None:
+            print(f"Processing {pad_start_frames} padding frames...")
+            for pad_idx in range(pad_start_frames):
+                if should_throttle_cpu(frame_count):
+                    apply_cpu_throttling()
+                
+                results = pose.process(cv2.cvtColor(padding_frame, cv2.COLOR_BGR2RGB))
+                if results.pose_landmarks:
+                    landmarks = [
+                        [landmark.x, landmark.y, landmark.z]
+                        for landmark in results.pose_landmarks.landmark
+                    ]
+                    if pose_config.get("estimate_occluded", False):
+                        landmarks = estimate_occluded_landmarks(landmarks)
+                    landmarks_history.append(landmarks)
+                    normalized_landmarks_list.append(landmarks)
+                    pixel_landmarks = [
+                        [int(landmark[0] * width), int(landmark[1] * height), landmark[2]]
+                        for landmark in landmarks
+                    ]
+                    pixel_landmarks_list.append(pixel_landmarks)
+                else:
+                    num_landmarks = len(landmark_names)
+                    nan_landmarks = [[np.nan, np.nan, np.nan] for _ in range(num_landmarks)]
+                    normalized_landmarks_list.append(nan_landmarks)
+                    pixel_landmarks_list.append(nan_landmarks)
+                    frames_with_missing_data.append(frame_count)
+                
+                frame_count += 1
+                time.sleep(FRAME_SLEEP_TIME)
 
-        total_batches = (len(all_frames) + batch_size - 1) // batch_size
+        # Process video frames in batches (read frame-by-frame, process in batches)
+        batch_frames = []
+        batch_start_idx = frame_count
+        current_batch = 0
+        total_batches = (total_frames + batch_size - 1) // batch_size
 
-        for batch_idx in range(total_batches):
-            start_idx = batch_idx * batch_size
-            end_idx = min(start_idx + batch_size, len(all_frames))
-            batch_frames = all_frames[start_idx:end_idx]
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                # Process remaining frames in batch
+                if batch_frames:
+                    print(f"Processing final batch {current_batch + 1}/{total_batches} ({len(batch_frames)} frames)")
+                    batch_norm, batch_pixel = process_video_batch(
+                        batch_frames,
+                        pose,
+                        pose_config,
+                        width,
+                        height,
+                        lambda msg: print(f"    {msg}"),
+                        batch_index=current_batch,
+                    )
+                    normalized_landmarks_list.extend(batch_norm)
+                    pixel_landmarks_list.extend(batch_pixel)
+                    for i, landmarks in enumerate(batch_norm):
+                        if all(np.isnan(lm[0]) for lm in landmarks):
+                            frames_with_missing_data.append(batch_start_idx + i)
+                    batch_frames = []
+                    cleanup_memory()
+                break
 
-            print(
-                f"Processing batch {batch_idx + 1}/{total_batches} (frames {start_idx}-{end_idx-1})"
-            )
-
-            # Process batch with batch index for CPU throttling
-            batch_norm, batch_pixel = process_video_batch(
-                batch_frames,
-                pose,
-                pose_config,
-                width,
-                height,
-                lambda msg: print(f"    {msg}"),
-                batch_index=batch_idx,
-            )
-
-            # Store results
-            normalized_landmarks_list.extend(batch_norm)
-            pixel_landmarks_list.extend(batch_pixel)
-
-            # Track missing data frames
-            for i, landmarks in enumerate(batch_norm):
-                if all(np.isnan(lm[0]) for lm in landmarks):
-                    frames_with_missing_data.append(start_idx + i)
-
-            # Memory cleanup after each batch
-            cleanup_memory()
-            print(f"Batch {batch_idx + 1} completed, memory cleaned")
-
-            # Small pause to allow system to stabilize
-            time.sleep(0.1)
+            batch_frames.append(frame.copy())  # Copy frame to avoid reference issues
+            
+            # When batch is full, process it
+            if len(batch_frames) >= batch_size:
+                print(f"Processing batch {current_batch + 1}/{total_batches} (frames {batch_start_idx}-{batch_start_idx + len(batch_frames) - 1})")
+                
+                batch_norm, batch_pixel = process_video_batch(
+                    batch_frames,
+                    pose,
+                    pose_config,
+                    width,
+                    height,
+                    lambda msg: print(f"    {msg}"),
+                    batch_index=current_batch,
+                )
+                
+                normalized_landmarks_list.extend(batch_norm)
+                pixel_landmarks_list.extend(batch_pixel)
+                
+                for i, landmarks in enumerate(batch_norm):
+                    if all(np.isnan(lm[0]) for lm in landmarks):
+                        frames_with_missing_data.append(batch_start_idx + i)
+                
+                # Clear batch and free memory immediately
+                del batch_frames
+                batch_frames = []
+                cleanup_memory()
+                print(f"Batch {current_batch + 1} completed, memory cleaned")
+                
+                batch_start_idx += len(batch_norm)
+                current_batch += 1
+                time.sleep(0.1)
 
         # Set frame_count for batch processing
         frame_count = len(normalized_landmarks_list)
-
+        cap.release()
         pose.close()
         cv2.destroyAllWindows()
 
     else:
-        # Standard processing for normal resolution videos
-        print("Using standard processing (no batch processing needed)")
+        # Standard processing for normal resolution videos (frame-by-frame)
+        print("Using standard processing (frame-by-frame to avoid memory out)")
 
-        # Process all frames (padding + real) with CPU throttling
-        frame_count = 0
-        for frame in all_frames:  # Processa TODOS os frames (incluindo padding)
+        # Process padding frames first if enabled
+        if enable_padding and pad_start_frames > 0 and padding_frame is not None:
+            print(f"Processing {pad_start_frames} padding frames...")
+            for pad_idx in range(pad_start_frames):
+                if should_throttle_cpu(frame_count):
+                    apply_cpu_throttling()
+
+                results = pose.process(cv2.cvtColor(padding_frame, cv2.COLOR_BGR2RGB))
+                if results.pose_landmarks:
+                    if VERBOSE_FRAMES:
+                        print(f"Padding frame {pad_idx}: pose detected!")
+                    landmarks = [
+                        [landmark.x, landmark.y, landmark.z]
+                        for landmark in results.pose_landmarks.landmark
+                    ]
+                    if pose_config.get("estimate_occluded", False):
+                        landmarks = estimate_occluded_landmarks(
+                            landmarks, list(landmarks_history)
+                        )
+                    landmarks_history.append(landmarks)
+                    if (
+                        pose_config.get("apply_filtering", False)
+                        and len(landmarks_history) > 3
+                    ):
+                        landmarks = apply_temporal_filter(list(landmarks_history))
+                    normalized_landmarks_list.append(landmarks)
+                    pixel_landmarks = [
+                        [int(landmark[0] * width), int(landmark[1] * height), landmark[2]]
+                        for landmark in landmarks
+                    ]
+                    pixel_landmarks_list.append(pixel_landmarks)
+                else:
+                    if VERBOSE_FRAMES:
+                        print(f"Padding frame {pad_idx}: NO pose detected")
+                    num_landmarks = len(landmark_names)
+                    nan_landmarks = [[np.nan, np.nan, np.nan] for _ in range(num_landmarks)]
+                    normalized_landmarks_list.append(nan_landmarks)
+                    pixel_landmarks_list.append(nan_landmarks)
+                    frames_with_missing_data.append(frame_count)
+
+                frame_count += 1
+                time.sleep(FRAME_SLEEP_TIME)
+
+        # Reset video to beginning and process real frames
+        # Note: We already processed the first frame for padding, so we'll process it again
+        # as part of the video (this is intentional for consistency)
+        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+
+        # Process all frames frame-by-frame (no memory accumulation)
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if not ret:
+                break
+
             # CPU throttling check for standard processing
             if should_throttle_cpu(frame_count):
                 apply_cpu_throttling()
@@ -2546,10 +2631,11 @@ def process_video(video_path, output_dir, pose_config):
 
             # Progress info every 100 frames
             if frame_count % 100 == 0:
-                print(f"  Processed {frame_count}/{len(all_frames)} frames")
+                print(f"  Processed {frame_count}/{total_frames + (pad_start_frames if enable_padding else 0)} frames")
 
-    pose.close()
-    cv2.destroyAllWindows()
+        cap.release()
+        pose.close()
+        cv2.destroyAllWindows()
 
     # --- Remove padding frames from results ---
     if enable_padding and pad_start_frames > 0:
