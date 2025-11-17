@@ -6,8 +6,8 @@ Author: Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 25 September 2024
-Update Date: 28 October 2025
-Version: 0.0.3
+Update Date: 17 November 2025
+Version: 0.0.4
 
 Description:
 This script processes .c3d files, extracting marker data, analog data, events, and points residuals,
@@ -94,6 +94,33 @@ from datetime import datetime
 from tkinter import Tk, filedialog, messagebox
 from tqdm import tqdm
 import numpy as np
+import math
+
+
+def get_time_precision(freq):
+    """
+    Calculate the number of decimal places needed for time formatting based on sampling frequency.
+    
+    For frequencies <= 1000 Hz: uses 3 decimal places (0.001s precision)
+    For frequencies > 1000 Hz: calculates decimal places needed to represent the sampling interval
+    
+    Args:
+        freq: Sampling frequency in Hz
+        
+    Returns:
+        Number of decimal places needed for time formatting
+    """
+    if freq <= 1000:
+        return 3
+    else:
+        # Calculate the sampling interval
+        interval = 1.0 / freq
+        # Calculate number of decimal places needed
+        # Use ceil of -log10(interval) to ensure we have enough precision
+        # For example: 2000 Hz -> interval = 0.0005 -> -log10(0.0005) ≈ 3.3 -> ceil = 4
+        # For example: 10000 Hz -> interval = 0.0001 -> -log10(0.0001) = 4 -> ceil = 4
+        decimal_places = max(3, int(math.ceil(-math.log10(interval))))
+        return decimal_places
 
 
 def save_info_file(datac3d, file_name, output_dir):
@@ -299,7 +326,8 @@ def save_platform_data(datac3d, file_name, output_dir):
             max_frames = max(max_frames, num_frames)
 
             # Create DataFrame with time and cop x, y, z
-            time_values = [f"{i / analog_freq:.3f}" for i in range(num_frames)]
+            time_precision = get_time_precision(analog_freq)
+            time_values = [f"{i / analog_freq:.{time_precision}f}" for i in range(num_frames)]
 
             cop_df = pd.DataFrame(
                 {
@@ -326,7 +354,8 @@ def save_platform_data(datac3d, file_name, output_dir):
 
             # Create DataFrame with time and force x, y, z
             num_frames = force_data.shape[1]
-            time_values = [f"{i / analog_freq:.3f}" for i in range(num_frames)]
+            time_precision = get_time_precision(analog_freq)
+            time_values = [f"{i / analog_freq:.{time_precision}f}" for i in range(num_frames)]
 
             force_df = pd.DataFrame(
                 {
@@ -350,7 +379,8 @@ def save_platform_data(datac3d, file_name, output_dir):
 
             # Create DataFrame with time and moment x, y, z
             num_frames = moment_data.shape[1]
-            time_values = [f"{i / analog_freq:.3f}" for i in range(num_frames)]
+            time_precision = get_time_precision(analog_freq)
+            time_values = [f"{i / analog_freq:.{time_precision}f}" for i in range(num_frames)]
 
             moment_df = pd.DataFrame(
                 {
@@ -371,7 +401,8 @@ def save_platform_data(datac3d, file_name, output_dir):
     # Create combined COP CSV with data from all platforms
     if all_cop_data:
         # Create time column
-        time_values = [f"{i / analog_freq:.3f}" for i in range(max_frames)]
+        time_precision = get_time_precision(analog_freq)
+        time_values = [f"{i / analog_freq:.{time_precision}f}" for i in range(max_frames)]
         combined_cop = {"Time": time_values}
 
         # Add data from each platform
@@ -480,8 +511,9 @@ def save_meta_points_data(datac3d, file_name, output_dir):
                             ].T  # Transpose to get frames as rows
 
                             # Create time column
+                            time_precision = get_time_precision(marker_freq)
                             time_values = [
-                                f"{j / marker_freq:.3f}"
+                                f"{j / marker_freq:.{time_precision}f}"
                                 for j in range(layer_data.shape[0])
                             ]
 
@@ -505,8 +537,9 @@ def save_meta_points_data(datac3d, file_name, output_dir):
 
                     elif len(meta_data.shape) == 2:
                         # For 2D data, can convert directly
+                        time_precision = get_time_precision(marker_freq)
                         time_values = [
-                            f"{j / marker_freq:.3f}" for j in range(meta_data.shape[1])
+                            f"{j / marker_freq:.{time_precision}f}" for j in range(meta_data.shape[1])
                         ]
                         df = pd.DataFrame(
                             meta_data.T
@@ -711,11 +744,12 @@ def save_to_files(
     # Save markers data
     if markers.size > 0:
         markers_df = pd.DataFrame(markers, columns=marker_columns)
+        time_precision = get_time_precision(marker_freq)
         markers_df.insert(
             0,
             "Time",
             pd.Series(
-                [f"{i / marker_freq:.3f}" for i in range(markers_df.shape[0])],
+                [f"{i / marker_freq:.{time_precision}f}" for i in range(markers_df.shape[0])],
                 name="Time",
             ),
         )
@@ -728,11 +762,12 @@ def save_to_files(
     # Save analog data
     if analogs.size > 0:
         analogs_df = pd.DataFrame(analogs.squeeze(axis=0).T, columns=analog_labels)
+        time_precision = get_time_precision(analog_freq)
         analogs_df.insert(
             0,
             "Time",
             pd.Series(
-                [f"{i / analog_freq:.3f}" for i in range(analogs_df.shape[0])],
+                [f"{i / analog_freq:.{time_precision}f}" for i in range(analogs_df.shape[0])],
                 name="Time",
             ),
         )
@@ -745,11 +780,12 @@ def save_to_files(
     # Save points residuals data
     if points_residuals.size > 0:
         points_residuals_df = pd.DataFrame(points_residuals.squeeze(axis=0).T)
+        time_precision = get_time_precision(marker_freq)
         points_residuals_df.insert(
             0,
             "Time",
             pd.Series(
-                [f"{i / marker_freq:.3f}" for i in range(points_residuals_df.shape[0])],
+                [f"{i / marker_freq:.{time_precision}f}" for i in range(points_residuals_df.shape[0])],
                 name="Time",
             ),
         )
@@ -782,8 +818,9 @@ def save_to_files(
                     if "center_of_pressure" in platform:
                         cop_data = platform["center_of_pressure"]
                         num_frames = cop_data.shape[1]
+                        time_precision = get_time_precision(analog_freq)
                         time_values = [
-                            f"{i / analog_freq:.3f}" for i in range(num_frames)
+                            f"{i / analog_freq:.{time_precision}f}" for i in range(num_frames)
                         ]
 
                         cop_df = pd.DataFrame(
