@@ -6,9 +6,9 @@ Author: Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 14 October 2024
-Update Date: 15 October 2025
-Version: 0.0.8
-Python Version: 3.12.11
+Update Date: 17 November 2025
+Version: 0.0.9
+Python Version: 3.12.12
 
 Description:
 ------------
@@ -184,6 +184,14 @@ def save_config_to_toml(config, filepath):
         f.write("# Split the data into two parts?\n")
         f.write("# enabled = true/false\n")
         f.write("enabled = false\n\n")
+        
+        # Sample rate section
+        f.write("[time_column]\n")
+        f.write("# Sample rate for Time column recalculation.\n")
+        f.write("# If the first column is 'Time', enter the sample rate (Hz) to recalculate time values.\n")
+        f.write("# Leave empty or set to 0 to use original time values from the file.\n")
+        f.write("# Example: 2000.0 for 2000 Hz, 10000.0 for 10000 Hz\n")
+        f.write("sample_rate = 0.0  # Set to 0 to use original time values\n\n")
     print(f"Configuration saved in: {filepath}")
 
 
@@ -249,6 +257,7 @@ class InterpolationConfigDialog:
         self.arima_p = tk.StringVar(value="1")
         self.arima_d = tk.StringVar(value="0")
         self.arima_q = tk.StringVar(value="0")
+        self.sample_rate = tk.StringVar(value="")
         self.loaded_toml = None
         self.use_toml = False
         self.test_data = None
@@ -351,6 +360,7 @@ class InterpolationConfigDialog:
         self.create_parameters_section(right_column)
         self.create_padding_section(right_column)
         self.create_gap_section(right_column)
+        self.create_sample_rate_section(right_column)
 
         # Bottom buttons
         self.create_buttons(scrollable_frame)
@@ -500,6 +510,34 @@ class InterpolationConfigDialog:
         tk.Label(
             frame,
             text="Note: Gaps larger than this value will be left as NaN. Set to 0 to fill all gaps.",
+            foreground="blue",
+            justify="left",
+            wraplength=400,
+            font=("Arial", 10),
+        ).pack(anchor="w", padx=10, pady=5)
+
+    def create_sample_rate_section(self, parent):
+        """Create sample rate configuration"""
+        frame = tk.LabelFrame(
+            parent,
+            text="Time Column Configuration",
+            padx=15,
+            pady=12,
+            font=("Arial", 12, "bold"),
+        )
+        frame.pack(fill="x", pady=(0, 15))
+
+        tk.Label(
+            frame,
+            text="Sample rate (Hz) for Time column:",
+            font=("Arial", 11, "bold"),
+        ).pack(anchor="w", padx=10, pady=5)
+        self.sample_rate_entry = tk.Entry(frame, font=("Arial", 12), textvariable=self.sample_rate)
+        self.sample_rate_entry.pack(fill="x", padx=10, pady=5)
+
+        tk.Label(
+            frame,
+            text="Note: If the first column is 'Time', enter the sample rate (Hz) to recalculate time values. Leave empty to use original time values.",
             foreground="blue",
             justify="left",
             wraplength=400,
@@ -1158,6 +1196,24 @@ Parameters have been confirmed and will be used for processing.
             padding = self.loaded_toml.get("padding", {})
             split = self.loaded_toml.get("split", {})
             smooth_params = {k: v for k, v in smoothing.items() if k != "method"}
+            sample_rate = None
+            time_config = self.loaded_toml.get("time_column", {})
+            if "sample_rate" in time_config:
+                try:
+                    sample_rate_val = float(time_config["sample_rate"])
+                    if sample_rate_val > 0:
+                        sample_rate = sample_rate_val
+                except (ValueError, TypeError):
+                    sample_rate = None
+            # Also check old format for backward compatibility
+            elif "sample_rate" in self.loaded_toml:
+                try:
+                    sample_rate_val = float(self.loaded_toml["sample_rate"])
+                    if sample_rate_val > 0:
+                        sample_rate = sample_rate_val
+                except (ValueError, TypeError):
+                    sample_rate = None
+            
             self.result = {
                 "padding": float(padding.get("percent", 10)),
                 "interp_method": interp.get("method", "linear"),
@@ -1165,6 +1221,7 @@ Parameters have been confirmed and will be used for processing.
                 "smooth_params": smooth_params,
                 "max_gap": int(interp.get("max_gap", 60)),
                 "do_split": bool(split.get("enabled", False)),
+                "sample_rate": sample_rate,
             }
         else:
             try:
@@ -1314,6 +1371,21 @@ Parameters have been confirmed and will be used for processing.
                     )
                     summary += f"\nARIMA Parameters:\n- Order: {order}"
 
+                # Get sample rate if provided
+                sample_rate_str = self.sample_rate.get().strip()
+                sample_rate = None
+                if sample_rate_str:
+                    try:
+                        sample_rate = float(sample_rate_str)
+                        if sample_rate <= 0:
+                            messagebox.showerror("Error", "Sample rate must be positive")
+                            self.result = None
+                            return
+                    except ValueError:
+                        messagebox.showerror("Error", "Invalid sample rate value")
+                        self.result = None
+                        return
+
                 if messagebox.askokcancel("Confirm Parameters", summary):
                     config_result = {
                         "padding": padding,
@@ -1322,6 +1394,7 @@ Parameters have been confirmed and will be used for processing.
                         "smooth_params": smooth_params,
                         "max_gap": max_gap,
                         "do_split": do_split,
+                        "sample_rate": sample_rate,
                     }
 
                     print("\nDEBUG - Final Configuration:")
@@ -1441,11 +1514,23 @@ Parameters have been confirmed and will be used for processing.
                 "d": int(self.arima_d.get()),
                 "q": int(self.arima_q.get()),
             }
+        # Get sample rate if provided
+        sample_rate_str = self.sample_rate.get().strip()
+        sample_rate = None
+        if sample_rate_str:
+            try:
+                sample_rate = float(sample_rate_str)
+                if sample_rate <= 0:
+                    sample_rate = None
+            except ValueError:
+                sample_rate = None
+        
         config = {
             "interpolation": {"method": interp_method, "max_gap": max_gap},
             "smoothing": {"method": smooth_method, **smoothing_params},
             "padding": {"percent": padding},
             "split": {"enabled": do_split},
+            "time_column": {"sample_rate": sample_rate if sample_rate else 0.0},
         }
         return config
 
@@ -1485,6 +1570,13 @@ Parameters have been confirmed and will be used for processing.
         self.padding_entry.delete(0, tk.END)
         self.padding_entry.insert(0, str(padding.get("percent", 10)))
         self.split_var.set(bool(split.get("enabled", False)))
+        # Sample rate
+        time_config = config.get("time_column", {})
+        sample_rate_value = time_config.get("sample_rate", 0.0)
+        if sample_rate_value and sample_rate_value > 0:
+            self.sample_rate.set(str(sample_rate_value))
+        else:
+            self.sample_rate.set("")
         # Specific smoothing parameters
         if smoothing.get("method") == "savgol":
             self.savgol_window.set(str(smoothing.get("window_length", 7)))
@@ -1634,6 +1726,17 @@ Parameters have been confirmed and will be used for processing.
                 "q": int(self.arima_q.get()),
             }
 
+        # Get sample rate if provided
+        sample_rate_str = self.sample_rate.get().strip()
+        sample_rate = None
+        if sample_rate_str:
+            try:
+                sample_rate = float(sample_rate_str)
+                if sample_rate <= 0:
+                    sample_rate = None
+            except ValueError:
+                sample_rate = None
+
         return {
             "padding": float(self.padding_entry.get()),
             "interp_method": interp_map[interp_method],
@@ -1641,6 +1744,7 @@ Parameters have been confirmed and will be used for processing.
             "smooth_params": smooth_params,
             "max_gap": int(self.max_gap_entry.get()),
             "do_split": self.split_var.get(),
+            "sample_rate": sample_rate,
         }
 
     def ok(self):
@@ -2917,21 +3021,66 @@ def process_file(file_path, dest_dir, config):
         file_info["original_size"] = len(df)
         file_info["original_columns"] = len(df.columns)
 
-        # Preserve the first column as integers
+        # Detect if first column is Time
         first_col = df.columns[0]
-        df[first_col] = df[first_col].astype(int)
-
-        # Generate complete sequence of indices
-        min_frame = df[first_col].min()
-        max_frame = df[first_col].max()
-        print(f"Frame range: {min_frame} to {max_frame}")
-
-        # Create DataFrame with all frames
-        all_frames = pd.DataFrame({first_col: range(min_frame, max_frame + 1)})
-
-        # Merge with original data to identify gaps
-        df = pd.merge(all_frames, df, on=first_col, how="left")
-        print(f"Shape after adding missing frames: {df.shape}")
+        is_time_column = first_col.lower() in ["time", "t", "tempo"]
+        
+        # Get sample rate from config
+        sample_rate = config.get("sample_rate")
+        
+        # Store original first column values
+        original_first_col = df[first_col].copy()
+        
+        if is_time_column:
+            print(f"Detected Time column: {first_col}")
+            # If time column, preserve original values and calculate based on sample rate if provided
+            if sample_rate is not None and sample_rate > 0:
+                print(f"Using sample rate: {sample_rate} Hz to recalculate time")
+                # Calculate time based on sample rate
+                df[first_col] = np.arange(len(df)) / sample_rate
+                # Store original time values for reference
+                original_time_values = original_first_col.values
+            else:
+                print("Using original time values from file")
+                # Use original time values
+                df[first_col] = original_first_col
+                # Try to detect sample rate from time differences
+                if len(df) > 1:
+                    time_diffs = np.diff(df[first_col].dropna().values)
+                    if len(time_diffs) > 0:
+                        avg_diff = np.mean(time_diffs[time_diffs > 0])
+                        if avg_diff > 0:
+                            detected_sample_rate = 1.0 / avg_diff
+                            print(f"Detected sample rate from time column: {detected_sample_rate:.2f} Hz")
+                            sample_rate = detected_sample_rate
+            
+            # For time column, we work with indices internally
+            df["_internal_index"] = np.arange(len(df))
+            min_frame = 0
+            max_frame = len(df) - 1
+            print(f"Time column detected. Data range: {min_frame} to {max_frame} rows")
+        else:
+            # For non-time columns, treat as frame numbers
+            print(f"First column '{first_col}' treated as frame numbers")
+            # Try to preserve as integers if possible, otherwise use as-is
+            try:
+                df[first_col] = df[first_col].astype(int)
+                min_frame = int(df[first_col].min())
+                max_frame = int(df[first_col].max())
+                print(f"Frame range: {min_frame} to {max_frame}")
+                
+                # Create DataFrame with all frames
+                all_frames = pd.DataFrame({first_col: range(min_frame, max_frame + 1)})
+                
+                # Merge with original data to identify gaps
+                df = pd.merge(all_frames, df, on=first_col, how="left")
+                print(f"Shape after adding missing frames: {df.shape}")
+            except (ValueError, TypeError):
+                # If conversion fails, treat as continuous data
+                print(f"Warning: Could not convert '{first_col}' to integers. Treating as continuous data.")
+                df["_internal_index"] = np.arange(len(df))
+                min_frame = 0
+                max_frame = len(df) - 1
 
         # Count missing values
         file_info["total_missing"] = df.isna().sum().sum()
@@ -2951,22 +3100,52 @@ def process_file(file_path, dest_dir, config):
             pad_len = int(len(df) * padding_percent / 100)
             print(f"Applying padding of {pad_len} frames")
 
-            # Criar frames para padding
-            pad_before = pd.DataFrame(
-                {first_col: range(min_frame - pad_len, min_frame)}
-            )
-            pad_after = pd.DataFrame(
-                {first_col: range(max_frame + 1, max_frame + pad_len + 1)}
-            )
+            if is_time_column:
+                # For time column, calculate time values for padding
+                if sample_rate is not None and sample_rate > 0:
+                    # Calculate time before and after
+                    first_time = df[first_col].iloc[0]
+                    last_time = df[first_col].iloc[-1]
+                    time_step = 1.0 / sample_rate
+                    
+                    # Create time values for padding
+                    pad_before_times = np.arange(first_time - pad_len * time_step, first_time, time_step)
+                    pad_after_times = np.arange(last_time + time_step, last_time + (pad_len + 1) * time_step, time_step)
+                    
+                    pad_before = pd.DataFrame({first_col: pad_before_times})
+                    pad_after = pd.DataFrame({first_col: pad_after_times})
+                else:
+                    # Use original time values pattern
+                    first_time = df[first_col].iloc[0]
+                    last_time = df[first_col].iloc[-1]
+                    if len(df) > 1:
+                        time_step = (df[first_col].iloc[1] - df[first_col].iloc[0])
+                    else:
+                        time_step = 0.001  # Default fallback
+                    
+                    pad_before_times = np.arange(first_time - pad_len * time_step, first_time, time_step)
+                    pad_after_times = np.arange(last_time + time_step, last_time + (pad_len + 1) * time_step, time_step)
+                    
+                    pad_before = pd.DataFrame({first_col: pad_before_times})
+                    pad_after = pd.DataFrame({first_col: pad_after_times})
+            else:
+                # For frame numbers
+                pad_before = pd.DataFrame(
+                    {first_col: range(min_frame - pad_len, min_frame)}
+                )
+                pad_after = pd.DataFrame(
+                    {first_col: range(max_frame + 1, max_frame + pad_len + 1)}
+                )
 
-            # Em vez de preencher com NaN, preencher com os valores das bordas
-            for col in df.columns[1:]:
-                # Usar o valor do primeiro registro para o padding inicial
-                pad_before[col] = df[col].iloc[0]
-                # Usar o valor do último registro para o padding final
-                pad_after[col] = df[col].iloc[-1]
+            # Fill padding with edge values for other columns
+            for col in df.columns:
+                if col != first_col:
+                    # Use the value of the first record for initial padding
+                    pad_before[col] = df[col].iloc[0]
+                    # Use the value of the last record for final padding
+                    pad_after[col] = df[col].iloc[-1]
 
-            # Concatenar com padding
+            # Concatenate with padding
             df = pd.concat([pad_before, df, pad_after]).reset_index(drop=True)
             print(f"Shape after padding: {df.shape}")
 
@@ -3229,19 +3408,106 @@ def process_file(file_path, dest_dir, config):
                     file_info["warnings"].append(error_msg)
 
         # Remove padding
-        print(
-            f"\nRemoving padding (keeping only frames from {min_frame} to {max_frame})"
-        )
-        df = df[df[first_col].between(min_frame, max_frame)].reset_index(drop=True)
+        print(f"\nRemoving padding")
+        if is_time_column:
+            # For time column, remove padding based on original time range
+            original_length = file_info["original_size"]
+            pad_len = int(original_length * padding_percent / 100) if padding_percent > 0 else 0
+            
+            if pad_len > 0:
+                df = df.iloc[pad_len:-pad_len].reset_index(drop=True)
+            
+            # Recalculate time for the final data
+            if sample_rate is not None and sample_rate > 0:
+                # Use sample rate to calculate time
+                df[first_col] = np.arange(len(df)) / sample_rate
+                print(f"Recalculated time using sample rate: {sample_rate} Hz")
+            else:
+                # Use original time values pattern
+                if len(original_first_col) > 0:
+                    first_time = float(original_first_col.iloc[0])
+                    if len(original_first_col) > 1:
+                        # Detect time step from original
+                        time_step = float(original_first_col.iloc[1] - original_first_col.iloc[0])
+                        df[first_col] = np.arange(len(df)) * time_step + first_time
+                        print(f"Recalculated time using detected time step: {time_step} s")
+                    else:
+                        # Single value, use sample rate if available
+                        if sample_rate is not None and sample_rate > 0:
+                            df[first_col] = np.arange(len(df)) / sample_rate
+                        else:
+                            df[first_col] = np.arange(len(df)) * 0.001 + first_time  # Default 1ms step
+                else:
+                    # Fallback: use sample rate or default
+                    if sample_rate is not None and sample_rate > 0:
+                        df[first_col] = np.arange(len(df)) / sample_rate
+                    else:
+                        df[first_col] = np.arange(len(df)) * 0.001  # Default 1ms step
+        else:
+            # For frame numbers
+            print(f"Keeping only frames from {min_frame} to {max_frame}")
+            df = df[df[first_col].between(min_frame, max_frame)].reset_index(drop=True)
+        
         print(f"Final shape after removing padding: {df.shape}")
+        
+        # Remove internal index column if it exists
+        if "_internal_index" in df.columns:
+            df = df.drop(columns=["_internal_index"])
 
         # Detect float format from original file
         float_format = detect_float_format(file_info["original_path"])
         print(f"Using float format: {float_format}")
 
+        # For time column, ensure proper precision
+        time_precision = None
+        if is_time_column:
+            if sample_rate is not None and sample_rate > 0:
+                # Use precision based on sample rate (same logic as readc3d_export.py)
+                try:
+                    from .readc3d_export import get_time_precision
+                except ImportError:
+                    try:
+                        from readc3d_export import get_time_precision
+                    except ImportError:
+                        # Fallback: define function locally
+                        import math
+                        def get_time_precision(freq):
+                            if freq <= 1000:
+                                return 3
+                            else:
+                                interval = 1.0 / freq
+                                decimal_places = max(3, int(math.ceil(-math.log10(interval))))
+                                return decimal_places
+                
+                time_precision = get_time_precision(sample_rate)
+                print(f"Time column will be formatted with {time_precision} decimal places")
+            else:
+                # Try to detect precision from original time values
+                if len(original_first_col) > 1:
+                    # Check decimal places in original time values
+                    sample_time = float(original_first_col.iloc[1])
+                    time_str = f"{sample_time:.10f}".rstrip('0').rstrip('.')
+                    if '.' in time_str:
+                        time_precision = len(time_str.split('.')[1])
+                    else:
+                        time_precision = 3  # Default
+                    print(f"Detected time precision from original file: {time_precision} decimal places")
+
         # Save processed DataFrame
         print(f"\nSaving processed file to: {output_path}")
-        df.to_csv(output_path, index=False, float_format=float_format)
+        
+        # If time column has specific precision, format it separately
+        if is_time_column and time_precision is not None:
+            # Create a copy for saving
+            df_to_save = df.copy()
+            # Format time column with specific precision
+            df_to_save[first_col] = df_to_save[first_col].apply(lambda x: f"{x:.{time_precision}f}")
+            # Save with default float format for other columns
+            df_to_save.to_csv(output_path, index=False, float_format=float_format)
+        else:
+            # Save normally
+            df.to_csv(output_path, index=False, float_format=float_format)
+        
         print("File saved successfully!")
 
         return file_info
