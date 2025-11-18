@@ -179,32 +179,31 @@ Changelog:
 ================================================================================
 """
 
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-import sys
-import os
 import csv
+import os
+import sys
 from datetime import datetime
-from scipy.signal import butter, filtfilt
-from scipy.signal import find_peaks
-from scipy.optimize import curve_fit
-from rich import print
-from ydata_profiling import ProfileReport
 from tkinter import (
-    Tk,
-    Button,
-    filedialog,
-    Toplevel,
-    Checkbutton,
     BooleanVar,
+    Button,
     Canvas,
-    Scrollbar,
+    Checkbutton,
     Frame,
+    Scrollbar,
+    Tk,
+    Toplevel,
+    filedialog,
     messagebox,
     simpledialog,
 )
 
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from rich import print
+from scipy.optimize import curve_fit
+from scipy.signal import butter, filtfilt, find_peaks
+from ydata_profiling import ProfileReport
 
 # Print the directory and name of the script being executed
 print(f"vailá - Running script: {os.path.basename(__file__)}")
@@ -468,9 +467,7 @@ def select_headers_and_load_data(file_path):
 
     def on_select():
         nonlocal selected_headers
-        selected_headers = [
-            header for header, var in zip(headers, header_vars) if var.get()
-        ]
+        selected_headers = [header for header, var in zip(headers, header_vars) if var.get()]
         selection_window.quit()  # Ends the main Tkinter loop
         selection_window.destroy()  # Closes the selection window
 
@@ -485,7 +482,7 @@ def select_headers_and_load_data(file_path):
     selection_window = Toplevel()
     selection_window.title(f"Select Headers for {os.path.basename(file_path)}")
     selection_window.geometry(
-        f"{selection_window.winfo_screenwidth()}x{int(selection_window.winfo_screenheight()*0.9)}"
+        f"{selection_window.winfo_screenwidth()}x{int(selection_window.winfo_screenheight() * 0.9)}"
     )
 
     canvas = Canvas(selection_window)
@@ -597,9 +594,7 @@ def prompt_user_input(file_name):
     )
     # Convert 'y' or 'Y' to 'Yes' and 'n' or 'N' to 'No'
     if generate_profile:
-        generate_profile = (
-            generate_profile.strip().lower()
-        )  # Make input case-insensitive
+        generate_profile = generate_profile.strip().lower()  # Make input case-insensitive
         if generate_profile in ["y", "yes"]:
             generate_profile = "Yes"
         elif generate_profile in ["n", "no"]:
@@ -626,14 +621,10 @@ def butterworthfilt(data, cutoff=59, Fs=1000):
 def calculate_median(data, start, end, window=5):
     # Garantindo que os índices não ultrapassem as fronteiras dos dados
     start_region = max(0, start - window)
-    end_region = min(
-        len(data), end + window + 1
-    )  # +1 para incluir o índice 'end+window'
+    end_region = min(len(data), end + window + 1)  # +1 para incluir o índice 'end+window'
 
     # Selecionando os dados ao redor de 'start' e 'end'
-    start_data = data[
-        start_region : start + window + 1
-    ]  # +1 para incluir o índice 'start+window'
+    start_data = data[start_region : start + window + 1]  # +1 para incluir o índice 'start+window'
     end_data = data[end - window : end_region]
 
     # Calculando a mediana de cada trecho
@@ -718,9 +709,7 @@ def calculate_loading_rates(vgrf, time_data):
 
     # Function to find VIP index within the first 40% of the signal
     def find_vip_index(vgrf, time_data):
-        forty_percent_index = int(
-            0.4 * len(vgrf)
-        )  # Limiting the search to the first 40%
+        forty_percent_index = int(0.4 * len(vgrf))  # Limiting the search to the first 40%
         # peaks, _ = find_peaks(vgrf[:forty_percent_index], prominence=1, width=20, distance=150)
         peaks, _ = find_peaks(vgrf[:forty_percent_index])
         if peaks.size > 0:
@@ -728,9 +717,7 @@ def calculate_loading_rates(vgrf, time_data):
                 np.argmax(vgrf[peaks])
             ]  # VIP is the highest peak within the first 40%
         else:
-            vip_index = np.argmax(
-                vgrf[:forty_percent_index]
-            )  # If no peaks, take the highest point
+            vip_index = np.argmax(vgrf[:forty_percent_index])  # If no peaks, take the highest point
         return vip_index
 
     vip_index = find_vip_index(vgrf, time_data)
@@ -873,25 +860,19 @@ def calculate_cube_values(signal, Fs):
         signal[:index_impact_transient], time_interval[:index_impact_transient]
     )
     rfd_impact_transient = (
-        vpeak_impact_transient / time_impact_transient
-        if time_impact_transient != 0
-        else np.nan
+        vpeak_impact_transient / time_impact_transient if time_impact_transient != 0 else np.nan
     )
 
     peaks_peakmax, _ = find_peaks(signal[index_poi:])
     if peaks_peakmax.size > 0:
-        index_peakmax = (
-            index_poi + peaks_peakmax[np.argmax(signal[index_poi + peaks_peakmax])]
-        )
+        index_peakmax = index_poi + peaks_peakmax[np.argmax(signal[index_poi + peaks_peakmax])]
     else:
         index_peakmax = index_poi + np.argmax(signal[index_poi:])
 
     vpeakmax = signal[index_peakmax]
     time_peakmax = time_interval[index_peakmax]
     area_peakmax = np.trapz(signal[:index_peakmax], time_interval[:index_peakmax])
-    rfd_peakmax = (
-        vpeakmax / time_peakmax if time_peakmax and time_peakmax != 0 else float("inf")
-    )
+    rfd_peakmax = vpeakmax / time_peakmax if time_peakmax and time_peakmax != 0 else float("inf")
 
     total_area = np.trapz(signal, time_interval)
     area_propulsion = np.trapz(
@@ -975,9 +956,7 @@ def makefig1(data, output_dir, filename):
             space_held = False
 
     def onclick(event):
-        if (
-            space_held and event.button == 1
-        ):  # Check if Space is held and left mouse is clicked
+        if space_held and event.button == 1:  # Check if Space is held and left mouse is clicked
             x_value = event.xdata
             if x_value is not None:
                 points.append((x_value, event.ydata))
@@ -1042,7 +1021,7 @@ def makefig2(data, indices, threshold):
         ax2[i].plot(np.arange(start, end), section_data)
         ax2[i].axvline(x=adjusted_start, color="green", label="Start")
         ax2[i].axvline(x=adjusted_end, color="red", label="End")
-        ax2[i].set_title(f"{i+1}: index {start} to {end}")
+        ax2[i].set_title(f"{i + 1}: index {start} to {end}")
         ax2[i].set_ylabel("Force (N)")
         ax2[i].set_xlabel("Time (s)")
         ax2[i].grid(True)
@@ -1088,19 +1067,13 @@ def makefig3(
     filename_without_extension = os.path.splitext(os.path.basename(filename))[0]
 
     # Define the CSV result file name using the new directory path
-    result_csv_filename = os.path.join(
-        output_dir, filename_without_extension + "_result.csv"
-    )
+    result_csv_filename = os.path.join(output_dir, filename_without_extension + "_result.csv")
 
     # Define the plot PNG and SVG file names using the new directory path
-    result_plot_filename = os.path.join(
-        output_dir, filename_without_extension + "_result"
-    )
+    result_plot_filename = os.path.join(output_dir, filename_without_extension + "_result")
 
     # Now also define the index file name using the new directory path
-    indices_filename = os.path.join(
-        output_dir, filename_without_extension + "_index.txt"
-    )
+    indices_filename = os.path.join(output_dir, filename_without_extension + "_index.txt")
 
     active_ranges_np = np.array(active_ranges)
     # Extrair o primeiro elemento
@@ -1194,7 +1167,7 @@ def makefig3(
             start_seconds = start / Fs
             end_seconds = end / Fs
             # Formatação do título com tempo em segundos
-            ax3[i].set_title(f"{i+1}: time {start_seconds:.3f} to {end_seconds:.3f} s")
+            ax3[i].set_title(f"{i + 1}: time {start_seconds:.3f} to {end_seconds:.3f} s")
             ax3[i].set_xlabel("Time (s)")
             ax3[i].set_ylabel("Force (BW)")
             # Ajustando o limite x do gráfico em x
@@ -1215,20 +1188,14 @@ def makefig3(
             current_ticks = np.append(
                 ax3[i].get_xticks(), 0.04
             )  # Include 0.04s in the existing ticks
-            current_ticks = np.unique(
-                np.sort(current_ticks)
-            )  # Sort and remove any duplicates
+            current_ticks = np.unique(np.sort(current_ticks))  # Sort and remove any duplicates
             ax3[i].set_xticks(current_ticks)  # Set the ticks to include 0.04s
 
             # Optional: you can format ticks to show more clearly or with specific precision
-            ax3[i].get_xaxis().set_major_formatter(
-                plt.FuncFormatter(lambda x, _: f"{x:.2f}")
-            )
+            ax3[i].get_xaxis().set_major_formatter(plt.FuncFormatter(lambda x, _: f"{x:.2f}"))
 
             # Preenchendo a área sob a curva
-            ax3[i].fill_between(
-                time_interval, active_segment_data, color="gray", alpha=0.2
-            )
+            ax3[i].fill_between(time_interval, active_segment_data, color="gray", alpha=0.2)
 
             # Create an array of x values from 0 to impact transient for filling - IMPACT TRANSIENT
             x_fill_impact_transient = np.linspace(0, time_impact_transient, 100)
@@ -1250,16 +1217,12 @@ def makefig3(
             # Create corresponding y values for the line
             y_fill_peakmax = (vpeakmax / time_peakmax) * x_fill_peakmax
             # Fill the area below the line in magenta with transparency
-            ax3[i].fill_between(
-                x_fill_peakmax, 0, y_fill_peakmax, color="orange", alpha=0.3
-            )
+            ax3[i].fill_between(x_fill_peakmax, 0, y_fill_peakmax, color="orange", alpha=0.3)
 
             # Preenchimento para o peakmax to end - PROPULSION
             x_fill_end = np.linspace(time_peakmax, total_time, 100)
             y_start = vpeakmax  # Valor de Y no ponto peakmax to end - PROPULSION
-            y_fill_end = np.linspace(
-                y_start, 0, 100
-            )  # Decresce linearmente de vpeakmax até 0
+            y_fill_end = np.linspace(y_start, 0, 100)  # Decresce linearmente de vpeakmax até 0
 
             # Fill the area below the line in another color (e.g., green) with transparency
             ax3[i].fill_between(x_fill_end, 0, y_fill_end, color="green", alpha=0.3)
@@ -1376,7 +1339,7 @@ def makefig3(
             result = [
                 f"{simple_filename}",
                 f"{timestamp}",
-                f"{i+1}",
+                f"{i + 1}",
                 f"{body_weight_kg:.3f}",
                 f"{sidefoot}",
                 f"{dominance}",
@@ -1502,22 +1465,14 @@ def makefig4(
     filename_without_extension = os.path.splitext(os.path.basename(filename))[0]
 
     # Define the CSV result file name using the new directory path
-    result_csv_filename = os.path.join(
-        output_dir, filename_without_extension + "_result.csv"
-    )
+    result_csv_filename = os.path.join(output_dir, filename_without_extension + "_result.csv")
 
     # Define the plot PNG and SVG file names using the new directory path
-    result_plot_filename_png = os.path.join(
-        output_dir, filename_without_extension + "_result.png"
-    )
-    result_plot_filename_svg = os.path.join(
-        output_dir, filename_without_extension + "_result.svg"
-    )
+    result_plot_filename_png = os.path.join(output_dir, filename_without_extension + "_result.png")
+    result_plot_filename_svg = os.path.join(output_dir, filename_without_extension + "_result.svg")
 
     # Now also define the index file name using the new directory path
-    indices_filename = os.path.join(
-        output_dir, filename_without_extension + "_index.txt"
-    )
+    indices_filename = os.path.join(output_dir, filename_without_extension + "_index.txt")
 
     active_ranges_np = np.array(active_ranges)
     # Extrair o primeiro elemento
@@ -1611,7 +1566,7 @@ def makefig4(
             start_seconds = start / Fs
             end_seconds = end / Fs
             # Formatação do título com tempo em segundos
-            ax4[i].set_title(f"{i+1}: time {start_seconds:.3f} to {end_seconds:.3f} s")
+            ax4[i].set_title(f"{i + 1}: time {start_seconds:.3f} to {end_seconds:.3f} s")
             ax4[i].set_xlabel("Time (s)")
             ax4[i].set_ylabel("Force (BW)")
             # Ajustando o limite x do gráfico em x
@@ -1632,20 +1587,14 @@ def makefig4(
             current_ticks = np.append(
                 ax4[i].get_xticks(), 0.04
             )  # Include 0.04s in the existing ticks
-            current_ticks = np.unique(
-                np.sort(current_ticks)
-            )  # Sort and remove any duplicates
+            current_ticks = np.unique(np.sort(current_ticks))  # Sort and remove any duplicates
             ax4[i].set_xticks(current_ticks)  # Set the ticks to include 0.04s
 
             # Optional: you can format ticks to show more clearly or with specific precision
-            ax4[i].get_xaxis().set_major_formatter(
-                plt.FuncFormatter(lambda x, _: f"{x:.2f}")
-            )
+            ax4[i].get_xaxis().set_major_formatter(plt.FuncFormatter(lambda x, _: f"{x:.2f}"))
 
             # Preenchendo a área sob a curva
-            ax4[i].fill_between(
-                time_interval, active_segment_data, color="gray", alpha=0.2
-            )
+            ax4[i].fill_between(time_interval, active_segment_data, color="gray", alpha=0.2)
 
             # Create an array of x values from 0 to impact transient for filling - IMPACT TRANSIENT
             x_fill_impact_transient = np.linspace(0, time_impact_transient, 100)
@@ -1667,16 +1616,12 @@ def makefig4(
             # Create corresponding y values for the line
             y_fill_peakmax = (vpeakmax / time_peakmax) * x_fill_peakmax
             # Fill the area below the line in magenta with transparency
-            ax4[i].fill_between(
-                x_fill_peakmax, 0, y_fill_peakmax, color="orange", alpha=0.3
-            )
+            ax4[i].fill_between(x_fill_peakmax, 0, y_fill_peakmax, color="orange", alpha=0.3)
 
             # Preenchimento para o peakmax to end - PROPULSION
             x_fill_end = np.linspace(time_peakmax, total_time, 100)
             y_start = vpeakmax  # Valor de Y no ponto peakmax to end - PROPULSION
-            y_fill_end = np.linspace(
-                y_start, 0, 100
-            )  # Decresce linearmente de vpeakmax até 0
+            y_fill_end = np.linspace(y_start, 0, 100)  # Decresce linearmente de vpeakmax até 0
 
             # Fill the area below the line in another color (e.g., green) with transparency
             ax4[i].fill_between(x_fill_end, 0, y_fill_end, color="green", alpha=0.3)
@@ -1793,7 +1738,7 @@ def makefig4(
             result = [
                 f"{simple_filename}",
                 f"{timestamp}",
-                f"{i+1}",
+                f"{i + 1}",
                 f"{body_weight_kg:.3f}",
                 f"{sidefoot}",
                 f"{dominance}",
@@ -1909,9 +1854,7 @@ def run_statistics(data2stats, filename, output_dir, timestamp, generate_profile
     # Temporarily map 'R' and 'L' to 0 and 1 for statistical description
     temp_df = df.copy()
     temp_df["SideFoot_RL"] = temp_df["SideFoot_RL"].map({"R": 0, "L": 1}).astype(float)
-    temp_df["Dominance_RL"] = (
-        temp_df["Dominance_RL"].map({"R": 0, "L": 1}).astype(float)
-    )
+    temp_df["Dominance_RL"] = temp_df["Dominance_RL"].map({"R": 0, "L": 1}).astype(float)
 
     # Calculating basic statistics with temporary numerical data
     results_stats = temp_df.describe().round(3)
@@ -1949,9 +1892,7 @@ def main():
         return
 
     # Get the first file for header selection
-    first_file_path = sorted([f for f in os.listdir(source_dir) if f.endswith(".csv")])[
-        0
-    ]
+    first_file_path = sorted([f for f in os.listdir(source_dir) if f.endswith(".csv")])[0]
     first_file_full_path = os.path.join(source_dir, first_file_path)
 
     selected_headers, selected_data = select_headers_and_load_data(first_file_full_path)
@@ -1960,9 +1901,7 @@ def main():
         return
 
     # Ask the user to select the column to analyze
-    selected_column = selected_headers[
-        0
-    ]  # Example: Assume first column is selected for analysis
+    selected_column = selected_headers[0]  # Example: Assume first column is selected for analysis
 
     # Prompt for output directory
     output_dir = select_output_directory()

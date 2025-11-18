@@ -35,24 +35,25 @@ Requirements:
 """
 
 import os
-import numpy as np
-import pandas as pd
+from datetime import datetime
+from tkinter import Tk, filedialog, messagebox
+
+import ezc3d
 import imufusion
 import matplotlib.pyplot as plt
-from datetime import datetime
-from tkinter import messagebox, filedialog, Tk
-import ezc3d
-from .filtering import apply_filter
-from .readcsv import select_headers_gui, get_csv_headers
-from .dialogsuser import get_user_inputs
+import numpy as np
+import pandas as pd
 from rich import print
+
+from .dialogsuser import get_user_inputs
+from .readcsv import get_csv_headers, select_headers_gui
 
 
 def importc3d(file_path):
     """Reads C3D file and extracts markers, analog data, and other metadata."""
     datac3d = ezc3d.c3d(file_path)
     print(f"\nProcessing file: {file_path}")
-    print(f'Number of markers: {datac3d["parameters"]["POINT"]["USED"]["value"][0]}')
+    print(f"Number of markers: {datac3d['parameters']['POINT']['USED']['value'][0]}")
 
     point_data = datac3d["data"]["points"]
     analogs = datac3d["data"]["analogs"]
@@ -99,9 +100,7 @@ def imu_orientations(accelerometer, gyroscope, time, sample_rate, sensor_name):
     quaternions = np.empty((len(time), 4))
 
     for index in range(len(time)):
-        ahrs.update_no_magnetometer(
-            gyroscope[index], accelerometer[index], (1 / sample_rate)
-        )
+        ahrs.update_no_magnetometer(gyroscope[index], accelerometer[index], (1 / sample_rate))
         euler[index] = ahrs.quaternion.to_euler()
         quaternions[index] = [
             ahrs.quaternion.w,
@@ -250,9 +249,7 @@ def analyze_imu_data():
         messagebox.showerror("Error", "No input directory selected.")
         return
 
-    output_directory = filedialog.askdirectory(
-        title="Choose directory to save analysis"
-    )
+    output_directory = filedialog.askdirectory(title="Choose directory to save analysis")
     if not output_directory:
         messagebox.showerror("Error", "No output directory selected.")
         return
@@ -276,9 +273,7 @@ def analyze_imu_data():
         elif selected_file.endswith(".c3d"):
             _, _, _, analogs, _, analog_labels, analog_freq = importc3d(selected_file)
             df_analogs = pd.DataFrame(
-                analogs.reshape(
-                    analogs.shape[0] * analogs.shape[1], analogs.shape[2]
-                ).T,
+                analogs.reshape(analogs.shape[0] * analogs.shape[1], analogs.shape[2]).T,
                 columns=analog_labels,
             )
             selected_headers = select_headers_gui(df_analogs.columns)
@@ -317,9 +312,7 @@ def analyze_imu_data():
                 accelerometer = data.iloc[:, [0, 2, 1]].values / gravity
                 gyroscope = data.iloc[:, [3, 5, 4]].values * (180 / np.pi)
 
-                time = np.linspace(
-                    0, (len(accelerometer) - 1) / sample_rate, len(accelerometer)
-                )
+                time = np.linspace(0, (len(accelerometer) - 1) / sample_rate, len(accelerometer))
                 tilt, euler, quaternions = imu_orientations(
                     accelerometer, gyroscope, time, sample_rate, "Sensor"
                 )
@@ -355,9 +348,7 @@ def analyze_imu_data():
             try:
                 _, _, _, analogs, _, analog_labels, analog_freq = importc3d(file_path)
                 df_analogs = pd.DataFrame(
-                    analogs.reshape(
-                        analogs.shape[0] * analogs.shape[1], analogs.shape[2]
-                    ).T,
+                    analogs.reshape(analogs.shape[0] * analogs.shape[1], analogs.shape[2]).T,
                     columns=analog_labels,
                 )
                 if selected_headers:
@@ -368,9 +359,7 @@ def analyze_imu_data():
                 accelerometer = data.iloc[:, [0, 2, 1]].values / gravity
                 gyroscope = data.iloc[:, [3, 5, 4]].values * (180 / np.pi)
 
-                time = np.linspace(
-                    0, (len(accelerometer) - 1) / analog_freq, len(accelerometer)
-                )
+                time = np.linspace(0, (len(accelerometer) - 1) / analog_freq, len(accelerometer))
                 tilt, euler, quaternions = imu_orientations(
                     accelerometer, gyroscope, time, analog_freq, "Sensor"
                 )
@@ -404,9 +393,7 @@ def analyze_imu_data():
                 )
 
     root.destroy()
-    messagebox.showinfo(
-        "Success", "All files have been processed and saved successfully."
-    )
+    messagebox.showinfo("Success", "All files have been processed and saved successfully.")
 
 
 if __name__ == "__main__":

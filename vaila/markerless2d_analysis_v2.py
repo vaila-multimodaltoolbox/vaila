@@ -66,22 +66,21 @@ warnings.filterwarnings(
     category=UserWarning,
 )
 
+import datetime
+import os
+import platform
+import shutil
+import time
+import tkinter as tk
+from pathlib import Path
+from tkinter import filedialog, messagebox, simpledialog, ttk
+
 import cv2
 import mediapipe as mp
-import os
-import time
-import datetime
-import tkinter as tk
-from tkinter import filedialog, messagebox, simpledialog, ttk
-from pathlib import Path
-import platform
 import numpy as np
-from ultralytics import YOLO
 import torch
-from scipy.signal import savgol_filter
-from pykalman import KalmanFilter
 from mediapipe.framework.formats import landmark_pb2
-import shutil
+from ultralytics import YOLO
 
 
 def get_hardware_info():
@@ -93,7 +92,7 @@ def get_hardware_info():
     info.append(f"PyTorch version: {torch.__version__}")
 
     if torch.cuda.is_available():
-        info.append(f"CUDA available: Yes")
+        info.append("CUDA available: Yes")
         info.append(f"CUDA version: {torch.version.cuda}")
         info.append(f"Number of GPUs: {torch.cuda.device_count()}")
         for i in range(torch.cuda.device_count()):
@@ -190,13 +189,9 @@ class ConfidenceInputDialog(simpledialog.Dialog):
             "yolo11l-pose.pt",  # Large
             "yolo11x-pose.pt",  # Extra Large - most accurate
         ]
-        
-        tk.Label(master, text="Enter minimum detection confidence (0.0 - 1.0):").grid(
-            row=0
-        )
-        tk.Label(master, text="Enter minimum tracking confidence (0.0 - 1.0):").grid(
-            row=1
-        )
+
+        tk.Label(master, text="Enter minimum detection confidence (0.0 - 1.0):").grid(row=0)
+        tk.Label(master, text="Enter minimum tracking confidence (0.0 - 1.0):").grid(row=1)
         tk.Label(master, text="Enter model complexity (0, 1, or 2):").grid(row=2)
         tk.Label(master, text="Enable segmentation? (True/False):").grid(row=3)
         tk.Label(master, text="Smooth segmentation? (True/False):").grid(row=4)
@@ -221,20 +216,30 @@ class ConfidenceInputDialog(simpledialog.Dialog):
         self.static_image_mode_entry.insert(0, "False")
         self.use_yolo_entry = tk.Entry(master)
         self.use_yolo_entry.insert(0, "True")
-        
+
         # YOLO mode selection (yolo_only or yolo_mediapipe)
         yolo_modes = ["yolo_only", "yolo_mediapipe"]
         self.yolo_mode_var = tk.StringVar(value="yolo_mediapipe")
-        self.yolo_mode_combo = ttk.Combobox(master, textvariable=self.yolo_mode_var,
-                                            values=yolo_modes, state="readonly", width=30)
+        self.yolo_mode_combo = ttk.Combobox(
+            master,
+            textvariable=self.yolo_mode_var,
+            values=yolo_modes,
+            state="readonly",
+            width=30,
+        )
         self.yolo_mode_combo.grid(row=7, column=1, sticky="ew")
-        
+
         # YOLO model selection with dropdown
         self.yolo_model_var = tk.StringVar(value="yolo11x-pose.pt")
-        self.yolo_model_combo = ttk.Combobox(master, textvariable=self.yolo_model_var, 
-                                             values=yolo_models, state="readonly", width=30)
+        self.yolo_model_combo = ttk.Combobox(
+            master,
+            textvariable=self.yolo_model_var,
+            values=yolo_models,
+            state="readonly",
+            width=30,
+        )
         self.yolo_model_combo.grid(row=8, column=1, sticky="ew")
-        
+
         self.yolo_conf_entry = tk.Entry(master)
         self.yolo_conf_entry.insert(0, "0.5")
         self.filter_type_entry = tk.Entry(master)
@@ -257,10 +262,8 @@ class ConfidenceInputDialog(simpledialog.Dialog):
             "min_detection_confidence": float(self.min_detection_entry.get()),
             "min_tracking_confidence": float(self.min_tracking_entry.get()),
             "model_complexity": int(self.model_complexity_entry.get()),
-            "enable_segmentation": self.enable_segmentation_entry.get().lower()
-            == "true",
-            "smooth_segmentation": self.smooth_segmentation_entry.get().lower()
-            == "true",
+            "enable_segmentation": self.enable_segmentation_entry.get().lower() == "true",
+            "smooth_segmentation": self.smooth_segmentation_entry.get().lower() == "true",
             "static_image_mode": self.static_image_mode_entry.get().lower() == "true",
             "use_yolo": self.use_yolo_entry.get().lower() == "true",
             "yolo_mode": self.yolo_mode_var.get(),  # yolo_only or yolo_mediapipe
@@ -288,10 +291,10 @@ def download_yolo_model(model_name):
     """
     Download a specific YOLO model to the vaila/vaila/models directory.
     Uses the same approach as markerless_live.py which works correctly.
-    
+
     Args:
         model_name: Name of the model to download (e.g., "yolov11x.pt")
-    
+
     Returns:
         Path to the downloaded model file
     """
@@ -312,14 +315,14 @@ def download_yolo_model(model_name):
 
     print(f"Downloading {model_name} to {model_path}...")
     print("This may take a while for the first time (model size ~300-600 MB).")
-    
+
     try:
         # Method 1: Try to download using YOLO (will download to Ultralytics cache)
         model = YOLO(model_name)
-        
+
         # Get the path where YOLO downloaded the model
-        source_path = getattr(model, 'ckpt_path', None)
-        
+        source_path = getattr(model, "ckpt_path", None)
+
         if source_path and os.path.exists(source_path):
             # Copy the downloaded model to our models directory
             shutil.copy2(source_path, str(model_path))
@@ -328,7 +331,7 @@ def download_yolo_model(model_name):
         else:
             print(f"YOLO downloaded the model but couldn't find it at {source_path}")
             print("Trying alternative download method...")
-            
+
     except Exception as e:
         print(f"Error downloading with YOLO: {e}")
         print("Trying alternative download method...")
@@ -336,7 +339,7 @@ def download_yolo_model(model_name):
     # Method 2: Try direct download from GitHub (same as markerless_live.py)
     try:
         import requests
-        
+
         # URL for the model - updated to use the correct model name and version
         # Ultralytics models are available at: https://github.com/ultralytics/assets/releases
         if "yolo11" in model_name.lower() or "yolov11" in model_name.lower():
@@ -347,21 +350,23 @@ def download_yolo_model(model_name):
             version_tag = "v8.0.0"
         else:
             version_tag = "v0.0.0"
-        
+
         # Clean model name for URL (ensure correct format)
         # Ultralytics uses 'yolo11x.pt' format (not 'yolov11x.pt')
-        url_model_name = model_name.replace("yolov", "yolo") if "yolov" in model_name.lower() else model_name
-        
+        url_model_name = (
+            model_name.replace("yolov", "yolo") if "yolov" in model_name.lower() else model_name
+        )
+
         # Try multiple possible URLs
         possible_urls = [
             f"https://github.com/ultralytics/assets/releases/download/{version_tag}/{url_model_name}",
             f"https://github.com/ultralytics/assets/releases/download/v0.0.0/{url_model_name}",
         ]
-        
+
         url = possible_urls[0]  # Try the versioned URL first
-        
+
         print(f"Downloading from: {url}")
-        
+
         # Try each URL until one works
         response = None
         for attempt_url in possible_urls:
@@ -376,16 +381,18 @@ def download_yolo_model(model_name):
             except Exception as url_error:
                 print(f"  Error with URL {attempt_url}: {url_error}")
                 continue
-        
+
         if not response or response.status_code != 200:
-            raise Exception(f"Could not download from any URL. Last status: {response.status_code if response else 'No response'}")
-        
+            raise Exception(
+                f"Could not download from any URL. Last status: {response.status_code if response else 'No response'}"
+            )
+
         response.raise_for_status()  # Raise an exception for HTTP errors
-        
+
         # Save the file
-        total_size = int(response.headers.get('content-length', 0))
+        total_size = int(response.headers.get("content-length", 0))
         downloaded = 0
-        
+
         with open(str(model_path), "wb") as f:
             for chunk in response.iter_content(chunk_size=8192):
                 if chunk:
@@ -394,22 +401,24 @@ def download_yolo_model(model_name):
                     if total_size > 0:
                         percent = (downloaded / total_size) * 100
                         if downloaded % (1024 * 1024) == 0:  # Print every MB
-                            print(f"  Downloaded: {percent:.1f}% ({downloaded / (1024*1024):.1f} MB)")
-        
+                            print(
+                                f"  Downloaded: {percent:.1f}% ({downloaded / (1024 * 1024):.1f} MB)"
+                            )
+
         print(f"✓ Successfully downloaded {model_name} using requests")
         return str(model_path)
-        
+
     except Exception as e2:
         print(f"All download methods failed for {model_name}: {e2}")
         print("Trying to find the model in Ultralytics cache...")
-        
+
         # Method 3: Try to find in Ultralytics cache
         home_dir = Path.home()
         cache_locations = [
             home_dir / ".ultralytics" / "weights" / model_name,
             home_dir / ".cache" / "ultralytics" / model_name,
         ]
-        
+
         for cache_path in cache_locations:
             if cache_path.exists():
                 print(f"Found model in cache: {cache_path}")
@@ -419,7 +428,7 @@ def download_yolo_model(model_name):
                     return str(model_path)
                 except Exception as copy_err:
                     print(f"Warning: Could not copy from cache: {copy_err}")
-        
+
         print(f"Could not find model {model_name} locally or download it.")
         print("Please manually download the model and place it in the models directory.")
         return None
@@ -427,7 +436,7 @@ def download_yolo_model(model_name):
 
 def download_or_load_yolo_model(model_name=None):
     """Download or load YOLO model for pose detection
-    
+
     Args:
         model_name: Name of the model to load (e.g., "yolo11x-pose.pt")
                    If None, defaults to "yolo11x-pose.pt"
@@ -444,7 +453,7 @@ def download_or_load_yolo_model(model_name=None):
     try:
         print(f"Loading YOLO model {model_name} for maximum accuracy...")
         print(f"Models directory: {models_dir}")
-        
+
         # Check if model exists in project models directory
         if model_path.exists():
             print(f"Found local model at {model_path}")
@@ -452,7 +461,7 @@ def download_or_load_yolo_model(model_name=None):
         else:
             # Download the model using the same method as markerless_live.py
             downloaded_path = download_yolo_model(model_name)
-            
+
             if downloaded_path and os.path.exists(downloaded_path):
                 print(f"Loading downloaded model from {downloaded_path}")
                 model = YOLO(downloaded_path, verbose=False)
@@ -462,7 +471,7 @@ def download_or_load_yolo_model(model_name=None):
                 model = YOLO(model_name, verbose=False)
                 # Try to save it after loading
                 try:
-                    if hasattr(model, 'ckpt_path') and model.ckpt_path:
+                    if hasattr(model, "ckpt_path") and model.ckpt_path:
                         source = Path(model.ckpt_path)
                         if source.exists():
                             shutil.copy2(str(source), str(model_path))
@@ -483,19 +492,19 @@ def download_or_load_yolo_model(model_name=None):
             print("Trying fallback to yolo11n-pose.pt (nano - smaller model)...")
             fallback_name = "yolo11n-pose.pt"
             fallback_path = models_dir / fallback_name
-            
+
             if fallback_path.exists():
                 print(f"Found fallback model at {fallback_path}")
                 model = YOLO(str(fallback_path), verbose=False)
             else:
                 # Download fallback model
                 downloaded_path = download_yolo_model(fallback_name)
-                
+
                 if downloaded_path and os.path.exists(downloaded_path):
                     model = YOLO(downloaded_path, verbose=False)
                 else:
                     model = YOLO(fallback_name, verbose=False)
-            
+
             model.to(device)
             print(f"✓ Fallback YOLO model loaded successfully on {device}")
             return model
@@ -517,9 +526,7 @@ def detect_persons_with_yolo(frame, model, conf_threshold=0.5):
 
     if scale < 1:
         new_h, new_w = int(h * scale), int(w * scale)
-        resized_frame = cv2.resize(
-            frame, (new_w, new_h), interpolation=cv2.INTER_LINEAR
-        )
+        resized_frame = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
     else:
         resized_frame = frame
         scale = 1
@@ -562,7 +569,7 @@ def process_frame_with_yolo_pose_only(frame, yolo_model, conf_threshold=0.5, fra
     """
     Process frame using YOLO11-pose only (no MediaPipe)
     Returns landmarks in MediaPipe format (33 landmarks, with YOLO's 17 mapped)
-    
+
     Args:
         frame: Input frame (BGR format)
         yolo_model: YOLO pose model
@@ -570,7 +577,7 @@ def process_frame_with_yolo_pose_only(frame, yolo_model, conf_threshold=0.5, fra
         frame_count: Current frame number (for debugging)
     """
     height, width = frame.shape[:2]
-    
+
     # Run YOLO pose detection
     results = yolo_model(
         frame,
@@ -580,19 +587,19 @@ def process_frame_with_yolo_pose_only(frame, yolo_model, conf_threshold=0.5, fra
         verbose=False,
         max_det=1,  # Get only the best detection
     )
-    
+
     if not results or len(results) == 0:
         return None, None
-    
+
     result = results[0]
-    
+
     # Check if keypoints are available
-    if not hasattr(result, 'keypoints') or result.keypoints is None:
+    if not hasattr(result, "keypoints") or result.keypoints is None:
         return None, None
-    
+
     if len(result.keypoints.data) == 0:
         return None, None
-    
+
     # Get keypoints from YOLO (shape: [num_persons, num_keypoints, 3] where 3 = [x, y, confidence])
     try:
         keypoints = result.keypoints.data[0].cpu().numpy()  # Get first person
@@ -603,7 +610,7 @@ def process_frame_with_yolo_pose_only(frame, yolo_model, conf_threshold=0.5, fra
     except (IndexError, AttributeError) as e:
         print(f"\n  Warning: Could not extract keypoints: {e}")
         return None, None
-    
+
     # YOLO11-pose has 17 keypoints
     # Map YOLO keypoints to MediaPipe format (33 landmarks)
     # YOLO keypoints order (17):
@@ -611,33 +618,33 @@ def process_frame_with_yolo_pose_only(frame, yolo_model, conf_threshold=0.5, fra
     # 5: left_shoulder, 6: right_shoulder, 7: left_elbow, 8: right_elbow,
     # 9: left_wrist, 10: right_wrist, 11: left_hip, 12: right_hip,
     # 13: left_knee, 14: right_knee, 15: left_ankle, 16: right_ankle
-    
+
     # MediaPipe landmarks (33) - we'll map YOLO's 17 to closest MediaPipe indices
     # and fill the rest with NaN
     landmarks_norm = [[np.nan, np.nan, np.nan, 0.0] for _ in range(33)]
     landmarks_px = [[np.nan, np.nan, np.nan, 0.0] for _ in range(33)]
-    
+
     # Mapping from YOLO keypoint index to MediaPipe landmark index
     yolo_to_mediapipe = {
-        0: 0,   # nose -> nose
-        1: 2,   # left_eye -> left_eye
-        2: 5,   # right_eye -> right_eye
-        3: 7,   # left_ear -> left_ear
-        4: 8,   # right_ear -> right_ear
+        0: 0,  # nose -> nose
+        1: 2,  # left_eye -> left_eye
+        2: 5,  # right_eye -> right_eye
+        3: 7,  # left_ear -> left_ear
+        4: 8,  # right_ear -> right_ear
         5: 11,  # left_shoulder -> left_shoulder
         6: 12,  # right_shoulder -> right_shoulder
         7: 13,  # left_elbow -> left_elbow
         8: 14,  # right_elbow -> right_elbow
         9: 15,  # left_wrist -> left_wrist
-        10: 16, # right_wrist -> right_wrist
-        11: 23, # left_hip -> left_hip
-        12: 24, # right_hip -> right_hip
-        13: 25, # left_knee -> left_knee
-        14: 26, # right_knee -> right_knee
-        15: 27, # left_ankle -> left_ankle
-        16: 28, # right_ankle -> right_ankle
+        10: 16,  # right_wrist -> right_wrist
+        11: 23,  # left_hip -> left_hip
+        12: 24,  # right_hip -> right_hip
+        13: 25,  # left_knee -> left_knee
+        14: 26,  # right_knee -> right_knee
+        15: 27,  # left_ankle -> left_ankle
+        16: 28,  # right_ankle -> right_ankle
     }
-    
+
     # Convert YOLO keypoints to MediaPipe format
     # YOLO keypoints are in pixel coordinates (x, y, confidence)
     for yolo_idx, mp_idx in yolo_to_mediapipe.items():
@@ -651,13 +658,20 @@ def process_frame_with_yolo_pose_only(frame, yolo_model, conf_threshold=0.5, fra
             except (ValueError, IndexError, TypeError):
                 # Skip invalid keypoints
                 continue
-            
+
             # Check for NaN or invalid values
-            if (np.isnan(x_px) or np.isnan(y_px) or np.isnan(conf) or 
-                conf < 0.3 or x_px <= 0 or y_px <= 0 or 
-                x_px >= width or y_px >= height):
+            if (
+                np.isnan(x_px)
+                or np.isnan(y_px)
+                or np.isnan(conf)
+                or conf < 0.3
+                or x_px <= 0
+                or y_px <= 0
+                or x_px >= width
+                or y_px >= height
+            ):
                 continue
-            
+
             # Normalized coordinates (0-1) for MediaPipe format
             landmarks_norm[mp_idx] = [x_px / width, y_px / height, 0.0, conf]
             # Pixel coordinates - ensure valid integers
@@ -666,13 +680,11 @@ def process_frame_with_yolo_pose_only(frame, yolo_model, conf_threshold=0.5, fra
             except (ValueError, OverflowError):
                 # Skip if conversion fails
                 continue
-    
+
     return landmarks_norm, landmarks_px
 
 
-def process_frame_with_mediapipe(
-    frame, pose, yolo_model=None, yolo_conf=0.4, use_yolo=True
-):
+def process_frame_with_mediapipe(frame, pose, yolo_model=None, yolo_conf=0.4, use_yolo=True):
     """
     Processa um frame completo com MediaPipe, opcionalmente usando YOLO para melhorar a detecção
     """
@@ -794,35 +806,53 @@ def draw_yolo_landmarks(frame, landmarks_px, width, height):
     """
     if landmarks_px is None:
         return frame
-    
+
     # YOLO keypoints mapped to MediaPipe indices
-    yolo_landmark_indices = [0, 2, 5, 7, 8, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28]
-    
+    yolo_landmark_indices = [
+        0,
+        2,
+        5,
+        7,
+        8,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+    ]
+
     # Connections for YOLO landmarks (based on MediaPipe connections but only for available landmarks)
     # Format: (start_idx, end_idx) where indices are MediaPipe landmark indices
     yolo_connections = [
         # Face
-        (0, 2),   # nose to left_eye
-        (0, 5),   # nose to right_eye
-        (2, 7),   # left_eye to left_ear
-        (5, 8),   # right_eye to right_ear
+        (0, 2),  # nose to left_eye
+        (0, 5),  # nose to right_eye
+        (2, 7),  # left_eye to left_ear
+        (5, 8),  # right_eye to right_ear
         # Upper body
-        (11, 12), # left_shoulder to right_shoulder
-        (11, 13), # left_shoulder to left_elbow
-        (13, 15), # left_elbow to left_wrist
-        (12, 14), # right_shoulder to right_elbow
-        (14, 16), # right_elbow to right_wrist
+        (11, 12),  # left_shoulder to right_shoulder
+        (11, 13),  # left_shoulder to left_elbow
+        (13, 15),  # left_elbow to left_wrist
+        (12, 14),  # right_shoulder to right_elbow
+        (14, 16),  # right_elbow to right_wrist
         # Torso
-        (11, 23), # left_shoulder to left_hip
-        (12, 24), # right_shoulder to right_hip
-        (23, 24), # left_hip to right_hip
+        (11, 23),  # left_shoulder to left_hip
+        (12, 24),  # right_shoulder to right_hip
+        (23, 24),  # left_hip to right_hip
         # Lower body
-        (23, 25), # left_hip to left_knee
-        (25, 27), # left_knee to left_ankle
-        (24, 26), # right_hip to right_knee
-        (26, 28), # right_knee to right_ankle
+        (23, 25),  # left_hip to left_knee
+        (25, 27),  # left_knee to left_ankle
+        (24, 26),  # right_hip to right_knee
+        (26, 28),  # right_knee to right_ankle
     ]
-    
+
     # Draw landmarks (circles)
     for idx in yolo_landmark_indices:
         if idx < len(landmarks_px):
@@ -831,22 +861,30 @@ def draw_yolo_landmarks(frame, landmarks_px, width, height):
                 x, y = int(round(lm[0])), int(round(lm[1]))
                 if 0 <= x < width and 0 <= y < height:
                     cv2.circle(frame, (x, y), 3, (0, 255, 0), -1)
-    
+
     # Draw connections (lines)
     for start_idx, end_idx in yolo_connections:
         if start_idx < len(landmarks_px) and end_idx < len(landmarks_px):
             start_lm = landmarks_px[start_idx]
             end_lm = landmarks_px[end_idx]
-            
-            if (not np.isnan(start_lm[0]) and not np.isnan(start_lm[1]) and
-                not np.isnan(end_lm[0]) and not np.isnan(end_lm[1])):
+
+            if (
+                not np.isnan(start_lm[0])
+                and not np.isnan(start_lm[1])
+                and not np.isnan(end_lm[0])
+                and not np.isnan(end_lm[1])
+            ):
                 start_pt = (int(round(start_lm[0])), int(round(start_lm[1])))
                 end_pt = (int(round(end_lm[0])), int(round(end_lm[1])))
-                
-                if (0 <= start_pt[0] < width and 0 <= start_pt[1] < height and
-                    0 <= end_pt[0] < width and 0 <= end_pt[1] < height):
+
+                if (
+                    0 <= start_pt[0] < width
+                    and 0 <= start_pt[1] < height
+                    and 0 <= end_pt[0] < width
+                    and 0 <= end_pt[1] < height
+                ):
                     cv2.line(frame, start_pt, end_pt, (255, 0, 0), 2)
-    
+
     return frame
 
 
@@ -920,9 +958,7 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
     landmarks_history = []
 
     # Prepare headers for CSV
-    headers = ["frame_index"] + [
-        f"{name}_x,{name}_y,{name}_z" for name in landmark_names
-    ]
+    headers = ["frame_index"] + [f"{name}_x,{name}_y,{name}_z" for name in landmark_names]
 
     # Lists to store landmarks
     normalized_landmarks_list = []
@@ -930,9 +966,9 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
     bbox_list = []
     frames_with_missing_data = []
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"PROCESSANDO VÍDEO: {video_path.name}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"Total de frames: {total_frames}")
     print(f"Resolução: {width}x{height}")
     print(f"FPS: {fps:.2f}")
@@ -947,13 +983,13 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
         print(f"YOLO Confidence: {pose_config.get('yolo_conf', 0.5)}")
     else:
         print("Pipeline: MediaPipe apenas")
-    print(f"{'='*60}\n")
+    print(f"{'=' * 60}\n")
 
     # Process video
     frame_count = 0
     frames_with_pose = 0
     frames_without_pose = 0
-    
+
     print("Iniciando processamento de frames...")
     while cap.isOpened():
         success, frame = cap.read()
@@ -964,19 +1000,27 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
         if frame_count % 10 == 0:
             progress = (frame_count / total_frames) * 100
             pose_rate = (frames_with_pose / (frame_count + 1)) * 100 if frame_count > 0 else 0
-            print(f"\r  Frame {frame_count}/{total_frames} ({progress:.1f}%) | "
-                  f"Pose detectado: {frames_with_pose} ({pose_rate:.1f}%) | "
-                  f"Sem pose: {frames_without_pose}", end="", flush=True)
-        
+            print(
+                f"\r  Frame {frame_count}/{total_frames} ({progress:.1f}%) | "
+                f"Pose detectado: {frames_with_pose} ({pose_rate:.1f}%) | "
+                f"Sem pose: {frames_without_pose}",
+                end="",
+                flush=True,
+            )
+
         # Show detailed progress every 30 frames
         if frame_count % 30 == 0 and frame_count > 0:
             elapsed = time.time() - start_time
             fps_processing = frame_count / elapsed if elapsed > 0 else 0
             remaining_frames = total_frames - frame_count
             eta = remaining_frames / fps_processing if fps_processing > 0 else 0
-            print(f"\n  Velocidade: {fps_processing:.1f} fps | "
-                  f"Tempo decorrido: {elapsed:.1f}s | "
-                  f"ETA: {eta:.1f}s", end="", flush=True)
+            print(
+                f"\n  Velocidade: {fps_processing:.1f} fps | "
+                f"Tempo decorrido: {elapsed:.1f}s | "
+                f"ETA: {eta:.1f}s",
+                end="",
+                flush=True,
+            )
 
         # Process frame based on mode
         yolo_mode = pose_config.get("yolo_mode", "yolo_mediapipe")
@@ -993,8 +1037,11 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
         else:
             # Use MediaPipe (with or without YOLO for detection)
             landmarks_norm, landmarks_px, bbox = process_frame_with_mediapipe(
-                frame, pose, yolo_model, pose_config["yolo_conf"], 
-                pose_config["use_yolo"] and yolo_mode == "yolo_mediapipe"
+                frame,
+                pose,
+                yolo_model,
+                pose_config["yolo_conf"],
+                pose_config["use_yolo"] and yolo_mode == "yolo_mediapipe",
             )
 
         # Apply temporal filter if configured
@@ -1013,7 +1060,7 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
                     y_val = lm[1] if not np.isnan(lm[1]) else np.nan
                     z_val = lm[2] if len(lm) > 2 and not np.isnan(lm[2]) else np.nan
                     conf_val = lm[3] if len(lm) > 3 and not np.isnan(lm[3]) else 1.0
-                    
+
                     if not np.isnan(x_val) and not np.isnan(y_val):
                         landmarks_px.append(
                             [
@@ -1040,9 +1087,7 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
             frames_with_pose += 1
         else:
             num_landmarks = len(landmark_names)
-            nan_landmarks = [
-                [np.nan, np.nan, np.nan, np.nan] for _ in range(num_landmarks)
-            ]
+            nan_landmarks = [[np.nan, np.nan, np.nan, np.nan] for _ in range(num_landmarks)]
             normalized_landmarks_list.append(nan_landmarks)
             pixel_landmarks_list.append(nan_landmarks)
             bbox_list.append(bbox)
@@ -1050,30 +1095,37 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
             frames_without_pose += 1
 
         frame_count += 1
-    
+
     # Final progress update
-    print(f"\r  Frame {frame_count}/{total_frames} (100.0%) | "
-          f"Pose detectado: {frames_with_pose} | "
-          f"Sem pose: {frames_without_pose}")
-    print(f"\n✓ Processamento de frames concluído!")
+    print(
+        f"\r  Frame {frame_count}/{total_frames} (100.0%) | "
+        f"Pose detectado: {frames_with_pose} | "
+        f"Sem pose: {frames_without_pose}"
+    )
+    print("\n✓ Processamento de frames concluído!")
     print(f"  Total processado: {frame_count} frames")
     if frame_count > 0:
-        print(f"  Frames com pose: {frames_with_pose} ({frames_with_pose/frame_count*100:.1f}%)")
-        print(f"  Frames sem pose: {frames_without_pose} ({frames_without_pose/frame_count*100:.1f}%)")
+        print(
+            f"  Frames com pose: {frames_with_pose} ({frames_with_pose / frame_count * 100:.1f}%)"
+        )
+        print(
+            f"  Frames sem pose: {frames_without_pose} ({frames_without_pose / frame_count * 100:.1f}%)"
+        )
 
     # Close capture
     cap.release()
     if pose is not None:
         pose.close()
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("SALVANDO ARQUIVOS CSV...")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     # Save CSVs
-    with open(output_file_path, "w") as f_norm, open(
-        output_pixel_file_path, "w"
-    ) as f_pixel:
+    with (
+        open(output_file_path, "w") as f_norm,
+        open(output_pixel_file_path, "w") as f_pixel,
+    ):
         f_norm.write(",".join(headers) + "\n")
         f_pixel.write(",".join(headers) + "\n")
 
@@ -1090,33 +1142,34 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
                 flat_landmarks_pixel.extend(lm_px[:3])  # Only x, y, z
 
             landmarks_norm_str = ",".join(
-                "NaN" if np.isnan(value) else f"{value:.6f}"
-                for value in flat_landmarks_norm
+                "NaN" if np.isnan(value) else f"{value:.6f}" for value in flat_landmarks_norm
             )
             landmarks_pixel_str = ",".join(
                 (
                     "NaN"
                     if np.isnan(value)
-                    else str(int(round(value))) if i % 3 != 2 and not np.isnan(value) else f"{value:.6f}"
+                    else str(int(round(value)))
+                    if i % 3 != 2 and not np.isnan(value)
+                    else f"{value:.6f}"
                 )
                 for i, value in enumerate(flat_landmarks_pixel)
             )
 
             f_norm.write(f"{frame_idx}," + landmarks_norm_str + "\n")
             f_pixel.write(f"{frame_idx}," + landmarks_pixel_str + "\n")
-            
+
             # Progress for CSV writing
             if frame_idx % 50 == 0:
                 csv_progress = (frame_idx / len(normalized_landmarks_list)) * 100
                 print(f"\r  Saving CSVs: {csv_progress:.1f}%", end="", flush=True)
 
-    print(f"\r  Saving CSVs: 100.0%")
-    print(f"✓ CSVs saved successfully!")
+    print("\r  Saving CSVs: 100.0%")
+    print("✓ CSVs saved successfully!")
     print(f"  - {output_file_path.name}")
     print(f"  - {output_pixel_file_path.name}")
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("Creating video with visualization...")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     # Create video with visualization
     cap = cv2.VideoCapture(str(video_path))
@@ -1128,9 +1181,7 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
     mp_pose = mp.solutions.pose
 
     # Drawing styles
-    landmark_spec = mp_drawing.DrawingSpec(
-        color=(0, 255, 0), thickness=2, circle_radius=3
-    )
+    landmark_spec = mp_drawing.DrawingSpec(color=(0, 255, 0), thickness=2, circle_radius=3)
     connection_spec = mp_drawing.DrawingSpec(color=(255, 0, 0), thickness=2)
 
     frame_idx = 0
@@ -1144,7 +1195,9 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
             elapsed_video = time.time() - start_time
             print(
                 f"\r  Creating video: {frame_idx}/{total_frames} ({progress:.1f}%) | "
-                f"Time: {elapsed_video:.1f}s", end="", flush=True
+                f"Time: {elapsed_video:.1f}s",
+                end="",
+                flush=True,
             )
 
         # Recover data
@@ -1155,9 +1208,7 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
             # Draw bbox if available (only in yolo_mediapipe mode)
             yolo_mode = pose_config.get("yolo_mode", "yolo_mediapipe")
             if bbox and pose_config["use_yolo"] and yolo_mode == "yolo_mediapipe":
-                cv2.rectangle(
-                    frame, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (0, 255, 0), 2
-                )
+                cv2.rectangle(frame, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (0, 255, 0), 2)
 
             # Check if there are valid landmarks
             if not all(np.isnan(lm[0]) for lm in landmarks_px):
@@ -1180,7 +1231,9 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
                                 landmark.x = lm[0] / width
                                 landmark.y = lm[1] / height
                                 landmark.z = lm[2] if len(lm) > 2 and not np.isnan(lm[2]) else 0.0
-                                landmark.visibility = lm[3] if len(lm) > 3 and not np.isnan(lm[3]) else 0.0
+                                landmark.visibility = (
+                                    lm[3] if len(lm) > 3 and not np.isnan(lm[3]) else 0.0
+                                )
                             else:
                                 # Set invalid landmarks to 0,0 with 0 visibility
                                 landmark.x = 0.0
@@ -1231,16 +1284,16 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
     # Close resources
     cap.release()
     out.release()
-    
+
     print(f"\r  Creating video: {total_frames}/{total_frames} (100.0%)")
     print(f"Video created successfully: {output_video_path.name}")
 
     end_time = time.time()
     execution_time = end_time - start_time
-    
-    print(f"\n{'='*60}")
+
+    print(f"\n{'=' * 60}")
     print("PROCESSING COMPLETED!")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     # Create log
     log_info_path = output_dir / "log_info.txt"
@@ -1260,7 +1313,7 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
         log_file.write(f"FPS: {fps}\n")
         log_file.write(f"Total Frames: {frame_count}\n")
         log_file.write(f"Execution Time: {execution_time:.2f} seconds\n")
-        log_file.write(f"Average FPS: {frame_count/execution_time:.2f}\n")
+        log_file.write(f"Average FPS: {frame_count / execution_time:.2f}\n")
         log_file.write(f"Processing device: {device}\n\n")
         log_file.write("=" * 60 + "\n")
         log_file.write("PIPELINE CONFIGURATION:\n")
@@ -1272,7 +1325,7 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
                 log_file.write("Pipeline: YOLOv11-pose only\n")
             else:
                 log_file.write("Pipeline: YOLOv11 + MediaPipe\n")
-            log_file.write("YOLO Model: {} (loaded successfully)\n".format(yolo_model_name))
+            log_file.write(f"YOLO Model: {yolo_model_name} (loaded successfully)\n")
             log_file.write("YOLO Confidence: {}\n".format(pose_config.get("yolo_conf", 0.5)))
         else:
             log_file.write("Pipeline: MediaPipe only\n")
@@ -1284,38 +1337,36 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
             log_file.write(f"{key}: {value}\n")
         log_file.write("\n")
         if frames_with_missing_data:
+            log_file.write(f"Frames with missing data: {len(frames_with_missing_data)}\n")
             log_file.write(
-                f"Frames with missing data: {len(frames_with_missing_data)}\n"
-            )
-            log_file.write(
-                f"Missing data percentage: {len(frames_with_missing_data)/frame_count*100:.2f}%\n"
+                f"Missing data percentage: {len(frames_with_missing_data) / frame_count * 100:.2f}%\n"
             )
         else:
             log_file.write("No frames with missing data.\n")
 
         # Add memory usage if GPU
         if device != "cpu":
-            log_file.write(
-                f"\nGPU Memory used: {torch.cuda.max_memory_allocated()/1e9:.2f} GB\n"
-            )
+            log_file.write(f"\nGPU Memory used: {torch.cuda.max_memory_allocated() / 1e9:.2f} GB\n")
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("RESUMO DO PROCESSAMENTO")
-    print(f"{'='*60}")
-    print(f"Tempo total: {execution_time:.2f} segundos ({execution_time/60:.1f} minutos)")
-    print(f"Velocidade média: {frame_count/execution_time:.2f} fps")
+    print(f"{'=' * 60}")
+    print(f"Tempo total: {execution_time:.2f} segundos ({execution_time / 60:.1f} minutos)")
+    print(f"Velocidade média: {frame_count / execution_time:.2f} fps")
     print(f"Frames processados: {frame_count}")
-    print(f"Frames com pose: {frames_with_pose} ({frames_with_pose/frame_count*100:.1f}%)")
-    print(f"Frames sem pose: {frames_without_pose} ({frames_without_pose/frame_count*100:.1f}%)")
-    print(f"\nArquivos salvos em:")
+    print(f"Frames com pose: {frames_with_pose} ({frames_with_pose / frame_count * 100:.1f}%)")
+    print(
+        f"Frames sem pose: {frames_without_pose} ({frames_without_pose / frame_count * 100:.1f}%)"
+    )
+    print("\nArquivos salvos em:")
     print(f"  {output_dir}")
     print(f"  - {output_video_path.name}")
     print(f"  - {output_file_path.name}")
     print(f"  - {output_pixel_file_path.name}")
     print(f"  - {log_info_path.name}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print("✓ PROCESSAMENTO CONCLUÍDO COM SUCESSO!")
-    print(f"{'='*60}\n")
+    print(f"{'=' * 60}\n")
 
 
 def process_videos_in_directory(existing_root=None):
@@ -1328,9 +1379,7 @@ def process_videos_in_directory(existing_root=None):
         root = tk.Tk()
         root.withdraw()
 
-    input_dir = filedialog.askdirectory(
-        title="Select the input directory containing videos"
-    )
+    input_dir = filedialog.askdirectory(title="Select the input directory containing videos")
     if not input_dir:
         messagebox.showerror("Error", "No input directory selected.")
         return
@@ -1354,7 +1403,9 @@ def process_videos_in_directory(existing_root=None):
         yolo_model = download_or_load_yolo_model(selected_model)
         if yolo_model is not None:
             use_yolo_successfully = True
-            print(f"✓ YOLO model '{selected_model}' loaded successfully - using YOLOv11 + MediaPipe pipeline")
+            print(
+                f"✓ YOLO model '{selected_model}' loaded successfully - using YOLOv11 + MediaPipe pipeline"
+            )
         else:
             print("Warning: Could not load YOLO model, proceeding without it")
             pose_config["use_yolo"] = False
@@ -1371,9 +1422,7 @@ def process_videos_in_directory(existing_root=None):
 
     input_dir = Path(input_dir)
     video_files = list(input_dir.glob("*.*"))
-    video_files = [
-        f for f in video_files if f.suffix.lower() in [".mp4", ".avi", ".mov"]
-    ]
+    video_files = [f for f in video_files if f.suffix.lower() in [".mp4", ".avi", ".mov"]]
 
     print(f"\nFound {len(video_files)} videos to process")
 

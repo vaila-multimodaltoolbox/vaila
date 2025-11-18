@@ -20,8 +20,8 @@ Usage Example:
   `filtered_data_band = butter_filter(data, fs=1000, filter_type='band', lowcut=5, highcut=15, order=4)`
 """
 
-from scipy.signal import butter, sosfiltfilt
 import numpy as np
+from scipy.signal import butter, sosfiltfilt
 
 
 def butter_filter(
@@ -75,9 +75,7 @@ def butter_filter(
         high = highcut / nyq
         sos = butter(order, [low, high], btype="band", analog=False, output="sos")
     else:
-        raise ValueError(
-            "Unsupported filter type. Use 'low' for low-pass or 'band' for band-pass."
-        )
+        raise ValueError("Unsupported filter type. Use 'low' for low-pass or 'band' for band-pass.")
 
     data = np.asarray(data)
     axis = 0  # Filtering along the first axis (rows)

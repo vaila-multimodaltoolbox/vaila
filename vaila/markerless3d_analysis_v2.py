@@ -75,23 +75,21 @@ You should have received a copy of the GNU GPLv3 (General Public License Version
 If not, see <https://www.gnu.org/licenses/>.
 """
 
+import datetime
+import os
+import platform
+import time
+import tkinter as tk
+from pathlib import Path
+from tkinter import filedialog, messagebox, simpledialog
+
 import cv2
 import mediapipe as mp
-import os
-import time
-import datetime
-import tkinter as tk
-from tkinter import filedialog, messagebox, simpledialog
-from pathlib import Path
-import platform
 import numpy as np
-from ultralytics import YOLO
-import torch
-from scipy import signal
-from scipy.signal import savgol_filter
-from pykalman import KalmanFilter
-import uuid
 from mediapipe.framework.formats import landmark_pb2
+from pykalman import KalmanFilter
+from scipy.signal import savgol_filter
+from ultralytics import YOLO
 
 landmark_names = [
     "nose",
@@ -132,12 +130,8 @@ landmark_names = [
 
 class ConfidenceInputDialog(simpledialog.Dialog):
     def body(self, master):
-        tk.Label(master, text="Enter minimum detection confidence (0.0 - 1.0):").grid(
-            row=0
-        )
-        tk.Label(master, text="Enter minimum tracking confidence (0.0 - 1.0):").grid(
-            row=1
-        )
+        tk.Label(master, text="Enter minimum detection confidence (0.0 - 1.0):").grid(row=0)
+        tk.Label(master, text="Enter minimum tracking confidence (0.0 - 1.0):").grid(row=1)
         tk.Label(master, text="Enter model complexity (0, 1, or 2):").grid(row=2)
         tk.Label(master, text="Enable segmentation? (True/False):").grid(row=3)
         tk.Label(master, text="Smooth segmentation? (True/False):").grid(row=4)
@@ -190,10 +184,8 @@ class ConfidenceInputDialog(simpledialog.Dialog):
             "min_detection_confidence": float(self.min_detection_entry.get()),
             "min_tracking_confidence": float(self.min_tracking_entry.get()),
             "model_complexity": int(self.model_complexity_entry.get()),
-            "enable_segmentation": self.enable_segmentation_entry.get().lower()
-            == "true",
-            "smooth_segmentation": self.smooth_segmentation_entry.get().lower()
-            == "true",
+            "enable_segmentation": self.enable_segmentation_entry.get().lower() == "true",
+            "smooth_segmentation": self.smooth_segmentation_entry.get().lower() == "true",
             "static_image_mode": self.static_image_mode_entry.get().lower() == "true",
             "use_yolo": self.use_yolo_entry.get().lower() == "true",
             "yolo_conf": float(self.yolo_conf_entry.get()),
@@ -247,9 +239,7 @@ def download_or_load_yolo_model():
                 shutil.copy2(source_path, model_path)
                 print(f"Downloaded model saved to {model_path}")
             else:
-                print(
-                    f"YOLO downloaded the model but couldn't find it at {source_path}"
-                )
+                print(f"YOLO downloaded the model but couldn't find it at {source_path}")
                 return None
 
         except Exception as e:
@@ -274,9 +264,7 @@ def detect_persons_with_yolo(frame, model, conf_threshold=0.3):
         for r in results[0].boxes.data.cpu().numpy():
             x1, y1, x2, y2, conf, cls = r
             if cls == 0:  # person class
-                persons.append(
-                    {"bbox": [int(x1), int(y1), int(x2), int(y2)], "conf": float(conf)}
-                )
+                persons.append({"bbox": [int(x1), int(y1), int(x2), int(y2)], "conf": float(conf)})
 
     return persons
 
@@ -384,9 +372,7 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
     landmarks_history = {}  # {person_id: {landmark_idx: [[x,y,z], ...]}}
 
     # Preparar cabeçalhos para CSV
-    headers = ["frame_index"] + [
-        f"{name}_x,{name}_y,{name}_z" for name in landmark_names
-    ]
+    headers = ["frame_index"] + [f"{name}_x,{name}_y,{name}_z" for name in landmark_names]
 
     # Listas para armazenar landmarks
     normalized_landmarks_list = []
@@ -412,9 +398,7 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
 
         # Processar com YOLO se configurado
         if pose_config["use_yolo"] and yolo_model:
-            persons = detect_persons_with_yolo(
-                frame, yolo_model, pose_config["yolo_conf"]
-            )
+            persons = detect_persons_with_yolo(frame, yolo_model, pose_config["yolo_conf"])
             person_bboxes = [p["bbox"] for p in persons]
             tracked_persons = person_tracker.update(person_bboxes)
 
@@ -436,9 +420,9 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
 
                         max_history = 30
                         if len(landmarks_history[person_id][i]) > max_history:
-                            landmarks_history[person_id][i] = landmarks_history[
-                                person_id
-                            ][i][-max_history:]
+                            landmarks_history[person_id][i] = landmarks_history[person_id][i][
+                                -max_history:
+                            ]
 
                         # Aplicar filtro selecionado
                         if pose_config.get("filter_type") == "kalman":
@@ -460,9 +444,7 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
                             pose_config.get("filter_type") == "savgol"
                             and len(landmarks_history[person_id][i]) >= 5
                         ):
-                            filtered = apply_savgol_filter(
-                                landmarks_history[person_id][i], norm
-                            )
+                            filtered = apply_savgol_filter(landmarks_history[person_id][i], norm)
                             landmarks_norm[i] = filtered
                             landmarks_px[i] = [
                                 int(filtered[0] * width),
@@ -539,9 +521,10 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
     pose.close()
 
     # Salvar CSVs
-    with open(output_file_path, "w") as f_norm, open(
-        output_pixel_file_path, "w"
-    ) as f_pixel:
+    with (
+        open(output_file_path, "w") as f_norm,
+        open(output_pixel_file_path, "w") as f_pixel,
+    ):
         f_norm.write(",".join(headers) + "\n")
         f_pixel.write(",".join(headers) + "\n")
 
@@ -549,26 +532,20 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
             landmarks_norm = normalized_landmarks_list[frame_idx]
             landmarks_pixel = pixel_landmarks_list[frame_idx]
 
-            flat_landmarks_norm = [
-                coord for landmark in landmarks_norm for coord in landmark
-            ]
-            flat_landmarks_pixel = [
-                coord for landmark in landmarks_pixel for coord in landmark
-            ]
+            flat_landmarks_norm = [coord for landmark in landmarks_norm for coord in landmark]
+            flat_landmarks_pixel = [coord for landmark in landmarks_pixel for coord in landmark]
 
             landmarks_norm_str = ",".join(
-                "NaN" if np.isnan(value) else f"{value:.6f}"
-                for value in flat_landmarks_norm
+                "NaN" if np.isnan(value) else f"{value:.6f}" for value in flat_landmarks_norm
             )
             landmarks_pixel_str = ",".join(
-                "NaN" if np.isnan(value) else str(value)
-                for value in flat_landmarks_pixel
+                "NaN" if np.isnan(value) else str(value) for value in flat_landmarks_pixel
             )
 
             f_norm.write(f"{frame_idx}," + landmarks_norm_str + "\n")
             f_pixel.write(f"{frame_idx}," + landmarks_pixel_str + "\n")
 
-    print(f"\n\nEtapa 2/2: Criando vídeo com landmarks processados")
+    print("\n\nEtapa 2/2: Criando vídeo com landmarks processados")
 
     # ETAPA 2: Gerar vídeo a partir dos landmarks processados
     cap = cv2.VideoCapture(str(video_path))
@@ -580,9 +557,7 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
     mp_pose = mp.solutions.pose
 
     # Estilos de desenho mais visíveis
-    landmark_spec = mp_drawing.DrawingSpec(
-        color=(0, 255, 0), thickness=2, circle_radius=2
-    )
+    landmark_spec = mp_drawing.DrawingSpec(color=(0, 255, 0), thickness=2, circle_radius=2)
     connection_spec = mp_drawing.DrawingSpec(color=(255, 0, 0), thickness=2)
 
     frame_idx = 0
@@ -593,9 +568,7 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
 
         if frame_idx % 30 == 0:
             progress = (frame_idx / total_frames) * 100
-            print(
-                f"\rCriando vídeo {frame_idx}/{total_frames} ({progress:.1f}%)", end=""
-            )
+            print(f"\rCriando vídeo {frame_idx}/{total_frames} ({progress:.1f}%)", end="")
 
         # Recuperar landmarks para este frame
         if frame_idx < len(pixel_landmarks_list):
@@ -606,9 +579,7 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
                 # Se YOLO estiver ativado, também desenhar os bounding boxes
                 if pose_config["use_yolo"] and yolo_model:
                     # Detectar pessoas novamente para mostrar todas as bboxes
-                    persons = detect_persons_with_yolo(
-                        frame, yolo_model, pose_config["yolo_conf"]
-                    )
+                    persons = detect_persons_with_yolo(frame, yolo_model, pose_config["yolo_conf"])
                     for person in persons:
                         bbox = person["bbox"]
                         cv2.rectangle(
@@ -814,9 +785,7 @@ def apply_kalman_filter(landmarks_history, current_landmarks=None):
         return current_landmarks
 
 
-def apply_savgol_filter(
-    landmarks_history, current_landmarks=None, window_length=5, poly_order=2
-):
+def apply_savgol_filter(landmarks_history, current_landmarks=None, window_length=5, poly_order=2):
     """
     Aplica filtro Savitzky-Golay em landmarks históricos
     """
@@ -885,9 +854,7 @@ def estimate_missing_landmarks(landmarks, visibility_threshold=0.5):
 
             # Exemplo: estimar posição de cotovelo com base no ombro e pulso
             if i == 13:  # left_elbow
-                if (
-                    landmarks[11] and landmarks[15]
-                ):  # left_shoulder e left_wrist estão visíveis
+                if landmarks[11] and landmarks[15]:  # left_shoulder e left_wrist estão visíveis
                     # Interpolar linearmente entre ombro e pulso
                     shoulder = landmarks[11]
                     wrist = landmarks[15]
@@ -902,9 +869,7 @@ def estimate_missing_landmarks(landmarks, visibility_threshold=0.5):
                 else:
                     estimated.append(lm)
             elif i == 14:  # right_elbow
-                if (
-                    landmarks[12] and landmarks[16]
-                ):  # right_shoulder e right_wrist estão visíveis
+                if landmarks[12] and landmarks[16]:  # right_shoulder e right_wrist estão visíveis
                     shoulder = landmarks[12]
                     wrist = landmarks[16]
                     estimated.append(
@@ -975,9 +940,7 @@ def process_videos_in_directory(existing_root=None):
         root = tk.Tk()
         root.withdraw()
 
-    input_dir = filedialog.askdirectory(
-        title="Select the input directory containing videos"
-    )
+    input_dir = filedialog.askdirectory(title="Select the input directory containing videos")
     if not input_dir:
         messagebox.showerror("Error", "No input directory selected.")
         return
@@ -1002,9 +965,7 @@ def process_videos_in_directory(existing_root=None):
 
     input_dir = Path(input_dir)
     video_files = list(input_dir.glob("*.*"))
-    video_files = [
-        f for f in video_files if f.suffix.lower() in [".mp4", ".avi", ".mov"]
-    ]
+    video_files = [f for f in video_files if f.suffix.lower() in [".mp4", ".avi", ".mov"]]
 
     print(f"\nFound {len(video_files)} videos to process")
 

@@ -29,9 +29,10 @@ Change History:
 """
 
 import os
+
 import numpy as np
-from scipy.signal import butter, filtfilt, firwin
 from rich import print
+from scipy.signal import butter, filtfilt, firwin
 
 
 def apply_filter(

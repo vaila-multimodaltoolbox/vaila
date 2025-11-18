@@ -57,23 +57,23 @@ License:
 """
 
 import os
-from rich import print
+from datetime import datetime
 from pathlib import Path
+from tkinter import Tk, filedialog, messagebox, simpledialog
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-from datetime import datetime
-from tkinter import messagebox, filedialog, simpledialog, Tk
+from rich import print
+
 from vaila.data_processing import read_mocap_csv
 from vaila.filtering import apply_filter
-from vaila.rotation import createortbase_4points, calcmatrot, rotmat2euler
 from vaila.plotting import plot_orthonormal_bases
 from vaila.readcsv import get_csv_headers, select_headers_gui
+from vaila.rotation import calcmatrot, createortbase_4points, rotmat2euler
 
 
-def save_results_to_csv(
-    base_dir, time, trunk_euler_angles, pelvis_euler_angles, file_name
-):
+def save_results_to_csv(base_dir, time, trunk_euler_angles, pelvis_euler_angles, file_name):
     results = {
         "time": time,
         "trunk_euler_x": trunk_euler_angles[:, 0],
@@ -92,12 +92,8 @@ def save_results_to_csv(
 def read_anatomical_csv(file_path):
     try:
         data = pd.read_csv(file_path)
-        trunk_median = (
-            data[["trunk_euler_x", "trunk_euler_y", "trunk_euler_z"]].median().values
-        )
-        pelvis_median = (
-            data[["pelvis_euler_x", "pelvis_euler_y", "pelvis_euler_z"]].median().values
-        )
+        trunk_median = data[["trunk_euler_x", "trunk_euler_y", "trunk_euler_z"]].median().values
+        pelvis_median = data[["pelvis_euler_x", "pelvis_euler_y", "pelvis_euler_z"]].median().values
         return {"trunk": trunk_median, "pelvis": pelvis_median}
     except Exception as e:
         print(f"Error reading {file_path}: {e}")
@@ -121,9 +117,7 @@ def analyze_mocap_fullbody_data():
         root.destroy()
         return
 
-    sample_rate = simpledialog.askfloat(
-        "Input", "Please enter the sample rate:", minvalue=0.0
-    )
+    sample_rate = simpledialog.askfloat("Input", "Please enter the sample rate:", minvalue=0.0)
     if sample_rate is None:
         messagebox.showerror("No Sample Rate", "No sample rate entered. Exiting.")
         root.destroy()
@@ -156,9 +150,7 @@ def analyze_mocap_fullbody_data():
 
     anatomical_data = {}
     if use_anatomical:
-        anatomical_dir = filedialog.askdirectory(
-            title="Select Directory with Anatomical CSV Files"
-        )
+        anatomical_dir = filedialog.askdirectory(title="Select Directory with Anatomical CSV Files")
         if not anatomical_dir:
             messagebox.showerror(
                 "No Directory Selected",
@@ -171,9 +163,7 @@ def analyze_mocap_fullbody_data():
             [f for f in os.listdir(anatomical_dir) if f.endswith(".csv")]
         )
         if len(anatomical_file_names) != len(file_names):
-            print(
-                "Warning: Number of anatomical files does not match the number of data files."
-            )
+            print("Warning: Number of anatomical files does not match the number of data files.")
         for idx, anatomical_file in enumerate(anatomical_file_names):
             anatomical_file_path = os.path.join(anatomical_dir, anatomical_file)
             anat_data = read_anatomical_csv(anatomical_file_path)

@@ -27,25 +27,23 @@ The "hand_landmarker.task" model will be downloaded to the project's "models" fo
 following the standard used in other files.
 """
 
+import colorsys  # Added for color conversion
+import csv
 import os
-import requests
+import tkinter as tk
+from pathlib import Path
+from tkinter import filedialog, messagebox
+
 import cv2
 import mediapipe as mp
-import time
-from pathlib import Path
-import tkinter as tk
-from tkinter import filedialog, messagebox
-import csv
-import colorsys  # Added for color conversion
+import requests
 
 # Tenta importar os labels oficiais do MediaPipe Hands
 try:
     from mediapipe.python.solutions.hands import HandLandmark
 
     # Garante que os landmarks estejam ordenados de acordo com o valor numérico
-    LANDMARK_NAMES = [
-        landmark.name for landmark in sorted(HandLandmark, key=lambda x: x.value)
-    ]
+    LANDMARK_NAMES = [landmark.name for landmark in sorted(HandLandmark, key=lambda x: x.value)]
 except ImportError:
     LANDMARK_NAMES = [
         "WRIST",
@@ -89,9 +87,7 @@ def download_model_if_needed():
         print("Downloading model...")
         response = requests.get(MODEL_URL)
         if response.status_code != 200:
-            raise RuntimeError(
-                f"Failed to download the model: status code {response.status_code}"
-            )
+            raise RuntimeError(f"Failed to download the model: status code {response.status_code}")
         with open(MODEL_PATH, "wb") as model_file:
             model_file.write(response.content)
         print("Download completed! Model saved at:", MODEL_PATH)
@@ -124,9 +120,7 @@ def draw_hand_landmarks(image, landmarks, hand_index=0):
         x = int(lm.x * image_width)
         y = int(lm.y * image_height)
         color = get_landmark_color(hand_index, lm_index)
-        cv2.circle(
-            image, (x, y), 5, color, -1
-        )  # using a slightly larger radius for visibility
+        cv2.circle(image, (x, y), 5, color, -1)  # using a slightly larger radius for visibility
 
     # Define hand connections as per MediaPipe Hands specification
     HAND_CONNECTIONS = [
@@ -219,16 +213,12 @@ def run_mphands():
 
     # Define output file paths based on the input video's name
     video_path = Path(video_file)
-    output_video_path = str(
-        video_path.parent / f"{video_path.stem}_processed{video_path.suffix}"
-    )
+    output_video_path = str(video_path.parent / f"{video_path.stem}_processed{video_path.suffix}")
     data_file_path = str(video_path.parent / f"{video_path.stem}_landmarks.csv")
 
     # Initialize video writer for output video
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    out_video = cv2.VideoWriter(
-        output_video_path, fourcc, fps, (frame_width, frame_height)
-    )
+    out_video = cv2.VideoWriter(output_video_path, fourcc, fps, (frame_width, frame_height))
 
     # Open CSV file for saving landmark data
     csv_file = open(data_file_path, mode="w", newline="")

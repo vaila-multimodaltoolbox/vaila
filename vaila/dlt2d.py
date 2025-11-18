@@ -84,12 +84,13 @@ License:
     If not, see <https://www.gnu.org/licenses/>.
 """
 
+import csv
 import os
+from tkinter import Tk, filedialog, messagebox
+
 import numpy as np
 import pandas as pd
-import csv
 from numpy.linalg import inv
-from tkinter import filedialog, Tk, messagebox
 from rich import print
 
 
@@ -171,11 +172,7 @@ def filter_and_shape_coordinates(coords):
 
     # Process coordinates in pairs (x,y)
     for i in range(0, len(coords), 2):
-        if (
-            i + 1 < len(coords)
-            and not np.isnan(coords[i])
-            and not np.isnan(coords[i + 1])
-        ):
+        if i + 1 < len(coords) and not np.isnan(coords[i]) and not np.isnan(coords[i + 1]):
             filtered_coords.append([coords[i], coords[i + 1]])
             valid_pairs.append(i // 2)  # Store the index of the valid pair
 
@@ -211,9 +208,7 @@ def process_files(pixel_file, real_file):
     # Check if we're using a single reference row for all frames
     single_ref_mode = len(real_df) == 1
     if single_ref_mode:
-        print(
-            "Single reference mode: Using the same reference coordinates for all frames"
-        )
+        print("Single reference mode: Using the same reference coordinates for all frames")
         # Store the single reference row for repeated use
         ref_row = real_df.iloc[0]
     elif len(real_df) != len(pixel_df):
@@ -248,9 +243,7 @@ def process_files(pixel_file, real_file):
         # Process coordinates in pairs (x,y)
         for j in range(0, len(coord_cols), 2):
             if j + 1 < len(coord_cols):  # Ensure we have a complete pair
-                point_name = coord_cols[j].split("_")[
-                    0
-                ]  # Extract point name (e.g., p1 from p1_x)
+                point_name = coord_cols[j].split("_")[0]  # Extract point name (e.g., p1 from p1_x)
                 px_x = pixel_row[coord_cols[j]]
                 px_y = pixel_row[coord_cols[j + 1]]
                 real_x = real_row[coord_cols[j]]
@@ -339,9 +332,7 @@ def run_dlt2d():
         real_file = create_ref2d_template(pixel_file)
         messagebox.showinfo("Success", f"Template REF2D file created: {real_file}")
         print(f"Template REF2D file created: {real_file}")
-        print(
-            "Please edit the REF2D file with real coordinates and run the DLT process again."
-        )
+        print("Please edit the REF2D file with real coordinates and run the DLT process again.")
         return
     else:
         real_file = filedialog.askopenfilename(

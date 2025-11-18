@@ -47,25 +47,25 @@ Notes:
 
 """
 
-import os
-from pathlib import Path
-from rich import print
-import sys
-import csv
-import cv2
-import torch
-import numpy as np
-import datetime
-from ultralytics import YOLO
-import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-import subprocess
 import colorsys
-import pkg_resources
+import csv
+import datetime
 import glob
-import pandas as pd
-from boxmot import BotSort
+import os
+import subprocess
+import sys
+import tkinter as tk
+from pathlib import Path
+from tkinter import filedialog, messagebox, ttk
 
+import cv2
+import numpy as np
+import pandas as pd
+import pkg_resources
+import torch
+from boxmot import BotSort
+from rich import print
+from ultralytics import YOLO
 
 # Print the script version and directory
 print(f"Running script: {Path(__file__).name}")
@@ -136,12 +136,10 @@ def initialize_csv(output_dir, label, tracker_id, total_frames):
     return csv_file
 
 
-def update_csv(
-    csv_file, frame_idx, tracker_id, label, x_min, y_min, x_max, y_max, conf
-):
+def update_csv(csv_file, frame_idx, tracker_id, label, x_min, y_min, x_max, y_max, conf):
     """Updates the CSV file with detection data for the specific frame."""
     rows = []
-    with open(csv_file, mode="r", newline="") as file:
+    with open(csv_file, newline="") as file:
         reader = csv.reader(file)
         rows = list(reader)
 
@@ -204,9 +202,7 @@ def detect_optimal_device():
     if torch.cuda.is_available():
         gpu_count = torch.cuda.device_count()
         if gpu_count > 1:
-            print(
-                f"Multiple GPUs detected ({gpu_count}). GPU 0 available for selection."
-            )
+            print(f"Multiple GPUs detected ({gpu_count}). GPU 0 available for selection.")
 
         # Clear cache for optimal performance
         torch.cuda.empty_cache()
@@ -241,9 +237,7 @@ class TrackerConfigDialog(tk.simpledialog.Dialog):
         hw_frame = tk.LabelFrame(master, text="Hardware Information", padx=5, pady=5)
         hw_frame.grid(row=0, column=0, columnspan=3, sticky="ew", padx=5, pady=5)
 
-        hw_text = tk.Text(
-            hw_frame, height=6, width=60, wrap="word", font=("Consolas", 8)
-        )
+        hw_text = tk.Text(hw_frame, height=6, width=60, wrap="word", font=("Consolas", 8))
         hw_text.insert(tk.END, self.hardware_info)
         hw_text.config(state="disabled")
         hw_text.pack(padx=5, pady=5)
@@ -253,9 +247,7 @@ class TrackerConfigDialog(tk.simpledialog.Dialog):
         device_frame.grid(row=1, column=0, columnspan=3, sticky="ew", padx=5, pady=5)
 
         # Device choice
-        tk.Label(device_frame, text="Processing Device:").grid(
-            row=0, column=0, padx=5, pady=5
-        )
+        tk.Label(device_frame, text="Processing Device:").grid(row=0, column=0, padx=5, pady=5)
 
         self.device_var = tk.StringVar(value="cpu")  # Default to CPU
         device_combo = ttk.Combobox(
@@ -277,13 +269,9 @@ class TrackerConfigDialog(tk.simpledialog.Dialog):
             is_valid, message = validate_device_choice(device)
             if is_valid:
                 if device == "cpu":
-                    self.device_status.config(
-                        text="✓ " + message, fg="blue"
-                    )  # Blue for CPU
+                    self.device_status.config(text="✓ " + message, fg="blue")  # Blue for CPU
                 else:
-                    self.device_status.config(
-                        text="✓ " + message, fg="green"
-                    )  # Green for GPU
+                    self.device_status.config(text="✓ " + message, fg="green")  # Green for GPU
             else:
                 self.device_status.config(text="⚠ " + message, fg="orange")
 
@@ -309,9 +297,7 @@ class TrackerConfigDialog(tk.simpledialog.Dialog):
         help_text.bind("<Leave>", self.hide_help)
 
         # Confidence
-        tk.Label(master, text="Confidence threshold:").grid(
-            row=2, column=0, padx=5, pady=5
-        )
+        tk.Label(master, text="Confidence threshold:").grid(row=2, column=0, padx=5, pady=5)
         self.conf = tk.Entry(master)
         self.conf.insert(0, "0.15")
         self.conf.grid(row=2, column=1, padx=5, pady=5)
@@ -430,9 +416,7 @@ class ModelSelectorDialog(tk.simpledialog.Dialog):
         main_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
         # Title
-        title_label = tk.Label(
-            main_frame, text="Select YOLO Model", font=("Arial", 12, "bold")
-        )
+        title_label = tk.Label(main_frame, text="Select YOLO Model", font=("Arial", 12, "bold"))
         title_label.pack(pady=(0, 10))
 
         # Create notebook for tabs
@@ -492,9 +476,7 @@ class ModelSelectorDialog(tk.simpledialog.Dialog):
         notebook.add(custom_frame, text="Custom Model")
 
         # Custom model selection
-        custom_label = tk.Label(
-            custom_frame, text="Select custom model file:", font=("Arial", 10)
-        )
+        custom_label = tk.Label(custom_frame, text="Select custom model file:", font=("Arial", 10))
         custom_label.pack(pady=(10, 5))
 
         # Frame for path display and browse button
@@ -502,14 +484,10 @@ class ModelSelectorDialog(tk.simpledialog.Dialog):
         path_frame.pack(fill="x", padx=10, pady=5)
 
         self.custom_path_var = tk.StringVar()
-        self.custom_path_entry = tk.Entry(
-            path_frame, textvariable=self.custom_path_var, width=50
-        )
+        self.custom_path_entry = tk.Entry(path_frame, textvariable=self.custom_path_var, width=50)
         self.custom_path_entry.pack(side="left", fill="x", expand=True, padx=(0, 5))
 
-        browse_button = tk.Button(
-            path_frame, text="Browse", command=self.browse_custom_model
-        )
+        browse_button = tk.Button(path_frame, text="Browse", command=self.browse_custom_model)
         browse_button.pack(side="right")
 
         # Help text for custom models
@@ -570,17 +548,13 @@ class ModelSelectorDialog(tk.simpledialog.Dialog):
                 messagebox.showwarning("Warning", "Please select a custom model file")
                 return False
             if not os.path.exists(custom_path):
-                messagebox.showerror(
-                    "Error", f"Custom model file not found: {custom_path}"
-                )
+                messagebox.showerror("Error", f"Custom model file not found: {custom_path}")
                 return False
         return True
 
     def apply(self):
         if self.selected_tab == "pretrained":
-            selection = self.pretrained_listbox.get(
-                self.pretrained_listbox.curselection()
-            )
+            selection = self.pretrained_listbox.get(self.pretrained_listbox.curselection())
             self.result = selection.split(" - ")[0]
         elif self.selected_tab == "custom":
             self.result = self.custom_path_var.get().strip()
@@ -733,9 +707,7 @@ class ClassSelectorDialog(tk.simpledialog.Dialog):
         classes_frame.pack(fill="both", expand=True, padx=10, pady=5)
 
         # Label and scrollbar for the list of classes
-        tk.Label(classes_frame, text="Available classes:").grid(
-            row=0, column=0, sticky="w"
-        )
+        tk.Label(classes_frame, text="Available classes:").grid(row=0, column=0, sticky="w")
 
         # Create a Text widget with scrollbar to display the classes
         self.classes_text = tk.Text(classes_frame, width=40, height=15)
@@ -796,9 +768,7 @@ class ClassSelectorDialog(tk.simpledialog.Dialog):
                         return False
             return True
         except ValueError:
-            messagebox.showwarning(
-                "Warning", "Invalid format. Use numbers separated by commas."
-            )
+            messagebox.showwarning("Warning", "Invalid format. Use numbers separated by commas.")
             return False
 
     def apply(self):
@@ -929,9 +899,7 @@ def get_color_palette(num_colors=200):
         v_level = 0.7 + 0.3 * ((i // 3) % 4) / 3  # Varies between 0.7 and 1.0
 
         rgb = colorsys.hsv_to_rgb(h, s_level, v_level)
-        additional_colors.append(
-            (int(rgb[2] * 255), int(rgb[1] * 255), int(rgb[0] * 255))
-        )
+        additional_colors.append((int(rgb[2] * 255), int(rgb[1] * 255), int(rgb[0] * 255)))
 
     # Combine base + additional colors
     result = base_palette.copy() + additional_colors
@@ -1072,7 +1040,7 @@ def create_merged_detection_csv(output_dir, total_frames):
         try:
             df = pd.read_csv(csv_file)
             print(f"Reading {os.path.basename(csv_file)}: {len(df)} rows")
-            
+
             # Ensure all expected columns exist
             for col in expected_columns:
                 if col not in df.columns:
@@ -1180,11 +1148,7 @@ def run_yolov11track():
     tracker_name = tracker_dialog.result
 
     # Handle model path based on whether it's a custom model or pre-trained
-    if (
-        os.path.isabs(model_name)
-        or model_name.startswith("./")
-        or model_name.startswith("../")
-    ):
+    if os.path.isabs(model_name) or model_name.startswith("./") or model_name.startswith("../"):
         # Custom model - use the path directly
         model_path = model_name
         print(f"Using custom model: {model_path}")
@@ -1224,9 +1188,7 @@ def run_yolov11track():
     print(f"\nSelected device: {device}")
     if device == "cuda":
         print(f"GPU: {torch.cuda.get_device_name(0)}")
-        print(
-            f"GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f} GB"
-        )
+        print(f"GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f} GB")
     else:
         print(f"CPU cores: {os.cpu_count()}")
 
@@ -1283,9 +1245,7 @@ def run_yolov11track():
 
     # Process each video in the directory
     for video_file in os.listdir(video_dir):
-        if video_file.endswith(
-            (".mp4", ".avi", ".mov", ".mkv", ".MP4", ".AVI", ".MOV", ".MKV")
-        ):
+        if video_file.endswith((".mp4", ".avi", ".mov", ".mkv", ".MP4", ".AVI", ".MOV", ".MKV")):
             video_path = os.path.join(video_dir, video_file)
             video_name = os.path.splitext(os.path.basename(video_path))[0]
 
@@ -1322,9 +1282,7 @@ def run_yolov11track():
             tracker_config = None
 
             # Option 1: Look for the tracker config in the Ultralytics package
-            ultralytics_path = pkg_resources.resource_filename(
-                "ultralytics", "cfg/trackers"
-            )
+            ultralytics_path = pkg_resources.resource_filename("ultralytics", "cfg/trackers")
             tracker_yaml = f"{tracker_name}.yaml"
             yaml_path = os.path.join(ultralytics_path, tracker_yaml)
 
@@ -1374,11 +1332,7 @@ def run_yolov11track():
 
                 # For OBB models result.boxes might be None.
                 # Try to use result.obbs if available:
-                boxes = (
-                    result.boxes
-                    if result.boxes is not None
-                    else getattr(result, "obbs", None)
-                )
+                boxes = result.boxes if result.boxes is not None else getattr(result, "obbs", None)
 
                 if boxes is None:
                     print("No bounding boxes found in this frame.")
@@ -1392,9 +1346,7 @@ def run_yolov11track():
                     conf = box.conf[0].item()
                     raw_id = int(box.id[0]) if box.id is not None else -1
                     class_id = int(box.cls[0].item()) if box.cls is not None else -1
-                    label = (
-                        model.names[class_id] if class_id in model.names else "unknown"
-                    )
+                    label = model.names[class_id] if class_id in model.names else "unknown"
 
                     # Skip invalid IDs
                     if raw_id < 0:
@@ -1464,9 +1416,7 @@ def run_yolov11track():
             except Exception as e:
                 print(f"Error in video conversion: {str(e)}")
 
-            print(
-                f"Processing completed for {video_file}. Results saved in '{output_dir}'."
-            )
+            print(f"Processing completed for {video_file}. Results saved in '{output_dir}'.")
 
             # Create combined wide CSV and merged wide per-label CSV(s) after processing each video
             combined_csv = create_combined_detection_csv(output_dir)

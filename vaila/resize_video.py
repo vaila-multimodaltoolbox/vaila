@@ -30,15 +30,14 @@ Dependencies:
 - pandas (for coordinates conversion)
 """
 
-import os
-import cv2
-import tkinter as tk
-from tkinter import filedialog, Button, Label, Frame, StringVar, messagebox, Radiobutton
-import threading
-from datetime import datetime
-import numpy as np
 import json
-import glob
+import os
+import threading
+import tkinter as tk
+from datetime import datetime
+from tkinter import Button, Frame, Label, StringVar, filedialog, messagebox
+
+import cv2
 import pandas as pd
 from rich import print
 
@@ -70,9 +69,7 @@ def get_video_info(video_path):
         raise e
 
 
-def resize_with_opencv(
-    input_file, output_file, scale_factor, roi=None, progress_callback=None
-):
+def resize_with_opencv(input_file, output_file, scale_factor, roi=None, progress_callback=None):
     """
     Resize video using OpenCV, optionally cropping to a region of interest.
 
@@ -137,9 +134,7 @@ def resize_with_opencv(
         print(message)
 
         # Define codec and create VideoWriter object
-        fourcc = cv2.VideoWriter.fourcc(
-            *"XVID"
-        )  # XVID is more reliable across platforms
+        fourcc = cv2.VideoWriter.fourcc(*"XVID")  # XVID is more reliable across platforms
         out = cv2.VideoWriter(output_file, fourcc, fps, (new_width, new_height))
 
         # Process the video frame by frame
@@ -246,9 +241,7 @@ def convert_coordinates_by_format(df, metadata, format_type, progress_callback=N
                     progress_callback(f"Converted column {col} to float64")
             except Exception as e:
                 if progress_callback:
-                    progress_callback(
-                        f"Warning: Could not convert column {col}: {str(e)}"
-                    )
+                    progress_callback(f"Warning: Could not convert column {col}: {str(e)}")
 
     # Debug the format type explicitly
     if progress_callback:
@@ -261,24 +254,16 @@ def convert_coordinates_by_format(df, metadata, format_type, progress_callback=N
             progress_callback(f"Found YOLO ID columns: {yolo_id_cols}")
 
         # Check for typical MediaPipe columns
-        mediapipe_cols = [
-            col for col in df.columns if col.endswith("_x") or col.endswith("_y")
-        ]
+        mediapipe_cols = [col for col in df.columns if col.endswith("_x") or col.endswith("_y")]
         if mediapipe_cols:
             progress_callback(
                 f"Found MediaPipe-like columns: {mediapipe_cols[:5]}"
-                + (
-                    f" (showing 5/{len(mediapipe_cols)})"
-                    if len(mediapipe_cols) > 5
-                    else ""
-                )
+                + (f" (showing 5/{len(mediapipe_cols)})" if len(mediapipe_cols) > 5 else "")
             )
 
         # Check for potential vailá columns
         vaila_cols = [
-            col
-            for col in df.columns
-            if col.lower().endswith("x") or col.lower().endswith("y")
+            col for col in df.columns if col.lower().endswith("x") or col.lower().endswith("y")
         ]
         vaila_cols = [col for col in vaila_cols if col not in mediapipe_cols]
         if vaila_cols:
@@ -289,9 +274,7 @@ def convert_coordinates_by_format(df, metadata, format_type, progress_callback=N
         if progress_callback:
             progress_callback("Processing using MediaPipe format...")
 
-        coord_columns = [
-            col for col in df.columns if col.endswith("_x") or col.endswith("_y")
-        ]
+        coord_columns = [col for col in df.columns if col.endswith("_x") or col.endswith("_y")]
         if progress_callback:
             progress_callback(f"Found {len(coord_columns)} coordinate columns")
 
@@ -304,9 +287,7 @@ def convert_coordinates_by_format(df, metadata, format_type, progress_callback=N
                 if y_col in df.columns:
                     for idx, row in df.iterrows():
                         if pd.notna(row[x_col]) and pd.notna(row[y_col]):
-                            orig_x, orig_y = convert_coordinates(
-                                row[x_col], row[y_col], metadata
-                            )
+                            orig_x, orig_y = convert_coordinates(row[x_col], row[y_col], metadata)
                             converted_df.at[idx, x_col] = orig_x
                             converted_df.at[idx, y_col] = orig_y
                     processed += 1
@@ -339,15 +320,8 @@ def convert_coordinates_by_format(df, metadata, format_type, progress_callback=N
                     y_val = row[y_col]
 
                     # Handle different possible types of missing values
-                    if (
-                        pd.notna(x_val)
-                        and pd.notna(y_val)
-                        and x_val != ""
-                        and y_val != ""
-                    ):
-                        orig_x, orig_y = convert_coordinates(
-                            float(x_val), float(y_val), metadata
-                        )
+                    if pd.notna(x_val) and pd.notna(y_val) and x_val != "" and y_val != "":
+                        orig_x, orig_y = convert_coordinates(float(x_val), float(y_val), metadata)
                         converted_df.at[idx, x_col] = orig_x
                         converted_df.at[idx, y_col] = orig_y
 
@@ -376,9 +350,7 @@ def convert_coordinates_by_format(df, metadata, format_type, progress_callback=N
 
             if y_col:
                 if progress_callback:
-                    progress_callback(
-                        f"Processing coordinate pair: {x_col} and {y_col}"
-                    )
+                    progress_callback(f"Processing coordinate pair: {x_col} and {y_col}")
 
                 for idx, row in df.iterrows():
                     if pd.notna(row[x_col]) and pd.notna(row[y_col]):
@@ -424,13 +396,11 @@ def convert_mediapipe_coordinates(
     """
     try:
         # Load metadata
-        with open(metadata_path, "r") as f:
+        with open(metadata_path) as f:
             metadata = json.load(f)
 
         if progress_callback:
-            progress_callback(
-                f"Loaded metadata from: {os.path.basename(metadata_path)}"
-            )
+            progress_callback(f"Loaded metadata from: {os.path.basename(metadata_path)}")
 
         # Load CSV file
         df = pd.read_csv(pixel_csv_path)
@@ -440,9 +410,7 @@ def convert_mediapipe_coordinates(
             progress_callback(f"Found {len(df)} frames")
 
         # Convert coordinates based on format
-        converted_df = convert_coordinates_by_format(
-            df, metadata, format_type, progress_callback
-        )
+        converted_df = convert_coordinates_by_format(df, metadata, format_type, progress_callback)
 
         # Save converted DataFrame
         converted_df.to_csv(output_csv_path, index=False)
@@ -684,18 +652,16 @@ def batch_resize_videos():
     # Input directory selection
     Label(dir_frame, text="Input Directory:").grid(row=0, column=0, sticky=tk.W)
     Label(dir_frame, textvariable=input_dir_var, width=40).grid(row=0, column=1, padx=5)
-    Button(
-        dir_frame, text="Browse", command=lambda: select_input_dir(input_dir_var)
-    ).grid(row=0, column=2, padx=5)
+    Button(dir_frame, text="Browse", command=lambda: select_input_dir(input_dir_var)).grid(
+        row=0, column=2, padx=5
+    )
 
     # Output directory selection
     Label(dir_frame, text="Output Directory:").grid(row=1, column=0, sticky=tk.W)
-    Label(dir_frame, textvariable=output_dir_var, width=40).grid(
-        row=1, column=1, padx=5
+    Label(dir_frame, textvariable=output_dir_var, width=40).grid(row=1, column=1, padx=5)
+    Button(dir_frame, text="Browse", command=lambda: select_output_dir(output_dir_var)).grid(
+        row=1, column=2, padx=5
     )
-    Button(
-        dir_frame, text="Browse", command=lambda: select_output_dir(output_dir_var)
-    ).grid(row=1, column=2, padx=5)
 
     # Scale factor selection
     scale_frame = Frame(root, padx=10, pady=10)
@@ -746,8 +712,6 @@ converting MediaPipe coordinates back to the original video dimensions."""
             status_var,
             root,
         ),
-        bg="#4CAF50",
-        fg="white",
         font=("Arial", 11, "bold"),
         width=20,
         height=2,
@@ -764,8 +728,6 @@ converting MediaPipe coordinates back to the original video dimensions."""
             status_var,
             root,
         ),
-        bg="#2196F3",
-        fg="white",
         font=("Arial", 11, "bold"),
         width=20,
         height=2,
@@ -776,8 +738,6 @@ converting MediaPipe coordinates back to the original video dimensions."""
         buttons_frame,
         text="Revert Coordinates to Original Video (MediaPipe, YOLO or vailá)",
         command=lambda: revert_coordinates_gui(root, status_var),
-        bg="#FFC107",
-        fg="black",
         font=("Arial", 11),
         width=50,
         height=3,
@@ -833,7 +793,6 @@ converting MediaPipe coordinates back to the original video dimensions."""
             format_buttons_frame,
             text="MediaPipe Format",
             command=lambda: set_format_and_highlight(0, "mediapipe"),
-            bg="#E3F2FD",
             width=20,
         ).pack(side=tk.LEFT, padx=5)
 
@@ -856,15 +815,11 @@ converting MediaPipe coordinates back to the original video dimensions."""
             selected_format_type[0] = format_type
             update_progress(f"Format selected: {format_type}")
 
-            # Atualizar os botões - use widget property access with dictionary style
+            # Reset all buttons to system default (no custom colors)
             buttons = format_buttons_frame.winfo_children()
             for i, btn in enumerate(buttons):
-                if i == format_num:
-                    btn["bg"] = "#4CAF50"
-                    btn["fg"] = "white"  # Destacar o selecionado
-                else:
-                    btn["bg"] = "SystemButtonFace"
-                    btn["fg"] = "black"  # Restaurar os outros
+                btn["bg"] = ""  # Empty string resets to system default
+                btn["fg"] = ""  # Empty string resets to system default
 
         # Progress text
         progress_frame = Frame(convert_window, padx=10, pady=10)
@@ -889,12 +844,8 @@ converting MediaPipe coordinates back to the original video dimensions."""
         file_frame.pack(fill=tk.X)
 
         # Metadata JSON file selection
-        Label(file_frame, text="1. Select Metadata JSON:").grid(
-            row=0, column=0, sticky=tk.W
-        )
-        Label(file_frame, textvariable=metadata_path_var, width=40).grid(
-            row=0, column=1, padx=5
-        )
+        Label(file_frame, text="1. Select Metadata JSON:").grid(row=0, column=0, sticky=tk.W)
+        Label(file_frame, textvariable=metadata_path_var, width=40).grid(row=0, column=1, padx=5)
         Button(
             file_frame,
             text="Browse",
@@ -902,12 +853,8 @@ converting MediaPipe coordinates back to the original video dimensions."""
         ).grid(row=0, column=2, padx=5)
 
         # Input CSV file selection (renamed from MediaPipe-specific label)
-        Label(file_frame, text="2. Select Coordinates CSV File:").grid(
-            row=1, column=0, sticky=tk.W
-        )
-        Label(file_frame, textvariable=pixel_csv_path_var, width=40).grid(
-            row=1, column=1, padx=5
-        )
+        Label(file_frame, text="2. Select Coordinates CSV File:").grid(row=1, column=0, sticky=tk.W)
+        Label(file_frame, textvariable=pixel_csv_path_var, width=40).grid(row=1, column=1, padx=5)
         Button(
             file_frame,
             text="Browse",
@@ -915,12 +862,8 @@ converting MediaPipe coordinates back to the original video dimensions."""
         ).grid(row=1, column=2, padx=5)
 
         # Output CSV file selection
-        Label(file_frame, text="3. Output Reverted CSV:").grid(
-            row=2, column=0, sticky=tk.W
-        )
-        Label(file_frame, textvariable=output_path_var, width=40).grid(
-            row=2, column=1, padx=5
-        )
+        Label(file_frame, text="3. Output Reverted CSV:").grid(row=2, column=0, sticky=tk.W)
+        Label(file_frame, textvariable=output_path_var, width=40).grid(row=2, column=1, padx=5)
         Button(
             file_frame,
             text="Browse",
@@ -939,8 +882,6 @@ converting MediaPipe coordinates back to the original video dimensions."""
                 status_var,
                 convert_window,
             ),
-            bg="#FF5722",
-            fg="white",
             font=("Arial", 11, "bold"),
             width=20,
             height=3,
@@ -953,9 +894,7 @@ converting MediaPipe coordinates back to the original video dimensions."""
             )
             if file_path:
                 var.set(file_path)
-                update_progress(
-                    f"Selected metadata file: {os.path.basename(file_path)}"
-                )
+                update_progress(f"Selected metadata file: {os.path.basename(file_path)}")
 
         def select_pixel_csv_file(var):
             file_path = filedialog.askopenfilename(
@@ -964,9 +903,7 @@ converting MediaPipe coordinates back to the original video dimensions."""
             )
             if file_path:
                 var.set(file_path)
-                update_progress(
-                    f"Selected MediaPipe CSV file: {os.path.basename(file_path)}"
-                )
+                update_progress(f"Selected MediaPipe CSV file: {os.path.basename(file_path)}")
 
         def select_output_csv_file(var):
             file_path = filedialog.asksaveasfilename(
@@ -976,9 +913,7 @@ converting MediaPipe coordinates back to the original video dimensions."""
             )
             if file_path:
                 var.set(file_path)
-                update_progress(
-                    f"Output will be saved to: {os.path.basename(file_path)}"
-                )
+                update_progress(f"Output will be saved to: {os.path.basename(file_path)}")
 
         def start_conversion_with_explicit_type(
             metadata_path,
@@ -1007,12 +942,8 @@ converting MediaPipe coordinates back to the original video dimensions."""
             def conversion_thread():
                 try:
                     progress_callback("=" * 50)
-                    progress_callback(
-                        f"Starting coordinate conversion with format: {format_type}"
-                    )
-                    status_var.set(
-                        f"Converting coordinates using {format_type} format..."
-                    )
+                    progress_callback(f"Starting coordinate conversion with format: {format_type}")
+                    status_var.set(f"Converting coordinates using {format_type} format...")
 
                     # Run the conversion with the selected format type
                     result = convert_mediapipe_coordinates(
@@ -1039,9 +970,7 @@ converting MediaPipe coordinates back to the original video dimensions."""
                             ),
                         )
                     else:
-                        progress_callback(
-                            "\nConversion failed. See error messages above."
-                        )
+                        progress_callback("\nConversion failed. See error messages above.")
                         status_var.set("Coordinate conversion failed")
 
                 except Exception as e:
@@ -1120,7 +1049,7 @@ converting MediaPipe coordinates back to the original video dimensions."""
                 update_progress(f"ROI: x={x}, y={y}, width={w}, height={h}")
                 update_progress(f"Scale: {scale_factor}x")
 
-                status_var.set(f"Processing video with ROI...")
+                status_var.set("Processing video with ROI...")
 
                 # Process the video
                 metadata = resize_with_opencv(
@@ -1130,16 +1059,10 @@ converting MediaPipe coordinates back to the original video dimensions."""
                 if metadata:
                     update_progress(f"Success! Output saved to: {output_path}")
                     metadata_file = os.path.splitext(output_path)[0] + "_metadata.json"
-                    update_progress(
-                        f"Metadata saved to: {os.path.basename(metadata_file)}"
-                    )
+                    update_progress(f"Metadata saved to: {os.path.basename(metadata_file)}")
 
-                    update_progress(
-                        "\nTo convert MediaPipe coordinates back to original video:"
-                    )
-                    update_progress(
-                        "Click 'Convert MediaPipe Coordinates' button after processing"
-                    )
+                    update_progress("\nTo convert MediaPipe coordinates back to original video:")
+                    update_progress("Click 'Convert MediaPipe Coordinates' button after processing")
 
                     status_var.set("Crop and resize completed successfully")
                 else:
@@ -1147,9 +1070,7 @@ converting MediaPipe coordinates back to the original video dimensions."""
                     status_var.set("Failed to process video")
 
                 # Add close button
-                Button(
-                    progress_window, text="Close", command=progress_window.destroy
-                ).pack(pady=10)
+                Button(progress_window, text="Close", command=progress_window.destroy).pack(pady=10)
 
             except Exception as e:
                 error_msg = f"Error: {str(e)}"
@@ -1161,9 +1082,7 @@ converting MediaPipe coordinates back to the original video dimensions."""
         thread.daemon = True
         thread.start()
 
-    def start_batch_processing(
-        input_dir, output_dir, scale_factor, use_roi, status_var, root
-    ):
+    def start_batch_processing(input_dir, output_dir, scale_factor, use_roi, status_var, root):
         """Start batch processing videos"""
         if input_dir == "No directory selected" or not os.path.exists(input_dir):
             messagebox.showerror("Error", "Please select a valid input directory")
@@ -1192,9 +1111,7 @@ converting MediaPipe coordinates back to the original video dimensions."""
             try:
                 # Create timestamp directory
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                batch_output_dir = os.path.join(
-                    output_dir, f"resized_videos_{timestamp}"
-                )
+                batch_output_dir = os.path.join(output_dir, f"resized_videos_{timestamp}")
                 os.makedirs(batch_output_dir, exist_ok=True)
 
                 # Find video files
@@ -1211,8 +1128,7 @@ converting MediaPipe coordinates back to the original video dimensions."""
                 video_files = [
                     os.path.join(input_dir, f)
                     for f in os.listdir(input_dir)
-                    if os.path.isfile(os.path.join(input_dir, f))
-                    and f.endswith(video_extensions)
+                    if os.path.isfile(os.path.join(input_dir, f)) and f.endswith(video_extensions)
                 ]
 
                 if not video_files:
@@ -1232,9 +1148,7 @@ converting MediaPipe coordinates back to the original video dimensions."""
                         output_filename = f"{name}_{scale_factor}x{ext}"
                         output_path = os.path.join(batch_output_dir, output_filename)
 
-                        update_progress(
-                            f"\n[{i}/{len(video_files)}] Processing: {input_filename}"
-                        )
+                        update_progress(f"\n[{i}/{len(video_files)}] Processing: {input_filename}")
 
                         # Process with OpenCV (no ROI for batch mode)
                         metadata = resize_with_opencv(
@@ -1247,9 +1161,7 @@ converting MediaPipe coordinates back to the original video dimensions."""
 
                         if metadata:
                             update_progress(f"  Completed: {output_filename}")
-                            metadata_file = (
-                                os.path.splitext(output_path)[0] + "_metadata.json"
-                            )
+                            metadata_file = os.path.splitext(output_path)[0] + "_metadata.json"
                             update_progress(
                                 f"  Metadata saved to: {os.path.basename(metadata_file)}"
                             )
@@ -1263,9 +1175,7 @@ converting MediaPipe coordinates back to the original video dimensions."""
                 status_var.set("Processing complete!")
 
                 # Add close button
-                Button(
-                    progress_window, text="Close", command=progress_window.destroy
-                ).pack(pady=10)
+                Button(progress_window, text="Close", command=progress_window.destroy).pack(pady=10)
 
             except Exception as e:
                 update_progress(f"Error in batch processing: {str(e)}")

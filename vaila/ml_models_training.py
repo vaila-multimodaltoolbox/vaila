@@ -53,41 +53,40 @@
 # For more details, visit: https://www.gnu.org/licenses/lgpl-3.0.html
 
 # =============================================================================
-import os
 import json
+import os
 import pickle
+from datetime import datetime
+from tkinter import Tk, filedialog
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import KFold
-from sklearn.preprocessing import StandardScaler
-from sklearn.neighbors import KNeighborsRegressor
-from sklearn.neural_network import MLPRegressor
-from sklearn.svm import SVR
-from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+import seaborn as sns
+from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor
 from sklearn.linear_model import LinearRegression
-from xgboost import XGBRegressor
 from sklearn.metrics import (
-    mean_squared_error,
-    mean_absolute_error,
-    r2_score,
     explained_variance_score,
     max_error,
+    mean_absolute_error,
+    mean_squared_error,
     median_absolute_error,
+    r2_score,
 )
-from tkinter import Tk, filedialog, messagebox
+from sklearn.model_selection import KFold
+from sklearn.neighbors import KNeighborsRegressor
+from sklearn.neural_network import MLPRegressor
+from sklearn.preprocessing import StandardScaler
+from sklearn.svm import SVR
 from tqdm import tqdm  # For progress bar
-from datetime import datetime
-import matplotlib.pyplot as plt
-import seaborn as sns
+from xgboost import XGBRegressor
 
 
 # Function to calculate metrics
 def calculate_metrics(y_true, y_pred):
     epsilon = 1e-10  # To avoid division by zero
     interval_tolerance = 0.1  # 10% tolerance
-    within_tolerance = np.abs(y_true - y_pred) <= interval_tolerance * np.abs(
-        y_true + epsilon
-    )
+    within_tolerance = np.abs(y_true - y_pred) <= interval_tolerance * np.abs(y_true + epsilon)
     accuracy_within_tolerance = np.mean(within_tolerance) * 100  # Accuracy percentage
     return {
         "MSE": mean_squared_error(y_true, y_pred),
@@ -95,8 +94,7 @@ def calculate_metrics(y_true, y_pred):
         "MAE": mean_absolute_error(y_true, y_pred),
         "MedAE": median_absolute_error(y_true, y_pred),
         "Max_Error": max_error(y_true, y_pred),
-        "RAE": np.sum(np.abs(y_true - y_pred))
-        / np.sum(np.abs(y_true - np.mean(y_true))),
+        "RAE": np.sum(np.abs(y_true - y_pred)) / np.sum(np.abs(y_true - np.mean(y_true))),
         "Accuracy(%)": accuracy_within_tolerance,  # Percentage of predictions within the interval
         "R²": r2_score(y_true, y_pred),
         "Explained_Variance": explained_variance_score(y_true, y_pred),
@@ -104,9 +102,7 @@ def calculate_metrics(y_true, y_pred):
 
 
 # Function to open a file dialog and select a file
-def select_file(
-    title="Select a File", filetypes=(("CSV Files", "*.csv"), ("All Files", "*.*"))
-):
+def select_file(title="Select a File", filetypes=(("CSV Files", "*.csv"), ("All Files", "*.*"))):
     root = Tk()
     root.withdraw()  # Hide the main window
     file_path = filedialog.askopenfilename(title=title, filetypes=filetypes)
@@ -132,9 +128,7 @@ def plot_metrics(metrics_df, target_name, save_dir):
     num_models = len(model_names)
 
     # Generate a color palette with enough colors for all models
-    palette = sns.color_palette(
-        "husl", num_models
-    )  # You can change "husl" to other palettes
+    palette = sns.color_palette("husl", num_models)  # You can change "husl" to other palettes
 
     for metric in metrics:
         plt.figure(figsize=(10, 6))
@@ -145,9 +139,7 @@ def plot_metrics(metrics_df, target_name, save_dir):
 
         for i, model in enumerate(model_names):
             values = metrics_df[metrics_df["Model"] == model][metric].values
-            plt.bar(
-                model, values, color=palette[i], label=model
-            )  # Use color from palette
+            plt.bar(model, values, color=palette[i], label=model)  # Use color from palette
 
         plt.title(f"{metric} for {target_name}")
         plt.ylabel(metric)
@@ -306,9 +298,7 @@ def run_ml_models_training():
                 y_fold_pred = model.predict(X_fold_test)
                 cv_results.append(calculate_metrics(y_fold_test, y_fold_pred))
 
-            averaged_metrics = {
-                key: np.mean([m[key] for m in cv_results]) for key in cv_results[0]
-            }
+            averaged_metrics = {key: np.mean([m[key] for m in cv_results]) for key in cv_results[0]}
             cv_metrics.append({"Model": model_name, **averaged_metrics})
 
             # Train final model with all data after cross-validation
@@ -326,7 +316,7 @@ def run_ml_models_training():
                 "mean": scaler.mean_.tolist(),
                 "scale": scaler.scale_.tolist(),
             }
-            scaler_path = os.path.join(target_output_path, f"scaler_params.json")
+            scaler_path = os.path.join(target_output_path, "scaler_params.json")
             os.makedirs(os.path.dirname(scaler_path), exist_ok=True)
             with open(scaler_path, "w") as f:
                 json.dump(scaler_params, f)
@@ -342,9 +332,7 @@ def run_ml_models_training():
 
         # Plot the metrics and save them as PNGs
         metrics_df = pd.read_csv(metrics_file)
-        plot_metrics(
-            metrics_df, target, plots_dir
-        )  # Pass target_metrics_path as save_dir
+        plot_metrics(metrics_df, target, plots_dir)  # Pass target_metrics_path as save_dir
 
     print("\nTraining completed.")
 

@@ -33,14 +33,15 @@ python vaila_datdistort.py
 ================================================================================
 """
 
+import os
+import tkinter as tk
+from datetime import datetime
+from tkinter import filedialog
+
 import cv2
 import numpy as np
 import pandas as pd
-import os
 from rich import print
-import tkinter as tk
-from tkinter import filedialog
-from datetime import datetime
 
 
 def load_distortion_parameters(csv_path):
@@ -160,9 +161,7 @@ def process_dat_file(input_path, output_path, parameters, image_size=(1920, 1080
 
         # Undistort valid points
         try:
-            undistorted_points = undistort_points(
-                points, camera_matrix, dist_coeffs, image_size
-            )
+            undistorted_points = undistort_points(points, camera_matrix, dist_coeffs, image_size)
 
             # Start with a copy of the original row to preserve all columns
             new_row = row.to_dict()
@@ -176,11 +175,7 @@ def process_dat_file(input_path, output_path, parameters, image_size=(1920, 1080
                     orig_y = row[y_col]
 
                     # Only update if original point was valid
-                    if (
-                        pd.notna(orig_x)
-                        and pd.notna(orig_y)
-                        and not (orig_x == 0 and orig_y == 0)
-                    ):
+                    if pd.notna(orig_x) and pd.notna(orig_y) and not (orig_x == 0 and orig_y == 0):
                         new_row[x_col] = undistorted_points[point_idx][0]
                         new_row[y_col] = undistorted_points[point_idx][1]
                         point_idx += 1

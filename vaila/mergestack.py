@@ -68,9 +68,10 @@ If you use this script, please cite the following paper:
 }
 """
 
-import pandas as pd
-from tkinter import filedialog, messagebox
 import os
+from tkinter import filedialog, messagebox
+
+import pandas as pd
 
 
 def select_file(prompt):

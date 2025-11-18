@@ -36,16 +36,17 @@ python getpixelvideo.py
 ================================================================================
 """
 
+import io
 import os
-from pathlib import Path
-from rich import print
 
 # Configure SDL environment variables BEFORE importing pygame
 # to prevent EGL/OpenGL warnings on Linux systems
 import platform
 import sys
-import io
 from contextlib import redirect_stderr
+from pathlib import Path
+
+from rich import print
 
 if platform.system() == "Linux":
     os.environ["SDL_VIDEODRIVER"] = "x11"
@@ -59,41 +60,21 @@ if platform.system() == "Linux":
     # These warnings come from both pygame and cv2 on some Linux systems
     f = io.StringIO()
     with redirect_stderr(f):
-        import pygame
         import cv2
+        import pygame
 
     # Import cv2 again normally to ensure it's available in the global scope
     import cv2
 else:
-    import pygame
     import cv2
-import pandas as pd
-import numpy as np
+    import pygame
 import os
 from datetime import datetime
 
-# Add current directory to path to import native_file_dialog
-try:
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-except NameError:
-    # If __file__ is not defined, use the current working directory
-    current_dir = os.getcwd()
+import numpy as np
+import pandas as pd
 
-if current_dir not in sys.path:
-    sys.path.insert(0, current_dir)
-
-try:
-    from native_file_dialog import open_native_file_dialog, open_yes_no_dialog
-except ImportError:
-    # Fallback: try to import from the vaila directory
-    vaila_dir = (
-        os.path.join(current_dir, "vaila")
-        if "vaila" not in current_dir
-        else current_dir
-    )
-    if vaila_dir not in sys.path:
-        sys.path.insert(0, vaila_dir)
-    from native_file_dialog import open_native_file_dialog, open_yes_no_dialog
+# Removed native_file_dialog imports - now using Tkinter directly for all dialogs
 
 
 def get_color_for_id(marker_id):
@@ -111,6 +92,369 @@ def get_color_for_id(marker_id):
         (128, 255, 0),  # Lime
     ]
     return colors[marker_id % len(colors)]
+
+
+# Removed pygame_file_dialog - now using Tkinter directly for file dialogs
+# Tkinter dialogs block Pygame events to avoid conflicts
+def _removed_pygame_file_dialog(
+    initial_dir=None, file_extensions=None, restore_screen=None, restore_size=None
+):
+    """
+    Native pygame file dialog for selecting files.
+    Works seamlessly within pygame without conflicts.
+
+    Args:
+        initial_dir: Starting directory (defaults to home or current directory)
+        file_extensions: List of extensions to filter (e.g., ['.csv'])
+        restore_screen: Screen surface to restore after dialog (optional)
+        restore_size: Tuple (width, height) to restore window size (optional)
+
+    Returns:
+        Selected file path or None if cancelled
+    """
+    if file_extensions is None:
+        file_extensions = [".csv"]
+
+    # Normalize extensions (ensure they start with .)
+    file_extensions = [ext if ext.startswith(".") else f".{ext}" for ext in file_extensions]
+    file_extensions_lower = [ext.lower() for ext in file_extensions]
+
+    # Determine initial directory
+    if initial_dir is None:
+        # Try common locations
+        for test_dir in [os.path.expanduser("~"), os.getcwd(), "/media", "/home"]:
+            if os.path.exists(test_dir) and os.path.isdir(test_dir):
+                initial_dir = test_dir
+                break
+        if initial_dir is None:
+            initial_dir = os.getcwd()
+
+    current_dir = os.path.abspath(initial_dir)
+    selected_file = None
+    scroll_offset = 0
+    selected_index = 0
+
+    # Save current display mode if provided
+    if restore_size:
+        old_size = restore_size
+    else:
+        old_size = (
+            pygame.display.get_surface().get_size() if pygame.display.get_init() else (800, 600)
+        )
+
+    # Create dialog window
+    dialog_width = 800
+    dialog_height = 600
+    dialog_screen = pygame.display.set_mode((dialog_width, dialog_height))
+    pygame.display.set_caption("Select File")
+
+    font = pygame.font.Font(None, 24)
+    small_font = pygame.font.Font(None, 20)
+
+    running = True
+    text_input = ""
+    input_active = False
+
+    while running:
+        # Get directory contents
+        try:
+            items = []
+            # Add parent directory option
+            if current_dir != os.path.dirname(current_dir):
+                items.append(("..", True))  # True = is directory
+
+            # Get files and directories
+            try:
+                dir_items = sorted(os.listdir(current_dir))
+            except PermissionError:
+                dir_items = []
+
+            for item in dir_items:
+                item_path = os.path.join(current_dir, item)
+                try:
+                    is_dir = os.path.isdir(item_path)
+                    # Show directories and files matching extensions
+                    if is_dir or any(item.lower().endswith(ext) for ext in file_extensions_lower):
+                        items.append((item, is_dir))
+                except (OSError, PermissionError):
+                    continue
+        except (OSError, PermissionError):
+            items = []
+
+        # Filter visible items based on scroll
+        visible_items = items[scroll_offset : scroll_offset + 20]
+
+        # Draw dialog
+        dialog_screen.fill((40, 40, 40))
+
+        # Draw title
+        title = font.render("Select CSV File", True, (255, 255, 255))
+        dialog_screen.blit(title, (10, 10))
+
+        # Draw current path
+        path_text = small_font.render(f"Path: {current_dir}", True, (200, 200, 200))
+        dialog_screen.blit(path_text, (10, 40))
+
+        # Draw path input field
+        input_rect = pygame.Rect(10, 70, dialog_width - 20, 30)
+        pygame.draw.rect(dialog_screen, (60, 60, 60), input_rect)
+        if input_active:
+            pygame.draw.rect(dialog_screen, (100, 150, 255), input_rect, 2)
+        else:
+            pygame.draw.rect(dialog_screen, (100, 100, 100), input_rect, 1)
+
+        input_surface = small_font.render(text_input or current_dir, True, (255, 255, 255))
+        dialog_screen.blit(input_surface, (input_rect.x + 5, input_rect.y + 5))
+
+        # Draw file list
+        list_y = 110
+        list_height = dialog_height - 200
+        list_rect = pygame.Rect(10, list_y, dialog_width - 20, list_height)
+        pygame.draw.rect(dialog_screen, (30, 30, 30), list_rect)
+
+        # Draw scrollbar if needed
+        if len(items) > 20:
+            scrollbar_height = int((20 / len(items)) * list_height)
+            scrollbar_y = list_y + int((scroll_offset / len(items)) * list_height)
+            scrollbar_rect = pygame.Rect(dialog_width - 30, scrollbar_y, 20, scrollbar_height)
+            pygame.draw.rect(dialog_screen, (100, 100, 100), scrollbar_rect)
+
+        # Draw items
+        item_height = 25
+        for i, (item, is_dir) in enumerate(visible_items):
+            y_pos = list_y + 5 + (i * item_height)
+            if y_pos + item_height > list_y + list_height:
+                break
+
+            # Draw background for item
+            item_rect = pygame.Rect(12, y_pos - 2, dialog_width - 44, item_height)
+            if is_dir:
+                # Directory background (darker blue)
+                bg_color = (40, 60, 80)
+            else:
+                # File background (darker gray)
+                bg_color = (30, 30, 30)
+
+            # Highlight selected item with brighter color
+            if i == selected_index - scroll_offset:
+                if is_dir:
+                    bg_color = (80, 120, 200)  # Bright blue for selected directory
+                else:
+                    bg_color = (60, 60, 100)  # Brighter for selected file
+
+            pygame.draw.rect(dialog_screen, bg_color, item_rect)
+
+            # Draw icon (directory or file) - make directories more prominent
+            if is_dir:
+                icon_text = "📁"
+                color = (150, 220, 255)
+            else:
+                icon_text = "📄"
+                color = (200, 200, 200)
+
+            # Try to render emoji, fallback to text if not supported
+            try:
+                icon = small_font.render(icon_text, True, color)
+            except:
+                icon_text = "[DIR]" if is_dir else "[FILE]"
+                icon = small_font.render(icon_text, True, color)
+            dialog_screen.blit(icon, (15, y_pos))
+
+            # Draw item name - directories in brighter color
+            if is_dir:
+                name_color = (150, 220, 255)  # Bright blue for directories
+                # Add "/" suffix to make it clearer it's a directory
+                display_name = item + "/" if item != ".." else item
+            else:
+                name_color = (255, 255, 255)  # White for files
+                display_name = item
+
+            name_surface = small_font.render(display_name, True, name_color)
+            dialog_screen.blit(name_surface, (100, y_pos))
+
+        # Draw buttons
+        button_y = dialog_height - 60
+        up_button = pygame.Rect(10, button_y, 60, 35)
+        open_button = pygame.Rect(dialog_width - 200, button_y, 80, 35)
+        cancel_button = pygame.Rect(dialog_width - 100, button_y, 80, 35)
+
+        # Up button (only if not at root)
+        parent_dir = os.path.dirname(current_dir)
+        if parent_dir != current_dir:  # Not at filesystem root
+            pygame.draw.rect(dialog_screen, (80, 80, 150), up_button)
+            up_text = font.render("↑ Up", True, (255, 255, 255))
+            dialog_screen.blit(up_text, (up_button.x + 8, up_button.y + 8))
+
+        pygame.draw.rect(dialog_screen, (50, 150, 50), open_button)
+        pygame.draw.rect(dialog_screen, (150, 50, 50), cancel_button)
+
+        open_text = font.render("Open", True, (255, 255, 255))
+        cancel_text = font.render("Cancel", True, (255, 255, 255))
+        dialog_screen.blit(open_text, (open_button.x + 15, open_button.y + 8))
+        dialog_screen.blit(cancel_text, (cancel_button.x + 10, cancel_button.y + 8))
+
+        # Draw instructions
+        instructions = small_font.render(
+            "Click folders to navigate | ↑↓: Navigate | Enter: Open | ESC: Cancel",
+            True,
+            (150, 150, 150),
+        )
+        dialog_screen.blit(instructions, (10, dialog_height - 25))
+
+        pygame.display.flip()
+
+        # Handle events
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+                selected_file = None
+
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    running = False
+                    selected_file = None
+
+                elif event.key == pygame.K_RETURN or event.key == pygame.K_KP_ENTER:
+                    if visible_items and selected_index - scroll_offset < len(visible_items):
+                        item, is_dir = visible_items[selected_index - scroll_offset]
+                        if is_dir:
+                            # Enter directory
+                            if item == "..":
+                                current_dir = os.path.dirname(current_dir)
+                            else:
+                                current_dir = os.path.join(current_dir, item)
+                            selected_index = 0
+                            scroll_offset = 0
+                            text_input = ""
+                        else:
+                            # Select file
+                            selected_file = os.path.join(current_dir, item)
+                            running = False
+                    elif text_input and os.path.isfile(text_input):
+                        selected_file = text_input
+                        running = False
+
+                elif event.key == pygame.K_UP:
+                    if selected_index > 0:
+                        selected_index -= 1
+                        if selected_index < scroll_offset:
+                            scroll_offset = max(0, selected_index)
+
+                elif event.key == pygame.K_DOWN:
+                    if selected_index < len(items) - 1:
+                        selected_index += 1
+                        if selected_index - scroll_offset >= 20:
+                            scroll_offset = selected_index - 19
+
+                elif event.key == pygame.K_BACKSPACE:
+                    if input_active:
+                        text_input = text_input[:-1]
+
+                elif event.key == pygame.K_TAB:
+                    input_active = not input_active
+                    if not input_active:
+                        # Try to navigate to entered path
+                        if text_input:
+                            test_path = os.path.expanduser(text_input)
+                            if os.path.isdir(test_path):
+                                current_dir = test_path
+                                text_input = ""
+                                selected_index = 0
+                                scroll_offset = 0
+                            elif os.path.isfile(test_path):
+                                selected_file = test_path
+                                running = False
+
+                else:
+                    if input_active:
+                        text_input += event.unicode
+
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                x, y = event.pos
+
+                # Check path input field
+                if input_rect.collidepoint(x, y):
+                    input_active = True
+
+                # Check file list
+                elif list_rect.collidepoint(x, y):
+                    rel_y = y - list_y - 5
+                    clicked_index = rel_y // item_height
+                    if 0 <= clicked_index < len(visible_items):
+                        item, is_dir = visible_items[clicked_index]
+                        clicked_absolute_index = scroll_offset + clicked_index
+
+                        # If clicking on already selected item, treat as double-click/open
+                        if selected_index == clicked_absolute_index:
+                            if is_dir:
+                                # Enter directory
+                                if item == "..":
+                                    current_dir = os.path.dirname(current_dir)
+                                else:
+                                    current_dir = os.path.join(current_dir, item)
+                                selected_index = 0
+                                scroll_offset = 0
+                                text_input = ""
+                            else:
+                                # Select file
+                                selected_file = os.path.join(current_dir, item)
+                                running = False
+                        else:
+                            # Just select the item
+                            selected_index = clicked_absolute_index
+                            # If it's a directory and user clicks, enter it immediately
+                            if is_dir and event.button == 1:
+                                if item == "..":
+                                    current_dir = os.path.dirname(current_dir)
+                                else:
+                                    current_dir = os.path.join(current_dir, item)
+                                selected_index = 0
+                                scroll_offset = 0
+                                text_input = ""
+
+                # Check buttons
+                elif up_button.collidepoint(x, y):
+                    parent_dir = os.path.dirname(current_dir)
+                    if parent_dir != current_dir:  # Not at filesystem root
+                        # Go up one directory
+                        current_dir = parent_dir
+                        selected_index = 0
+                        scroll_offset = 0
+                        text_input = ""
+
+                elif open_button.collidepoint(x, y):
+                    if visible_items and selected_index - scroll_offset < len(visible_items):
+                        item, is_dir = visible_items[selected_index - scroll_offset]
+                        if not is_dir:
+                            selected_file = os.path.join(current_dir, item)
+                            running = False
+                    elif text_input and os.path.isfile(text_input):
+                        selected_file = text_input
+                        running = False
+
+                elif cancel_button.collidepoint(x, y):
+                    running = False
+                    selected_file = None
+
+            elif event.type == pygame.MOUSEWHEEL:
+                # Scroll through items - MOUSEWHEEL doesn't have pos, use mouse position
+                mouse_x, mouse_y = pygame.mouse.get_pos()
+                if list_rect.collidepoint(mouse_x, mouse_y):
+                    scroll_offset = max(0, min(scroll_offset - event.y, len(items) - 20))
+                    if selected_index < scroll_offset:
+                        selected_index = scroll_offset
+                    elif selected_index >= scroll_offset + 20:
+                        selected_index = scroll_offset + 19
+
+        pygame.time.Clock().tick(60)
+
+    # Restore original window size
+    if restore_size:
+        pygame.display.set_mode(restore_size, pygame.RESIZABLE)
+    elif old_size:
+        pygame.display.set_mode(old_size, pygame.RESIZABLE)
+
+    return selected_file
 
 
 def play_video_with_controls(video_path, coordinates=None):
@@ -133,9 +477,7 @@ def play_video_with_controls(video_path, coordinates=None):
     )
     window_width = min(original_width, screen_width - 100)
     window_height = min(original_height, screen_height - 150)
-    screen = pygame.display.set_mode(
-        (window_width, window_height + 80), pygame.RESIZABLE
-    )
+    screen = pygame.display.set_mode((window_width, window_height + 80), pygame.RESIZABLE)
     pygame.display.set_caption("Video Player with Controls")
     clock = pygame.time.Clock()
 
@@ -200,9 +542,7 @@ def play_video_with_controls(video_path, coordinates=None):
         )
         # Guard against zero total_frames to avoid division by zero for short/merged videos
         denom_frames = total_frames if total_frames and total_frames > 0 else 1
-        slider_pos = slider_margin_left + int(
-            (frame_count / denom_frames) * slider_width
-        )
+        slider_pos = slider_margin_left + int((frame_count / denom_frames) * slider_width)
         pygame.draw.circle(
             control_surface,
             (255, 255, 255),
@@ -213,21 +553,15 @@ def play_video_with_controls(video_path, coordinates=None):
         # Draw frame info above the slider.
         # Use a safe display total when total_frames is unknown/zero
         display_total = (
-            total_frames
-            if total_frames and total_frames > 0
-            else max(1, frame_count + 1)
+            total_frames if total_frames and total_frames > 0 else max(1, frame_count + 1)
         )
-        frame_info = font.render(
-            f"Frame: {frame_count + 1}/{display_total}", True, (255, 255, 255)
-        )
+        frame_info = font.render(f"Frame: {frame_count + 1}/{display_total}", True, (255, 255, 255))
         control_surface.blit(frame_info, (slider_margin_left, slider_y - 25))
 
         # Draw auto-marking indicator if enabled
         if auto_marking_mode:
             auto_indicator = font.render("AUTO-MARKING ON", True, (255, 255, 0))
-            control_surface.blit(
-                auto_indicator, (slider_margin_left + 300, slider_y - 25)
-            )
+            control_surface.blit(auto_indicator, (slider_margin_left + 300, slider_y - 25))
 
         # Draw marker navigation and persistence info
         if one_line_mode:
@@ -261,14 +595,10 @@ def play_video_with_controls(video_path, coordinates=None):
         cluster_y = slider_y - button_height - 5
 
         # Load button
-        load_button_rect = pygame.Rect(
-            cluster_x, cluster_y, button_width, button_height
-        )
+        load_button_rect = pygame.Rect(cluster_x, cluster_y, button_width, button_height)
         pygame.draw.rect(control_surface, (100, 100, 100), load_button_rect)
         load_text = font.render("Load", True, (255, 255, 255))
-        control_surface.blit(
-            load_text, load_text.get_rect(center=load_button_rect.center)
-        )
+        control_surface.blit(load_text, load_text.get_rect(center=load_button_rect.center))
 
         # Save button.
         save_button_rect = pygame.Rect(
@@ -279,9 +609,7 @@ def play_video_with_controls(video_path, coordinates=None):
         )
         pygame.draw.rect(control_surface, (100, 100, 100), save_button_rect)
         save_text = font.render("Save", True, (255, 255, 255))
-        control_surface.blit(
-            save_text, save_text.get_rect(center=save_button_rect.center)
-        )
+        control_surface.blit(save_text, save_text.get_rect(center=save_button_rect.center))
 
         # Help button.
         help_button_rect = pygame.Rect(
@@ -292,9 +620,7 @@ def play_video_with_controls(video_path, coordinates=None):
         )
         pygame.draw.rect(control_surface, (100, 100, 100), help_button_rect)
         help_text = font.render("Help", True, (255, 255, 255))
-        control_surface.blit(
-            help_text, help_text.get_rect(center=help_button_rect.center)
-        )
+        control_surface.blit(help_text, help_text.get_rect(center=help_button_rect.center))
 
         # "1 Line" mode toggle button.
         one_line_button_rect = pygame.Rect(
@@ -324,16 +650,11 @@ def play_video_with_controls(video_path, coordinates=None):
         persist_text = font.render(
             "Persist ON" if persistence_enabled else "Persist", True, (255, 255, 255)
         )
-        control_surface.blit(
-            persist_text, persist_text.get_rect(center=persist_button_rect.center)
-        )
+        control_surface.blit(persist_text, persist_text.get_rect(center=persist_button_rect.center))
 
         # Add Sequential mode button after persist button
         seq_button_rect = pygame.Rect(
-            cluster_x
-            + 4 * (button_width + button_gap)
-            + persist_button_width
-            + button_gap,
+            cluster_x + 4 * (button_width + button_gap) + persist_button_width + button_gap,
             cluster_y,
             seq_button_width,
             button_height,
@@ -357,9 +678,7 @@ def play_video_with_controls(video_path, coordinates=None):
         auto_color = (150, 50, 150) if auto_marking_mode else (100, 100, 100)
         pygame.draw.rect(control_surface, auto_color, auto_button_rect)
         auto_text = font.render("Auto", True, (255, 255, 255))
-        control_surface.blit(
-            auto_text, auto_text.get_rect(center=auto_button_rect.center)
-        )
+        control_surface.blit(auto_text, auto_text.get_rect(center=auto_button_rect.center))
 
         screen.blit(control_surface, (0, window_height))
         return (
@@ -587,19 +906,13 @@ def play_video_with_controls(video_path, coordinates=None):
 
         # Find largest marker index (accounting for deleted ones)
         max_marker = max(
-            [
-                idx
-                for idx, _ in enumerate(one_line_markers)
-                if idx not in deleted_markers
-            ],
+            [idx for idx, _ in enumerate(one_line_markers) if idx not in deleted_markers],
             default=0,
         )
 
         # Create header: frame column and p1_x, p1_y, p2_x, p2_y, etc.
         header = ["frame"]
-        for i in range(
-            1, max_marker + 2
-        ):  # +2 because we need to add one more than max index
+        for i in range(1, max_marker + 2):  # +2 because we need to add one more than max index
             header.extend([f"p{i}_x", f"p{i}_y"])
 
         # Get the frame number from the first non-deleted marker
@@ -638,7 +951,13 @@ def play_video_with_controls(video_path, coordinates=None):
 
     def add_new_marker():
         """Adiciona um novo marcador vazio após o último marcador visível"""
-        nonlocal coordinates, one_line_markers, selected_marker_idx, showing_save_message, save_message_timer, save_message_text
+        nonlocal \
+            coordinates, \
+            one_line_markers, \
+            selected_marker_idx, \
+            showing_save_message, \
+            save_message_timer, \
+            save_message_text
 
         if one_line_mode:
             # In one-line mode, find the largest visible marker index
@@ -656,7 +975,7 @@ def play_video_with_controls(video_path, coordinates=None):
             one_line_markers.append((frame_count, None, None))
             selected_marker_idx = new_idx
 
-            save_message_text = f"Added new empty marker {new_idx+1}"
+            save_message_text = f"Added new empty marker {new_idx + 1}"
             showing_save_message = True
             save_message_timer = 60
         else:
@@ -686,7 +1005,7 @@ def play_video_with_controls(video_path, coordinates=None):
             # Select the new added marker
             selected_marker_idx = new_marker_idx
 
-            save_message_text = f"Added new empty marker {new_marker_idx+1}"
+            save_message_text = f"Added new empty marker {new_marker_idx + 1}"
             showing_save_message = True
             save_message_timer = 60
 
@@ -695,7 +1014,13 @@ def play_video_with_controls(video_path, coordinates=None):
 
     def remove_marker():
         """Remove the selected marker only in the current frame"""
-        nonlocal coordinates, one_line_markers, selected_marker_idx, showing_save_message, save_message_timer, save_message_text
+        nonlocal \
+            coordinates, \
+            one_line_markers, \
+            selected_marker_idx, \
+            showing_save_message, \
+            save_message_timer, \
+            save_message_text
 
         if one_line_mode:
             if selected_marker_idx >= 0:
@@ -704,7 +1029,9 @@ def play_video_with_controls(video_path, coordinates=None):
                     if i == selected_marker_idx and f_num == frame_count:
                         # Instead of removing completely, add to the deleted markers list
                         deleted_markers.add(selected_marker_idx)
-                        save_message_text = f"Removed marker {selected_marker_idx+1} in the current frame"
+                        save_message_text = (
+                            f"Removed marker {selected_marker_idx + 1} in the current frame"
+                        )
                         showing_save_message = True
                         save_message_timer = 60
                         break
@@ -718,7 +1045,7 @@ def play_video_with_controls(video_path, coordinates=None):
                 if selected_marker_idx < len(coordinates[frame_count]):
                     deleted_positions[frame_count].add(selected_marker_idx)
                     save_message_text = (
-                        f"Removed marker {selected_marker_idx+1} in the current frame"
+                        f"Removed marker {selected_marker_idx + 1} in the current frame"
                     )
                     showing_save_message = True
                     save_message_timer = 60
@@ -748,9 +1075,7 @@ def play_video_with_controls(video_path, coordinates=None):
         # Check if there is a normal coordinates file
         coords_file = os.path.join(video_dir, f"{base_name}_markers.csv")
         if os.path.exists(coords_file):
-            backup_file = os.path.join(
-                video_dir, f"{base_name}_markers_bk_{timestamp}.csv"
-            )
+            backup_file = os.path.join(video_dir, f"{base_name}_markers_bk_{timestamp}.csv")
             try:
                 import shutil
 
@@ -776,9 +1101,7 @@ def play_video_with_controls(video_path, coordinates=None):
         # Also check the 1 line file
         line_file = os.path.join(video_dir, f"{base_name}_markers_1_line.csv")
         if os.path.exists(line_file):
-            backup_file = os.path.join(
-                video_dir, f"{base_name}_markers_1_line_bk_{timestamp}.csv"
-            )
+            backup_file = os.path.join(video_dir, f"{base_name}_markers_1_line_bk_{timestamp}.csv")
             try:
                 import shutil
 
@@ -787,42 +1110,78 @@ def play_video_with_controls(video_path, coordinates=None):
             except Exception as e:
                 print(f"Error trying to backup 1-line: {e}")
 
+    def show_file_path_dialog():
+        """Simple Tkinter file dialog to select CSV file - blocks Pygame events"""
+        from tkinter import Tk
+        from tkinter.filedialog import askopenfilename
+
+        # Determine initial directory from video path
+        initial_dir = os.path.dirname(video_path) if video_path else os.path.expanduser("~")
+
+        # Block Pygame from processing mouse and keyboard events while Tkinter is open
+        # This prevents Pygame from capturing events that should go to Tkinter
+        pygame.event.set_blocked([pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP, pygame.MOUSEMOTION, 
+                                  pygame.KEYDOWN, pygame.KEYUP])
+        
+        # Clear any pending events
+        pygame.event.clear()
+        
+        try:
+            # Create Tkinter root window (hidden)
+            root = Tk()
+            root.withdraw()  # Hide the root window
+            root.attributes("-topmost", True)  # Bring to front
+            root.update_idletasks()  # Ensure window is ready
+            
+            # Show file dialog (this will block until user selects or cancels)
+            filename = askopenfilename(
+                title="Select CSV File",
+                initialdir=initial_dir,
+                filetypes=[("CSV Files", "*.csv"), ("All Files", "*.*")],
+            )
+            
+            result = filename if filename else None
+        except Exception as e:
+            print(f"Error in file dialog: {e}")
+            result = None
+        finally:
+            # Clean up Tkinter
+            try:
+                root.destroy()
+            except:
+                pass
+            
+            # Re-enable Pygame events
+            pygame.event.set_allowed([pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP, pygame.MOUSEMOTION,
+                                     pygame.KEYDOWN, pygame.KEYUP])
+            
+            # Clear any events that accumulated while dialog was open
+            pygame.event.clear()
+        
+        return result
+
     def reload_coordinates():
         """Load a new coordinates file during execution"""
-        nonlocal coordinates, one_line_markers, deleted_markers, deleted_positions, selected_marker_idx, one_line_mode, save_message_text, showing_save_message, save_message_timer
+        nonlocal \
+            coordinates, \
+            one_line_markers, \
+            deleted_markers, \
+            deleted_positions, \
+            selected_marker_idx, \
+            one_line_mode, \
+            save_message_text, \
+            showing_save_message, \
+            save_message_timer
 
         # Make backup of the current before loading a new one
         make_backup()
 
-        # Use native file dialog for file selection with fallback
-        input_file = open_native_file_dialog(
-            title="Select Keypoints File", file_types=[("*.csv", "CSV Files")]
-        )
+        # Use simple pygame dialog to enter file path
+        input_file = show_file_path_dialog()
 
-        # Fallback to tkinter if native dialog fails
+        # If user cancelled or error occurred, show message
         if not input_file:
-            try:
-                import tkinter as tk
-                from tkinter import filedialog
-
-                # Create a hidden root window
-                root = tk.Tk()
-                root.withdraw()  # Hide the root window
-
-                # Open file dialog
-                input_file = filedialog.askopenfilename(
-                    title="Select Keypoints File",
-                    filetypes=[("CSV Files", "*.csv"), ("All Files", "*.*")],
-                )
-
-                root.destroy()  # Clean up
-
-            except Exception as e:
-                print(f"Error with tkinter fallback: {e}")
-                input_file = None
-
-        if not input_file:
-            save_message_text = "Loading canceled."
+            save_message_text = "File selection cancelled."
             showing_save_message = True
             save_message_timer = 60
             return
@@ -842,13 +1201,9 @@ def play_video_with_controls(video_path, coordinates=None):
                         y_col = f"p{i}_y"
                         if x_col in df.columns and y_col in df.columns:
                             if pd.notna(row[x_col]) and pd.notna(row[y_col]):
-                                one_line_markers.append(
-                                    (frame_num, row[x_col], row[y_col])
-                                )
+                                one_line_markers.append((frame_num, row[x_col], row[y_col]))
 
-                save_message_text = (
-                    f"Loaded 1 line file: {os.path.basename(input_file)}"
-                )
+                save_message_text = f"Loaded 1 line file: {os.path.basename(input_file)}"
                 # If it was in normal mode, switch to 1 line mode
                 one_line_mode = True
             else:
@@ -952,9 +1307,7 @@ def play_video_with_controls(video_path, coordinates=None):
             start_frame = max(0, frame_count - persistence_frames)
 
             # Collect marker positions across frames for each ID
-            marker_trails = (
-                {}
-            )  # Dictionary: marker_id -> list of (frame_num, x, y) points
+            marker_trails = {}  # Dictionary: marker_id -> list of (frame_num, x, y) points
 
             if one_line_mode:
                 # In one_line mode, collect marker positions by their index
@@ -994,9 +1347,7 @@ def play_video_with_controls(video_path, coordinates=None):
                 for i in range(1, len(positions)):
                     # Calculate opacity based on how recent this segment is
                     segment_opacity = int(
-                        200
-                        * (positions[i][0] - start_frame)
-                        / (frame_count - start_frame + 1)
+                        200 * (positions[i][0] - start_frame) / (frame_count - start_frame + 1)
                     )
 
                     # Get screen coordinates for this segment
@@ -1004,12 +1355,7 @@ def play_video_with_controls(video_path, coordinates=None):
                     curr_frame, curr_x, curr_y = positions[i]
 
                     # Skip if any coordinates are None
-                    if (
-                        prev_x is None
-                        or prev_y is None
-                        or curr_x is None
-                        or curr_y is None
-                    ):
+                    if prev_x is None or prev_y is None or curr_x is None or curr_y is None:
                         continue
 
                     prev_screen_x = int((prev_x * zoom_level) - crop_x)
@@ -1053,17 +1399,13 @@ def play_video_with_controls(video_path, coordinates=None):
                         0,
                         segment_opacity,
                     )  # Cor preta com a mesma opacidade da linha
-                    pygame.draw.circle(
-                        point_surface, point_color, (4, 4), 2
-                    )  # Círculo de raio 2
+                    pygame.draw.circle(point_surface, point_color, (4, 4), 2)  # Círculo de raio 2
                     screen.blit(point_surface, (prev_screen_x - 4, prev_screen_y - 4))
 
                 # Still draw the most recent point as a small circle
                 last_frame, last_x, last_y = positions[-1]
                 if (
-                    last_frame < frame_count
-                    and last_x is not None
-                    and last_y is not None
+                    last_frame < frame_count and last_x is not None and last_y is not None
                 ):  # Don't draw current frame again and check for None
                     last_screen_x = int((last_x * zoom_level) - crop_x)
                     last_screen_y = int((last_y * zoom_level) - crop_y)
@@ -1142,9 +1484,7 @@ def play_video_with_controls(video_path, coordinates=None):
                 msg_bg.set_alpha(200)
                 msg_bg.fill((0, 100, 0))
                 screen.blit(msg_bg, (window_width // 2 - msg_bg.get_width() // 2, 10))
-                screen.blit(
-                    msg_surface, (window_width // 2 - msg_surface.get_width() // 2, 15)
-                )
+                screen.blit(msg_surface, (window_width // 2 - msg_surface.get_width() // 2, 15))
 
         pygame.display.flip()
 
@@ -1210,9 +1550,7 @@ def play_video_with_controls(video_path, coordinates=None):
                     zoom_level = max(0.2, zoom_level / 1.2)
                 elif event.key == pygame.K_c:
                     one_line_mode = not one_line_mode
-                    selected_marker_idx = (
-                        -1
-                    )  # Reset selected marker when changing modes
+                    selected_marker_idx = -1  # Reset selected marker when changing modes
                 elif event.key == pygame.K_m:
                     auto_marking_mode = not auto_marking_mode
                     save_message_text = (
@@ -1254,9 +1592,7 @@ def play_video_with_controls(video_path, coordinates=None):
                             else:
                                 # Find the previous marker (lower index)
                                 prev_visible = [
-                                    idx
-                                    for idx in frame_marker_indices
-                                    if idx < selected_marker_idx
+                                    idx for idx in frame_marker_indices if idx < selected_marker_idx
                                 ]
                                 prev_deleted = [
                                     idx
@@ -1269,9 +1605,7 @@ def play_video_with_controls(video_path, coordinates=None):
                                     selected_marker_idx = max(prev_indices)
                                 else:
                                     # Wrap around to max marker
-                                    all_markers = (
-                                        frame_marker_indices + deleted_frame_markers
-                                    )
+                                    all_markers = frame_marker_indices + deleted_frame_markers
                                     if all_markers:
                                         selected_marker_idx = max(all_markers)
                                     else:
@@ -1290,9 +1624,7 @@ def play_video_with_controls(video_path, coordinates=None):
                             else:
                                 # Find the next marker (higher index)
                                 next_visible = [
-                                    idx
-                                    for idx in frame_marker_indices
-                                    if idx > selected_marker_idx
+                                    idx for idx in frame_marker_indices if idx > selected_marker_idx
                                 ]
                                 next_deleted = [
                                     idx
@@ -1305,9 +1637,7 @@ def play_video_with_controls(video_path, coordinates=None):
                                     selected_marker_idx = min(next_indices)
                                 else:
                                     # Wrap around to first marker
-                                    all_markers = (
-                                        frame_marker_indices + deleted_frame_markers
-                                    )
+                                    all_markers = frame_marker_indices + deleted_frame_markers
                                     if all_markers:
                                         selected_marker_idx = min(all_markers)
                                     else:
@@ -1344,9 +1674,7 @@ def play_video_with_controls(video_path, coordinates=None):
                             else:
                                 # Find the previous marker
                                 prev_visible = [
-                                    idx
-                                    for idx in visible_markers
-                                    if idx < selected_marker_idx
+                                    idx for idx in visible_markers if idx < selected_marker_idx
                                 ]
                                 prev_deleted = [
                                     idx
@@ -1359,9 +1687,7 @@ def play_video_with_controls(video_path, coordinates=None):
                                     selected_marker_idx = max(prev_indices)
                                 else:
                                     # Wrap around to highest marker
-                                    all_markers = (
-                                        visible_markers + deleted_markers_in_frame
-                                    )
+                                    all_markers = visible_markers + deleted_markers_in_frame
                                     if all_markers:
                                         selected_marker_idx = max(all_markers)
                                     else:
@@ -1379,9 +1705,7 @@ def play_video_with_controls(video_path, coordinates=None):
                             else:
                                 # Find the next marker
                                 next_visible = [
-                                    idx
-                                    for idx in visible_markers
-                                    if idx > selected_marker_idx
+                                    idx for idx in visible_markers if idx > selected_marker_idx
                                 ]
                                 next_deleted = [
                                     idx
@@ -1394,9 +1718,7 @@ def play_video_with_controls(video_path, coordinates=None):
                                     selected_marker_idx = min(next_indices)
                                 else:
                                     # Wrap around to first marker
-                                    all_markers = (
-                                        visible_markers + deleted_markers_in_frame
-                                    )
+                                    all_markers = visible_markers + deleted_markers_in_frame
                                     if all_markers:
                                         selected_marker_idx = min(all_markers)
                                     else:
@@ -1406,7 +1728,9 @@ def play_video_with_controls(video_path, coordinates=None):
                 elif event.key == pygame.K_p:
                     persistence_enabled = not persistence_enabled
                     # Show confirmation message
-                    save_message_text = f"Persistence {'enabled' if persistence_enabled else 'disabled'}"
+                    save_message_text = (
+                        f"Persistence {'enabled' if persistence_enabled else 'disabled'}"
+                    )
                     showing_save_message = True
                     save_message_timer = 30
 
@@ -1448,26 +1772,16 @@ def play_video_with_controls(video_path, coordinates=None):
                     add_new_marker()
 
                 # Remover marcador
-                elif event.key == pygame.K_r:
-                    remove_marker()
-
-                # Atualize a função de teclado para usar a tecla 'd' para remover marcadores
-                elif event.key == pygame.K_d:
+                elif event.key == pygame.K_r or event.key == pygame.K_d:
                     remove_marker()
 
                 # Add sequential mode toggle with 'o' key
-                elif event.key == pygame.K_o:  # Toggle sequential mode with 'o' key
+                elif event.key == pygame.K_o or event.key == pygame.K_s:  # Toggle sequential mode with 'o' key
                     if not one_line_mode:  # Only toggle if not in one-line mode
                         sequential_mode = not sequential_mode
-                        save_message_text = f"Sequential mode {'enabled' if sequential_mode else 'disabled'}"
-                        showing_save_message = True
-                        save_message_timer = 30
-
-                # Add sequential mode toggle with 's' key
-                elif event.key == pygame.K_s:  # Toggle sequential mode with 's' key
-                    if not one_line_mode:  # Only toggle if not in one-line mode
-                        sequential_mode = not sequential_mode
-                        save_message_text = f"Sequential mode {'enabled' if sequential_mode else 'disabled'}"
+                        save_message_text = (
+                            f"Sequential mode {'enabled' if sequential_mode else 'disabled'}"
+                        )
                         showing_save_message = True
                         save_message_timer = 30
 
@@ -1504,19 +1818,25 @@ def play_video_with_controls(video_path, coordinates=None):
                     elif persist_button_rect.collidepoint(x, rel_y):
                         # Remove persistence settings dialog
                         persistence_enabled = not persistence_enabled
-                        save_message_text = f"Persistence {'enabled' if persistence_enabled else 'disabled'}"
+                        save_message_text = (
+                            f"Persistence {'enabled' if persistence_enabled else 'disabled'}"
+                        )
                         showing_save_message = True
                         save_message_timer = 30
                     elif seq_button_rect.collidepoint(x, rel_y):
                         if not one_line_mode:  # Only toggle if not in one-line mode
                             sequential_mode = not sequential_mode
-                            save_message_text = f"Sequential mode {'enabled' if sequential_mode else 'disabled'}"
+                            save_message_text = (
+                                f"Sequential mode {'enabled' if sequential_mode else 'disabled'}"
+                            )
                             showing_save_message = True
                             save_message_timer = 30
                     elif auto_button_rect.collidepoint(x, rel_y):
                         if not one_line_mode:  # Only toggle if not in one-line mode
                             auto_marking_mode = not auto_marking_mode
-                            save_message_text = f"Auto-marking {'enabled' if auto_marking_mode else 'disabled'}"
+                            save_message_text = (
+                                f"Auto-marking {'enabled' if auto_marking_mode else 'disabled'}"
+                            )
                             showing_save_message = True
                             save_message_timer = 30
                     elif slider_y <= rel_y <= slider_y + slider_height:
@@ -1549,35 +1869,23 @@ def play_video_with_controls(video_path, coordinates=None):
                                 # Find the next available marker index
                                 next_idx = len(coordinates[frame_count])
                                 coordinates[frame_count].append((video_x, video_y))
-                                selected_marker_idx = (
-                                    next_idx  # Auto-select the new marker
-                                )
+                                selected_marker_idx = next_idx  # Auto-select the new marker
                             else:
                                 # Use existing marker selection logic
                                 if selected_marker_idx >= 0:
                                     # Update existing marker
-                                    while (
-                                        len(coordinates[frame_count])
-                                        <= selected_marker_idx
-                                    ):
+                                    while len(coordinates[frame_count]) <= selected_marker_idx:
                                         coordinates[frame_count].append((None, None))
                                     coordinates[frame_count][selected_marker_idx] = (
                                         video_x,
                                         video_y,
                                     )
-                                    if (
-                                        selected_marker_idx
-                                        in deleted_positions[frame_count]
-                                    ):
-                                        deleted_positions[frame_count].remove(
-                                            selected_marker_idx
-                                        )
+                                    if selected_marker_idx in deleted_positions[frame_count]:
+                                        deleted_positions[frame_count].remove(selected_marker_idx)
                                 else:
                                     # Add new marker at the end
                                     coordinates[frame_count].append((video_x, video_y))
-                                    selected_marker_idx = (
-                                        len(coordinates[frame_count]) - 1
-                                    )
+                                    selected_marker_idx = len(coordinates[frame_count]) - 1
 
                     elif event.button == 3:  # Right click
                         # Keep existing behavior for right-click (delete most recent)
@@ -1592,9 +1900,7 @@ def play_video_with_controls(video_path, coordinates=None):
                         # Reset selection if we removed the selected marker
                         if one_line_mode:
                             markers_in_frame = [
-                                i
-                                for i, m in enumerate(one_line_markers)
-                                if m[0] == frame_count
+                                i for i, m in enumerate(one_line_markers) if m[0] == frame_count
                             ]
                             if not markers_in_frame:
                                 selected_marker_idx = -1
@@ -1619,12 +1925,8 @@ def play_video_with_controls(video_path, coordinates=None):
             elif event.type == pygame.MOUSEMOTION:
                 if scrolling:
                     rel_dx, rel_dy = pygame.mouse.get_rel()
-                    offset_x = max(
-                        0, min(zoomed_width - window_width, offset_x - rel_dx)
-                    )
-                    offset_y = max(
-                        0, min(zoomed_height - window_height, offset_y - rel_dy)
-                    )
+                    offset_x = max(0, min(zoomed_width - window_width, offset_x - rel_dx))
+                    offset_y = max(0, min(zoomed_height - window_height, offset_y - rel_dy))
                 if dragging_slider:
                     rel_x = event.pos[0] - slider_x
                     rel_x = max(0, min(rel_x, slider_width))
@@ -1657,32 +1959,35 @@ def play_video_with_controls(video_path, coordinates=None):
 
 
 def load_coordinates_from_file(total_frames, video_width=None, video_height=None):
-    # Try native dialog first
-    input_file = open_native_file_dialog(
-        title="Select Keypoint File", file_types=[("*.csv", "CSV Files")]
-    )
+    # Use Tkinter file dialog directly
+    tkinter_file_types = [("CSV Files", "*.csv"), ("All Files", "*.*")]
 
-    # Fallback to tkinter if native dialog fails
-    if not input_file:
-        try:
-            import tkinter as tk
-            from tkinter import filedialog
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
 
-            # Create a hidden root window
-            root = tk.Tk()
-            root.withdraw()  # Hide the root window
+        # Create a hidden root window and make it modal
+        root = tk.Tk()
+        root.withdraw()  # Hide the root window
+        root.attributes("-topmost", True)  # Bring to front
+        root.update_idletasks()  # Process any pending events
 
-            # Open file dialog
-            input_file = filedialog.askopenfilename(
-                title="Select Keypoint File",
-                filetypes=[("CSV Files", "*.csv"), ("All Files", "*.*")],
-            )
+        # Open file dialog - use format that works on Linux
+        input_file = filedialog.askopenfilename(
+            title="Select Keypoint File", filetypes=tkinter_file_types
+        )
 
-            root.destroy()  # Clean up
+        root.destroy()  # Clean up
 
-        except Exception as e:
-            print(f"Error with tkinter fallback: {e}")
-            input_file = None
+        # Convert to None if empty string
+        input_file = input_file if input_file else None
+
+    except Exception as e:
+        print(f"Error with file dialog: {e}")
+        import traceback
+
+        traceback.print_exc()
+        input_file = None
 
     if not input_file:
         print("No keypoint file selected. Starting fresh.")
@@ -1742,9 +2047,7 @@ def load_coordinates_from_file(total_frames, video_width=None, video_height=None
 
         for row_idx, row in df.iterrows():
             try:
-                frame_num = (
-                    int(row.get("frame", 0)) if pd.notna(row.get("frame")) else 0
-                )
+                frame_num = int(row.get("frame", 0)) if pd.notna(row.get("frame")) else 0
                 pts = []
                 for i in range(1, max_marker + 1):
                     try:
@@ -1816,9 +2119,7 @@ def load_coordinates_from_file(total_frames, video_width=None, video_height=None
         filename_lower = input_file.lower()
         if "_norm.csv" in filename_lower:
             file_type = "normalized"
-            print(
-                "Detected _norm.csv file - will convert normalized coordinates to pixel"
-            )
+            print("Detected _norm.csv file - will convert normalized coordinates to pixel")
             # Force conversion for normalized files
             sx = video_width if video_width else 1.0
             sy = video_height if video_height else 1.0
@@ -1827,9 +2128,7 @@ def load_coordinates_from_file(total_frames, video_width=None, video_height=None
             )
         elif "_pixel.csv" in filename_lower:
             file_type = "pixel"
-            print(
-                "Detected _pixel.csv file - using pixel coordinates directly (ignoring Z)"
-            )
+            print("Detected _pixel.csv file - using pixel coordinates directly (ignoring Z)")
             # Use pixel coordinates as-is
             sx = 1.0
             sy = 1.0
@@ -1915,9 +2214,7 @@ def load_coordinates_from_file(total_frames, video_width=None, video_height=None
         print(f"Using '{frame_col}' as frame column")
 
         for _, row in df.iterrows():
-            frame_num = (
-                int(row.get(frame_col, 0)) if pd.notna(row.get(frame_col)) else 0
-            )
+            frame_num = int(row.get(frame_col, 0)) if pd.notna(row.get(frame_col)) else 0
             pts = []
 
             # Group x,y pairs
@@ -1942,17 +2239,13 @@ def load_coordinates_from_file(total_frames, video_width=None, video_height=None
 
             coordinates[frame_num] = pts
 
-        print(
-            f"Coordinates loaded (generic CSV format): {len(coord_cols)//2} coordinate pairs"
-        )
+        print(f"Coordinates loaded (generic CSV format): {len(coord_cols) // 2} coordinate pairs")
         return coordinates
 
     print(f"File format not recognized: {input_file}. Starting fresh.")
     print("Supported formats:")
     print("  1. vailá format: 'frame', 'p1_x', 'p1_y', 'p2_x', 'p2_y', ...")
-    print(
-        "  2. MediaPipe format: 'frame_index', 'landmark_x', 'landmark_y', 'landmark_z', ..."
-    )
+    print("  2. MediaPipe format: 'frame_index', 'landmark_x', 'landmark_y', 'landmark_z', ...")
     print("  3. Generic CSV with coordinate columns")
     return {i: [] for i in range(total_frames)}
 
@@ -1993,8 +2286,8 @@ def save_coordinates(
             if i not in deleted_positions[frame_num]:  # Only save non-deleted markers
                 # Verificar se é um marcador vazio (None)
                 if x is not None and y is not None:
-                    df.at[frame_num, f"p{i+1}_x"] = float(x)
-                    df.at[frame_num, f"p{i+1}_y"] = float(y)
+                    df.at[frame_num, f"p{i + 1}_x"] = float(x)
+                    df.at[frame_num, f"p{i + 1}_y"] = float(y)
                 # Se for None, deixar como NaN (o que se tornará "" no CSV)
 
     # Salva o CSV com valores NaN representados como strings vazias
@@ -2004,42 +2297,37 @@ def save_coordinates(
 
 
 def get_video_path():
-    file_types = [
-        ("*.mp4", "MP4 Files"),
-        ("*.MP4", "MP4 Files"),
-        ("*.avi", "AVI Files"),
-        ("*.AVI", "AVI Files"),
-        ("*.mov", "MOV Files"),
-        ("*.MOV", "MOV Files"),
-        ("*.mkv", "MKV Files"),
-        ("*.MKV", "MKV Files"),
-    ]
+    # Use the same format as cutvideo.py which works on Linux
+    # Single tuple with all extensions in one string works better on Linux tkinter
+    file_types = [("Video Files", "*.mp4 *.MP4 *.avi *.AVI *.mov *.MOV *.mkv *.MKV")]
 
-    # Try native dialog first
-    video_path = open_native_file_dialog(
-        title="Select Video File", file_types=file_types
-    )
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
 
-    # Fallback to tkinter if native dialog fails
-    if not video_path:
-        try:
-            import tkinter as tk
-            from tkinter import filedialog
+        # Create a hidden root window
+        root = tk.Tk()
+        root.withdraw()  # Hide the root window
+        root.attributes("-topmost", True)  # Bring to front
+        root.update_idletasks()  # Process any pending events
 
-            # Create a hidden root window
-            root = tk.Tk()
-            root.withdraw()  # Hide the root window
+        # Open file dialog - use same format as cutvideo.py (works on Linux)
+        video_path = filedialog.askopenfilename(title="Select Video File", filetypes=file_types)
 
-            # Open file dialog
-            video_path = filedialog.askopenfilename(
-                title="Select Video File", filetypes=file_types
-            )
+        if video_path:
+            print(f"Video selected: {video_path}")
 
-            root.destroy()  # Clean up
+        root.destroy()  # Clean up
 
-        except Exception as e:
-            print(f"Error with tkinter fallback: {e}")
-            video_path = None
+        # Convert to None if empty string
+        video_path = video_path if video_path else None
+
+    except Exception as e:
+        print(f"Error with file dialog: {e}")
+        import traceback
+
+        traceback.print_exc()
+        video_path = None
 
     return video_path
 
@@ -2056,33 +2344,26 @@ def run_getpixelvideo():
         print("No video selected. Exiting.")
         return
 
-    # Use native dialog for message box with fallback
-    load_existing = open_yes_no_dialog(
-        title="Load Existing Keypoints",
-        message="Do you want to load existing keypoints from a saved file?",
-    )
+    # Use Tkinter message box to ask if user wants to load existing keypoints
+    try:
+        import tkinter as tk
+        from tkinter import messagebox
 
-    # Fallback to tkinter if native dialog fails
-    if load_existing is None:
-        try:
-            import tkinter as tk
-            from tkinter import messagebox
+        root = tk.Tk()
+        root.withdraw()  # Hide the root window
+        root.attributes("-topmost", True)  # Bring to front
+        root.update_idletasks()  # Process any pending events
 
-            # Create a hidden root window
-            root = tk.Tk()
-            root.withdraw()  # Hide the root window
+        load_existing = messagebox.askyesno(
+            title="Load Existing Keypoints",
+            message="Do you want to load existing keypoints from a saved file?",
+        )
 
-            # Show message box
-            load_existing = messagebox.askyesno(
-                title="Load Existing Keypoints",
-                message="Do you want to load existing keypoints from a saved file?",
-            )
-
-            root.destroy()  # Clean up
-
-        except Exception as e:
-            print(f"Error with tkinter fallback: {e}")
-            load_existing = False
+        root.destroy()  # Clean up
+    except Exception as e:
+        print(f"Error with message dialog: {e}")
+        print("Defaulting to: Don't load existing keypoints.")
+        load_existing = False
 
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():

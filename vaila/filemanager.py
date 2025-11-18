@@ -93,27 +93,14 @@ This script is distributed under the GPL3 License
 ================================================================================
 """
 
-import shutil
-import os
-import tkinter as tk
-from tkinter import filedialog, messagebox, simpledialog, Tk
-import time
-import pandas as pd
-import ezc3d
-import pickle  # pickle native in Python 3.11
-import yaml
-import toml
-from lxml import etree
-from bs4 import BeautifulSoup
-from datetime import datetime
-import h5py
-import json
 import fnmatch
-import paramiko
-from scp import SCPClient
-import subprocess
-from tkinter import ttk
+import os
 import platform  # Add this import at the top with other imports
+import shutil
+import subprocess
+import time
+import tkinter as tk
+from tkinter import filedialog, messagebox, simpledialog
 
 
 def copy_file():
@@ -369,9 +356,7 @@ def remove_file():
 
     # Check if the pattern might cause removal of critical system files or directories
     if removal_type == "dir" and any(sys_file in pattern for sys_file in system_files):
-        messagebox.showerror(
-            "Error", "Attempting to remove a system directory is not allowed."
-        )
+        messagebox.showerror("Error", "Attempting to remove a system directory is not allowed.")
         return
 
     # Confirmation step - user must re-enter the pattern to confirm
@@ -430,15 +415,11 @@ def import_file():
     """
 
     def data_import_tsv_qualysis():
-        messagebox.showinfo(
-            "Data Import", "You selected to import a .tsv file from Qualysis."
-        )
+        messagebox.showinfo("Data Import", "You selected to import a .tsv file from Qualysis.")
         # Add your .tsv processing logic here
 
     def data_import_mat_matlab():
-        messagebox.showinfo(
-            "Data Import", "You selected to import a .mat file from MATLAB."
-        )
+        messagebox.showinfo("Data Import", "You selected to import a .mat file from MATLAB.")
         # Add your .mat processing logic here
 
     def data_import_csv_vicon_nexus():
@@ -456,9 +437,7 @@ def import_file():
                 )
 
             # Ask the user to select the source and output directories
-            src_directory, output_directory = (
-                load_vicon_csv_split_batch.select_directory()
-            )
+            src_directory, output_directory = load_vicon_csv_split_batch.select_directory()
 
             # Run the batch processing function from load_vicon_csv_split_batch.py
             load_vicon_csv_split_batch.process_csv_files_first_level(
@@ -477,9 +456,7 @@ def import_file():
 
         except Exception as e:
             # General error handling
-            messagebox.showerror(
-                "Error", f"An error occurred during batch processing: {e}"
-            )
+            messagebox.showerror("Error", f"An error occurred during batch processing: {e}")
 
     def data_import_html():
         messagebox.showinfo("Data Import", "You selected to import a .html file.")
@@ -549,9 +526,7 @@ def rename_files():
         return
 
     # Prompt the user to enter the text to be replaced and the text to replace it with
-    text_to_replace = simpledialog.askstring(
-        "Text to Replace", "Enter the text to replace:"
-    )
+    text_to_replace = simpledialog.askstring("Text to Replace", "Enter the text to replace:")
     replacement_text = simpledialog.askstring(
         "Replacement Text",
         "Enter the replacement text (leave empty to remove the text):",
@@ -579,9 +554,7 @@ def rename_files():
                     # Create the new filename by replacing the text
                     new_filename = filename.replace(text_to_replace, replacement_text)
                     # Rename the file
-                    os.rename(
-                        os.path.join(root, filename), os.path.join(root, new_filename)
-                    )
+                    os.rename(os.path.join(root, filename), os.path.join(root, new_filename))
 
         # Show a success message after renaming is complete
         messagebox.showinfo("Success", "Files have been renamed successfully.")
@@ -629,9 +602,7 @@ def tree_file():
                 for file in files:
                     if file.endswith(file_extension):
                         # Write the relative file path to the output file
-                        relative_path = os.path.relpath(
-                            os.path.join(root, file), src_directory
-                        )
+                        relative_path = os.path.relpath(os.path.join(root, file), src_directory)
                         output_file.write(f"{relative_path}\n")
 
         # Show a success message after the operation is complete
@@ -709,9 +680,7 @@ def find_file():
             for name in dirs + files:
                 if fnmatch.fnmatch(name, full_pattern):
                     # Write the relative file path to the list
-                    relative_path = os.path.relpath(
-                        os.path.join(root, name), src_directory
-                    )
+                    relative_path = os.path.relpath(os.path.join(root, name), src_directory)
                     found_files.append(relative_path)
 
             # Count files with the specified extension and calculate their sizes
@@ -778,9 +747,7 @@ def transfer_file():
 
             # Check if transfer.sh exists
             if not os.path.exists(script_path):
-                messagebox.showerror(
-                    "Error", f"Transfer script not found: {script_path}"
-                )
+                messagebox.showerror("Error", f"Transfer script not found: {script_path}")
                 return
 
             # Make the script executable
@@ -796,9 +763,7 @@ def transfer_file():
                 terminals = ["gnome-terminal", "xterm", "konsole", "lxterminal"]
                 for terminal in terminals:
                     try:
-                        subprocess.Popen(
-                            [terminal, "-e", f"bash {script_path}"], cwd=script_dir
-                        )
+                        subprocess.Popen([terminal, "-e", f"bash {script_path}"], cwd=script_dir)
                         break
                     except FileNotFoundError:
                         continue

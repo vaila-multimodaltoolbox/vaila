@@ -98,24 +98,24 @@ References:
 ===============================================================================
 """
 
+import os
+import subprocess
+import tkinter as tk
+from datetime import datetime
+from tkinter import filedialog
+
 import cv2
 import numpy as np
 import pandas as pd
-import os
-from rich import print
-import tkinter as tk
-from tkinter import filedialog
-from datetime import datetime
+from rich import print as rprint
+from rich.console import Console
 from rich.progress import (
+    BarColumn,
     Progress,
     SpinnerColumn,
-    TimeElapsedColumn,
-    BarColumn,
     TextColumn,
+    TimeElapsedColumn,
 )
-from rich.console import Console
-from rich import print as rprint
-import subprocess
 
 
 def load_distortion_parameters(csv_path):
@@ -178,11 +178,8 @@ def process_video(input_path, output_path, parameters):
             TimeElapsedColumn(),
             console=console,
         ) as progress:
-
             # Add tasks
-            process_task = progress.add_task(
-                "[cyan]Processing frames...", total=total_frames
-            )
+            process_task = progress.add_task("[cyan]Processing frames...", total=total_frames)
 
             frame_count = 0
             while True:
@@ -247,7 +244,7 @@ def process_video(input_path, output_path, parameters):
                 os.remove(os.path.join(temp_dir, file))
             os.rmdir(temp_dir)
 
-    rprint(f"\n[green]Video processing complete![/green]")
+    rprint("\n[green]Video processing complete![/green]")
     rprint(f"[blue]Output saved as: {output_path}[/blue]")
 
 
@@ -304,8 +301,7 @@ def run_distortvideo():
     video_files = [
         f
         for f in os.listdir(input_dir)
-        if os.path.isfile(os.path.join(input_dir, f))
-        and f.lower().endswith(video_extensions)
+        if os.path.isfile(os.path.join(input_dir, f)) and f.lower().endswith(video_extensions)
     ]
 
     if not video_files:

@@ -23,14 +23,12 @@ It allows for:
 
 import os
 import sys
-import numpy as np
-import pandas as pd
-import cv2
 from tkinter import Tk, filedialog
 
+import cv2
+import pandas as pd
+
 # Garantir que o Qt encontre seus plugins
-import sys
-import os
 from PySide6 import QtCore
 
 # Exibir diretório de plugins do Qt para diagnóstico
@@ -58,41 +56,39 @@ import matplotlib
 matplotlib.use("QtAgg")  # Usar backend genérico QtAgg
 
 # Import Figure and FigureCanvas
-from matplotlib.figure import Figure
+from getpixelvideo import get_color_for_id
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QImage, QPixmap
 
 # PySide6 imports
 from PySide6.QtWidgets import (
     QApplication,
-    QMainWindow,
-    QWidget,
-    QVBoxLayout,
+    QCheckBox,
+    QGridLayout,
+    QGroupBox,
     QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QMessageBox,
     QPushButton,
     QSlider,
-    QLabel,
-    QCheckBox,
-    QGroupBox,
-    QGridLayout,
     QSplitter,
-    QFrame,
-    QMessageBox,
+    QVBoxLayout,
+    QWidget,
 )
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QImage, QPixmap
 
 # Import functions from both source files
 from reid_markers import (
-    load_markers_file,
-    save_markers_file,
     detect_markers,
-    get_marker_coords,
     fill_gaps,
+    get_marker_coords,
+    load_markers_file,
     merge_markers,
+    save_markers_file,
     swap_markers,
-    detect_gaps,
 )
-from getpixelvideo import get_color_for_id
 
 
 class MplCanvas(FigureCanvas):
@@ -362,9 +358,7 @@ class CombinedMarkerGUI(QMainWindow):
         # Open video file
         self.video_cap = cv2.VideoCapture(self.video_path)
         if not self.video_cap.isOpened():
-            QMessageBox.critical(
-                self, "Error", f"Could not open video file: {self.video_path}"
-            )
+            QMessageBox.critical(self, "Error", f"Could not open video file: {self.video_path}")
             self.video_cap = None
             return
 
@@ -474,12 +468,8 @@ class CombinedMarkerGUI(QMainWindow):
             self.canvas.ax_y.axvline(end_frame, color="r", linestyle="--", alpha=0.5)
 
             # Add current frame indicator
-            self.canvas.ax_x.axvline(
-                self.current_frame, color="g", linestyle="-", linewidth=2
-            )
-            self.canvas.ax_y.axvline(
-                self.current_frame, color="g", linestyle="-", linewidth=2
-            )
+            self.canvas.ax_x.axvline(self.current_frame, color="g", linestyle="-", linewidth=2)
+            self.canvas.ax_y.axvline(self.current_frame, color="g", linestyle="-", linewidth=2)
 
             # Set limits
             self.canvas.ax_x.set_xlim(0, len(self.df) - 1)
@@ -559,13 +549,11 @@ class CombinedMarkerGUI(QMainWindow):
         # Scale to fit video label
         pixmap = QPixmap.fromImage(q_img)
         self.video_label.setPixmap(
-            pixmap.scaled(
-                self.video_label.width(), self.video_label.height(), Qt.KeepAspectRatio
-            )
+            pixmap.scaled(self.video_label.width(), self.video_label.height(), Qt.KeepAspectRatio)
         )
 
         # Update frame label
-        self.frame_label.setText(f"Frame: {frame_num}/{self.total_frames-1}")
+        self.frame_label.setText(f"Frame: {frame_num}/{self.total_frames - 1}")
 
     def toggle_play(self):
         """Toggle video playback"""
@@ -662,9 +650,7 @@ class CombinedMarkerGUI(QMainWindow):
 
         # Merge each source into the target
         for source_id in source_ids:
-            self.df = merge_markers(
-                self.df, source_id, target_id, (start_frame, end_frame)
-            )
+            self.df = merge_markers(self.df, source_id, target_id, (start_frame, end_frame))
 
         # Update display
         self.update_plot()
@@ -693,9 +679,7 @@ class CombinedMarkerGUI(QMainWindow):
         start_frame, end_frame = self.frame_range
 
         # Swap markers
-        self.df = swap_markers(
-            self.df, marker_id1, marker_id2, (start_frame, end_frame)
-        )
+        self.df = swap_markers(self.df, marker_id1, marker_id2, (start_frame, end_frame))
 
         # Update display
         self.update_plot()

@@ -14,7 +14,7 @@ def determine_header_lines(file_path):
     Returns:
     int: The number of header lines.
     """
-    with open(file_path, "r") as f:
+    with open(file_path) as f:
         for i, line in enumerate(f):
             first_element = line.split(",")[0].strip()
             if first_element.replace(".", "", 1).isdigit():
@@ -32,7 +32,7 @@ def determine_header_lines_mocap(file_path):
     Returns:
     int: The number of header lines (0, 1, or 2).
     """
-    with open(file_path, "r") as file:
+    with open(file_path) as file:
         lines = file.readlines()
         for i, line in enumerate(lines):
             if "Time" in line or "LFHD_X" in line or "CLAV_X" in line:

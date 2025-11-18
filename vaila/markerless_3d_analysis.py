@@ -20,15 +20,17 @@ pip install numpy opencv-python mediapipe torch ezc3d scipy
 """
 
 from __future__ import annotations
-import os, sys, json, math, glob, time
-import tkinter as tk
-from tkinter import filedialog, messagebox, simpledialog
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Optional, List, Dict, Tuple
 
-import numpy as np
+import math
+import os
+import sys
+import time
+import tkinter as tk
+from pathlib import Path
+from tkinter import filedialog, messagebox
+
 import cv2
+import numpy as np
 
 try:
     import torch
@@ -43,7 +45,6 @@ try:
 except Exception:
     ezc3d = None
 
-from scipy.spatial import procrustes
 from scipy.optimize import least_squares
 
 try:
@@ -64,8 +65,8 @@ def _toml_escape(s: str) -> str:
     return s.replace("\\", "\\\\").replace('"', '\\"')
 
 
-def dict_to_toml(d: Dict, prefix: str = "") -> str:
-    lines: List[str] = []
+def dict_to_toml(d: dict, prefix: str = "") -> str:
+    lines: list[str] = []
     # simple (non-container) keys first
     scalars = {k: v for k, v in d.items() if not isinstance(v, (dict, list))}
     if scalars and prefix:
@@ -101,9 +102,7 @@ def dict_to_toml(d: Dict, prefix: str = "") -> str:
                 lines.append(f"{k} = [ {arr} ]")
                 lines.append("")
             else:
-                arr = ", ".join(
-                    f'"{_toml_escape(x)}"' if isinstance(x, str) else str(x) for x in v
-                )
+                arr = ", ".join(f'"{_toml_escape(x)}"' if isinstance(x, str) else str(x) for x in v)
                 if prefix:
                     lines.append(f"[{prefix}]")
                 lines.append(f"{k} = [ {arr} ]")
@@ -197,17 +196,13 @@ def mediapipe_to_coco17(kps33_xy: np.ndarray) -> np.ndarray:
 # =====================
 
 
-def build_vp3d_model(
-    vp3d_dir: str, njoints: int = 17, channels: int = 1024, dropout: float = 0.25
-):
+def build_vp3d_model(vp3d_dir: str, njoints: int = 17, channels: int = 1024, dropout: float = 0.25):
     if torch is None:
         raise ImportError("torch is required for VideoPose3D")
     vp3d_path = Path(vp3d_dir).resolve()
 
     # Avoid collision with a pip package named 'common'.
-    for modname in [
-        k for k in list(sys.modules) if k == "common" or k.startswith("common.")
-    ]:
+    for modname in [k for k in list(sys.modules) if k == "common" or k.startswith("common.")]:
         del sys.modules[modname]
 
     # Ensure the VideoPose3D repo path has priority
@@ -228,7 +223,7 @@ def build_vp3d_model(
         raise ImportError(f"Failed to create import spec for {model_py}")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)  # type: ignore[attr-defined]
-    TemporalModel = getattr(mod, "TemporalModel")
+    TemporalModel = mod.TemporalModel
 
     # Standard VideoPose3D expects num_joints_out = number of joints (e.g., 17)
     model = TemporalModel(
@@ -264,9 +259,7 @@ def sliding_windows(X: np.ndarray, receptive: int, pad: bool = True) -> np.ndarr
         return np.stack([X[i : i + receptive] for i in starts], axis=0)
 
 
-def infer_vp3d(
-    model, seq2d_norm: np.ndarray, batch_size: Optional[int] = None
-) -> np.ndarray:
+def infer_vp3d(model, seq2d_norm: np.ndarray, batch_size: int | None = None) -> np.ndarray:
     """Run VideoPose3D with progress and bounded memory.
 
     The model expects input shaped [B, T, J, 2]. We build sliding windows of length
@@ -328,7 +321,7 @@ def infer_vp3d(
 # =====================
 
 
-def dlt8_to_H(L: List[float]):
+def dlt8_to_H(L: list[float]):
     L1, L2, L3, L4, L5, L6, L7, L8 = L
     H = np.array([[L1, L2, L3], [L4, L5, L6], [L7, L8, 1.0]], dtype=np.float64)
     Hinv = np.linalg.inv(H)
@@ -413,10 +406,10 @@ def anchor_with_vertical(
     Hinv: np.ndarray,
     units: str = "m",
     prefer_side: str = "left",
-    leg_len_m: Optional[float] = 0.42,
+    leg_len_m: float | None = 0.42,
     z_weight: float = 10.0,
     use_anisotropic_z: bool = True,
-) -> Tuple[np.ndarray, Dict]:
+) -> tuple[np.ndarray, dict]:
     scale_u = (
         1000.0 if units.lower() == "m" else 1.0
     )  # convert ground XY meters→mm for matching Vp3D units
@@ -477,9 +470,7 @@ def anchor_with_vertical(
             if use_anisotropic_z:
                 gamma = float(target_mm / med_pred_mm)
                 Pw[:, :, 2] *= gamma
-                zc = np.median(
-                    Pw[frames, [COCO_IDX["left_ankle"], COCO_IDX["right_ankle"]], 2]
-                )
+                zc = np.median(Pw[frames, [COCO_IDX["left_ankle"], COCO_IDX["right_ankle"]], 2])
                 Pw[:, :, 2] -= zc
                 calib.update({"gamma_z": gamma, "anisotropic": True})
             else:
@@ -502,9 +493,7 @@ def anchor_with_vertical(
                 Txyz2 = np.array([tx, ty, tz], np.float32)
                 for t in range(P.shape[0]):
                     Pw[t] = s_global * P[t] + Txyz2
-                calib.update(
-                    {"s_xy": float(s_global), "T": Txyz2, "anisotropic": False}
-                )
+                calib.update({"s_xy": float(s_global), "T": Txyz2, "anisotropic": False})
 
     return Pw, calib
 
@@ -517,7 +506,7 @@ class DLT3D:
 
 def load_dlt3d_from_file(path: str) -> DLT3D:
     vals = []
-    with open(path, "r") as f:
+    with open(path) as f:
         for line in f:
             parts = [p for p in line.replace(",", " ").split() if p.strip()]
             for p in parts:
@@ -553,9 +542,9 @@ def refine_with_dlt3d(
     Pw: np.ndarray,
     uv_px: np.ndarray,
     dlt: DLT3D,
-    init: Optional[Dict] = None,
+    init: dict | None = None,
     use_yaw_only: bool = True,
-) -> Tuple[np.ndarray, Dict]:
+) -> tuple[np.ndarray, dict]:
     T, J, _ = Pw.shape
     W = Pw.copy()
     if init is None:
@@ -613,7 +602,7 @@ def refine_with_dlt3d(
 # =====================
 
 
-def extract_mediapipe_csv(video_path: str, out_csv: str) -> Tuple[int, int, float, int]:
+def extract_mediapipe_csv(video_path: str, out_csv: str) -> tuple[int, int, float, int]:
     if mp is None:
         raise ImportError("mediapipe is required for 2D extraction")
     cap = cv2.VideoCapture(video_path)
@@ -655,9 +644,7 @@ def extract_mediapipe_csv(video_path: str, out_csv: str) -> Tuple[int, int, floa
         if i % 50 == 0:
             elapsed = time.time() - t0
             rate = i / elapsed if elapsed > 0 else 0.0
-            print(
-                f"[MediaPipe] {i}/{total if total>0 else '?'} frames  ({rate:.1f} fps)"
-            )
+            print(f"[MediaPipe] {i}/{total if total > 0 else '?'} frames  ({rate:.1f} fps)")
             sys.stdout.flush()
         if (t_proc1 - t_proc0) > 0.25:
             print(f"[MediaPipe] slow frame {i}: {t_proc1 - t_proc0:.3f}s")
@@ -691,7 +678,7 @@ def load_csv33(csv_path: str) -> np.ndarray:
 # =====================
 
 
-def read_toml_config(path: str) -> Dict:
+def read_toml_config(path: str) -> dict:
     if _toml_reader is None:
         raise ImportError(
             "tomllib/tomli is required to read TOML configs. Install 'tomli' for Python<3.11."
@@ -700,7 +687,7 @@ def read_toml_config(path: str) -> Dict:
         return _toml_reader.load(f)
 
 
-def default_config() -> Dict:
+def default_config() -> dict:
     return {
         "paths": {
             "vp3d_dir": "../VideoPose3D",
@@ -735,7 +722,7 @@ def default_config() -> Dict:
     }
 
 
-def write_toml_config(path: str, cfg: Dict) -> None:
+def write_toml_config(path: str, cfg: dict) -> None:
     toml_str = dict_to_toml(cfg)
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
@@ -745,19 +732,17 @@ def write_toml_config(path: str, cfg: Dict) -> None:
 # VIDEO path → full pipeline
 
 
-def run_single_video(
-    cfg: Dict, video_path: str, out_dir: str, base_dir: Optional[Path] = None
-):
+def run_single_video(cfg: dict, video_path: str, out_dir: str, base_dir: Path | None = None):
     def _resolve(p: str, expect_exists: bool = False) -> str:
         if not p:
             return ""
-        candidate_paths: List[Path] = []
+        candidate_paths: list[Path] = []
         pp = Path(p)
         if pp.is_absolute():
             candidate_paths.append(pp)
         else:
             if base_dir is not None:
-                candidate_paths.append((base_dir / pp))
+                candidate_paths.append(base_dir / pp)
             candidate_paths.append(pp)
             if base_dir is not None:
                 candidate_paths.append(base_dir / pp.name)
@@ -795,9 +780,7 @@ def run_single_video(
 
     # Build and run VideoPose3D
     paths = cfg.get("paths", {})
-    vp3d_dir_resolved = _resolve(
-        paths.get("vp3d_dir", "../VideoPose3D"), expect_exists=True
-    )
+    vp3d_dir_resolved = _resolve(paths.get("vp3d_dir", "../VideoPose3D"), expect_exists=True)
     ckpt_resolved = _resolve(
         paths.get("ckpt", "../checkpoints/h36m_cpn_ft_h36m_dbb.pth"),
         expect_exists=False,
@@ -810,15 +793,13 @@ def run_single_video(
             Path(vp3d_dir_resolved) / "pretrained",
             Path(vp3d_dir_resolved) / "pretrained_models",
         ]
-        candidates: List[str] = []
+        candidates: list[str] = []
         for d in search_dirs:
             candidates.extend([str(p) for p in d.glob("*.pth") if p.is_file()])
             candidates.extend([str(p) for p in d.glob("*.bin") if p.is_file()])
         if candidates:
             ckpt_resolved = candidates[0]
-            print(
-                f"[Vp3D] Checkpoint not found in TOML; using found file: {ckpt_resolved}"
-            )
+            print(f"[Vp3D] Checkpoint not found in TOML; using found file: {ckpt_resolved}")
         else:
             raise FileNotFoundError(
                 f"Vp3D checkpoint not found. Set 'paths.ckpt' in the TOML to a valid .pth file.\n"
@@ -844,7 +825,7 @@ def run_single_video(
         if not dlt2d_path or not os.path.exists(dlt2d_path):
             raise FileNotFoundError(f"DLT2D file not found: {dlt2d_path}")
         vals = []
-        with open(dlt2d_path, "r", encoding="utf-8") as f:
+        with open(dlt2d_path, encoding="utf-8") as f:
             for line in f:
                 for p in line.replace(",", " ").split():
                     try:
@@ -855,9 +836,7 @@ def run_single_video(
             raise ValueError("DLT2D must contain at least 8 numeric parameters")
         _, Hinv = dlt8_to_H(vals[:8])
     else:
-        raise NotImplementedError(
-            f"ground.mode '{mode}' not implemented yet (use 'dlt')"
-        )
+        raise NotImplementedError(f"ground.mode '{mode}' not implemented yet (use 'dlt')")
 
     # Anchor and vertical calibration
     calib = cfg.get("calibration", {})
@@ -889,9 +868,7 @@ def run_single_video(
         Pw = Pw_mm / 1000.0
     else:
         Pw = Pw_mm
-    np.savetxt(
-        out_base + ".csv", Pw.reshape(Pw.shape[0], -1), delimiter=",", fmt="%.6f"
-    )
+    np.savetxt(out_base + ".csv", Pw.reshape(Pw.shape[0], -1), delimiter=",", fmt="%.6f")
     print(f"Saved CSV to {out_base}.csv")
 
     # Optional C3D
@@ -932,25 +909,17 @@ if __name__ == "__main__":
             row1.pack(fill=tk.X)
             tk.Label(row1, text="Config TOML:").pack(side=tk.LEFT)
             self.cfg_path_var = tk.StringVar(
-                value=str(
-                    Path(
-                        "tests/markerless_3d_analysis/markerless3d_config.toml"
-                    ).resolve()
-                )
+                value=str(Path("tests/markerless_3d_analysis/markerless3d_config.toml").resolve())
             )
             tk.Entry(row1, textvariable=self.cfg_path_var, width=80).pack(
                 side=tk.LEFT, padx=5, fill=tk.X, expand=True
             )
-            tk.Button(row1, text="Browse", command=self.browse_cfg).pack(
-                side=tk.LEFT, padx=5
-            )
+            tk.Button(row1, text="Browse", command=self.browse_cfg).pack(side=tk.LEFT, padx=5)
 
             # Buttons
             row2 = tk.Frame(top)
             row2.pack(fill=tk.X, pady=(8, 0))
-            tk.Button(row2, text="Load TOML", command=self.load_cfg).pack(
-                side=tk.LEFT, padx=5
-            )
+            tk.Button(row2, text="Load TOML", command=self.load_cfg).pack(side=tk.LEFT, padx=5)
             self.btn_default = tk.Button(
                 row2, text="Create Default TOML", command=self.write_default_cfg
             )
@@ -959,11 +928,9 @@ if __name__ == "__main__":
             self.btn_run.pack(side=tk.LEFT, padx=5)
 
             self.status_var = tk.StringVar(value="Ready")
-            tk.Label(top, textvariable=self.status_var, fg="gray").pack(
-                anchor=tk.W, pady=(8, 0)
-            )
+            tk.Label(top, textvariable=self.status_var, fg="gray").pack(anchor=tk.W, pady=(8, 0))
 
-            self.cfg: Dict = {}
+            self.cfg: dict = {}
             self._worker_running = False
 
         def _set_status(self, text: str):
@@ -1013,20 +980,16 @@ if __name__ == "__main__":
                 input_dir = (base_dir / str(vid_cfg.get("input_dir", "."))).resolve()
                 patterns = [
                     p.strip()
-                    for p in str(vid_cfg.get("pattern", "*.mp4;*_mp_pixel.csv")).split(
-                        ";"
-                    )
+                    for p in str(vid_cfg.get("pattern", "*.mp4;*_mp_pixel.csv")).split(";")
                     if p.strip()
                 ]
-                out_dir_cfg = cfg.get("output", {}).get(
-                    "out_dir", str(input_dir / "mono3d_out")
-                )
+                out_dir_cfg = cfg.get("output", {}).get("out_dir", str(input_dir / "mono3d_out"))
                 out_dir = (
                     str((base_dir / out_dir_cfg).resolve())
                     if not os.path.isabs(out_dir_cfg)
                     else out_dir_cfg
                 )
-                files: List[str] = []
+                files: list[str] = []
                 for pat in patterns:
                     files.extend([str(p) for p in input_dir.glob(pat)])
                 if not files:
