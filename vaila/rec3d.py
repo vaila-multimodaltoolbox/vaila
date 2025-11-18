@@ -31,12 +31,13 @@ Description:
 """
 
 import os
+from datetime import datetime
 from pathlib import Path
+from tkinter import Tk, filedialog, messagebox, simpledialog
+
 import numpy as np
 import pandas as pd
 from numpy.linalg import lstsq
-from tkinter import filedialog, Tk, messagebox, simpledialog
-from datetime import datetime
 from rich import print
 
 
@@ -71,9 +72,7 @@ def rec3d_multicam(dlt_list, pixel_list):
     return solution  # [X, Y, Z]
 
 
-def process_files_in_directory(
-    dlt_params_dfs, input_directory, output_directory, data_rate
-):
+def process_files_in_directory(dlt_params_dfs, input_directory, output_directory, data_rate):
     """
     Process multiple CSV files in a directory using multiple DLT3D parameter sets.
 
@@ -112,9 +111,7 @@ def process_files_in_directory(
     for csv_file in csv_files:
         files_processed += 1
         progress = (files_processed / total_files) * 100
-        print(
-            f"Processing file {files_processed}/{total_files} ({progress:.1f}%): {csv_file}"
-        )
+        print(f"Processing file {files_processed}/{total_files} ({progress:.1f}%): {csv_file}")
 
         pixel_file = os.path.join(input_directory, csv_file)
         pixel_coords_df = pd.read_csv(pixel_file)
@@ -138,9 +135,7 @@ def process_files_in_directory(
             frame_exists_in_all = True
             dlt_params_for_frame = []
 
-            for camera_idx, (dlt_params, frames) in enumerate(
-                zip(dlt_params_list, frames_list)
-            ):
+            for camera_idx, (dlt_params, frames) in enumerate(zip(dlt_params_list, frames_list)):
                 if frame_num in frames:
                     A_index = np.where(frames == frame_num)[0][0]
                     A = dlt_params[A_index]
@@ -153,9 +148,7 @@ def process_files_in_directory(
                     frame_exists_in_all = False
                     break
 
-            if frame_exists_in_all and len(dlt_params_for_frame) == len(
-                dlt_params_list
-            ):
+            if frame_exists_in_all and len(dlt_params_for_frame) == len(dlt_params_list):
                 # Process each marker for this frame
                 for marker in range(1, num_coords + 1):
                     pixel_obs_list = []
@@ -173,16 +166,12 @@ def process_files_in_directory(
                             valid_marker = False
                             break
 
-                    if valid_marker and len(pixel_obs_list) == len(
-                        dlt_params_for_frame
-                    ):
+                    if valid_marker and len(pixel_obs_list) == len(dlt_params_for_frame):
                         # Calculate 3D reconstruction
                         point3d = rec3d_multicam(dlt_params_for_frame, pixel_obs_list)
 
                         # Fill the pre-allocated array directly
-                        col_start = (
-                            1 + (marker - 1) * 3
-                        )  # x, y, z columns for this marker
+                        col_start = 1 + (marker - 1) * 3  # x, y, z columns for this marker
                         rec_coords_array[i, col_start : col_start + 3] = point3d
                 # NaN values already pre-allocated for invalid frames/markers
 
@@ -193,9 +182,7 @@ def process_files_in_directory(
 
         rec_coords_df = pd.DataFrame(rec_coords_array, columns=header)
 
-        output_file = os.path.join(
-            output_dir, f"{os.path.splitext(csv_file)[0]}_{timestamp}.3d"
-        )
+        output_file = os.path.join(output_dir, f"{os.path.splitext(csv_file)[0]}_{timestamp}.3d")
         rec_coords_df.to_csv(output_file, index=False, float_format="%.6f")
 
     print("\n=== Processing Complete ===")
@@ -235,18 +222,14 @@ def run_rec3d():
 
     # Step 2: Select input directory with CSV files
     print("Step 2: Selecting input directory...")
-    input_directory = filedialog.askdirectory(
-        title="Select Directory Containing CSV Files"
-    )
+    input_directory = filedialog.askdirectory(title="Select Directory Containing CSV Files")
     if not input_directory:
         print("Input directory selection cancelled.")
         return
 
     # Step 3: Select output directory
     print("Step 3: Selecting output directory...")
-    output_directory = filedialog.askdirectory(
-        title="Select Output Directory for Results"
-    )
+    output_directory = filedialog.askdirectory(title="Select Output Directory for Results")
     if not output_directory:
         print("Output directory selection cancelled.")
         return
@@ -257,9 +240,7 @@ def run_rec3d():
         "Data Frequency", "Enter the data frequency (Hz):", minvalue=1, initialvalue=100
     )
     if data_rate is None:
-        messagebox.showerror(
-            "Error", "Data frequency is required. Operation cancelled."
-        )
+        messagebox.showerror("Error", "Data frequency is required. Operation cancelled.")
         return
 
     # Load and validate DLT parameters for each camera
@@ -268,25 +249,21 @@ def run_rec3d():
     for dlt_file in dlt_files:
         df = pd.read_csv(dlt_file)
         if df.empty:
-            messagebox.showerror(
-                "Error", f"DLT3D file {os.path.basename(dlt_file)} is empty!"
-            )
+            messagebox.showerror("Error", f"DLT3D file {os.path.basename(dlt_file)} is empty!")
             return
         dlt_params_dfs.append(df)
 
-    print(f"Configuration complete:")
+    print("Configuration complete:")
     print(f"  - DLT3D files: {len(dlt_files)} cameras")
     print(f"  - Input directory: {input_directory}")
     print(f"  - Output directory: {output_directory}")
     print(f"  - Data rate: {data_rate} Hz")
     for i, df in enumerate(dlt_params_dfs):
-        print(f"  - Camera {i+1}: {len(df)} frames")
+        print(f"  - Camera {i + 1}: {len(df)} frames")
     print("-" * 80)
 
     # Process files
-    process_files_in_directory(
-        dlt_params_dfs, input_directory, output_directory, data_rate
-    )
+    process_files_in_directory(dlt_params_dfs, input_directory, output_directory, data_rate)
 
     root.destroy()
 

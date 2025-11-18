@@ -1,7 +1,8 @@
+import platform
+
+import torch
 from diffusers import StableDiffusionUpscalePipeline
 from PIL import Image
-import torch
-import platform
 
 
 def check_device():

@@ -61,11 +61,12 @@ Version 1.0 (2024-08-12):
 """
 
 import os
-import subprocess
 import platform
+import subprocess
 import sys
 import tkinter as tk
 from tkinter import filedialog
+
 from rich import print
 
 
@@ -109,7 +110,7 @@ def batch_cut_videos(video_directory, list_file_path, output_directory):
     output_directory = os.path.join(output_directory, "cut_videos")
     os.makedirs(output_directory, exist_ok=True)
 
-    with open(list_file_path, "r") as file:
+    with open(list_file_path) as file:
         lines = file.readlines()
 
     for line in lines:
@@ -118,9 +119,7 @@ def batch_cut_videos(video_directory, list_file_path, output_directory):
 
         parts = line.split()
         if len(parts) != 4:
-            print(
-                f"Line format error: {line.strip()} - expected 4 parts, got {len(parts)}"
-            )
+            print(f"Line format error: {line.strip()} - expected 4 parts, got {len(parts)}")
             continue
 
         original_name, new_name, start_frame, end_frame = parts
@@ -161,9 +160,7 @@ def cut_videos():
     root = tk.Tk()
     root.withdraw()
 
-    video_directory = filedialog.askdirectory(
-        title="Select the directory containing videos"
-    )
+    video_directory = filedialog.askdirectory(title="Select the directory containing videos")
     if not video_directory:
         print("No video directory selected.")
         return

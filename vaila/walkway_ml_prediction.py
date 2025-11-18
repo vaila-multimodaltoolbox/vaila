@@ -68,16 +68,16 @@
 
 # =============================================================================
 
-import os
 import json
+import os
+import tkinter as tk
+from datetime import datetime
+from tkinter import filedialog, messagebox, ttk
+
 import joblib
 import numpy as np
 import pandas as pd
 from rich import print
-import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-from datetime import datetime
-
 
 # Function to load models and make predictions
 
@@ -97,7 +97,6 @@ def predict_metrics(selected_metrics, valid_features, output_dir):
     )
     models_info = {}
     if use_default:
-
         script_dir = os.path.dirname(os.path.abspath(__file__))
         models_path = os.path.join(script_dir, "models")
 
@@ -117,18 +116,14 @@ def predict_metrics(selected_metrics, valid_features, output_dir):
                 filetypes=[("Pickle Files", "*.pkl")],
             )
             if not model_path:
-                messagebox.showwarning(
-                    "Warning", f"No model selected for {metric}. Skipping."
-                )
+                messagebox.showwarning("Warning", f"No model selected for {metric}. Skipping.")
                 continue
             scaler_path = filedialog.askopenfilename(
                 title=f"Select Scaler File for {metric}",
                 filetypes=[("JSON Files", "*.json")],
             )
             if not scaler_path:
-                messagebox.showwarning(
-                    "Warning", f"No scaler selected for {metric}. Skipping."
-                )
+                messagebox.showwarning("Warning", f"No scaler selected for {metric}. Skipping.")
                 continue
             models_info[metric] = {"model": model_path, "scaler": scaler_path}
 
@@ -163,7 +158,7 @@ def predict_metrics(selected_metrics, valid_features, output_dir):
     # Se houver scaler, tenta fazer a escala dos dados
     if os.path.exists(scaler_path):
         try:
-            with open(scaler_path, "r") as f:
+            with open(scaler_path) as f:
                 scaler_params = json.load(f)
             mean = np.array(scaler_params.get("mean", []))
             scale = np.array(scaler_params.get("scale", []))
@@ -204,18 +199,12 @@ def predict_metrics(selected_metrics, valid_features, output_dir):
         # Criar DataFrame com as colunas ignoradas (ex.: subject_name, trial_number, etc.)
         ignored_columns = valid_features.loc[
             :,
-            [
-                col
-                for col in valid_features.columns
-                if col.strip().lower() in columns_to_ignore
-            ],
+            [col for col in valid_features.columns if col.strip().lower() in columns_to_ignore],
         ]
 
         # Adicionar as colunas ignoradas existentes ao DataFrame de resultados
         if not ignored_columns.empty:
-            results_df = pd.concat(
-                [ignored_columns.reset_index(drop=True), results_df], axis=1
-            )
+            results_df = pd.concat([ignored_columns.reset_index(drop=True), results_df], axis=1)
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         result_filename = f"result_ml_walkway_{timestamp}.csv"
@@ -253,13 +242,9 @@ def run_prediction(selected_metrics=None):
         "step_block",
     ]
     numeric_columns = [
-        col
-        for col in valid_features_df.columns
-        if col.strip().lower() not in columns_to_ignore
+        col for col in valid_features_df.columns if col.strip().lower() not in columns_to_ignore
     ]
-    valid_features_df = valid_features_df[numeric_columns].apply(
-        pd.to_numeric, errors="coerce"
-    )
+    valid_features_df = valid_features_df[numeric_columns].apply(pd.to_numeric, errors="coerce")
 
     print("Metrics selected for prediction:", selected_metrics)  # Print para depuração
 
@@ -322,14 +307,10 @@ def unselect_all_metrics():
     listbox.selection_clear(0, tk.END)
 
 
-select_all_button = ttk.Button(
-    button_frame, text="Select All", command=select_all_metrics
-)
+select_all_button = ttk.Button(button_frame, text="Select All", command=select_all_metrics)
 select_all_button.grid(row=0, column=0, padx=5)
 
-unselect_all_button = ttk.Button(
-    button_frame, text="Unselect All", command=unselect_all_metrics
-)
+unselect_all_button = ttk.Button(button_frame, text="Unselect All", command=unselect_all_metrics)
 unselect_all_button.grid(row=0, column=1, padx=5)
 
 
@@ -344,9 +325,7 @@ def confirm_and_run_prediction():
     run_prediction(selected_metrics)
 
 
-confirm_button = ttk.Button(
-    button_frame, text="Confirm", command=confirm_and_run_prediction
-)
+confirm_button = ttk.Button(button_frame, text="Confirm", command=confirm_and_run_prediction)
 confirm_button.grid(row=0, column=2, padx=5)
 
 root.mainloop()

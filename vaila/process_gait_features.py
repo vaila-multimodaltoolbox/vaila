@@ -40,11 +40,12 @@ For more details, visit: https://www.gnu.org/licenses/lgpl-3.0.html
 """
 
 import os
-import pandas as pd
-import numpy as np
-from rich import print
-from tkinter import Tk, filedialog, simpledialog
 from datetime import datetime
+from tkinter import filedialog, simpledialog
+
+import numpy as np
+import pandas as pd
+from rich import print
 
 
 def calculate_features(data_block):
@@ -108,12 +109,8 @@ def calculate_features(data_block):
     time_diff = 1  # assumindo tempo constante entre frames
 
     # Velocidades do calcanhar esquerdo
-    features["left_heel_x_speed"] = np.mean(
-        np.diff(data_block["left_heel_x"]) / time_diff
-    )
-    features["left_heel_y_speed"] = np.mean(
-        np.diff(data_block["left_heel_y"]) / time_diff
-    )
+    features["left_heel_x_speed"] = np.mean(np.diff(data_block["left_heel_x"]) / time_diff)
+    features["left_heel_y_speed"] = np.mean(np.diff(data_block["left_heel_y"]) / time_diff)
 
     # Velocidades do índice do pé esquerdo
     features["left_foot_index_x_speed"] = np.mean(
@@ -124,12 +121,8 @@ def calculate_features(data_block):
     )
 
     # Velocidades do calcanhar direito
-    features["right_heel_x_speed"] = np.mean(
-        np.diff(data_block["right_heel_x"]) / time_diff
-    )
-    features["right_heel_y_speed"] = np.mean(
-        np.diff(data_block["right_heel_y"]) / time_diff
-    )
+    features["right_heel_x_speed"] = np.mean(np.diff(data_block["right_heel_x"]) / time_diff)
+    features["right_heel_y_speed"] = np.mean(np.diff(data_block["right_heel_y"]) / time_diff)
 
     # Velocidades do índice do pé direito
     features["right_foot_index_x_speed"] = np.mean(
@@ -163,9 +156,7 @@ def divide_into_blocks(data, num_steps):
     Divide the data into blocks based on the number of steps provided.
     """
     block_size = len(data) // num_steps
-    blocks = [
-        data.iloc[i * block_size : (i + 1) * block_size] for i in range(num_steps)
-    ]
+    blocks = [data.iloc[i * block_size : (i + 1) * block_size] for i in range(num_steps)]
     return blocks
 
 
@@ -174,9 +165,7 @@ def process_files_and_save(input_dir, output_dir):
     Process all .csv files in the input directory and save extracted features to output.
     """
 
-    csv_files = [
-        os.path.join(input_dir, f) for f in os.listdir(input_dir) if f.endswith(".csv")
-    ]
+    csv_files = [os.path.join(input_dir, f) for f in os.listdir(input_dir) if f.endswith(".csv")]
     all_features = []
 
     for file in csv_files:
@@ -204,9 +193,7 @@ def process_files_and_save(input_dir, output_dir):
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         if len(csv_files) == 1:
             base_name = os.path.splitext(os.path.basename(csv_files[0]))[0]
-            output_file = os.path.join(
-                output_dir, f"{base_name}_gaitfeatures_{timestamp}.csv"
-            )
+            output_file = os.path.join(output_dir, f"{base_name}_gaitfeatures_{timestamp}.csv")
         else:
             output_file = os.path.join(output_dir, f"gaitfeatures_{timestamp}.csv")
         result_df.to_csv(output_file, index=False)

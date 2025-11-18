@@ -44,9 +44,9 @@ from __future__ import annotations
 
 import argparse
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
@@ -71,7 +71,7 @@ COORD_SUFFIXES = ("x", "y", "z")
 class MarkerCoords:
     base_name: str
     side: str  # "L" or "R"
-    cols: Dict[str, str]  # coord suffix -> column name (e.g., {"x": "hip_L_x"})
+    cols: dict[str, str]  # coord suffix -> column name (e.g., {"x": "hip_L_x"})
 
 
 @dataclass
@@ -86,7 +86,7 @@ class LRPair:
 # ------------------------------
 
 
-def _normalize_side_tokens(name: str) -> Tuple[Optional[str], str]:
+def _normalize_side_tokens(name: str) -> tuple[str | None, str]:
     """
     Extract side (L/R) and the base marker name from a column marker token.
 
@@ -127,7 +127,7 @@ def _normalize_side_tokens(name: str) -> Tuple[Optional[str], str]:
     return None, name
 
 
-def _split_marker_and_coord(col: str) -> Optional[Tuple[str, str]]:
+def _split_marker_and_coord(col: str) -> tuple[str, str] | None:
     """
     Split a column into (marker_token, coord_suffix) when it ends with _x/_y/_z.
     Returns None if not a coordinate column.
@@ -138,7 +138,7 @@ def _split_marker_and_coord(col: str) -> Optional[Tuple[str, str]]:
     return m.group(1), m.group(2).lower()
 
 
-def find_lr_pairs(df: pd.DataFrame) -> List[LRPair]:
+def find_lr_pairs(df: pd.DataFrame) -> list[LRPair]:
     """
     Build left/right pairs from dataframe column names.
 
@@ -146,7 +146,7 @@ def find_lr_pairs(df: pd.DataFrame) -> List[LRPair]:
     parsed for side information (L/R or left/right). Pairs are grouped by the
     base_name (common part without side token).
     """
-    by_marker: Dict[str, Dict[str, Dict[str, str]]] = {}
+    by_marker: dict[str, dict[str, dict[str, str]]] = {}
     # base_name -> side(L/R) -> coord -> colname
 
     for col in df.columns:
@@ -161,18 +161,13 @@ def find_lr_pairs(df: pd.DataFrame) -> List[LRPair]:
             by_marker[base] = {"L": {}, "R": {}}
         by_marker[base][side][coord] = col
 
-    pairs: List[LRPair] = []
+    pairs: list[LRPair] = []
     for base, sides in by_marker.items():
         if set(sides.keys()) >= {"L", "R"} and sides["L"] and sides["R"]:
             left = MarkerCoords(base_name=base, side="L", cols=sides["L"])
             right = MarkerCoords(base_name=base, side="R", cols=sides["R"])
             # require at least x and y
-            if (
-                "x" in left.cols
-                and "x" in right.cols
-                and "y" in left.cols
-                and "y" in right.cols
-            ):
+            if "x" in left.cols and "x" in right.cols and "y" in left.cols and "y" in right.cols:
                 pairs.append(LRPair(base_name=base, left=left, right=right))
     return pairs
 
@@ -182,7 +177,7 @@ def find_lr_pairs(df: pd.DataFrame) -> List[LRPair]:
 # ------------------------------
 
 
-def _contiguous_regions(mask: np.ndarray) -> List[Tuple[int, int]]:
+def _contiguous_regions(mask: np.ndarray) -> list[tuple[int, int]]:
     """Return list of [start, end] inclusive ranges where mask is True."""
     if mask.ndim != 1:
         mask = mask.ravel()
@@ -204,7 +199,7 @@ def propose_swaps_for_pair(
     pair: LRPair,
     max_len: int = 30,
     min_gap: int = 1,
-) -> List[Tuple[int, int]]:
+) -> list[tuple[int, int]]:
     """
     Propose swap intervals for a pair based on the sign of (xR - xL).
 
@@ -231,7 +226,7 @@ def propose_swaps_for_pair(
     bad = (np.sign(np.where(d == 0, eps, d)) != majority_sign) & valid
     ranges = _contiguous_regions(bad)
     # keep small/medium runs only
-    filtered: List[Tuple[int, int]] = []
+    filtered: list[tuple[int, int]] = []
     for s, e in ranges:
         length = e - s + 1
         if length < min_gap:
@@ -270,11 +265,11 @@ def auto_fix_swaps(
     pairs: Sequence[LRPair],
     max_len: int = 30,
     min_gap: int = 1,
-) -> Dict[str, List[Tuple[int, int]]]:
+) -> dict[str, list[tuple[int, int]]]:
     """
     Detect and apply swaps for each pair. Returns dict base_name -> list of ranges.
     """
-    proposals: Dict[str, List[Tuple[int, int]]] = {}
+    proposals: dict[str, list[tuple[int, int]]] = {}
     for p in pairs:
         ranges = propose_swaps_for_pair(df, p, max_len=max_len, min_gap=min_gap)
         if ranges:
@@ -294,19 +289,15 @@ def load_csv(path: Path) -> pd.DataFrame:
     return df
 
 
-def save_csv_with_suffix(
-    original_csv: Path, df: pd.DataFrame, suffix: str = "_reidswap"
-) -> Path:
+def save_csv_with_suffix(original_csv: Path, df: pd.DataFrame, suffix: str = "_reidswap") -> Path:
     out = original_csv.with_name(original_csv.stem + suffix + original_csv.suffix)
     df.to_csv(out, index=False)
     return out
 
 
-def write_report(
-    original_csv: Path, proposals: Dict[str, List[Tuple[int, int]]]
-) -> Path:
+def write_report(original_csv: Path, proposals: dict[str, list[tuple[int, int]]]) -> Path:
     report = original_csv.with_name(original_csv.stem + "_reidswap_report.txt")
-    lines: List[str] = []
+    lines: list[str] = []
     lines.append(f"File: {original_csv}")
     if proposals:
         lines.append("Suspected swap intervals (inclusive) per marker pair:\n")
@@ -319,7 +310,7 @@ def write_report(
     return report
 
 
-def _ask_csv_via_tk() -> Optional[Path]:
+def _ask_csv_via_tk() -> Path | None:
     if tk is None or filedialog is None:
         return None
     root = tk.Tk()
@@ -341,11 +332,11 @@ def _ask_csv_via_tk() -> Optional[Path]:
 
 def export_preview_clips(
     video_path: Path,
-    proposals: Dict[str, List[Tuple[int, int]]],
+    proposals: dict[str, list[tuple[int, int]]],
     dest_root: Path,
     margin: int = 5,
     max_total_clips: int = 20,
-) -> List[Path]:
+) -> list[Path]:
     """
     Export short MP4 clips around each proposed swap interval to help inspection.
     Returns the list of created files.
@@ -374,7 +365,7 @@ def export_preview_clips(
     out_dir = dest_root
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    created: List[Path] = []
+    created: list[Path] = []
     clips_made = 0
     for base, spans in proposals.items():
         for s, e in spans:
@@ -430,7 +421,7 @@ def interactive_review(
     video_path: Path,
     max_len: int = 30,
     min_gap: int = 1,
-) -> Optional[Path]:
+) -> Path | None:
     """
     Open an interactive OpenCV window to review suspected swaps over the video.
     Controls:
@@ -462,14 +453,14 @@ def interactive_review(
         print("No L/R pairs detected in CSV columns.")
         return None
 
-    proposals_all: Dict[str, List[Tuple[int, int]]] = {}
+    proposals_all: dict[str, list[tuple[int, int]]] = {}
     for p in pairs:
         spans = propose_swaps_for_pair(df, p, max_len=max_len, min_gap=min_gap)
         if spans:
             proposals_all[p.base_name] = spans
 
     # Applied flags per pair per interval index
-    applied: Dict[str, List[bool]] = {
+    applied: dict[str, list[bool]] = {
         base: [True for _ in spans] for base, spans in proposals_all.items()
     }
 
@@ -483,7 +474,7 @@ def interactive_review(
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
 
     # Pre-fetch coords arrays for quicker access
-    coords: Dict[str, Dict[str, np.ndarray]] = {}
+    coords: dict[str, dict[str, np.ndarray]] = {}
     for p in pairs:
         base = p.base_name
         coords[base] = {}
@@ -513,7 +504,7 @@ def interactive_review(
     def get_current_base() -> str:
         return base_names[pair_idx]
 
-    def in_any_interval(base: str, frame_idx: int) -> Optional[int]:
+    def in_any_interval(base: str, frame_idx: int) -> int | None:
         spans = proposals_all.get(base, [])
         for i, (s, e) in enumerate(spans):
             if s <= frame_idx <= e:
@@ -545,9 +536,7 @@ def interactive_review(
             x = Rx[current_frame]
             y = Ry[current_frame]
             if np.isfinite(x) and np.isfinite(y):
-                cv2.circle(
-                    img, (int(x), int(y)), 6, (0, 165, 255), -1
-                )  # Right in orange
+                cv2.circle(img, (int(x), int(y)), 6, (0, 165, 255), -1)  # Right in orange
                 cv2.putText(
                     img,
                     "R",
@@ -560,8 +549,8 @@ def interactive_review(
 
         # HUD
         hud = [
-            f"Pair: {base}  ({pair_idx+1}/{len(base_names)})",
-            f"Frame: {current_frame}/{total_frames-1}",
+            f"Pair: {base}  ({pair_idx + 1}/{len(base_names)})",
+            f"Frame: {current_frame}/{total_frames - 1}",
         ]
         spans = proposals_all.get(base, [])
         if spans:
@@ -571,15 +560,13 @@ def interactive_review(
             else:
                 s, e = spans[cur_i]
                 state = "ON" if applied.get(base, [])[cur_i] else "OFF"
-                hud.append(f"Interval: {cur_i+1}/{len(spans)} [{s}:{e}] apply={state}")
+                hud.append(f"Interval: {cur_i + 1}/{len(spans)} [{s}:{e}] apply={state}")
         else:
             hud.append("No proposed intervals for this pair")
 
         y0 = 28
         for line in hud:
-            cv2.putText(
-                img, line, (20, y0), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2
-            )
+            cv2.putText(img, line, (20, y0), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
             y0 += 26
 
     def print_help() -> None:
@@ -589,7 +576,7 @@ def interactive_review(
 
     print_help()
 
-    saved_path: Optional[Path] = None
+    saved_path: Path | None = None
     while True:
         # Clamp frame
         if total_frames > 0:
@@ -685,7 +672,7 @@ def interactive_review(
 # ------------------------------
 
 
-def run_auto(csv_path: Path, max_len: int = 30, min_gap: int = 1) -> Tuple[Path, Path]:
+def run_auto(csv_path: Path, max_len: int = 30, min_gap: int = 1) -> tuple[Path, Path]:
     df = load_csv(csv_path)
     pairs = find_lr_pairs(df)
     proposals = auto_fix_swaps(df, pairs, max_len=max_len, min_gap=min_gap)
@@ -718,15 +705,13 @@ def run_manual(csv_path: Path, pair_name: str, start: int, end: int) -> Path:
     return out_csv
 
 
-def main(argv: Optional[Sequence[str]] = None) -> None:
+def main(argv: Sequence[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         description="Detect and fix abrupt left/right marker swaps in CSVs",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument("--csv", type=str, default="", help="Path to marker CSV")
-    parser.add_argument(
-        "--video", type=str, default="", help="Optional video path (reserved)"
-    )
+    parser.add_argument("--video", type=str, default="", help="Optional video path (reserved)")
     parser.add_argument(
         "--review",
         action="store_true",
@@ -747,19 +732,15 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         default=1,
         help="Min length to consider (ignore tiny blips)",
     )
-    parser.add_argument(
-        "--manual", type=str, default="", help="Manual pair base name for swapping"
-    )
+    parser.add_argument("--manual", type=str, default="", help="Manual pair base name for swapping")
     parser.add_argument(
         "--start", type=int, default=-1, help="Start frame for manual swap (inclusive)"
     )
-    parser.add_argument(
-        "--end", type=int, default=-1, help="End frame for manual swap (inclusive)"
-    )
+    parser.add_argument("--end", type=int, default=-1, help="End frame for manual swap (inclusive)")
 
     args = parser.parse_args(argv)
 
-    csv_path: Optional[Path] = Path(args.csv) if args.csv else None
+    csv_path: Path | None = Path(args.csv) if args.csv else None
     if not csv_path or not csv_path.exists():
         # try to ask via Tk
         possible = _ask_csv_via_tk()
@@ -771,9 +752,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         if args.start < 0 or args.end < 0 or args.end < args.start:
             raise ValueError("For manual mode, provide valid --start and --end frames.")
         out_csv = run_manual(csv_path, args.manual, args.start, args.end)
-        print(
-            f"Manual swap applied for pair '{args.manual}' in {args.start}..{args.end}"
-        )
+        print(f"Manual swap applied for pair '{args.manual}' in {args.start}..{args.end}")
         print(f"Saved: {out_csv}")
         if args.video:
             # Export a single preview clip for the manual range
@@ -803,16 +782,14 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
             # Load proposals again just for preview export
             df = load_csv(csv_path)
             pairs = find_lr_pairs(df)
-            proposals = auto_fix_swaps(
-                df.copy(), pairs, max_len=args.max_len, min_gap=args.min_gap
-            )
+            proposals = auto_fix_swaps(df.copy(), pairs, max_len=args.max_len, min_gap=args.min_gap)
             previews_dir = out_csv.with_name(out_csv.stem + "_previews")
             export_preview_clips(Path(args.video), proposals, previews_dir)
     else:
         # Only analyze and write report (no changes)
         df = load_csv(csv_path)
         pairs = find_lr_pairs(df)
-        proposals: Dict[str, List[Tuple[int, int]]] = {}
+        proposals: dict[str, list[tuple[int, int]]] = {}
         for p in pairs:
             proposals[p.base_name] = propose_swaps_for_pair(
                 df, p, max_len=args.max_len, min_gap=args.min_gap

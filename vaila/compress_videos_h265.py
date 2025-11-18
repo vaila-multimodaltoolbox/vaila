@@ -92,12 +92,13 @@ Note:
 """
 
 import os
-import subprocess
 import platform
+import subprocess
 import tempfile
-from datetime import datetime
 import tkinter as tk
+from datetime import datetime
 from tkinter import filedialog, messagebox
+
 from rich import print
 
 # Global variables for success and failure counts
@@ -121,9 +122,7 @@ def is_nvidia_gpu_available():
             return "NVIDIA" in result.stdout
         elif os_type == "Linux":
             # Specific command for Linux
-            result = subprocess.run(
-                ["lspci"], capture_output=True, text=True, check=True
-            )
+            result = subprocess.run(["lspci"], capture_output=True, text=True, check=True)
             return "NVIDIA" in result.stdout
         elif os_type == "Darwin":  # macOS
             # On macOS, there are no recent NVIDIA GPUs supported
@@ -174,7 +173,7 @@ def run_compress_videos_h265(input_list, output_dir, preset, crf, resolution, us
     os.makedirs(output_dir, exist_ok=True)
 
     # Read the video files from the temp file
-    with open(input_list, "r") as temp_file:
+    with open(input_list) as temp_file:
         video_paths = [line.strip() for line in temp_file]
 
     for video_path in video_paths:
@@ -197,9 +196,7 @@ def run_compress_videos_h265(input_list, output_dir, preset, crf, resolution, us
                     "csv=s=x:p=0",
                     video_path,
                 ]
-                original_resolution = (
-                    subprocess.check_output(cmd_probe).decode().strip()
-                )
+                original_resolution = subprocess.check_output(cmd_probe).decode().strip()
                 print(f"[DEBUG] Original video resolution: {original_resolution}")
             except Exception as e:
                 print(f"[DEBUG] Error getting original resolution: {str(e)}")
@@ -323,14 +320,14 @@ def get_compression_parameters():
     main_frame.pack(fill="both", expand=True)
 
     # Title
-    tk.Label(
-        main_frame, text="H.265 Video Compression Settings", font=("Arial", 12, "bold")
-    ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 15))
+    tk.Label(main_frame, text="H.265 Video Compression Settings", font=("Arial", 12, "bold")).grid(
+        row=0, column=0, columnspan=2, sticky="w", pady=(0, 15)
+    )
 
     # 1. Preset field with numbered options
-    tk.Label(
-        main_frame, text="Preset (enter number):", font=("Arial", 10, "bold")
-    ).grid(row=1, column=0, sticky="w", pady=5)
+    tk.Label(main_frame, text="Preset (enter number):", font=("Arial", 10, "bold")).grid(
+        row=1, column=0, sticky="w", pady=5
+    )
     preset_var = tk.StringVar(value="5")  # Default to medium (index 5)
     preset_entry = tk.Entry(main_frame, textvariable=preset_var, width=5)
     preset_entry.grid(row=1, column=1, sticky="w", pady=5)
@@ -344,9 +341,9 @@ def get_compression_parameters():
             if i % 3 == 0:  # Break line every 3 options
                 preset_help_text += "\n"
 
-    tk.Label(
-        main_frame, text=preset_help_text, font=("Arial", 8, "italic"), justify="left"
-    ).grid(row=2, column=0, columnspan=2, sticky="w", padx=20)
+    tk.Label(main_frame, text=preset_help_text, font=("Arial", 8, "italic"), justify="left").grid(
+        row=2, column=0, columnspan=2, sticky="w", padx=20
+    )
 
     # 2. CRF field (keep as is - already a number)
     tk.Label(main_frame, text="CRF Value (0-51):", font=("Arial", 10, "bold")).grid(
@@ -364,9 +361,9 @@ def get_compression_parameters():
     ).grid(row=4, column=0, columnspan=2, sticky="w", padx=20)
 
     # 3. Resolution field with numbered options
-    tk.Label(
-        main_frame, text="Resolution (enter number):", font=("Arial", 10, "bold")
-    ).grid(row=5, column=0, sticky="w", pady=5)
+    tk.Label(main_frame, text="Resolution (enter number):", font=("Arial", 10, "bold")).grid(
+        row=5, column=0, sticky="w", pady=5
+    )
     resolution_var = tk.StringVar(value="1")  # Default to original (index 1)
     resolution_entry = tk.Entry(main_frame, textvariable=resolution_var, width=5)
     resolution_entry.grid(row=5, column=1, sticky="w", pady=5)
@@ -388,9 +385,9 @@ def get_compression_parameters():
     ).grid(row=6, column=0, columnspan=2, sticky="w", padx=20)
 
     # 4. GPU field with numbered options
-    tk.Label(
-        main_frame, text="Use GPU (enter number):", font=("Arial", 10, "bold")
-    ).grid(row=7, column=0, sticky="w", pady=5)
+    tk.Label(main_frame, text="Use GPU (enter number):", font=("Arial", 10, "bold")).grid(
+        row=7, column=0, sticky="w", pady=5
+    )
     gpu_var = tk.StringVar(value="2")  # Default to No
     gpu_entry = tk.Entry(main_frame, textvariable=gpu_var, width=5)
     gpu_entry.grid(row=7, column=1, sticky="w", pady=5)
@@ -456,9 +453,7 @@ def get_compression_parameters():
             try:
                 gpu_choice = int(gpu_var.get().strip())
                 if gpu_choice not in [1, 2]:
-                    messagebox.showerror(
-                        "Error", "GPU option must be 1 (Yes) or 2 (No)"
-                    )
+                    messagebox.showerror("Error", "GPU option must be 1 (Yes) or 2 (No)")
                     return
                 use_gpu = gpu_choice == 1
             except ValueError:
@@ -493,12 +488,8 @@ def get_compression_parameters():
         dialog.destroy()
 
     # Add buttons
-    tk.Button(button_frame, text="OK", command=on_ok, width=10).pack(
-        side="left", padx=5
-    )
-    tk.Button(button_frame, text="Cancel", command=on_cancel, width=10).pack(
-        side="left", padx=5
-    )
+    tk.Button(button_frame, text="OK", command=on_ok, width=10).pack(side="left", padx=5)
+    tk.Button(button_frame, text="Cancel", command=on_cancel, width=10).pack(side="left", padx=5)
 
     # Function to show built-in help
     def show_help():
@@ -614,9 +605,7 @@ def compress_videos_h265_gui():
     # Check if NVIDIA GPU is available when GPU is selected
     use_gpu = compression_config["use_gpu"] and is_nvidia_gpu_available()
     if compression_config["use_gpu"] and not use_gpu:
-        print(
-            "GPU acceleration requested but no NVIDIA GPU detected. Using CPU instead."
-        )
+        print("GPU acceleration requested but no NVIDIA GPU detected. Using CPU instead.")
         messagebox.showwarning(
             "GPU Not Available",
             "GPU acceleration was requested but no compatible NVIDIA GPU was detected.\n"

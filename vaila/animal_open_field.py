@@ -74,30 +74,29 @@ Changelog:
 """
 
 import os
-import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.colors
-import matplotlib.patches
-from matplotlib.colors import LinearSegmentedColormap
-import seaborn as sns
+from datetime import datetime
 from tkinter import (
-    Tk,
-    filedialog,
-    simpledialog,
-    messagebox,
-    StringVar,
+    LEFT,
+    Button,
+    Entry,
+    Frame,
     Label,
     Radiobutton,
-    Entry,
-    Button,
-    Frame,
-    LEFT,
+    StringVar,
+    Tk,
+    filedialog,
+    messagebox,
+    simpledialog,
 )
-from datetime import datetime
-from pathlib import Path
-from scipy.signal import butter, filtfilt
+
+import matplotlib.colors
+import matplotlib.patches
+import matplotlib.pyplot as plt
+import numpy as np
+import seaborn as sns
+from matplotlib.colors import LinearSegmentedColormap
 from scipy.ndimage import median_filter
-from scipy.signal import savgol_filter
+from scipy.signal import butter, filtfilt, savgol_filter
 
 
 def load_and_preprocess_data(input_file):
@@ -240,8 +239,8 @@ def calculate_zone_occupancy(x, y, distance):
         zones_distance (dict): Distance covered in each zone.
     """
     zones = define_zones()
-    zones_count = {zone: 0 for zone in zones}
-    zones_distance = {zone: 0.0 for zone in zones}
+    zones_count = dict.fromkeys(zones, 0)
+    zones_distance = dict.fromkeys(zones, 0.0)
     total_points = len(x)
 
     # Add counter for points outside all zones
@@ -263,9 +262,7 @@ def calculate_zone_occupancy(x, y, distance):
             points_outside_zones += 1  # Count points that are outside all zones
 
     # Calculate percentages
-    zones_percentage = {
-        zone: (count / total_points) * 100 for zone, count in zones_count.items()
-    }
+    zones_percentage = {zone: (count / total_points) * 100 for zone, count in zones_count.items()}
 
     # Check for missing points
     total_counted_points = sum(zones_count.values())
@@ -330,9 +327,7 @@ def calculate_kinematics(x, y, fs):
     # Speed ranges
     speed_ranges = [(3 * i, 3 * (i + 1)) for i in range(15)]  # 0 to 45 m/min
     speed_range_counts_frames = {f"{low}-{high} m/min": 0 for low, high in speed_ranges}
-    speed_range_counts_seconds = {
-        f"{low}-{high} m/min": 0 for low, high in speed_ranges
-    }
+    speed_range_counts_seconds = {f"{low}-{high} m/min": 0 for low, high in speed_ranges}
 
     # Count speed ranges
     for s in speed * 60:  # Convert m/s to m/min
@@ -343,9 +338,7 @@ def calculate_kinematics(x, y, fs):
                 break
 
     # Call zone functions
-    zones_count, zones_percentage, zones_distance = calculate_zone_occupancy(
-        x, y, distance
-    )
+    zones_count, zones_percentage, zones_distance = calculate_zone_occupancy(x, y, distance)
     center_border_results = calculate_center_and_border_occupancy(x, y, distance)
 
     return (
@@ -380,9 +373,7 @@ def plot_pathway(x, y, time_vector, total_distance, output_dir, base_name):
     time_in_minutes = time_vector / 60
 
     # Create a colormap for the pathway (e.g., from blue to red)
-    cmap = LinearSegmentedColormap.from_list(
-        "PathwayProgress", ["blue", "green", "yellow", "red"]
-    )
+    cmap = LinearSegmentedColormap.from_list("PathwayProgress", ["blue", "green", "yellow", "red"])
 
     # Normalize the time to range [0, 1] for color mapping
     progress = (time_in_minutes - time_in_minutes.min()) / (
@@ -426,9 +417,7 @@ def plot_pathway(x, y, time_vector, total_distance, output_dir, base_name):
     # Add a colorbar for the pathway progression
     sm = plt.cm.ScalarMappable(
         cmap=cmap,
-        norm=matplotlib.colors.Normalize(
-            vmin=time_in_minutes.min(), vmax=time_in_minutes.max()
-        ),
+        norm=matplotlib.colors.Normalize(vmin=time_in_minutes.min(), vmax=time_in_minutes.max()),
     )
     sm.set_array([])
     cbar = plt.colorbar(sm, ax=ax, orientation="vertical", fraction=0.046, pad=0.04)
@@ -533,9 +522,7 @@ def plot_center_and_border_heatmap(x, y, output_dir, base_name, center_border_re
 
     # Check if the data is empty
     if len(x) == 0 or len(y) == 0:
-        print(
-            f"Warning: Empty data for center and border heatmap in {base_name}. Skipping plot."
-        )
+        print(f"Warning: Empty data for center and border heatmap in {base_name}. Skipping plot.")
         return
 
     # Create the heatmap
@@ -596,17 +583,13 @@ def plot_center_and_border_heatmap(x, y, output_dir, base_name, center_border_re
             f"Heatmap with Central and Border Distances: Center: {center_border_results['distance_in_center']:.2f} m | Border: {center_border_results['distance_in_border']:.2f} m"
         )
         # Save the heatmap with higher DPI
-        output_file_path = os.path.join(
-            output_dir, f"{base_name}_center_border_heatmap.png"
-        )
+        output_file_path = os.path.join(output_dir, f"{base_name}_center_border_heatmap.png")
         plt.savefig(output_file_path, bbox_inches="tight", dpi=300)  # Added dpi=300
         plt.close()
         print(f"Central and border heatmap saved at: {output_file_path}")
 
     except ValueError as e:
-        print(
-            f"Error generating center and border heatmap for {base_name}: {e}. Skipping plot."
-        )
+        print(f"Error generating center and border heatmap for {base_name}: {e}. Skipping plot.")
         return
 
 
@@ -626,9 +609,7 @@ def plot_speed_ranges(
     os.makedirs(output_dir, exist_ok=True)
 
     # Convert frames to seconds (frames / fs)
-    speed_range_counts_seconds = {
-        k: v / fs for k, v in speed_range_counts_frames.items()
-    }
+    speed_range_counts_seconds = {k: v / fs for k, v in speed_range_counts_frames.items()}
 
     # Add stationary time to the first range (0-3 m/min)
     speed_range_counts_seconds["0-3 m/min"] += time_stationary_seconds
@@ -654,9 +635,7 @@ def plot_speed_ranges(
     print(f"Speed ranges plot saved at: {output_file_path}")
 
 
-def plot_speed_over_time_with_tags(
-    time_vector, speed, window_size, output_dir, base_name
-):
+def plot_speed_over_time_with_tags(time_vector, speed, window_size, output_dir, base_name):
     """
     Plots speed over time with horizontal lines indicating speed ranges
     and tags for each range. Additionally, overlays a smoothed speed curve
@@ -674,9 +653,7 @@ def plot_speed_over_time_with_tags(
     speed_m_per_min = speed * 60
 
     # Moving average smoothing using numpy.convolve
-    speed_smoothed = np.convolve(
-        speed_m_per_min, np.ones(window_size) / window_size, mode="same"
-    )
+    speed_smoothed = np.convolve(speed_m_per_min, np.ones(window_size) / window_size, mode="same")
 
     # Speed ranges (3 m/min to 45 m/min)
     speed_ranges = [3 * i for i in range(16)]  # 0, 3, 6, ..., 45 m/min
@@ -685,9 +662,7 @@ def plot_speed_over_time_with_tags(
     plt.figure(figsize=(18, 9))  # Increased from 12,6 to 18,9
 
     # Create the plot
-    plt.plot(
-        time_vector, speed_m_per_min, color="blue", linewidth=1.5, label="Speed (m/min)"
-    )
+    plt.plot(time_vector, speed_m_per_min, color="blue", linewidth=1.5, label="Speed (m/min)")
     plt.plot(
         time_vector,
         speed_smoothed,
@@ -716,26 +691,20 @@ def plot_speed_over_time_with_tags(
     # Configure grid and limits
     plt.grid(True, linestyle="--", alpha=0.6)
     plt.ylim(0, max(speed_m_per_min) + 5)
-    plt.xlim(
-        0, max(time_vector) + (max(time_vector) * 0.05)
-    )  # Add space on the X-axis for tags
+    plt.xlim(0, max(time_vector) + (max(time_vector) * 0.05))  # Add space on the X-axis for tags
 
     # Add legend
     plt.legend(fontsize=10)
 
     # Save the plot with higher DPI
-    output_file_path = os.path.join(
-        output_dir, f"{base_name}_speed_over_time_with_tags.png"
-    )
+    output_file_path = os.path.join(output_dir, f"{base_name}_speed_over_time_with_tags.png")
     plt.savefig(output_file_path, bbox_inches="tight", dpi=300)  # Added dpi=300
     plt.close()
 
     print(f"Speed over time plot with tags saved at: {output_file_path}")
 
 
-def save_results_to_csv(
-    results, center_border_results, zones_distance, fs, output_dir, base_name
-):
+def save_results_to_csv(results, center_border_results, zones_distance, fs, output_dir, base_name):
     """
     Save results including zone occupancy, stationary time, speed range counts,
     and distances covered in zones and center/border areas.
@@ -784,9 +753,7 @@ def save_results_to_csv(
 
         # Create data row
         zone_points = [results["zone_counts"].get(f"Z{i}", 0) for i in range(1, 10)]
-        zone_percentages = [
-            results["zone_percentages"].get(f"Z{i}", 0.0) for i in range(1, 10)
-        ]
+        zone_percentages = [results["zone_percentages"].get(f"Z{i}", 0.0) for i in range(1, 10)]
         zone_distances = [zones_distance.get(f"Z{i}", 0.0) for i in range(1, 10)]
 
         center_border_data = [
@@ -898,9 +865,7 @@ def process_open_field_data(
             zones_percentage,
             zones_distance,
             center_border_results,
-        ) = calculate_kinematics(
-            x_filtered, y_filtered, fs
-        )  # Using filtered coordinates
+        ) = calculate_kinematics(x_filtered, y_filtered, fs)  # Using filtered coordinates
 
         # Save results and data
         results = {
@@ -912,19 +877,13 @@ def process_open_field_data(
         }
 
         # Generate visualizations using filtered data
-        plot_pathway(
-            x_filtered, y_filtered, time_vector, sum(distance), output_dir, base_name
-        )
+        plot_pathway(x_filtered, y_filtered, time_vector, sum(distance), output_dir, base_name)
         plot_heatmap(x_filtered, y_filtered, output_dir, base_name, results)
         plot_center_and_border_heatmap(
             x_filtered, y_filtered, output_dir, base_name, center_border_results
         )
-        plot_speed_ranges(
-            speed_range_counts_frames, time_stationary, fs, output_dir, base_name
-        )
-        plot_speed_over_time_with_tags(
-            time_vector, speed, int(2 * fs), output_dir, base_name
-        )
+        plot_speed_ranges(speed_range_counts_frames, time_stationary, fs, output_dir, base_name)
+        plot_speed_over_time_with_tags(time_vector, speed, int(2 * fs), output_dir, base_name)
 
         # Save filtered position data
         save_position_data(
@@ -953,11 +912,7 @@ def process_all_files_in_directory(
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     main_output_dir = os.path.join(target_dir, f"openfield_results_{timestamp}")
     os.makedirs(main_output_dir, exist_ok=True)
-    csv_files = [
-        os.path.join(target_dir, f)
-        for f in os.listdir(target_dir)
-        if f.endswith(".csv")
-    ]
+    csv_files = [os.path.join(target_dir, f) for f in os.listdir(target_dir) if f.endswith(".csv")]
     for input_file in csv_files:
         print(f"Processing file: {input_file}")
         process_open_field_data(
@@ -1060,27 +1015,21 @@ def run_animal_open_field():
             messagebox.showinfo("Help", help_text)
 
         # Title label
-        Label(filter_window, text="Filter Settings", font=("Arial", 12, "bold")).pack(
-            pady=15
-        )
+        Label(filter_window, text="Filter Settings", font=("Arial", 12, "bold")).pack(pady=15)
 
         # Filter type selection with more padding
         Label(filter_window, text="Select filter type:").pack(pady=15)
-        Radiobutton(
-            filter_window, text="Savitzky-Golay", variable=filter_var, value="savgol"
-        ).pack(pady=5)
-        Radiobutton(
-            filter_window, text="Median", variable=filter_var, value="median"
-        ).pack(pady=5)
+        Radiobutton(filter_window, text="Savitzky-Golay", variable=filter_var, value="savgol").pack(
+            pady=5
+        )
+        Radiobutton(filter_window, text="Median", variable=filter_var, value="median").pack(pady=5)
 
         # Window size entry with more padding
         Label(filter_window, text="Window size (in frames):").pack(pady=15)
         Entry(filter_window, textvariable=window_var).pack(pady=5)
 
         # Polynomial order entry with more padding
-        Label(filter_window, text="Polynomial order (Savitzky-Golay only):").pack(
-            pady=15
-        )
+        Label(filter_window, text="Polynomial order (Savitzky-Golay only):").pack(pady=15)
         Entry(filter_window, textvariable=poly_var).pack(pady=5)
 
         # Frame for buttons
@@ -1088,12 +1037,10 @@ def run_animal_open_field():
         button_frame.pack(pady=20)
 
         # Add Help and Save buttons side by side
-        Button(button_frame, text="Help", command=show_help, width=15).pack(
+        Button(button_frame, text="Help", command=show_help, width=15).pack(side=LEFT, padx=10)
+        Button(button_frame, text="Save Settings", command=save_settings, width=15).pack(
             side=LEFT, padx=10
         )
-        Button(
-            button_frame, text="Save Settings", command=save_settings, width=15
-        ).pack(side=LEFT, padx=10)
 
         # Center the window
         filter_window.update_idletasks()
@@ -1101,7 +1048,7 @@ def run_animal_open_field():
         height = filter_window.winfo_height()
         x = (filter_window.winfo_screenwidth() // 2) - (width // 2)
         y = (filter_window.winfo_screenheight() // 2) - (height // 2)
-        filter_window.geometry("{}x{}+{}+{}".format(width, height, x, y))
+        filter_window.geometry(f"{width}x{height}+{x}+{y}")
 
         # Wait for window to close
         filter_window.wait_window()
@@ -1120,26 +1067,19 @@ def run_animal_open_field():
         return
 
     # Process all files in the selected directory
-    process_all_files_in_directory(
-        target_dir, fs, cutoff, filter_type, window_size, poly_order
-    )
+    process_all_files_in_directory(target_dir, fs, cutoff, filter_type, window_size, poly_order)
     root.destroy()
-    messagebox.showinfo(
-        "Success", "All .csv files have been processed and results saved."
-    )
+    messagebox.showinfo("Success", "All .csv files have been processed and results saved.")
 
 
-def plot_filtering_comparison(
-    x, y, x_filtered, y_filtered, time_vector, fs, output_dir, base_name
-):
+def plot_filtering_comparison(x, y, x_filtered, y_filtered, time_vector, fs, output_dir, base_name):
     """
     Plots a comparison of the original and filtered data.
     """
     # Calculate speeds
     speed_original = np.insert(np.sqrt(np.diff(x) ** 2 + np.diff(y) ** 2), 0, 0) * fs
     speed_filtered = (
-        np.insert(np.sqrt(np.diff(x_filtered) ** 2 + np.diff(y_filtered) ** 2), 0, 0)
-        * fs
+        np.insert(np.sqrt(np.diff(x_filtered) ** 2 + np.diff(y_filtered) ** 2), 0, 0) * fs
     )
 
     # Create the comparison plot

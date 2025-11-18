@@ -64,11 +64,11 @@ You should see a line containing "libvvenc". If not, your FFmpeg build is not co
 
 import os
 import subprocess
-import platform
 import tempfile
-from datetime import datetime
 import tkinter as tk
+from datetime import datetime
 from tkinter import filedialog, messagebox
+
 from rich import print
 
 # Global variables
@@ -104,7 +104,7 @@ def run_compress_videos_h266(input_list, output_dir, preset, qp, resolution):
     print(f"[DEBUG] - Preset: {preset}")
     print(f"[DEBUG] - QP: {qp}")
     print(f"[DEBUG] - Resolution: {resolution}")
-    print(f"[DEBUG] - Encoder: libvvenc (CPU-only)")
+    print("[DEBUG] - Encoder: libvvenc (CPU-only)")
 
     print("\n[bold red]!!! ATTENTION !!![/bold red]")
     print(
@@ -113,7 +113,7 @@ def run_compress_videos_h266(input_list, output_dir, preset, qp, resolution):
 
     os.makedirs(output_dir, exist_ok=True)
 
-    with open(input_list, "r") as f:
+    with open(input_list) as f:
         video_paths = [line.strip() for line in f]
 
     for video_path in video_paths:
@@ -197,19 +197,19 @@ def get_compression_parameters():
     main_frame = tk.Frame(dialog, padx=20, pady=15)
     main_frame.pack(fill="both", expand=True)
 
-    tk.Label(
-        main_frame, text="H.266/VVC Compression Settings", font=("Arial", 12, "bold")
-    ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 15))
+    tk.Label(main_frame, text="H.266/VVC Compression Settings", font=("Arial", 12, "bold")).grid(
+        row=0, column=0, columnspan=2, sticky="w", pady=(0, 15)
+    )
 
     # 1. Preset
-    tk.Label(
-        main_frame, text="Preset (enter number):", font=("Arial", 10, "bold")
-    ).grid(row=1, column=0, sticky="w", pady=5)
+    tk.Label(main_frame, text="Preset (enter number):", font=("Arial", 10, "bold")).grid(
+        row=1, column=0, sticky="w", pady=5
+    )
     preset_var = tk.StringVar(value="6")  # Default to medium
     preset_entry = tk.Entry(main_frame, textvariable=preset_var, width=5)
     preset_entry.grid(row=1, column=1, sticky="w", pady=5)
     preset_help_text = "Options:\n" + "   ".join(
-        [f"{i+1}={p}" for i, p in enumerate(preset_options)]
+        [f"{i + 1}={p}" for i, p in enumerate(preset_options)]
     )
     tk.Label(
         main_frame,
@@ -233,14 +233,14 @@ def get_compression_parameters():
     ).grid(row=4, column=0, columnspan=2, sticky="w", padx=20)
 
     # 3. Resolution
-    tk.Label(
-        main_frame, text="Resolution (enter number):", font=("Arial", 10, "bold")
-    ).grid(row=5, column=0, sticky="w", pady=5)
+    tk.Label(main_frame, text="Resolution (enter number):", font=("Arial", 10, "bold")).grid(
+        row=5, column=0, sticky="w", pady=5
+    )
     resolution_var = tk.StringVar(value="1")  # Default to original
     resolution_entry = tk.Entry(main_frame, textvariable=resolution_var, width=5)
     resolution_entry.grid(row=5, column=1, sticky="w", pady=5)
     resolution_help_text = "Options:\n" + "   ".join(
-        [f"{i+1}={r}" for i, r in enumerate(resolution_options)]
+        [f"{i + 1}={r}" for i, r in enumerate(resolution_options)]
     )
     tk.Label(
         main_frame,
@@ -269,9 +269,7 @@ def get_compression_parameters():
 
             resolution_idx = int(resolution_var.get().strip())
             if not (1 <= resolution_idx <= len(resolution_options)):
-                raise ValueError(
-                    f"Resolution must be between 1 and {len(resolution_options)}"
-                )
+                raise ValueError(f"Resolution must be between 1 and {len(resolution_options)}")
             resolution = resolution_options[resolution_idx - 1]
 
             params["preset"] = preset
@@ -294,12 +292,8 @@ def get_compression_parameters():
     def on_cancel():
         dialog.destroy()
 
-    tk.Button(button_frame, text="OK", command=on_ok, width=10).pack(
-        side="left", padx=5
-    )
-    tk.Button(button_frame, text="Cancel", command=on_cancel, width=10).pack(
-        side="left", padx=5
-    )
+    tk.Button(button_frame, text="OK", command=on_ok, width=10).pack(side="left", padx=5)
+    tk.Button(button_frame, text="Cancel", command=on_cancel, width=10).pack(side="left", padx=5)
     dialog.wait_window()
     return params if params else None
 

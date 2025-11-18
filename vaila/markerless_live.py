@@ -77,17 +77,18 @@ You should have received a copy of the GNU GPLv3 (General Public License Version
 If not, see <https://www.gnu.org/licenses/>.
 """
 
-import cv2
-import numpy as np
-from ultralytics import YOLO
-import time
 import csv
+import os
+import time
+import tkinter as tk
 from datetime import datetime
+from tkinter import filedialog, messagebox, simpledialog
+
+import cv2
 import matplotlib.pyplot as plt
 import mediapipe as mp
-import os
-import tkinter as tk
-from tkinter import messagebox, simpledialog, filedialog
+import numpy as np
+from ultralytics import YOLO
 
 
 def list_available_cameras():
@@ -202,7 +203,7 @@ class YOLOAngleCalculator(AngleCalculator):
 
         # Debug: Print keypoints shape and content
         print(f"Keypoints shape: {keypoints.shape}")
-        print(f"Processing keypoints...")
+        print("Processing keypoints...")
 
         # Check if the keypoints have enough confidence (third column)
         confidence_threshold = 0.3  # Reduced to 0.3 to capture more points
@@ -218,7 +219,7 @@ class YOLOAngleCalculator(AngleCalculator):
         )
 
         print(f"Valid keypoints mask: {valid_mask}")
-        print(f"Valid keypoints coordinates:")
+        print("Valid keypoints coordinates:")
         for i, valid in enumerate(valid_mask):
             if valid:
                 print(
@@ -334,7 +335,6 @@ class MediaPipeAngleCalculator(AngleCalculator):
                     and landmarks[p2_idx].visibility > 0.5
                     and landmarks[p3_idx].visibility > 0.5
                 ):
-
                     p1 = [
                         landmarks[p1_idx].x * frame.shape[1],
                         landmarks[p1_idx].y * frame.shape[0],
@@ -396,9 +396,7 @@ def download_model(model_name):
 
     # Check if model already exists
     if os.path.exists(model_path):
-        print(
-            f"Model {model_name} already exists at {model_path}, using existing file."
-        )
+        print(f"Model {model_name} already exists at {model_path}, using existing file.")
         return model_path
 
     print(f"Downloading {model_name} to {model_path}...")
@@ -457,9 +455,7 @@ def download_model(model_name):
                 return model_path
             else:
                 print(f"Could not find model {model_name} locally or download it.")
-                print(
-                    "Please manually download the model and place it in the models directory."
-                )
+                print("Please manually download the model and place it in the models directory.")
 
     return model_path
 
@@ -675,9 +671,7 @@ class MovementAnalyzer:
                 ),
             ]
         else:
-            raise ValueError(
-                f"Unrecognized engine: {engine}. Use 'yolo' or 'mediapipe'."
-            )
+            raise ValueError(f"Unrecognized engine: {engine}. Use 'yolo' or 'mediapipe'.")
 
         # Initialize camera
         self.cap = cv2.VideoCapture(self.camera_device)
@@ -694,7 +688,7 @@ class MovementAnalyzer:
         actual_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         actual_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-        print(f"Camera initialized with settings:")
+        print("Camera initialized with settings:")
         print(f"FPS: {actual_fps}")
         print(f"Resolution: {actual_width}x{actual_height}")
 
@@ -754,9 +748,7 @@ class MovementAnalyzer:
                 # Adapt the angle calculator based on the keypoints shape
                 if len(keypoints_shape) >= 2:
                     num_keypoints = (
-                        keypoints_shape[1]
-                        if len(keypoints_shape) > 1
-                        else keypoints_shape[0]
+                        keypoints_shape[1] if len(keypoints_shape) > 1 else keypoints_shape[0]
                     )
                     print(f"Number of keypoints: {num_keypoints}")
 
@@ -813,10 +805,7 @@ class MovementAnalyzer:
 
                 # Try to find keypoints in different possible locations
                 keypoints = None
-                if (
-                    hasattr(results[0], "keypoints")
-                    and results[0].keypoints is not None
-                ):
+                if hasattr(results[0], "keypoints") and results[0].keypoints is not None:
                     print("Found keypoints in results[0].keypoints")
                     if len(results[0].keypoints.data) > 0:
                         keypoints = results[0].keypoints.data[0].cpu().numpy()
@@ -826,10 +815,7 @@ class MovementAnalyzer:
                     if len(results[0].poses) > 0:
                         keypoints = results[0].poses[0].cpu().numpy()
                         print(f"Keypoints from results[0].poses: {keypoints.shape}")
-                elif (
-                    hasattr(results[0], "landmarks")
-                    and results[0].landmarks is not None
-                ):
+                elif hasattr(results[0], "landmarks") and results[0].landmarks is not None:
                     print("Found landmarks in results[0].landmarks")
                     if len(results[0].landmarks) > 0:
                         keypoints = results[0].landmarks[0].cpu().numpy()
@@ -847,9 +833,7 @@ class MovementAnalyzer:
                         conf = float(box.conf[0])
 
                         # Draw rectangle around the person
-                        cv2.rectangle(
-                            processed_frame, (x1, y1), (x2, y2), (0, 0, 255), 2
-                        )
+                        cv2.rectangle(processed_frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
 
                         # Add label "Person" with confidence
                         label = f"Person {conf:.2f}"
@@ -1001,7 +985,6 @@ class MovementAnalyzer:
                         pose_landmarks[start_idx].visibility > 0.5
                         and pose_landmarks[end_idx].visibility > 0.5
                     ):
-
                         start_point = (
                             int(pose_landmarks[start_idx].x * frame.shape[1]),
                             int(pose_landmarks[start_idx].y * frame.shape[0]),
@@ -1012,9 +995,7 @@ class MovementAnalyzer:
                             int(pose_landmarks[end_idx].y * frame.shape[0]),
                         )
 
-                        cv2.line(
-                            processed_frame, start_point, end_point, (0, 255, 0), 2
-                        )
+                        cv2.line(processed_frame, start_point, end_point, (0, 255, 0), 2)
 
                 # Draw visible landmarks
                 for i, landmark in enumerate(pose_landmarks):
@@ -1049,9 +1030,7 @@ class MovementAnalyzer:
             for joint, angle in angles.items():
                 # Ensure that the angle is a number and use appropriate formatting
                 if isinstance(angle, (int, float)):
-                    text = (
-                        f"{joint}: {angle:0.1f}°"  # Fixed format with a decimal place
-                    )
+                    text = f"{joint}: {angle:0.1f}°"  # Fixed format with a decimal place
                 else:
                     text = f"{joint}: N/A"
                 (text_width, text_height), _ = cv2.getTextSize(
@@ -1190,9 +1169,7 @@ class MovementAnalyzer:
                     plt.savefig(plot_filename)
                     plt.close()
 
-                    print(
-                        f"Data saved successfully to:\n{csv_filename}\n{plot_filename}"
-                    )
+                    print(f"Data saved successfully to:\n{csv_filename}\n{plot_filename}")
 
             except Exception as e:
                 print(f"Error saving data: {str(e)}")
@@ -1275,18 +1252,14 @@ def run_markerless_live():
         root.destroy()
         return
 
-    selected_camera = next(
-        (cam for cam in available_cameras if cam["index"] == camera_id), None
-    )
+    selected_camera = next((cam for cam in available_cameras if cam["index"] == camera_id), None)
     if not selected_camera:
         messagebox.showerror("Error", "Invalid camera selection!", parent=root)
         root.destroy()
         return
 
     # Ask user to select resolution
-    resolution_options = [
-        f"{width}x{height}" for width, height in selected_camera["resolutions"]
-    ]
+    resolution_options = [f"{width}x{height}" for width, height in selected_camera["resolutions"]]
     resolution_message = "Select resolution:\n\n" + "\n".join(
         f"{i}: {res}" for i, res in enumerate(resolution_options)
     )
@@ -1300,12 +1273,8 @@ def run_markerless_live():
         parent=root,
     )
 
-    if resolution_choice is None or resolution_choice >= len(
-        selected_camera["resolutions"]
-    ):
-        messagebox.showinfo(
-            "Default Resolution", "Using default resolution (640x480)", parent=root
-        )
+    if resolution_choice is None or resolution_choice >= len(selected_camera["resolutions"]):
+        messagebox.showinfo("Default Resolution", "Using default resolution (640x480)", parent=root)
         camera_width, camera_height = 640, 480
     else:
         camera_width, camera_height = selected_camera["resolutions"][resolution_choice]
@@ -1334,7 +1303,7 @@ def run_markerless_live():
     camera_config = f"""
     Camera Configuration:
     --------------------
-    Camera: {selected_camera['name']}
+    Camera: {selected_camera["name"]}
     Resolution: {camera_width}x{camera_height}
     FPS: {camera_fps}
     """
@@ -1416,9 +1385,7 @@ def run_markerless_live():
         min_detection_confidence = 0.5
 
     # Configure output directory using directory selection dialog
-    default_output_dir = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "output"
-    )
+    default_output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "output")
     output_dir = filedialog.askdirectory(
         title="Select Output Directory",
         initialdir=default_output_dir,

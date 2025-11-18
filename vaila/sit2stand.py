@@ -104,33 +104,37 @@ This module is part of the VAILA toolbox and follows the same MIT License.
 """
 
 import os
-from pathlib import Path
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk, simpledialog
-import pandas as pd
+from pathlib import Path
+from tkinter import filedialog, messagebox, ttk
+
 import numpy as np
+import pandas as pd
+
 try:
     import toml
+
     TOML_SUPPORT = True
 except ImportError:
     try:
         import tomli as toml  # Fallback for older Python
+
         TOML_SUPPORT = True
     except ImportError:
         try:
             import tomllib as toml  # Python 3.11+ built-in
+
             TOML_SUPPORT = True
         except ImportError:
             TOML_SUPPORT = False
             print("Warning: No TOML library available. Install tomli: pip install tomli")
-import json
 import matplotlib.pyplot as plt
 from scipy.signal import butter, filtfilt, find_peaks
-from pathlib import Path
 
 # Try to import ezc3d for C3D file support
 try:
     from ezc3d import c3d
+
     C3D_SUPPORT = True
 except ImportError:
     C3D_SUPPORT = False
@@ -153,6 +157,7 @@ def main(cli_args=None):
 
     # Parse command line arguments
     import sys
+
     if cli_args is None:
         cli_args = sys.argv[1:]
 
@@ -174,7 +179,9 @@ def run_cli_mode(cli_args):
         Command line arguments [config_file, input_directory, output_directory, file_format]
     """
     if len(cli_args) < 3:
-        print("Usage: python sit2stand.py <config.toml> <input_directory> [output_directory] [file_format]")
+        print(
+            "Usage: python sit2stand.py <config.toml> <input_directory> [output_directory] [file_format]"
+        )
         print("Example: python sit2stand.py config.toml /path/to/files /path/to/output auto")
         print("File format: auto, c3d, csv")
         return
@@ -223,41 +230,42 @@ def run_cli_mode(cli_args):
     except Exception as e:
         print(f"Error in batch analysis: {e}")
         import traceback
+
         traceback.print_exc()
 
 
 def get_default_config():
     """Returns default configuration for sit-to-stand analysis."""
     return {
-        'analysis': {
-            'force_column': 'Force.Fz3',
-            'fps': 2000.0,  # Frames per second for time vector generation
-            'body_weight': 18.36  # Body weight in kg for energy calculations
+        "analysis": {
+            "force_column": "Force.Fz3",
+            "fps": 2000.0,  # Frames per second for time vector generation
+            "body_weight": 18.36,  # Body weight in kg for energy calculations
         },
-        'filtering': {
-            'enabled': False,
-            'cutoff_frequency': 100.0,
-            'sampling_frequency': 2000.0,
-            'order': 4
+        "filtering": {
+            "enabled": False,
+            "cutoff_frequency": 100.0,
+            "sampling_frequency": 2000.0,
+            "order": 4,
         },
-        'detection': {
-            'force_threshold': 1.0,  # Very low threshold for better detection
-            'min_duration': 0.05,   # Very short minimum duration
-            'onset_threshold': 1.0,  # Very low onset threshold
-            'peak_detection': {
-                'height': 139.0,  # Minimum height of peaks (N) - adjust based on baseline
-                'distance': 200,  # Minimum distance between peaks (samples) - 100ms at 2000Hz
-                'prominence': 10.0,  # Minimum prominence of peaks (N)
-                'rel_height': 0.5  # Relative height for width calculation
-            }
+        "detection": {
+            "force_threshold": 1.0,  # Very low threshold for better detection
+            "min_duration": 0.05,  # Very short minimum duration
+            "onset_threshold": 1.0,  # Very low onset threshold
+            "peak_detection": {
+                "height": 139.0,  # Minimum height of peaks (N) - adjust based on baseline
+                "distance": 200,  # Minimum distance between peaks (samples) - 100ms at 2000Hz
+                "prominence": 10.0,  # Minimum prominence of peaks (N)
+                "rel_height": 0.5,  # Relative height for width calculation
+            },
         },
-        'stability': {
-            'enabled': True,
-            'baseline_window': 0.5,  # Seconds after first peak to consider as baseline
-            'stability_threshold': 10.0,  # Maximum deviation for stable standing (N) - adjusted for higher force values
-            'noise_analysis': True,  # Enable noise/oscillation analysis
-            'rolling_window': 0.1  # Rolling window for noise analysis (seconds)
-        }
+        "stability": {
+            "enabled": True,
+            "baseline_window": 0.5,  # Seconds after first peak to consider as baseline
+            "stability_threshold": 10.0,  # Maximum deviation for stable standing (N) - adjusted for higher force values
+            "noise_analysis": True,  # Enable noise/oscillation analysis
+            "rolling_window": 0.1,  # Rolling window for noise analysis (seconds)
+        },
     }
 
 
@@ -273,6 +281,7 @@ def run_gui_mode():
     except Exception as e:
         print(f"Error in GUI mode: {e}")
         import traceback
+
         traceback.print_exc()
 
 
@@ -294,7 +303,7 @@ def load_toml_config(config_file):
         if not TOML_SUPPORT:
             print("TOML support not available. Install toml or tomli library.")
             return None
-            
+
         if not os.path.exists(config_file):
             print(f"Configuration file not found: {config_file}")
             return None
@@ -302,17 +311,17 @@ def load_toml_config(config_file):
         # Load TOML file - handle different library APIs
         try:
             # Try toml library (most common)
-            with open(config_file, 'r') as f:
+            with open(config_file) as f:
                 config = toml.load(f)
         except AttributeError:
             # Try tomllib (Python 3.11+ built-in, binary mode)
-            with open(config_file, 'rb') as f:
+            with open(config_file, "rb") as f:
                 config = toml.load(f)
-                
+
         print(f"Loaded configuration from: {config_file}")
 
         # Validate required sections
-        required_sections = ['analysis', 'filtering', 'detection']
+        required_sections = ["analysis", "filtering", "detection"]
         for section in required_sections:
             if section not in config:
                 print(f"Warning: Missing '{section}' section in configuration")
@@ -323,6 +332,7 @@ def load_toml_config(config_file):
     except Exception as e:
         print(f"Error loading TOML configuration: {e}")
         import traceback
+
         traceback.print_exc()
         return None
 
@@ -353,11 +363,11 @@ def find_analysis_files(input_dir, file_format="auto"):
 
     # Determine extensions based on format
     if file_format == "auto":
-        extensions = ['.c3d', '.csv']
+        extensions = [".c3d", ".csv"]
     elif file_format == "c3d":
-        extensions = ['.c3d']
+        extensions = [".c3d"]
     elif file_format == "csv":
-        extensions = ['.csv']
+        extensions = [".csv"]
     else:
         print(f"Unknown file format: {file_format}")
         return files
@@ -394,8 +404,8 @@ def select_or_confirm_column(sample_file, config):
         Selected column name or None if cancelled
     """
     # Check if column is already specified in config
-    if (config.get('analysis', {}).get('force_column')):
-        column_from_config = config['analysis']['force_column']
+    if config.get("analysis", {}).get("force_column"):
+        column_from_config = config["analysis"]["force_column"]
         # Verify column exists in file
         if verify_column_exists(sample_file, column_from_config):
             print(f"Using column from configuration: {column_from_config}")
@@ -435,12 +445,25 @@ def auto_detect_force_column(sample_file):
         # Priority order for column detection
         force_patterns = [
             # Vertical force columns (most common for sit-to-stand)
-            'Force.Fz1', 'Force.Fz2', 'Force.Fz3', 'Force.Fz4',  # Force plates
-            'Fz', 'FZ', 'Force_Z', 'Vertical_Force',  # Generic names
-            'Force.Fz', 'force_z',  # Alternative patterns
+            "Force.Fz1",
+            "Force.Fz2",
+            "Force.Fz3",
+            "Force.Fz4",  # Force plates
+            "Fz",
+            "FZ",
+            "Force_Z",
+            "Vertical_Force",  # Generic names
+            "Force.Fz",
+            "force_z",  # Alternative patterns
             # If no vertical force found, try any force column
-            'Force.Fx1', 'Force.Fy1', 'Force.Fx2', 'Force.Fy2',
-            'Fx', 'Fy', 'Force_X', 'Force_Y'
+            "Force.Fx1",
+            "Force.Fy1",
+            "Force.Fx2",
+            "Force.Fy2",
+            "Fx",
+            "Fy",
+            "Force_X",
+            "Force_Y",
         ]
 
         for pattern in force_patterns:
@@ -451,7 +474,7 @@ def auto_detect_force_column(sample_file):
 
         # If no standard pattern found, suggest the first numeric column that's not Time
         for col in columns:
-            if col.lower() not in ['time', 'timestamp', 'frame', 't']:
+            if col.lower() not in ["time", "timestamp", "frame", "t"]:
                 try:
                     # Try to read a small sample to see if it's numeric
                     sample_data = pd.read_csv(sample_file, usecols=[col], nrows=10)
@@ -486,10 +509,10 @@ def verify_column_exists(sample_file, column_name):
         True if column exists, False otherwise
     """
     try:
-        if sample_file.lower().endswith('.c3d'):
+        if sample_file.lower().endswith(".c3d"):
             # For C3D files, we can't easily verify without proper library
             # Assume it exists if it's in our standard list
-            standard_columns = ['Fz', 'Force_Z', 'Vertical_Force', 'FZ']
+            standard_columns = ["Fz", "Force_Z", "Vertical_Force", "FZ"]
             return column_name in standard_columns
         else:
             # Check CSV file headers
@@ -525,7 +548,7 @@ def butterworth_filter(data, fs, cutoff, order=4):
         normal_cutoff = cutoff / nyquist
 
         # Design the Butterworth filter
-        b, a = butter(order, normal_cutoff, btype='low', analog=False)
+        b, a = butter(order, normal_cutoff, btype="low", analog=False)
 
         # Apply the filter
         filtered_data = filtfilt(b, a, data)
@@ -559,7 +582,7 @@ def run_batch_analysis(files, config, output_dir):
         List of analysis results for each file
     """
     results = []
-    column_name = config['analysis']['force_column']
+    column_name = config["analysis"]["force_column"]
 
     # Create main results directory if it doesn't exist
     main_results_dir = Path(output_dir) / "sit2stand_results"
@@ -567,34 +590,36 @@ def run_batch_analysis(files, config, output_dir):
 
     for i, file_path in enumerate(files):
         try:
-            print(f"Processing file {i+1}/{len(files)}: {os.path.basename(file_path)}")
+            print(f"Processing file {i + 1}/{len(files)}: {os.path.basename(file_path)}")
 
             # Read file data
-            if file_path.lower().endswith('.c3d'):
+            if file_path.lower().endswith(".c3d"):
                 data = read_c3d_file(file_path, column_name)
             else:
                 data = read_csv_file(file_path, column_name, config)
 
             if data is None:
                 print(f"  Skipping {file_path} - could not read data")
-                results.append({
-                    'file': file_path,
-                    'filename': os.path.basename(file_path),
-                    'error': 'Could not read data'
-                })
+                results.append(
+                    {
+                        "file": file_path,
+                        "filename": os.path.basename(file_path),
+                        "error": "Could not read data",
+                    }
+                )
                 continue
 
             # Apply Butterworth filtering if enabled
-            if config.get('filtering', {}).get('enabled', False):
+            if config.get("filtering", {}).get("enabled", False):
                 print("  Applying Butterworth filter...")
                 filtered_force = butterworth_filter(
-                    data['Force'].values,
-                    fs=config['filtering']['sampling_frequency'],
-                    cutoff=config['filtering']['cutoff_frequency'],
-                    order=config['filtering']['order']
+                    data["Force"].values,
+                    fs=config["filtering"]["sampling_frequency"],
+                    cutoff=config["filtering"]["cutoff_frequency"],
+                    order=config["filtering"]["order"],
                 )
                 data = data.copy()
-                data['Force'] = filtered_force
+                data["Force"] = filtered_force
                 print(f"  Filtered with cutoff {config['filtering']['cutoff_frequency']} Hz")
 
             # Analyze sit-to-stand movement
@@ -604,22 +629,27 @@ def run_batch_analysis(files, config, output_dir):
             file_base_name = Path(file_path).stem
             file_results_dir = main_results_dir / file_base_name
             file_results_dir.mkdir(exist_ok=True)
-            
+
             # Save force plot as PNG in the individual file directory
             plot_filename = f"{file_base_name}_force_plot.png"
             plot_path = file_results_dir / plot_filename
-            save_force_plot_png(data, analysis_result['sit_to_stand_phases'], str(plot_path), config, 
-                              analysis_result.get('stability_metrics', {}), 
-                              analysis_result.get('all_peaks_global', []))
+            save_force_plot_png(
+                data,
+                analysis_result["sit_to_stand_phases"],
+                str(plot_path),
+                config,
+                analysis_result.get("stability_metrics", {}),
+                analysis_result.get("all_peaks_global", []),
+            )
 
             # Store results with file information
             result = {
-                'file': file_path,
-                'filename': os.path.basename(file_path),
-                'analysis': analysis_result,
-                'configuration': config.copy(),
-                'plot_path': str(plot_path),
-                'results_dir': str(file_results_dir)
+                "file": file_path,
+                "filename": os.path.basename(file_path),
+                "analysis": analysis_result,
+                "configuration": config.copy(),
+                "plot_path": str(plot_path),
+                "results_dir": str(file_results_dir),
             }
 
             results.append(result)
@@ -627,11 +657,13 @@ def run_batch_analysis(files, config, output_dir):
 
         except Exception as e:
             print(f"Error processing {file_path}: {str(e)}")
-            results.append({
-                'file': file_path,
-                'filename': os.path.basename(file_path),
-                'error': str(e)
-            })
+            results.append(
+                {
+                    "file": file_path,
+                    "filename": os.path.basename(file_path),
+                    "error": str(e),
+                }
+            )
 
     return results
 
@@ -639,7 +671,7 @@ def run_batch_analysis(files, config, output_dir):
 def generate_individual_report(result, config, output_dir):
     """
     Generates individual report for a single file analysis.
-    
+
     Parameters:
     -----------
     result : dict
@@ -650,156 +682,259 @@ def generate_individual_report(result, config, output_dir):
         Output directory path
     """
     try:
-        filename = result['filename']
+        filename = result["filename"]
         base_name = Path(filename).stem
-        analysis = result['analysis']
-        
+        analysis = result["analysis"]
+
         # Create individual file directory path
         main_results_dir = Path(output_dir) / "sit2stand_results"
         file_results_dir = main_results_dir / base_name
-        
+
         # Generate individual text report
         txt_path = file_results_dir / f"{base_name}_analysis_report.txt"
-        
-        with open(txt_path, 'w', encoding='utf-8') as f:
+
+        with open(txt_path, "w", encoding="utf-8") as f:
             f.write(f"Sit-to-Stand Analysis Report: {filename}\n")
             f.write("=" * 60 + "\n\n")
-            
+
             # Configuration summary
             f.write("Configuration Used:\n")
             f.write("-" * 30 + "\n")
             f.write(f"Force Column: {config['analysis']['force_column']}\n")
-            if 'body_weight' in config['analysis']:
+            if "body_weight" in config["analysis"]:
                 f.write(f"Body Weight: {config['analysis']['body_weight']} kg\n")
-            if 'fps' in config['analysis']:
+            if "fps" in config["analysis"]:
                 f.write(f"FPS: {config['analysis']['fps']} Hz\n")
-            f.write(f"Butterworth Filter: {'Enabled' if config['filtering']['enabled'] else 'Disabled'}\n")
-            
-            if config['filtering']['enabled']:
+            f.write(
+                f"Butterworth Filter: {'Enabled' if config['filtering']['enabled'] else 'Disabled'}\n"
+            )
+
+            if config["filtering"]["enabled"]:
                 f.write(f"  Cutoff Frequency: {config['filtering']['cutoff_frequency']} Hz\n")
                 f.write(f"  Sampling Frequency: {config['filtering']['sampling_frequency']} Hz\n")
                 f.write(f"  Filter Order: {config['filtering']['order']}\n")
-            
-            f.write(f"Detection Parameters:\n")
+
+            f.write("Detection Parameters:\n")
             f.write(f"  Force Threshold: {config['detection']['force_threshold']} N\n")
             f.write(f"  Min Duration: {config['detection']['min_duration']} s\n")
             f.write(f"  Onset Threshold: {config['detection']['onset_threshold']} N\n")
             f.write("\n" + "=" * 60 + "\n\n")
-            
+
             # Basic metrics
             f.write("BASIC FORCE METRICS:\n")
             f.write(f"  Duration: {analysis['duration']:.2f} s\n")
             f.write(f"  Mean Force: {analysis['mean_force']:.2f} N\n")
             f.write(f"  Max Force: {analysis['max_force']:.2f} N\n")
             f.write(f"  Min Force: {analysis['min_force']:.2f} N\n\n")
-            
+
             # Movement detection
-            movement = analysis['movement_metrics']
+            movement = analysis["movement_metrics"]
             f.write("MOVEMENT DETECTION:\n")
             f.write(f"  Phases Detected: {movement['num_phases']}\n")
             f.write(f"  Total Movement Time: {movement['total_movement_time']:.2f} s\n")
             f.write(f"  Average Phase Duration: {movement['average_phase_duration']:.2f} s\n")
-            if movement['phases_per_minute'] > 0:
+            if movement["phases_per_minute"] > 0:
                 f.write(f"  Phases per Minute: {movement['phases_per_minute']:.1f}\n\n")
-            
+
             # Energy expenditure analysis
-            energy = analysis.get('energy_metrics', {})
+            energy = analysis.get("energy_metrics", {})
             if energy:
                 f.write("ENERGY EXPENDITURE ANALYSIS:\n")
-                f.write(f"  Body Weight: {energy.get('body_weight_kg', 0):.1f} kg ({energy.get('body_weight_N', 0):.1f} N)\n")
+                f.write(
+                    f"  Body Weight: {energy.get('body_weight_kg', 0):.1f} kg ({energy.get('body_weight_N', 0):.1f} N)\n"
+                )
                 f.write(f"  Total Movements: {energy.get('total_movements', 0)}\n")
-                f.write(f"  Total Mechanical Work: {energy.get('total_mechanical_work_J', 0):.2f} J ({energy.get('total_mechanical_work_J', 0)/4184:.3f} kcal)\n")
-                f.write(f"  Total Metabolic Energy: {energy.get('total_metabolic_energy_kcal', 0):.3f} kcal\n")
-                f.write(f"  Average Energy per Movement: {energy.get('average_energy_per_movement_kcal', 0):.3f} kcal\n")
+                f.write(
+                    f"  Total Mechanical Work: {energy.get('total_mechanical_work_J', 0):.2f} J ({energy.get('total_mechanical_work_J', 0) / 4184:.3f} kcal)\n"
+                )
+                f.write(
+                    f"  Total Metabolic Energy: {energy.get('total_metabolic_energy_kcal', 0):.3f} kcal\n"
+                )
+                f.write(
+                    f"  Average Energy per Movement: {energy.get('average_energy_per_movement_kcal', 0):.3f} kcal\n"
+                )
                 f.write(f"  Energy Efficiency: {energy.get('energy_efficiency', 0):.1f}%\n\n")
-            
+
             # Stability analysis
-            stability = analysis.get('stability_metrics', {})
+            stability = analysis.get("stability_metrics", {})
             if stability:
                 f.write("STABILITY ANALYSIS (Oscillation around Reference Peak):\n")
                 f.write(f"  Reference Peak Force: {stability.get('first_peak_force', 0):.2f} N\n")
-                f.write(f"  Stability Index: {stability.get('stability_index', 0):.3f} (0-1 scale)\n")
-                f.write(f"  Mean Deviation from Reference Peak: {stability.get('mean_deviation', 0):.2f} N\n")
-                f.write(f"  Max Deviation from Reference Peak: {stability.get('max_deviation', 0):.2f} N\n")
-                f.write(f"  Points Above Reference Peak: {stability.get('points_above', 0)} ({stability.get('percent_above', 0):.1f}%)\n")
-                f.write(f"  Points Below Reference Peak: {stability.get('points_below', 0)} ({stability.get('percent_below', 0):.1f}%)\n")
-                f.write(f"  Total Crossings: {stability.get('total_crossings', 0)} (↑{stability.get('crossings_above', 0)}, ↓{stability.get('crossings_below', 0)})\n")
-                f.write(f"  Is Stable Standing: {'Yes' if stability.get('is_stable', False) else 'No'}\n")
-                
+                f.write(
+                    f"  Stability Index: {stability.get('stability_index', 0):.3f} (0-1 scale)\n"
+                )
+                f.write(
+                    f"  Mean Deviation from Reference Peak: {stability.get('mean_deviation', 0):.2f} N\n"
+                )
+                f.write(
+                    f"  Max Deviation from Reference Peak: {stability.get('max_deviation', 0):.2f} N\n"
+                )
+                f.write(
+                    f"  Points Above Reference Peak: {stability.get('points_above', 0)} ({stability.get('percent_above', 0):.1f}%)\n"
+                )
+                f.write(
+                    f"  Points Below Reference Peak: {stability.get('points_below', 0)} ({stability.get('percent_below', 0):.1f}%)\n"
+                )
+                f.write(
+                    f"  Total Crossings: {stability.get('total_crossings', 0)} (↑{stability.get('crossings_above', 0)}, ↓{stability.get('crossings_below', 0)})\n"
+                )
+                f.write(
+                    f"  Is Stable Standing: {'Yes' if stability.get('is_stable', False) else 'No'}\n"
+                )
+
                 # Standing baseline peaks
-                standing_peaks = stability.get('standing_peaks', [])
+                standing_peaks = stability.get("standing_peaks", [])
                 if standing_peaks:
                     f.write(f"\n  STANDING BASELINE PEAKS ({len(standing_peaks)} detected):\n")
                     for i, peak in enumerate(standing_peaks, 1):
-                        f.write(f"    Peak {i}: {peak['force']:.2f} N at {peak['time']:.3f} s (prominence: {peak['prominence']:.2f} N)\n")
+                        f.write(
+                            f"    Peak {i}: {peak['force']:.2f} N at {peak['time']:.3f} s (prominence: {peak['prominence']:.2f} N)\n"
+                        )
                 f.write("\n")
-            
+
             # Plot information
-            if 'plot_path' in result:
+            if "plot_path" in result:
                 f.write(f"Plot saved: {Path(result['plot_path']).name}\n")
-        
+
         # Generate individual CSV report
         csv_path = file_results_dir / f"{base_name}_analysis_data.csv"
-        
+
         # Create comprehensive CSV with all metrics
-        csv_data = {
-            'metric': [],
-            'value': [],
-            'unit': []
-        }
-        
+        csv_data = {"metric": [], "value": [], "unit": []}
+
         # Basic metrics
-        csv_data['metric'].extend(['Duration', 'Mean Force', 'Max Force', 'Min Force', 'Total Samples'])
-        csv_data['value'].extend([analysis['duration'], analysis['mean_force'], analysis['max_force'], analysis['min_force'], analysis['total_samples']])
-        csv_data['unit'].extend(['s', 'N', 'N', 'N', 'samples'])
-        
+        csv_data["metric"].extend(
+            ["Duration", "Mean Force", "Max Force", "Min Force", "Total Samples"]
+        )
+        csv_data["value"].extend(
+            [
+                analysis["duration"],
+                analysis["mean_force"],
+                analysis["max_force"],
+                analysis["min_force"],
+                analysis["total_samples"],
+            ]
+        )
+        csv_data["unit"].extend(["s", "N", "N", "N", "samples"])
+
         # Movement metrics
-        csv_data['metric'].extend(['Phases Detected', 'Total Movement Time', 'Average Phase Duration', 'Phases per Minute'])
-        csv_data['value'].extend([movement['num_phases'], movement['total_movement_time'], movement['average_phase_duration'], movement['phases_per_minute']])
-        csv_data['unit'].extend(['count', 's', 's', 'phases/min'])
-        
+        csv_data["metric"].extend(
+            [
+                "Phases Detected",
+                "Total Movement Time",
+                "Average Phase Duration",
+                "Phases per Minute",
+            ]
+        )
+        csv_data["value"].extend(
+            [
+                movement["num_phases"],
+                movement["total_movement_time"],
+                movement["average_phase_duration"],
+                movement["phases_per_minute"],
+            ]
+        )
+        csv_data["unit"].extend(["count", "s", "s", "phases/min"])
+
         # Energy metrics
         if energy:
-            csv_data['metric'].extend(['Body Weight', 'Total Mechanical Work', 'Total Metabolic Energy', 'Average Energy per Movement', 'Energy Efficiency'])
-            csv_data['value'].extend([energy.get('body_weight_kg', 0), energy.get('total_mechanical_work_J', 0), energy.get('total_metabolic_energy_kcal', 0), energy.get('average_energy_per_movement_kcal', 0), energy.get('energy_efficiency', 0)])
-            csv_data['unit'].extend(['kg', 'J', 'kcal', 'kcal', '%'])
-        
+            csv_data["metric"].extend(
+                [
+                    "Body Weight",
+                    "Total Mechanical Work",
+                    "Total Metabolic Energy",
+                    "Average Energy per Movement",
+                    "Energy Efficiency",
+                ]
+            )
+            csv_data["value"].extend(
+                [
+                    energy.get("body_weight_kg", 0),
+                    energy.get("total_mechanical_work_J", 0),
+                    energy.get("total_metabolic_energy_kcal", 0),
+                    energy.get("average_energy_per_movement_kcal", 0),
+                    energy.get("energy_efficiency", 0),
+                ]
+            )
+            csv_data["unit"].extend(["kg", "J", "kcal", "kcal", "%"])
+
         # Stability metrics
         if stability:
-            csv_data['metric'].extend(['Reference Peak Force', 'Stability Index', 'Mean Deviation from Reference Peak', 'Max Deviation from Reference Peak', 
-                                       'Points Above Reference Peak', 'Points Below Reference Peak', 'Percent Above', 'Percent Below',
-                                       'Total Crossings', 'Crossings Above', 'Crossings Below', 'Is Stable', 'Num Standing Peaks'])
-            csv_data['value'].extend([stability.get('first_peak_force', 0), stability.get('stability_index', 0), 
-                                     stability.get('mean_deviation', 0), stability.get('max_deviation', 0),
-                                     stability.get('points_above', 0), stability.get('points_below', 0),
-                                     stability.get('percent_above', 0), stability.get('percent_below', 0),
-                                     stability.get('total_crossings', 0), stability.get('crossings_above', 0),
-                                     stability.get('crossings_below', 0), stability.get('is_stable', False),
-                                     stability.get('num_standing_peaks', 0)])
-            csv_data['unit'].extend(['N', '0-1 scale', 'N', 'N', 'count', 'count', '%', '%', 'count', 'count', 'count', 'boolean', 'count'])
-            
+            csv_data["metric"].extend(
+                [
+                    "Reference Peak Force",
+                    "Stability Index",
+                    "Mean Deviation from Reference Peak",
+                    "Max Deviation from Reference Peak",
+                    "Points Above Reference Peak",
+                    "Points Below Reference Peak",
+                    "Percent Above",
+                    "Percent Below",
+                    "Total Crossings",
+                    "Crossings Above",
+                    "Crossings Below",
+                    "Is Stable",
+                    "Num Standing Peaks",
+                ]
+            )
+            csv_data["value"].extend(
+                [
+                    stability.get("first_peak_force", 0),
+                    stability.get("stability_index", 0),
+                    stability.get("mean_deviation", 0),
+                    stability.get("max_deviation", 0),
+                    stability.get("points_above", 0),
+                    stability.get("points_below", 0),
+                    stability.get("percent_above", 0),
+                    stability.get("percent_below", 0),
+                    stability.get("total_crossings", 0),
+                    stability.get("crossings_above", 0),
+                    stability.get("crossings_below", 0),
+                    stability.get("is_stable", False),
+                    stability.get("num_standing_peaks", 0),
+                ]
+            )
+            csv_data["unit"].extend(
+                [
+                    "N",
+                    "0-1 scale",
+                    "N",
+                    "N",
+                    "count",
+                    "count",
+                    "%",
+                    "%",
+                    "count",
+                    "count",
+                    "count",
+                    "boolean",
+                    "count",
+                ]
+            )
+
             # Add individual standing peaks
-            standing_peaks = stability.get('standing_peaks', [])
+            standing_peaks = stability.get("standing_peaks", [])
             for i, peak in enumerate(standing_peaks, 1):
-                csv_data['metric'].append(f'Standing Peak {i} Time')
-                csv_data['value'].append(peak['time'])
-                csv_data['unit'].append('s')
-                csv_data['metric'].append(f'Standing Peak {i} Force')
-                csv_data['value'].append(peak['force'])
-                csv_data['unit'].append('N')
-                csv_data['metric'].append(f'Standing Peak {i} Prominence')
-                csv_data['value'].append(peak['prominence'])
-                csv_data['unit'].append('N')
-        
+                csv_data["metric"].append(f"Standing Peak {i} Time")
+                csv_data["value"].append(peak["time"])
+                csv_data["unit"].append("s")
+                csv_data["metric"].append(f"Standing Peak {i} Force")
+                csv_data["value"].append(peak["force"])
+                csv_data["unit"].append("N")
+                csv_data["metric"].append(f"Standing Peak {i} Prominence")
+                csv_data["value"].append(peak["prominence"])
+                csv_data["unit"].append("N")
+
         # Save CSV
         df = pd.DataFrame(csv_data)
         df.to_csv(csv_path, index=False)
-        
+
         # print(f"  Individual reports saved: {os.path.basename(txt_path)}, {os.path.basename(csv_path)}")
-        
+
     except Exception as e:
         print(f"Error generating individual report for {result['filename']}: {e}")
         import traceback
+
         traceback.print_exc()
 
 
@@ -819,18 +954,18 @@ def generate_batch_report(results, config, output_dir):
     try:
         # Generate individual reports for each file first
         for result in results:
-            if 'error' not in result:
+            if "error" not in result:
                 generate_individual_report(result, config, output_dir)
 
         # Generate summary statistics
-        successful_analyses = sum(1 for r in results if 'error' not in r)
+        successful_analyses = sum(1 for r in results if "error" not in r)
         total_files = len(results)
 
         # Generate batch summary text report in main results directory
         main_results_dir = Path(output_dir) / "sit2stand_results"
         report_path = main_results_dir / "batch_analysis_summary.txt"
 
-        with open(report_path, 'w', encoding='utf-8') as f:
+        with open(report_path, "w", encoding="utf-8") as f:
             f.write("Sit-to-Stand Batch Analysis Report\n")
             f.write("=" * 60 + "\n\n")
 
@@ -838,14 +973,16 @@ def generate_batch_report(results, config, output_dir):
             f.write("Configuration Used:\n")
             f.write("-" * 30 + "\n")
             f.write(f"Force Column: {config['analysis']['force_column']}\n")
-            f.write(f"Butterworth Filter: {'Enabled' if config['filtering']['enabled'] else 'Disabled'}\n")
+            f.write(
+                f"Butterworth Filter: {'Enabled' if config['filtering']['enabled'] else 'Disabled'}\n"
+            )
 
-            if config['filtering']['enabled']:
+            if config["filtering"]["enabled"]:
                 f.write(f"  Cutoff Frequency: {config['filtering']['cutoff_frequency']} Hz\n")
                 f.write(f"  Sampling Frequency: {config['filtering']['sampling_frequency']} Hz\n")
                 f.write(f"  Filter Order: {config['filtering']['order']}\n")
 
-            f.write(f"Detection Parameters:\n")
+            f.write("Detection Parameters:\n")
             f.write(f"  Force Threshold: {config['detection']['force_threshold']} N\n")
             f.write(f"  Min Duration: {config['detection']['min_duration']} s\n")
             f.write(f"  Onset Threshold: {config['detection']['onset_threshold']} N\n")
@@ -857,15 +994,15 @@ def generate_batch_report(results, config, output_dir):
             f.write(f"Total files processed: {total_files}\n")
             f.write(f"Successful analyses: {successful_analyses}\n")
             f.write(f"Failed analyses: {total_files - successful_analyses}\n")
-            f.write(f"Success rate: {(successful_analyses/total_files*100):.1f}%\n\n")
+            f.write(f"Success rate: {(successful_analyses / total_files * 100):.1f}%\n\n")
 
             # Detailed results with comprehensive clinical metrics
             total_phases = 0
             for result in results:
-                if 'error' not in result:
+                if "error" not in result:
                     f.write(f"\nFile: {result['filename']}\n")
                     f.write("=" * 60 + "\n")
-                    analysis = result['analysis']
+                    analysis = result["analysis"]
 
                     # === BASIC METRICS ===
                     f.write("BASIC FORCE METRICS:\n")
@@ -875,220 +1012,329 @@ def generate_batch_report(results, config, output_dir):
                     f.write(f"  Min Force: {analysis['min_force']:.2f} N\n\n")
 
                     # === MOVEMENT DETECTION ===
-                    movement = analysis['movement_metrics']
+                    movement = analysis["movement_metrics"]
                     f.write("MOVEMENT DETECTION:\n")
                     f.write(f"  Phases Detected: {movement['num_phases']}\n")
                     f.write(f"  Total Movement Time: {movement['total_movement_time']:.2f} s\n")
-                    f.write(f"  Average Phase Duration: {movement['average_phase_duration']:.2f} s\n")
+                    f.write(
+                        f"  Average Phase Duration: {movement['average_phase_duration']:.2f} s\n"
+                    )
 
-                    if movement['phases_per_minute'] > 0:
+                    if movement["phases_per_minute"] > 0:
                         f.write(f"  Phases per Minute: {movement['phases_per_minute']:.1f}\n\n")
 
                     # === TIME TO PEAK METRICS (CRITICAL FOR CP) ===
-                    time_to_peak = analysis['time_to_peak_metrics']
+                    time_to_peak = analysis["time_to_peak_metrics"]
                     f.write("TIME TO PEAK METRICS:\n")
-                    if time_to_peak.get('time_to_first_peak') is not None:
-                        f.write(f"  Time to First Peak: {time_to_peak['time_to_first_peak']:.3f} s\n")
-                    if time_to_peak.get('time_to_max_force') is not None:
+                    if time_to_peak.get("time_to_first_peak") is not None:
+                        f.write(
+                            f"  Time to First Peak: {time_to_peak['time_to_first_peak']:.3f} s\n"
+                        )
+                    if time_to_peak.get("time_to_max_force") is not None:
                         f.write(f"  Time to Max Force: {time_to_peak['time_to_max_force']:.3f} s\n")
-                    if time_to_peak.get('average_time_to_peak') > 0:
-                        f.write(f"  Average Time to Peak: {time_to_peak['average_time_to_peak']:.3f} s\n")
-                    if time_to_peak.get('time_to_peak_variation') > 0:
-                        f.write(f"  Time to Peak Variation: {time_to_peak['time_to_peak_variation']:.3f} s\n\n")
+                    if time_to_peak.get("average_time_to_peak") > 0:
+                        f.write(
+                            f"  Average Time to Peak: {time_to_peak['average_time_to_peak']:.3f} s\n"
+                        )
+                    if time_to_peak.get("time_to_peak_variation") > 0:
+                        f.write(
+                            f"  Time to Peak Variation: {time_to_peak['time_to_peak_variation']:.3f} s\n\n"
+                        )
 
                     # === RATE OF FORCE DEVELOPMENT (CRITICAL FOR CP) ===
                     f.write("RATE OF FORCE DEVELOPMENT (RFD):\n")
-                    phases_data = analysis.get('sit_to_stand_phases', [])
+                    phases_data = analysis.get("sit_to_stand_phases", [])
                     if phases_data:
                         first_phase = phases_data[0]
                         f.write(f"  Overall RFD: {first_phase.get('overall_rfd', 0):.2f} N/s\n")
-                        f.write(f"  Early RFD (first 100ms): {first_phase.get('early_rfd', 0):.2f} N/s\n")
+                        f.write(
+                            f"  Early RFD (first 100ms): {first_phase.get('early_rfd', 0):.2f} N/s\n"
+                        )
                         f.write(f"  Peak RFD: {first_phase.get('peak_rfd', 0):.2f} N/s\n")
-                        if first_phase.get('weight_transfer_time'):
-                            f.write(f"  Weight Transfer Time: {first_phase['weight_transfer_time']:.3f} s\n\n")
+                        if first_phase.get("weight_transfer_time"):
+                            f.write(
+                                f"  Weight Transfer Time: {first_phase['weight_transfer_time']:.3f} s\n\n"
+                            )
 
                     # === IMPULSE METRICS ===
-                    impulse = analysis['impulse_metrics']
+                    impulse = analysis["impulse_metrics"]
                     f.write("IMPULSE & POWER METRICS:\n")
                     f.write(f"  Total Impulse: {impulse['total_impulse']:.2f} N⋅s\n")
                     f.write(f"  Average Impulse: {impulse['average_impulse']:.2f} N⋅s\n")
                     f.write(f"  Peak Power: {impulse['peak_power']:.2f} W\n")
                     f.write(f"  Average Power: {impulse['average_power']:.2f} W\n")
-                    f.write(f"  Force Rate of Change: {impulse['force_rate_of_change']:.2f} N/s\n\n")
+                    f.write(
+                        f"  Force Rate of Change: {impulse['force_rate_of_change']:.2f} N/s\n\n"
+                    )
 
                     # === CLINICAL QUALITY METRICS ===
                     if phases_data:
                         first_phase = phases_data[0]
                         f.write("MOVEMENT QUALITY METRICS:\n")
-                        if 'force_cv' in first_phase:
-                            f.write(f"  Force Coefficient of Variation: {first_phase['force_cv']:.2f}%\n")
-                        if 'force_jerk' in first_phase:
+                        if "force_cv" in first_phase:
+                            f.write(
+                                f"  Force Coefficient of Variation: {first_phase['force_cv']:.2f}%\n"
+                            )
+                        if "force_jerk" in first_phase:
                             f.write(f"  Force Smoothness (Jerk): {first_phase['force_jerk']:.2f}\n")
-                        if 'bilateral_index' in first_phase:
-                            f.write(f"  Bilateral Symmetry Index: {first_phase['peak_symmetry']:.3f}\n")
-                        if 'consistency_score' in first_phase:
-                            f.write(f"  Movement Consistency: {first_phase['consistency_score']:.3f}\n")
-                        if 'num_peaks' in first_phase:
+                        if "bilateral_index" in first_phase:
+                            f.write(
+                                f"  Bilateral Symmetry Index: {first_phase['peak_symmetry']:.3f}\n"
+                            )
+                        if "consistency_score" in first_phase:
+                            f.write(
+                                f"  Movement Consistency: {first_phase['consistency_score']:.3f}\n"
+                            )
+                        if "num_peaks" in first_phase:
                             f.write(f"  Number of Peaks: {first_phase['num_peaks']}\n")
 
                     # === STABILITY METRICS ===
-                    stability = analysis.get('stability_metrics', {})
+                    stability = analysis.get("stability_metrics", {})
                     if stability:
                         f.write("\nSTABILITY ANALYSIS (Oscillation around Reference Peak):\n")
-                        f.write(f"  Reference Peak Force: {stability.get('first_peak_force', 0):.2f} N\n")
-                        f.write(f"  Stability Index: {stability.get('stability_index', 0):.3f} (0-1 scale)\n")
-                        f.write(f"  Mean Deviation from Reference Peak: {stability.get('mean_deviation', 0):.2f} N\n")
-                        f.write(f"  Max Deviation from Reference Peak: {stability.get('max_deviation', 0):.2f} N\n")
-                        f.write(f"  Points Above Reference Peak: {stability.get('points_above', 0)} ({stability.get('percent_above', 0):.1f}%)\n")
-                        f.write(f"  Points Below Reference Peak: {stability.get('points_below', 0)} ({stability.get('percent_below', 0):.1f}%)\n")
-                        f.write(f"  Total Crossings: {stability.get('total_crossings', 0)} (Up: {stability.get('crossings_above', 0)}, Down: {stability.get('crossings_below', 0)})\n")
+                        f.write(
+                            f"  Reference Peak Force: {stability.get('first_peak_force', 0):.2f} N\n"
+                        )
+                        f.write(
+                            f"  Stability Index: {stability.get('stability_index', 0):.3f} (0-1 scale)\n"
+                        )
+                        f.write(
+                            f"  Mean Deviation from Reference Peak: {stability.get('mean_deviation', 0):.2f} N\n"
+                        )
+                        f.write(
+                            f"  Max Deviation from Reference Peak: {stability.get('max_deviation', 0):.2f} N\n"
+                        )
+                        f.write(
+                            f"  Points Above Reference Peak: {stability.get('points_above', 0)} ({stability.get('percent_above', 0):.1f}%)\n"
+                        )
+                        f.write(
+                            f"  Points Below Reference Peak: {stability.get('points_below', 0)} ({stability.get('percent_below', 0):.1f}%)\n"
+                        )
+                        f.write(
+                            f"  Total Crossings: {stability.get('total_crossings', 0)} (Up: {stability.get('crossings_above', 0)}, Down: {stability.get('crossings_below', 0)})\n"
+                        )
                         f.write(f"  Noise Level: {stability.get('noise_level', 0):.2f} N\n")
-                        f.write(f"  Oscillation Frequency: {stability.get('oscillation_frequency', 0):.2f} Hz\n")
-                        f.write(f"  Stability Duration: {stability.get('stability_duration', 0):.2f} s\n")
-                        f.write(f"  Is Stable Standing: {'Yes' if stability.get('is_stable', False) else 'No'}\n")
-                        
+                        f.write(
+                            f"  Oscillation Frequency: {stability.get('oscillation_frequency', 0):.2f} Hz\n"
+                        )
+                        f.write(
+                            f"  Stability Duration: {stability.get('stability_duration', 0):.2f} s\n"
+                        )
+                        f.write(
+                            f"  Is Stable Standing: {'Yes' if stability.get('is_stable', False) else 'No'}\n"
+                        )
+
                         # Standing baseline peaks
-                        standing_peaks = stability.get('standing_peaks', [])
+                        standing_peaks = stability.get("standing_peaks", [])
                         if standing_peaks:
-                            f.write(f"\n  STANDING BASELINE PEAKS ({len(standing_peaks)} detected):\n")
+                            f.write(
+                                f"\n  STANDING BASELINE PEAKS ({len(standing_peaks)} detected):\n"
+                            )
                             for i, peak in enumerate(standing_peaks, 1):
-                                f.write(f"    Peak {i}: {peak['force']:.2f} N at {peak['time']:.3f} s (prominence: {peak['prominence']:.2f} N)\n")
+                                f.write(
+                                    f"    Peak {i}: {peak['force']:.2f} N at {peak['time']:.3f} s (prominence: {peak['prominence']:.2f} N)\n"
+                                )
 
                     # === ENERGY EXPENDITURE METRICS ===
-                    energy = analysis.get('energy_metrics', {})
+                    energy = analysis.get("energy_metrics", {})
                     if energy:
                         f.write("\nENERGY EXPENDITURE ANALYSIS:\n")
-                        f.write(f"  Body Weight: {energy.get('body_weight_kg', 0):.1f} kg ({energy.get('body_weight_N', 0):.1f} N)\n")
+                        f.write(
+                            f"  Body Weight: {energy.get('body_weight_kg', 0):.1f} kg ({energy.get('body_weight_N', 0):.1f} N)\n"
+                        )
                         f.write(f"  Total Movements: {energy.get('total_movements', 0)}\n")
-                        f.write(f"  Total Mechanical Work: {energy.get('total_mechanical_work_J', 0):.2f} J ({energy.get('total_mechanical_work_J', 0)/4184:.3f} kcal)\n")
-                        f.write(f"  Total Metabolic Energy: {energy.get('total_metabolic_energy_kcal', 0):.3f} kcal\n")
-                        f.write(f"  Average Energy per Movement: {energy.get('average_energy_per_movement_kcal', 0):.3f} kcal\n")
+                        f.write(
+                            f"  Total Mechanical Work: {energy.get('total_mechanical_work_J', 0):.2f} J ({energy.get('total_mechanical_work_J', 0) / 4184:.3f} kcal)\n"
+                        )
+                        f.write(
+                            f"  Total Metabolic Energy: {energy.get('total_metabolic_energy_kcal', 0):.3f} kcal\n"
+                        )
+                        f.write(
+                            f"  Average Energy per Movement: {energy.get('average_energy_per_movement_kcal', 0):.3f} kcal\n"
+                        )
                         f.write(f"  Energy Efficiency: {energy.get('energy_efficiency', 0):.1f}%\n")
-                        f.write(f"  Chair Height (reference): {energy.get('chair_height_m', 0):.3f} m\n")
+                        f.write(
+                            f"  Chair Height (reference): {energy.get('chair_height_m', 0):.3f} m\n"
+                        )
                         f.write(f"  Reference Study: {energy.get('reference_study', 'N/A')}\n\n")
-                        
+
                         # Detailed phase energy data
-                        phases_energy = energy.get('phases_energy', [])
+                        phases_energy = energy.get("phases_energy", [])
                         if phases_energy:
                             f.write("  MOVEMENT-BY-MOVEMENT ENERGY:\n")
                             for phase_energy in phases_energy:
-                                f.write(f"    Phase {phase_energy['phase_number']} ({phase_energy['movement_type']}):\n")
+                                f.write(
+                                    f"    Phase {phase_energy['phase_number']} ({phase_energy['movement_type']}):\n"
+                                )
                                 f.write(f"      Duration: {phase_energy['duration_s']:.2f} s\n")
-                                f.write(f"      Mechanical Work: {phase_energy['mechanical_work_J']:.2f} J\n")
-                                f.write(f"      Metabolic Energy: {phase_energy['metabolic_energy_kcal']:.3f} kcal\n")
-                                f.write(f"      Average Force: {phase_energy['average_force_N']:.1f} N\n")
-                                f.write(f"      Force above Body Weight: {phase_energy['force_above_body_weight_N']:.1f} N\n")
-                                f.write(f"      Energy Efficiency: {phase_energy['energy_efficiency_percent']:.1f}%\n")
+                                f.write(
+                                    f"      Mechanical Work: {phase_energy['mechanical_work_J']:.2f} J\n"
+                                )
+                                f.write(
+                                    f"      Metabolic Energy: {phase_energy['metabolic_energy_kcal']:.3f} kcal\n"
+                                )
+                                f.write(
+                                    f"      Average Force: {phase_energy['average_force_N']:.1f} N\n"
+                                )
+                                f.write(
+                                    f"      Force above Body Weight: {phase_energy['force_above_body_weight_N']:.1f} N\n"
+                                )
+                                f.write(
+                                    f"      Energy Efficiency: {phase_energy['energy_efficiency_percent']:.1f}%\n"
+                                )
                             f.write("\n")
 
                     # Plot information
-                    if 'plot_path' in result:
+                    if "plot_path" in result:
                         f.write(f"Plot saved: {os.path.basename(result['plot_path'])}\n")
 
                     f.write("=" * 60 + "\n")
-                    total_phases += movement['num_phases']
+                    total_phases += movement["num_phases"]
                 else:
                     f.write(f"\nERROR - {result['filename']}: {result['error']}\n")
                     f.write("=" * 60 + "\n")
 
-            f.write(f"\nOverall Summary:\n")
+            f.write("\nOverall Summary:\n")
             f.write(f"Total phases detected across all files: {total_phases}\n")
-            f.write(f"Average phases per successful file: {total_phases/successful_analyses:.1f}\n")
+            f.write(
+                f"Average phases per successful file: {total_phases / successful_analyses:.1f}\n"
+            )
 
         # Generate comprehensive CSV summary with all clinical metrics
         csv_data = []
         for result in results:
-            if 'error' not in result:
-                analysis = result['analysis']
-                movement = analysis['movement_metrics']
-                impulse = analysis['impulse_metrics']
-                time_to_peak = analysis['time_to_peak_metrics']
-                phases_data = analysis.get('sit_to_stand_phases', [])
+            if "error" not in result:
+                analysis = result["analysis"]
+                movement = analysis["movement_metrics"]
+                impulse = analysis["impulse_metrics"]
+                time_to_peak = analysis["time_to_peak_metrics"]
+                phases_data = analysis.get("sit_to_stand_phases", [])
 
                 # Base metrics
                 row = {
-                    'filename': result['filename'],
-                    'duration_s': analysis['duration'],
-                    'mean_force_N': analysis['mean_force'],
-                    'max_force_N': analysis['max_force'],
-                    'min_force_N': analysis['min_force'],
-                    
+                    "filename": result["filename"],
+                    "duration_s": analysis["duration"],
+                    "mean_force_N": analysis["mean_force"],
+                    "max_force_N": analysis["max_force"],
+                    "min_force_N": analysis["min_force"],
                     # Movement detection
-                    'num_phases': movement['num_phases'],
-                    'total_movement_time_s': movement['total_movement_time'],
-                    'average_phase_duration_s': movement['average_phase_duration'],
-                    'phases_per_minute': movement['phases_per_minute'],
-                    
+                    "num_phases": movement["num_phases"],
+                    "total_movement_time_s": movement["total_movement_time"],
+                    "average_phase_duration_s": movement["average_phase_duration"],
+                    "phases_per_minute": movement["phases_per_minute"],
                     # Time to peak metrics (CRITICAL)
-                    'time_to_first_peak_s': time_to_peak.get('time_to_first_peak'),
-                    'time_to_max_force_s': time_to_peak.get('time_to_max_force'),
-                    'average_time_to_peak_s': time_to_peak.get('average_time_to_peak', 0),
-                    'time_to_peak_variation_s': time_to_peak.get('time_to_peak_variation', 0),
-                    
+                    "time_to_first_peak_s": time_to_peak.get("time_to_first_peak"),
+                    "time_to_max_force_s": time_to_peak.get("time_to_max_force"),
+                    "average_time_to_peak_s": time_to_peak.get("average_time_to_peak", 0),
+                    "time_to_peak_variation_s": time_to_peak.get("time_to_peak_variation", 0),
                     # Impulse metrics
-                    'total_impulse_Ns': impulse['total_impulse'],
-                    'average_impulse_Ns': impulse['average_impulse'],
-                    'peak_power_W': impulse['peak_power'],
-                    'average_power_W': impulse['average_power'],
-                    'force_rate_of_change_Ns': impulse['force_rate_of_change'],
-                    
+                    "total_impulse_Ns": impulse["total_impulse"],
+                    "average_impulse_Ns": impulse["average_impulse"],
+                    "peak_power_W": impulse["peak_power"],
+                    "average_power_W": impulse["average_power"],
+                    "force_rate_of_change_Ns": impulse["force_rate_of_change"],
                     # Symmetry metrics
-                    'symmetry_index': movement.get('symmetry_index', 0),
-                    
+                    "symmetry_index": movement.get("symmetry_index", 0),
                     # Stability metrics (oscillation around first peak)
-                    'first_peak_force_N': analysis.get('stability_metrics', {}).get('first_peak_force', 0),
-                    'stability_index': analysis.get('stability_metrics', {}).get('stability_index', 0),
-                    'mean_deviation_from_first_peak_N': analysis.get('stability_metrics', {}).get('mean_deviation', 0),
-                    'max_deviation_from_first_peak_N': analysis.get('stability_metrics', {}).get('max_deviation', 0),
-                    'points_above_first_peak': analysis.get('stability_metrics', {}).get('points_above', 0),
-                    'points_below_first_peak': analysis.get('stability_metrics', {}).get('points_below', 0),
-                    'percent_above_first_peak': analysis.get('stability_metrics', {}).get('percent_above', 0),
-                    'percent_below_first_peak': analysis.get('stability_metrics', {}).get('percent_below', 0),
-                    'total_crossings': analysis.get('stability_metrics', {}).get('total_crossings', 0),
-                    'crossings_above': analysis.get('stability_metrics', {}).get('crossings_above', 0),
-                    'crossings_below': analysis.get('stability_metrics', {}).get('crossings_below', 0),
-                    'noise_level_N': analysis.get('stability_metrics', {}).get('noise_level', 0),
-                    'oscillation_frequency_Hz': analysis.get('stability_metrics', {}).get('oscillation_frequency', 0),
-                    'stability_duration_s': analysis.get('stability_metrics', {}).get('stability_duration', 0),
-                    'is_stable': analysis.get('stability_metrics', {}).get('is_stable', False),
-                    'num_standing_peaks': analysis.get('stability_metrics', {}).get('num_standing_peaks', 0),
-                    
+                    "first_peak_force_N": analysis.get("stability_metrics", {}).get(
+                        "first_peak_force", 0
+                    ),
+                    "stability_index": analysis.get("stability_metrics", {}).get(
+                        "stability_index", 0
+                    ),
+                    "mean_deviation_from_first_peak_N": analysis.get("stability_metrics", {}).get(
+                        "mean_deviation", 0
+                    ),
+                    "max_deviation_from_first_peak_N": analysis.get("stability_metrics", {}).get(
+                        "max_deviation", 0
+                    ),
+                    "points_above_first_peak": analysis.get("stability_metrics", {}).get(
+                        "points_above", 0
+                    ),
+                    "points_below_first_peak": analysis.get("stability_metrics", {}).get(
+                        "points_below", 0
+                    ),
+                    "percent_above_first_peak": analysis.get("stability_metrics", {}).get(
+                        "percent_above", 0
+                    ),
+                    "percent_below_first_peak": analysis.get("stability_metrics", {}).get(
+                        "percent_below", 0
+                    ),
+                    "total_crossings": analysis.get("stability_metrics", {}).get(
+                        "total_crossings", 0
+                    ),
+                    "crossings_above": analysis.get("stability_metrics", {}).get(
+                        "crossings_above", 0
+                    ),
+                    "crossings_below": analysis.get("stability_metrics", {}).get(
+                        "crossings_below", 0
+                    ),
+                    "noise_level_N": analysis.get("stability_metrics", {}).get("noise_level", 0),
+                    "oscillation_frequency_Hz": analysis.get("stability_metrics", {}).get(
+                        "oscillation_frequency", 0
+                    ),
+                    "stability_duration_s": analysis.get("stability_metrics", {}).get(
+                        "stability_duration", 0
+                    ),
+                    "is_stable": analysis.get("stability_metrics", {}).get("is_stable", False),
+                    "num_standing_peaks": analysis.get("stability_metrics", {}).get(
+                        "num_standing_peaks", 0
+                    ),
                     # Energy expenditure metrics
-                    'body_weight_kg': analysis.get('energy_metrics', {}).get('body_weight_kg', 0),
-                    'body_weight_N': analysis.get('energy_metrics', {}).get('body_weight_N', 0),
-                    'total_mechanical_work_J': analysis.get('energy_metrics', {}).get('total_mechanical_work_J', 0),
-                    'total_mechanical_work_kcal': analysis.get('energy_metrics', {}).get('total_mechanical_work_J', 0) / 4184 if analysis.get('energy_metrics', {}).get('total_mechanical_work_J', 0) > 0 else 0,
-                    'total_metabolic_energy_kcal': analysis.get('energy_metrics', {}).get('total_metabolic_energy_kcal', 0),
-                    'average_energy_per_movement_kcal': analysis.get('energy_metrics', {}).get('average_energy_per_movement_kcal', 0),
-                    'energy_per_movement_J': analysis.get('energy_metrics', {}).get('energy_per_movement_J', 0),
-                    'energy_efficiency_percent': analysis.get('energy_metrics', {}).get('energy_efficiency', 0),
-                    'total_movements': analysis.get('energy_metrics', {}).get('total_movements', 0),
+                    "body_weight_kg": analysis.get("energy_metrics", {}).get("body_weight_kg", 0),
+                    "body_weight_N": analysis.get("energy_metrics", {}).get("body_weight_N", 0),
+                    "total_mechanical_work_J": analysis.get("energy_metrics", {}).get(
+                        "total_mechanical_work_J", 0
+                    ),
+                    "total_mechanical_work_kcal": analysis.get("energy_metrics", {}).get(
+                        "total_mechanical_work_J", 0
+                    )
+                    / 4184
+                    if analysis.get("energy_metrics", {}).get("total_mechanical_work_J", 0) > 0
+                    else 0,
+                    "total_metabolic_energy_kcal": analysis.get("energy_metrics", {}).get(
+                        "total_metabolic_energy_kcal", 0
+                    ),
+                    "average_energy_per_movement_kcal": analysis.get("energy_metrics", {}).get(
+                        "average_energy_per_movement_kcal", 0
+                    ),
+                    "energy_per_movement_J": analysis.get("energy_metrics", {}).get(
+                        "energy_per_movement_J", 0
+                    ),
+                    "energy_efficiency_percent": analysis.get("energy_metrics", {}).get(
+                        "energy_efficiency", 0
+                    ),
+                    "total_movements": analysis.get("energy_metrics", {}).get("total_movements", 0),
                 }
-                
+
                 # Add RFD metrics from first phase if available
                 if phases_data:
                     first_phase = phases_data[0]
-                    row.update({
-                        'overall_rfd_Ns': first_phase.get('overall_rfd', 0),
-                        'early_rfd_Ns': first_phase.get('early_rfd', 0),
-                        'peak_rfd_Ns': first_phase.get('peak_rfd', 0),
-                        'weight_transfer_time_s': first_phase.get('weight_transfer_time'),
-                        'first_peak_force_N': first_phase.get('first_peak_force', 0),
-                        'max_peak_force_N': first_phase.get('max_peak_force', 0),
-                        'num_peaks_detected': first_phase.get('num_peaks', 0),
-                        'force_cv_percent': first_phase.get('force_cv', 0),
-                        'force_jerk': first_phase.get('force_jerk', 0),
-                        'peak_symmetry': first_phase.get('peak_symmetry', 0),
-                        'temporal_symmetry': first_phase.get('temporal_symmetry', 0),
-                        'bilateral_index': first_phase.get('bilateral_index', 0),
-                        'consistency_score': first_phase.get('consistency_score', 0),
-                        'has_unloading_phase': first_phase.get('has_unloading_phase', False),
-                        'force_range_N': first_phase.get('force_range', 0),
-                        'force_excursion_N': first_phase.get('force_excursion', 0),
-                        'mean_force_during_movement_N': first_phase.get('mean_force_during_movement', 0),
-                        'sampling_frequency_Hz': first_phase.get('sampling_frequency', 0)
-                    })
-                
+                    row.update(
+                        {
+                            "overall_rfd_Ns": first_phase.get("overall_rfd", 0),
+                            "early_rfd_Ns": first_phase.get("early_rfd", 0),
+                            "peak_rfd_Ns": first_phase.get("peak_rfd", 0),
+                            "weight_transfer_time_s": first_phase.get("weight_transfer_time"),
+                            "first_peak_force_N": first_phase.get("first_peak_force", 0),
+                            "max_peak_force_N": first_phase.get("max_peak_force", 0),
+                            "num_peaks_detected": first_phase.get("num_peaks", 0),
+                            "force_cv_percent": first_phase.get("force_cv", 0),
+                            "force_jerk": first_phase.get("force_jerk", 0),
+                            "peak_symmetry": first_phase.get("peak_symmetry", 0),
+                            "temporal_symmetry": first_phase.get("temporal_symmetry", 0),
+                            "bilateral_index": first_phase.get("bilateral_index", 0),
+                            "consistency_score": first_phase.get("consistency_score", 0),
+                            "has_unloading_phase": first_phase.get("has_unloading_phase", False),
+                            "force_range_N": first_phase.get("force_range", 0),
+                            "force_excursion_N": first_phase.get("force_excursion", 0),
+                            "mean_force_during_movement_N": first_phase.get(
+                                "mean_force_during_movement", 0
+                            ),
+                            "sampling_frequency_Hz": first_phase.get("sampling_frequency", 0),
+                        }
+                    )
+
                 csv_data.append(row)
 
         if csv_data:
@@ -1096,7 +1342,7 @@ def generate_batch_report(results, config, output_dir):
             csv_path = main_results_dir / "batch_analysis_summary.csv"
             df.to_csv(csv_path, index=False)
 
-        print(f"\nBatch report generated:")
+        print("\nBatch report generated:")
         print(f"  Batch summary report: {report_path}")
         print(f"  Batch CSV summary: {csv_path}")
         print(f"  Individual reports and plots saved in: {main_results_dir}")
@@ -1126,7 +1372,11 @@ def read_c3d_file(file_path, column_name):
         # Get analog data and labels
         analogs = datac3d["data"]["analogs"]
         analog_labels = datac3d["parameters"]["ANALOG"]["LABELS"]["value"]
-        analog_units = datac3d["parameters"]["ANALOG"].get("UNITS", {}).get("value", ["Unknown"] * len(analog_labels))
+        analog_units = (
+            datac3d["parameters"]["ANALOG"]
+            .get("UNITS", {})
+            .get("value", ["Unknown"] * len(analog_labels))
+        )
 
         print(f"Available analog channels: {analog_labels}")
 
@@ -1171,10 +1421,7 @@ def read_c3d_file(file_path, column_name):
         print(f"Force range: {force_values.min():.3f} - {force_values.max():.3f}")
 
         # Create DataFrame
-        force_data = pd.DataFrame({
-            'Time': time_values,
-            'Force': force_values
-        })
+        force_data = pd.DataFrame({"Time": time_values, "Force": force_values})
 
         return force_data
 
@@ -1188,9 +1435,9 @@ def print_c3d_info(datac3d):
     Print detailed information about the C3D file structure.
     """
     try:
-        print("\n" + "="*50)
+        print("\n" + "=" * 50)
         print("C3D FILE INFORMATION")
-        print("="*50)
+        print("=" * 50)
 
         # Basic header info
         print(f"Points frame rate: {datac3d['header']['points']['frame_rate']} Hz")
@@ -1199,13 +1446,17 @@ def print_c3d_info(datac3d):
         print(f"Number of analog channels: {datac3d['parameters']['ANALOG']['USED']['value'][0]}")
 
         # Point/marker information
-        if datac3d['parameters']['POINT']['USED']['value'][0] > 0:
+        if datac3d["parameters"]["POINT"]["USED"]["value"][0] > 0:
             marker_labels = datac3d["parameters"]["POINT"]["LABELS"]["value"]
             print(f"Marker labels: {marker_labels}")
 
         # Analog information
         analog_labels = datac3d["parameters"]["ANALOG"]["LABELS"]["value"]
-        analog_units = datac3d["parameters"]["ANALOG"].get("UNITS", {}).get("value", ["Unknown"] * len(analog_labels))
+        analog_units = (
+            datac3d["parameters"]["ANALOG"]
+            .get("UNITS", {})
+            .get("value", ["Unknown"] * len(analog_labels))
+        )
 
         print("\nAnalog channels and units:")
         for label, unit in zip(analog_labels, analog_units):
@@ -1223,7 +1474,7 @@ def print_c3d_info(datac3d):
                     force_shape = platform["force"].shape
                     print(f"    Force data shape: {force_shape}")
 
-        print("="*50)
+        print("=" * 50)
 
     except Exception as e:
         print(f"Error printing C3D info: {e}")
@@ -1236,14 +1487,34 @@ def suggest_force_column(analog_labels):
     # Priority order for force column detection
     force_patterns = [
         # Force plate vertical forces (most common for sit-to-stand)
-        'FZ1', 'Fz1', 'Force.Fz1', 'force_z_1',
-        'FZ2', 'Fz2', 'Force.Fz2', 'force_z_2',
-        'FZ3', 'Fz3', 'Force.Fz3', 'force_z_3',
-        'FZ4', 'Fz4', 'Force.Fz4', 'force_z_4',
+        "FZ1",
+        "Fz1",
+        "Force.Fz1",
+        "force_z_1",
+        "FZ2",
+        "Fz2",
+        "Force.Fz2",
+        "force_z_2",
+        "FZ3",
+        "Fz3",
+        "Force.Fz3",
+        "force_z_3",
+        "FZ4",
+        "Fz4",
+        "Force.Fz4",
+        "force_z_4",
         # Generic force patterns
-        'FZ', 'Fz', 'Force_Z', 'force_z',
+        "FZ",
+        "Fz",
+        "Force_Z",
+        "force_z",
         # Any force component
-        'FX', 'FY', 'Fx', 'Fy', 'Force_X', 'Force_Y'
+        "FX",
+        "FY",
+        "Fx",
+        "Fy",
+        "Force_X",
+        "Force_Y",
     ]
 
     for pattern in force_patterns:
@@ -1299,7 +1570,7 @@ def read_csv_file(file_path, column_name, config=None):
         # Try to identify time column (first numeric column or column with 'time' in name)
         time_col = None
         for col in df.columns:
-            if col.lower() in ['time', 'timestamp', 'frame', 't']:
+            if col.lower() in ["time", "timestamp", "frame", "t"]:
                 time_col = col
                 break
 
@@ -1311,34 +1582,34 @@ def read_csv_file(file_path, column_name, config=None):
         print(f"Using force column: {column_name}")
 
         # Check if Time column is problematic (only 0s and 1s or not increasing properly)
-        if time_col.lower() in ['time', 'tempo', 'frame', 't']:
+        if time_col.lower() in ["time", "tempo", "frame", "t"]:
             unique_time_values = sorted(df[time_col].unique())
             if len(unique_time_values) <= 2 or not df[time_col].is_monotonic_increasing:
                 print(f"[WARNING] Time column has issues: {unique_time_values}")
                 print("[DEBUG] Generating time vector from FPS configuration")
                 # Generate time vector using FPS from config
                 fps = 100.0  # Default FPS
-                if config and 'analysis' in config:
-                    fps = config['analysis'].get('fps', 100.0)
-                
+                if config and "analysis" in config:
+                    fps = config["analysis"].get("fps", 100.0)
+
                 # Create time vector based on FPS
                 df = df.copy()
                 time_vector = np.arange(len(df)) / fps
-                df.insert(0, 'Time_Generated', time_vector)
-                time_col = 'Time_Generated'
+                df.insert(0, "Time_Generated", time_vector)
+                time_col = "Time_Generated"
                 print(f"Generated time vector using FPS: {fps} Hz")
 
         # Extract relevant data
         force_data = df[[time_col, column_name]].copy()
 
         # Rename columns for consistency
-        force_data.columns = ['Time', 'Force']
+        force_data.columns = ["Time", "Force"]
 
         # Ensure Time column is numeric
-        force_data['Time'] = pd.to_numeric(force_data['Time'], errors='coerce')
+        force_data["Time"] = pd.to_numeric(force_data["Time"], errors="coerce")
 
         # Ensure Force column is numeric
-        force_data['Force'] = pd.to_numeric(force_data['Force'], errors='coerce')
+        force_data["Force"] = pd.to_numeric(force_data["Force"], errors="coerce")
 
         # Remove any rows with NaN values
         force_data = force_data.dropna()
@@ -1376,62 +1647,63 @@ def analyze_sit_to_stand(data, config):
     """
     try:
         # Extract parameters from config
-        force_threshold = config['detection']['force_threshold']
-        min_duration = config['detection']['min_duration']
-        onset_threshold = config['detection']['onset_threshold']
+        force_threshold = config["detection"]["force_threshold"]
+        min_duration = config["detection"]["min_duration"]
+        onset_threshold = config["detection"]["onset_threshold"]
 
         # Basic statistics
         total_samples = len(data)
-        duration = data['Time'].iloc[-1] - data['Time'].iloc[0] if len(data) > 0 else 0
-        mean_force = data['Force'].mean()
-        max_force = data['Force'].max()
-        min_force = data['Force'].min()
+        duration = data["Time"].iloc[-1] - data["Time"].iloc[0] if len(data) > 0 else 0
+        mean_force = data["Force"].mean()
+        max_force = data["Force"].max()
+        min_force = data["Force"].min()
 
         # Detect ALL peaks in the entire signal using scipy if enabled
         all_peaks = []
         all_peaks_global = []  # All peaks in entire signal
-        if config.get('detection', {}).get('peak_detection'):
+        if config.get("detection", {}).get("peak_detection"):
             print("Using scipy.find_peaks for peak detection on entire signal")
-            all_peaks_global = detect_peaks_scipy(data['Force'].values, data['Time'].values, config)
+            all_peaks_global = detect_peaks_scipy(data["Force"].values, data["Time"].values, config)
             all_peaks = all_peaks_global  # For compatibility with existing code
-            
+
             print(f"Total peaks detected in signal: {len(all_peaks_global)}")
             if len(all_peaks_global) > 0:
-                print(f"  Peak times: {[f'{p['time']:.3f}s' for p in all_peaks_global[:10]]}")
-                print(f"  Peak forces: {[f'{p['force']:.2f}N' for p in all_peaks_global[:10]]}")
+                print(f"  Peak times: {[f'{p["time"]:.3f}s' for p in all_peaks_global[:10]]}")
+                print(f"  Peak forces: {[f'{p["force"]:.2f}N' for p in all_peaks_global[:10]]}")
 
         # Detect sit-to-stand phases
         sit_to_stand_phases = detect_sit_to_stand_phases(
-            data['Force'].values,
-            data['Time'].values,
+            data["Force"].values,
+            data["Time"].values,
             force_threshold,
             min_duration,
-            onset_threshold
+            onset_threshold,
         )
 
         # Calculate stability metrics if enabled
         stability_metrics = {}
-        if config.get('stability', {}).get('enabled', False):
+        if config.get("stability", {}).get("enabled", False):
             print("Calculating stability index...")
             # Use the maximum force peak as reference (not just first peak)
             if all_peaks:
                 # Find the peak with maximum force
-                max_peak = max(all_peaks, key=lambda p: p['force'])
-                reference_peak_time = max_peak['time']
-                reference_peak_force = max_peak['force']
-                print(f"Using maximum peak as reference: {reference_peak_force:.2f} N at {reference_peak_time:.3f} s")
+                max_peak = max(all_peaks, key=lambda p: p["force"])
+                reference_peak_time = max_peak["time"]
+                reference_peak_force = max_peak["force"]
+                print(
+                    f"Using maximum peak as reference: {reference_peak_force:.2f} N at {reference_peak_time:.3f} s"
+                )
             else:
                 # Fallback: use the maximum force in the data
-                max_force_idx = np.argmax(data['Force'].values)
-                reference_peak_time = data['Time'].iloc[max_force_idx]
-                reference_peak_force = data['Force'].iloc[max_force_idx]
-                print(f"Using maximum force as reference: {reference_peak_force:.2f} N at {reference_peak_time:.3f} s")
-            
+                max_force_idx = np.argmax(data["Force"].values)
+                reference_peak_time = data["Time"].iloc[max_force_idx]
+                reference_peak_force = data["Force"].iloc[max_force_idx]
+                print(
+                    f"Using maximum force as reference: {reference_peak_force:.2f} N at {reference_peak_time:.3f} s"
+                )
+
             stability_metrics = calculate_stability_index(
-                data['Force'].values, 
-                data['Time'].values, 
-                reference_peak_time, 
-                config
+                data["Force"].values, data["Time"].values, reference_peak_time, config
             )
 
         # Calculate movement metrics
@@ -1445,31 +1717,28 @@ def analyze_sit_to_stand(data, config):
 
         # Calculate energy expenditure if body weight is configured
         energy_metrics = {}
-        if config.get('analysis', {}).get('body_weight'):
+        if config.get("analysis", {}).get("body_weight"):
             print("Calculating energy expenditure...")
             energy_metrics = calculate_energy_expenditure(
-                data['Force'].values, 
-                data['Time'].values, 
-                sit_to_stand_phases, 
-                config
+                data["Force"].values, data["Time"].values, sit_to_stand_phases, config
             )
 
         results = {
-            'total_samples': total_samples,
-            'duration': duration,
-            'mean_force': mean_force,
-            'max_force': max_force,
-            'min_force': min_force,
-            'all_peaks': all_peaks,
-            'all_peaks_global': all_peaks_global,  # All peaks in entire signal
-            'sit_to_stand_phases': sit_to_stand_phases,
-            'movement_metrics': movement_metrics,
-            'impulse_metrics': impulse_metrics,
-            'time_to_peak_metrics': time_to_peak_metrics,
-            'stability_metrics': stability_metrics,
-            'energy_metrics': energy_metrics,
-            'detection_threshold': force_threshold,
-            'status': 'analyzed'
+            "total_samples": total_samples,
+            "duration": duration,
+            "mean_force": mean_force,
+            "max_force": max_force,
+            "min_force": min_force,
+            "all_peaks": all_peaks,
+            "all_peaks_global": all_peaks_global,  # All peaks in entire signal
+            "sit_to_stand_phases": sit_to_stand_phases,
+            "movement_metrics": movement_metrics,
+            "impulse_metrics": impulse_metrics,
+            "time_to_peak_metrics": time_to_peak_metrics,
+            "stability_metrics": stability_metrics,
+            "energy_metrics": energy_metrics,
+            "detection_threshold": force_threshold,
+            "status": "analyzed",
         }
 
         return results
@@ -1477,17 +1746,24 @@ def analyze_sit_to_stand(data, config):
     except Exception as e:
         print(f"Error in sit-to-stand analysis: {str(e)}")
         return {
-            'total_samples': len(data),
-            'duration': data['Time'].iloc[-1] - data['Time'].iloc[0] if len(data) > 0 else 0,
-            'mean_force': data['Force'].mean(),
-            'max_force': data['Force'].max(),
-            'min_force': data['Force'].min(),
-            'error': str(e),
-            'status': 'error'
+            "total_samples": len(data),
+            "duration": data["Time"].iloc[-1] - data["Time"].iloc[0] if len(data) > 0 else 0,
+            "mean_force": data["Force"].mean(),
+            "max_force": data["Force"].max(),
+            "min_force": data["Force"].min(),
+            "error": str(e),
+            "status": "error",
         }
 
 
-def detect_sit_to_stand_phases(force_data, time_data, force_threshold, min_duration, onset_threshold, auto_threshold=True):
+def detect_sit_to_stand_phases(
+    force_data,
+    time_data,
+    force_threshold,
+    min_duration,
+    onset_threshold,
+    auto_threshold=True,
+):
     """
     Detects sit-to-stand phases in force data with enhanced clinical biomechanical analysis.
     Specifically designed for pediatric cerebral palsy assessment with comprehensive metrics.
@@ -1540,7 +1816,7 @@ def detect_sit_to_stand_phases(force_data, time_data, force_threshold, min_durat
 
         if len(onset_indices) == 0:
             print("No movement onset detected - check threshold settings")
-            print(f"Try lowering onset_threshold or check if force data is correct")
+            print("Try lowering onset_threshold or check if force data is correct")
             return phases
 
         # Find continuous segments representing distinct sit-to-stand movements
@@ -1558,7 +1834,7 @@ def detect_sit_to_stand_phases(force_data, time_data, force_threshold, min_durat
         print(f"Minimum samples for valid phase: {min_samples} (at {sampling_freq:.1f} Hz)")
 
         for i in range(1, len(onset_indices)):
-            if onset_indices[i] == onset_indices[i-1] + 1:
+            if onset_indices[i] == onset_indices[i - 1] + 1:
                 current_segment.append(onset_indices[i])
             else:
                 if len(current_segment) >= min_samples:
@@ -1577,19 +1853,19 @@ def detect_sit_to_stand_phases(force_data, time_data, force_threshold, min_durat
             end_idx = segment[-1]
 
             # Extract segment data
-            segment_forces = force_data[start_idx:end_idx+1]
-            segment_times = time_data[start_idx:end_idx+1]
+            segment_forces = force_data[start_idx : end_idx + 1]
+            segment_times = time_data[start_idx : end_idx + 1]
 
             # === PEAK DETECTION ===
             # Find ALL peaks in this segment (important for multi-peak movements in CP)
             all_peaks = detect_all_peaks_in_segment(segment_forces, segment_times, baseline_force)
-            
+
             # Identify first peak (clinically important for initial force generation)
             first_peak = all_peaks[0] if all_peaks else None
-            
+
             # Identify maximum peak
-            max_peak = max(all_peaks, key=lambda p: p['force']) if all_peaks else None
-            
+            max_peak = max(all_peaks, key=lambda p: p["force"]) if all_peaks else None
+
             # Global peak in segment (for compatibility)
             peak_idx = start_idx + np.argmax(segment_forces)
             peak_force = force_data[peak_idx]
@@ -1597,20 +1873,22 @@ def detect_sit_to_stand_phases(force_data, time_data, force_threshold, min_durat
 
             # === TEMPORAL METRICS ===
             phase_duration = time_data[end_idx] - time_data[start_idx]
-            
+
             # Time to first peak (onset to first peak) - Critical for CP assessment
-            time_to_first_peak = first_peak['time'] - segment_times[0] if first_peak else None
-            
+            time_to_first_peak = first_peak["time"] - segment_times[0] if first_peak else None
+
             # Time to maximum force
             time_to_max_force = peak_time - segment_times[0]
-            
+
             # === FORCE DEVELOPMENT METRICS ===
             # Rate of Force Development (RFD) - multiple methods
-            
+
             # 1. Overall RFD (onset to peak)
             force_at_onset = segment_forces[0]
-            overall_rfd = (peak_force - force_at_onset) / time_to_max_force if time_to_max_force > 0 else 0
-            
+            overall_rfd = (
+                (peak_force - force_at_onset) / time_to_max_force if time_to_max_force > 0 else 0
+            )
+
             # 2. Early RFD (first 100ms or 10% of movement, whichever is shorter)
             early_window_time = min(0.1, phase_duration * 0.1)  # 100ms or 10%
             early_window_samples = int(early_window_time * sampling_freq)
@@ -1619,118 +1897,116 @@ def detect_sit_to_stand_phases(force_data, time_data, force_threshold, min_durat
                 early_rfd = early_force_change / early_window_time
             else:
                 early_rfd = 0
-            
+
             # 3. Peak RFD (maximum instantaneous rate)
             force_gradient = np.gradient(segment_forces, segment_times)
             peak_rfd = np.max(force_gradient)
             peak_rfd_time = segment_times[np.argmax(force_gradient)]
-            
+
             # === IMPULSE METRICS ===
             # Total impulse (force-time integral)
             total_impulse = np.trapz(segment_forces, segment_times)
-            
+
             # Impulse above baseline (more clinically relevant)
             impulse_above_baseline = np.trapz(segment_forces - baseline_force, segment_times)
-            
+
             # Normalized impulse (per unit time)
             normalized_impulse = total_impulse / phase_duration if phase_duration > 0 else 0
-            
+
             # === POWER METRICS ===
             # Average power
             average_power = total_impulse / phase_duration if phase_duration > 0 else 0
-            
+
             # Peak power (at point of maximum force)
             peak_power = peak_force * peak_rfd if peak_rfd > 0 else 0
-            
+
             # === FORCE VARIABILITY ===
             # Coefficient of variation of force during movement
-            force_cv = (np.std(segment_forces) / np.mean(segment_forces)) * 100 if np.mean(segment_forces) > 0 else 0
-            
+            force_cv = (
+                (np.std(segment_forces) / np.mean(segment_forces)) * 100
+                if np.mean(segment_forces) > 0
+                else 0
+            )
+
             # Force smoothness (using jerk-like metric)
             force_jerk = np.mean(np.abs(np.gradient(force_gradient, segment_times)))
-            
+
             # === SYMMETRY AND CONSISTENCY ===
             # Multiple peak analysis for bilateral assessment
             symmetry_metrics = calculate_detailed_symmetry(all_peaks, segment_forces, segment_times)
-            
+
             # === CLINICAL METRICS ===
             # Weight transfer efficiency (how quickly force reaches threshold)
             weight_transfer_time = None
             threshold_idx = np.where(segment_forces >= (baseline_force + onset_threshold))[0]
             if len(threshold_idx) > 0:
                 weight_transfer_time = segment_times[threshold_idx[0]] - segment_times[0]
-            
+
             # Unloading phase (before standing) - negative force development
             unloading_indices = np.where(force_gradient < 0)[0]
             has_unloading = len(unloading_indices) > 0
-            
+
             # Store comprehensive phase metrics
-            phases.append({
-                # Basic temporal metrics
-                'phase_number': phase_num + 1,
-                'start_time': time_data[start_idx],
-                'end_time': time_data[end_idx],
-                'duration': phase_duration,
-                'start_index': start_idx,
-                'end_index': end_idx,
-                
-                # Peak force metrics
-                'peak_force': peak_force,
-                'peak_time': peak_time,
-                'first_peak_force': first_peak['force'] if first_peak else peak_force,
-                'first_peak_time': first_peak['time'] if first_peak else peak_time,
-                'max_peak_force': max_peak['force'] if max_peak else peak_force,
-                'max_peak_time': max_peak['time'] if max_peak else peak_time,
-                'num_peaks': len(all_peaks),
-                'all_peaks': all_peaks,
-                
-                # Time to peak metrics (CRITICAL for CP assessment)
-                'time_to_first_peak': time_to_first_peak,
-                'time_to_max_force': time_to_max_force,
-                'weight_transfer_time': weight_transfer_time,
-                
-                # Rate of Force Development (RFD) - CRITICAL for CP assessment
-                'overall_rfd': overall_rfd,
-                'early_rfd': early_rfd,
-                'peak_rfd': peak_rfd,
-                'peak_rfd_time': peak_rfd_time,
-                'rate_of_force_development': overall_rfd,  # Legacy compatibility
-                
-                # Impulse metrics
-                'impulse': total_impulse,
-                'impulse_above_baseline': impulse_above_baseline,
-                'normalized_impulse': normalized_impulse,
-                
-                # Power metrics
-                'average_power': average_power,
-                'peak_power': peak_power,
-                'power': average_power,  # Legacy compatibility
-                
-                # Force variability and smoothness
-                'force_cv': force_cv,
-                'force_jerk': force_jerk,
-                
-                # Symmetry metrics
-                'symmetry': symmetry_metrics['overall_symmetry'],
-                'peak_symmetry': symmetry_metrics['peak_symmetry'],
-                'temporal_symmetry': symmetry_metrics['temporal_symmetry'],
-                
-                # Clinical indicators
-                'baseline_force': baseline_force,
-                'onset_threshold': onset_threshold,
-                'force_at_onset': force_at_onset,
-                'has_unloading_phase': has_unloading,
-                
-                # Additional biomechanical metrics
-                'force_range': peak_force - force_at_onset,
-                'force_excursion': np.max(segment_forces) - np.min(segment_forces),
-                'mean_force_during_movement': np.mean(segment_forces),
-                'sampling_frequency': sampling_freq
-            })
+            phases.append(
+                {
+                    # Basic temporal metrics
+                    "phase_number": phase_num + 1,
+                    "start_time": time_data[start_idx],
+                    "end_time": time_data[end_idx],
+                    "duration": phase_duration,
+                    "start_index": start_idx,
+                    "end_index": end_idx,
+                    # Peak force metrics
+                    "peak_force": peak_force,
+                    "peak_time": peak_time,
+                    "first_peak_force": first_peak["force"] if first_peak else peak_force,
+                    "first_peak_time": first_peak["time"] if first_peak else peak_time,
+                    "max_peak_force": max_peak["force"] if max_peak else peak_force,
+                    "max_peak_time": max_peak["time"] if max_peak else peak_time,
+                    "num_peaks": len(all_peaks),
+                    "all_peaks": all_peaks,
+                    # Time to peak metrics (CRITICAL for CP assessment)
+                    "time_to_first_peak": time_to_first_peak,
+                    "time_to_max_force": time_to_max_force,
+                    "weight_transfer_time": weight_transfer_time,
+                    # Rate of Force Development (RFD) - CRITICAL for CP assessment
+                    "overall_rfd": overall_rfd,
+                    "early_rfd": early_rfd,
+                    "peak_rfd": peak_rfd,
+                    "peak_rfd_time": peak_rfd_time,
+                    "rate_of_force_development": overall_rfd,  # Legacy compatibility
+                    # Impulse metrics
+                    "impulse": total_impulse,
+                    "impulse_above_baseline": impulse_above_baseline,
+                    "normalized_impulse": normalized_impulse,
+                    # Power metrics
+                    "average_power": average_power,
+                    "peak_power": peak_power,
+                    "power": average_power,  # Legacy compatibility
+                    # Force variability and smoothness
+                    "force_cv": force_cv,
+                    "force_jerk": force_jerk,
+                    # Symmetry metrics
+                    "symmetry": symmetry_metrics["overall_symmetry"],
+                    "peak_symmetry": symmetry_metrics["peak_symmetry"],
+                    "temporal_symmetry": symmetry_metrics["temporal_symmetry"],
+                    # Clinical indicators
+                    "baseline_force": baseline_force,
+                    "onset_threshold": onset_threshold,
+                    "force_at_onset": force_at_onset,
+                    "has_unloading_phase": has_unloading,
+                    # Additional biomechanical metrics
+                    "force_range": peak_force - force_at_onset,
+                    "force_excursion": np.max(segment_forces) - np.min(segment_forces),
+                    "mean_force_during_movement": np.mean(segment_forces),
+                    "sampling_frequency": sampling_freq,
+                }
+            )
 
     except Exception as e:
         print(f"Error detecting sit-to-stand phases: {str(e)}")
         import traceback
+
         traceback.print_exc()
 
     return phases
@@ -1779,7 +2055,7 @@ def detect_ascending_threshold(force_data, time_data):
 def detect_peaks_scipy(force_data, time_data, config):
     """
     Detects peaks using scipy.signal.find_peaks with configurable parameters.
-    
+
     Parameters:
     -----------
     force_data : array-like
@@ -1788,23 +2064,23 @@ def detect_peaks_scipy(force_data, time_data, config):
         Time values
     config : dict
         Configuration dictionary with peak detection parameters
-        
+
     Returns:
     --------
     list
         List of detected peaks with time, force, and index information
     """
     try:
-        peak_params = config.get('detection', {}).get('peak_detection', {})
-        
+        peak_params = config.get("detection", {}).get("peak_detection", {})
+
         # Extract peak detection parameters
-        height = peak_params.get('height', None)
-        threshold = peak_params.get('threshold', None)
-        distance = peak_params.get('distance', 10)
-        prominence = peak_params.get('prominence', 5.0)
-        width = peak_params.get('width', None)
-        rel_height = peak_params.get('rel_height', 0.5)
-        
+        height = peak_params.get("height", None)
+        threshold = peak_params.get("threshold", None)
+        distance = peak_params.get("distance", 10)
+        prominence = peak_params.get("prominence", 5.0)
+        width = peak_params.get("width", None)
+        rel_height = peak_params.get("rel_height", 0.5)
+
         # Find peaks using scipy
         peaks, properties = find_peaks(
             force_data,
@@ -1813,25 +2089,29 @@ def detect_peaks_scipy(force_data, time_data, config):
             distance=distance,
             prominence=prominence,
             width=width,
-            rel_height=rel_height
+            rel_height=rel_height,
         )
-        
+
         # Convert to list of dictionaries
         peak_list = []
         for i, peak_idx in enumerate(peaks):
             peak_info = {
-                'index': int(peak_idx),
-                'time': float(time_data[peak_idx]),
-                'force': float(force_data[peak_idx]),
-                'prominence': float(properties['prominences'][i]) if 'prominences' in properties else 0.0,
-                'width': float(properties['widths'][i]) if 'widths' in properties else 0.0,
-                'height': float(properties['peak_heights'][i]) if 'peak_heights' in properties else force_data[peak_idx]
+                "index": int(peak_idx),
+                "time": float(time_data[peak_idx]),
+                "force": float(force_data[peak_idx]),
+                "prominence": float(properties["prominences"][i])
+                if "prominences" in properties
+                else 0.0,
+                "width": float(properties["widths"][i]) if "widths" in properties else 0.0,
+                "height": float(properties["peak_heights"][i])
+                if "peak_heights" in properties
+                else force_data[peak_idx],
             }
             peak_list.append(peak_info)
-        
+
         print(f"Detected {len(peak_list)} peaks using scipy.find_peaks")
         return peak_list
-        
+
     except Exception as e:
         print(f"Error in scipy peak detection: {str(e)}")
         # Fallback to simple peak detection
@@ -1842,7 +2122,7 @@ def detect_all_peaks_in_segment(forces, times, baseline_force, min_prominence=5.
     """
     Detects all significant peaks in a sit-to-stand segment with enhanced filtering.
     Critical for identifying multiple force peaks in cerebral palsy patients.
-    
+
     Parameters:
     -----------
     forces : array-like
@@ -1853,7 +2133,7 @@ def detect_all_peaks_in_segment(forces, times, baseline_force, min_prominence=5.
         Baseline force level for reference
     min_prominence : float
         Minimum peak prominence (height above surrounding valleys)
-    
+
     Returns:
     --------
     list
@@ -1861,54 +2141,64 @@ def detect_all_peaks_in_segment(forces, times, baseline_force, min_prominence=5.
     """
     try:
         peaks = []
-        
+
         # Method 1: Local maxima detection with prominence check
         for i in range(1, len(forces) - 1):
-            is_local_max = forces[i] > forces[i-1] and forces[i] > forces[i+1]
-            
+            is_local_max = forces[i] > forces[i - 1] and forces[i] > forces[i + 1]
+
             if is_local_max:
                 # Calculate prominence (height above nearby valleys)
-                left_valley = np.min(forces[max(0, i-10):i]) if i > 0 else forces[i]
-                right_valley = np.min(forces[i:min(len(forces), i+10)]) if i < len(forces)-1 else forces[i]
+                left_valley = np.min(forces[max(0, i - 10) : i]) if i > 0 else forces[i]
+                right_valley = (
+                    np.min(forces[i : min(len(forces), i + 10)])
+                    if i < len(forces) - 1
+                    else forces[i]
+                )
                 prominence = forces[i] - max(left_valley, right_valley)
-                
+
                 # Only include peaks with sufficient prominence and above baseline
                 if prominence >= min_prominence and forces[i] > baseline_force + min_prominence:
-                    peaks.append({
-                        'time': times[i],
-                        'force': forces[i],
-                        'index': i,
-                        'prominence': prominence,
-                        'above_baseline': forces[i] - baseline_force
-                    })
-        
+                    peaks.append(
+                        {
+                            "time": times[i],
+                            "force": forces[i],
+                            "index": i,
+                            "prominence": prominence,
+                            "above_baseline": forces[i] - baseline_force,
+                        }
+                    )
+
         # If no peaks found with prominence filter, find at least the maximum
         if not peaks:
             max_idx = np.argmax(forces)
-            peaks.append({
-                'time': times[max_idx],
-                'force': forces[max_idx],
-                'index': max_idx,
-                'prominence': forces[max_idx] - np.min(forces),
-                'above_baseline': forces[max_idx] - baseline_force
-            })
-        
+            peaks.append(
+                {
+                    "time": times[max_idx],
+                    "force": forces[max_idx],
+                    "index": max_idx,
+                    "prominence": forces[max_idx] - np.min(forces),
+                    "above_baseline": forces[max_idx] - baseline_force,
+                }
+            )
+
         # Sort peaks by time (chronological order)
-        peaks = sorted(peaks, key=lambda x: x['time'])
-        
+        peaks = sorted(peaks, key=lambda x: x["time"])
+
         return peaks
 
     except Exception as e:
         print(f"Error detecting peaks in segment: {str(e)}")
         # Return at least the maximum as fallback
         max_idx = np.argmax(forces)
-        return [{
-            'time': times[max_idx],
-            'force': forces[max_idx],
-            'index': max_idx,
-            'prominence': 0,
-            'above_baseline': forces[max_idx] - baseline_force
-        }]
+        return [
+            {
+                "time": times[max_idx],
+                "force": forces[max_idx],
+                "index": max_idx,
+                "prominence": 0,
+                "above_baseline": forces[max_idx] - baseline_force,
+            }
+        ]
 
 
 def find_peaks_in_segment(forces, times):
@@ -1917,14 +2207,10 @@ def find_peaks_in_segment(forces, times):
         # Simple peak detection - find local maxima
         peaks = []
         for i in range(1, len(forces) - 1):
-            if forces[i] > forces[i-1] and forces[i] > forces[i+1]:
-                peaks.append({
-                    'time': times[i],
-                    'force': forces[i],
-                    'index': i
-                })
+            if forces[i] > forces[i - 1] and forces[i] > forces[i + 1]:
+                peaks.append({"time": times[i], "force": forces[i], "index": i})
 
-        return sorted(peaks, key=lambda x: x['force'], reverse=True)
+        return sorted(peaks, key=lambda x: x["force"], reverse=True)
 
     except Exception as e:
         print(f"Error finding peaks in segment: {str(e)}")
@@ -1935,7 +2221,7 @@ def calculate_energy_expenditure(force_data, time_data, phases, config):
     """
     Calculates energy expenditure for sit-to-stand movements based on force data and body weight.
     Uses both mechanical work and metabolic energy calculations.
-    
+
     Parameters:
     -----------
     force_data : array-like
@@ -1946,67 +2232,67 @@ def calculate_energy_expenditure(force_data, time_data, phases, config):
         List of detected sit-to-stand phases
     config : dict
         Configuration dictionary with body weight and other parameters
-        
+
     Returns:
     --------
     dict
         Energy expenditure metrics including mechanical work and metabolic energy
     """
     try:
-        body_weight = config.get('analysis', {}).get('body_weight', 70.0)  # kg
+        body_weight = config.get("analysis", {}).get("body_weight", 70.0)  # kg
         gravity = 9.81  # m/s²
-        
+
         # Calculate body weight in Newtons
         body_weight_N = body_weight * gravity
-        
+
         energy_metrics = {
-            'body_weight_kg': body_weight,
-            'body_weight_N': body_weight_N,
-            'total_mechanical_work_J': 0.0,
-            'total_metabolic_energy_kcal': 0.0,
-            'average_energy_per_movement_kcal': 0.0,
-            'energy_per_movement_J': 0.0,
-            'energy_efficiency': 0.0,
-            'phases_energy': []
+            "body_weight_kg": body_weight,
+            "body_weight_N": body_weight_N,
+            "total_mechanical_work_J": 0.0,
+            "total_metabolic_energy_kcal": 0.0,
+            "average_energy_per_movement_kcal": 0.0,
+            "energy_per_movement_J": 0.0,
+            "energy_efficiency": 0.0,
+            "phases_energy": [],
         }
-        
+
         if not phases:
             return energy_metrics
-        
+
         total_mechanical_work = 0.0
         total_metabolic_energy = 0.0
-        
+
         # Typical chair height for sit-to-stand (0.45-0.50m)
         # Using average of 0.475m as reference
         chair_height = 0.475  # meters
-        
+
         for i, phase in enumerate(phases):
             # Extract phase data
-            start_idx = phase['start_index']
-            end_idx = phase['end_index']
-            phase_forces = force_data[start_idx:end_idx+1]
-            phase_times = time_data[start_idx:end_idx+1]
-            phase_duration = phase['duration']
-            
+            start_idx = phase["start_index"]
+            end_idx = phase["end_index"]
+            phase_forces = force_data[start_idx : end_idx + 1]
+            phase_times = time_data[start_idx : end_idx + 1]
+            phase_duration = phase["duration"]
+
             # === MECHANICAL WORK CALCULATION ===
             # Method 1: Force-time integral (impulse)
             impulse = np.trapz(phase_forces, phase_times)  # N⋅s
-            
+
             # Method 2: Work = Force × Distance (assuming vertical movement)
             # Average force during movement
             avg_force = np.mean(phase_forces)
             # Work = average_force × chair_height
             mechanical_work = avg_force * chair_height  # Joules
-            
+
             # Method 3: Net work above body weight
             net_force_above_weight = avg_force - body_weight_N
             net_work = max(0, net_force_above_weight) * chair_height  # Only positive work
-            
+
             # === METABOLIC ENERGY CALCULATION ===
             # Based on Nakagata et al. (2019) study:
             # - STS-slow: 0.37 ± 0.12 kcal per movement
             # - STS-normal: 0.26 ± 0.06 kcal per movement
-            
+
             # Determine movement speed based on duration
             if phase_duration > 2.0:  # Slow movement (>2s)
                 metabolic_energy_per_movement = 0.37  # kcal
@@ -2014,72 +2300,84 @@ def calculate_energy_expenditure(force_data, time_data, phases, config):
             else:  # Normal movement (≤2s)
                 metabolic_energy_per_movement = 0.26  # kcal
                 movement_type = "normal"
-            
+
             # Adjust for body weight (study was with ~64kg subjects)
             reference_weight = 64.0  # kg from the study
             weight_factor = body_weight / reference_weight
             adjusted_metabolic_energy = metabolic_energy_per_movement * weight_factor
-            
+
             # === ENERGY EFFICIENCY ===
             # Efficiency = Mechanical work / Metabolic energy
             mechanical_work_kcal = mechanical_work / 4184  # Convert J to kcal
-            efficiency = (mechanical_work_kcal / adjusted_metabolic_energy) * 100 if adjusted_metabolic_energy > 0 else 0
-            
+            efficiency = (
+                (mechanical_work_kcal / adjusted_metabolic_energy) * 100
+                if adjusted_metabolic_energy > 0
+                else 0
+            )
+
             # Store phase energy data
             phase_energy = {
-                'phase_number': i + 1,
-                'movement_type': movement_type,
-                'duration_s': phase_duration,
-                'mechanical_work_J': mechanical_work,
-                'mechanical_work_kcal': mechanical_work_kcal,
-                'net_work_J': net_work,
-                'impulse_Ns': impulse,
-                'average_force_N': avg_force,
-                'metabolic_energy_kcal': adjusted_metabolic_energy,
-                'energy_efficiency_percent': efficiency,
-                'force_above_body_weight_N': net_force_above_weight
+                "phase_number": i + 1,
+                "movement_type": movement_type,
+                "duration_s": phase_duration,
+                "mechanical_work_J": mechanical_work,
+                "mechanical_work_kcal": mechanical_work_kcal,
+                "net_work_J": net_work,
+                "impulse_Ns": impulse,
+                "average_force_N": avg_force,
+                "metabolic_energy_kcal": adjusted_metabolic_energy,
+                "energy_efficiency_percent": efficiency,
+                "force_above_body_weight_N": net_force_above_weight,
             }
-            
-            energy_metrics['phases_energy'].append(phase_energy)
+
+            energy_metrics["phases_energy"].append(phase_energy)
             total_mechanical_work += mechanical_work
             total_metabolic_energy += adjusted_metabolic_energy
-        
+
         # Calculate total energy metrics
-        energy_metrics['total_mechanical_work_J'] = total_mechanical_work
-        energy_metrics['total_metabolic_energy_kcal'] = total_metabolic_energy
-        energy_metrics['average_energy_per_movement_kcal'] = total_metabolic_energy / len(phases)
-        energy_metrics['energy_per_movement_J'] = total_mechanical_work / len(phases)
-        
+        energy_metrics["total_mechanical_work_J"] = total_mechanical_work
+        energy_metrics["total_metabolic_energy_kcal"] = total_metabolic_energy
+        energy_metrics["average_energy_per_movement_kcal"] = total_metabolic_energy / len(phases)
+        energy_metrics["energy_per_movement_J"] = total_mechanical_work / len(phases)
+
         # Overall energy efficiency
         total_mechanical_work_kcal = total_mechanical_work / 4184
-        energy_metrics['energy_efficiency'] = (total_mechanical_work_kcal / total_metabolic_energy) * 100 if total_metabolic_energy > 0 else 0
-        
+        energy_metrics["energy_efficiency"] = (
+            (total_mechanical_work_kcal / total_metabolic_energy) * 100
+            if total_metabolic_energy > 0
+            else 0
+        )
+
         # Additional metrics
-        energy_metrics['total_movements'] = len(phases)
-        energy_metrics['chair_height_m'] = chair_height
-        energy_metrics['reference_study'] = "Nakagata et al. (2019) - PMC6473689"
-        
-        print(f"Energy Expenditure Analysis:")
+        energy_metrics["total_movements"] = len(phases)
+        energy_metrics["chair_height_m"] = chair_height
+        energy_metrics["reference_study"] = "Nakagata et al. (2019) - PMC6473689"
+
+        print("Energy Expenditure Analysis:")
         print(f"  Body Weight: {body_weight:.1f} kg ({body_weight_N:.1f} N)")
         print(f"  Total Movements: {len(phases)}")
-        print(f"  Total Mechanical Work: {total_mechanical_work:.2f} J ({total_mechanical_work_kcal:.3f} kcal)")
+        print(
+            f"  Total Mechanical Work: {total_mechanical_work:.2f} J ({total_mechanical_work_kcal:.3f} kcal)"
+        )
         print(f"  Total Metabolic Energy: {total_metabolic_energy:.3f} kcal")
-        print(f"  Average per Movement: {energy_metrics['average_energy_per_movement_kcal']:.3f} kcal")
+        print(
+            f"  Average per Movement: {energy_metrics['average_energy_per_movement_kcal']:.3f} kcal"
+        )
         print(f"  Energy Efficiency: {energy_metrics['energy_efficiency']:.1f}%")
-        
+
         return energy_metrics
-        
+
     except Exception as e:
         print(f"Error calculating energy expenditure: {str(e)}")
         return {
-            'body_weight_kg': 0.0,
-            'body_weight_N': 0.0,
-            'total_mechanical_work_J': 0.0,
-            'total_metabolic_energy_kcal': 0.0,
-            'average_energy_per_movement_kcal': 0.0,
-            'energy_per_movement_J': 0.0,
-            'energy_efficiency': 0.0,
-            'error': str(e)
+            "body_weight_kg": 0.0,
+            "body_weight_N": 0.0,
+            "total_mechanical_work_J": 0.0,
+            "total_metabolic_energy_kcal": 0.0,
+            "average_energy_per_movement_kcal": 0.0,
+            "energy_per_movement_J": 0.0,
+            "energy_efficiency": 0.0,
+            "error": str(e),
         }
 
 
@@ -2087,7 +2385,7 @@ def calculate_stability_index(force_data, time_data, reference_peak_time, config
     """
     Calculates stability index based on oscillation around the reference peak value.
     Uses the reference peak force (typically the maximum peak) as reference and measures how the signal oscillates around it.
-    
+
     Parameters:
     -----------
     force_data : array-like
@@ -2098,162 +2396,178 @@ def calculate_stability_index(force_data, time_data, reference_peak_time, config
         Time of the reference peak (typically maximum peak)
     config : dict
         Configuration dictionary with stability parameters
-        
+
     Returns:
     --------
     dict
         Stability metrics including oscillation counts and deviation from reference peak
     """
     try:
-        stability_config = config.get('stability', {})
-        baseline_window = stability_config.get('baseline_window', 0.5)
-        stability_threshold = stability_config.get('stability_threshold', 2.0)
-        noise_analysis = stability_config.get('noise_analysis', True)
-        rolling_window = stability_config.get('rolling_window', 0.1)
-        
+        stability_config = config.get("stability", {})
+        baseline_window = stability_config.get("baseline_window", 0.5)
+        stability_threshold = stability_config.get("stability_threshold", 2.0)
+        noise_analysis = stability_config.get("noise_analysis", True)
+        rolling_window = stability_config.get("rolling_window", 0.1)
+
         # Find the index corresponding to reference peak time
         reference_peak_idx = np.argmin(np.abs(time_data - reference_peak_time))
-        
+
         # Get the reference peak force value (this is our reference)
         reference_peak_force = force_data[reference_peak_idx]
-        
+
         # Define the stability period (from reference peak to end)
         stability_start_idx = reference_peak_idx
         stability_end_idx = len(force_data)
-        
+
         if stability_end_idx <= stability_start_idx:
             return {
-                'stability_index': 0.0,
-                'mean_deviation': 0.0,
-                'max_deviation': 0.0,
-                'noise_level': 0.0,
-                'oscillation_frequency': 0.0,
-                'stability_duration': 0.0,
-                'is_stable': False,
-                'first_peak_force': 0.0,
-                'crossings_above': 0,
-                'crossings_below': 0,
-                'total_crossings': 0,
-                'percent_above': 0.0,
-                'percent_below': 0.0
+                "stability_index": 0.0,
+                "mean_deviation": 0.0,
+                "max_deviation": 0.0,
+                "noise_level": 0.0,
+                "oscillation_frequency": 0.0,
+                "stability_duration": 0.0,
+                "is_stable": False,
+                "first_peak_force": 0.0,
+                "crossings_above": 0,
+                "crossings_below": 0,
+                "total_crossings": 0,
+                "percent_above": 0.0,
+                "percent_below": 0.0,
             }
-        
+
         # Extract stability period data (from reference peak to end)
         stability_forces = force_data[stability_start_idx:stability_end_idx]
         stability_times = time_data[stability_start_idx:stability_end_idx]
-        
+
         # Calculate RFD to find when standing phase actually starts
         # Standing phase = when RFD approaches zero (movement finished)
         force_rate = np.gradient(stability_forces, stability_times)
-        
+
         # Find where RFD stabilizes (approaches zero)
         # Use baseline_window to skip initial transition period
-        baseline_samples = int(baseline_window * len(stability_forces) / (stability_times[-1] - stability_times[0] + 1e-6))
+        baseline_samples = int(
+            baseline_window
+            * len(stability_forces)
+            / (stability_times[-1] - stability_times[0] + 1e-6)
+        )
         baseline_samples = max(baseline_samples, 100)  # At least 100 samples
-        baseline_samples = min(baseline_samples, len(stability_forces) // 2)  # At most half the data
-        
+        baseline_samples = min(
+            baseline_samples, len(stability_forces) // 2
+        )  # At most half the data
+
         # Standing phase starts after baseline_window
         standing_start_idx = baseline_samples
         standing_forces = stability_forces[standing_start_idx:]
         standing_times = stability_times[standing_start_idx:]
-        
-        print(f"Standing phase analysis: from {standing_times[0]:.3f}s to {standing_times[-1]:.3f}s")
+
+        print(
+            f"Standing phase analysis: from {standing_times[0]:.3f}s to {standing_times[-1]:.3f}s"
+        )
         print(f"  Standing phase duration: {standing_times[-1] - standing_times[0]:.3f}s")
         print(f"  Standing phase samples: {len(standing_forces)}")
-        
+
         # Detect peaks ONLY in the standing baseline (after movement stabilized)
         standing_peaks = []
         try:
             from scipy.signal import find_peaks
-            peak_params = config.get('detection', {}).get('peak_detection', {})
-            
+
+            peak_params = config.get("detection", {}).get("peak_detection", {})
+
             # Use same parameters from config but applied to standing phase only
-            height = peak_params.get('height', None)
-            distance = peak_params.get('distance', 10)
-            prominence = peak_params.get('prominence', 5.0)
-            
+            height = peak_params.get("height", None)
+            distance = peak_params.get("distance", 10)
+            prominence = peak_params.get("prominence", 5.0)
+
             # Find peaks in standing phase ONLY (after stabilization)
             peak_indices, properties = find_peaks(
-                standing_forces,
-                height=height,
-                distance=distance,
-                prominence=prominence
+                standing_forces, height=height, distance=distance, prominence=prominence
             )
-            
+
             # Store peak information with absolute time and force values
             for i, peak_idx in enumerate(peak_indices):
                 abs_idx = stability_start_idx + standing_start_idx + peak_idx
-                standing_peaks.append({
-                    'time': float(standing_times[peak_idx]),
-                    'force': float(standing_forces[peak_idx]),
-                    'index': int(abs_idx),  # Absolute index in original data
-                    'prominence': float(properties['prominences'][i]) if 'prominences' in properties else 0.0
-                })
-            
-            print(f"Detected {len(standing_peaks)} peaks in standing baseline (after stabilization)")
+                standing_peaks.append(
+                    {
+                        "time": float(standing_times[peak_idx]),
+                        "force": float(standing_forces[peak_idx]),
+                        "index": int(abs_idx),  # Absolute index in original data
+                        "prominence": float(properties["prominences"][i])
+                        if "prominences" in properties
+                        else 0.0,
+                    }
+                )
+
+            print(
+                f"Detected {len(standing_peaks)} peaks in standing baseline (after stabilization)"
+            )
             if len(standing_peaks) > 0:
-                print(f"  Standing peaks times: {[f'{p['time']:.3f}s' for p in standing_peaks]}")
-                print(f"  Standing peaks forces: {[f'{p['force']:.2f}N' for p in standing_peaks]}")
+                print(f"  Standing peaks times: {[f'{p["time"]:.3f}s' for p in standing_peaks]}")
+                print(f"  Standing peaks forces: {[f'{p["force"]:.2f}N' for p in standing_peaks]}")
         except Exception as e:
             print(f"Error detecting standing peaks: {str(e)}")
-        
+
         # Calculate deviations from reference peak force (NOT from mean)
         deviations = stability_forces - reference_peak_force
         abs_deviations = np.abs(deviations)
         mean_deviation = np.mean(abs_deviations)
         max_deviation = np.max(abs_deviations)
-        
+
         # Count how many times signal is above or below reference peak
         points_above = np.sum(stability_forces > reference_peak_force)
         points_below = np.sum(stability_forces < reference_peak_force)
         total_points = len(stability_forces)
-        
+
         percent_above = (points_above / total_points) * 100 if total_points > 0 else 0
         percent_below = (points_below / total_points) * 100 if total_points > 0 else 0
-        
+
         # Count crossings (transitions above/below the reference peak value)
         crossings = np.where(np.diff(np.signbit(deviations)))[0]
         total_crossings = len(crossings)
-        
+
         # Separate upward and downward crossings
         crossings_above = 0  # Crosses from below to above
         crossings_below = 0  # Crosses from above to below
-        
+
         for crossing_idx in crossings:
             if crossing_idx + 1 < len(deviations):
                 if deviations[crossing_idx] < 0 and deviations[crossing_idx + 1] >= 0:
                     crossings_above += 1
                 elif deviations[crossing_idx] >= 0 and deviations[crossing_idx + 1] < 0:
                     crossings_below += 1
-        
+
         # Calculate stability index (0-1 scale, higher = more stable)
         # Based on how much the signal deviates from the reference peak value
         stability_index = max(0.0, 1.0 - (mean_deviation / stability_threshold))
-        
+
         # Determine if standing is stable (small deviations from reference peak)
         is_stable = mean_deviation <= stability_threshold
-        
+
         # Noise analysis if enabled
         noise_level = 0.0
         oscillation_frequency = 0.0
-        
+
         if noise_analysis and len(stability_forces) > 1:
             # Calculate rolling standard deviation as noise measure
-            window_samples = int(rolling_window * len(stability_forces) / (stability_times[-1] - stability_times[0]))
+            window_samples = int(
+                rolling_window * len(stability_forces) / (stability_times[-1] - stability_times[0])
+            )
             if window_samples > 1:
                 rolling_std = []
                 for i in range(len(stability_forces) - window_samples + 1):
-                    window_data = stability_forces[i:i + window_samples]
+                    window_data = stability_forces[i : i + window_samples]
                     rolling_std.append(np.std(window_data))
-                
+
                 noise_level = np.mean(rolling_std) if rolling_std else 0.0
-                
+
                 # Estimate oscillation frequency from crossings
                 if len(crossings) > 1 and (stability_times[-1] - stability_times[0]) > 0:
-                    oscillation_frequency = len(crossings) / (2 * (stability_times[-1] - stability_times[0]))
-        
+                    oscillation_frequency = len(crossings) / (
+                        2 * (stability_times[-1] - stability_times[0])
+                    )
+
         stability_duration = stability_times[-1] - stability_times[0]
-        
+
         print(f"Stability Analysis (Reference: Peak = {reference_peak_force:.2f} N):")
         print(f"  Duration: {stability_duration:.2f} s")
         print(f"  Mean Deviation from Reference Peak: {mean_deviation:.2f} N")
@@ -2265,49 +2579,49 @@ def calculate_stability_index(force_data, time_data, reference_peak_time, config
         print(f"  Is Stable: {is_stable}")
         print(f"  Noise Level: {noise_level:.2f} N")
         print(f"  Oscillation Frequency: {oscillation_frequency:.2f} Hz")
-        
+
         return {
-            'stability_index': float(stability_index),
-            'mean_deviation': float(mean_deviation),
-            'max_deviation': float(max_deviation),
-            'noise_level': float(noise_level),
-            'oscillation_frequency': float(oscillation_frequency),
-            'stability_duration': float(stability_duration),
-            'is_stable': bool(is_stable),
-            'first_peak_force': float(reference_peak_force),
-            'stability_threshold': float(stability_threshold),
-            'stability_start_time': float(stability_times[0]),
-            'stability_end_time': float(stability_times[-1]),
-            'crossings_above': int(crossings_above),
-            'crossings_below': int(crossings_below),
-            'total_crossings': int(total_crossings),
-            'percent_above': float(percent_above),
-            'percent_below': float(percent_below),
-            'points_above': int(points_above),
-            'points_below': int(points_below),
-            'standing_peaks': standing_peaks,  # List of peaks detected in standing baseline
-            'num_standing_peaks': len(standing_peaks)
+            "stability_index": float(stability_index),
+            "mean_deviation": float(mean_deviation),
+            "max_deviation": float(max_deviation),
+            "noise_level": float(noise_level),
+            "oscillation_frequency": float(oscillation_frequency),
+            "stability_duration": float(stability_duration),
+            "is_stable": bool(is_stable),
+            "first_peak_force": float(reference_peak_force),
+            "stability_threshold": float(stability_threshold),
+            "stability_start_time": float(stability_times[0]),
+            "stability_end_time": float(stability_times[-1]),
+            "crossings_above": int(crossings_above),
+            "crossings_below": int(crossings_below),
+            "total_crossings": int(total_crossings),
+            "percent_above": float(percent_above),
+            "percent_below": float(percent_below),
+            "points_above": int(points_above),
+            "points_below": int(points_below),
+            "standing_peaks": standing_peaks,  # List of peaks detected in standing baseline
+            "num_standing_peaks": len(standing_peaks),
         }
-        
+
     except Exception as e:
         print(f"Error calculating stability index: {str(e)}")
         return {
-            'stability_index': 0.0,
-            'mean_deviation': 0.0,
-            'max_deviation': 0.0,
-            'noise_level': 0.0,
-            'oscillation_frequency': 0.0,
-            'stability_duration': 0.0,
-            'is_stable': False,
-            'first_peak_force': 0.0,
-            'crossings_above': 0,
-            'crossings_below': 0,
-            'total_crossings': 0,
-            'percent_above': 0.0,
-            'percent_below': 0.0,
-            'standing_peaks': [],
-            'num_standing_peaks': 0,
-            'error': str(e)
+            "stability_index": 0.0,
+            "mean_deviation": 0.0,
+            "max_deviation": 0.0,
+            "noise_level": 0.0,
+            "oscillation_frequency": 0.0,
+            "stability_duration": 0.0,
+            "is_stable": False,
+            "first_peak_force": 0.0,
+            "crossings_above": 0,
+            "crossings_below": 0,
+            "total_crossings": 0,
+            "percent_above": 0.0,
+            "percent_below": 0.0,
+            "standing_peaks": [],
+            "num_standing_peaks": 0,
+            "error": str(e),
         }
 
 
@@ -2315,7 +2629,7 @@ def calculate_detailed_symmetry(all_peaks, forces, times):
     """
     Calculates comprehensive symmetry metrics for bilateral movement assessment.
     Important for evaluating compensatory strategies in cerebral palsy.
-    
+
     Parameters:
     -----------
     all_peaks : list
@@ -2324,44 +2638,52 @@ def calculate_detailed_symmetry(all_peaks, forces, times):
         Force values for the entire segment
     times : array-like
         Time values for the entire segment
-    
+
     Returns:
     --------
     dict
         Comprehensive symmetry metrics
     """
     metrics = {
-        'overall_symmetry': 1.0,
-        'peak_symmetry': 1.0,
-        'temporal_symmetry': 1.0,
-        'bilateral_index': 0.0,
-        'consistency_score': 1.0
+        "overall_symmetry": 1.0,
+        "peak_symmetry": 1.0,
+        "temporal_symmetry": 1.0,
+        "bilateral_index": 0.0,
+        "consistency_score": 1.0,
     }
-    
+
     if len(all_peaks) < 2:
         return metrics  # Perfect symmetry if only one peak
-    
+
     try:
         # Extract peak characteristics
-        peak_forces = [peak['force'] for peak in all_peaks]
-        peak_times = [peak['time'] for peak in all_peaks]
-        
+        peak_forces = [peak["force"] for peak in all_peaks]
+        peak_times = [peak["time"] for peak in all_peaks]
+
         # === PEAK FORCE SYMMETRY ===
         # Coefficient of variation of peak forces (lower = more symmetric)
-        peak_force_cv = (np.std(peak_forces) / np.mean(peak_forces)) * 100 if np.mean(peak_forces) > 0 else 0
+        peak_force_cv = (
+            (np.std(peak_forces) / np.mean(peak_forces)) * 100 if np.mean(peak_forces) > 0 else 0
+        )
         peak_symmetry = 1.0 - min(peak_force_cv / 100.0, 1.0)  # Convert to 0-1 scale
-        
+
         # === TEMPORAL SYMMETRY ===
         # Time distribution of peaks
         time_range = max(peak_times) - min(peak_times)
         if time_range > 0 and len(peak_times) > 1:
             expected_spacing = time_range / (len(peak_times) - 1)
-            actual_spacings = [peak_times[i+1] - peak_times[i] for i in range(len(peak_times)-1)]
-            time_cv = (np.std(actual_spacings) / np.mean(actual_spacings)) * 100 if np.mean(actual_spacings) > 0 else 0
+            actual_spacings = [
+                peak_times[i + 1] - peak_times[i] for i in range(len(peak_times) - 1)
+            ]
+            time_cv = (
+                (np.std(actual_spacings) / np.mean(actual_spacings)) * 100
+                if np.mean(actual_spacings) > 0
+                else 0
+            )
             temporal_symmetry = 1.0 - min(time_cv / 100.0, 1.0)
         else:
             temporal_symmetry = 1.0
-        
+
         # === BILATERAL INDEX ===
         # For sit-to-stand, assess if there are two peaks (bilateral loading pattern)
         if len(all_peaks) == 2:
@@ -2372,26 +2694,26 @@ def calculate_detailed_symmetry(all_peaks, forces, times):
             bilateral_index = 0.5  # Single peak might indicate asymmetry
         else:
             bilateral_index = 0.3  # Multiple peaks might indicate instability
-        
+
         # === OVERALL SYMMETRY ===
         # Combined score weighting clinical relevance
-        overall_symmetry = (peak_symmetry * 0.4 + temporal_symmetry * 0.3 + bilateral_index * 0.3)
-        
+        overall_symmetry = peak_symmetry * 0.4 + temporal_symmetry * 0.3 + bilateral_index * 0.3
+
         # === CONSISTENCY SCORE ===
         # How smooth and consistent is the force profile
         force_gradient = np.gradient(forces, times)
         gradient_variability = np.std(force_gradient) / (np.mean(np.abs(force_gradient)) + 1e-6)
         consistency_score = 1.0 / (1.0 + gradient_variability)  # Higher = more consistent
-        
-        metrics['overall_symmetry'] = overall_symmetry
-        metrics['peak_symmetry'] = peak_symmetry
-        metrics['temporal_symmetry'] = temporal_symmetry
-        metrics['bilateral_index'] = bilateral_index
-        metrics['consistency_score'] = consistency_score
-        
+
+        metrics["overall_symmetry"] = overall_symmetry
+        metrics["peak_symmetry"] = peak_symmetry
+        metrics["temporal_symmetry"] = temporal_symmetry
+        metrics["bilateral_index"] = bilateral_index
+        metrics["consistency_score"] = consistency_score
+
     except Exception as e:
         print(f"Error calculating detailed symmetry: {str(e)}")
-    
+
     return metrics
 
 
@@ -2401,14 +2723,10 @@ def find_peaks_in_segment(forces, times):
         # Simple peak detection - find local maxima
         peaks = []
         for i in range(1, len(forces) - 1):
-            if forces[i] > forces[i-1] and forces[i] > forces[i+1]:
-                peaks.append({
-                    'time': times[i],
-                    'force': forces[i],
-                    'index': i
-                })
+            if forces[i] > forces[i - 1] and forces[i] > forces[i + 1]:
+                peaks.append({"time": times[i], "force": forces[i], "index": i})
 
-        return sorted(peaks, key=lambda x: x['force'], reverse=True)
+        return sorted(peaks, key=lambda x: x["force"], reverse=True)
 
     except Exception as e:
         print(f"Error finding peaks in segment: {str(e)}")
@@ -2425,15 +2743,17 @@ def calculate_symmetry(peaks):
 
     try:
         # Calculate symmetry based on timing and force distribution
-        times = [peak['time'] for peak in peaks]
-        forces = [peak['force'] for peak in peaks]
+        times = [peak["time"] for peak in peaks]
+        forces = [peak["force"] for peak in peaks]
 
         # Time-based symmetry (how evenly distributed in time)
         time_range = max(times) - min(times)
         if time_range > 0:
             expected_spacing = time_range / (len(times) - 1)
-            actual_spacing = [times[i+1] - times[i] for i in range(len(times)-1)]
-            time_variance = np.var(actual_spacing) / (expected_spacing ** 2) if expected_spacing > 0 else 0
+            actual_spacing = [times[i + 1] - times[i] for i in range(len(times) - 1)]
+            time_variance = (
+                np.var(actual_spacing) / (expected_spacing**2) if expected_spacing > 0 else 0
+            )
         else:
             time_variance = 0
 
@@ -2468,21 +2788,21 @@ def calculate_movement_metrics(data, phases):
         Movement metrics including time to peak, RFD, and clinical quality indicators
     """
     metrics = {
-        'num_phases': len(phases),
-        'total_movement_time': 0,
-        'average_phase_duration': 0,
-        'phases_per_minute': 0,
-        'symmetry_index': None,
-        'average_time_to_peak': 0,
-        'time_to_peak_variation': 0,
-        'average_rate_of_force_development': 0,
-        'peak_force_consistency': 0,
-        'movement_efficiency': 0,
-        'average_overall_rfd': 0,
-        'average_early_rfd': 0,
-        'average_peak_rfd': 0,
-        'average_bilateral_index': 0,
-        'average_consistency_score': 0
+        "num_phases": len(phases),
+        "total_movement_time": 0,
+        "average_phase_duration": 0,
+        "phases_per_minute": 0,
+        "symmetry_index": None,
+        "average_time_to_peak": 0,
+        "time_to_peak_variation": 0,
+        "average_rate_of_force_development": 0,
+        "peak_force_consistency": 0,
+        "movement_efficiency": 0,
+        "average_overall_rfd": 0,
+        "average_early_rfd": 0,
+        "average_peak_rfd": 0,
+        "average_bilateral_index": 0,
+        "average_consistency_score": 0,
     }
 
     if not phases:
@@ -2490,55 +2810,72 @@ def calculate_movement_metrics(data, phases):
 
     try:
         # Calculate basic temporal metrics
-        durations = [phase['duration'] for phase in phases]
-        
-        # Time to peak metrics (handle both new and legacy format)
-        time_to_max = [phase.get('time_to_max_force', phase.get('time_to_peak', 0)) for phase in phases]
-        time_to_first = [phase.get('time_to_first_peak', phase.get('time_to_peak', 0)) for phase in phases]
-        
-        peak_forces = [phase['peak_force'] for phase in phases]
-        rates_of_force_dev = [phase.get('overall_rfd', phase.get('rate_of_force_development', 0)) for phase in phases]
+        durations = [phase["duration"] for phase in phases]
 
-        metrics['total_movement_time'] = sum(durations)
-        metrics['average_phase_duration'] = np.mean(durations) if durations else 0
-        metrics['average_time_to_peak'] = np.mean(time_to_max) if time_to_max else 0
-        metrics['time_to_peak_variation'] = np.std(time_to_max) if len(time_to_max) > 1 else 0
-        metrics['average_rate_of_force_development'] = np.mean(rates_of_force_dev) if rates_of_force_dev else 0
+        # Time to peak metrics (handle both new and legacy format)
+        time_to_max = [
+            phase.get("time_to_max_force", phase.get("time_to_peak", 0)) for phase in phases
+        ]
+        time_to_first = [
+            phase.get("time_to_first_peak", phase.get("time_to_peak", 0)) for phase in phases
+        ]
+
+        peak_forces = [phase["peak_force"] for phase in phases]
+        rates_of_force_dev = [
+            phase.get("overall_rfd", phase.get("rate_of_force_development", 0)) for phase in phases
+        ]
+
+        metrics["total_movement_time"] = sum(durations)
+        metrics["average_phase_duration"] = np.mean(durations) if durations else 0
+        metrics["average_time_to_peak"] = np.mean(time_to_max) if time_to_max else 0
+        metrics["time_to_peak_variation"] = np.std(time_to_max) if len(time_to_max) > 1 else 0
+        metrics["average_rate_of_force_development"] = (
+            np.mean(rates_of_force_dev) if rates_of_force_dev else 0
+        )
 
         # Enhanced RFD metrics
-        overall_rfds = [phase.get('overall_rfd', 0) for phase in phases]
-        early_rfds = [phase.get('early_rfd', 0) for phase in phases]
-        peak_rfds = [phase.get('peak_rfd', 0) for phase in phases]
-        
-        metrics['average_overall_rfd'] = np.mean(overall_rfds) if overall_rfds else 0
-        metrics['average_early_rfd'] = np.mean(early_rfds) if early_rfds else 0
-        metrics['average_peak_rfd'] = np.mean(peak_rfds) if peak_rfds else 0
+        overall_rfds = [phase.get("overall_rfd", 0) for phase in phases]
+        early_rfds = [phase.get("early_rfd", 0) for phase in phases]
+        peak_rfds = [phase.get("peak_rfd", 0) for phase in phases]
+
+        metrics["average_overall_rfd"] = np.mean(overall_rfds) if overall_rfds else 0
+        metrics["average_early_rfd"] = np.mean(early_rfds) if early_rfds else 0
+        metrics["average_peak_rfd"] = np.mean(peak_rfds) if peak_rfds else 0
 
         # Calculate phases per minute if duration > 0
-        total_duration = data['Time'].iloc[-1] - data['Time'].iloc[0]
+        total_duration = data["Time"].iloc[-1] - data["Time"].iloc[0]
         if total_duration > 0:
-            metrics['phases_per_minute'] = (len(phases) / total_duration) * 60
+            metrics["phases_per_minute"] = (len(phases) / total_duration) * 60
 
         # Calculate peak force consistency
         if len(peak_forces) > 1:
-            metrics['peak_force_consistency'] = 1 - (np.std(peak_forces) / (np.mean(peak_forces) + 1e-6))
+            metrics["peak_force_consistency"] = 1 - (
+                np.std(peak_forces) / (np.mean(peak_forces) + 1e-6)
+            )
 
         # Calculate symmetry using enhanced method
-        symmetry_values = [phase.get('symmetry', phase.get('overall_symmetry', 1.0)) for phase in phases]
-        bilateral_indices = [phase.get('bilateral_index', 0.5) for phase in phases]
-        consistency_scores = [phase.get('consistency_score', 1.0) for phase in phases]
-        
-        metrics['symmetry_index'] = np.mean(symmetry_values) if symmetry_values else None
-        metrics['average_bilateral_index'] = np.mean(bilateral_indices) if bilateral_indices else 0
-        metrics['average_consistency_score'] = np.mean(consistency_scores) if consistency_scores else 0
+        symmetry_values = [
+            phase.get("symmetry", phase.get("overall_symmetry", 1.0)) for phase in phases
+        ]
+        bilateral_indices = [phase.get("bilateral_index", 0.5) for phase in phases]
+        consistency_scores = [phase.get("consistency_score", 1.0) for phase in phases]
+
+        metrics["symmetry_index"] = np.mean(symmetry_values) if symmetry_values else None
+        metrics["average_bilateral_index"] = np.mean(bilateral_indices) if bilateral_indices else 0
+        metrics["average_consistency_score"] = (
+            np.mean(consistency_scores) if consistency_scores else 0
+        )
 
         # Calculate movement efficiency (time to peak / total duration ratio)
-        if metrics['total_movement_time'] > 0:
-            metrics['movement_efficiency'] = metrics['average_time_to_peak'] / metrics['total_movement_time']
+        if metrics["total_movement_time"] > 0:
+            metrics["movement_efficiency"] = (
+                metrics["average_time_to_peak"] / metrics["total_movement_time"]
+            )
 
     except Exception as e:
         print(f"Error calculating movement metrics: {str(e)}")
         import traceback
+
         traceback.print_exc()
 
     return metrics
@@ -2561,37 +2898,37 @@ def calculate_impulse_metrics(data, phases):
         Impulse and power metrics
     """
     metrics = {
-        'total_impulse': 0,
-        'average_impulse': 0,
-        'peak_power': 0,
-        'average_power': 0,
-        'force_rate_of_change': 0
+        "total_impulse": 0,
+        "average_impulse": 0,
+        "peak_power": 0,
+        "average_power": 0,
+        "force_rate_of_change": 0,
     }
 
     if not phases:
         return metrics
 
     # Calculate impulse metrics
-    impulses = [phase['impulse'] for phase in phases]
-    metrics['total_impulse'] = sum(impulses)
-    metrics['average_impulse'] = np.mean(impulses)
+    impulses = [phase["impulse"] for phase in phases]
+    metrics["total_impulse"] = sum(impulses)
+    metrics["average_impulse"] = np.mean(impulses)
 
     # Calculate power metrics (simplified)
     for phase in phases:
-        duration = phase['duration']
+        duration = phase["duration"]
         if duration > 0:
-            power = phase['impulse'] / duration
-            metrics['peak_power'] = max(metrics['peak_power'], power)
+            power = phase["impulse"] / duration
+            metrics["peak_power"] = max(metrics["peak_power"], power)
 
-    metrics['average_power'] = metrics['total_impulse'] / sum([p['duration'] for p in phases])
+    metrics["average_power"] = metrics["total_impulse"] / sum([p["duration"] for p in phases])
 
     # Calculate rate of force development (first phase only)
     if phases:
         first_phase = phases[0]
-        force_change = first_phase['peak_force'] - data['Force'].iloc[first_phase['start_index']]
-        time_change = first_phase['peak_time'] - data['Time'].iloc[first_phase['start_index']]
+        force_change = first_phase["peak_force"] - data["Force"].iloc[first_phase["start_index"]]
+        time_change = first_phase["peak_time"] - data["Time"].iloc[first_phase["start_index"]]
         if time_change > 0:
-            metrics['force_rate_of_change'] = force_change / time_change
+            metrics["force_rate_of_change"] = force_change / time_change
 
     return metrics
 
@@ -2613,11 +2950,11 @@ def calculate_time_to_peak_metrics(data, phases):
         Time to peak metrics
     """
     metrics = {
-        'time_to_first_peak': None,
-        'time_to_max_force': None,
-        'average_time_to_peak': 0,
-        'time_to_peak_variation': 0,
-        'peak_timing_consistency': 0
+        "time_to_first_peak": None,
+        "time_to_max_force": None,
+        "average_time_to_peak": 0,
+        "time_to_peak_variation": 0,
+        "peak_timing_consistency": 0,
     }
 
     if not phases:
@@ -2628,27 +2965,30 @@ def calculate_time_to_peak_metrics(data, phases):
         time_to_peaks = []
         for phase in phases:
             # Find the peak in this phase
-            phase_data = data[(data['Time'] >= phase['start_time']) &
-                             (data['Time'] <= phase['end_time'])]
+            phase_data = data[
+                (data["Time"] >= phase["start_time"]) & (data["Time"] <= phase["end_time"])
+            ]
             if len(phase_data) > 0:
-                peak_idx = phase_data['Force'].idxmax()
-                peak_time = data.loc[peak_idx, 'Time']
-                time_to_peak = peak_time - phase['start_time']
+                peak_idx = phase_data["Force"].idxmax()
+                peak_time = data.loc[peak_idx, "Time"]
+                time_to_peak = peak_time - phase["start_time"]
                 time_to_peaks.append(time_to_peak)
 
         if time_to_peaks:
-            metrics['time_to_first_peak'] = time_to_peaks[0] if time_to_peaks else None
-            metrics['average_time_to_peak'] = np.mean(time_to_peaks)
-            metrics['time_to_peak_variation'] = np.std(time_to_peaks)
+            metrics["time_to_first_peak"] = time_to_peaks[0] if time_to_peaks else None
+            metrics["average_time_to_peak"] = np.mean(time_to_peaks)
+            metrics["time_to_peak_variation"] = np.std(time_to_peaks)
 
             # Overall time to maximum force
-            overall_peak_idx = data['Force'].idxmax()
-            overall_peak_time = data.loc[overall_peak_idx, 'Time']
-            metrics['time_to_max_force'] = overall_peak_time - data['Time'].iloc[0]
+            overall_peak_idx = data["Force"].idxmax()
+            overall_peak_time = data.loc[overall_peak_idx, "Time"]
+            metrics["time_to_max_force"] = overall_peak_time - data["Time"].iloc[0]
 
             # Consistency measure (lower variation = higher consistency)
-            if metrics['average_time_to_peak'] > 0:
-                metrics['peak_timing_consistency'] = 1 - (metrics['time_to_peak_variation'] / metrics['average_time_to_peak'])
+            if metrics["average_time_to_peak"] > 0:
+                metrics["peak_timing_consistency"] = 1 - (
+                    metrics["time_to_peak_variation"] / metrics["average_time_to_peak"]
+                )
 
     except Exception as e:
         print(f"Error calculating time to peak metrics: {str(e)}")
@@ -2656,7 +2996,9 @@ def calculate_time_to_peak_metrics(data, phases):
     return metrics
 
 
-def save_force_plot_png(data, phases, output_path, config, stability_metrics=None, all_peaks_global=None):
+def save_force_plot_png(
+    data, phases, output_path, config, stability_metrics=None, all_peaks_global=None
+):
     """
     Saves a clean PNG plot of the raw force data with highlighted points of interest.
     Shows the original signal with minimal processing and clear annotations.
@@ -2679,160 +3021,300 @@ def save_force_plot_png(data, phases, output_path, config, stability_metrics=Non
     try:
         # Create figure with subplots - make room for legend on the right
         fig = plt.figure(figsize=(22, 12))
-        
+
         # Main plot (force vs time) - RAW SIGNAL
         ax1 = plt.subplot(2, 1, 1)
-        
+
         # Plot the COMPLETE RAW force data as the main signal
-        ax1.plot(data['Time'], data['Force'], 'b-', linewidth=1.5, alpha=0.9, 
-                label=f'Raw Force Signal (Min: {data["Force"].min():.1f}N, Max: {data["Force"].max():.1f}N)')
+        ax1.plot(
+            data["Time"],
+            data["Force"],
+            "b-",
+            linewidth=1.5,
+            alpha=0.9,
+            label=f"Raw Force Signal (Min: {data['Force'].min():.1f}N, Max: {data['Force'].max():.1f}N)",
+        )
 
         # Highlight points of interest on the RAW signal
-        colors = ['red', 'green', 'orange', 'purple', 'brown', 'cyan', 'magenta', 'yellow']
-        
+        colors = [
+            "red",
+            "green",
+            "orange",
+            "purple",
+            "brown",
+            "cyan",
+            "magenta",
+            "yellow",
+        ]
+
         for i, phase in enumerate(phases[:8]):  # Show up to 8 phases
             color = colors[i % len(colors)]
-            
+
             # Mark movement onset (start of phase)
-            onset_time = phase['start_time']
-            onset_force = data.loc[phase['start_index'], 'Force']
-            ax1.plot(onset_time, onset_force, '^', color=color, markersize=12, 
-                    markeredgecolor='black', markeredgewidth=2, zorder=10,
-                    label=f'Movement Onset {i+1}')
+            onset_time = phase["start_time"]
+            onset_force = data.loc[phase["start_index"], "Force"]
+            ax1.plot(
+                onset_time,
+                onset_force,
+                "^",
+                color=color,
+                markersize=12,
+                markeredgecolor="black",
+                markeredgewidth=2,
+                zorder=10,
+                label=f"Movement Onset {i + 1}",
+            )
 
             # Mark ALL peaks in this phase on the RAW signal
-            if 'all_peaks' in phase:
-                for j, peak in enumerate(phase['all_peaks']):
-                    peak_time = peak['time']
-                    peak_force = peak['force']
-                    ax1.plot(peak_time, peak_force, 'o', color=color, markersize=10, 
-                            markeredgecolor='black', markeredgewidth=2, zorder=10)
-                    
+            if "all_peaks" in phase:
+                for j, peak in enumerate(phase["all_peaks"]):
+                    peak_time = peak["time"]
+                    peak_force = peak["force"]
+                    ax1.plot(
+                        peak_time,
+                        peak_force,
+                        "o",
+                        color=color,
+                        markersize=10,
+                        markeredgecolor="black",
+                        markeredgewidth=2,
+                        zorder=10,
+                    )
+
                     # Annotate first peak with force value
                     if j == 0:
-                        ax1.annotate(f'Peak {j+1}\n{peak_force:.1f}N', 
-                                    xy=(peak_time, peak_force),
-                                    xytext=(15, 15), textcoords='offset points',
-                                    fontsize=9, fontweight='bold',
-                                    bbox=dict(boxstyle='round,pad=0.3', facecolor=color, alpha=0.8))
+                        ax1.annotate(
+                            f"Peak {j + 1}\n{peak_force:.1f}N",
+                            xy=(peak_time, peak_force),
+                            xytext=(15, 15),
+                            textcoords="offset points",
+                            fontsize=9,
+                            fontweight="bold",
+                            bbox=dict(boxstyle="round,pad=0.3", facecolor=color, alpha=0.8),
+                        )
 
             # Mark phase end
-            end_time = phase['end_time']
-            end_force = data.loc[phase['end_index'], 'Force']
-            ax1.plot(end_time, end_force, 's', color=color, markersize=8, 
-                    markeredgecolor='black', markeredgewidth=2, zorder=10,
-                    label=f'Phase End {i+1}')
+            end_time = phase["end_time"]
+            end_force = data.loc[phase["end_index"], "Force"]
+            ax1.plot(
+                end_time,
+                end_force,
+                "s",
+                color=color,
+                markersize=8,
+                markeredgecolor="black",
+                markeredgewidth=2,
+                zorder=10,
+                label=f"Phase End {i + 1}",
+            )
 
         # Mark ALL peaks detected in the entire signal
         if all_peaks_global and len(all_peaks_global) > 0:
             # Extract times and forces for all global peaks
-            all_peak_times = [p['time'] for p in all_peaks_global]
-            all_peak_forces = [p['force'] for p in all_peaks_global]
-            
+            all_peak_times = [p["time"] for p in all_peaks_global]
+            all_peak_forces = [p["force"] for p in all_peaks_global]
+
             # Plot all global peaks with star markers
-            ax1.plot(all_peak_times, all_peak_forces, '*', color='gold', markersize=15, 
-                    markeredgecolor='black', markeredgewidth=1.5, zorder=12,
-                    label=f'All Peaks Detected ({len(all_peaks_global)})')
-            
+            ax1.plot(
+                all_peak_times,
+                all_peak_forces,
+                "*",
+                color="gold",
+                markersize=15,
+                markeredgecolor="black",
+                markeredgewidth=1.5,
+                zorder=12,
+                label=f"All Peaks Detected ({len(all_peaks_global)})",
+            )
+
             # Annotate first few global peaks
             for i, peak in enumerate(all_peaks_global[:5]):  # Show first 5
-                ax1.annotate(f'P{i+1}\n{peak["force"]:.1f}N', 
-                            xy=(peak['time'], peak['force']),
-                            xytext=(0, -25), textcoords='offset points',
-                            fontsize=7, fontweight='bold', ha='center',
-                            bbox=dict(boxstyle='round,pad=0.2', facecolor='yellow', 
-                                     edgecolor='orange', alpha=0.9),
-                            arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0',
-                                           color='orange', lw=1))
-        
+                ax1.annotate(
+                    f"P{i + 1}\n{peak['force']:.1f}N",
+                    xy=(peak["time"], peak["force"]),
+                    xytext=(0, -25),
+                    textcoords="offset points",
+                    fontsize=7,
+                    fontweight="bold",
+                    ha="center",
+                    bbox=dict(
+                        boxstyle="round,pad=0.2",
+                        facecolor="yellow",
+                        edgecolor="orange",
+                        alpha=0.9,
+                    ),
+                    arrowprops=dict(
+                        arrowstyle="->",
+                        connectionstyle="arc3,rad=0",
+                        color="orange",
+                        lw=1,
+                    ),
+                )
+
         # Mark standing baseline peaks if available (these are AFTER stabilization)
-        if stability_metrics and 'standing_peaks' in stability_metrics:
-            standing_peaks = stability_metrics['standing_peaks']
+        if stability_metrics and "standing_peaks" in stability_metrics:
+            standing_peaks = stability_metrics["standing_peaks"]
             if len(standing_peaks) > 0:
                 # Extract times and forces
-                peak_times = [p['time'] for p in standing_peaks]
-                peak_forces = [p['force'] for p in standing_peaks]
-                
+                peak_times = [p["time"] for p in standing_peaks]
+                peak_forces = [p["force"] for p in standing_peaks]
+
                 # Plot standing peaks with distinct markers
-                ax1.plot(peak_times, peak_forces, 'D', color='darkblue', markersize=12, 
-                        markeredgecolor='white', markeredgewidth=2, zorder=15,
-                        label=f'Standing Baseline Peaks ({len(standing_peaks)})')
-                
+                ax1.plot(
+                    peak_times,
+                    peak_forces,
+                    "D",
+                    color="darkblue",
+                    markersize=12,
+                    markeredgecolor="white",
+                    markeredgewidth=2,
+                    zorder=15,
+                    label=f"Standing Baseline Peaks ({len(standing_peaks)})",
+                )
+
                 # Annotate each standing peak
                 for i, peak in enumerate(standing_peaks):
-                    ax1.annotate(f'S{i+1}\n{peak["force"]:.1f}N', 
-                                xy=(peak['time'], peak['force']),
-                                xytext=(0, 20), textcoords='offset points',
-                                fontsize=8, fontweight='bold', ha='center',
-                                bbox=dict(boxstyle='round,pad=0.3', facecolor='lightblue', 
-                                         edgecolor='darkblue', alpha=0.8),
-                                arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0',
-                                               color='darkblue', lw=1.5))
+                    ax1.annotate(
+                        f"S{i + 1}\n{peak['force']:.1f}N",
+                        xy=(peak["time"], peak["force"]),
+                        xytext=(0, 20),
+                        textcoords="offset points",
+                        fontsize=8,
+                        fontweight="bold",
+                        ha="center",
+                        bbox=dict(
+                            boxstyle="round,pad=0.3",
+                            facecolor="lightblue",
+                            edgecolor="darkblue",
+                            alpha=0.8,
+                        ),
+                        arrowprops=dict(
+                            arrowstyle="->",
+                            connectionstyle="arc3,rad=0",
+                            color="darkblue",
+                            lw=1.5,
+                        ),
+                    )
 
         # Add reference lines for context
-        baseline = np.percentile(data['Force'], 10)
-        threshold = config['detection']['force_threshold']
-        max_force = data['Force'].max()
+        baseline = np.percentile(data["Force"], 10)
+        threshold = config["detection"]["force_threshold"]
+        max_force = data["Force"].max()
 
-        ax1.axhline(y=baseline, color='gray', linestyle='--', linewidth=2, alpha=0.7, label=f'Baseline (10th percentile: {baseline:.1f}N)')
-        ax1.axhline(y=threshold, color='red', linestyle=':', linewidth=2, alpha=0.7, label=f'Detection Threshold: {threshold:.1f}N')
-        ax1.axhline(y=max_force, color='green', linestyle='-.', linewidth=2, alpha=0.7, label=f'Maximum Force: {max_force:.1f}N')
+        ax1.axhline(
+            y=baseline,
+            color="gray",
+            linestyle="--",
+            linewidth=2,
+            alpha=0.7,
+            label=f"Baseline (10th percentile: {baseline:.1f}N)",
+        )
+        ax1.axhline(
+            y=threshold,
+            color="red",
+            linestyle=":",
+            linewidth=2,
+            alpha=0.7,
+            label=f"Detection Threshold: {threshold:.1f}N",
+        )
+        ax1.axhline(
+            y=max_force,
+            color="green",
+            linestyle="-.",
+            linewidth=2,
+            alpha=0.7,
+            label=f"Maximum Force: {max_force:.1f}N",
+        )
 
         # Customize main plot
-        ax1.set_xlabel('Time (s)', fontsize=12, fontweight='bold')
-        ax1.set_ylabel('Vertical Force - Fz (N)', fontsize=12, fontweight='bold')
-        ax1.set_title('Sit-to-Stand Force Analysis - Raw Signal with Points of Interest', 
-                     fontsize=14, fontweight='bold')
-        
+        ax1.set_xlabel("Time (s)", fontsize=12, fontweight="bold")
+        ax1.set_ylabel("Vertical Force - Fz (N)", fontsize=12, fontweight="bold")
+        ax1.set_title(
+            "Sit-to-Stand Force Analysis - Raw Signal with Points of Interest",
+            fontsize=14,
+            fontweight="bold",
+        )
+
         # Place legend in the bottom right corner inside the plot area
-        ax1.legend(bbox_to_anchor=(0.98, 0.02), loc='lower right', fontsize=8, 
-                  frameon=True, fancybox=True, shadow=True)
-        ax1.grid(True, alpha=0.3, linestyle='--')
+        ax1.legend(
+            bbox_to_anchor=(0.98, 0.02),
+            loc="lower right",
+            fontsize=8,
+            frameon=True,
+            fancybox=True,
+            shadow=True,
+        )
+        ax1.grid(True, alpha=0.3, linestyle="--")
 
         # No text box - keeping only the legend
 
         # === SUBPLOT 2: Force Rate (RFD visualization) ===
         ax2 = plt.subplot(2, 1, 2)
-        
+
         # Calculate and plot force rate of change from RAW data
-        force_rate = np.gradient(data['Force'].values, data['Time'].values)
-        ax2.plot(data['Time'], force_rate, 'g-', linewidth=1.5, alpha=0.8, 
-                label=f'Force Rate (RFD) - Max: {force_rate.max():.1f} N/s')
-        
+        force_rate = np.gradient(data["Force"].values, data["Time"].values)
+        ax2.plot(
+            data["Time"],
+            force_rate,
+            "g-",
+            linewidth=1.5,
+            alpha=0.8,
+            label=f"Force Rate (RFD) - Max: {force_rate.max():.1f} N/s",
+        )
+
         # Mark RFD peaks and phase boundaries
         for i, phase in enumerate(phases[:8]):
             color = colors[i % len(colors)]
-            phase_data_idx = (data['Time'] >= phase['start_time']) & (data['Time'] <= phase['end_time'])
-            phase_time = data.loc[phase_data_idx, 'Time']
+            phase_data_idx = (data["Time"] >= phase["start_time"]) & (
+                data["Time"] <= phase["end_time"]
+            )
+            phase_time = data.loc[phase_data_idx, "Time"]
             phase_rate = force_rate[phase_data_idx]
-            
+
             # Highlight RFD during phases
             ax2.plot(phase_time, phase_rate, color=color, linewidth=2, alpha=0.8)
-            
-            # Mark peak RFD
-            if 'peak_rfd_time' in phase:
-                peak_rfd_idx = np.argmin(np.abs(data['Time'] - phase['peak_rfd_time']))
-                peak_rfd_value = force_rate[peak_rfd_idx]
-                ax2.plot(data['Time'].iloc[peak_rfd_idx], peak_rfd_value, 
-                        '*', color=color, markersize=15, markeredgecolor='black', 
-                        markeredgewidth=2, zorder=10,
-                        label=f'Peak RFD {i+1}: {peak_rfd_value:.1f} N/s')
 
-        ax2.axhline(y=0, color='black', linestyle='-', linewidth=0.5, alpha=0.5)
-        ax2.set_xlabel('Time (s)', fontsize=12, fontweight='bold')
-        ax2.set_ylabel('Rate of Force Development (N/s)', fontsize=12, fontweight='bold')
-        ax2.set_title('Force Development Rate (RFD) - Derived from Raw Signal', fontsize=12, fontweight='bold')
-        
+            # Mark peak RFD
+            if "peak_rfd_time" in phase:
+                peak_rfd_idx = np.argmin(np.abs(data["Time"] - phase["peak_rfd_time"]))
+                peak_rfd_value = force_rate[peak_rfd_idx]
+                ax2.plot(
+                    data["Time"].iloc[peak_rfd_idx],
+                    peak_rfd_value,
+                    "*",
+                    color=color,
+                    markersize=15,
+                    markeredgecolor="black",
+                    markeredgewidth=2,
+                    zorder=10,
+                    label=f"Peak RFD {i + 1}: {peak_rfd_value:.1f} N/s",
+                )
+
+        ax2.axhline(y=0, color="black", linestyle="-", linewidth=0.5, alpha=0.5)
+        ax2.set_xlabel("Time (s)", fontsize=12, fontweight="bold")
+        ax2.set_ylabel("Rate of Force Development (N/s)", fontsize=12, fontweight="bold")
+        ax2.set_title(
+            "Force Development Rate (RFD) - Derived from Raw Signal",
+            fontsize=12,
+            fontweight="bold",
+        )
+
         # Place legend in the bottom right corner inside the plot area for RFD plot too
-        ax2.legend(bbox_to_anchor=(0.98, 0.02), loc='lower right', fontsize=8, 
-                  frameon=True, fancybox=True, shadow=True)
-        ax2.grid(True, alpha=0.3, linestyle='--')
+        ax2.legend(
+            bbox_to_anchor=(0.98, 0.02),
+            loc="lower right",
+            fontsize=8,
+            frameon=True,
+            fancybox=True,
+            shadow=True,
+        )
+        ax2.grid(True, alpha=0.3, linestyle="--")
 
         # Adjust layout - no need for extra space since legends are inside
         plt.tight_layout()
 
         # Save plot
-        plt.savefig(output_path, dpi=300, bbox_inches='tight')
+        plt.savefig(output_path, dpi=300, bbox_inches="tight")
         plt.close()
 
         print(f"Raw force signal plot saved to: {output_path}")
@@ -2840,6 +3322,7 @@ def save_force_plot_png(data, phases, output_path, config, stability_metrics=Non
     except Exception as e:
         print(f"Error saving force plot: {str(e)}")
         import traceback
+
         traceback.print_exc()
 
 
@@ -2876,8 +3359,9 @@ class SitToStandGUI:
         main_frame.pack(fill=tk.BOTH, expand=True)
 
         # Title
-        title_label = tk.Label(main_frame, text="Sit-to-Stand Analysis Setup",
-                              font=("Arial", 14, "bold"))
+        title_label = tk.Label(
+            main_frame, text="Sit-to-Stand Analysis Setup", font=("Arial", 14, "bold")
+        )
         title_label.pack(pady=(0, 20))
 
         # Config file row
@@ -2888,8 +3372,9 @@ class SitToStandGUI:
         self.config_entry = tk.Entry(config_frame, width=40)
         self.config_entry.pack(side=tk.LEFT, padx=(10, 5), fill=tk.X, expand=True)
 
-        config_btn = tk.Button(config_frame, text="Browse",
-                              command=self.browse_config_file, width=8)
+        config_btn = tk.Button(
+            config_frame, text="Browse", command=self.browse_config_file, width=8
+        )
         config_btn.pack(side=tk.LEFT)
 
         # Input directory row
@@ -2900,8 +3385,7 @@ class SitToStandGUI:
         self.input_entry = tk.Entry(input_frame, width=40)
         self.input_entry.pack(side=tk.LEFT, padx=(10, 5), fill=tk.X, expand=True)
 
-        input_btn = tk.Button(input_frame, text="Browse",
-                             command=self.browse_input_dir, width=8)
+        input_btn = tk.Button(input_frame, text="Browse", command=self.browse_input_dir, width=8)
         input_btn.pack(side=tk.LEFT)
 
         # Output directory row
@@ -2912,8 +3396,7 @@ class SitToStandGUI:
         self.output_entry = tk.Entry(output_frame, width=40)
         self.output_entry.pack(side=tk.LEFT, padx=(10, 5), fill=tk.X, expand=True)
 
-        output_btn = tk.Button(output_frame, text="Browse",
-                              command=self.browse_output_dir, width=8)
+        output_btn = tk.Button(output_frame, text="Browse", command=self.browse_output_dir, width=8)
         output_btn.pack(side=tk.LEFT)
 
         # File format selection
@@ -2921,8 +3404,13 @@ class SitToStandGUI:
         format_frame.pack(fill=tk.X, pady=(0, 10))
 
         tk.Label(format_frame, text="File format:").pack(side=tk.LEFT)
-        format_combo = ttk.Combobox(format_frame, textvariable=self.file_format,
-                                   values=["auto", "c3d", "csv"], state="readonly", width=10)
+        format_combo = ttk.Combobox(
+            format_frame,
+            textvariable=self.file_format,
+            values=["auto", "c3d", "csv"],
+            state="readonly",
+            width=10,
+        )
         format_combo.pack(side=tk.LEFT, padx=(10, 5))
         format_combo.set("auto")
 
@@ -2931,32 +3419,43 @@ class SitToStandGUI:
         options_frame.pack(fill=tk.X, pady=(10, 20))
 
         self.defaults_var = tk.BooleanVar(value=True)
-        defaults_cb = tk.Checkbutton(options_frame, text="Use default config",
-                                    variable=self.defaults_var,
-                                    command=self.toggle_defaults)
+        defaults_cb = tk.Checkbutton(
+            options_frame,
+            text="Use default config",
+            variable=self.defaults_var,
+            command=self.toggle_defaults,
+        )
         defaults_cb.pack(side=tk.LEFT)
 
         # Create default config file button
-        create_config_btn = tk.Button(options_frame, text="Create Default Config",
-                                     command=self.create_default_config_file, width=20)
+        create_config_btn = tk.Button(
+            options_frame,
+            text="Create Default Config",
+            command=self.create_default_config_file,
+            width=20,
+        )
         create_config_btn.pack(side=tk.LEFT, padx=(20, 0))
 
         # Buttons frame
         btn_frame = tk.Frame(main_frame)
         btn_frame.pack(fill=tk.X, pady=(10, 0))
 
-        run_btn = tk.Button(btn_frame, text="Run Analysis",
-                           command=self.run_analysis, bg="#4CAF50", fg="white",
-                           font=("Arial", 10, "bold"), padx=20)
+        run_btn = tk.Button(
+            btn_frame,
+            text="Run Analysis",
+            command=self.run_analysis,
+            bg="#4CAF50",
+            fg="white",
+            font=("Arial", 10, "bold"),
+            padx=20,
+        )
         run_btn.pack(side=tk.RIGHT, padx=(10, 0))
 
-        cancel_btn = tk.Button(btn_frame, text="Cancel",
-                              command=self.root.quit, padx=20)
+        cancel_btn = tk.Button(btn_frame, text="Cancel", command=self.root.quit, padx=20)
         cancel_btn.pack(side=tk.RIGHT)
 
         # Status label
-        self.status_label = tk.Label(main_frame, text="Ready",
-                                    font=("Arial", 9), fg="blue")
+        self.status_label = tk.Label(main_frame, text="Ready", font=("Arial", 9), fg="blue")
         self.status_label.pack(pady=(10, 0))
 
     def toggle_defaults(self):
@@ -2978,7 +3477,7 @@ class SitToStandGUI:
 
         filename = filedialog.askopenfilename(
             title="Select TOML Configuration File",
-            filetypes=[("TOML files", "*.toml"), ("All files", "*.*")]
+            filetypes=[("TOML files", "*.toml"), ("All files", "*.*")],
         )
         if filename:
             self.config_file = filename
@@ -3009,13 +3508,14 @@ class SitToStandGUI:
         filename = filedialog.asksaveasfilename(
             title="Save Default Configuration File",
             defaultextension=".toml",
-            filetypes=[("TOML files", "*.toml"), ("All files", "*.*")]
+            filetypes=[("TOML files", "*.toml"), ("All files", "*.*")],
         )
 
         if filename:
             try:
                 import toml
-                with open(filename, 'w') as f:
+
+                with open(filename, "w") as f:
                     toml.dump(default_config, f)
 
                 self.status_label.config(text=f"Default config saved to: {filename}", fg="green")
@@ -3048,7 +3548,9 @@ class SitToStandGUI:
             return
 
         if not self.use_defaults and not config_file:
-            self.status_label.config(text="Error: Please select config file or use defaults", fg="red")
+            self.status_label.config(
+                text="Error: Please select config file or use defaults", fg="red"
+            )
             return
 
         # Prepare arguments for CLI mode
@@ -3097,25 +3599,35 @@ class SitToStandGUI:
 def main():
     """Main function - launches GUI by default, CLI mode with arguments."""
     import sys
-    
+
     # Check if running with command line arguments
     if len(sys.argv) > 1:
         # CLI mode with arguments
         import argparse
-        
-        parser = argparse.ArgumentParser(description='Sit-to-Stand Analysis Tool')
-        parser.add_argument('--input_dir', type=str, help='Input directory containing CSV/C3D files')
-        parser.add_argument('--config', type=str, help='TOML configuration file')
-        parser.add_argument('--output_dir', type=str, help='Output directory for results')
-        parser.add_argument('--format', type=str, choices=['csv', 'c3d', 'both'], default='both', help='File format to process')
-        
+
+        parser = argparse.ArgumentParser(description="Sit-to-Stand Analysis Tool")
+        parser.add_argument(
+            "--input_dir", type=str, help="Input directory containing CSV/C3D files"
+        )
+        parser.add_argument("--config", type=str, help="TOML configuration file")
+        parser.add_argument("--output_dir", type=str, help="Output directory for results")
+        parser.add_argument(
+            "--format",
+            type=str,
+            choices=["csv", "c3d", "both"],
+            default="both",
+            help="File format to process",
+        )
+
         args = parser.parse_args()
-        
+
         if args.input_dir:
             run_cli_mode(args)
         else:
             print("Sit-to-Stand Analysis Tool")
-            print("Usage: python sit2stand.py --input_dir <path> [--config <config.toml>] [--output_dir <path>]")
+            print(
+                "Usage: python sit2stand.py --input_dir <path> [--config <config.toml>] [--output_dir <path>]"
+            )
     else:
         # No arguments - launch GUI
         print("Launching Sit-to-Stand Analysis GUI...")
@@ -3125,6 +3637,7 @@ def main():
         except Exception as e:
             print(f"Error launching GUI: {e}")
             import traceback
+
             traceback.print_exc()
 
 

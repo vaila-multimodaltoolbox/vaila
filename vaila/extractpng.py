@@ -60,11 +60,10 @@ Version 1.0.0 (2023-12-15):
 import os
 import subprocess
 import time
-from tkinter import filedialog, messagebox, simpledialog, Tk, Toplevel, Label, Button
-from rich import print
-import shutil
-import numpy as np
+from tkinter import Button, Label, Tk, Toplevel, filedialog, messagebox, simpledialog
+
 import cv2
+from rich import print
 
 
 class VideoProcessor:
@@ -77,9 +76,7 @@ class VideoProcessor:
         root = Tk()
         root.withdraw()
 
-        src = filedialog.askdirectory(
-            title="Select the source directory containing videos"
-        )
+        src = filedialog.askdirectory(title="Select the source directory containing videos")
         if not src:
             messagebox.showerror("Error", "No source directory selected.")
             return
@@ -99,9 +96,7 @@ class VideoProcessor:
             video_files = [
                 f
                 for f in os.listdir(src)
-                if f.endswith(
-                    (".avi", ".mp4", ".mov", ".mkv", ".MP4", ".AVI", ".MOV", ".MKV")
-                )
+                if f.endswith((".avi", ".mp4", ".mov", ".mkv", ".MP4", ".AVI", ".MOV", ".MKV"))
             ]
 
             for item in video_files:
@@ -149,9 +144,7 @@ class VideoProcessor:
                         subprocess.run(command, check=True)
 
                     except subprocess.CalledProcessError:
-                        print(
-                            "\nHardware acceleration failed, trying software decoder..."
-                        )
+                        print("\nHardware acceleration failed, trying software decoder...")
 
                         # Remove hardware acceleration to try software decoder
                         command = [
@@ -178,9 +171,7 @@ class VideoProcessor:
                         subprocess.run(command, check=True)
 
                     print(f"\n\nChecking frames in {output_dir}...")
-                    total_frames = len(
-                        [f for f in os.listdir(output_dir) if f.endswith(".png")]
-                    )
+                    total_frames = len([f for f in os.listdir(output_dir) if f.endswith(".png")])
                     print(f"Total frames extracted: {total_frames}")
 
                     # Save basic video information
@@ -224,9 +215,7 @@ class VideoProcessor:
             return
 
         timestamp = time.strftime("%Y%m%d%H%M%S")
-        output_dir = os.path.join(
-            os.path.dirname(video_file), f"vaila_grabframes_{timestamp}"
-        )
+        output_dir = os.path.join(os.path.dirname(video_file), f"vaila_grabframes_{timestamp}")
         os.makedirs(output_dir, exist_ok=True)
 
         frames = frame_numbers.replace(" ", "").split(",")
@@ -363,9 +352,7 @@ class VideoProcessor:
 
     def is_nvidia_gpu_available(self):
         try:
-            result = subprocess.run(
-                ["nvidia-smi"], stdout=subprocess.PIPE, stderr=subprocess.PIPE
-            )
+            result = subprocess.run(["nvidia-smi"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             return result.returncode == 0
         except FileNotFoundError:
             return False

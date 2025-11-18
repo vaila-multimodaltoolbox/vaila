@@ -86,27 +86,28 @@ Citation:
 }
 """
 
+import math
+from datetime import datetime
 from pathlib import Path
-from rich import print
+from tkinter import Tk, filedialog, messagebox
+
+import numpy as np
 import pandas as pd
 from ezc3d import c3d
-from datetime import datetime
-from tkinter import Tk, filedialog, messagebox
+from rich import print
 from tqdm import tqdm
-import numpy as np
-import math
 
 
 def get_time_precision(freq):
     """
     Calculate the number of decimal places needed for time formatting based on sampling frequency.
-    
+
     For frequencies <= 1000 Hz: uses 3 decimal places (0.001s precision)
     For frequencies > 1000 Hz: calculates decimal places needed to represent the sampling interval
-    
+
     Args:
         freq: Sampling frequency in Hz
-        
+
     Returns:
         Number of decimal places needed for time formatting
     """
@@ -144,9 +145,7 @@ def save_info_file(datac3d, file_name, output_dir):
                 info_file.write(
                     f"    Description: {param_content.get('description', 'No description')}\n"
                 )
-                info_file.write(
-                    f"    Value: {param_content.get('value', 'No value')}\n"
-                )
+                info_file.write(f"    Value: {param_content.get('value', 'No value')}\n")
                 info_file.write(f"    Type: {param_content.get('type', 'No type')}\n")
                 info_file.write(
                     f"    Dimension: {param_content.get('dimension', 'No dimension')}\n"
@@ -213,9 +212,7 @@ def save_events(datac3d, file_name, output_dir):
     events_data = []
     for context, label, time in zip(event_contexts, event_labels, event_times):
         frame = int(round(time * marker_freq))
-        events_data.append(
-            {"Context": context, "Label": label, "Time": time, "Frame": frame}
-        )
+        events_data.append({"Context": context, "Label": label, "Time": time, "Frame": frame})
 
     # Save to a CSV file
     events_df = pd.DataFrame(events_data)
@@ -237,7 +234,7 @@ def importc3d(dat):
     datac3d = c3d(dat, extract_forceplat_data=True)
     print(f"\nProcessing file: {dat}")
     print("================================================")
-    print(f'Number of markers = {datac3d["parameters"]["POINT"]["USED"]["value"][0]}')
+    print(f"Number of markers = {datac3d['parameters']['POINT']['USED']['value'][0]}")
 
     point_data = datac3d["data"]["points"]
     points_residuals = datac3d["data"]["meta_points"]["residuals"]
@@ -339,9 +336,7 @@ def save_platform_data(datac3d, file_name, output_dir):
             )
 
             # Save individual platform COP data to CSV
-            cop_file_path = (
-                Path(output_dir) / f"{file_name}_platform{platform_idx}_cop.csv"
-            )
+            cop_file_path = Path(output_dir) / f"{file_name}_platform{platform_idx}_cop.csv"
             cop_df.to_csv(cop_file_path, index=False)
             print(f"COP data saved to: {cop_file_path}")
 
@@ -367,9 +362,7 @@ def save_platform_data(datac3d, file_name, output_dir):
             )
 
             # Save to CSV
-            force_file_path = (
-                Path(output_dir) / f"{file_name}_platform{platform_idx}_force.csv"
-            )
+            force_file_path = Path(output_dir) / f"{file_name}_platform{platform_idx}_force.csv"
             force_df.to_csv(force_file_path, index=False)
             print(f"Force data saved to: {force_file_path}")
 
@@ -392,9 +385,7 @@ def save_platform_data(datac3d, file_name, output_dir):
             )
 
             # Save to CSV
-            moment_file_path = (
-                Path(output_dir) / f"{file_name}_platform{platform_idx}_moment.csv"
-            )
+            moment_file_path = Path(output_dir) / f"{file_name}_platform{platform_idx}_moment.csv"
             moment_df.to_csv(moment_file_path, index=False)
             print(f"Moment data saved to: {moment_file_path}")
 
@@ -506,9 +497,7 @@ def save_meta_points_data(datac3d, file_name, output_dir):
                     if len(meta_data.shape) == 3:
                         # For 3D data, save each "layer" separately
                         for i in range(meta_data.shape[0]):
-                            layer_data = meta_data[
-                                i, :, :
-                            ].T  # Transpose to get frames as rows
+                            layer_data = meta_data[i, :, :].T  # Transpose to get frames as rows
 
                             # Create time column
                             time_precision = get_time_precision(marker_freq)
@@ -518,36 +507,27 @@ def save_meta_points_data(datac3d, file_name, output_dir):
                             ]
 
                             # Create DataFrame with appropriate column names
-                            cols = [
-                                f"{meta_key}_{i}_{j}"
-                                for j in range(layer_data.shape[1])
-                            ]
+                            cols = [f"{meta_key}_{i}_{j}" for j in range(layer_data.shape[1])]
                             df = pd.DataFrame(layer_data, columns=cols)
                             df.insert(0, "Time", time_values)
 
                             # Save to CSV
                             meta_path = (
-                                Path(output_dir)
-                                / f"{file_name}_meta_{meta_key}_layer{i}.csv"
+                                Path(output_dir) / f"{file_name}_meta_{meta_key}_layer{i}.csv"
                             )
                             df.to_csv(meta_path, index=False)
-                            print(
-                                f"Meta points {meta_key} layer {i} saved to: {meta_path}"
-                            )
+                            print(f"Meta points {meta_key} layer {i} saved to: {meta_path}")
 
                     elif len(meta_data.shape) == 2:
                         # For 2D data, can convert directly
                         time_precision = get_time_precision(marker_freq)
                         time_values = [
-                            f"{j / marker_freq:.{time_precision}f}" for j in range(meta_data.shape[1])
+                            f"{j / marker_freq:.{time_precision}f}"
+                            for j in range(meta_data.shape[1])
                         ]
-                        df = pd.DataFrame(
-                            meta_data.T
-                        )  # Transpose to get frames as rows
+                        df = pd.DataFrame(meta_data.T)  # Transpose to get frames as rows
                         df.insert(0, "Time", time_values)
-                        meta_path = (
-                            Path(output_dir) / f"{file_name}_meta_{meta_key}.csv"
-                        )
+                        meta_path = Path(output_dir) / f"{file_name}_meta_{meta_key}.csv"
                         df.to_csv(meta_path, index=False)
                         print(f"Meta points {meta_key} saved to: {meta_path}")
 
@@ -571,13 +551,9 @@ def save_header_summary(datac3d, file_name, output_dir):
     for section, content in datac3d["header"].items():
         if isinstance(content, dict):
             for key, value in content.items():
-                header_rows.append(
-                    {"Section": section, "Property": key, "Value": str(value)}
-                )
+                header_rows.append({"Section": section, "Property": key, "Value": str(value)})
         else:
-            header_rows.append(
-                {"Section": section, "Property": "", "Value": str(content)}
-            )
+            header_rows.append({"Section": section, "Property": "", "Value": str(content)})
 
     pd.DataFrame(header_rows).to_csv(header_path, index=False)
     print(f"Header summary saved to: {header_path}")
@@ -604,7 +580,9 @@ def save_parameter_groups(datac3d, file_name, output_dir):
                         try:
                             # For numeric arrays, show shape and sample
                             if isinstance(value, np.ndarray) and value.size > 10:
-                                value_str = f"Array shape {value.shape}, sample: {value.flatten()[:5]}..."
+                                value_str = (
+                                    f"Array shape {value.shape}, sample: {value.flatten()[:5]}..."
+                                )
                             else:
                                 value_str = str(value)
                         except Exception:
@@ -664,13 +642,8 @@ def save_data_statistics(datac3d, file_name, output_dir):
             "TRIAL" in datac3d["parameters"]
             and "ACTUAL_END_FIELD" in datac3d["parameters"]["TRIAL"]
         ):
-            stats["Trial_End"] = str(
-                datac3d["parameters"]["TRIAL"]["ACTUAL_END_FIELD"]["value"]
-            )
-        if (
-            "SUBJECT" in datac3d["parameters"]
-            and "NAME" in datac3d["parameters"]["SUBJECT"]
-        ):
+            stats["Trial_End"] = str(datac3d["parameters"]["TRIAL"]["ACTUAL_END_FIELD"]["value"])
+        if "SUBJECT" in datac3d["parameters"] and "NAME" in datac3d["parameters"]["SUBJECT"]:
             stats["Subject"] = str(datac3d["parameters"]["SUBJECT"]["NAME"]["value"])
     except Exception:
         pass
@@ -737,9 +710,7 @@ def save_to_files(
     save_data_statistics(datac3d, file_name, str(file_dir))
 
     # Prepare marker columns
-    marker_columns = [
-        f"{label}_{axis}" for label in marker_labels for axis in ["X", "Y", "Z"]
-    ]
+    marker_columns = [f"{label}_{axis}" for label in marker_labels for axis in ["X", "Y", "Z"]]
 
     # Save markers data
     if markers.size > 0:
@@ -785,14 +756,15 @@ def save_to_files(
             0,
             "Time",
             pd.Series(
-                [f"{i / marker_freq:.{time_precision}f}" for i in range(points_residuals_df.shape[0])],
+                [
+                    f"{i / marker_freq:.{time_precision}f}"
+                    for i in range(points_residuals_df.shape[0])
+                ],
                 name="Time",
             ),
         )
         print(f"Saving points residuals CSV for {file_name}")
-        points_residuals_df.to_csv(
-            file_dir / f"{file_name}_points_residuals.csv", index=False
-        )
+        points_residuals_df.to_csv(file_dir / f"{file_name}_points_residuals.csv", index=False)
     else:
         print(f"No points residuals found for {file_name}, saving empty file.")
         save_empty_file(file_dir / f"{file_name}_points_residuals.csv")
@@ -800,17 +772,13 @@ def save_to_files(
     # Optionally save to Excel
     if save_excel:
         print("Saving to Excel. This process can take a long time...")
-        with pd.ExcelWriter(
-            file_dir / f"{file_name}.xlsx", engine="openpyxl"
-        ) as writer:
+        with pd.ExcelWriter(file_dir / f"{file_name}.xlsx", engine="openpyxl") as writer:
             if markers.size > 0:
                 markers_df.to_excel(writer, sheet_name="Markers", index=False)
             if analogs.size > 0:
                 analogs_df.to_excel(writer, sheet_name="Analogs", index=False)
             if points_residuals.size > 0:
-                points_residuals_df.to_excel(
-                    writer, sheet_name="Points Residuals", index=False
-                )
+                points_residuals_df.to_excel(writer, sheet_name="Points Residuals", index=False)
 
             # Add platform data to Excel if available
             if "platform" in datac3d["data"] and datac3d["data"]["platform"]:
@@ -864,9 +832,7 @@ def convert_c3d_to_csv():
     print(f"Excel export: {'Yes' if save_excel else 'No'}")
 
     print("Step 2: Selecting input directory...")
-    input_directory = filedialog.askdirectory(
-        title="Select Input Directory with C3D Files"
-    )
+    input_directory = filedialog.askdirectory(title="Select Input Directory with C3D Files")
     if not input_directory:
         print("No input directory selected. Exiting.")
         messagebox.showerror("Error", "No input directory selected.")
@@ -894,9 +860,7 @@ def convert_c3d_to_csv():
 
     if not c3d_files:
         print(f"ERROR: No visible C3D files found in {input_directory}")
-        messagebox.showerror(
-            "Error", f"No visible C3D files found in {input_directory}"
-        )
+        messagebox.showerror("Error", f"No visible C3D files found in {input_directory}")
         root.destroy()
         return
 
@@ -967,21 +931,19 @@ def convert_c3d_to_csv():
     progress_bar.close()
 
     # Show final results
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("SINGLE CONVERSION COMPLETED")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"Visible C3D files found: {len(c3d_files)}")
     print(f"Successful conversions: {successful_conversions}")
     print(f"Failed conversions: {failed_conversions}")
-    print(f"Success rate: {(successful_conversions/len(c3d_files)*100):.1f}%")
+    print(f"Success rate: {(successful_conversions / len(c3d_files) * 100):.1f}%")
     print(f"Output directory: {run_save_dir}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     if failed_conversions == 0:
         print("PERFECT! All files converted successfully!")
-        messagebox.showinfo(
-            "Information", "C3D files conversion completed successfully!"
-        )
+        messagebox.showinfo("Information", "C3D files conversion completed successfully!")
     else:
         print(f"Warning: {failed_conversions} files failed to convert.")
         messagebox.showwarning(
@@ -1026,9 +988,7 @@ def batch_convert_c3d_to_csv():
     root.withdraw()
 
     print("Step 1: Selecting input directory...")
-    input_directory = filedialog.askdirectory(
-        title="Select Input Directory with C3D Files"
-    )
+    input_directory = filedialog.askdirectory(title="Select Input Directory with C3D Files")
     if not input_directory:
         print("No input directory selected. Exiting.")
         messagebox.showerror("Error", "No input directory selected.")
@@ -1056,9 +1016,7 @@ def batch_convert_c3d_to_csv():
 
     if not c3d_files:
         print(f"ERROR: No visible C3D files found in {input_directory}")
-        messagebox.showerror(
-            "Error", f"No visible C3D files found in {input_directory}"
-        )
+        messagebox.showerror("Error", f"No visible C3D files found in {input_directory}")
         return
 
     print(f"Found {len(c3d_files)} visible C3D files in directory")
@@ -1174,13 +1132,9 @@ def batch_convert_c3d_to_csv():
             if "utf-8" in error_msg.lower():
                 log_file.write("Context: This appears to be a UTF-8 encoding issue\n")
             elif "keyerror" in error_msg.lower():
-                log_file.write(
-                    "Context: This appears to be a parameter/key access issue\n"
-                )
+                log_file.write("Context: This appears to be a parameter/key access issue\n")
             elif "shape" in error_msg.lower():
-                log_file.write(
-                    "Context: This appears to be a data shape/dimension issue\n"
-                )
+                log_file.write("Context: This appears to be a data shape/dimension issue\n")
             elif "ezc3d" in error_msg.lower():
                 log_file.write("Context: This appears to be a C3D file reading issue\n")
 
@@ -1193,9 +1147,7 @@ def batch_convert_c3d_to_csv():
     log_file.write(f"Visible C3D files found: {len(c3d_files)}\n")
     log_file.write(f"Successful conversions: {successful_conversions}\n")
     log_file.write(f"Failed conversions: {failed_conversions}\n")
-    log_file.write(
-        f"Success rate: {(successful_conversions/len(c3d_files)*100):.1f}%\n"
-    )
+    log_file.write(f"Success rate: {(successful_conversions / len(c3d_files) * 100):.1f}%\n")
 
     if successful_files:
         log_file.write(f"\nSUCCESSFUL CONVERSIONS ({len(successful_files)}):\n")
@@ -1212,9 +1164,7 @@ def batch_convert_c3d_to_csv():
         log_file.write("\nERROR ANALYSIS:\n")
         error_types = {}
         for file, error in error_details:
-            error_type = (
-                type(error).__name__ if hasattr(error, "__class__") else "Unknown"
-            )
+            error_type = type(error).__name__ if hasattr(error, "__class__") else "Unknown"
             if error_type not in error_types:
                 error_types[error_type] = []
             error_types[error_type].append(file)
@@ -1232,16 +1182,16 @@ def batch_convert_c3d_to_csv():
     print(f"\nDetailed log saved to: {log_file_path}")
 
     # Show final results
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("BATCH CONVERSION COMPLETED")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"Visible C3D files found: {len(c3d_files)}")
     print(f"Successful conversions: {successful_conversions}")
     print(f"Failed conversions: {failed_conversions}")
-    print(f"Success rate: {(successful_conversions/len(c3d_files)*100):.1f}%")
+    print(f"Success rate: {(successful_conversions / len(c3d_files) * 100):.1f}%")
     print(f"Output directory: {run_save_dir}")
     print(f"Detailed log: {log_file_path}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     if failed_conversions == 0:
         print("PERFECT! All files converted successfully!")
@@ -1267,10 +1217,10 @@ def batch_convert_c3d_to_csv():
         sorted_errors = sorted(error_counts.items(), key=lambda x: x[1], reverse=True)
         for i, (error_msg, count) in enumerate(sorted_errors[:5]):
             print(
-                f"  {i+1}. {error_msg[:100]}{'...' if len(error_msg) > 100 else ''} ({count} files)"
+                f"  {i + 1}. {error_msg[:100]}{'...' if len(error_msg) > 100 else ''} ({count} files)"
             )
 
-    message = f"Batch conversion completed!\n\nVisible C3D files: {len(c3d_files)}\nSuccessful: {successful_conversions}\nFailed: {failed_conversions}\nSuccess rate: {(successful_conversions/len(c3d_files)*100):.1f}%\n\nOutput directory: {run_save_dir}\nDetailed log: {log_file_path.name}"
+    message = f"Batch conversion completed!\n\nVisible C3D files: {len(c3d_files)}\nSuccessful: {successful_conversions}\nFailed: {failed_conversions}\nSuccess rate: {(successful_conversions / len(c3d_files) * 100):.1f}%\n\nOutput directory: {run_save_dir}\nDetailed log: {log_file_path.name}"
     messagebox.showinfo("Batch Conversion Complete", message)
 
     root.destroy()  # Close the Tkinter resources

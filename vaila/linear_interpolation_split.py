@@ -36,10 +36,11 @@ For more details, visit: https://www.gnu.org/licenses/lgpl-3.0.html
 """
 
 import os
-import pandas as pd
-import numpy as np
-from tkinter import filedialog, messagebox, Toplevel, Button, Label
 import tkinter as tk
+from tkinter import Button, Label, Toplevel, filedialog, messagebox
+
+import numpy as np
+import pandas as pd
 
 
 def run_fill_split_dialog():
@@ -116,13 +117,9 @@ def run_linear_interpolation():
                 df[col] = df[col].round(original_decimals)
 
             # Save the filled data to the destination directory with '_fill' suffix
-            dest_file_path = os.path.join(
-                dest_dir, f"{filename.split('.csv')[0]}_fill.csv"
-            )
+            dest_file_path = os.path.join(dest_dir, f"{filename.split('.csv')[0]}_fill.csv")
             df.to_csv(dest_file_path, index=False)
-            messagebox.showinfo(
-                "Linear Interpolation", f"Filled data saved to {dest_file_path}"
-            )
+            messagebox.showinfo("Linear Interpolation", f"Filled data saved to {dest_file_path}")
 
 
 def split_data():
@@ -151,9 +148,7 @@ def split_data():
             df_part2.rename(columns={"index": "frame_index"}, inplace=True)
 
             # Save the split data to the destination directory with '_split' suffix
-            part2_file_path = os.path.join(
-                dest_dir, f"{filename.split('.csv')[0]}_part2_split.csv"
-            )
+            part2_file_path = os.path.join(dest_dir, f"{filename.split('.csv')[0]}_part2_split.csv")
             df_part2.to_csv(part2_file_path, index=False)
             messagebox.showinfo("Split Data", f"Split data saved to {part2_file_path}")
 

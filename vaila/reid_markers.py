@@ -19,30 +19,27 @@ by getpixelvideo.py. It offers the following functionalities:
 ================================================================================
 """
 
+import json
 import os
-import sys
-from rich import print
+import shutil  # Para operações de diretório
+import tkinter as tk
+import warnings
+from tkinter import Button as TkButton
+from tkinter import Frame, Label, Tk, filedialog, messagebox, simpledialog, ttk
+
+import matplotlib
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 from matplotlib.widgets import (
     Button,
-    RangeSlider,
     CheckButtons,
-    TextBox,
-    RadioButtons,
+    RangeSlider,
     SpanSelector,
+    TextBox,
 )
-from tkinter import Tk, filedialog, messagebox, Frame, Label, Button as TkButton
-from tkinter import simpledialog
-import tkinter as tk
-from scipy.interpolate import interp1d
-import json
+from rich import print
 from statsmodels.tsa.arima.model import ARIMA
-import warnings
-import shutil  # Para operações de diretório
-from tkinter import ttk
-import matplotlib
 
 matplotlib.use("TkAgg")  # Força backend interativo
 from pathlib import Path
@@ -243,12 +240,8 @@ def merge_markers(df, source_id, target_id, frame_range=None):
     start_frame, end_frame = frame_range
 
     for i in range(start_frame, end_frame + 1):
-        source_x_valid = not (
-            pd.isna(df.at[i, source_x_col]) or df.at[i, source_x_col] == ""
-        )
-        source_y_valid = not (
-            pd.isna(df.at[i, source_y_col]) or df.at[i, source_y_col] == ""
-        )
+        source_x_valid = not (pd.isna(df.at[i, source_x_col]) or df.at[i, source_x_col] == "")
+        source_y_valid = not (pd.isna(df.at[i, source_y_col]) or df.at[i, source_y_col] == "")
 
         # Copy source data to target if source has valid coordinates,
         # regardless of whether target already has coordinates
@@ -290,9 +283,7 @@ def swap_markers(df, marker_id1, marker_id2, frame_range):
     df.loc[start_frame:end_frame, x_col2] = temp_x
     df.loc[start_frame:end_frame, y_col2] = temp_y
 
-    print(
-        f"Markers {marker_id1} and {marker_id2} swapped in frame range {start_frame}-{end_frame}"
-    )
+    print(f"Markers {marker_id1} and {marker_id2} swapped in frame range {start_frame}-{end_frame}")
     return df
 
 
@@ -322,9 +313,7 @@ def visualize_markers(df, marker_ids=None):
     all_markers = detect_markers(df)
 
     # Ensure marker_ids is either None or a list of integers
-    if isinstance(
-        marker_ids, str
-    ):  # Fix for when a file path is passed instead of marker IDs
+    if isinstance(marker_ids, str):  # Fix for when a file path is passed instead of marker IDs
         marker_ids = None
 
     # Handle empty dataframe
@@ -357,9 +346,7 @@ def visualize_markers(df, marker_ids=None):
 
     # Add frame range slider
     frames_slider_ax = plt.axes([0.3, 0.15, 0.5, 0.03])
-    frames_range = RangeSlider(
-        frames_slider_ax, "Frames", 0, len(df) - 1, valinit=(0, len(df) - 1)
-    )
+    frames_range = RangeSlider(frames_slider_ax, "Frames", 0, len(df) - 1, valinit=(0, len(df) - 1))
 
     # Dictionary to store plot lines
     lines_x = {}
@@ -392,12 +379,8 @@ def visualize_markers(df, marker_ids=None):
         for marker_id in visible_markers:
             x_values, y_values = get_marker_coords(df, marker_id)
             if x_values is not None and y_values is not None:
-                lines_x[marker_id] = ax1.plot(
-                    frames, x_values, label=f"Marker {marker_id}"
-                )[0]
-                lines_y[marker_id] = ax2.plot(
-                    frames, y_values, label=f"Marker {marker_id}"
-                )[0]
+                lines_x[marker_id] = ax1.plot(frames, x_values, label=f"Marker {marker_id}")[0]
+                lines_y[marker_id] = ax2.plot(frames, y_values, label=f"Marker {marker_id}")[0]
 
         # Show frame range with vertical lines
         start_frame, end_frame = frames_range.val
@@ -410,9 +393,7 @@ def visualize_markers(df, marker_ids=None):
         ax2.set_xlim(0, len(df) - 1)
 
         # Place legend outside the plot to avoid overlap
-        if visible_markers and any(
-            marker_id in lines_x for marker_id in visible_markers
-        ):
+        if visible_markers and any(marker_id in lines_x for marker_id in visible_markers):
             handles1 = [lines_x[m] for m in visible_markers if m in lines_x]
             handles2 = [lines_y[m] for m in visible_markers if m in lines_y]
 
@@ -475,11 +456,7 @@ def visualize_markers(df, marker_ids=None):
     plt.show()
 
     # Return which markers were selected when the figure was closed
-    return [
-        all_markers[i]
-        for i, checked in enumerate(marker_selection.get_status())
-        if checked
-    ]
+    return [all_markers[i] for i, checked in enumerate(marker_selection.get_status()) if checked]
 
 
 def detect_markers_dynamic(df, coord_cols):
@@ -537,9 +514,7 @@ def detect_gaps_dynamic(coords_dict, min_gap_size=3):
 
     for i in range(length):
         # Check if any coordinate is missing at this frame
-        is_missing = any(
-            pd.isna(coords[i]) or coords[i] == "" for coords in coords_dict.values()
-        )
+        is_missing = any(pd.isna(coords[i]) or coords[i] == "" for coords in coords_dict.values())
 
         if is_missing and current_gap is None:
             current_gap = [i, i]
@@ -598,9 +573,7 @@ def visualize_markers_dynamic(df, frame_col, coord_cols, marker_ids=None):
 
     # Create scrollable frame
     canvas = tk.Canvas(marker_select_root, height=300)
-    scrollbar = tk.Scrollbar(
-        marker_select_root, orient="vertical", command=canvas.yview
-    )
+    scrollbar = tk.Scrollbar(marker_select_root, orient="vertical", command=canvas.yview)
     scrollable_frame = tk.Frame(canvas)
 
     scrollable_frame.bind(
@@ -613,9 +586,7 @@ def visualize_markers_dynamic(df, frame_col, coord_cols, marker_ids=None):
     # Create checkboxes for all markers
     for marker_name in marker_names:
         var = tk.BooleanVar(value=True)
-        tk.Checkbutton(scrollable_frame, text=marker_name, variable=var).pack(
-            anchor="w", padx=20
-        )
+        tk.Checkbutton(scrollable_frame, text=marker_name, variable=var).pack(anchor="w", padx=20)
         marker_vars[marker_name] = var
 
     canvas.pack(side="left", fill="both", expand=True, padx=(20, 0))
@@ -633,12 +604,8 @@ def visualize_markers_dynamic(df, frame_col, coord_cols, marker_ids=None):
         for var in marker_vars.values():
             var.set(False)
 
-    tk.Button(button_frame, text="Select All", command=select_all).pack(
-        side="left", padx=5
-    )
-    tk.Button(button_frame, text="Select None", command=select_none).pack(
-        side="left", padx=5
-    )
+    tk.Button(button_frame, text="Select All", command=select_all).pack(side="left", padx=5)
+    tk.Button(button_frame, text="Select None", command=select_none).pack(side="left", padx=5)
 
     # Function to show the plot with selected markers
     selected_markers = []
@@ -683,9 +650,7 @@ def visualize_markers_dynamic(df, frame_col, coord_cols, marker_ids=None):
 
     # Add frame range slider
     frames_slider_ax = plt.axes([0.3, 0.05, 0.5, 0.03])
-    frames_range = RangeSlider(
-        frames_slider_ax, "Frames", 0, len(df) - 1, valinit=(0, len(df) - 1)
-    )
+    frames_range = RangeSlider(frames_slider_ax, "Frames", 0, len(df) - 1, valinit=(0, len(df) - 1))
 
     # Track current slider values to avoid NameError and enable optional bindings
     start_var = tk.IntVar(value=0)
@@ -746,7 +711,6 @@ def visualize_markers_dynamic(df, frame_col, coord_cols, marker_ids=None):
 def select_columns_dialog(df):
     """Dialog to select frame and coordinate columns."""
     import tkinter as tk
-    from tkinter import ttk
 
     root = tk.Toplevel()
     root.title("Select Columns")
@@ -756,9 +720,7 @@ def select_columns_dialog(df):
     result = {"cancelled": True}
 
     # Frame column selection
-    tk.Label(root, text="Select Frame Column:", font=("Arial", 12, "bold")).pack(
-        pady=10
-    )
+    tk.Label(root, text="Select Frame Column:", font=("Arial", 12, "bold")).pack(pady=10)
     frame_var = tk.StringVar(value=df.columns[0])
     frame_combo = ttk.Combobox(
         root,
@@ -770,9 +732,7 @@ def select_columns_dialog(df):
     frame_combo.pack(pady=5)
 
     # Coordinate columns selection with scrollbar and multiple columns
-    tk.Label(root, text="Select Coordinate Columns:", font=("Arial", 12, "bold")).pack(
-        pady=(20, 5)
-    )
+    tk.Label(root, text="Select Coordinate Columns:", font=("Arial", 12, "bold")).pack(pady=(20, 5))
 
     # Create main container with scrollbar
     main_container = tk.Frame(root)
@@ -792,9 +752,7 @@ def select_columns_dialog(df):
 
     # Create coordinate column checkboxes in multiple columns
     coord_vars = {}
-    coordinate_columns = [
-        col for col in df.columns if col != df.columns[0]
-    ]  # Skip frame column
+    coordinate_columns = [col for col in df.columns if col != df.columns[0]]  # Skip frame column
 
     # Calculate number of columns (max 4 columns)
     total_cols = len(coordinate_columns)
@@ -808,9 +766,7 @@ def select_columns_dialog(df):
 
         var = tk.BooleanVar()
         # Auto-select if column looks like coordinates
-        if any(
-            col.lower().endswith(suffix) for suffix in ["_x", "_y", "_z", "x", "y", "z"]
-        ):
+        if any(col.lower().endswith(suffix) for suffix in ["_x", "_y", "_z", "x", "y", "z"]):
             var.set(True)
 
         checkbox = tk.Checkbutton(
@@ -842,23 +798,20 @@ def select_columns_dialog(df):
     def auto_select_coords():
         """Auto-select columns that look like coordinates"""
         for col, var in coord_vars.items():
-            if any(
-                col.lower().endswith(suffix)
-                for suffix in ["_x", "_y", "_z", "x", "y", "z"]
-            ):
+            if any(col.lower().endswith(suffix) for suffix in ["_x", "_y", "_z", "x", "y", "z"]):
                 var.set(True)
             else:
                 var.set(False)
 
-    tk.Button(
-        coord_buttons_frame, text="Select All", command=select_all_coords, width=12
-    ).pack(side="left", padx=5)
-    tk.Button(
-        coord_buttons_frame, text="Select None", command=select_none_coords, width=12
-    ).pack(side="left", padx=5)
-    tk.Button(
-        coord_buttons_frame, text="Auto Select", command=auto_select_coords, width=12
-    ).pack(side="left", padx=5)
+    tk.Button(coord_buttons_frame, text="Select All", command=select_all_coords, width=12).pack(
+        side="left", padx=5
+    )
+    tk.Button(coord_buttons_frame, text="Select None", command=select_none_coords, width=12).pack(
+        side="left", padx=5
+    )
+    tk.Button(coord_buttons_frame, text="Auto Select", command=auto_select_coords, width=12).pack(
+        side="left", padx=5
+    )
 
     # Info label
     info_label = tk.Label(
@@ -889,12 +842,10 @@ def select_columns_dialog(df):
 
     button_frame = tk.Frame(root)
     button_frame.pack(pady=15)
-    tk.Button(
-        button_frame, text="OK", command=on_ok, width=15, font=("Arial", 10, "bold")
-    ).pack(side="left", padx=10)
-    tk.Button(button_frame, text="Cancel", command=on_cancel, width=15).pack(
+    tk.Button(button_frame, text="OK", command=on_ok, width=15, font=("Arial", 10, "bold")).pack(
         side="left", padx=10
     )
+    tk.Button(button_frame, text="Cancel", command=on_cancel, width=15).pack(side="left", padx=10)
 
     # Enable mouse wheel scrolling
     def on_mousewheel(event):
@@ -1046,9 +997,7 @@ def create_gui_menu():
     version_label = Label(info_frame, text="Version 0.1.0", font=("Arial", 10))
     version_label.pack()
 
-    author_label = Label(
-        info_frame, text="Paulo R. P. Santiago", font=("Arial", 9), fg="gray"
-    )
+    author_label = Label(info_frame, text="Paulo R. P. Santiago", font=("Arial", 9), fg="gray")
     author_label.pack()
 
     root.mainloop()
@@ -1059,16 +1008,14 @@ def run_reid_swap_auto_with_data(df, file_path):
     try:
         # Reuse logic from reidmplrswap: detect L/R pairs from columns
         from vaila.reidmplrswap import (
-            find_lr_pairs,
             auto_fix_swaps,
+            find_lr_pairs,
             save_csv_with_suffix,
         )
 
         pairs = find_lr_pairs(df)
         if not pairs:
-            messagebox.showinfo(
-                "Info", "No L/R pairs detected in the selected columns."
-            )
+            messagebox.showinfo("Info", "No L/R pairs detected in the selected columns.")
             return
         proposals = auto_fix_swaps(df, pairs, max_len=30, min_gap=1)
         out_csv = save_csv_with_suffix(Path(file_path), df, suffix="_reidswap")
@@ -1085,16 +1032,14 @@ def run_reid_swap_manual_with_data(df, file_path):
     """Prompt for a pair base name and frame range, and swap L/R using reidmplrswap."""
     try:
         from vaila.reidmplrswap import (
-            find_lr_pairs,
             apply_swap_for_pair,
+            find_lr_pairs,
             save_csv_with_suffix,
         )
 
         pairs = find_lr_pairs(df)
         if not pairs:
-            messagebox.showinfo(
-                "Info", "No L/R pairs detected in the selected columns."
-            )
+            messagebox.showinfo("Info", "No L/R pairs detected in the selected columns.")
             return
         # Ask for pair (base name)
         base_names = ", ".join(sorted({p.base_name for p in pairs}))
@@ -1106,10 +1051,7 @@ def run_reid_swap_manual_with_data(df, file_path):
         # Find target pair (case-insensitive, allow partial)
         target = None
         for p in pairs:
-            if (
-                p.base_name.lower() == pair_name.lower()
-                or pair_name.lower() in p.base_name.lower()
-            ):
+            if p.base_name.lower() == pair_name.lower() or pair_name.lower() in p.base_name.lower():
                 target = p
                 break
         if target is None:
@@ -1124,17 +1066,13 @@ def run_reid_swap_manual_with_data(df, file_path):
         if use_graphical:
             import matplotlib.pyplot as plt
 
-            frames = (
-                df[df.columns[0]].values if len(df.columns) > 0 else np.arange(len(df))
-            )
+            frames = df[df.columns[0]].values if len(df.columns) > 0 else np.arange(len(df))
             colsLx = target.left.cols.get("x")
             colsLy = target.left.cols.get("y")
             colsRx = target.right.cols.get("x")
             colsRy = target.right.cols.get("y")
             if not colsLx or not colsLy or not colsRx or not colsRy:
-                messagebox.showerror(
-                    "Error", "Selected pair does not have x/y columns."
-                )
+                messagebox.showerror("Error", "Selected pair does not have x/y columns.")
                 return
             Lx = df[colsLx].values
             Ly = df[colsLy].values
@@ -1218,9 +1156,7 @@ def run_reid_swap_manual_with_data(df, file_path):
                     return
                 apply_swap_for_pair(df, target, s, e)
                 out_csv = save_csv_with_suffix(Path(file_path), df, suffix="_reidswap")
-                print(
-                    f"Manual swap applied for '{target.base_name}' {s}-{e}. Saved: {out_csv}"
-                )
+                print(f"Manual swap applied for '{target.base_name}' {s}-{e}. Saved: {out_csv}")
                 result["done"] = True
                 plt.close(fig)
 
@@ -1232,9 +1168,7 @@ def run_reid_swap_manual_with_data(df, file_path):
             plt.show()
             if not result["done"]:
                 return
-            messagebox.showinfo(
-                "Done", f"Manual swap applied for '{target.base_name}'."
-            )
+            messagebox.showinfo("Done", f"Manual swap applied for '{target.base_name}'.")
         else:
             start = simpledialog.askinteger(
                 "Manual Swap", "Start frame:", minvalue=0, maxvalue=len(df) - 1
@@ -1299,9 +1233,7 @@ def advanced_reid_gui_with_data(df, file_path, frame_col, coord_cols):
 
     marker_vars = {}
 
-    tk.Label(
-        marker_select_root, text="Select Markers:", font=("Arial", 12, "bold")
-    ).pack(pady=5)
+    tk.Label(marker_select_root, text="Select Markers:", font=("Arial", 12, "bold")).pack(pady=5)
 
     # Create scrollable frame with multiple columns for markers
     main_container = tk.Frame(marker_select_root)
@@ -1369,9 +1301,9 @@ def advanced_reid_gui_with_data(df, file_path, frame_col, coord_cols):
     controls_frame.pack(pady=10, fill="x")
 
     # Organize buttons in a grid (2 columns)
-    tk.Button(
-        controls_frame, text="Fill Gaps", command=lambda: on_fill_gaps(), width=12
-    ).grid(row=0, column=0, padx=5, pady=5)
+    tk.Button(controls_frame, text="Fill Gaps", command=lambda: on_fill_gaps(), width=12).grid(
+        row=0, column=0, padx=5, pady=5
+    )
     tk.Button(
         controls_frame,
         text="Merge Markers",
@@ -1415,32 +1347,26 @@ def advanced_reid_gui_with_data(df, file_path, frame_col, coord_cols):
                 frames_range.set_val((start, end))
                 update_plot()
             else:
-                messagebox.showerror(
-                    "Error", f"Range must be between 0 and {len(df)-1}"
-                )
+                messagebox.showerror("Error", f"Range must be between 0 and {len(df) - 1}")
         except:
             messagebox.showerror("Error", "Please enter valid numbers")
 
-    tk.Button(range_entry_frame, text="Apply", command=update_range).grid(
-        row=0, column=4, padx=5
-    )
+    tk.Button(range_entry_frame, text="Apply", command=update_range).grid(row=0, column=4, padx=5)
 
     # Save and exit buttons
     save_frame = tk.Frame(marker_select_root)
     save_frame.pack(pady=20)
 
-    tk.Button(
-        save_frame, text="Save Changes", command=lambda: on_save(), width=15
-    ).pack(side="left", padx=10)
+    tk.Button(save_frame, text="Save Changes", command=lambda: on_save(), width=15).pack(
+        side="left", padx=10
+    )
     tk.Button(save_frame, text="Exit", command=lambda: on_close(), width=15).pack(
         side="left", padx=10
     )
 
     # Create sliders for the frame range in matplotlib
     frames_slider_ax = plt.axes([0.3, 0.15, 0.5, 0.03])
-    frames_range = RangeSlider(
-        frames_slider_ax, "Frames", 0, len(df) - 1, valinit=(0, len(df) - 1)
-    )
+    frames_range = RangeSlider(frames_slider_ax, "Frames", 0, len(df) - 1, valinit=(0, len(df) - 1))
 
     # Function to get selected markers
     def get_selected_markers():
@@ -1488,9 +1414,7 @@ def advanced_reid_gui_with_data(df, file_path, frame_col, coord_cols):
     def on_fill_gaps():
         selected_markers = get_selected_markers()
         if not selected_markers:
-            messagebox.showinfo(
-                "Info", "Please select at least one marker to fill gaps."
-            )
+            messagebox.showinfo("Info", "Please select at least one marker to fill gaps.")
             return
 
         # Save current state to history
@@ -1509,16 +1433,12 @@ def advanced_reid_gui_with_data(df, file_path, frame_col, coord_cols):
 
                     # Simple linear interpolation on the selected range
                     values_range = values[start_frame : end_frame + 1]
-                    interpolated = (
-                        pd.Series(values_range).interpolate(method="linear").values
-                    )
+                    interpolated = pd.Series(values_range).interpolate(method="linear").values
                     values[start_frame : end_frame + 1] = interpolated
                     df[col_name] = values
 
         update_plot()
-        messagebox.showinfo(
-            "Complete", f"Gaps filled for {len(selected_markers)} marker(s)."
-        )
+        messagebox.showinfo("Complete", f"Gaps filled for {len(selected_markers)} marker(s).")
 
     def on_merge_markers():
         # TODO: Implement marker merging functionality
@@ -1541,14 +1461,10 @@ def advanced_reid_gui_with_data(df, file_path, frame_col, coord_cols):
             c2 = markers[m2].get(coord)
             if c1 and c2 and c1 in df.columns and c2 in df.columns:
                 tmp = df.loc[start_frame:end_frame, c1].copy()
-                df.loc[start_frame:end_frame, c1] = df.loc[
-                    start_frame:end_frame, c2
-                ].values
+                df.loc[start_frame:end_frame, c1] = df.loc[start_frame:end_frame, c2].values
                 df.loc[start_frame:end_frame, c2] = tmp.values
         update_plot()
-        messagebox.showinfo(
-            "Done", f"Swapped {m1} and {m2} in {start_frame}-{end_frame}."
-        )
+        messagebox.showinfo("Done", f"Swapped {m1} and {m2} in {start_frame}-{end_frame}.")
 
     def on_delete_marker():
         # TODO: Implement marker deletion functionality
@@ -1634,9 +1550,7 @@ def fill_gaps_arima(df, marker_id, max_gap_size=30, order=(1, 1, 1)):
 
     # If there are fewer than 10 valid points, fall back to linear interpolation
     if np.sum(valid_indices) < 10:
-        print(
-            f"Too few valid points for marker {marker_id}, falling back to linear interpolation"
-        )
+        print(f"Too few valid points for marker {marker_id}, falling back to linear interpolation")
         return fill_gaps(df, marker_id, max_gap_size, method="linear"), 0
 
     # Process each gap
@@ -1678,14 +1592,10 @@ def fill_gaps_arima(df, marker_id, max_gap_size=30, order=(1, 1, 1)):
 
         # Combine segments for ARIMA modeling
         full_segment_x = (
-            [p[0] for p in before_segment]
-            + [np.nan] * gap_size
-            + [p[0] for p in after_segment]
+            [p[0] for p in before_segment] + [np.nan] * gap_size + [p[0] for p in after_segment]
         )
         full_segment_y = (
-            [p[1] for p in before_segment]
-            + [np.nan] * gap_size
-            + [p[1] for p in after_segment]
+            [p[1] for p in before_segment] + [np.nan] * gap_size + [p[1] for p in after_segment]
         )
 
         # Create pandas series for ARIMA
@@ -1853,9 +1763,7 @@ def auto_fill_gaps_arima():
             f"+{arima_params_window.winfo_rootx() + 100}+{arima_params_window.winfo_rooty() + 100}"
         )
 
-        help_label = Label(
-            help_window, text=help_text[param], justify="left", padx=15, pady=15
-        )
+        help_label = Label(help_window, text=help_text[param], justify="left", padx=15, pady=15)
         help_label.pack(fill="both", expand=True)
 
         ok_button = TkButton(help_window, text="OK", command=help_window.destroy)
@@ -1869,9 +1777,7 @@ def auto_fill_gaps_arima():
     p_entry = tk.Entry(p_frame, textvariable=p_var, width=5)
     p_entry.pack(side=tk.LEFT, padx=5)
     Label(p_frame, text=f"Default: {default_p}", width=10).pack(side=tk.LEFT)
-    p_help_btn = TkButton(
-        p_frame, text="?", width=2, command=lambda: show_help_popup("p")
-    )
+    p_help_btn = TkButton(p_frame, text="?", width=2, command=lambda: show_help_popup("p"))
     p_help_btn.pack(side=tk.LEFT)
 
     # ARIMA d parameter row
@@ -1882,9 +1788,7 @@ def auto_fill_gaps_arima():
     d_entry = tk.Entry(d_frame, textvariable=d_var, width=5)
     d_entry.pack(side=tk.LEFT, padx=5)
     Label(d_frame, text=f"Default: {default_d}", width=10).pack(side=tk.LEFT)
-    d_help_btn = TkButton(
-        d_frame, text="?", width=2, command=lambda: show_help_popup("d")
-    )
+    d_help_btn = TkButton(d_frame, text="?", width=2, command=lambda: show_help_popup("d"))
     d_help_btn.pack(side=tk.LEFT)
 
     # ARIMA q parameter row
@@ -1895,9 +1799,7 @@ def auto_fill_gaps_arima():
     q_entry = tk.Entry(q_frame, textvariable=q_var, width=5)
     q_entry.pack(side=tk.LEFT, padx=5)
     Label(q_frame, text=f"Default: {default_q}", width=10).pack(side=tk.LEFT)
-    q_help_btn = TkButton(
-        q_frame, text="?", width=2, command=lambda: show_help_popup("q")
-    )
+    q_help_btn = TkButton(q_frame, text="?", width=2, command=lambda: show_help_popup("q"))
     q_help_btn.pack(side=tk.LEFT)
 
     # Max gap size parameter row
@@ -1907,9 +1809,7 @@ def auto_fill_gaps_arima():
     max_gap_var = tk.StringVar(value=str(default_max_gap))
     max_gap_entry = tk.Entry(max_gap_frame, textvariable=max_gap_var, width=5)
     max_gap_entry.pack(side=tk.LEFT, padx=5)
-    Label(max_gap_frame, text=f"Default: {default_max_gap}", width=10).pack(
-        side=tk.LEFT
-    )
+    Label(max_gap_frame, text=f"Default: {default_max_gap}", width=10).pack(side=tk.LEFT)
     max_gap_help_btn = TkButton(
         max_gap_frame, text="?", width=2, command=lambda: show_help_popup("max_gap")
     )
@@ -1921,9 +1821,7 @@ def auto_fill_gaps_arima():
 
     # Processing status
     status_var = tk.StringVar(value="")
-    status_label = Label(
-        arima_params_window, textvariable=status_var, font=("Arial", 9), fg="blue"
-    )
+    status_label = Label(arima_params_window, textvariable=status_var, font=("Arial", 9), fg="blue")
     status_label.pack(pady=5)
 
     def reset_to_defaults():
@@ -1955,27 +1853,25 @@ def auto_fill_gaps_arima():
                 total_filled += 1
                 total_points_filled += points_filled
                 # Update the metadata to include information about filled gaps
-                df.loc[
-                    0, "processed_info"
-                ] += f"ARIMA filled {points_filled} points for marker {marker_id}; "
+                df.loc[0, "processed_info"] += (
+                    f"ARIMA filled {points_filled} points for marker {marker_id}; "
+                )
 
             # Update status to show progress
             status_var.set(
-                f"Processing marker {marker_id}... ({markers.index(marker_id)+1}/{len(markers)})"
+                f"Processing marker {marker_id}... ({markers.index(marker_id) + 1}/{len(markers)})"
             )
             arima_params_window.update_idletasks()  # Force GUI update
 
         # Add timestamp and processing info
         timestamp = pd.Timestamp.now().strftime("%Y-%m-%d_%H-%M-%S")
-        df.loc[
-            0, "processed_info"
-        ] += f"ARIMA processed on {timestamp} with parameters (p={arima_params['p']},d={arima_params['d']},q={arima_params['q']})"
+        df.loc[0, "processed_info"] += (
+            f"ARIMA processed on {timestamp} with parameters (p={arima_params['p']},d={arima_params['d']},q={arima_params['q']})"
+        )
 
         # Save with a more descriptive suffix that includes parameters
         param_text = f"p{arima_params['p']}d{arima_params['d']}q{arima_params['q']}"
-        new_file = save_markers_file(
-            df, file_path, suffix=f"_arima_{param_text}_{timestamp}"
-        )
+        new_file = save_markers_file(df, file_path, suffix=f"_arima_{param_text}_{timestamp}")
 
         # Create operations log
         operations_log = {
@@ -2041,18 +1937,14 @@ def auto_fill_gaps_arima():
             # Start processing in the same window (don't destroy it yet)
             start_processing()
         except ValueError:
-            messagebox.showerror(
-                "Error", "Please enter valid integers for all parameters"
-            )
+            messagebox.showerror("Error", "Please enter valid integers for all parameters")
 
     # Button frame
     button_frame = Frame(arima_params_window)
     button_frame.pack(pady=10)
 
     # Add a reset button
-    reset_button = TkButton(
-        button_frame, text="Reset to Defaults", command=reset_to_defaults
-    )
+    reset_button = TkButton(button_frame, text="Reset to Defaults", command=reset_to_defaults)
     reset_button.pack(side=tk.LEFT, padx=10)
 
     # Add confirm button with a more descriptive label
@@ -2073,9 +1965,9 @@ def auto_fill_gaps_arima():
         )
 
         # Title
-        Label(
-            help_window, text="ARIMA Parameter Guide", font=("Arial", 12, "bold")
-        ).pack(pady=(10, 15))
+        Label(help_window, text="ARIMA Parameter Guide", font=("Arial", 12, "bold")).pack(
+            pady=(10, 15)
+        )
 
         # Create scrollable frame for help text
         canvas = tk.Canvas(help_window)

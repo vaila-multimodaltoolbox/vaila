@@ -72,11 +72,12 @@ License:
 """
 
 import os
+from datetime import datetime
+from tkinter import Tk, filedialog, messagebox
+
 import numpy as np
 import pandas as pd
-from datetime import datetime
 from rich import print
-from tkinter import filedialog, Tk, messagebox
 
 
 def process_csv_files_with_numpy(directory, save_directory):
@@ -95,7 +96,7 @@ def process_csv_files_with_numpy(directory, save_directory):
         file_path = os.path.join(directory, csv_file)
 
         # Read the file header manually
-        with open(file_path, "r") as f:
+        with open(file_path) as f:
             lines = f.readlines()
 
         # Retain only the third header line
@@ -111,9 +112,7 @@ def process_csv_files_with_numpy(directory, save_directory):
         data_without_col0 = data[:, 1:]
 
         # Select columns to keep (exclude every third column)
-        columns_to_keep = [
-            i for i in range(data_without_col0.shape[1]) if (i + 1) % 3 != 0
-        ]
+        columns_to_keep = [i for i in range(data_without_col0.shape[1]) if (i + 1) % 3 != 0]
         processed_data = data_without_col0[:, columns_to_keep]
 
         # Add the first column back to the processed data
@@ -160,9 +159,7 @@ def batch_convert_dlc(directory=None):
     if directory is None:
         root = Tk()
         root.withdraw()  # Hide the root Tkinter window
-        directory = filedialog.askdirectory(
-            title="Select Directory Containing DLC CSV Files"
-        )
+        directory = filedialog.askdirectory(title="Select Directory Containing DLC CSV Files")
 
     if not directory:
         messagebox.showerror("Error", "No directory selected. Operation cancelled.")

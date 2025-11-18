@@ -36,12 +36,12 @@ Enter the desired FPS for the output video.
 """
 
 import os
+import re
 import shutil
 import subprocess
 import time
 import tkinter as tk
-from tkinter import filedialog, messagebox, simpledialog, Toplevel, Label, Button
-import re
+from tkinter import Button, Label, Toplevel, filedialog, messagebox, simpledialog
 
 
 class FrameRemover:
@@ -117,7 +117,7 @@ class FrameRemover:
             return
 
         # Read the original info file
-        with open(info_file, "r") as f:
+        with open(info_file) as f:
             lines = f.readlines()
 
         # Extract values
@@ -284,7 +284,7 @@ class FrameRemover:
         target_dir = os.path.join(output_video_dir, backup_folder_name)
 
         try:
-            print(f"Copying backup directory to video output directory...")
+            print("Copying backup directory to video output directory...")
             # Use shutil.copytree to copy the entire directory
             shutil.copytree(self.backup_dir, target_dir)
             print(f"Successfully copied backup directory to: {target_dir}")
@@ -309,9 +309,7 @@ class FrameRemover:
         root.withdraw()
 
         # Get target directory
-        frame_dir = filedialog.askdirectory(
-            title="Select directory containing PNG frames"
-        )
+        frame_dir = filedialog.askdirectory(title="Select directory containing PNG frames")
         if not frame_dir:
             print("No directory selected. Exiting...")
             return
@@ -346,9 +344,7 @@ class FrameRemover:
                     remover.new_fps = new_fps
 
                     # Update video info file
-                    remover.update_video_info(
-                        frame_dir, removed_count, pattern, new_fps
-                    )
+                    remover.update_video_info(frame_dir, removed_count, pattern, new_fps)
 
                     # Create video directly (without asking)
                     output_video = remover.create_video(frame_dir, new_fps)
@@ -377,8 +373,8 @@ class FrameRemover:
                         # If video creation failed, just restore frames
                         remover.restore_duplicate_frames(frame_dir)
                         remover.show_completion_message(
-                            f"Failed to create video, but removed frames \n"
-                            f"have been restored to the original directory."
+                            "Failed to create video, but removed frames \n"
+                            "have been restored to the original directory."
                         )
             else:
                 messagebox.showinfo("No Frames Removed", "No frames were removed.")
@@ -394,8 +390,7 @@ class FrameRemover:
 
             messagebox.showerror(
                 "Error",
-                f"An error occurred: {str(e)}\n"
-                f"Any removed frames have been restored.",
+                f"An error occurred: {str(e)}\nAny removed frames have been restored.",
             )
 
     def show_completion_message(self, message):

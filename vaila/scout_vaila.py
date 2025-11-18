@@ -52,20 +52,18 @@ License:
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, asdict
+import tkinter as tk
+import webbrowser
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
+from tkinter import filedialog, messagebox, simpledialog, ttk
 
-import matplotlib.pyplot as plt
 import matplotlib.patches as patches
+import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
-import tkinter as tk
-from tkinter import ttk, filedialog, messagebox, simpledialog
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from rich import print
-import webbrowser
-
 
 # --- Config I/O helpers (TOML) -------------------------------------------------
 try:  # Python 3.11+
@@ -85,7 +83,7 @@ except Exception:  # noqa: BLE001
 DEFAULT_CFG_FILENAME = "vaila_scout_config.toml"
 
 
-def _default_config() -> Dict:
+def _default_config() -> dict:
     return {
         "program": {
             "name": "vaila_scout",
@@ -195,7 +193,7 @@ def _default_config() -> Dict:
     }
 
 
-def read_toml_config(path: Path) -> Optional[Dict]:
+def read_toml_config(path: Path) -> dict | None:
     if not path or not path.exists():
         return None
     if _toml_reader is None:
@@ -208,7 +206,7 @@ def read_toml_config(path: Path) -> Optional[Dict]:
         return None
 
 
-def write_toml_config(path: Path, cfg: Dict) -> bool:
+def write_toml_config(path: Path, cfg: dict) -> bool:
     if _toml_writer is None:
         print("[yellow]toml package not available; skipping config write[/]")
         return False
@@ -239,12 +237,12 @@ class ScoutEvent:
     pos_x_m: float
     pos_y_m: float
 
-    def to_row(self) -> Dict[str, object]:
+    def to_row(self) -> dict[str, object]:
         return asdict(self)
 
 
 # --- Friendly TOML template writer ---------------------------------------------
-def _toml_template_with_comments(cfg: Dict) -> str:
+def _toml_template_with_comments(cfg: dict) -> str:
     """Generate a human-friendly TOML template with comments in English."""
     program = cfg.get("program", {})
     project = cfg.get("project", {})
@@ -264,7 +262,7 @@ def _toml_template_with_comments(cfg: Dict) -> str:
     away_names = away.get("players_names", {})
 
     # players_names objects
-    def _players_names_block(mapping: Dict[str, str]) -> str:
+    def _players_names_block(mapping: dict[str, str]) -> str:
         if not mapping:
             return ""
         lines = []
@@ -320,31 +318,31 @@ def _toml_template_with_comments(cfg: Dict) -> str:
 
 [program]
 # Metadata about this tool
-name = "{program.get('name', 'vaila_scout')}"
-version = "{program.get('version', '0.1.5')}"
-author = "{program.get('author', '')}"
-email = "{program.get('email', '')}"
-description = "{program.get('description', 'Integrated scouting (annotation + analysis) for soccer.')}"
-repository = "{program.get('repository', '')}"
-license = "{program.get('license', '')}"
-homepage = "{program.get('homepage', '')}"
-created = "{program.get('created', '')}"
-updated = "{program.get('updated', '')}"
+name = "{program.get("name", "vaila_scout")}"
+version = "{program.get("version", "0.1.5")}"
+author = "{program.get("author", "")}"
+email = "{program.get("email", "")}"
+description = "{program.get("description", "Integrated scouting (annotation + analysis) for soccer.")}"
+repository = "{program.get("repository", "")}"
+license = "{program.get("license", "")}"
+homepage = "{program.get("homepage", "")}"
+created = "{program.get("created", "")}"
+updated = "{program.get("updated", "")}"
 
 [project]
 # Field size in meters (FIFA standard is 105 x 68)
-name = "{project.get('name', 'vaila_scout')}"
-field_width_m = {float(project.get('field_width_m', 105.0))}
-field_height_m = {float(project.get('field_height_m', 68.0))}
-sport = "{project.get('sport', 'soccer')}"
-field_units = "{project.get('field_units', 'meters')}"
-field_standard = "{project.get('field_standard', 'FIFA')}"
-description = "{project.get('description', 'Default soccer field and teams for scouting.')}"
+name = "{project.get("name", "vaila_scout")}"
+field_width_m = {float(project.get("field_width_m", 105.0))}
+field_height_m = {float(project.get("field_height_m", 68.0))}
+sport = "{project.get("sport", "soccer")}"
+field_units = "{project.get("field_units", "meters")}"
+field_standard = "{project.get("field_standard", "FIFA")}"
+description = "{project.get("description", "Default soccer field and teams for scouting.")}"
 
 [teams.home]
 # Home team settings: display name, color, roster, and player name mapping
-name = "{home.get('name', 'HOME')}"
-color = "{home.get('color', '#1f77b4')}"  # jersey color used for player circles
+name = "{home.get("name", "HOME")}"
+color = "{home.get("color", "#1f77b4")}"  # jersey color used for player circles
 players = [{_quote_list_str(home_players)}]
 
 [teams.home.players_names]
@@ -352,8 +350,8 @@ players = [{_quote_list_str(home_players)}]
 {_players_names_block(home_names) if _players_names_block(home_names) else '# Add entries like: "10" = "Pelé"'}
 
 [teams.away]
-name = "{away.get('name', 'AWAY')}"
-color = "{away.get('color', '#d62728')}"
+name = "{away.get("name", "AWAY")}"
+color = "{away.get("color", "#d62728")}"
 players = [{_quote_list_str(away_players)}]
 
 [teams.away.players_names]
@@ -361,13 +359,13 @@ players = [{_quote_list_str(away_players)}]
 
 [drawing]
 # Visual defaults for drawing players and action symbols on the field
-player_circle_radius_m = {float(drawing.get('player_circle_radius_m', 0.6))}
-player_edge_color = "{drawing.get('player_edge_color', 'black')}"
-player_number_color = "{drawing.get('player_number_color', 'white')}"
-player_number_size = {int(drawing.get('player_number_size', 8))}
-action_symbol_size = {float(drawing.get('action_symbol_size', 90))}
-show_player_name = {str(bool(drawing.get('show_player_name', True))).lower()}  # draw small label near circle
-player_name_size = {int(drawing.get('player_name_size', 8))}
+player_circle_radius_m = {float(drawing.get("player_circle_radius_m", 0.6))}
+player_edge_color = "{drawing.get("player_edge_color", "black")}"
+player_number_color = "{drawing.get("player_number_color", "white")}"
+player_number_size = {int(drawing.get("player_number_size", 8))}
+action_symbol_size = {float(drawing.get("action_symbol_size", 90))}
+show_player_name = {str(bool(drawing.get("show_player_name", True))).lower()}  # draw small label near circle
+player_name_size = {int(drawing.get("player_name_size", 8))}
 
 # Results are generic and independent from actions. Use any labels you need.
 results = [{_quote_list_str(results)}]
@@ -375,14 +373,14 @@ results = [{_quote_list_str(results)}]
 # Actions are listed at the end for readability. Each action has a display name,
 # a plot symbol/marker, and a color used for the symbol.
 # Common symbols: o, *, +, x, ^, s (square), P (plus filled), D (diamond), h (hexagon).
-{''.join(actions_blocks)}
+{"".join(actions_blocks)}
 """.strip()
         + "\n"
     )
     return template
 
 
-def write_toml_template(path: Path, cfg: Dict) -> bool:
+def write_toml_template(path: Path, cfg: dict) -> bool:
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("w", encoding="utf-8") as f:
@@ -437,9 +435,7 @@ def draw_soccer_field(ax: plt.Axes, field_w: float, field_h: float) -> None:
 
     # Perimeter
     ax.add_patch(
-        patches.Rectangle(
-            (0, 0), field_w, field_h, fill=False, edgecolor=line_color, linewidth=lw
-        )
+        patches.Rectangle((0, 0), field_w, field_h, fill=False, edgecolor=line_color, linewidth=lw)
     )
 
     # Halfway line
@@ -449,9 +445,7 @@ def draw_soccer_field(ax: plt.Axes, field_w: float, field_h: float) -> None:
     center = (field_w / 2.0, field_h / 2.0)
     center_circle_r = 9.15  # 10 yd ≈ 9.15 m
     ax.add_patch(
-        patches.Circle(
-            center, center_circle_r, fill=False, edgecolor=line_color, linewidth=lw
-        )
+        patches.Circle(center, center_circle_r, fill=False, edgecolor=line_color, linewidth=lw)
     )
 
     # Center spot
@@ -540,7 +534,7 @@ def draw_soccer_field(ax: plt.Axes, field_w: float, field_h: float) -> None:
 
 # --- Main Application -----------------------------------------------------------
 class ScoutApp(tk.Tk):
-    def __init__(self, cfg: Dict):
+    def __init__(self, cfg: dict):
         super().__init__()
         self.title("vailá - Scout - v0.1.5")
 
@@ -560,11 +554,11 @@ class ScoutApp(tk.Tk):
         self.minsize(1000, 600)  # Minimum window size
 
         self.cfg = cfg
-        self.cfg_path: Optional[Path] = None
+        self.cfg_path: Path | None = None
         self.field_w = float(cfg["project"]["field_width_m"])  # meters
         self.field_h = float(cfg["project"]["field_height_m"])  # meters
         self.start_time = time.time()
-        self.events: List[ScoutEvent] = []
+        self.events: list[ScoutEvent] = []
 
         # --- Menu bar
         menubar = tk.Menu(self)
@@ -577,9 +571,7 @@ class ScoutApp(tk.Tk):
 
         view_menu = tk.Menu(menubar, tearoff=0)
         view_menu.add_command(label="Show Heatmap (H)", command=self.draw_heatmap)
-        view_menu.add_command(
-            label="Scout visualization (V)", command=self.draw_action_view
-        )
+        view_menu.add_command(label="Scout visualization (V)", command=self.draw_action_view)
         menubar.add_cascade(label="View", menu=view_menu)
 
         self.bind_all("v", lambda e: self.draw_action_view())
@@ -587,17 +579,11 @@ class ScoutApp(tk.Tk):
 
         tools_menu = tk.Menu(menubar, tearoff=0)
         tools_menu.add_command(label="Load Config	Ctrl+L", command=self.load_config)
-        tools_menu.add_command(
-            label="Save Config	Ctrl+Shift+S", command=self.save_config
-        )
-        tools_menu.add_command(
-            label="Create Template", command=self._create_template_config
-        )
+        tools_menu.add_command(label="Save Config	Ctrl+Shift+S", command=self.save_config)
+        tools_menu.add_command(label="Create Template", command=self._create_template_config)
         tools_menu.add_command(label="Rename Teams	Ctrl+T", command=self.rename_teams)
         tools_menu.add_separator()
-        tools_menu.add_command(
-            label="Convert Skout to vailá", command=self.convert_skout_to_vaila
-        )
+        tools_menu.add_command(label="Convert Skout to vailá", command=self.convert_skout_to_vaila)
         menubar.add_cascade(label="Tools", menu=tools_menu)
 
         help_menu = tk.Menu(menubar, tearoff=0)
@@ -636,9 +622,7 @@ class ScoutApp(tk.Tk):
         self.player_cb.grid_remove()
 
         # Action selector (normalized structured actions)
-        ttk.Label(controls, text="Action:").grid(
-            row=1, column=0, sticky=tk.W, padx=2, pady=2
-        )
+        ttk.Label(controls, text="Action:").grid(row=1, column=0, sticky=tk.W, padx=2, pady=2)
         self.actions_cfg = self._normalize_actions_config(cfg.get("actions", []))
         self.action_names = [a["name"] for a in self.actions_cfg]
         self.name_to_action = {a["name"]: a for a in self.actions_cfg}
@@ -656,9 +640,7 @@ class ScoutApp(tk.Tk):
         )  # Added padding to move dropdown right
 
         # Result selector
-        ttk.Label(controls, text="Result:").grid(
-            row=1, column=2, sticky=tk.W, padx=2, pady=2
-        )
+        ttk.Label(controls, text="Result:").grid(row=1, column=2, sticky=tk.W, padx=2, pady=2)
         self.results_list = list(cfg.get("results", _default_config()["results"]))
         if not self.results_list:
             self.results_list = _default_config()["results"]
@@ -683,15 +665,9 @@ class ScoutApp(tk.Tk):
             timer_frame, textvariable=self.clock_var, font=("Segoe UI", 10, "bold")
         )
         self.clock_label.pack(side=tk.LEFT, padx=(4, 8))
-        ttk.Button(timer_frame, text="Start", command=self.start_timer).pack(
-            side=tk.LEFT, padx=2
-        )
-        ttk.Button(timer_frame, text="Pause", command=self.pause_timer).pack(
-            side=tk.LEFT, padx=2
-        )
-        ttk.Button(timer_frame, text="Reset", command=self.reset_timer).pack(
-            side=tk.LEFT, padx=2
-        )
+        ttk.Button(timer_frame, text="Start", command=self.start_timer).pack(side=tk.LEFT, padx=2)
+        ttk.Button(timer_frame, text="Pause", command=self.pause_timer).pack(side=tk.LEFT, padx=2)
+        ttk.Button(timer_frame, text="Reset", command=self.reset_timer).pack(side=tk.LEFT, padx=2)
 
         # Manual time entry on separate line
         manual_frame = ttk.Frame(controls)
@@ -711,21 +687,11 @@ class ScoutApp(tk.Tk):
         btns.grid(
             row=4, column=0, columnspan=4, sticky=tk.W, padx=2, pady=(6, 4)
         )  # Updated columnspan to 4
-        ttk.Button(btns, text="Save CSV", command=self.save_csv).pack(
-            side=tk.LEFT, padx=1
-        )
-        ttk.Button(btns, text="Load CSV", command=self.load_csv).pack(
-            side=tk.LEFT, padx=1
-        )
-        ttk.Button(btns, text="Clear Events", command=self.clear_events).pack(
-            side=tk.LEFT, padx=1
-        )
-        ttk.Button(btns, text="Heatmap", command=self.draw_heatmap).pack(
-            side=tk.LEFT, padx=1
-        )
-        ttk.Button(btns, text="Reset", command=self.reset_timer).pack(
-            side=tk.LEFT, padx=1
-        )
+        ttk.Button(btns, text="Save CSV", command=self.save_csv).pack(side=tk.LEFT, padx=1)
+        ttk.Button(btns, text="Load CSV", command=self.load_csv).pack(side=tk.LEFT, padx=1)
+        ttk.Button(btns, text="Clear Events", command=self.clear_events).pack(side=tk.LEFT, padx=1)
+        ttk.Button(btns, text="Heatmap", command=self.draw_heatmap).pack(side=tk.LEFT, padx=1)
+        ttk.Button(btns, text="Reset", command=self.reset_timer).pack(side=tk.LEFT, padx=1)
 
         # Config buttons
         cfg_btns = ttk.Frame(controls)
@@ -738,9 +704,9 @@ class ScoutApp(tk.Tk):
         ttk.Button(cfg_btns, text="Save Config", command=self.save_config).pack(
             side=tk.LEFT, padx=4
         )
-        ttk.Button(
-            cfg_btns, text="Create Template", command=self._create_template_config
-        ).pack(side=tk.LEFT, padx=4)
+        ttk.Button(cfg_btns, text="Create Template", command=self._create_template_config).pack(
+            side=tk.LEFT, padx=4
+        )
 
         # Layout control button - Remove this section entirely
         # layout_btns = ttk.Frame(controls)
@@ -764,7 +730,7 @@ class ScoutApp(tk.Tk):
         # Remove auto-number/unique-per-click (not needed)
         self.auto_number_players = False
         self.unique_player_per_click = False
-        self.next_player_number_by_team: Dict[str, int] = {}
+        self.next_player_number_by_team: dict[str, int] = {}
 
         # Ctrl state tracking for remove functionality
         self._ctrl_pressed = False
@@ -813,9 +779,7 @@ class ScoutApp(tk.Tk):
         # Quick action code buffer (digits map to action codes)
         self.quick_action_buffer = ""
         self.quick_label = ttk.Label(controls, text="Quick action code: (none)")
-        self.quick_label.grid(
-            row=7, column=0, columnspan=4, sticky=tk.W, padx=2, pady=(2, 2)
-        )
+        self.quick_label.grid(row=7, column=0, columnspan=4, sticky=tk.W, padx=2, pady=(2, 2))
         for _d in list("0123456789"):
             self.bind_all(_d, self._on_digit_action)
         self.bind_all("<BackSpace>", self._on_backspace_action)
@@ -826,38 +790,26 @@ class ScoutApp(tk.Tk):
         rosters = ttk.Frame(right_frame)
         rosters.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=2, pady=(4, 2))
 
-        home_box = ttk.Labelframe(
-            rosters, text=f"Home ({self.cfg['teams']['home']['name']})"
-        )
+        home_box = ttk.Labelframe(rosters, text=f"Home ({self.cfg['teams']['home']['name']})")
         home_box.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 4))
-        away_box = ttk.Labelframe(
-            rosters, text=f"Away ({self.cfg['teams']['away']['name']})"
-        )
+        away_box = ttk.Labelframe(rosters, text=f"Away ({self.cfg['teams']['away']['name']})")
         away_box.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(4, 0))
 
-        self.home_tv = ttk.Treeview(
-            home_box, columns=("no", "name"), show="headings", height=12
-        )
+        self.home_tv = ttk.Treeview(home_box, columns=("no", "name"), show="headings", height=12)
         self.home_tv.heading("no", text="No")
         self.home_tv.heading("name", text="Name")
         self.home_tv.column("no", width=40, anchor=tk.CENTER)
         self.home_tv.column("name", width=120, anchor=tk.W)
         self.home_tv.pack(fill=tk.BOTH, expand=True)
-        self.home_tv.bind(
-            "<<TreeviewSelect>>", lambda e: self._on_roster_select("home")
-        )
+        self.home_tv.bind("<<TreeviewSelect>>", lambda e: self._on_roster_select("home"))
 
-        self.away_tv = ttk.Treeview(
-            away_box, columns=("no", "name"), show="headings", height=12
-        )
+        self.away_tv = ttk.Treeview(away_box, columns=("no", "name"), show="headings", height=12)
         self.away_tv.heading("no", text="No")
         self.away_tv.heading("name", text="Name")
         self.away_tv.column("no", width=40, anchor=tk.CENTER)
         self.away_tv.column("name", width=120, anchor=tk.W)
         self.away_tv.pack(fill=tk.BOTH, expand=True)
-        self.away_tv.bind(
-            "<<TreeviewSelect>>", lambda e: self._on_roster_select("away")
-        )
+        self.away_tv.bind("<<TreeviewSelect>>", lambda e: self._on_roster_select("away"))
 
         # Populate initial players list based on current team
         self._on_team_changed()
@@ -913,9 +865,7 @@ class ScoutApp(tk.Tk):
 
                     # Update figure size (ensure positive values)
                     if new_width > 0 and new_height > 0:
-                        self.field_fig.set_size_inches(
-                            new_width / 100, new_height / 100
-                        )
+                        self.field_fig.set_size_inches(new_width / 100, new_height / 100)
                         self._redraw_field()
         except Exception as e:
             print(f"Error in _on_field_resize: {e}")
@@ -959,17 +909,13 @@ class ScoutApp(tk.Tk):
                 return 0.0
         if not getattr(self, "_timer_running", False):
             return float(getattr(self, "_timer_paused_elapsed", 0.0))
-        return float(
-            self._timer_paused_elapsed + (time.time() - self._timer_start_epoch)
-        )
+        return float(self._timer_paused_elapsed + (time.time() - self._timer_start_epoch))
 
     def _get_live_time_s(self) -> float:
         # Live timer ignoring manual mode
         if not getattr(self, "_timer_running", False):
             return float(getattr(self, "_timer_paused_elapsed", 0.0))
-        return float(
-            self._timer_paused_elapsed + (time.time() - self._timer_start_epoch)
-        )
+        return float(self._timer_paused_elapsed + (time.time() - self._timer_start_epoch))
 
     def start_timer(self):
         if not getattr(self, "_timer_running", False):
@@ -999,9 +945,9 @@ class ScoutApp(tk.Tk):
         self.manual_time_entry.delete(0, tk.END)
         self.manual_time_entry.insert(0, f"{float(current):.1f}")
 
-    def _init_next_player_numbers(self) -> Dict[str, int]:
-        def next_from_list(players: List[str]) -> int:
-            nums: List[int] = []
+    def _init_next_player_numbers(self) -> dict[str, int]:
+        def next_from_list(players: list[str]) -> int:
+            nums: list[int] = []
             for p in players:
                 try:
                     nums.append(int(p))
@@ -1091,9 +1037,7 @@ class ScoutApp(tk.Tk):
             self._update_quick_label()
 
         # Action code lookup
-        _act = next(
-            (a for a in self.actions_cfg if a["name"] == self.action_var.get()), None
-        )
+        _act = next((a for a in self.actions_cfg if a["name"] == self.action_var.get()), None)
         _act_code = int(_act.get("code", -1)) if _act else -1
 
         ev = ScoutEvent(
@@ -1216,9 +1160,9 @@ class ScoutApp(tk.Tk):
                 for e in self.events:
                     if e.player_name:
                         k = self._team_key_from_name(e.team)
-                        self.cfg["teams"][k].setdefault("players_names", {})[
-                            str(e.player)
-                        ] = e.player_name
+                        self.cfg["teams"][k].setdefault("players_names", {})[str(e.player)] = (
+                            e.player_name
+                        )
             # Re-plot on field
             self._redraw_field()
             if self.events:
@@ -1318,9 +1262,7 @@ class ScoutApp(tk.Tk):
                 if show_centroid.get():
                     x_mean = filt["pos_x_m"].mean()
                     y_mean = filt["pos_y_m"].mean()
-                    ax.scatter(
-                        x_mean, y_mean, c="blue", s=200, marker="X", label="Centroide"
-                    )
+                    ax.scatter(x_mean, y_mean, c="blue", s=200, marker="X", label="Centroide")
 
             ax.set_xlim(0, self.field_w)
             ax.set_ylim(0, self.field_h)
@@ -1401,9 +1343,7 @@ class ScoutApp(tk.Tk):
                 player_cb.config(values=[ALL])
                 player_var.set(ALL)
             else:
-                key = (
-                    "home" if sel_team == self.cfg["teams"]["home"]["name"] else "away"
-                )
+                key = "home" if sel_team == self.cfg["teams"]["home"]["name"] else "away"
                 values = [ALL] + list(self.cfg["teams"][key].get("players", []))
                 player_cb.config(values=values)
                 player_var.set(ALL)
@@ -1486,13 +1426,9 @@ class ScoutApp(tk.Tk):
         players = self.cfg["teams"][key].setdefault("players", [])
         if player not in players:
             players.append(player)
-        self.cfg["teams"][key].setdefault("players_names", {}).setdefault(
-            str(player), ""
-        )
+        self.cfg["teams"][key].setdefault("players_names", {}).setdefault(str(player), "")
 
-    def _remove_events_near_position(
-        self, x_m: float, y_m: float, radius_m: float = 1.0
-    ) -> None:
+    def _remove_events_near_position(self, x_m: float, y_m: float, radius_m: float = 1.0) -> None:
         """Remove the most recent event within radius_m meters of the given position."""
         if not self.events:
             return
@@ -1533,9 +1469,7 @@ class ScoutApp(tk.Tk):
         key = self._team_key_from_name(team_name)
         return str(self.cfg["teams"][key].get("color", "#1f77b4"))
 
-    def _draw_player_marker_with_action(
-        self, x_m: float, y_m: float, ev: "ScoutEvent"
-    ) -> None:
+    def _draw_player_marker_with_action(self, x_m: float, y_m: float, ev: ScoutEvent) -> None:
         draw_cfg = self.cfg.get("drawing", {})
         circle_r = float(draw_cfg.get("player_circle_radius_m", 0.6))
         edge_default = str(draw_cfg.get("player_edge_color", "black"))
@@ -1613,7 +1547,7 @@ class ScoutApp(tk.Tk):
                 "D": "D",
                 "h": "h",
             }
-            m = marker_map.get(symbol, None)
+            m = marker_map.get(symbol)
 
             if m is not None and len(m) == 1:
                 unfilled = m in {"+", "x"}
@@ -1653,22 +1587,16 @@ class ScoutApp(tk.Tk):
                     zorder=8,
                     ha="center",
                     va="center",
-                    bbox=dict(
-                        boxstyle="round,pad=0.3", fc="white", ec="black", alpha=0.8
-                    ),
+                    bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="black", alpha=0.8),
                 )
 
     # --- Actions helpers
-    def _normalize_actions_config(self, actions_cfg: List) -> List[Dict[str, str]]:
+    def _normalize_actions_config(self, actions_cfg: list) -> list[dict[str, str]]:
         """Accepts either list[str] or list[dict] and returns list of dicts with keys name,code,symbol,color."""
-        out: List[Dict[str, str]] = []
+        out: list[dict[str, str]] = []
         if not actions_cfg:
             return _default_config()["actions"]
-        if (
-            isinstance(actions_cfg, list)
-            and actions_cfg
-            and isinstance(actions_cfg[0], dict)
-        ):
+        if isinstance(actions_cfg, list) and actions_cfg and isinstance(actions_cfg[0], dict):
             # ensure defaults
             for a in actions_cfg:
                 out.append(
@@ -1759,9 +1687,7 @@ class ScoutApp(tk.Tk):
         if ok:
             messagebox.showinfo("Config", f"Config saved to\n{self.cfg_path}")
         else:
-            messagebox.showwarning(
-                "Config", "Config was not saved (writer unavailable)."
-            )
+            messagebox.showwarning("Config", "Config was not saved (writer unavailable).")
 
     def _create_template_config(self):
         here = Path(__file__).resolve()
@@ -1774,14 +1700,10 @@ class ScoutApp(tk.Tk):
             "project": dict(self.cfg.get("project", _default_config()["project"])),
             "teams": {
                 "home": dict(
-                    self.cfg.get("teams", {}).get(
-                        "home", _default_config()["teams"]["home"]
-                    )
+                    self.cfg.get("teams", {}).get("home", _default_config()["teams"]["home"])
                 ),
                 "away": dict(
-                    self.cfg.get("teams", {}).get(
-                        "away", _default_config()["teams"]["away"]
-                    )
+                    self.cfg.get("teams", {}).get("away", _default_config()["teams"]["away"])
                 ),
             },
             "drawing": dict(self.cfg.get("drawing", _default_config()["drawing"])),
@@ -1831,9 +1753,7 @@ class ScoutApp(tk.Tk):
                     f"Help markdown is at vaila/help/scout_vaila.md. Could not open automatically: {exc}",
                 )
             return
-        messagebox.showinfo(
-            "Help", "Help page not found at vaila/help/scout_vaila.html or .md"
-        )
+        messagebox.showinfo("Help", "Help page not found at vaila/help/scout_vaila.html or .md")
 
     def open_shortcuts(self):
         win = tk.Toplevel(self)
@@ -1888,7 +1808,7 @@ class ScoutApp(tk.Tk):
             if not self.events:
                 return
             df = pd.DataFrame([e.to_row() for e in self.events])
-            rows: List[Dict[str, str]] = []
+            rows: list[dict[str, str]] = []
             for (team, player), g in df.groupby(["team", "player"], sort=True):
                 times = sorted(g["timestamp_s"].astype(float).tolist())
                 rows.append(
@@ -1901,14 +1821,8 @@ class ScoutApp(tk.Tk):
                         "timestamps": ";".join(f"{t:.2f}" for t in times),
                     }
                 )
-            out_df = (
-                pd.DataFrame(rows)
-                .sort_values(["team", "player"])
-                .reset_index(drop=True)
-            )
-            out_path = events_csv_path.with_name(
-                events_csv_path.stem + "_players_summary.csv"
-            )
+            out_df = pd.DataFrame(rows).sort_values(["team", "player"]).reset_index(drop=True)
+            out_path = events_csv_path.with_name(events_csv_path.stem + "_players_summary.csv")
             out_df.to_csv(out_path, index=False)
         except Exception as exc:  # noqa: BLE001
             print(f"[yellow]Warning: could not write players summary[/]: {exc}")
@@ -2002,16 +1916,12 @@ class ScoutApp(tk.Tk):
         for item in self.home_tv.get_children():
             self.home_tv.delete(item)
         for no in self._get_players_numbers("home"):
-            self.home_tv.insert(
-                "", tk.END, values=(no, self._get_player_name("home", no))
-            )
+            self.home_tv.insert("", tk.END, values=(no, self._get_player_name("home", no)))
         # Fill away roster
         for item in self.away_tv.get_children():
             self.away_tv.delete(item)
         for no in self._get_players_numbers("away"):
-            self.away_tv.insert(
-                "", tk.END, values=(no, self._get_player_name("away", no))
-            )
+            self.away_tv.insert("", tk.END, values=(no, self._get_player_name("away", no)))
 
     def _on_roster_select(self, which: str):
         tv = self.home_tv if which == "home" else self.away_tv
@@ -2032,7 +1942,7 @@ class ScoutApp(tk.Tk):
     def _team_key_from_name(self, team_name: str) -> str:
         return "home" if team_name == self.cfg["teams"]["home"]["name"] else "away"
 
-    def _get_players_numbers(self, team_key: str) -> List[str]:
+    def _get_players_numbers(self, team_key: str) -> list[str]:
         return list(self.cfg["teams"][team_key].get("players", []))
 
     def _get_player_name(self, team_key: str, number: str) -> str:
@@ -2048,11 +1958,8 @@ class ScoutApp(tk.Tk):
             return f"{number} {short}"
         return str(number)
 
-    def _players_display_list(self, team_key: str) -> List[str]:
-        return [
-            self._display_for(team_key, num)
-            for num in self._get_players_numbers(team_key)
-        ]
+    def _players_display_list(self, team_key: str) -> list[str]:
+        return [self._display_for(team_key, num) for num in self._get_players_numbers(team_key)]
 
     def _parse_display_to_number(self, display: str) -> str:
         return display.strip().split()[0] if display else ""
@@ -2085,12 +1992,8 @@ class ScoutApp(tk.Tk):
             if self.team_var.get() not in teams:
                 self.team_var.set(teams[0])
             # Update roster labels with new team names
-            self.home_tv.master.configure(
-                text=f"Home ({self.cfg['teams']['home']['name']})"
-            )
-            self.away_tv.master.configure(
-                text=f"Away ({self.cfg['teams']['away']['name']})"
-            )
+            self.home_tv.master.configure(text=f"Home ({self.cfg['teams']['home']['name']})")
+            self.away_tv.master.configure(text=f"Away ({self.cfg['teams']['away']['name']})")
             self._on_team_changed()
 
     def convert_skout_to_vaila(self):
@@ -2160,9 +2063,7 @@ class ScoutApp(tk.Tk):
             ]
 
             # Run conversion
-            result = subprocess.run(
-                cmd, capture_output=True, text=True, cwd=Path(__file__).parent
-            )
+            result = subprocess.run(cmd, capture_output=True, text=True, cwd=Path(__file__).parent)
 
             if result.returncode == 0:
                 messagebox.showinfo(
@@ -2180,13 +2081,9 @@ class ScoutApp(tk.Tk):
                     new_cfg = read_toml_config(toml_output)
                     if new_cfg:
                         self.cfg = new_cfg
-                        messagebox.showinfo(
-                            "Success", "Configuration loaded successfully!"
-                        )
+                        messagebox.showinfo("Success", "Configuration loaded successfully!")
                     else:
-                        messagebox.showerror(
-                            "Error", "Failed to load the generated config file."
-                        )
+                        messagebox.showerror("Error", "Failed to load the generated config file.")
 
             else:
                 error_msg = result.stderr if result.stderr else "Unknown error occurred"
@@ -2195,13 +2092,11 @@ class ScoutApp(tk.Tk):
                 )
 
         except Exception as e:
-            messagebox.showerror(
-                "Error", f"An error occurred during conversion:\n\n{str(e)}"
-            )
+            messagebox.showerror("Error", f"An error occurred during conversion:\n\n{str(e)}")
 
 
 class RenameTeamsDialog(tk.Toplevel):
-    def __init__(self, parent: tk.Tk, cfg: Dict):
+    def __init__(self, parent: tk.Tk, cfg: dict):
         super().__init__(parent)
         self.title("Rename Teams")
         self.resizable(True, True)
@@ -2213,27 +2108,17 @@ class RenameTeamsDialog(tk.Toplevel):
         frame.columnconfigure(0, weight=0)
         frame.columnconfigure(1, weight=1)
 
-        ttk.Label(frame, text="Home team name:").grid(
-            row=0, column=0, sticky=tk.W, padx=4, pady=4
-        )
+        ttk.Label(frame, text="Home team name:").grid(row=0, column=0, sticky=tk.W, padx=4, pady=4)
         self.home_var = tk.StringVar(value=cfg["teams"]["home"].get("name", "HOME"))
-        ttk.Entry(frame, textvariable=self.home_var, width=24).grid(
-            row=0, column=1, padx=4, pady=4
-        )
+        ttk.Entry(frame, textvariable=self.home_var, width=24).grid(row=0, column=1, padx=4, pady=4)
 
-        ttk.Label(frame, text="Away team name:").grid(
-            row=1, column=0, sticky=tk.W, padx=4, pady=4
-        )
+        ttk.Label(frame, text="Away team name:").grid(row=1, column=0, sticky=tk.W, padx=4, pady=4)
         self.away_var = tk.StringVar(value=cfg["teams"]["away"].get("name", "AWAY"))
-        ttk.Entry(frame, textvariable=self.away_var, width=24).grid(
-            row=1, column=1, padx=4, pady=4
-        )
+        ttk.Entry(frame, textvariable=self.away_var, width=24).grid(row=1, column=1, padx=4, pady=4)
 
         btns = ttk.Frame(frame)
         btns.grid(row=2, column=0, columnspan=2, pady=(8, 0), sticky=tk.E)
-        ttk.Button(btns, text="Cancel", command=self.destroy).pack(
-            side=tk.RIGHT, padx=4
-        )
+        ttk.Button(btns, text="Cancel", command=self.destroy).pack(side=tk.RIGHT, padx=4)
         ttk.Button(btns, text="Apply", command=self._apply).pack(side=tk.RIGHT, padx=4)
 
         self.grab_set()
@@ -2249,11 +2134,11 @@ class RenameTeamsDialog(tk.Toplevel):
 
 
 class ConfigDialog(tk.Toplevel):
-    def __init__(self, parent: tk.Tk, cfg: Dict):
+    def __init__(self, parent: tk.Tk, cfg: dict):
         super().__init__(parent)
         self.title("Edit Scout Config")
         self.resizable(True, True)
-        self.result: Optional[Dict] = None
+        self.result: dict | None = None
 
         # Clone config
         self.cfg = {
@@ -2271,12 +2156,8 @@ class ConfigDialog(tk.Toplevel):
         frame.pack(fill=tk.BOTH, expand=True)
 
         # Field size
-        ttk.Label(frame, text="Field width (m):").grid(
-            row=0, column=0, sticky=tk.W, padx=4, pady=4
-        )
-        self.field_w_var = tk.StringVar(
-            value=str(self.cfg["project"].get("field_width_m", 105))
-        )
+        ttk.Label(frame, text="Field width (m):").grid(row=0, column=0, sticky=tk.W, padx=4, pady=4)
+        self.field_w_var = tk.StringVar(value=str(self.cfg["project"].get("field_width_m", 105)))
         ttk.Entry(frame, textvariable=self.field_w_var, width=12).grid(
             row=0, column=1, padx=4, pady=4
         )
@@ -2284,29 +2165,21 @@ class ConfigDialog(tk.Toplevel):
         ttk.Label(frame, text="Field height (m):").grid(
             row=0, column=2, sticky=tk.W, padx=4, pady=4
         )
-        self.field_h_var = tk.StringVar(
-            value=str(self.cfg["project"].get("field_height_m", 68))
-        )
+        self.field_h_var = tk.StringVar(value=str(self.cfg["project"].get("field_height_m", 68)))
         ttk.Entry(frame, textvariable=self.field_h_var, width=12).grid(
             row=0, column=3, padx=4, pady=4
         )
 
         # Home team
-        ttk.Label(frame, text="Home team name:").grid(
-            row=1, column=0, sticky=tk.W, padx=4, pady=4
-        )
-        self.home_name_var = tk.StringVar(
-            value=self.cfg["teams"]["home"].get("name", "HOME")
-        )
+        ttk.Label(frame, text="Home team name:").grid(row=1, column=0, sticky=tk.W, padx=4, pady=4)
+        self.home_name_var = tk.StringVar(value=self.cfg["teams"]["home"].get("name", "HOME"))
         ttk.Entry(frame, textvariable=self.home_name_var, width=20).grid(
             row=1, column=1, padx=4, pady=4
         )
         ttk.Label(frame, text="Home color (#hex or name):").grid(
             row=1, column=2, sticky=tk.W, padx=4, pady=4
         )
-        self.home_color_var = tk.StringVar(
-            value=self.cfg["teams"]["home"].get("color", "#1f77b4")
-        )
+        self.home_color_var = tk.StringVar(value=self.cfg["teams"]["home"].get("color", "#1f77b4"))
         ttk.Entry(frame, textvariable=self.home_color_var, width=20).grid(
             row=1, column=3, padx=4, pady=4
         )
@@ -2334,21 +2207,15 @@ class ConfigDialog(tk.Toplevel):
         )
 
         # Away team
-        ttk.Label(frame, text="Away team name:").grid(
-            row=3, column=0, sticky=tk.W, padx=4, pady=4
-        )
-        self.away_name_var = tk.StringVar(
-            value=self.cfg["teams"]["away"].get("name", "AWAY")
-        )
+        ttk.Label(frame, text="Away team name:").grid(row=3, column=0, sticky=tk.W, padx=4, pady=4)
+        self.away_name_var = tk.StringVar(value=self.cfg["teams"]["away"].get("name", "AWAY"))
         ttk.Entry(frame, textvariable=self.away_name_var, width=20).grid(
             row=3, column=1, padx=4, pady=4
         )
         ttk.Label(frame, text="Away color (#hex or name):").grid(
             row=3, column=2, sticky=tk.W, padx=4, pady=4
         )
-        self.away_color_var = tk.StringVar(
-            value=self.cfg["teams"]["away"].get("color", "#d62728")
-        )
+        self.away_color_var = tk.StringVar(value=self.cfg["teams"]["away"].get("color", "#d62728"))
         ttk.Entry(frame, textvariable=self.away_color_var, width=20).grid(
             row=3, column=3, padx=4, pady=4
         )
@@ -2402,9 +2269,7 @@ class ConfigDialog(tk.Toplevel):
         # Buttons
         btns = ttk.Frame(frame)
         btns.grid(row=7, column=0, columnspan=4, pady=(8, 0), sticky=tk.E)
-        ttk.Button(btns, text="Cancel", command=self.destroy).pack(
-            side=tk.RIGHT, padx=4
-        )
+        ttk.Button(btns, text="Cancel", command=self.destroy).pack(side=tk.RIGHT, padx=4)
         ttk.Button(btns, text="Apply", command=self._apply).pack(side=tk.RIGHT, padx=4)
 
         self.grab_set()
@@ -2417,18 +2282,14 @@ class ConfigDialog(tk.Toplevel):
         except ValueError:
             messagebox.showerror("Error", "Field size must be numeric.")
             return
-        home_players = [
-            p.strip() for p in self.home_players_var.get().split(",") if p.strip()
-        ]
-        away_players = [
-            p.strip() for p in self.away_players_var.get().split(",") if p.strip()
-        ]
+        home_players = [p.strip() for p in self.home_players_var.get().split(",") if p.strip()]
+        away_players = [p.strip() for p in self.away_players_var.get().split(",") if p.strip()]
         actions = [a.strip() for a in self.actions_var.get().split(",") if a.strip()]
         results = [r.strip() for r in self.results_var.get().split(",") if r.strip()]
 
         # Parse names mappings
-        def parse_names(s: str) -> Dict[str, str]:
-            out: Dict[str, str] = {}
+        def parse_names(s: str) -> dict[str, str]:
+            out: dict[str, str] = {}
             for pair in [p.strip() for p in s.split(";") if p.strip()]:
                 if ":" in pair:
                     k, v = pair.split(":", 1)
@@ -2452,14 +2313,10 @@ class ConfigDialog(tk.Toplevel):
         self.cfg["project"]["field_width_m"] = fw
         self.cfg["project"]["field_height_m"] = fh
         self.cfg["teams"]["home"]["name"] = self.home_name_var.get().strip() or "HOME"
-        self.cfg["teams"]["home"]["players"] = home_players or [
-            str(n) for n in range(1, 24)
-        ]
+        self.cfg["teams"]["home"]["players"] = home_players or [str(n) for n in range(1, 24)]
         self.cfg["teams"]["home"]["players_names"] = home_names
         self.cfg["teams"]["away"]["name"] = self.away_name_var.get().strip() or "AWAY"
-        self.cfg["teams"]["away"]["players"] = away_players or [
-            str(n) for n in range(1, 24)
-        ]
+        self.cfg["teams"]["away"]["players"] = away_players or [str(n) for n in range(1, 24)]
         self.cfg["teams"]["away"]["players_names"] = away_names
         self.cfg["actions"] = actions or _default_config()["actions"]
         self.cfg["results"] = results or _default_config()["results"]
@@ -2468,7 +2325,7 @@ class ConfigDialog(tk.Toplevel):
         self.destroy()
 
 
-def _locate_or_init_config() -> Dict:
+def _locate_or_init_config() -> dict:
     """Find the TOML config alongside the script, or under vaila/models, else create template there."""
     here = Path(__file__).resolve()
     script_dir = here.parent

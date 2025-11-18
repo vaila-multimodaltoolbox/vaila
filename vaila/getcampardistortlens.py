@@ -1,31 +1,24 @@
-import cv2
-import numpy as np
 import os
 import tkinter as tk
-from tkinter import filedialog, messagebox
-import time
 from datetime import datetime
+from tkinter import filedialog, messagebox
+
+import cv2
+import numpy as np
 
 
-def calibrate_camera_from_images(
-    calib_files, pattern_size, square_size, show_images=False
-):
+def calibrate_camera_from_images(calib_files, pattern_size, square_size, show_images=False):
     """
     Receives a list of paths to chessboard images,
     detects the internal corners and returns (camera_matrix, dist_coeffs).
     """
     criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
     objp = np.zeros((pattern_size[0] * pattern_size[1], 3), np.float32)
-    objp[:, :2] = (
-        np.mgrid[0 : pattern_size[0], 0 : pattern_size[1]].T.reshape(-1, 2)
-        * square_size
-    )
+    objp[:, :2] = np.mgrid[0 : pattern_size[0], 0 : pattern_size[1]].T.reshape(-1, 2) * square_size
 
     # Criar diretório para salvar resultados da calibração
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_dir = os.path.join(
-        os.path.dirname(calib_files[0]), f"calibration_results_{timestamp}"
-    )
+    output_dir = os.path.join(os.path.dirname(calib_files[0]), f"calibration_results_{timestamp}")
     os.makedirs(output_dir, exist_ok=True)
 
     # Diretório para salvar imagens detectadas
@@ -58,9 +51,7 @@ def calibrate_camera_from_images(
         detection_img = img.copy()
         cv2.drawChessboardCorners(detection_img, pattern_size, corners, found)
         base_name = os.path.splitext(os.path.basename(f))[0]
-        cv2.imwrite(
-            os.path.join(detection_dir, f"{base_name}_detected.jpg"), detection_img
-        )
+        cv2.imwrite(os.path.join(detection_dir, f"{base_name}_detected.jpg"), detection_img)
 
         # Mostrar apenas se solicitado
         if show_images:
@@ -160,9 +151,7 @@ def undistort_image(img_path, camera_matrix, dist_coeffs, alpha, output_dir=None
     # Processar cada alpha e salvar resultado
     results = {}
     for a in alpha_values:
-        new_mtx, roi = cv2.getOptimalNewCameraMatrix(
-            camera_matrix, dist_coeffs, (w, h), a, (w, h)
-        )
+        new_mtx, roi = cv2.getOptimalNewCameraMatrix(camera_matrix, dist_coeffs, (w, h), a, (w, h))
         undistorted = cv2.undistort(img, camera_matrix, dist_coeffs, None, new_mtx)
 
         # Aplicar recorte se ROI for válido
@@ -210,9 +199,7 @@ def undistort_image(img_path, camera_matrix, dist_coeffs, alpha, output_dir=None
     cv2.imwrite(compare_path, comparison)
 
     # Salvar parâmetros
-    fs = cv2.FileStorage(
-        os.path.join(output_dir, f"{base_name}_calib.xml"), cv2.FILE_STORAGE_WRITE
-    )
+    fs = cv2.FileStorage(os.path.join(output_dir, f"{base_name}_calib.xml"), cv2.FILE_STORAGE_WRITE)
     fs.write("camera_matrix", camera_matrix)
     fs.write("dist_coeffs", dist_coeffs)
     fs.write("alpha", alpha)
@@ -276,9 +263,7 @@ def analyze_chessboard(calib_files, pattern_size):
             # Calculate the distance between adjacent corners (estimate of the square size)
             pixel_sizes = []
             for i in range(len(corners) - 1):
-                if (
-                    i % pattern_size[0] != pattern_size[0] - 1
-                ):  # Do not calculate between lines
+                if i % pattern_size[0] != pattern_size[0] - 1:  # Do not calculate between lines
                     dist = np.sqrt(
                         (corners[i + 1][0][0] - corners[i][0][0]) ** 2
                         + (corners[i + 1][0][1] - corners[i][0][1]) ** 2
@@ -377,9 +362,7 @@ def enhanced_chessboard_detection(calib_files, pattern_sizes=None):
         # Try to find the board with different patterns and methods
         for method_name, img_to_use, flags in methods:
             for pattern in pattern_sizes:
-                found, corners = cv2.findChessboardCorners(
-                    img_to_use, pattern, flags=flags
-                )
+                found, corners = cv2.findChessboardCorners(img_to_use, pattern, flags=flags)
 
                 if found:
                     print(f"[SUCCESS] Found with {method_name}, pattern={pattern}")
@@ -400,9 +383,7 @@ def enhanced_chessboard_detection(calib_files, pattern_sizes=None):
             corner_count = 0
 
             try:
-                refined_corners = cv2.cornerSubPix(
-                    gray, best_corners, (11, 11), (-1, -1), criteria
-                )
+                refined_corners = cv2.cornerSubPix(gray, best_corners, (11, 11), (-1, -1), criteria)
                 corner_count = len(refined_corners)
             except Exception as e:
                 print(f"[ERROR] cornerSubPix falhou: {e}")
@@ -414,9 +395,7 @@ def enhanced_chessboard_detection(calib_files, pattern_sizes=None):
                     int(best_pattern[0]),
                     int(best_pattern[1]),
                 )  # Ensure it is an integer tuple
-                cv2.drawChessboardCorners(
-                    result_img, pattern_size, refined_corners, True
-                )
+                cv2.drawChessboardCorners(result_img, pattern_size, refined_corners, True)
             except Exception as e:
                 print(f"[ERROR] drawChessboardCorners failed: {e}")
 
@@ -456,11 +435,9 @@ def enhanced_chessboard_detection(calib_files, pattern_sizes=None):
                 )
 
                 if found_circles and corners_circles is not None:
-                    print(f"[INFO] Detected as asymmetric circle grid!")
+                    print("[INFO] Detected as asymmetric circle grid!")
                     try:
-                        cv2.drawChessboardCorners(
-                            result_img, circle_pattern, corners_circles, True
-                        )
+                        cv2.drawChessboardCorners(result_img, circle_pattern, corners_circles, True)
                     except Exception as e:
                         print(f"[ERROR] drawChessboardCorners for circles failed: {e}")
             except Exception as e:
@@ -529,9 +506,7 @@ class App(tk.Tk):
 
         # Square size
         row += 1
-        tk.Label(main_frame, text="Square size (cm):").grid(
-            row=row, column=0, sticky="w"
-        )
+        tk.Label(main_frame, text="Square size (cm):").grid(row=row, column=0, sticky="w")
         self.size = tk.Entry(main_frame)
         self.size.insert(0, "10.0")
         self.size.grid(row=row, column=1, sticky="we")
@@ -562,20 +537,20 @@ class App(tk.Tk):
         buttons_frame = tk.Frame(main_frame)
         buttons_frame.grid(row=row, column=0, columnspan=2, sticky="we", pady=10)
 
-        tk.Button(
-            buttons_frame, text="Select calibration", command=self.load_calib, width=15
-        ).pack(side=tk.LEFT, padx=5, expand=True, fill=tk.X)
-        tk.Button(
-            buttons_frame, text="Process image", command=self.run_undistort, width=15
-        ).pack(side=tk.LEFT, padx=5, expand=True, fill=tk.X)
+        tk.Button(buttons_frame, text="Select calibration", command=self.load_calib, width=15).pack(
+            side=tk.LEFT, padx=5, expand=True, fill=tk.X
+        )
+        tk.Button(buttons_frame, text="Process image", command=self.run_undistort, width=15).pack(
+            side=tk.LEFT, padx=5, expand=True, fill=tk.X
+        )
 
         row += 1
         buttons_frame2 = tk.Frame(main_frame)
         buttons_frame2.grid(row=row, column=0, columnspan=2, sticky="we")
 
-        tk.Button(
-            buttons_frame2, text="Analyze board", command=self.analyze_board, width=15
-        ).pack(side=tk.LEFT, padx=5, expand=True, fill=tk.X)
+        tk.Button(buttons_frame2, text="Analyze board", command=self.analyze_board, width=15).pack(
+            side=tk.LEFT, padx=5, expand=True, fill=tk.X
+        )
         tk.Button(
             buttons_frame2,
             text="Debug Detection",
@@ -662,9 +637,7 @@ class App(tk.Tk):
             # Show results in a window
             result_text = "Detection results:\n\n"
             for img, data in results.items():
-                result_text += (
-                    f"{img}: pattern={data['pattern']}, method={data['method']}\n"
-                )
+                result_text += f"{img}: pattern={data['pattern']}, method={data['method']}\n"
 
             messagebox.showinfo("Detection results", result_text)
         else:

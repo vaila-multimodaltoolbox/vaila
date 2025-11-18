@@ -65,32 +65,32 @@ License:
     This project is licensed under the terms of AGPLv3.0.
 """
 
-import os
-import time
 import datetime
-import cv2
-import mediapipe as mp
-import tkinter as tk
-from tkinter import filedialog, messagebox
-from pathlib import Path
-from rich import print
-import numpy as np
-from collections import deque
-from scipy.signal import savgol_filter
-from mediapipe.framework.formats import landmark_pb2
-import pandas as pd
-import tempfile
+import gc
+import os
 import platform
 import shutil
+import tempfile
+import time
+import tkinter as tk
+from collections import deque
+from pathlib import Path
+from tkinter import filedialog, messagebox
+
+import cv2
+import mediapipe as mp
+import numpy as np
+import pandas as pd
 import psutil
-import gc
+from mediapipe.framework.formats import landmark_pb2
 
 # Additional imports for filtering and interpolation
 from pykalman import KalmanFilter
-from statsmodels.nonparametric.smoothers_lowess import lowess
+from rich import print
 from scipy.interpolate import UnivariateSpline
+from scipy.signal import butter, savgol_filter, sosfiltfilt
+from statsmodels.nonparametric.smoothers_lowess import lowess
 from statsmodels.tsa.arima.model import ARIMA
-from scipy.signal import butter, sosfiltfilt
 
 # Import TOML for configuration management
 try:
@@ -105,9 +105,9 @@ except ImportError:
 
 # Additional imports for CPU throttling and better resource management
 # These are used conditionally for Linux-specific features
-import threading  # noqa: F401 - For future Linux thread management
-import signal  # noqa: F401 - For future Linux process management
 import multiprocessing  # noqa: F401 - For future Linux batch processing
+import signal  # noqa: F401 - For future Linux process management
+import threading  # noqa: F401 - For future Linux thread management
 
 landmark_names = [
     "nose",
@@ -232,9 +232,7 @@ def butter_filter(
         high = highcut / nyq
         sos = butter(order, [low, high], btype="band", analog=False, output="sos")
     else:
-        raise ValueError(
-            "Unsupported filter type. Use 'low' for low-pass or 'band' for band-pass."
-        )
+        raise ValueError("Unsupported filter type. Use 'low' for low-pass or 'band' for band-pass.")
 
     data = np.asarray(data)
     axis = 0  # Filtering along the first axis (rows)
@@ -398,19 +396,15 @@ def kalman_smooth(data, n_iter=5, mode=1):
                 )
 
                 # Apply EM algorithm and smoothing
-                smoothed_state_means, _ = kf.em(
-                    data[:, j : j + 1], n_iter=n_iter
-                ).smooth(data[:, j : j + 1])
-                filtered_data[:, j] = (
-                    alpha * smoothed_state_means[:, 0] + (1 - alpha) * data[:, j]
+                smoothed_state_means, _ = kf.em(data[:, j : j + 1], n_iter=n_iter).smooth(
+                    data[:, j : j + 1]
                 )
+                filtered_data[:, j] = alpha * smoothed_state_means[:, 0] + (1 - alpha) * data[:, j]
 
         else:  # mode == 2
             # Process x,y pairs together
             if n_features % 2 != 0:
-                raise ValueError(
-                    "For 2D mode, number of features must be even (x,y pairs)"
-                )
+                raise ValueError("For 2D mode, number of features must be even (x,y pairs)")
 
             filtered_data = np.empty_like(data)
             for j in range(0, n_features, 2):
@@ -446,13 +440,9 @@ def kalman_smooth(data, n_iter=5, mode=1):
                 )
 
                 observations = np.column_stack([data[:, j], data[:, j + 1]])
-                smoothed_state_means, _ = kf.em(observations, n_iter=n_iter).smooth(
-                    observations
-                )
+                smoothed_state_means, _ = kf.em(observations, n_iter=n_iter).smooth(observations)
 
-                filtered_data[:, j] = (
-                    alpha * smoothed_state_means[:, 0] + (1 - alpha) * data[:, j]
-                )
+                filtered_data[:, j] = alpha * smoothed_state_means[:, 0] + (1 - alpha) * data[:, j]
                 filtered_data[:, j + 1] = (
                     alpha * smoothed_state_means[:, 1] + (1 - alpha) * data[:, j + 1]
                 )
@@ -506,9 +496,7 @@ def arima_smooth(data, order=(1, 0, 0)):
 
                 valid_data = col_data[valid_mask]
                 if len(valid_data) < max(order) + 1:
-                    print(
-                        f"Warning: Not enough data points for ARIMA model in column {j}"
-                    )
+                    print(f"Warning: Not enough data points for ARIMA model in column {j}")
                     smoothed[:, j] = col_data
                     continue
 
@@ -584,9 +572,7 @@ def save_config_to_toml(config, filepath):
                 "resize_scale": config.get("resize_scale", 2),
             },
             "advanced_filtering": {
-                "enable_advanced_filtering": config.get(
-                    "enable_advanced_filtering", False
-                ),
+                "enable_advanced_filtering": config.get("enable_advanced_filtering", False),
                 "interp_method": config.get("interp_method", "linear"),
                 "smooth_method": config.get("smooth_method", "none"),
                 "max_gap": config.get("max_gap", 60),
@@ -608,29 +594,19 @@ def save_config_to_toml(config, filepath):
                     "arima_q": 0,
                 },
             ),
-            "enable_padding": str(
-                config.get("enable_padding", ENABLE_PADDING_DEFAULT)
-            ).lower(),
-            "pad_start_frames": config.get(
-                "pad_start_frames", PAD_START_FRAMES_DEFAULT
-            ),
+            "enable_padding": str(config.get("enable_padding", ENABLE_PADDING_DEFAULT)).lower(),
+            "pad_start_frames": config.get("pad_start_frames", PAD_START_FRAMES_DEFAULT),
         }
 
         with open(filepath, "w") as f:
             # Write header comment
-            f.write(
-                "# ================================================================\n"
-            )
+            f.write("# ================================================================\n")
             f.write("# MediaPipe 2D Analysis Configuration File\n")
             f.write(
                 "# Generated automatically by markerless_2D_analysis.py in vaila Multimodal Analysis Toolbox\n"
             )
-            f.write(
-                f"# Created: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-            )
-            f.write(
-                "# ================================================================\n"
-            )
+            f.write(f"# Created: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write("# ================================================================\n")
             f.write("#\n")
             f.write("# HOW TO USE THIS FILE:\n")
             f.write("# 1. Edit the values below to customize your analysis\n")
@@ -642,19 +618,13 @@ def save_config_to_toml(config, filepath):
             f.write("# - true/false must be lowercase\n")
             f.write("# - Numbers can have decimals (3.0) or not (30)\n")
             f.write('# - Text must be in quotes ("linear")\n')
-            f.write(
-                "# ================================================================\n\n"
-            )
+            f.write("# ================================================================\n\n")
 
             # Write sections with comments
             f.write("[mediapipe]\n")
-            f.write(
-                "# ================================================================\n"
-            )
+            f.write("# ================================================================\n")
             f.write("# MEDIAPIPE POSE DETECTION SETTINGS\n")
-            f.write(
-                "# ================================================================\n"
-            )
+            f.write("# ================================================================\n")
             f.write("# These control how MediaPipe detects poses in your video\n")
 
             mp = toml_config["mediapipe"]
@@ -683,41 +653,29 @@ def save_config_to_toml(config, filepath):
             )
             f.write("#                        # 0 = fastest, least accurate\n")
             f.write("#                        # 1 = balanced speed and accuracy\n")
-            f.write(
-                "#                        # 2 = slowest, most accurate (recommended)\n"
-            )
+            f.write("#                        # 2 = slowest, most accurate (recommended)\n")
 
             f.write(
                 f"enable_segmentation = {str(mp['enable_segmentation']).lower()}           # Draw person outline (true/false)\n"
             )
-            f.write(
-                "#                             # true = creates person mask (slower)\n"
-            )
+            f.write("#                             # true = creates person mask (slower)\n")
             f.write("#                             # false = only landmarks (faster)\n")
 
             f.write(
                 f"smooth_segmentation = {str(mp['smooth_segmentation']).lower()}           # Smooth the outline (true/false)\n"
             )
-            f.write(
-                "#                             # Only works if enable_segmentation = true\n"
-            )
+            f.write("#                             # Only works if enable_segmentation = true\n")
 
             f.write(
                 f"static_image_mode = {str(mp['static_image_mode']).lower()}             # Treat each frame separately (true/false)\n"
             )
-            f.write(
-                "#                           # false = track across frames (recommended)\n"
-            )
-            f.write(
-                "#                           # true = detect fresh each frame (slower)\n"
-            )
+            f.write("#                           # false = track across frames (recommended)\n")
+            f.write("#                           # true = detect fresh each frame (slower)\n")
 
             f.write(
                 f"apply_filtering = {str(mp['apply_filtering']).lower()}               # Apply built-in smoothing (true/false)\n"
             )
-            f.write(
-                "#                         # true = smoother movement (recommended)\n"
-            )
+            f.write("#                         # true = smoother movement (recommended)\n")
             f.write("#                         # false = raw detection results\n")
 
             f.write(
@@ -726,59 +684,35 @@ def save_config_to_toml(config, filepath):
             f.write(
                 "#                           # true = fill in missing landmarks (recommended)\n"
             )
-            f.write(
-                "#                           # false = leave gaps when parts are hidden\n"
-            )
+            f.write("#                           # false = leave gaps when parts are hidden\n")
 
             f.write("\n[video_resize]\n")
-            f.write(
-                "# ================================================================\n"
-            )
+            f.write("# ================================================================\n")
             f.write("# VIDEO RESIZING FOR BETTER DETECTION\n")
-            f.write(
-                "# ================================================================\n"
-            )
+            f.write("# ================================================================\n")
             f.write("# Resize video before analysis to improve pose detection\n")
-            f.write(
-                "# Useful for: small people, distant subjects, low resolution videos\n"
-            )
+            f.write("# Useful for: small people, distant subjects, low resolution videos\n")
 
             vr = toml_config["video_resize"]
             f.write(
                 f"enable_resize = {str(vr['enable_resize']).lower()}                 # Resize video before analysis (true/false)\n"
             )
-            f.write(
-                "#                           # true = upscale for better detection\n"
-            )
-            f.write(
-                "#                           # false = use original size (faster)\n"
-            )
+            f.write("#                           # true = upscale for better detection\n")
+            f.write("#                           # false = use original size (faster)\n")
 
             f.write(
                 f"resize_scale = {vr['resize_scale']}                      # Scale factor (2-8)\n"
             )
-            f.write(
-                "#                        # 2 = double size (good for most cases)\n"
-            )
+            f.write("#                        # 2 = double size (good for most cases)\n")
             f.write("#                        # 3-4 = better for very small subjects\n")
-            f.write(
-                "#                        # 5-8 = for very distant or tiny people\n"
-            )
-            f.write(
-                "#                        # Higher = better detection but much slower\n"
-            )
-            f.write(
-                "#                        # Coordinates are automatically converted back\n"
-            )
+            f.write("#                        # 5-8 = for very distant or tiny people\n")
+            f.write("#                        # Higher = better detection but much slower\n")
+            f.write("#                        # Coordinates are automatically converted back\n")
 
             f.write("\n[advanced_filtering]\n")
-            f.write(
-                "# ================================================================\n"
-            )
+            f.write("# ================================================================\n")
             f.write("# ADVANCED FILTERING AND INTERPOLATION\n")
-            f.write(
-                "# ================================================================\n"
-            )
+            f.write("# ================================================================\n")
             f.write("# Fill gaps and smooth the landmark data after detection\n")
 
             af = toml_config["advanced_filtering"]
@@ -788,30 +722,22 @@ def save_config_to_toml(config, filepath):
             f.write(
                 "#                                     # true = apply smoothing and gap filling\n"
             )
-            f.write(
-                "#                                     # false = use raw MediaPipe output\n"
-            )
+            f.write("#                                     # false = use raw MediaPipe output\n")
 
             f.write(
-                f"interp_method = \"{af['interp_method']}\"             # How to fill missing data\n"
+                f'interp_method = "{af["interp_method"]}"             # How to fill missing data\n'
             )
-            f.write(
-                '#                         # "linear" = straight lines (most common)\n'
-            )
+            f.write('#                         # "linear" = straight lines (most common)\n')
             f.write('#                         # "cubic" = curved lines (smoother)\n')
-            f.write(
-                '#                         # "nearest" = copy nearest valid point\n'
-            )
+            f.write('#                         # "nearest" = copy nearest valid point\n')
             f.write('#                         # "kalman" = predictive filling\n')
             f.write('#                         # "none" = don\'t fill gaps\n')
 
             f.write(
-                f"smooth_method = \"{af['smooth_method']}\"               # Type of smoothing to apply\n"
+                f'smooth_method = "{af["smooth_method"]}"               # Type of smoothing to apply\n'
             )
             f.write('#                       # "none" = no smoothing\n')
-            f.write(
-                '#                       # "butterworth" = most common for biomechanics\n'
-            )
+            f.write('#                       # "butterworth" = most common for biomechanics\n')
             f.write('#                       # "savgol" = preserves signal features\n')
             f.write('#                       # "lowess" = for very noisy data\n')
             f.write('#                       # "kalman" = for tracking applications\n')
@@ -820,37 +746,21 @@ def save_config_to_toml(config, filepath):
             f.write(
                 f"max_gap = {af['max_gap']}                         # Maximum gap size to fill (frames)\n"
             )
-            f.write(
-                "#                         # 60 = fill gaps up to 2 seconds (at 30fps)\n"
-            )
-            f.write(
-                "#                         # 30 = fill gaps up to 1 second (at 30fps)\n"
-            )
-            f.write(
-                "#                         # 0 = fill all gaps regardless of size\n"
-            )
+            f.write("#                         # 60 = fill gaps up to 2 seconds (at 30fps)\n")
+            f.write("#                         # 30 = fill gaps up to 1 second (at 30fps)\n")
+            f.write("#                         # 0 = fill all gaps regardless of size\n")
 
             f.write("\n[smoothing_params]\n")
-            f.write(
-                "# ================================================================\n"
-            )
+            f.write("# ================================================================\n")
             f.write("# SMOOTHING PARAMETERS - Detailed Guide for Users\n")
-            f.write(
-                "# ================================================================\n"
-            )
+            f.write("# ================================================================\n")
             f.write("# Only the parameters for your selected method will be used.\n")
-            f.write(
-                "# To use smoothing, set 'smooth_method' above to the desired option:\n"
-            )
+            f.write("# To use smoothing, set 'smooth_method' above to the desired option:\n")
             f.write("#   - 'none' = No smoothing (default)\n")
-            f.write(
-                "#   - 'savgol' = Savitzky-Golay filter (good for preserving peaks)\n"
-            )
+            f.write("#   - 'savgol' = Savitzky-Golay filter (good for preserving peaks)\n")
             f.write("#   - 'lowess' = Local regression (good for noisy data)\n")
             f.write("#   - 'kalman' = Kalman filter (good for tracking)\n")
-            f.write(
-                "#   - 'butterworth' = Butterworth filter (most common for biomechanics)\n"
-            )
+            f.write("#   - 'butterworth' = Butterworth filter (most common for biomechanics)\n")
             f.write("#   - 'splines' = Spline smoothing (very smooth curves)\n")
             f.write("#   - 'arima' = ARIMA model (for time series)\n")
             f.write("\n")
@@ -858,40 +768,24 @@ def save_config_to_toml(config, filepath):
             # Group smoothing parameters by method
             sp = toml_config["smoothing_params"]
 
-            f.write(
-                "# ----------------------------------------------------------------\n"
-            )
+            f.write("# ----------------------------------------------------------------\n")
             f.write("# SAVITZKY-GOLAY FILTER (smooth_method = 'savgol')\n")
-            f.write(
-                "# ----------------------------------------------------------------\n"
-            )
+            f.write("# ----------------------------------------------------------------\n")
             f.write("# Best for: Preserving signal features while reducing noise\n")
-            f.write(
-                "# Common use: When you want smooth movement but keep important details\n"
-            )
+            f.write("# Common use: When you want smooth movement but keep important details\n")
             f.write(
                 f"savgol_window_length = {sp['savgol_window_length']}    # Window size (must be odd number)\n"
             )
-            f.write(
-                "#                                 # Smaller = less smoothing (try 5-11)\n"
-            )
-            f.write(
-                "#                                 # Larger = more smoothing (try 13-21)\n"
-            )
+            f.write("#                                 # Smaller = less smoothing (try 5-11)\n")
+            f.write("#                                 # Larger = more smoothing (try 13-21)\n")
             f.write(
                 f"savgol_polyorder = {sp['savgol_polyorder']}        # Polynomial order (usually 2 or 3)\n"
             )
-            f.write(
-                "#                           # 2 = simpler curves, 3 = more complex curves\n\n"
-            )
+            f.write("#                           # 2 = simpler curves, 3 = more complex curves\n\n")
 
-            f.write(
-                "# ----------------------------------------------------------------\n"
-            )
+            f.write("# ----------------------------------------------------------------\n")
             f.write("# LOWESS SMOOTHING (smooth_method = 'lowess')\n")
-            f.write(
-                "# ----------------------------------------------------------------\n"
-            )
+            f.write("# ----------------------------------------------------------------\n")
             f.write("# Best for: Very noisy data that needs strong smoothing\n")
             f.write("# Common use: Poor quality videos or tremor analysis\n")
             f.write(
@@ -902,53 +796,31 @@ def save_config_to_toml(config, filepath):
             f.write(
                 f"lowess_it = {sp['lowess_it']}          # Number of iterations (usually 1-5)\n"
             )
-            f.write(
-                "#                    # More iterations = more robust but slower\n\n"
-            )
+            f.write("#                    # More iterations = more robust but slower\n\n")
 
-            f.write(
-                "# ----------------------------------------------------------------\n"
-            )
-            f.write(
-                "# BUTTERWORTH FILTER (smooth_method = 'butterworth') - MOST COMMON\n"
-            )
-            f.write(
-                "# ----------------------------------------------------------------\n"
-            )
-            f.write(
-                "# Best for: General biomechanics analysis (most used in research)\n"
-            )
+            f.write("# ----------------------------------------------------------------\n")
+            f.write("# BUTTERWORTH FILTER (smooth_method = 'butterworth') - MOST COMMON\n")
+            f.write("# ----------------------------------------------------------------\n")
+            f.write("# Best for: General biomechanics analysis (most used in research)\n")
             f.write("# Common use: Human movement, sports analysis, gait analysis\n")
             f.write("# IMPORTANT: Match butter_fs to your video frame rate!\n")
             f.write(
                 f"butter_cutoff = {sp['butter_cutoff']}    # Cutoff frequency in Hz - ADJUST THIS!\n"
             )
             f.write("#                      # Lower = more smoothing:\n")
-            f.write(
-                "#                      #   3Hz = heavy smoothing (slow movements)\n"
-            )
-            f.write(
-                "#                      #   6Hz = medium smoothing (normal walking)\n"
-            )
-            f.write(
-                "#                      #  10Hz = light smoothing (fast movements)\n"
-            )
+            f.write("#                      #   3Hz = heavy smoothing (slow movements)\n")
+            f.write("#                      #   6Hz = medium smoothing (normal walking)\n")
+            f.write("#                      #  10Hz = light smoothing (fast movements)\n")
             f.write("#                      #  15Hz = minimal smoothing (sports)\n")
             f.write(
                 f"butter_fs = {sp['butter_fs']}       # Sampling frequency = VIDEO FRAME RATE!\n"
             )
-            f.write(
-                "#                    # 30Hz for 30fps video, 60Hz for 60fps video\n"
-            )
+            f.write("#                    # 30Hz for 30fps video, 60Hz for 60fps video\n")
             f.write("#                    # 120Hz for 120fps high-speed video\n\n")
 
-            f.write(
-                "# ----------------------------------------------------------------\n"
-            )
+            f.write("# ----------------------------------------------------------------\n")
             f.write("# KALMAN FILTER (smooth_method = 'kalman')\n")
-            f.write(
-                "# ----------------------------------------------------------------\n"
-            )
+            f.write("# ----------------------------------------------------------------\n")
             f.write("# Best for: Tracking objects with predictable motion\n")
             f.write("# Common use: Following specific body parts, sports tracking\n")
             f.write(
@@ -958,77 +830,45 @@ def save_config_to_toml(config, filepath):
             f.write(
                 f"kalman_mode = {sp['kalman_mode']}          # 1 = simple mode, 2 = advanced mode\n"
             )
-            f.write(
-                "#                   # Mode 1 for most cases, Mode 2 for complex movements\n\n"
-            )
+            f.write("#                   # Mode 1 for most cases, Mode 2 for complex movements\n\n")
 
-            f.write(
-                "# ----------------------------------------------------------------\n"
-            )
+            f.write("# ----------------------------------------------------------------\n")
             f.write("# SPLINE SMOOTHING (smooth_method = 'splines')\n")
-            f.write(
-                "# ----------------------------------------------------------------\n"
-            )
+            f.write("# ----------------------------------------------------------------\n")
             f.write("# Best for: Creating very smooth curves for presentation\n")
             f.write("# Common use: Publication figures, smooth trajectories\n")
             f.write(
                 f"spline_smoothing_factor = {sp['spline_smoothing_factor']}    # Smoothing factor\n"
             )
-            f.write(
-                "#                               # 0 = no smoothing (follows data exactly)\n"
-            )
+            f.write("#                               # 0 = no smoothing (follows data exactly)\n")
             f.write("#                               # 1 = moderate smoothing\n")
             f.write("#                               # 10+ = heavy smoothing\n\n")
 
-            f.write(
-                "# ----------------------------------------------------------------\n"
-            )
+            f.write("# ----------------------------------------------------------------\n")
             f.write("# ARIMA MODEL (smooth_method = 'arima')\n")
-            f.write(
-                "# ----------------------------------------------------------------\n"
-            )
+            f.write("# ----------------------------------------------------------------\n")
             f.write("# Best for: Time series analysis and prediction\n")
-            f.write(
-                "# Common use: Advanced statistical analysis (requires expertise)\n"
-            )
-            f.write(
-                f"arima_p = {sp['arima_p']}    # Autoregressive order (usually 1-3)\n"
-            )
-            f.write(
-                f"arima_d = {sp['arima_d']}    # Differencing order (usually 0-1)\n"
-            )
-            f.write(
-                f"arima_q = {sp['arima_q']}    # Moving average order (usually 0-3)\n"
-            )
-            f.write(
-                "# Note: ARIMA requires statistical knowledge to use effectively\n\n"
-            )
+            f.write("# Common use: Advanced statistical analysis (requires expertise)\n")
+            f.write(f"arima_p = {sp['arima_p']}    # Autoregressive order (usually 1-3)\n")
+            f.write(f"arima_d = {sp['arima_d']}    # Differencing order (usually 0-1)\n")
+            f.write(f"arima_q = {sp['arima_q']}    # Moving average order (usually 0-3)\n")
+            f.write("# Note: ARIMA requires statistical knowledge to use effectively\n\n")
 
-            f.write(
-                "# ================================================================\n"
-            )
+            f.write("# ================================================================\n")
             f.write("# QUICK REFERENCE FOR COMMON SCENARIOS:\n")
-            f.write(
-                "# ================================================================\n"
-            )
+            f.write("# ================================================================\n")
             f.write("# Walking analysis:     butterworth, cutoff=6, fs=30\n")
             f.write("# Running analysis:     butterworth, cutoff=10, fs=60\n")
             f.write("# Sports (fast moves):  butterworth, cutoff=15, fs=120\n")
             f.write("# Tremor/shaky video:   lowess, frac=0.3, it=3\n")
             f.write("# Presentation plots:   splines, smoothing_factor=1.0\n")
             f.write("# Research publication: savgol, window=7, polyorder=3\n")
-            f.write(
-                "# ================================================================\n"
-            )
+            f.write("# ================================================================\n")
 
             f.write("\n[padding]\n")
-            f.write(
-                "# ================================================================\n"
-            )
+            f.write("# ================================================================\n")
             f.write("# INITIAL FRAME PADDING FOR STABILIZATION\n")
-            f.write(
-                "# ================================================================\n"
-            )
+            f.write("# ================================================================\n")
             f.write("# Add repeated frames at the start to help MediaPipe stabilize.\n")
             f.write(
                 f"enable_padding = {str(config.get('enable_padding', ENABLE_PADDING_DEFAULT)).lower()}  # true/false\n"
@@ -1054,7 +894,7 @@ def load_config_from_toml(filepath):
 
         print(f"Reading TOML file: {filepath}")
 
-        with open(filepath, "r", encoding="utf-8") as f:
+        with open(filepath, encoding="utf-8") as f:
             toml_config = toml.load(f)
 
         print(f"TOML parsed successfully. Found sections: {list(toml_config.keys())}")
@@ -1068,12 +908,8 @@ def load_config_from_toml(filepath):
             print(f"Loading MediaPipe settings: {list(mp.keys())}")
             config.update(
                 {
-                    "min_detection_confidence": float(
-                        mp.get("min_detection_confidence", 0.1)
-                    ),
-                    "min_tracking_confidence": float(
-                        mp.get("min_tracking_confidence", 0.1)
-                    ),
+                    "min_detection_confidence": float(mp.get("min_detection_confidence", 0.1)),
+                    "min_tracking_confidence": float(mp.get("min_tracking_confidence", 0.1)),
                     "model_complexity": int(mp.get("model_complexity", 2)),
                     "enable_segmentation": bool(mp.get("enable_segmentation", False)),
                     "smooth_segmentation": bool(mp.get("smooth_segmentation", False)),
@@ -1104,9 +940,7 @@ def load_config_from_toml(filepath):
             print(f"Loading advanced filtering settings: {list(af.keys())}")
             config.update(
                 {
-                    "enable_advanced_filtering": bool(
-                        af.get("enable_advanced_filtering", False)
-                    ),
+                    "enable_advanced_filtering": bool(af.get("enable_advanced_filtering", False)),
                     "interp_method": str(af.get("interp_method", "linear")),
                     "smooth_method": str(af.get("smooth_method", "none")),
                     "max_gap": int(af.get("max_gap", 60)),
@@ -1148,9 +982,7 @@ def load_config_from_toml(filepath):
                     "mode": int(sp.get("kalman_mode", 1)),
                 }
             elif smooth_method == "splines":
-                smooth_params = {
-                    "smoothing_factor": float(sp.get("spline_smoothing_factor", 1.0))
-                }
+                smooth_params = {"smoothing_factor": float(sp.get("spline_smoothing_factor", 1.0))}
             elif smooth_method == "arima":
                 smooth_params = {
                     "p": int(sp.get("arima_p", 1)),
@@ -1170,9 +1002,7 @@ def load_config_from_toml(filepath):
                 "butter_fs": float(sp.get("butter_fs", 100.0)),
                 "kalman_iterations": int(sp.get("kalman_iterations", 5)),
                 "kalman_mode": int(sp.get("kalman_mode", 1)),
-                "spline_smoothing_factor": float(
-                    sp.get("spline_smoothing_factor", 1.0)
-                ),
+                "spline_smoothing_factor": float(sp.get("spline_smoothing_factor", 1.0)),
                 "arima_p": int(sp.get("arima_p", 1)),
                 "arima_d": int(sp.get("arima_d", 0)),
                 "arima_q": int(sp.get("arima_q", 0)),
@@ -1183,12 +1013,8 @@ def load_config_from_toml(filepath):
         # Padding section
         if "padding" in toml_config:
             pad = toml_config["padding"]
-            config["enable_padding"] = bool(
-                pad.get("enable_padding", ENABLE_PADDING_DEFAULT)
-            )
-            config["pad_start_frames"] = int(
-                pad.get("pad_start_frames", PAD_START_FRAMES_DEFAULT)
-            )
+            config["enable_padding"] = bool(pad.get("enable_padding", ENABLE_PADDING_DEFAULT))
+            config["pad_start_frames"] = int(pad.get("pad_start_frames", PAD_START_FRAMES_DEFAULT))
         else:
             config["enable_padding"] = ENABLE_PADDING_DEFAULT
             config["pad_start_frames"] = PAD_START_FRAMES_DEFAULT
@@ -1233,36 +1059,18 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
         tk.Label(master, text="min_tracking_confidence (0.0 - 1.0):").grid(
             row=1, column=0, sticky="e"
         )
-        tk.Label(master, text="model_complexity (0, 1, 2):").grid(
-            row=2, column=0, sticky="e"
-        )
-        tk.Label(master, text="enable_segmentation (True/False):").grid(
-            row=3, column=0, sticky="e"
-        )
-        tk.Label(master, text="smooth_segmentation (True/False):").grid(
-            row=4, column=0, sticky="e"
-        )
-        tk.Label(master, text="static_image_mode (True/False):").grid(
-            row=5, column=0, sticky="e"
-        )
-        tk.Label(master, text="apply_filtering (True/False):").grid(
-            row=6, column=0, sticky="e"
-        )
-        tk.Label(master, text="estimate_occluded (True/False):").grid(
-            row=7, column=0, sticky="e"
-        )
-        tk.Label(master, text="enable_resize (True/False):").grid(
-            row=8, column=0, sticky="e"
-        )
-        tk.Label(master, text="resize_scale (2, 3, ...):").grid(
-            row=9, column=0, sticky="e"
-        )
+        tk.Label(master, text="model_complexity (0, 1, 2):").grid(row=2, column=0, sticky="e")
+        tk.Label(master, text="enable_segmentation (True/False):").grid(row=3, column=0, sticky="e")
+        tk.Label(master, text="smooth_segmentation (True/False):").grid(row=4, column=0, sticky="e")
+        tk.Label(master, text="static_image_mode (True/False):").grid(row=5, column=0, sticky="e")
+        tk.Label(master, text="apply_filtering (True/False):").grid(row=6, column=0, sticky="e")
+        tk.Label(master, text="estimate_occluded (True/False):").grid(row=7, column=0, sticky="e")
+        tk.Label(master, text="enable_resize (True/False):").grid(row=8, column=0, sticky="e")
+        tk.Label(master, text="resize_scale (2, 3, ...):").grid(row=9, column=0, sticky="e")
         tk.Label(master, text="Enable initial frame padding? (True/False):").grid(
             row=10, column=0, sticky="e"
         )
-        tk.Label(master, text="Number of padding frames:").grid(
-            row=11, column=0, sticky="e"
-        )
+        tk.Label(master, text="Number of padding frames:").grid(row=11, column=0, sticky="e")
 
         # Entries
         self.min_detection_entry = tk.Entry(master)
@@ -1305,23 +1113,19 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
         self.pad_start_frames_entry.grid(row=11, column=1)
 
         # TOML section
-        toml_frame = tk.LabelFrame(
-            master, text="Advanced Configuration (TOML)", padx=10, pady=10
-        )
+        toml_frame = tk.LabelFrame(master, text="Advanced Configuration (TOML)", padx=10, pady=10)
         toml_frame.grid(row=12, column=0, columnspan=2, pady=(10, 0), sticky="ew")
         btns_frame = tk.Frame(toml_frame)
         btns_frame.pack()
-        tk.Button(
-            btns_frame, text="Load Configuration TOML", command=self.load_config_file
-        ).pack(side="left", padx=5)
+        tk.Button(btns_frame, text="Load Configuration TOML", command=self.load_config_file).pack(
+            side="left", padx=5
+        )
         tk.Button(
             btns_frame,
             text="Create Default TOML Template",
             command=self.create_default_toml_template,
         ).pack(side="left", padx=5)
-        tk.Button(btns_frame, text="Help", command=self.show_help).pack(
-            side="left", padx=5
-        )
+        tk.Button(btns_frame, text="Help", command=self.show_help).pack(side="left", padx=5)
         self.toml_label = tk.Label(toml_frame, text="No TOML loaded", fg="gray")
         self.toml_label.pack()
 
@@ -1347,19 +1151,11 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
             default_config = get_default_config()
             # Build dict in format expected by save_config_to_toml
             save_config = {
-                "min_detection_confidence": default_config["mediapipe"][
-                    "min_detection_confidence"
-                ],
-                "min_tracking_confidence": default_config["mediapipe"][
-                    "min_tracking_confidence"
-                ],
+                "min_detection_confidence": default_config["mediapipe"]["min_detection_confidence"],
+                "min_tracking_confidence": default_config["mediapipe"]["min_tracking_confidence"],
                 "model_complexity": default_config["mediapipe"]["model_complexity"],
-                "enable_segmentation": default_config["mediapipe"][
-                    "enable_segmentation"
-                ],
-                "smooth_segmentation": default_config["mediapipe"][
-                    "smooth_segmentation"
-                ],
+                "enable_segmentation": default_config["mediapipe"]["enable_segmentation"],
+                "smooth_segmentation": default_config["mediapipe"]["smooth_segmentation"],
                 "static_image_mode": default_config["mediapipe"]["static_image_mode"],
                 "apply_filtering": default_config["mediapipe"]["apply_filtering"],
                 "estimate_occluded": default_config["mediapipe"]["estimate_occluded"],
@@ -1410,34 +1206,33 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
                     )
                     # Show summary of loaded config
                     summary = f"TOML loaded: {os.path.basename(file_path)}\n\n"
-                    summary += f"min_detection_confidence: {config.get('min_detection_confidence')}\n"
+                    summary += (
+                        f"min_detection_confidence: {config.get('min_detection_confidence')}\n"
+                    )
                     summary += f"min_tracking_confidence: {config.get('min_tracking_confidence')}\n"
                     summary += f"model_complexity: {config.get('model_complexity')}\n"
-                    summary += (
-                        f"enable_segmentation: {config.get('enable_segmentation')}\n"
-                    )
-                    summary += (
-                        f"smooth_segmentation: {config.get('smooth_segmentation')}\n"
-                    )
+                    summary += f"enable_segmentation: {config.get('enable_segmentation')}\n"
+                    summary += f"smooth_segmentation: {config.get('smooth_segmentation')}\n"
                     summary += f"static_image_mode: {config.get('static_image_mode')}\n"
                     summary += f"apply_filtering: {config.get('apply_filtering')}\n"
                     summary += f"estimate_occluded: {config.get('estimate_occluded')}\n"
                     summary += f"enable_resize: {config.get('enable_resize')}\n"
                     summary += f"resize_scale: {config.get('resize_scale')}\n"
-                    summary += f"enable_advanced_filtering: {config.get('enable_advanced_filtering')}\n"
+                    summary += (
+                        f"enable_advanced_filtering: {config.get('enable_advanced_filtering')}\n"
+                    )
                     summary += f"interp_method: {config.get('interp_method')}\n"
                     summary += f"smooth_method: {config.get('smooth_method')}\n"
                     summary += f"max_gap: {config.get('max_gap')}\n"
                     if "smooth_params" in config:
                         summary += f"smooth_params: {config['smooth_params']}\n"
-                    print(
-                        "\n=== TOML configuration loaded and will be used ===\n"
-                        + summary
-                    )
+                    print("\n=== TOML configuration loaded and will be used ===\n" + summary)
                     from tkinter import messagebox
 
                     messagebox.showinfo("TOML Parameters Loaded", summary)
-                    summary += f"enable_padding: {config.get('enable_padding', ENABLE_PADDING_DEFAULT)}\n"
+                    summary += (
+                        f"enable_padding: {config.get('enable_padding', ENABLE_PADDING_DEFAULT)}\n"
+                    )
                     summary += f"pad_start_frames: {config.get('pad_start_frames', PAD_START_FRAMES_DEFAULT)}\n"
                 else:
                     self.toml_label.config(text="Error loading TOML", fg="red")
@@ -1632,15 +1427,11 @@ For more information, visit: https://github.com/vaila-multimodaltoolbox/vaila
                 "min_detection_confidence": float(self.min_detection_entry.get()),
                 "min_tracking_confidence": float(self.min_tracking_entry.get()),
                 "model_complexity": int(self.model_complexity_entry.get()),
-                "enable_segmentation": self.enable_segmentation_entry.get().lower()
-                == "true",
-                "smooth_segmentation": self.smooth_segmentation_entry.get().lower()
-                == "true",
-                "static_image_mode": self.static_image_mode_entry.get().lower()
-                == "true",
+                "enable_segmentation": self.enable_segmentation_entry.get().lower() == "true",
+                "smooth_segmentation": self.smooth_segmentation_entry.get().lower() == "true",
+                "static_image_mode": self.static_image_mode_entry.get().lower() == "true",
                 "apply_filtering": self.apply_filtering_entry.get().lower() == "true",
-                "estimate_occluded": self.estimate_occluded_entry.get().lower()
-                == "true",
+                "estimate_occluded": self.estimate_occluded_entry.get().lower() == "true",
                 "enable_resize": self.enable_resize_entry.get().lower() == "true",
                 "resize_scale": int(self.resize_scale_entry.get()),
                 # Defaults for other advanced parameters
@@ -1706,9 +1497,7 @@ def resize_video_opencv(input_file, output_file, scale_factor, progress_callback
         }
 
         if progress_callback:
-            progress_callback(
-                f"Resizing from {width}x{height} to {new_width}x{new_height}"
-            )
+            progress_callback(f"Resizing from {width}x{height} to {new_width}x{new_height}")
 
         # Define codec and create VideoWriter object
         fourcc = cv2.VideoWriter_fourcc(*"mp4v")
@@ -1732,9 +1521,7 @@ def resize_video_opencv(input_file, output_file, scale_factor, progress_callback
             if frame_count % 30 == 0:
                 progress = (frame_count / total_frames) * 100
                 if progress_callback:
-                    progress_callback(
-                        f"Resizing: {progress:.1f}% ({frame_count}/{total_frames})"
-                    )
+                    progress_callback(f"Resizing: {progress:.1f}% ({frame_count}/{total_frames})")
 
         # Release resources
         cap.release()
@@ -1763,14 +1550,10 @@ def convert_coordinates_to_original(df, metadata, progress_callback=None):
     scale_factor = metadata["scale_factor"]
 
     if progress_callback:
-        progress_callback(
-            f"Converting coordinates back to original scale (/{scale_factor})"
-        )
+        progress_callback(f"Converting coordinates back to original scale (/{scale_factor})")
 
     # Find coordinate columns (MediaPipe format: *_x, *_y)
-    coord_columns = [
-        col for col in df.columns if col.endswith("_x") or col.endswith("_y")
-    ]
+    coord_columns = [col for col in df.columns if col.endswith("_x") or col.endswith("_y")]
 
     if progress_callback:
         progress_callback(f"Found {len(coord_columns)} coordinate columns to convert")
@@ -1792,9 +1575,7 @@ def convert_coordinates_to_original(df, metadata, progress_callback=None):
                 processed += 1
 
     if progress_callback:
-        progress_callback(
-            f"Converted {processed} coordinate pairs back to original scale"
-        )
+        progress_callback(f"Converted {processed} coordinate pairs back to original scale")
 
     return converted_df
 
@@ -1855,9 +1636,7 @@ def apply_interpolation_and_smoothing(df, config, progress_callback=None):
                 if np.sum(valid) > window_length:
                     try:
                         col_padded = pad_signal(col_valid, pad_width, mode="edge")
-                        col_filtered = savgol_filter(
-                            col_padded, window_length, polyorder
-                        )
+                        col_filtered = savgol_filter(col_padded, window_length, polyorder)
                         col_filtered = col_filtered[pad_width:-pad_width]
                         col_smooth = col.copy()
                         col_smooth[valid] = col_filtered
@@ -1876,9 +1655,7 @@ def apply_interpolation_and_smoothing(df, config, progress_callback=None):
                     try:
                         col_padded = pad_signal(col_valid, pad_width, mode="edge")
                         x = np.arange(len(col_padded))
-                        col_filtered = lowess(
-                            col_padded, x, frac=frac, it=it, return_sorted=False
-                        )
+                        col_filtered = lowess(col_padded, x, frac=frac, it=it, return_sorted=False)
                         col_filtered = col_filtered[pad_width:-pad_width]
                         col_smooth = col.copy()
                         col_smooth[valid] = col_filtered
@@ -1895,9 +1672,7 @@ def apply_interpolation_and_smoothing(df, config, progress_callback=None):
                     try:
                         col_padded = pad_signal(col_valid, pad_width, mode="edge")
                         # Kalman filter expects 2D array
-                        kf = KalmanFilter(
-                            transition_matrices=[1], observation_matrices=[1]
-                        )
+                        kf = KalmanFilter(transition_matrices=[1], observation_matrices=[1])
                         col_filtered, _ = kf.smooth(col_padded)
                         col_filtered = col_filtered.flatten()[pad_width:-pad_width]
                         col_smooth = col.copy()
@@ -1942,9 +1717,7 @@ def apply_interpolation_and_smoothing(df, config, progress_callback=None):
                         x = np.arange(len(col_valid))
                         x_padded = np.arange(-pad_width, len(col_valid) + pad_width)
                         col_padded = pad_signal(col_valid, pad_width, mode="edge")
-                        spline = UnivariateSpline(
-                            x_padded, col_padded, s=smoothing_factor
-                        )
+                        spline = UnivariateSpline(x_padded, col_padded, s=smoothing_factor)
                         col_filtered = spline(x)
                         col_smooth = col.copy()
                         col_smooth[valid] = col_filtered
@@ -2138,9 +1911,7 @@ def should_use_batch_processing(video_path, pose_config):
     low_memory = False
     if memory_info:
         # If less than 4GB available or more than 80% used
-        low_memory = (
-            memory_info["available_gb"] < 4.0 or memory_info["percent_used"] > 80
-        )
+        low_memory = memory_info["available_gb"] < 4.0 or memory_info["percent_used"] > 80
 
     should_use_batch = is_high_res or low_memory or is_long_video
 
@@ -2236,14 +2007,13 @@ def process_video_batch(
             apply_cpu_throttling()
 
         if progress_callback and i % 10 == 0:
-            progress_callback(f"Processing frame {i+1}/{len(frames)} in batch")
+            progress_callback(f"Processing frame {i + 1}/{len(frames)} in batch")
 
         results = pose.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
 
         if results.pose_landmarks:
             landmarks = [
-                [landmark.x, landmark.y, landmark.z]
-                for landmark in results.pose_landmarks.landmark
+                [landmark.x, landmark.y, landmark.z] for landmark in results.pose_landmarks.landmark
             ]
 
             # Apply occluded landmark estimation if enabled
@@ -2422,19 +2192,21 @@ def process_video(video_path, output_dir, pose_config):
     landmarks_history = deque(maxlen=10)
 
     if use_batch_processing:
-        print("Using batch processing for high-resolution video (frame-by-frame to avoid memory out)")
+        print(
+            "Using batch processing for high-resolution video (frame-by-frame to avoid memory out)"
+        )
         batch_size = calculate_batch_size(video_path, pose_config)
 
         # Reset video to beginning
         cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-        
+
         # Process padding frames first if enabled
         if enable_padding and pad_start_frames > 0 and padding_frame is not None:
             print(f"Processing {pad_start_frames} padding frames...")
             for pad_idx in range(pad_start_frames):
                 if should_throttle_cpu(frame_count):
                     apply_cpu_throttling()
-                
+
                 results = pose.process(cv2.cvtColor(padding_frame, cv2.COLOR_BGR2RGB))
                 if results.pose_landmarks:
                     landmarks = [
@@ -2446,7 +2218,11 @@ def process_video(video_path, output_dir, pose_config):
                     landmarks_history.append(landmarks)
                     normalized_landmarks_list.append(landmarks)
                     pixel_landmarks = [
-                        [int(landmark[0] * width), int(landmark[1] * height), landmark[2]]
+                        [
+                            int(landmark[0] * width),
+                            int(landmark[1] * height),
+                            landmark[2],
+                        ]
                         for landmark in landmarks
                     ]
                     pixel_landmarks_list.append(pixel_landmarks)
@@ -2456,7 +2232,7 @@ def process_video(video_path, output_dir, pose_config):
                     normalized_landmarks_list.append(nan_landmarks)
                     pixel_landmarks_list.append(nan_landmarks)
                     frames_with_missing_data.append(frame_count)
-                
+
                 frame_count += 1
                 time.sleep(FRAME_SLEEP_TIME)
 
@@ -2471,7 +2247,9 @@ def process_video(video_path, output_dir, pose_config):
             if not ret:
                 # Process remaining frames in batch
                 if batch_frames:
-                    print(f"Processing final batch {current_batch + 1}/{total_batches} ({len(batch_frames)} frames)")
+                    print(
+                        f"Processing final batch {current_batch + 1}/{total_batches} ({len(batch_frames)} frames)"
+                    )
                     batch_norm, batch_pixel = process_video_batch(
                         batch_frames,
                         pose,
@@ -2491,11 +2269,13 @@ def process_video(video_path, output_dir, pose_config):
                 break
 
             batch_frames.append(frame.copy())  # Copy frame to avoid reference issues
-            
+
             # When batch is full, process it
             if len(batch_frames) >= batch_size:
-                print(f"Processing batch {current_batch + 1}/{total_batches} (frames {batch_start_idx}-{batch_start_idx + len(batch_frames) - 1})")
-                
+                print(
+                    f"Processing batch {current_batch + 1}/{total_batches} (frames {batch_start_idx}-{batch_start_idx + len(batch_frames) - 1})"
+                )
+
                 batch_norm, batch_pixel = process_video_batch(
                     batch_frames,
                     pose,
@@ -2505,20 +2285,20 @@ def process_video(video_path, output_dir, pose_config):
                     lambda msg: print(f"    {msg}"),
                     batch_index=current_batch,
                 )
-                
+
                 normalized_landmarks_list.extend(batch_norm)
                 pixel_landmarks_list.extend(batch_pixel)
-                
+
                 for i, landmarks in enumerate(batch_norm):
                     if all(np.isnan(lm[0]) for lm in landmarks):
                         frames_with_missing_data.append(batch_start_idx + i)
-                
+
                 # Clear batch and free memory immediately
                 del batch_frames
                 batch_frames = []
                 cleanup_memory()
                 print(f"Batch {current_batch + 1} completed, memory cleaned")
-                
+
                 batch_start_idx += len(batch_norm)
                 current_batch += 1
                 time.sleep(0.1)
@@ -2549,18 +2329,17 @@ def process_video(video_path, output_dir, pose_config):
                         for landmark in results.pose_landmarks.landmark
                     ]
                     if pose_config.get("estimate_occluded", False):
-                        landmarks = estimate_occluded_landmarks(
-                            landmarks, list(landmarks_history)
-                        )
+                        landmarks = estimate_occluded_landmarks(landmarks, list(landmarks_history))
                     landmarks_history.append(landmarks)
-                    if (
-                        pose_config.get("apply_filtering", False)
-                        and len(landmarks_history) > 3
-                    ):
+                    if pose_config.get("apply_filtering", False) and len(landmarks_history) > 3:
                         landmarks = apply_temporal_filter(list(landmarks_history))
                     normalized_landmarks_list.append(landmarks)
                     pixel_landmarks = [
-                        [int(landmark[0] * width), int(landmark[1] * height), landmark[2]]
+                        [
+                            int(landmark[0] * width),
+                            int(landmark[1] * height),
+                            landmark[2],
+                        ]
                         for landmark in landmarks
                     ]
                     pixel_landmarks_list.append(pixel_landmarks)
@@ -2600,14 +2379,9 @@ def process_video(video_path, output_dir, pose_config):
                     for landmark in results.pose_landmarks.landmark
                 ]
                 if pose_config.get("estimate_occluded", False):
-                    landmarks = estimate_occluded_landmarks(
-                        landmarks, list(landmarks_history)
-                    )
+                    landmarks = estimate_occluded_landmarks(landmarks, list(landmarks_history))
                 landmarks_history.append(landmarks)
-                if (
-                    pose_config.get("apply_filtering", False)
-                    and len(landmarks_history) > 3
-                ):
+                if pose_config.get("apply_filtering", False) and len(landmarks_history) > 3:
                     landmarks = apply_temporal_filter(list(landmarks_history))
                 normalized_landmarks_list.append(landmarks)
                 pixel_landmarks = [
@@ -2631,7 +2405,9 @@ def process_video(video_path, output_dir, pose_config):
 
             # Progress info every 100 frames
             if frame_count % 100 == 0:
-                print(f"  Processed {frame_count}/{total_frames + (pad_start_frames if enable_padding else 0)} frames")
+                print(
+                    f"  Processed {frame_count}/{total_frames + (pad_start_frames if enable_padding else 0)} frames"
+                )
 
         cap.release()
         pose.close()
@@ -2645,9 +2421,7 @@ def process_video(video_path, output_dir, pose_config):
         # normalized_landmarks_list = normalized_landmarks_list[pad_start_frames:]
         # pixel_landmarks_list = pixel_landmarks_list[pad_start_frames:]
         # frames_with_missing_data = [f-pad_start_frames for f in frames_with_missing_data if f >= pad_start_frames]
-        print(
-            f"Keeping padding for advanced filtering: {len(normalized_landmarks_list)} frames"
-        )
+        print(f"Keeping padding for advanced filtering: {len(normalized_landmarks_list)} frames")
     else:
         print("No padding frames to remove")
 
@@ -2678,9 +2452,7 @@ def process_video(video_path, output_dir, pose_config):
     # Apply advanced filtering and smoothing if enabled (COM PADDING)
     if pose_config.get("enable_advanced_filtering", False):
         step_text = "Step 4/5" if enable_resize else "Step 3/4"
-        print(
-            f"\n{step_text}: Applying advanced filtering and smoothing (with padding)"
-        )
+        print(f"\n{step_text}: Applying advanced filtering and smoothing (with padding)")
 
         # Apply to normalized data (with padding)
         df_norm = apply_interpolation_and_smoothing(
@@ -2704,9 +2476,7 @@ def process_video(video_path, output_dir, pose_config):
         print(f"After removal: {len(df_norm)} frames")
         # Remove padding from unfiltered as well to keep alignment
         try:
-            df_pixel_unfiltered = df_pixel_unfiltered.iloc[
-                pad_start_frames:
-            ].reset_index(drop=True)
+            df_pixel_unfiltered = df_pixel_unfiltered.iloc[pad_start_frames:].reset_index(drop=True)
             df_pixel_unfiltered["frame_index"] = df_pixel_unfiltered.index
         except Exception:
             pass
@@ -2781,9 +2551,7 @@ def process_video(video_path, output_dir, pose_config):
     final_step = "Step 2/2"
     if enable_resize:
         final_step = (
-            "Step 4/4"
-            if pose_config.get("enable_advanced_filtering", False)
-            else "Step 3/3"
+            "Step 4/4" if pose_config.get("enable_advanced_filtering", False) else "Step 3/3"
         )
     elif pose_config.get("enable_advanced_filtering", False):
         final_step = "Step 4/4"
@@ -2815,9 +2583,7 @@ def process_video(video_path, output_dir, pose_config):
 
     # Fallback if VideoWriter fails to open
     if not out.isOpened():
-        print(
-            f"Warning: VideoWriter failed with FPS {safe_fps}, trying fallback FPS 30.0"
-        )
+        print(f"Warning: VideoWriter failed with FPS {safe_fps}, trying fallback FPS 30.0")
         safe_fps = 30.0
         out = cv2.VideoWriter(
             str(temp_output_video_path),
@@ -2829,9 +2595,7 @@ def process_video(video_path, output_dir, pose_config):
     mp_drawing = mp.solutions.drawing_utils
     mp_pose = mp.solutions.pose
 
-    drawing_spec = mp_drawing.DrawingSpec(
-        color=(0, 255, 0), thickness=2, circle_radius=2
-    )
+    drawing_spec = mp_drawing.DrawingSpec(color=(0, 255, 0), thickness=2, circle_radius=2)
     connection_spec = mp_drawing.DrawingSpec(color=(255, 0, 0), thickness=2)
 
     frame_idx = 0
@@ -2886,9 +2650,7 @@ def process_video(video_path, output_dir, pose_config):
                     landmark.x = lm[0] / original_width  # Normalize to 0-1
                     landmark.y = lm[1] / original_height  # Normalize to 0-1
                     landmark.z = lm[2] if not np.isnan(lm[2]) else 0
-                    landmark.visibility = (
-                        1.0  # Maximum visibility for all processed points
-                    )
+                    landmark.visibility = 1.0  # Maximum visibility for all processed points
 
                 # Draw landmarks
                 mp_drawing.draw_landmarks(
@@ -2909,13 +2671,8 @@ def process_video(video_path, output_dir, pose_config):
     # Finalize single universal MP4: prefer H.264 if ffmpeg is available; otherwise keep mp4v
     try:
         # Check if temp video was created successfully and has content
-        if (
-            not temp_output_video_path.exists()
-            or temp_output_video_path.stat().st_size == 0
-        ):
-            print(
-                "Warning: Temporary video file is empty or missing, skipping ffmpeg transcoding"
-            )
+        if not temp_output_video_path.exists() or temp_output_video_path.stat().st_size == 0:
+            print("Warning: Temporary video file is empty or missing, skipping ffmpeg transcoding")
             # Try to move the temp file anyway (in case it exists but is empty)
             try:
                 if temp_output_video_path.exists():
@@ -2954,15 +2711,11 @@ def process_video(video_path, output_dir, pose_config):
                 except Exception:
                     pass
             else:
-                print(
-                    "ffmpeg failed to produce final video; falling back to mp4v file."
-                )
+                print("ffmpeg failed to produce final video; falling back to mp4v file.")
                 try:
                     shutil.move(str(temp_output_video_path), str(output_video_path))
                 except Exception as _move_e:
-                    print(
-                        f"Warning: Could not move temp video to final path: {_move_e}"
-                    )
+                    print(f"Warning: Could not move temp video to final path: {_move_e}")
         else:
             # No ffmpeg: move temp mp4v to final path to keep only one video
             try:
@@ -2998,9 +2751,7 @@ def process_video(video_path, output_dir, pose_config):
     with open(log_info_path, "w") as log_file:
         log_file.write(f"Video Path: {video_path}\n")
         log_file.write(f"Output Video Path: {output_video_path}\n")
-        log_file.write(
-            "Configuration File: configuration_used.toml (saved in this directory)\n"
-        )
+        log_file.write("Configuration File: configuration_used.toml (saved in this directory)\n")
         if enable_resize:
             log_file.write(f"Video Resize: Enabled ({resize_scale}x scaling)\n")
             log_file.write(
@@ -3020,26 +2771,16 @@ def process_video(video_path, output_dir, pose_config):
         # Advanced filtering information
         if pose_config.get("enable_advanced_filtering", False):
             log_file.write("Advanced Filtering: Enabled\n")
-            log_file.write(
-                f"Interpolation Method: {pose_config.get('interp_method', 'none')}\n"
-            )
-            log_file.write(
-                f"Smoothing Method: {pose_config.get('smooth_method', 'none')}\n"
-            )
-            log_file.write(
-                f"Maximum Gap Size: {pose_config.get('max_gap', 0)} frames\n"
-            )
+            log_file.write(f"Interpolation Method: {pose_config.get('interp_method', 'none')}\n")
+            log_file.write(f"Smoothing Method: {pose_config.get('smooth_method', 'none')}\n")
+            log_file.write(f"Maximum Gap Size: {pose_config.get('max_gap', 0)} frames\n")
             if pose_config.get("smooth_params"):
-                log_file.write(
-                    f"Smoothing Parameters: {pose_config['smooth_params']}\n"
-                )
+                log_file.write(f"Smoothing Parameters: {pose_config['smooth_params']}\n")
         else:
             log_file.write("Advanced Filtering: Disabled\n")
 
         if frames_with_missing_data:
-            log_file.write(
-                f"Frames with missing data: {len(frames_with_missing_data)}\n"
-            )
+            log_file.write(f"Frames with missing data: {len(frames_with_missing_data)}\n")
         else:
             log_file.write("No frames with missing data.\n")
 
@@ -3056,9 +2797,7 @@ def process_video(video_path, output_dir, pose_config):
 
     print(f"DEBUG: enable_padding = {enable_padding}")
     print(f"DEBUG: pad_start_frames = {pad_start_frames}")
-    print(
-        f"DEBUG: Total frames before padding removal: {len(normalized_landmarks_list)}"
-    )
+    print(f"DEBUG: Total frames before padding removal: {len(normalized_landmarks_list)}")
     print(
         f"DEBUG: Total frames after padding removal: {len(normalized_landmarks_list[pad_start_frames:])}"
     )
@@ -3106,9 +2845,7 @@ def process_videos_in_directory(existing_root=None):
         return
 
     # Select output base directory
-    output_base = filedialog.askdirectory(
-        parent=root, title="Select the base output directory"
-    )
+    output_base = filedialog.askdirectory(parent=root, title="Select the base output directory")
     if not output_base:
         messagebox.showerror("Error", "No output directory selected.")
         return
@@ -3130,9 +2867,7 @@ def process_videos_in_directory(existing_root=None):
             params = pose_config.get("smooth_params", {})
             cutoff = params.get("cutoff", 10)
             fs = params.get("fs", 100)
-            suffix_parts.append(
-                f"filter_{interp_method}_{smooth_method}_c{cutoff}_fs{fs}"
-            )
+            suffix_parts.append(f"filter_{interp_method}_{smooth_method}_c{cutoff}_fs{fs}")
         else:
             suffix_parts.append(f"filter_{interp_method}_{smooth_method}")
     suffix = ("_" + "_".join(suffix_parts)) if suffix_parts else ""
@@ -3141,9 +2876,7 @@ def process_videos_in_directory(existing_root=None):
 
     # Gather video files
     input_dir = Path(input_dir)
-    video_files = [
-        f for f in input_dir.glob("*.*") if f.suffix.lower() in [".mp4", ".avi", ".mov"]
-    ]
+    video_files = [f for f in input_dir.glob("*.*") if f.suffix.lower() in [".mp4", ".avi", ".mov"]]
 
     if not video_files:
         messagebox.showerror(

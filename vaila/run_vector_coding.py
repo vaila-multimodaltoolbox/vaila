@@ -1,12 +1,12 @@
 import os
 import tkinter as tk
-from tkinter import messagebox, filedialog, simpledialog
-import pandas as pd
-import numpy as np
-from scipy import interpolate
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
 from datetime import datetime
+from tkinter import filedialog, messagebox, simpledialog
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from scipy import interpolate
 
 
 def get_coupling_angle(
@@ -18,9 +18,7 @@ def get_coupling_angle(
     savedir=None,
     savename="vectorcoding_result",
 ):
-    print(
-        "-------------------------------------------------------------------------------"
-    )
+    print("-------------------------------------------------------------------------------")
     print(f"Processing: {file}")
     print(f"Joint 1: {joint1_name}")
     print(f"Joint 2: {joint2_name}")
@@ -34,9 +32,7 @@ def get_coupling_angle(
 
     # Instead of using the header name, always use the 2nd and 3rd column (idx: 1 and 2)
     if df.shape[1] < 3:
-        print(
-            "Error: The CSV file must contain at least three columns (frame + 2 data columns)."
-        )
+        print("Error: The CSV file must contain at least three columns (frame + 2 data columns).")
         return
     array_joint1_raw = df.iloc[:, 1].values
     array_joint2_raw = df.iloc[:, 2].values
@@ -86,9 +82,7 @@ def get_coupling_angle(
         fig.savefig(f"{output_path}.png", dpi=300, bbox_inches="tight")
 
         print(f"\n All results files have been saved in {output_path}.")
-        print(
-            "-------------------------------------------------------------------------------"
-        )
+        print("-------------------------------------------------------------------------------")
     else:
         fig.show()
         print("\n DataFrame with results:")
@@ -108,9 +102,7 @@ def run_vector_coding():
         return
 
     # Solicitar ao usuário a pasta onde os resultados serão salvos
-    output_dir = filedialog.askdirectory(
-        title="Selecione a pasta onde os resultados serão salvos"
-    )
+    output_dir = filedialog.askdirectory(title="Selecione a pasta onde os resultados serão salvos")
     if not output_dir:
         return
 
@@ -121,9 +113,7 @@ def run_vector_coding():
         if file.lower().endswith(".csv")
     ]
     if not csv_files:
-        messagebox.showerror(
-            "Erro", "Nenhum arquivo CSV encontrado na pasta selecionada."
-        )
+        messagebox.showerror("Erro", "Nenhum arquivo CSV encontrado na pasta selecionada.")
         return
 
     # Solicitar o frame rate (Hz) e os nomes dos ângulos (joint angles) apenas uma vez
@@ -144,9 +134,7 @@ def run_vector_coding():
         initialvalue="Joint2",
     )
     if not all([freq, joint1_name, joint2_name]):
-        messagebox.showerror(
-            "Erro", "Por favor, forneça todas as informações solicitadas."
-        )
+        messagebox.showerror("Erro", "Por favor, forneça todas as informações solicitadas.")
         return
 
     # Criar a pasta de saída root (dentro do diretório escolhido) com um timestamp global

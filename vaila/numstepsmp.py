@@ -26,22 +26,20 @@ Dependencies:
     - matplotlib (optional, for visualization)
 """
 
-import tkinter as tk
-from tkinter import filedialog, messagebox, simpledialog
-import pandas as pd
-import numpy as np
-from scipy.signal import find_peaks, savgol_filter, butter, filtfilt
-import matplotlib.pyplot as plt
-from typing import Tuple, List, Optional, Dict, Any
-import os
-import sys
 import datetime
 import glob
+import os
+import tkinter as tk
+from tkinter import filedialog, messagebox, simpledialog
+from typing import Any
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from scipy.signal import butter, filtfilt, find_peaks, savgol_filter
 
 
-def butterworth_filter(
-    data: np.ndarray, cutoff: float, fs: float, order: int = 4
-) -> np.ndarray:
+def butterworth_filter(data: np.ndarray, cutoff: float, fs: float, order: int = 4) -> np.ndarray:
     """
     Applies a Butterworth low-pass filter to the signal.
 
@@ -60,9 +58,7 @@ def butterworth_filter(
     return filtfilt(b, a, data)
 
 
-def filter_signals(
-    data: np.ndarray, window_length: int = 11, polyorder: int = 2
-) -> np.ndarray:
+def filter_signals(data: np.ndarray, window_length: int = 11, polyorder: int = 2) -> np.ndarray:
     """
     Applies a Savitzky-Golay filter to smooth the data and reduce noise.
 
@@ -92,7 +88,7 @@ def filter_signals(
 
 def calculate_feet_metrics(
     df: pd.DataFrame, fs: float = 30.0, cutoff: float = 3.0, order: int = 4
-) -> Dict[str, np.ndarray]:
+) -> dict[str, np.ndarray]:
     """
     Calculates various metrics between feet that can indicate steps.
     Applies Butterworth filter to smooth the data.
@@ -152,12 +148,8 @@ def calculate_feet_metrics(
 
     # NEW METRICS: MEAN Y AND Z FOR ANKLE, HEEL AND INDEX MARKERS
     # LEFT foot
-    left_y_markers = (
-        df[["left_ankle_y", "left_heel_y", "left_foot_index_y"]].astype(float).values
-    )
-    left_z_markers = (
-        df[["left_ankle_z", "left_heel_z", "left_foot_index_z"]].astype(float).values
-    )
+    left_y_markers = df[["left_ankle_y", "left_heel_y", "left_foot_index_y"]].astype(float).values
+    left_z_markers = df[["left_ankle_z", "left_heel_z", "left_foot_index_z"]].astype(float).values
     mean_y_left = np.mean(left_y_markers, axis=1)
     mean_z_left = np.mean(left_z_markers, axis=1) - hip_z.values
 
@@ -206,12 +198,8 @@ def calculate_feet_metrics(
     mean_z_right = butterworth_filter(mean_z_right, cutoff, fs, order)
     combined_speed = butterworth_filter(combined_speed, cutoff, fs, order)
     inverted_speed = butterworth_filter(inverted_speed, cutoff, fs, order)
-    mean_heel_index_y_left = butterworth_filter(
-        mean_heel_index_y_left, cutoff, fs, order
-    )
-    mean_heel_index_y_right = butterworth_filter(
-        mean_heel_index_y_right, cutoff, fs, order
-    )
+    mean_heel_index_y_left = butterworth_filter(mean_heel_index_y_left, cutoff, fs, order)
+    mean_heel_index_y_right = butterworth_filter(mean_heel_index_y_right, cutoff, fs, order)
     heel_index_y_diff = butterworth_filter(heel_index_y_diff, cutoff, fs, order)
     left_heel_z_depth = butterworth_filter(left_heel_z_depth, cutoff, fs, order)
     right_heel_z_depth = butterworth_filter(right_heel_z_depth, cutoff, fs, order)
@@ -270,16 +258,12 @@ def count_steps_original(
     peaks, _ = find_peaks(separation, distance=peak_distance, prominence=prominence)
 
     num_peaks = len(peaks)
-    if (
-        fix_double_count and num_peaks > 7
-    ):  # Suspect double counting if more than 7 steps
+    if fix_double_count and num_peaks > 7:  # Suspect double counting if more than 7 steps
         return num_peaks // 2
     return num_peaks
 
 
-def count_steps_basic(
-    df: pd.DataFrame, peak_distance: int = 10, sensitivity: float = 0.15
-) -> int:
+def count_steps_basic(df: pd.DataFrame, peak_distance: int = 10, sensitivity: float = 0.15) -> int:
     """
     Basic method using only horizontal separation with explicit parameters.
 
@@ -300,14 +284,12 @@ def count_steps_basic(
     height = min_val + range_val * sensitivity
     prominence = range_val * (sensitivity / 3)  # Adjusted proportion
 
-    print(f"Parameters for find_peaks:")
+    print("Parameters for find_peaks:")
     print(f"  - Distance: {peak_distance}")
     print(f"  - Height: {height:.6f}")
     print(f"  - Prominence: {prominence:.6f}")
 
-    peaks, _ = find_peaks(
-        separation, distance=peak_distance, prominence=prominence, height=height
-    )
+    peaks, _ = find_peaks(separation, distance=peak_distance, prominence=prominence, height=height)
 
     print(f"Peaks found: {len(peaks)} -> {peaks}")
     return len(peaks)
@@ -410,7 +392,7 @@ def count_steps_sliding_window(
 
 
 def count_steps_mean_y(
-    metrics: Dict[str, np.ndarray], peak_distance: int = 10, sensitivity: float = 0.15
+    metrics: dict[str, np.ndarray], peak_distance: int = 10, sensitivity: float = 0.15
 ) -> int:
     """
     Step counting method based on the average of the markers of each foot in Y.
@@ -452,7 +434,7 @@ def count_steps_mean_y(
 
 
 def count_steps_z_depth(
-    metrics: Dict[str, np.ndarray], peak_distance: int = 10, sensitivity: float = 0.2
+    metrics: dict[str, np.ndarray], peak_distance: int = 10, sensitivity: float = 0.2
 ) -> int:
     """
     Step counting method based on the Z depth of the feet relative to the hip.
@@ -488,8 +470,8 @@ def count_steps_z_depth(
 
 
 def detect_foot_strikes_heel_z(
-    metrics: Dict[str, np.ndarray], peak_distance: int = 20
-) -> Dict[str, Any]:
+    metrics: dict[str, np.ndarray], peak_distance: int = 20
+) -> dict[str, Any]:
     """
     Detects foot strike events based on heel Z-depth and velocity.
 
@@ -636,9 +618,7 @@ def detect_foot_strikes_heel_z(
     }
 
 
-def detect_foot_strikes(
-    metrics: Dict[str, np.ndarray], delay_frames: int = 10
-) -> Dict[str, Any]:
+def detect_foot_strikes(metrics: dict[str, np.ndarray], delay_frames: int = 10) -> dict[str, Any]:
     """
     Compatibility function that calls the heel Z-based foot strike detection.
     Maintained for backwards compatibility with existing code.
@@ -656,15 +636,15 @@ def detect_foot_strikes(
 
 def count_steps(
     df: pd.DataFrame,
-    peak_distance: Optional[int] = None,
+    peak_distance: int | None = None,
     height_threshold: float = 0.5,
     visualize: bool = False,
-    target_steps: Optional[int] = None,
+    target_steps: int | None = None,
     output_dir: str = ".",
     fps: int = 30,
     fix_double_count: bool = True,
     cutoff_freq: float = 3.0,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Counts the number of steps from the DataFrame with greater precision.
     Tries multiple methods and returns the most reasonable result.
@@ -714,9 +694,7 @@ def count_steps(
 
     # Method 4: Sliding window adjusted for FPS
     window_size = int(peak_distance * 2.5)  # Larger window for 60fps
-    steps_window = count_steps_sliding_window(
-        df, window_size, fix_double_count=fix_double_count
-    )
+    steps_window = count_steps_sliding_window(df, window_size, fix_double_count=fix_double_count)
     print(f"Window method: {steps_window} steps")
 
     # Method 5: New method based on marker Y average
@@ -753,9 +731,7 @@ def count_steps(
 
     # If we have a target step count, select the closest method
     if target_steps is not None:
-        closest_method = min(
-            methods.keys(), key=lambda x: abs(methods[x] - target_steps)
-        )
+        closest_method = min(methods.keys(), key=lambda x: abs(methods[x] - target_steps))
         steps = methods[closest_method]
         print(
             f"\nMethod closest to expected ({target_steps} steps): {closest_method} with {steps} steps"
@@ -779,7 +755,7 @@ def count_steps(
 
         # If the average is much higher than 6 (expected), suspect double counting
         if fix_double_count and suspected_double_count:
-            print(f"Possible double counting detected. Adjusting...")
+            print("Possible double counting detected. Adjusting...")
             # Use the heel Z method, which is more reliable
             steps = steps_heel_z
         else:
@@ -791,10 +767,8 @@ def count_steps(
     # Alert for possible incorrect count
     expected_range = range(5, 8)  # Expected range for 6 steps (error margin)
     if steps not in expected_range:
-        print(
-            f"\nWARNING: Detected step count ({steps}) is outside expected range (5-7)."
-        )
-        print(f"Consider manually specifying expected step count.")
+        print(f"\nWARNING: Detected step count ({steps}) is outside expected range (5-7).")
+        print("Consider manually specifying expected step count.")
 
     # Optional visualization
     viz_path = None
@@ -818,22 +792,16 @@ def count_steps(
             range_val = max_val - min_val
             prominence = range_val * 0.05  # Reduced to detect more peaks
 
-            peaks_sep, _ = find_peaks(
-                separation, distance=peak_distance, prominence=prominence
-            )
+            peaks_sep, _ = find_peaks(separation, distance=peak_distance, prominence=prominence)
 
             plt.plot(peaks_sep, separation[peaks_sep], "rx")
-            plt.title(
-                f"Horizontal Separation (Original Method: {steps_original} steps)"
-            )
+            plt.title(f"Horizontal Separation (Original Method: {steps_original} steps)")
 
             # Plot 2: Feet velocity
             plt.subplot(9, 1, 2)
             plt.plot(metrics["abs_left_velocity"], "g-", label="Left Foot")
             plt.plot(metrics["abs_right_velocity"], "b-", label="Right Foot")
-            plt.title(
-                f"Absolute Feet Velocity (Velocity Method: {steps_velocity} steps)"
-            )
+            plt.title(f"Absolute Feet Velocity (Velocity Method: {steps_velocity} steps)")
             plt.legend()
 
             # Plot 3: Inverted velocity (velocity minima = foot strike)
@@ -845,9 +813,7 @@ def count_steps(
             range_val = max_val - min_val
             prominence = range_val * 0.1
 
-            peaks_vel, _ = find_peaks(
-                inv_speed, distance=peak_distance, prominence=prominence
-            )
+            peaks_vel, _ = find_peaks(inv_speed, distance=peak_distance, prominence=prominence)
 
             plt.plot(inv_speed)
             plt.plot(peaks_vel, inv_speed[peaks_vel], "rx")
@@ -936,9 +902,7 @@ def count_steps(
                         "go",
                         markersize=8,
                     )
-                elif side == "right" and 0 <= frame < len(
-                    metrics["right_heel_z_velocity"]
-                ):
+                elif side == "right" and 0 <= frame < len(metrics["right_heel_z_velocity"]):
                     plt.plot(
                         frame,
                         metrics["right_heel_z_velocity"][frame],
@@ -946,7 +910,7 @@ def count_steps(
                         markersize=8,
                     )
 
-            plt.title(f"Heel Z Velocity (vertical velocity at strike moments)")
+            plt.title("Heel Z Velocity (vertical velocity at strike moments)")
             plt.legend()
 
             # Plot 8: Combined View - Heel Z and Y Position
@@ -1041,7 +1005,7 @@ def count_steps(
 
 
 def export_results(
-    results: Dict[str, Any], csv_path: str, output_path: Optional[str] = None
+    results: dict[str, Any], csv_path: str, output_path: str | None = None
 ) -> str:
     """
     Exports the analysis results to a CSV or TXT file.
@@ -1078,9 +1042,7 @@ def export_results(
                 )
                 f.write(f"Left side strikes: {foot_strikes['left_strikes']}\n")
                 f.write(f"Right side strikes: {foot_strikes['right_strikes']}\n")
-                f.write(
-                    f"Total strikes (complete cycle): {foot_strikes['total_strikes']}\n\n"
-                )
+                f.write(f"Total strikes (complete cycle): {foot_strikes['total_strikes']}\n\n")
 
                 f.write("List of all foot strikes:\n")
                 for i, (frame, side) in enumerate(foot_strikes["all_strikes"]):
@@ -1093,7 +1055,7 @@ def export_results(
                         )
                         else ""
                     )
-                    f.write(f"  {i+1}. Frame {frame}: {side}{note}\n")
+                    f.write(f"  {i + 1}. Frame {frame}: {side}{note}\n")
                 f.write("\n")
 
             f.write("Results by method:\n")
@@ -1204,7 +1166,7 @@ def run_numsteps(
         # Information about foot strikes
         foot_strikes = results.get("foot_strikes", {})
         if foot_strikes:
-            print(f"\nFoot strike details:")
+            print("\nFoot strike details:")
             print(
                 f"First foot strike: frame {foot_strikes['first_strike']['frame']} - side {foot_strikes['first_strike']['side']}"
             )
@@ -1227,7 +1189,7 @@ def run_numsteps(
                     )
                     else ""
                 )
-                print(f"  {i+1}. Frame {frame}: {side}{note}")
+                print(f"  {i + 1}. Frame {frame}: {side}{note}")
 
         return steps, results
 
@@ -1277,14 +1239,10 @@ def extract_gait_features(df, foot_strikes, participant=None, trial=None):
             "right_foot_index_x_var": block["right_foot_index_x"].var(),
             "right_foot_index_y_var": block["right_foot_index_y"].var(),
             # Range
-            "left_heel_x_range": block["left_heel_x"].max()
-            - block["left_heel_x"].min(),
-            "left_heel_y_range": block["left_heel_y"].max()
-            - block["left_heel_y"].min(),
-            "right_heel_x_range": block["right_heel_x"].max()
-            - block["right_heel_x"].min(),
-            "right_heel_y_range": block["right_heel_y"].max()
-            - block["right_heel_y"].min(),
+            "left_heel_x_range": block["left_heel_x"].max() - block["left_heel_x"].min(),
+            "left_heel_y_range": block["left_heel_y"].max() - block["left_heel_y"].min(),
+            "right_heel_x_range": block["right_heel_x"].max() - block["right_heel_x"].min(),
+            "right_heel_y_range": block["right_heel_y"].max() - block["right_heel_y"].min(),
             "left_foot_index_x_range": block["left_foot_index_x"].max()
             - block["left_foot_index_x"].min(),
             "left_foot_index_y_range": block["left_foot_index_y"].max()
@@ -1327,9 +1285,7 @@ def run_numsteps_gui():
 
     try:
         # Open dialog for directory selection
-        input_dir = filedialog.askdirectory(
-            title="Select Input Directory with CSV Files"
-        )
+        input_dir = filedialog.askdirectory(title="Select Input Directory with CSV Files")
         if not input_dir:
             print("No directory selected. Aborting.")
             return
@@ -1374,9 +1330,7 @@ def run_numsteps_gui():
             )
 
         # Option for visualization
-        visualize = messagebox.askyesno(
-            "Visualization", "Generate visualization graphs?"
-        )
+        visualize = messagebox.askyesno("Visualization", "Generate visualization graphs?")
 
         # Create main output directory
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -1394,7 +1348,7 @@ def run_numsteps_gui():
         for i, file in enumerate(csv_files):
             # Get the base name for creating subdirectory
             base_name = os.path.splitext(os.path.basename(file))[0]
-            print(f"\nProcessing file {i+1}/{total_files}: {base_name}")
+            print(f"\nProcessing file {i + 1}/{total_files}: {base_name}")
 
             # Create subdirectory for this file
             file_output_dir = os.path.join(main_output_dir, base_name)
@@ -1422,9 +1376,7 @@ def run_numsteps_gui():
                     )
 
                     # Save features for this file
-                    features_file = os.path.join(
-                        file_output_dir, f"{base_name}_features.csv"
-                    )
+                    features_file = os.path.join(file_output_dir, f"{base_name}_features.csv")
                     pd.DataFrame(features).to_csv(features_file, index=False)
                     print(f"Features saved at: {features_file}")
 
@@ -1432,14 +1384,10 @@ def run_numsteps_gui():
                     all_features.extend(features)
 
                 # Move visualization if it exists to the subdirectory
-                if results["visualization_path"] and os.path.exists(
-                    results["visualization_path"]
-                ):
+                if results["visualization_path"] and os.path.exists(results["visualization_path"]):
                     viz_filename = os.path.basename(results["visualization_path"])
                     new_viz_path = os.path.join(file_output_dir, viz_filename)
-                    if (
-                        results["visualization_path"] != new_viz_path
-                    ):  # Avoid unnecessary copy
+                    if results["visualization_path"] != new_viz_path:  # Avoid unnecessary copy
                         try:
                             import shutil
 

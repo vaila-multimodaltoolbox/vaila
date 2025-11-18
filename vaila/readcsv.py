@@ -40,19 +40,21 @@ Change History:
 """
 
 import os
-from pathlib import Path
-import pandas as pd
-import tkinter as tk
-from tkinter import filedialog, Button, Label, Listbox, Frame, messagebox
-import numpy as np
 import time
-import matplotlib.pyplot as plt
-from matplotlib.widgets import Slider, Button as MplButton, TextBox
-from matplotlib import animation
-from rich import print
+import tkinter as tk
+from pathlib import Path
+from tkinter import Button, Frame, Label, Listbox, filedialog, messagebox
 from typing import cast
-from mpl_toolkits.mplot3d import Axes3D
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from matplotlib import animation
 from matplotlib.backend_bases import TimerBase
+from matplotlib.widgets import Button as MplButton
+from matplotlib.widgets import Slider, TextBox
+from mpl_toolkits.mplot3d import Axes3D
+from rich import print
 
 
 # ==================== PERFORMANCE OPTIMIZATIONS ====================
@@ -95,9 +97,7 @@ def _load_with_cache(csv_path: str, use_cache: bool = True):
     return index_vector, list(valid_markers.keys()), points
 
 
-def show_csv_optimized(
-    file_path=None, *, use_cache=True, turbo=False, fps=30, stride=1
-):
+def show_csv_optimized(file_path=None, *, use_cache=True, turbo=False, fps=30, stride=1):
     """
     Optimized version of show_csv with performance improvements
 
@@ -109,9 +109,7 @@ def show_csv_optimized(
         stride: Skip frames (1=all, 2=every other, etc.)
     """
     print(f"Running optimized script: {os.path.basename(__file__)}")
-    print(
-        f"Performance settings: cache={use_cache}, turbo={turbo}, fps={fps}, stride={stride}"
-    )
+    print(f"Performance settings: cache={use_cache}, turbo={turbo}, fps={fps}, stride={stride}")
 
     # File selection
     if file_path is None:
@@ -138,7 +136,7 @@ def show_csv_optimized(
         points = points[::stride]
         index_vector = index_vector[::stride]
         print(
-            f"Applied stride {stride}: reduced frames from {len(index_vector)*stride} to {len(index_vector)}"
+            f"Applied stride {stride}: reduced frames from {len(index_vector) * stride} to {len(index_vector)}"
         )
 
     # Select markers
@@ -228,7 +226,7 @@ def show_csv_matplotlib_turbo(points, marker_names, fps=30):
         else:
             scatter._offsets3d = ([], [], [])
 
-        ax.set_title(f"Frame {frame_idx}/{points.shape[0]-1}")
+        ax.set_title(f"Frame {frame_idx}/{points.shape[0] - 1}")
         return (scatter,)
 
     slider.on_changed(update)
@@ -245,9 +243,7 @@ def show_csv_matplotlib_turbo(points, marker_names, fps=30):
             playing[0] = True
             btn_play.label.set_text("Pause")
             timer[0] = fig.canvas.new_timer(interval=int(1000 / fps))
-            timer[0].add_callback(
-                lambda: slider.set_val((slider.val + 1) % points.shape[0])
-            )
+            timer[0].add_callback(lambda: slider.set_val((slider.val + 1) % points.shape[0]))
             timer[0].start()
         else:
             playing[0] = False
@@ -321,9 +317,7 @@ def reshapedata(df, selected_markers):
             points[:, i, 1] = df[y_col].values
             points[:, i, 2] = df[z_col].values
         else:
-            raise ValueError(
-                f"Columns for marker '{marker}' not found in expected format."
-            )
+            raise ValueError(f"Columns for marker '{marker}' not found in expected format.")
     if np.mean(np.abs(points)) > 100:
         points = points * 0.001  # Convert from millimeters to meters
     return points
@@ -351,7 +345,7 @@ def detect_delimiter(file_path):
     delimiter_scores = {}
 
     try:
-        with open(file_path, "r", encoding="utf-8") as file:
+        with open(file_path, encoding="utf-8") as file:
             # Read first few lines
             sample_lines = []
             file.seek(0)
@@ -382,9 +376,7 @@ def detect_delimiter(file_path):
                 if column_counts:
                     # Prefer delimiters that give consistent column counts
                     most_common_count = max(set(column_counts), key=column_counts.count)
-                    consistency = column_counts.count(most_common_count) / len(
-                        column_counts
-                    )
+                    consistency = column_counts.count(most_common_count) / len(column_counts)
                     avg_columns = sum(column_counts) / len(column_counts)
 
                     # Score based on consistency and reasonable column count
@@ -421,7 +413,7 @@ def detect_has_header(file_path, delimiter):
     Returns:
         bool: True if file has header, False otherwise
     """
-    with open(file_path, "r", encoding="utf-8") as file:
+    with open(file_path, encoding="utf-8") as file:
         first_line = file.readline().strip()
         values = first_line.split(delimiter)
 
@@ -513,9 +505,7 @@ def select_markers_csv(marker_labels):
         listbox.selection_clear(0, tk.END)
 
     Button(btn_frame, text="Select All", command=select_all).pack(side="left", padx=5)
-    Button(btn_frame, text="Unselect All", command=unselect_all).pack(
-        side="left", padx=5
-    )
+    Button(btn_frame, text="Unselect All", command=unselect_all).pack(side="left", padx=5)
 
     Button(root, text="Select", command=root.quit).pack(pady=10)
     root.mainloop()
@@ -556,9 +546,7 @@ def select_headers_gui(headers):
         listbox.selection_clear(0, tk.END)
 
     Button(btn_frame, text="Select All", command=select_all).pack(side="left", padx=5)
-    Button(btn_frame, text="Unselect All", command=unselect_all).pack(
-        side="left", padx=5
-    )
+    Button(btn_frame, text="Unselect All", command=unselect_all).pack(side="left", padx=5)
 
     Button(root, text="OK", command=root.quit).pack(pady=10)
     root.mainloop()
@@ -628,20 +616,17 @@ def show_csv_matplotlib(points, marker_names, fps=30):
     """
     try:
         import matplotlib.pyplot as plt
-        from matplotlib.widgets import Slider, Button as MplButton
+        from matplotlib.widgets import Button as MplButton
+        from matplotlib.widgets import Slider
     except ImportError:
-        print(
-            "matplotlib is not installed. Please install it with 'pip install matplotlib'."
-        )
+        print("matplotlib is not installed. Please install it with 'pip install matplotlib'.")
         return
 
     num_frames, num_markers, _ = points.shape
     fig = plt.figure(figsize=(10, 8))
     ax = cast(Axes3D, fig.add_subplot(111, projection="3d"))
     ax.scatter(points[0, :, 0], points[0, :, 1], points[0, :, 2], c="blue", s=20)
-    ax.set_title(
-        f"CSV Data Visualization (Matplotlib) | Frames: {num_frames} | FPS: {fps}"
-    )
+    ax.set_title(f"CSV Data Visualization (Matplotlib) | Frames: {num_frames} | FPS: {fps}")
     ax.set_xlabel("X")
     ax.set_ylabel("Y")
     ax.set_zlabel("Z")
@@ -722,9 +707,7 @@ def show_csv_matplotlib(points, marker_names, fps=30):
     btn_play = MplButton(ax_play, "Play")
     btn_play.on_clicked(play_pause)
     # Add record button
-    ax_record = plt.axes(
-        (0.82, 0.08, 0.1, 0.05)
-    )  # Keep consistent with ax_slider format
+    ax_record = plt.axes((0.82, 0.08, 0.1, 0.05))  # Keep consistent with ax_slider format
     btn_record = MplButton(ax_record, "Record")
 
     def record_animation(event):
@@ -739,9 +722,7 @@ def show_csv_matplotlib(points, marker_names, fps=30):
                 return
 
             # Create animation writer
-            writer = animation.FFMpegWriter(
-                fps=30, metadata=dict(artist="VAILA"), bitrate=1800
-            )
+            writer = animation.FFMpegWriter(fps=30, metadata=dict(artist="VAILA"), bitrate=1800)
 
             # Show recording message
             btn_record.label.set_text("Recording...")
@@ -962,9 +943,7 @@ def read_csv_generic(file_path):
                 marker_headers[marker_name] = {}
             marker_headers[marker_name][coord] = col
         else:
-            print(
-                f"Warning: Could not parse column '{col}' - no matching pattern found"
-            )
+            print(f"Warning: Could not parse column '{col}' - no matching pattern found")
 
     print(f"Found marker patterns: {list(marker_headers.keys())}")
 
@@ -976,9 +955,7 @@ def read_csv_generic(file_path):
     # Select only the markers that have the complete set of 3 columns
     valid_markers = {}
     for marker, coord_dict in marker_headers.items():
-        if len(coord_dict) == 3 and all(
-            coord in coord_dict for coord in ["X", "Y", "Z"]
-        ):
+        if len(coord_dict) == 3 and all(coord in coord_dict for coord in ["X", "Y", "Z"]):
             # Ensure correct order: X, Y, Z
             ordered_cols = [coord_dict["X"], coord_dict["Y"], coord_dict["Z"]]
             valid_markers[marker] = ordered_cols
@@ -998,9 +975,7 @@ def read_csv_generic(file_path):
     # Handle unit conversion based on user input
     if valid_markers:
         # Create a temporary array with all points to check units
-        temp_points = np.stack(
-            [marker_data[marker] for marker in valid_markers.keys()], axis=1
-        )
+        temp_points = np.stack([marker_data[marker] for marker in valid_markers], axis=1)
 
         # Calculate statistics for user information
         valid_coords = temp_points[~np.isnan(temp_points)]
@@ -1048,9 +1023,7 @@ def read_csv_generic(file_path):
         elif user_units == "auto":
             print("Using auto-detection for units...")
             if detect_units(temp_points):
-                print(
-                    "Auto-detection: Data appears to be in millimeters. Converting to meters..."
-                )
+                print("Auto-detection: Data appears to be in millimeters. Converting to meters...")
                 # Convert all marker data from millimeters to meters
                 for marker in marker_data:
                     marker_data[marker] = marker_data[marker] * 0.001
@@ -1061,7 +1034,7 @@ def read_csv_generic(file_path):
         # Check for and filter extreme outliers after unit conversion
         print("\nChecking for extreme outliers...")
         temp_points_converted = np.stack(
-            [marker_data[marker] for marker in valid_markers.keys()], axis=1
+            [marker_data[marker] for marker in valid_markers], axis=1
         )
         valid_coords = temp_points_converted[~np.isnan(temp_points_converted)]
 
@@ -1142,9 +1115,7 @@ def show_csv(file_path=None):
             return
 
     try:
-        index_vector, marker_data, valid_markers, delimiter = read_csv_generic(
-            file_path
-        )
+        index_vector, marker_data, valid_markers, delimiter = read_csv_generic(file_path)
     except Exception as e:
         messagebox.showerror("Error", f"Error reading the CSV file: {e}")
         return
@@ -1397,19 +1368,13 @@ def show_csv(file_path=None):
         else:
             index_display = str(current_index_value)
 
-        ax.set_title(
-            f"Record {frame}/{num_frames-1} | {first_column_name}: {index_display}"
-        )
+        ax.set_title(f"Record {frame}/{num_frames - 1} | {first_column_name}: {index_display}")
 
         # Plot markers
-        for i, (marker_pos, marker_name) in enumerate(
-            zip(new_positions, selected_markers)
-        ):
+        for i, (marker_pos, marker_name) in enumerate(zip(new_positions, selected_markers)):
             if not np.isnan(marker_pos).any():
                 # Only add label if legend is enabled and we have reasonable number of markers
-                marker_label = (
-                    marker_name if (show_legend[0] and num_markers <= 15) else None
-                )
+                marker_label = marker_name if (show_legend[0] and num_markers <= 15) else None
 
                 if color_mode[0] == 0:
                     # Blue mode
@@ -1494,9 +1459,7 @@ def show_csv(file_path=None):
         if show_legend[0] and num_markers <= 15:
             # Get handles and labels, filter out None labels
             handles, labels = ax.get_legend_handles_labels()
-            if (
-                handles and labels
-            ):  # Only create legend if we have valid handles and labels
+            if handles and labels:  # Only create legend if we have valid handles and labels
                 # Filter out empty labels
                 filtered_handles_labels = [
                     (h, label)
@@ -1567,9 +1530,7 @@ def show_csv(file_path=None):
     btn_play.on_clicked(play_pause)
 
     # Color mode button
-    ax_color = fig.add_axes(
-        (controls_x_start, 0.02 + button_spacing, button_width, button_height)
-    )
+    ax_color = fig.add_axes((controls_x_start, 0.02 + button_spacing, button_width, button_height))
     btn_color = MplButton(ax_color, "Blue Mode")
 
     def toggle_color_mode(event):
@@ -1603,9 +1564,7 @@ def show_csv(file_path=None):
 
     def toggle_trajectory(event):
         show_trajectory[0] = not show_trajectory[0]
-        btn_trajectory.label.set_text(
-            "Trails ON" if show_trajectory[0] else "Trails OFF"
-        )
+        btn_trajectory.label.set_text("Trails ON" if show_trajectory[0] else "Trails OFF")
         update_frame(current_frame[0])
 
     btn_trajectory.on_clicked(toggle_trajectory)
@@ -1646,9 +1605,7 @@ def show_csv(file_path=None):
             if not file_path:
                 return
 
-            writer = animation.FFMpegWriter(
-                fps=30, metadata=dict(artist="VAILA"), bitrate=1800
-            )
+            writer = animation.FFMpegWriter(fps=30, metadata=dict(artist="VAILA"), bitrate=1800)
 
             btn_record.label.set_text("Recording...")
             fig.canvas.draw_idle()
@@ -1660,11 +1617,9 @@ def show_csv(file_path=None):
                 ax.set_xlabel("X")
                 ax.set_ylabel("Y")
                 ax.set_zlabel("Z")
-                ax.set_title(f"Frame {frame}/{num_frames-1}")
+                ax.set_title(f"Frame {frame}/{num_frames - 1}")
 
-                for i, (marker_pos, marker_name) in enumerate(
-                    zip(new_positions, selected_markers)
-                ):
+                for i, (marker_pos, marker_name) in enumerate(zip(new_positions, selected_markers)):
                     if not np.isnan(marker_pos).any():
                         if color_mode[0] == 0:
                             ax.scatter(
@@ -1740,9 +1695,7 @@ def show_csv(file_path=None):
             print(f"File: {export_path}")
             print(f"Records: {num_frames}, Markers: {len(selected_markers)}")
 
-            messagebox.showinfo(
-                "Success", f"Data exported successfully to:\n{export_path}"
-            )
+            messagebox.showinfo("Success", f"Data exported successfully to:\n{export_path}")
 
         except Exception as e:
             messagebox.showerror("Error", f"Failed to export data: {e}")
@@ -1801,15 +1754,13 @@ def show_csv(file_path=None):
 # Main entry point
 ###############################################################################
 if __name__ == "__main__":
-    import sys
     import argparse
+    import sys
 
     # Enhanced command line interface with performance options
     if len(sys.argv) > 1 and sys.argv[1].startswith("--"):
         # Parse arguments
-        parser = argparse.ArgumentParser(
-            description="CSV Viewer with performance options"
-        )
+        parser = argparse.ArgumentParser(description="CSV Viewer with performance options")
         parser.add_argument("file", nargs="?", help="CSV file path")
         parser.add_argument("--no-cache", action="store_true", help="Disable NPZ cache")
         parser.add_argument(
