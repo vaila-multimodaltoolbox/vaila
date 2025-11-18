@@ -50,20 +50,18 @@ Notes:
     - The script uses the default output directory of reid_corrected.
 """
 
+import colorsys
+import glob
 import os
-from rich import print
-import cv2
-import numpy as np
-import pandas as pd
-import torch
-from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox
-import glob
+
+import cv2
+import pandas as pd
+import torch
 from boxmot.deep import StrongSORT
 from boxmot.reid_models.frameworks.torch import ReIdentifier
-import colorsys
-import csv
+from rich import print
 
 # Configuration to avoid library conflicts
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
@@ -81,8 +79,8 @@ except ImportError:
 # Now use the correct imports based on the installed boxmot version
 try:
     # Try current structure (newer versions)
-    from boxmot.trackers.strongsort.strong_sort import StrongSORT
     from boxmot.appearance.reid_model_factory import ReIDFactory
+    from boxmot.trackers.strongsort.strong_sort import StrongSORT
 
     def get_reid_model(weights="osnet_x0_25_msmt17.pt", device="cpu"):
         reid_factory = ReIDFactory()
@@ -559,9 +557,7 @@ def run_reid_yolotrack():
     root.withdraw()
 
     # Select input directory (where CSV files are located)
-    input_dir = filedialog.askdirectory(
-        title="Select directory with tracking CSV files"
-    )
+    input_dir = filedialog.askdirectory(title="Select directory with tracking CSV files")
     if not input_dir:
         print("No directory selected. Exiting.")
         return

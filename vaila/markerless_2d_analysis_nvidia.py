@@ -86,20 +86,18 @@ You should have received a copy of the GNU GPLv3 (General Public License Version
 If not, see <https://www.gnu.org/licenses/>.
 """
 
+import datetime
+import time
+import tkinter as tk
+from collections import deque
+from pathlib import Path
+from tkinter import filedialog, messagebox
+
 import cv2
 import mediapipe as mp
-import os
-import time
-import datetime
-import tkinter as tk
-from tkinter import filedialog, messagebox
-from pathlib import Path
-import platform
 import numpy as np  # Added to work with NaN
-from collections import deque
-from scipy.signal import savgol_filter
-import copy
 from mediapipe.framework.formats import landmark_pb2
+from scipy.signal import savgol_filter
 
 landmark_names = [
     "nose",
@@ -140,12 +138,8 @@ landmark_names = [
 
 class ConfidenceInputDialog(tk.simpledialog.Dialog):
     def body(self, master):
-        tk.Label(master, text="Enter minimum detection confidence (0.0 - 1.0):").grid(
-            row=0
-        )
-        tk.Label(master, text="Enter minimum tracking confidence (0.0 - 1.0):").grid(
-            row=1
-        )
+        tk.Label(master, text="Enter minimum detection confidence (0.0 - 1.0):").grid(row=0)
+        tk.Label(master, text="Enter minimum tracking confidence (0.0 - 1.0):").grid(row=1)
         tk.Label(master, text="Enter model complexity (0, 1, or 2):").grid(row=2)
         tk.Label(master, text="Enable segmentation? (True/False):").grid(row=3)
         tk.Label(master, text="Smooth segmentation? (True/False):").grid(row=4)
@@ -186,10 +180,8 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
             "min_detection_confidence": float(self.min_detection_entry.get()),
             "min_tracking_confidence": float(self.min_tracking_entry.get()),
             "model_complexity": int(self.model_complexity_entry.get()),
-            "enable_segmentation": self.enable_segmentation_entry.get().lower()
-            == "true",
-            "smooth_segmentation": self.smooth_segmentation_entry.get().lower()
-            == "true",
+            "enable_segmentation": self.enable_segmentation_entry.get().lower() == "true",
+            "smooth_segmentation": self.smooth_segmentation_entry.get().lower() == "true",
             "static_image_mode": self.static_image_mode_entry.get().lower() == "true",
             "apply_filtering": self.apply_filtering_entry.get().lower() == "true",
             "estimate_occluded": self.estimate_occluded_entry.get().lower() == "true",
@@ -351,9 +343,7 @@ def process_video(video_path, output_dir, pose_config):
     )
 
     # Prepare headers for CSV
-    headers = ["frame_index"] + [
-        f"{name}_x,{name}_y,{name}_z" for name in landmark_names
-    ]
+    headers = ["frame_index"] + [f"{name}_x,{name}_y,{name}_z" for name in landmark_names]
 
     # Lists to store landmarks
     normalized_landmarks_list = []
@@ -383,15 +373,12 @@ def process_video(video_path, output_dir, pose_config):
 
         if results.pose_landmarks:
             landmarks = [
-                [landmark.x, landmark.y, landmark.z]
-                for landmark in results.pose_landmarks.landmark
+                [landmark.x, landmark.y, landmark.z] for landmark in results.pose_landmarks.landmark
             ]
 
             # Estimate occluded landmarks
             if pose_config.get("estimate_occluded", False):
-                landmarks = estimate_occluded_landmarks(
-                    landmarks, list(landmarks_history)
-                )
+                landmarks = estimate_occluded_landmarks(landmarks, list(landmarks_history))
 
             # Add to history
             landmarks_history.append(landmarks)
@@ -424,9 +411,10 @@ def process_video(video_path, output_dir, pose_config):
     cv2.destroyAllWindows()
 
     # Save CSVs with processed landmarks
-    with open(output_file_path, "w") as f_norm, open(
-        output_pixel_file_path, "w"
-    ) as f_pixel:
+    with (
+        open(output_file_path, "w") as f_norm,
+        open(output_pixel_file_path, "w") as f_pixel,
+    ):
         f_norm.write(",".join(headers) + "\n")
         f_pixel.write(",".join(headers) + "\n")
 
@@ -434,26 +422,20 @@ def process_video(video_path, output_dir, pose_config):
             landmarks_norm = normalized_landmarks_list[frame_idx]
             landmarks_pixel = pixel_landmarks_list[frame_idx]
 
-            flat_landmarks_norm = [
-                coord for landmark in landmarks_norm for coord in landmark
-            ]
-            flat_landmarks_pixel = [
-                coord for landmark in landmarks_pixel for coord in landmark
-            ]
+            flat_landmarks_norm = [coord for landmark in landmarks_norm for coord in landmark]
+            flat_landmarks_pixel = [coord for landmark in landmarks_pixel for coord in landmark]
 
             landmarks_norm_str = ",".join(
-                "NaN" if np.isnan(value) else f"{value:.6f}"
-                for value in flat_landmarks_norm
+                "NaN" if np.isnan(value) else f"{value:.6f}" for value in flat_landmarks_norm
             )
             landmarks_pixel_str = ",".join(
-                "NaN" if np.isnan(value) else str(value)
-                for value in flat_landmarks_pixel
+                "NaN" if np.isnan(value) else str(value) for value in flat_landmarks_pixel
             )
 
             f_norm.write(f"{frame_idx}," + landmarks_norm_str + "\n")
             f_pixel.write(f"{frame_idx}," + landmarks_pixel_str + "\n")
 
-    print(f"\n\nStep 2/2: Generating video with processed landmarks")
+    print("\n\nStep 2/2: Generating video with processed landmarks")
 
     # Step 2: Generate the video using the processed landmarks
     cap = cv2.VideoCapture(str(video_path))
@@ -463,9 +445,7 @@ def process_video(video_path, output_dir, pose_config):
     mp_drawing = mp.solutions.drawing_utils
     mp_pose = mp.solutions.pose
 
-    drawing_spec = mp_drawing.DrawingSpec(
-        color=(0, 255, 0), thickness=2, circle_radius=2
-    )
+    drawing_spec = mp_drawing.DrawingSpec(color=(0, 255, 0), thickness=2, circle_radius=2)
     connection_spec = mp_drawing.DrawingSpec(color=(255, 0, 0), thickness=2)
 
     frame_idx = 0
@@ -495,9 +475,7 @@ def process_video(video_path, output_dir, pose_config):
                     landmark.x = lm[0] / width  # Normalize to 0-1
                     landmark.y = lm[1] / height  # Normalize to 0-1
                     landmark.z = lm[2] if not np.isnan(lm[2]) else 0
-                    landmark.visibility = (
-                        1.0  # Maximum visibility for all processed points
-                    )
+                    landmark.visibility = 1.0  # Maximum visibility for all processed points
 
                 # Draw landmarks
                 mp_drawing.draw_landmarks(
@@ -529,9 +507,7 @@ def process_video(video_path, output_dir, pose_config):
         log_file.write(f"Execution Time: {execution_time} seconds\n")
         log_file.write(f"MediaPipe Pose Configuration: {pose_config}\n")
         if frames_with_missing_data:
-            log_file.write(
-                f"Frames with missing data: {len(frames_with_missing_data)}\n"
-            )
+            log_file.write(f"Frames with missing data: {len(frames_with_missing_data)}\n")
         else:
             log_file.write("No frames with missing data.\n")
 
@@ -547,9 +523,7 @@ def process_videos_in_directory():
     root = tk.Tk()
     root.withdraw()
 
-    input_dir = filedialog.askdirectory(
-        title="Select the input directory containing videos"
-    )
+    input_dir = filedialog.askdirectory(title="Select the input directory containing videos")
     if not input_dir:
         messagebox.showerror("Error", "No input directory selected.")
         return
@@ -569,9 +543,7 @@ def process_videos_in_directory():
 
     input_dir = Path(input_dir)
     video_files = list(input_dir.glob("*.*"))
-    video_files = [
-        f for f in video_files if f.suffix.lower() in [".mp4", ".avi", ".mov"]
-    ]
+    video_files = [f for f in video_files if f.suffix.lower() in [".mp4", ".avi", ".mov"]]
 
     print(f"\nFound {len(video_files)} videos to process")
 

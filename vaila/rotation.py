@@ -63,6 +63,7 @@ This script is distributed under the GPL3 License.
 """
 
 import os
+
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 
@@ -191,12 +192,8 @@ def createortbase_4points(p1, p2, p3, p4, configuration="y"):
 
     if configuration == "x":
         # Trunk configuration
-        v1 = (p2 - pm) / np.linalg.norm(
-            p2 - pm, axis=1, keepdims=True
-        )  # CLAV - PM normalized
-        v2 = (p1 - pm) / np.linalg.norm(
-            p1 - pm, axis=1, keepdims=True
-        )  # STRN - PM normalized
+        v1 = (p2 - pm) / np.linalg.norm(p2 - pm, axis=1, keepdims=True)  # CLAV - PM normalized
+        v2 = (p1 - pm) / np.linalg.norm(p1 - pm, axis=1, keepdims=True)  # STRN - PM normalized
         v3_ml = np.cross(v2, v1)  # Right ML direction
         v3_ml /= np.linalg.norm(v3_ml, axis=1, keepdims=True)
         pm_tprox = (p2 + p3) / 2
@@ -211,18 +208,12 @@ def createortbase_4points(p1, p2, p3, p4, configuration="y"):
         x_axis /= np.linalg.norm(x_axis, axis=1, keepdims=True)
     elif configuration == "z":
         # Pelvis configuration
-        v1 = (p2 - pm) / np.linalg.norm(
-            p2 - pm, axis=1, keepdims=True
-        )  # LASI - PM normalized
-        v2 = (p1 - pm) / np.linalg.norm(
-            p1 - pm, axis=1, keepdims=True
-        )  # RASI - PM normalized
+        v1 = (p2 - pm) / np.linalg.norm(p2 - pm, axis=1, keepdims=True)  # LASI - PM normalized
+        v2 = (p1 - pm) / np.linalg.norm(p1 - pm, axis=1, keepdims=True)  # RASI - PM normalized
         v4_up = np.cross(v2, v1)  # UP direction
         v4_up /= np.linalg.norm(v4_up, axis=1, keepdims=True)
         pm_ant = (p1 + p2) / 2
-        v5_ap = (pm_ant - pm) / np.linalg.norm(
-            pm_ant - pm, axis=1, keepdims=True
-        )  # AP direction
+        v5_ap = (pm_ant - pm) / np.linalg.norm(pm_ant - pm, axis=1, keepdims=True)  # AP direction
         x_axis = np.cross(v5_ap, v4_up)
         x_axis /= np.linalg.norm(x_axis, axis=1, keepdims=True)
         y_axis = np.cross(v4_up, x_axis)

@@ -33,13 +33,14 @@ Change History:
 """
 
 import os
-import sys
 import pathlib
+import sys
 import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox, scrolledtext
-from ultralytics import YOLO
+
 import torch
+from ultralytics import YOLO
 
 # import datetime
 # import re
@@ -152,9 +153,7 @@ class YOLOTrainApp(tk.Tk):
         tk.Label(self, text="AnyLabeling Dataset Folder:").grid(
             row=3, column=0, sticky="e", padx=5, pady=5
         )
-        dataset_entry = tk.Entry(
-            self, textvariable=self.dataset_path, width=50, state="readonly"
-        )
+        dataset_entry = tk.Entry(self, textvariable=self.dataset_path, width=50, state="readonly")
         dataset_entry.grid(row=3, column=1, padx=5, pady=5, sticky="ew")
         tk.Button(self, text="Browse", command=self.browse_dataset).grid(
             row=3, column=2, padx=5, pady=5
@@ -164,14 +163,10 @@ class YOLOTrainApp(tk.Tk):
         yaml_frame = tk.Frame(self)
         yaml_frame.grid(row=4, column=0, columnspan=3, pady=5, sticky="ew")
 
-        tk.Label(yaml_frame, text="YAML Configuration:").grid(
-            row=0, column=0, sticky="w", padx=5
-        )
+        tk.Label(yaml_frame, text="YAML Configuration:").grid(row=0, column=0, sticky="w", padx=5)
 
         # YAML Path Entry
-        yaml_entry = tk.Entry(
-            yaml_frame, textvariable=self.yaml_path, width=40, state="readonly"
-        )
+        yaml_entry = tk.Entry(yaml_frame, textvariable=self.yaml_path, width=40, state="readonly")
         yaml_entry.grid(row=1, column=0, padx=5, pady=2, sticky="ew")
 
         # YAML Buttons Frame
@@ -179,14 +174,14 @@ class YOLOTrainApp(tk.Tk):
         yaml_buttons_frame.grid(row=1, column=1, padx=5, pady=2)
 
         # Browse YAML Button
-        tk.Button(
-            yaml_buttons_frame, text="Browse YAML", command=self.browse_yaml
-        ).grid(row=0, column=0, padx=2)
+        tk.Button(yaml_buttons_frame, text="Browse YAML", command=self.browse_yaml).grid(
+            row=0, column=0, padx=2
+        )
 
         # Create YAML Button
-        tk.Button(
-            yaml_buttons_frame, text="Create New YAML", command=self.create_new_yaml
-        ).grid(row=0, column=1, padx=2)
+        tk.Button(yaml_buttons_frame, text="Create New YAML", command=self.create_new_yaml).grid(
+            row=0, column=1, padx=2
+        )
 
         # Start Training Button
         self.start_button = tk.Button(
@@ -204,9 +199,7 @@ class YOLOTrainApp(tk.Tk):
         tk.Label(self, text="Training Output:").grid(
             row=6, column=0, columnspan=3, sticky="w", padx=5, pady=5
         )
-        self.console = scrolledtext.ScrolledText(
-            self, height=15, wrap="word", font=("Consolas", 9)
-        )
+        self.console = scrolledtext.ScrolledText(self, height=15, wrap="word", font=("Consolas", 9))
         self.console.grid(row=7, column=0, columnspan=3, padx=10, pady=5, sticky="nsew")
 
     def _update_model_list(self, event=None):
@@ -332,8 +325,7 @@ For more info: https://github.com/vietanhdev/anylabeling
                 # Ask user if they want to create YAML
                 result = messagebox.askyesno(
                     "Create YAML",
-                    f"No YAML file found in:\n{path}\n\n"
-                    "Would you like to create a new YAML file?",
+                    f"No YAML file found in:\n{path}\n\nWould you like to create a new YAML file?",
                 )
                 if result:
                     self._auto_detect_and_create_yaml(path)
@@ -381,7 +373,7 @@ For more info: https://github.com/vietanhdev/anylabeling
 
         if os.path.exists(classes_file):
             try:
-                with open(classes_file, "r", encoding="utf-8") as f:
+                with open(classes_file, encoding="utf-8") as f:
                     class_names = [line.strip() for line in f if line.strip()]
                 print(f"Found {len(class_names)} classes in classes.txt")
             except Exception as e:
@@ -408,9 +400,7 @@ For more info: https://github.com/vietanhdev/anylabeling
         train_path = os.path.join(dataset_path, "train", "images")
         val_path = os.path.join(dataset_path, "val", "images")
         test_path = (
-            os.path.join(dataset_path, "test", "images")
-            if os.path.exists(test_images)
-            else None
+            os.path.join(dataset_path, "test", "images") if os.path.exists(test_images) else None
         )
 
         # Convert to forward slashes for YAML compatibility
@@ -419,9 +409,7 @@ For more info: https://github.com/vietanhdev/anylabeling
         if test_path:
             test_path = test_path.replace("\\", "/")
 
-        yaml_content = self._create_comprehensive_yaml(
-            train_path, val_path, test_path, class_names
-        )
+        yaml_content = self._create_comprehensive_yaml(train_path, val_path, test_path, class_names)
         yaml_file_path = os.path.join(dataset_path, "data.yaml")
 
         try:
@@ -685,9 +673,7 @@ names: {names_str}  # class names
             print(f"Dataset folder: {dataset_folder}")
             print(f"YAML file: {yaml_file}")
             # print(f"Model: {model_name}") # This line is removed
-            print(
-                f"Run name: {self.project_name.get()}"
-            )  # Keep project_name for consistency
+            print(f"Run name: {self.project_name.get()}")  # Keep project_name for consistency
             print("=" * 60)
 
             # Validate YAML file
@@ -699,7 +685,7 @@ names: {names_str}  # class names
             try:
                 import yaml
 
-                with open(yaml_file, "r") as f:
+                with open(yaml_file) as f:
                     yaml_data = yaml.safe_load(f)
                 print("YAML loaded successfully")
                 print(f"Classes: {yaml_data.get('nc', 'Not found')}")
@@ -765,9 +751,7 @@ names: {names_str}  # class names
             if not os.path.exists(model_path):
                 try:
                     print(f"\nDownloading model {model_name}...")
-                    print(
-                        "This may take a few minutes depending on your internet connection."
-                    )
+                    print("This may take a few minutes depending on your internet connection.")
                     print("Model size varies by type:")
                     print("  • Nano models (~6-20 MB)")
                     print("  • Small models (~20-50 MB)")
@@ -814,9 +798,7 @@ names: {names_str}  # class names
 
             # Define output directory structure
             output_dir = os.path.join(dataset_folder, "runs")
-            run_output_dir = os.path.join(
-                output_dir, self.project_name.get()
-            )  # Use project_name
+            run_output_dir = os.path.join(output_dir, self.project_name.get())  # Use project_name
             weights_dir = os.path.join(run_output_dir, "weights")
 
             print("\n--- Training Configuration ---")
@@ -908,9 +890,7 @@ names: {names_str}  # class names
 
             # Fix the lambda scope issue
             error_type = type(e).__name__
-            error_details = str(
-                e
-            )  # noqa: F841 - Error details for potential future use
+            error_details = str(e)  # noqa: F841 - Error details for potential future use
 
             self.after(
                 0,
@@ -1126,14 +1106,12 @@ names: {names_str}  # class names
         try:
             import yaml
 
-            with open(yaml_file, "r") as f:
+            with open(yaml_file) as f:
                 yaml_data = yaml.safe_load(f)
 
             # Check required fields
             required_fields = ["train", "val", "nc", "names"]
-            missing_fields = [
-                field for field in required_fields if field not in yaml_data
-            ]
+            missing_fields = [field for field in required_fields if field not in yaml_data]
 
             if missing_fields:
                 messagebox.showerror(
@@ -1155,9 +1133,7 @@ names: {names_str}  # class names
                 val_path = os.path.join(dataset_dir, val_path[2:])
 
             if not os.path.exists(train_path):
-                messagebox.showerror(
-                    "Invalid YAML", f"Train path not found: {train_path}"
-                )
+                messagebox.showerror("Invalid YAML", f"Train path not found: {train_path}")
                 return False
 
             if not os.path.exists(val_path):

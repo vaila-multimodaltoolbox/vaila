@@ -112,9 +112,7 @@ def get_user_inputs():
     sample_rate_entry.pack(padx=10, pady=5)
 
     # Create a LabelFrame for entering Cluster 1 configuration
-    cluster1_config_frame = ttk.LabelFrame(
-        input_frame, text="Cluster 1 Configuration (A/B/C/D):"
-    )
+    cluster1_config_frame = ttk.LabelFrame(input_frame, text="Cluster 1 Configuration (A/B/C/D):")
     cluster1_config_frame.pack(padx=10, pady=10)
 
     # Create an Entry widget for Cluster 1 configuration with default value 'A'
@@ -132,9 +130,7 @@ def get_user_inputs():
     cluster1_name_entry.pack(padx=10, pady=5)
 
     # Create a LabelFrame for entering Cluster 2 configuration
-    cluster2_config_frame = ttk.LabelFrame(
-        input_frame, text="Cluster 2 Configuration (A/B/C/D):"
-    )
+    cluster2_config_frame = ttk.LabelFrame(input_frame, text="Cluster 2 Configuration (A/B/C/D):")
     cluster2_config_frame.pack(padx=10, pady=10)
 
     # Create an Entry widget for Cluster 2 configuration with default value 'C'

@@ -72,29 +72,29 @@ python vaila/cube2d_kinematics.py
 """
 
 import os
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-from matplotlib.colors import Normalize
+from datetime import datetime
 from tkinter import (
+    BOTH,
+    RIGHT,
+    WORD,
+    Button,
+    Frame,
+    Scrollbar,
+    Text,
     Tk,
+    Toplevel,
+    Y,
     filedialog,
     messagebox,
     simpledialog,
-    Toplevel,
-    Text,
-    Scrollbar,
-    Frame,
-    Button,
-    WORD,
-    RIGHT,
-    Y,
-    BOTH,
-    END,
 )
-from datetime import datetime
-from scipy.signal import butter, filtfilt
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 from matplotlib.collections import LineCollection
+from matplotlib.colors import Normalize
+from scipy.signal import butter, filtfilt
 
 # Define the default quadrants using numpy arrays
 quadrants = np.array(
@@ -145,9 +145,7 @@ def show_instructions():
     scrollbar = Scrollbar(frame)
     scrollbar.pack(side=RIGHT, fill=Y)
 
-    text_widget = Text(
-        frame, wrap=WORD, yscrollcommand=scrollbar.set, font=("Arial", 11)
-    )
+    text_widget = Text(frame, wrap=WORD, yscrollcommand=scrollbar.set, font=("Arial", 11))
     text_widget.pack(side="left", fill=BOTH, expand=True)
     scrollbar.config(command=text_widget.yview)
 
@@ -268,12 +266,8 @@ CLICK 'CONTINUE' TO START FILE SELECTION
 
     # Center the window
     instruction_window.update_idletasks()
-    x = (instruction_window.winfo_screenwidth() // 2) - (
-        instruction_window.winfo_width() // 2
-    )
-    y = (instruction_window.winfo_screenheight() // 2) - (
-        instruction_window.winfo_height() // 2
-    )
+    x = (instruction_window.winfo_screenwidth() // 2) - (instruction_window.winfo_width() // 2)
+    y = (instruction_window.winfo_screenheight() // 2) - (instruction_window.winfo_height() // 2)
     instruction_window.geometry(f"+{x}+{y}")
 
     root.mainloop()
@@ -479,9 +473,7 @@ def plot_pathway_with_quadrants(x, y, quadrants_df, time_vector):
     cbar.set_ticklabels([f"{time_vector[0]:.2f}", f"{time_vector[-1]:.2f}"])
 
     # Configure plot
-    ax.set_title(
-        "CUBE 2D Pathway with Time-Based Color Gradient", fontsize=16, fontweight="bold"
-    )
+    ax.set_title("CUBE 2D Pathway with Time-Based Color Gradient", fontsize=16, fontweight="bold")
     ax.set_xlabel("X - Medio-lateral (m)", fontsize=12)
     ax.set_ylabel("Y - Antero-posterior (m)", fontsize=12)
     ax.axhline(0, color="black", linewidth=1, alpha=0.5)
@@ -543,9 +535,7 @@ def process_file(file_path, quadrants_df, output_dir, fs, base_name):
         results_df.to_csv(results_csv, index=False)
 
         # Also save detailed text file for human reading
-        with open(
-            os.path.join(output_dir, f"{base_name}_cube2d_summary.txt"), "w"
-        ) as f:
+        with open(os.path.join(output_dir, f"{base_name}_cube2d_summary.txt"), "w") as f:
             f.write("CUBE 2D KINEMATICS ANALYSIS RESULTS\n")
             f.write("=" * 50 + "\n")
             f.write(f"File: {base_name}\n")
@@ -584,9 +574,7 @@ def run_cube2d_kinematics():
     print("Starting CUBE 2D Kinematics analysis...")
 
     # Select data directory
-    data_dir = filedialog.askdirectory(
-        title="Select the Data Directory (containing CSV files)"
-    )
+    data_dir = filedialog.askdirectory(title="Select the Data Directory (containing CSV files)")
     if not data_dir:
         print("No data directory selected. Exiting.")
         return
@@ -651,9 +639,7 @@ def run_cube2d_kinematics():
 
         # Create subdirectory for each file
         file_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        file_output_dir = os.path.join(
-            base_output_dir, f"{base_name}_cube2d_{file_timestamp}"
-        )
+        file_output_dir = os.path.join(base_output_dir, f"{base_name}_cube2d_{file_timestamp}")
         os.makedirs(file_output_dir, exist_ok=True)
 
         # Process file
@@ -699,19 +685,17 @@ def run_cube2d_kinematics():
     # Create consolidated database CSV
     if all_results:
         consolidated_df = pd.DataFrame(all_results)
-        consolidated_csv = os.path.join(
-            base_output_dir, "consolidated_cube2d_database.csv"
-        )
+        consolidated_csv = os.path.join(base_output_dir, "consolidated_cube2d_database.csv")
         consolidated_df.to_csv(consolidated_csv, index=False)
         print(f"Consolidated database saved: {consolidated_csv}")
 
     # Show completion message
-    message = f"Analysis completed!\n\n"
+    message = "Analysis completed!\n\n"
     message += f"Files processed successfully: {files_processed}\n"
     if files_failed > 0:
         message += f"Files failed: {files_failed}\n"
     message += f"\nOutput directory:\n{base_output_dir}\n\n"
-    message += f"Database file: consolidated_cube2d_database.csv"
+    message += "Database file: consolidated_cube2d_database.csv"
 
     messagebox.showinfo("Processing Complete", message)
     print(f"Analysis complete. Results saved to: {base_output_dir}")
