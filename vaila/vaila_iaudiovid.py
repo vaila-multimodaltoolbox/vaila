@@ -28,16 +28,15 @@ Requirements:
 ================================================================================
 """
 
+import math
 import os
-import sys
-import subprocess
 import shutil
-from pathlib import Path
-from datetime import datetime
+import subprocess
+import sys
 import threading
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox, scrolledtext
-import math
+from datetime import datetime
+from tkinter import filedialog, messagebox, scrolledtext, ttk
 
 
 class AudioVideoProcessor:
@@ -57,9 +56,7 @@ class AudioVideoProcessor:
         # Check for ffmpeg
         self.ffmpeg_available = self._check_ffmpeg()
         if not self.ffmpeg_available:
-            print(
-                "Error: ffmpeg not found. Please install ffmpeg and ensure it's in your PATH."
-            )
+            print("Error: ffmpeg not found. Please install ffmpeg and ensure it's in your PATH.")
             sys.exit(1)
 
     def _check_ffmpeg(self):
@@ -204,11 +201,9 @@ class AudioVideoProcessor:
                 # Build a complex filter that concatenates the audio file with itself multiple times
                 concat_parts = []
                 for i in range(loops_needed):
-                    concat_parts.append(f"[0:a]")
+                    concat_parts.append("[0:a]")
 
-                filter_complex = (
-                    f"{' '.join(concat_parts)}concat=n={loops_needed}:v=0:a=1[aout]"
-                )
+                filter_complex = f"{' '.join(concat_parts)}concat=n={loops_needed}:v=0:a=1[aout]"
 
                 # Create looped audio file using concat filter
                 loop_cmd = [
@@ -296,7 +291,7 @@ class AudioVideoProcessor:
                     else:
                         if self.status_callback:
                             self.status_callback(
-                                f"Fallback method also failed. Using original audio."
+                                "Fallback method also failed. Using original audio."
                             )
                         audio_input = self.audio_file
             else:
@@ -335,9 +330,7 @@ class AudioVideoProcessor:
                     time_parts = line.split("time=")[1].split()[0].split(":")
                     if len(time_parts) == 3:
                         hours, minutes, seconds = time_parts
-                        progress = (
-                            float(hours) * 3600 + float(minutes) * 60 + float(seconds)
-                        )
+                        progress = float(hours) * 3600 + float(minutes) * 60 + float(seconds)
                         # Update progress (simplified - actual calculation would need video duration)
                         self.progress_callback(progress)
 
@@ -360,9 +353,7 @@ class AudioVideoProcessor:
                 return True, output_file
             else:
                 if self.status_callback:
-                    self.status_callback(
-                        f"Error processing {os.path.basename(video_file)}"
-                    )
+                    self.status_callback(f"Error processing {os.path.basename(video_file)}")
                 return False, None
 
         except Exception as e:
@@ -399,9 +390,7 @@ class AudioVideoProcessor:
         # Create log file
         log_file = os.path.join(process_dir, "processing_log.txt")
         with open(log_file, "w", encoding="utf-8") as f:
-            f.write(
-                f"Processing started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-            )
+            f.write(f"Processing started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
             f.write(f"Audio file: {self.audio_file}\n")
             f.write(f"Number of videos: {len(self.video_files)}\n\n")
             f.write("Results:\n")
@@ -415,9 +404,7 @@ class AudioVideoProcessor:
                 output_file = os.path.join(process_dir, base_name)
 
                 if self.status_callback:
-                    self.status_callback(
-                        f"Processing ({i}/{len(self.video_files)}): {base_name}"
-                    )
+                    self.status_callback(f"Processing ({i}/{len(self.video_files)}): {base_name}")
 
                 # Process the video
                 success, actual_output = self.process_video(video_file, output_file)
@@ -444,13 +431,9 @@ class AudioVideoProcessor:
         # Write completion to log
         with open(log_file, "a", encoding="utf-8") as f:
             f.write(
-                "\nProcessing completed: "
-                + datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                + "\n"
+                "\nProcessing completed: " + datetime.now().strftime("%Y-%m-%d %H:%M:%S") + "\n"
             )
-            f.write(
-                f"Successfully processed: {len(processed_files)}/{len(self.video_files)}\n"
-            )
+            f.write(f"Successfully processed: {len(processed_files)}/{len(self.video_files)}\n")
 
         if self.status_callback:
             self.status_callback(f"Processing complete. Files saved to: {process_dir}")
@@ -462,9 +445,7 @@ class AudioVideoProcessor:
         if self.process_thread and self.process_thread.is_alive():
             return False  # Already processing
 
-        self.process_thread = threading.Thread(
-            target=self.process_all_videos, daemon=True
-        )
+        self.process_thread = threading.Thread(target=self.process_all_videos, daemon=True)
         self.process_thread.start()
         return True
 
@@ -493,9 +474,7 @@ class AudioVideoGUI:
         title_frame.pack(pady=(0, 3), fill=tk.X)
 
         # Use two labels to have vailá in italic and the rest normal
-        vaila_label = ttk.Label(
-            title_frame, text="vailá", font=("Arial", 16, "bold", "italic")
-        )
+        vaila_label = ttk.Label(title_frame, text="vailá", font=("Arial", 16, "bold", "italic"))
         vaila_label.pack(side=tk.LEFT)
 
         title_label = ttk.Label(
@@ -512,9 +491,7 @@ class AudioVideoGUI:
         desc_label.pack(pady=(0, 8))
 
         # Video directory section
-        video_frame = ttk.LabelFrame(
-            main_frame, text="Step 1: Select Video Directory", padding=5
-        )
+        video_frame = ttk.LabelFrame(main_frame, text="Step 1: Select Video Directory", padding=5)
         video_frame.pack(fill=tk.X, pady=5)
 
         ttk.Label(video_frame, text="Directory containing video files:").pack(
@@ -528,25 +505,19 @@ class AudioVideoGUI:
         video_entry = ttk.Entry(video_entry_frame, textvariable=self.video_dir_var)
         video_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
 
-        ttk.Button(
-            video_entry_frame, text="Browse", command=self.browse_video_dir
-        ).pack(side=tk.RIGHT)
+        ttk.Button(video_entry_frame, text="Browse", command=self.browse_video_dir).pack(
+            side=tk.RIGHT
+        )
 
         # File counter display
         self.file_count_var = tk.StringVar(value="No videos selected")
-        ttk.Label(video_frame, textvariable=self.file_count_var).pack(
-            anchor=tk.W, pady=2
-        )
+        ttk.Label(video_frame, textvariable=self.file_count_var).pack(anchor=tk.W, pady=2)
 
         # Audio file section
-        audio_frame = ttk.LabelFrame(
-            main_frame, text="Step 2: Select Audio File", padding=5
-        )
+        audio_frame = ttk.LabelFrame(main_frame, text="Step 2: Select Audio File", padding=5)
         audio_frame.pack(fill=tk.X, pady=5)
 
-        ttk.Label(audio_frame, text="Audio file to insert:").pack(
-            anchor=tk.W, pady=(0, 2)
-        )
+        ttk.Label(audio_frame, text="Audio file to insert:").pack(anchor=tk.W, pady=(0, 2))
 
         audio_entry_frame = ttk.Frame(audio_frame)
         audio_entry_frame.pack(fill=tk.X, pady=2)
@@ -555,14 +526,12 @@ class AudioVideoGUI:
         audio_entry = ttk.Entry(audio_entry_frame, textvariable=self.audio_file_var)
         audio_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
 
-        ttk.Button(
-            audio_entry_frame, text="Browse", command=self.browse_audio_file
-        ).pack(side=tk.RIGHT)
+        ttk.Button(audio_entry_frame, text="Browse", command=self.browse_audio_file).pack(
+            side=tk.RIGHT
+        )
 
         # Output directory section
-        output_frame = ttk.LabelFrame(
-            main_frame, text="Step 3: Select Output Directory", padding=5
-        )
+        output_frame = ttk.LabelFrame(main_frame, text="Step 3: Select Output Directory", padding=5)
         output_frame.pack(fill=tk.X, pady=5)
 
         ttk.Label(output_frame, text="Directory to save processed files:").pack(
@@ -572,20 +541,16 @@ class AudioVideoGUI:
         output_entry_frame = ttk.Frame(output_frame)
         output_entry_frame.pack(fill=tk.X, pady=2)
 
-        self.output_dir_var = tk.StringVar(
-            value=os.path.expanduser("~/Processed_Videos")
-        )
+        self.output_dir_var = tk.StringVar(value=os.path.expanduser("~/Processed_Videos"))
         output_entry = ttk.Entry(output_entry_frame, textvariable=self.output_dir_var)
         output_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
 
-        ttk.Button(
-            output_entry_frame, text="Browse", command=self.browse_output_dir
-        ).pack(side=tk.RIGHT)
+        ttk.Button(output_entry_frame, text="Browse", command=self.browse_output_dir).pack(
+            side=tk.RIGHT
+        )
 
         # Process button
-        process_frame = ttk.LabelFrame(
-            main_frame, text="Step 4: Start Processing", padding=5
-        )
+        process_frame = ttk.LabelFrame(main_frame, text="Step 4: Start Processing", padding=5)
         process_frame.pack(fill=tk.X, pady=5)
 
         self.process_btn = ttk.Button(
@@ -600,9 +565,7 @@ class AudioVideoGUI:
         log_frame = ttk.LabelFrame(main_frame, text="Processing Log", padding=5)
         log_frame.pack(fill=tk.BOTH, expand=True, pady=5)
 
-        self.log_text = scrolledtext.ScrolledText(
-            log_frame, height=8, width=80, wrap=tk.WORD
-        )
+        self.log_text = scrolledtext.ScrolledText(log_frame, height=8, width=80, wrap=tk.WORD)
         self.log_text.pack(fill=tk.BOTH, expand=True)
 
         # Status bar
@@ -610,9 +573,9 @@ class AudioVideoGUI:
         status_frame.pack(fill=tk.X, side=tk.BOTTOM)
 
         self.status_var = tk.StringVar(value="Ready")
-        ttk.Label(
-            status_frame, textvariable=self.status_var, font=("Arial", 9, "bold")
-        ).pack(side=tk.LEFT)
+        ttk.Label(status_frame, textvariable=self.status_var, font=("Arial", 9, "bold")).pack(
+            side=tk.LEFT
+        )
 
         self.progress_bar = ttk.Progressbar(
             status_frame, orient=tk.HORIZONTAL, length=100, mode="determinate"
@@ -620,9 +583,7 @@ class AudioVideoGUI:
         self.progress_bar.pack(fill=tk.X, expand=True, side=tk.RIGHT, padx=(10, 0))
 
         # Initialize
-        self.log(
-            "Audio insertion tool started. Please select a video directory and audio file."
-        )
+        self.log("Audio insertion tool started. Please select a video directory and audio file.")
 
     def log(self, message):
         """Add a message to the log display."""
@@ -706,9 +667,7 @@ class AudioVideoGUI:
     def start_processing(self):
         """Start the processing operation."""
         if not self.processor.video_files:
-            messagebox.showwarning(
-                "Warning", "Please select a directory with video files first."
-            )
+            messagebox.showwarning("Warning", "Please select a directory with video files first.")
             return
 
         if not self.processor.audio_file:
@@ -722,9 +681,7 @@ class AudioVideoGUI:
                 os.makedirs(output_dir, exist_ok=True)
                 self.log(f"Created output directory: {output_dir}")
             except Exception as e:
-                messagebox.showerror(
-                    "Error", f"Could not create output directory: {str(e)}"
-                )
+                messagebox.showerror("Error", f"Could not create output directory: {str(e)}")
                 return
 
         self.processor.set_output_directory(output_dir)

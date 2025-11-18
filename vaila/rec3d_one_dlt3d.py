@@ -32,14 +32,15 @@ Description:
 """
 
 import os
+from datetime import datetime
 from pathlib import Path
-from rich import print
+from tkinter import Tk, filedialog, messagebox, simpledialog
+
+import ezc3d
 import numpy as np
 import pandas as pd
 from numpy.linalg import lstsq
-from tkinter import filedialog, Tk, messagebox, simpledialog
-from datetime import datetime
-import ezc3d
+from rich import print
 
 
 def rec3d_multicam(dlt_list, pixel_list):
@@ -73,9 +74,7 @@ def rec3d_multicam(dlt_list, pixel_list):
     return solution  # [X, Y, Z]
 
 
-def save_rec3d_as_c3d(
-    rec3d_df, output_dir, default_filename, point_rate=100, conversion_factor=1
-):
+def save_rec3d_as_c3d(rec3d_df, output_dir, default_filename, point_rate=100, conversion_factor=1):
     """
     Converte o DataFrame de reconstrução 3D para um arquivo C3D e o salva.
 
@@ -90,9 +89,7 @@ def save_rec3d_as_c3d(
 
     num_frames = rec3d_df.shape[0]
     # Define the markers based on the actual columns
-    x_columns = [
-        col for col in rec3d_df.columns if col.endswith("_x") and col.startswith("p")
-    ]
+    x_columns = [col for col in rec3d_df.columns if col.endswith("_x") and col.startswith("p")]
     num_markers = len(x_columns)
     marker_labels = [f"p{i}" for i in range(1, num_markers + 1)]
 
@@ -104,9 +101,7 @@ def save_rec3d_as_c3d(
             points_data[1, i, :] = rec3d_df[f"{marker}_y"].values * conversion_factor
             points_data[2, i, :] = rec3d_df[f"{marker}_z"].values * conversion_factor
         except KeyError as e:
-            messagebox.showerror(
-                "Error", f"Dados ausentes para o marcador {marker}: {e}"
-            )
+            messagebox.showerror("Error", f"Dados ausentes para o marcador {marker}: {e}")
             return
     points_data[3, :, :] = 1  # Coordenada homogênea
 
@@ -183,13 +178,9 @@ def run_rec3d_one_dlt3d():
 
     # Step 3: Select output directory
     print("Step 3: Selecting output directory...")
-    output_directory = filedialog.askdirectory(
-        title="Select Output Directory for Results"
-    )
+    output_directory = filedialog.askdirectory(title="Select Output Directory for Results")
     if not output_directory:
-        messagebox.showerror(
-            "Error", "No output directory selected. Operation cancelled."
-        )
+        messagebox.showerror("Error", "No output directory selected. Operation cancelled.")
         return
 
     # Step 4: Ask for data frequency
@@ -201,13 +192,11 @@ def run_rec3d_one_dlt3d():
         initialvalue=100,
     )
     if point_rate is None:
-        messagebox.showerror(
-            "Error", "Point data rate is required. Operation cancelled."
-        )
+        messagebox.showerror("Error", "Point data rate is required. Operation cancelled.")
         return
 
     # Configuration summary
-    print(f"Configuration complete:")
+    print("Configuration complete:")
     print(f"  - DLT3D files: {len(dlt_files)} cameras")
     print(f"  - Pixel files: {len(pixel_files)} cameras")
     print(f"  - Output directory: {output_directory}")
@@ -220,9 +209,7 @@ def run_rec3d_one_dlt3d():
     for file in dlt_files:
         df = pd.read_csv(file)
         if df.empty:
-            messagebox.showerror(
-                "Error", f"DLT3D file {os.path.basename(file)} is empty!"
-            )
+            messagebox.showerror("Error", f"DLT3D file {os.path.basename(file)} is empty!")
             return
         params = df.iloc[0, 1:].to_numpy().astype(float)
         dlt_params_list.append(params)
@@ -246,9 +233,7 @@ def run_rec3d_one_dlt3d():
 
     # Calculate number of markers by counting the columns that match the pattern "p{number}_x"
     first_df = pixel_dfs[0]
-    x_columns = [
-        col for col in first_df.columns if col.endswith("_x") and col.startswith("p")
-    ]
+    x_columns = [col for col in first_df.columns if col.endswith("_x") and col.startswith("p")]
     num_markers = len(x_columns)
     print(f"Detected {num_markers} markers for 3D reconstruction")
 
@@ -379,9 +364,7 @@ def run_rec3d_one_dlt3d():
             point_rate=point_rate,
             conversion_factor=m_conversion,
         )
-        messagebox.showinfo(
-            "Success", f"C3D file (meters) saved at:\n{c3d_output_path_m}"
-        )
+        messagebox.showinfo("Success", f"C3D file (meters) saved at:\n{c3d_output_path_m}")
         print("C3D file (meters) created successfully")
     except Exception as e:
         messagebox.showerror("Error", f"Failed to save C3D file (meters): {e}")
@@ -396,19 +379,17 @@ def run_rec3d_one_dlt3d():
             point_rate=point_rate,
             conversion_factor=mm_conversion,
         )
-        messagebox.showinfo(
-            "Success", f"C3D file (millimeters) saved at:\n{c3d_output_path_mm}"
-        )
+        messagebox.showinfo("Success", f"C3D file (millimeters) saved at:\n{c3d_output_path_mm}")
         print("C3D file (millimeters) created successfully")
     except Exception as e:
         messagebox.showerror("Error", f"Failed to save C3D file (millimeters): {e}")
         print("Error saving C3D file (millimeters):", e)
 
     # Final summary message
-    print(f"\n=== Processing Complete ===")
+    print("\n=== Processing Complete ===")
     print(f"Processed {len(common_frames)} frames with {num_markers} markers")
     print(f"Output directory: {new_dir}")
-    print(f"Files created:")
+    print("Files created:")
     print(f"  - {file_base}.csv (CSV format)")
     print(f"  - {file_base}.3d (3D format)")
     print(f"  - {file_base}_m.c3d (C3D in meters)")

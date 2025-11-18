@@ -26,24 +26,20 @@ Requirements:
 ================================================================================
 """
 
-import os
-import sys
-import re
-import time
-import subprocess
 import argparse
+import os
+import re
 import shutil
-from pathlib import Path
+import sys
 from datetime import datetime
-import threading
-import json
+
 from rich.console import Console
 from rich.progress import (
-    Progress,
     BarColumn,
+    MofNCompleteColumn,
+    Progress,
     TextColumn,
     TimeRemainingColumn,
-    MofNCompleteColumn,
 )
 
 # Try to import yt-dlp
@@ -57,7 +53,7 @@ except ImportError:
 # Try to import tkinter for GUI
 try:
     import tkinter as tk
-    from tkinter import ttk, filedialog, messagebox
+    from tkinter import filedialog, messagebox, ttk
 
     TKINTER_AVAILABLE = True
 except ImportError:
@@ -73,7 +69,7 @@ def read_urls_from_file(file_path):
     """Read YouTube URLs from a text file (one per line)."""
     urls = []
     try:
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(file_path, encoding="utf-8") as f:
             for line in f:
                 url = line.strip()
                 if url and not url.startswith("#"):  # Ignore empty lines and comments
@@ -133,10 +129,7 @@ class YTDownloader:
                         fps = fmt.get("fps", 0)
 
                         key = f"{fmt.get('width', 0)}x{height}"
-                        if (
-                            key not in resolution_formats
-                            or fps > resolution_formats[key]["fps"]
-                        ):
+                        if key not in resolution_formats or fps > resolution_formats[key]["fps"]:
                             resolution_formats[key] = {
                                 "resolution": key,
                                 "height": height,
@@ -184,7 +177,7 @@ class YTDownloader:
 
         # Format spec: Let yt-dlp decide best quality available (default behavior)
         format_spec = "bestvideo+bestaudio/best"
-        console.print(f"[blue]Downloading best available quality (video+audio)[/blue]")
+        console.print("[blue]Downloading best available quality (video+audio)[/blue]")
 
         # Progress hook for download updates
         def progress_hook(d):
@@ -209,7 +202,7 @@ class YTDownloader:
         # Prepare filename template with prefix if provided
         outtmpl = os.path.join(
             save_dir,
-            f"{filename_prefix+'_' if filename_prefix else ''}%(title)s.%(ext)s",
+            f"{filename_prefix + '_' if filename_prefix else ''}%(title)s.%(ext)s",
         )
 
         # Set up download options with max FPS preference
@@ -235,9 +228,7 @@ class YTDownloader:
                 console.print(f"[blue]Getting detailed info for: {url}[/blue]")
                 video_info = self.get_video_info(url)
             except Exception as e:
-                console.print(
-                    f"[yellow]Warning: Could not get detailed info: {str(e)}[/yellow]"
-                )
+                console.print(f"[yellow]Warning: Could not get detailed info: {str(e)}[/yellow]")
                 video_info = {"url": url, "available_formats": []}
 
             # Now download the video
@@ -250,9 +241,7 @@ class YTDownloader:
                     actual_filename = info["requested_downloads"][0]["filepath"]
                 else:
                     # Try to guess the filename
-                    actual_filename = os.path.join(
-                        save_dir, f"{self.current_video_title}.mp4"
-                    )
+                    actual_filename = os.path.join(save_dir, f"{self.current_video_title}.mp4")
 
                 # Create a comprehensive information file with available resolutions and FPS
                 info_file = os.path.join(save_dir, "video_info.txt")
@@ -265,9 +254,7 @@ class YTDownloader:
                     )
                     f.write(f"Downloaded FPS: {info.get('fps', 0)}\n")
                     f.write(f"Duration: {info.get('duration', 0)} seconds\n")
-                    f.write(
-                        f"Download date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-                    )
+                    f.write(f"Download date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
 
                     # Add available formats information sorted by FPS first, then resolution
                     f.write("AVAILABLE RESOLUTIONS AND FPS OPTIONS (sorted by FPS):\n")
@@ -293,9 +280,7 @@ class YTDownloader:
                     else:
                         f.write("Could not retrieve detailed format information.\n")
 
-                console.print(
-                    f"\n[green]Download successful:[/green] {self.current_video_title}"
-                )
+                console.print(f"\n[green]Download successful:[/green] {self.current_video_title}")
                 console.print(f"[blue]Saved to:[/blue] {actual_filename}")
                 console.print(
                     f"[blue]Resolution:[/blue] {info.get('width', 0)}x{info.get('height', 0)}"
@@ -334,9 +319,7 @@ class YTDownloader:
                 size = d.get("_total_bytes_str", "Unknown")
                 speed = d.get("_speed_str", "Unknown speed")
                 eta = d.get("_eta_str", "Unknown")
-                status_msg = (
-                    f"\rDownloading Audio: {p} of {size} at {speed}, ETA: {eta}"
-                )
+                status_msg = f"\rDownloading Audio: {p} of {size} at {speed}, ETA: {eta}"
                 console.print(status_msg, end="")
             elif d["status"] == "finished":
                 console.print("\nAudio download complete. Converting to MP3...")
@@ -345,7 +328,7 @@ class YTDownloader:
 
         outtmpl = os.path.join(
             save_dir,
-            f"{filename_prefix+'_' if filename_prefix else ''}%(title)s.%(ext)s",
+            f"{filename_prefix + '_' if filename_prefix else ''}%(title)s.%(ext)s",
         )
 
         ydl_opts = {
@@ -377,9 +360,7 @@ class YTDownloader:
                 actual_filename_mp3 = base + ".mp3"
 
                 # Renomeia se o arquivo final não for .mp3 (caso raro)
-                if os.path.exists(actual_filename) and not os.path.exists(
-                    actual_filename_mp3
-                ):
+                if os.path.exists(actual_filename) and not os.path.exists(actual_filename_mp3):
                     try:
                         os.rename(actual_filename, actual_filename_mp3)
                         actual_filename = actual_filename_mp3
@@ -387,9 +368,7 @@ class YTDownloader:
                         console.print(
                             f"[yellow]Warning: Could not rename output file to .mp3: {e}[/yellow]"
                         )
-                        actual_filename = (
-                            actual_filename  # Mantém o nome original se falhar
-                        )
+                        actual_filename = actual_filename  # Mantém o nome original se falhar
 
                 console.print(
                     f"\n[green]Audio download successful:[/green] {self.current_video_title}"
@@ -437,9 +416,7 @@ class YTDownloader:
             info_file = os.path.join(playlist_dir, "playlist_info.txt")
             with open(info_file, "w", encoding="utf-8") as f:
                 f.write(f"Playlist: {playlist_title}\n")
-                f.write(
-                    f"Downloaded on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-                )
+                f.write(f"Downloaded on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
                 f.write(f"Total videos: {len(entries)}\n\n")
                 f.write("Videos in this playlist:\n")
                 f.write("-" * 60 + "\n")
@@ -456,17 +433,13 @@ class YTDownloader:
                 TextColumn("•"),
                 TimeRemainingColumn(),
             ) as progress:
-                task = progress.add_task(
-                    f"[cyan]Downloading playlist", total=len(entries)
-                )
+                task = progress.add_task("[cyan]Downloading playlist", total=len(entries))
 
                 for i, entry in enumerate(entries, 1):
                     video_url = entry.get("url")
                     video_title = entry.get("title", f"Video {i}")
 
-                    progress.update(
-                        task, description=f"[{i}/{len(entries)}] {video_title[:40]}..."
-                    )
+                    progress.update(task, description=f"[{i}/{len(entries)}] {video_title[:40]}...")
 
                     try:
                         # Add number prefix to keep videos in order
@@ -483,9 +456,7 @@ class YTDownloader:
                         progress.update(task, advance=1)
 
                     except Exception as e:
-                        console.print(
-                            f"[red]Error downloading video {i}: {str(e)}[/red]"
-                        )
+                        console.print(f"[red]Error downloading video {i}: {str(e)}[/red]")
 
                         # Add error to info file
                         with open(info_file, "a", encoding="utf-8") as f:
@@ -495,7 +466,7 @@ class YTDownloader:
                         progress.update(task, advance=1)
                         continue
 
-            console.print(f"\n[green]Playlist download complete![/green]")
+            console.print("\n[green]Playlist download complete![/green]")
             console.print(f"[blue]Saved to:[/blue] {playlist_dir}")
 
             return playlist_dir
@@ -523,26 +494,18 @@ class YTDownloader:
         # Create log file
         log_file = os.path.join(batch_dir, "download_log.txt")
         with open(log_file, "w", encoding="utf-8") as f:
-            f.write(
-                f"Batch download started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-            )
-            f.write(
-                f"Download type: {'Audio (MP3)' if audio_only else 'Video (Highest FPS)'}\n"
-            )
+            f.write(f"Batch download started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"Download type: {'Audio (MP3)' if audio_only else 'Video (Highest FPS)'}\n")
             f.write(f"Total URLs: {len(urls)}\n\n")
             f.write("Results:\n")
             f.write("-" * 60 + "\n")
 
         content_type = "audio tracks" if audio_only else "videos"
-        console.print(
-            f"[bold]Starting batch download of {len(urls)} {content_type}[/bold]"
-        )
+        console.print(f"[bold]Starting batch download of {len(urls)} {content_type}[/bold]")
         console.print(f"[bold]Output directory:[/bold] {batch_dir}")
 
         if not audio_only:
-            console.print(
-                f"[bold]Priority:[/bold] Highest FPS available for each video"
-            )
+            console.print("[bold]Priority:[/bold] Highest FPS available for each video")
 
         success_count = 0
         fail_count = 0
@@ -574,9 +537,7 @@ class YTDownloader:
             except Exception as e:
                 error_msg = str(e)
                 content_type = "audio" if audio_only else "video"
-                console.print(
-                    f"[red]Error downloading {content_type} {i}: {error_msg}[/red]"
-                )
+                console.print(f"[red]Error downloading {content_type} {i}: {error_msg}[/red]")
 
                 # Log error
                 with open(log_file, "a", encoding="utf-8") as f:
@@ -585,7 +546,7 @@ class YTDownloader:
                 fail_count += 1
 
         # Final summary
-        console.print(f"\n[green]Batch download complete![/green]")
+        console.print("\n[green]Batch download complete![/green]")
         console.print(
             f"[blue]Total: {len(urls)}, Success: {success_count}, Failures: {fail_count}[/blue]"
         )
@@ -645,9 +606,7 @@ if TKINTER_AVAILABLE:
 
             # Usar dois labels separados em vez do widget Text
             # O primeiro label para "vailá" em itálico
-            vaila_label = ttk.Label(
-                title_frame, text="vailá", font=("Arial", 16, "bold", "italic")
-            )
+            vaila_label = ttk.Label(title_frame, text="vailá", font=("Arial", 16, "bold", "italic"))
             vaila_label.pack(side=tk.LEFT)
 
             # O segundo label para "YOUTUBE DOWNLOADER" em fonte normal
@@ -669,16 +628,12 @@ if TKINTER_AVAILABLE:
 
             # Directory display
             self.output_dir_var = tk.StringVar(value=os.path.expanduser("~/Downloads"))
-            ttk.Label(dir_frame, text="Videos will be saved to:").pack(
-                anchor=tk.W, pady=(0, 5)
-            )
+            ttk.Label(dir_frame, text="Videos will be saved to:").pack(anchor=tk.W, pady=(0, 5))
 
             dir_path = ttk.Entry(dir_frame, textvariable=self.output_dir_var, width=60)
             dir_path.pack(fill=tk.X, pady=5)
 
-            browse_btn = ttk.Button(
-                dir_frame, text="Browse...", command=self.browse_dir
-            )
+            browse_btn = ttk.Button(dir_frame, text="Browse...", command=self.browse_dir)
             browse_btn.pack(anchor=tk.W, pady=5)
 
             # Status area
@@ -688,9 +643,9 @@ if TKINTER_AVAILABLE:
             self.status_var = tk.StringVar(
                 value="Ready - Please select output directory and load a URL file"
             )
-            ttk.Label(
-                status_frame, textvariable=self.status_var, font=("Arial", 10, "bold")
-            ).pack(anchor=tk.W)
+            ttk.Label(status_frame, textvariable=self.status_var, font=("Arial", 10, "bold")).pack(
+                anchor=tk.W
+            )
 
             self.progress_bar = ttk.Progressbar(
                 status_frame, orient=tk.HORIZONTAL, length=100, mode="determinate"
@@ -707,9 +662,7 @@ if TKINTER_AVAILABLE:
             self.log_text.pack(fill=tk.BOTH, expand=True)
 
             # Load URL file section
-            file_frame = ttk.LabelFrame(
-                main_frame, text="Load URLs from File", padding=10
-            )
+            file_frame = ttk.LabelFrame(main_frame, text="Load URLs from File", padding=10)
             file_frame.pack(fill=tk.X, pady=10)
 
             ttk.Label(
@@ -754,9 +707,7 @@ if TKINTER_AVAILABLE:
                     timestamp = datetime.now().strftime("%H:%M:%S")
                     self.log_text.insert(tk.END, f"[{timestamp}] {message}\n")
                     self.log_text.see(tk.END)  # Scroll to the end
-                print(
-                    f"[LOG] {message}"
-                )  # Sempre imprimir no console, independente do widget
+                print(f"[LOG] {message}")  # Sempre imprimir no console, independente do widget
             except Exception as e:
                 print(f"[LOG ERROR] Couldn't log to UI: {str(e)}")
                 print(f"[LOG] {message}")  # Garantir que a mensagem é impressa
@@ -827,9 +778,7 @@ if TKINTER_AVAILABLE:
                     self.root.lift()
                     self.root.focus_force()
                     self.root.update()
-                    messagebox.showwarning(
-                        "Warning", "No URLs found in the file", parent=self.root
-                    )
+                    messagebox.showwarning("Warning", "No URLs found in the file", parent=self.root)
                     return
 
                 # Trazer a janela para frente antes dos próximos diálogos
@@ -848,9 +797,7 @@ if TKINTER_AVAILABLE:
                 )
 
                 audio_only = download_type == "yes"
-                content_type = (
-                    "MP3 audio tracks" if audio_only else "videos with highest FPS"
-                )
+                content_type = "MP3 audio tracks" if audio_only else "videos with highest FPS"
 
                 # Trazer a janela para frente antes do próximo diálogo
                 self.root.lift()
@@ -861,9 +808,7 @@ if TKINTER_AVAILABLE:
                 confirm = messagebox.askyesno(
                     "Confirm Batch Download",
                     f"Do you want to download {len(urls)} {content_type}?\n\n"
-                    f"First 3 URLs:\n"
-                    + "\n".join(urls[:3])
-                    + ("\n..." if len(urls) > 3 else ""),
+                    f"First 3 URLs:\n" + "\n".join(urls[:3]) + ("\n..." if len(urls) > 3 else ""),
                     parent=self.root,
                 )
 
@@ -938,7 +883,7 @@ if TKINTER_AVAILABLE:
                                         f"Resolution: {info.get('width', 'unknown')}x{info.get('height', 'unknown')}\n"
                                     )
                                     f.write(f"FPS: {info.get('fps', 'unknown')}\n")
-                                    f.write(f"Priority: Best overall quality\n")
+                                    f.write("Priority: Best overall quality\n")
 
                                 # Log success
                                 with open(log_file, "a", encoding="utf-8") as f:
@@ -1008,9 +953,7 @@ def run_ytdown():
     """Main entry point for the script."""
     parser = argparse.ArgumentParser(description="Download YouTube videos or audio")
     parser.add_argument("-u", "--url", help="YouTube video or playlist URL")
-    parser.add_argument(
-        "-f", "--file", help="Text file with YouTube URLs (one per line)"
-    )
+    parser.add_argument("-f", "--file", help="Text file with YouTube URLs (one per line)")
     parser.add_argument("-o", "--output", help="Output directory")
     parser.add_argument("--no-gui", action="store_true", help="Force CLI mode (no GUI)")
     parser.add_argument(
@@ -1056,13 +999,11 @@ def run_ytdown():
                     url = url[1:]
 
                 if args.audio_only:
-                    console.print(f"\n[green]Starting audio download (MP3)...[/green]")
+                    console.print("\n[green]Starting audio download (MP3)...[/green]")
                     console.print(f"[bold]URL:[/bold] {url}")
                     downloader.download_audio(url, output_dir=args.output)
                 else:
-                    console.print(
-                        f"\n[green]Starting download of highest FPS version...[/green]"
-                    )
+                    console.print("\n[green]Starting download of highest FPS version...[/green]")
                     console.print(f"[bold]URL:[/bold] {url}")
 
                     # Simplifiquei a chamada aqui para usar o método da classe
@@ -1081,7 +1022,7 @@ def run_ytdown():
             if url:
                 try:
                     console.print(
-                        f"\n[green]Starting download of highest quality version...[/green]"
+                        "\n[green]Starting download of highest quality version...[/green]"
                     )
                     downloader.download_video(url, output_dir=args.output)
                 except Exception as e:
@@ -1131,7 +1072,7 @@ def run_ytdown():
                 try:
                     downloader = YTDownloader()
                     console.print(
-                        f"\n[green]Starting download of highest quality version...[/green]"
+                        "\n[green]Starting download of highest quality version...[/green]"
                     )
                     downloader.download_video(url, output_dir=args.output)
                 except Exception as e:

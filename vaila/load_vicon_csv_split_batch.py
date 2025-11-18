@@ -45,12 +45,13 @@ This script is provided "as is" without warranty of any kind. The author is not 
 ================================================================================
 """
 
-import pandas as pd
 import os
 import re
-from io import StringIO
 from datetime import datetime
+from io import StringIO
 from tkinter import Tk, filedialog
+
+import pandas as pd
 
 
 def clean_header(header):
@@ -97,12 +98,10 @@ def read_csv_devs(filepath, output_dir):
     """Process a CSV file and save the results split by devices."""
     file_datetime = get_file_creation_datetime(filepath)
 
-    with open(filepath, "r", encoding="utf-8-sig") as file:
+    with open(filepath, encoding="utf-8-sig") as file:
         lines = file.readlines()
 
-    blank_line_indices = [
-        index for index, line in enumerate(lines) if line.strip() == ""
-    ]
+    blank_line_indices = [index for index, line in enumerate(lines) if line.strip() == ""]
     blank_line_indices = [0] + blank_line_indices + [len(lines)]
 
     devs = {}
@@ -118,9 +117,7 @@ def read_csv_devs(filepath, output_dir):
 
         if start_index < end_index - data_offset:
             dev_lines = lines[start_index:end_index]
-            header_lines = StringIO(
-                "".join(dev_lines[header_offset : header_offset + 2])
-            )
+            header_lines = StringIO("".join(dev_lines[header_offset : header_offset + 2]))
             data_str = StringIO("".join(dev_lines[data_offset:]))
 
             try:
@@ -154,9 +151,7 @@ def select_directory():
     root.tk.call("wm", "attributes", ".", "-topmost", "1")  # Keep window on top
 
     # Prompt the user to select the source directory
-    src_directory = filedialog.askdirectory(
-        title="Select the Source Directory with CSV Files"
-    )
+    src_directory = filedialog.askdirectory(title="Select the Source Directory with CSV Files")
 
     # Prompt the user to select the output directory
     output_directory = filedialog.askdirectory(
@@ -185,9 +180,7 @@ def process_csv_files_first_level(src_directory, output_directory):
 
     # Create the main output directory with a timestamp
     datetime_suffix = datetime.now().strftime("%Y%m%d_%H%M%S")
-    main_output_dir = os.path.join(
-        output_directory, f"vicon_csv_split_{datetime_suffix}"
-    )
+    main_output_dir = os.path.join(output_directory, f"vicon_csv_split_{datetime_suffix}")
     os.makedirs(main_output_dir, exist_ok=True)
 
     for csv_file in csv_files:

@@ -56,15 +56,16 @@ For batch processing, the script will:
 
 """
 
+import re
+import tkinter as tk
+from datetime import datetime
 from pathlib import Path
-from rich import print
+from tkinter import filedialog, messagebox, simpledialog
+
+import ezc3d
 import numpy as np
 import pandas as pd
-import re
-import ezc3d
-import tkinter as tk
-from tkinter import filedialog, simpledialog, messagebox
-from datetime import datetime
+from rich import print
 
 # Dictionary for metric unit conversions with abbreviations
 CONVERSIONS = {
@@ -114,9 +115,7 @@ def sanitize_header(header):
     - Ensure each coordinate column has the correct suffix (_X, _Y, _Z).
     - Fix any empty or incorrectly named columns.
     """
-    new_header = [
-        header[0]
-    ]  # Keep the first column unchanged (typically 'Time' or 'Frame')
+    new_header = [header[0]]  # Keep the first column unchanged (typically 'Time' or 'Frame')
     empty_column_counter = 0  # Counter for empty columns
 
     for i, col in enumerate(header[1:]):  # Start from the second column
@@ -146,12 +145,8 @@ def sanitize_header(header):
     i = 0
     while i < len(new_header):
         sanitized_header.append(new_header[i])
-        if i > 0 and (i + 2) < len(
-            new_header
-        ):  # Ensure we have space for a set of _X, _Y, _Z
-            base_name = new_header[i].rsplit("_", 1)[
-                0
-            ]  # Get the base name without the suffix
+        if i > 0 and (i + 2) < len(new_header):  # Ensure we have space for a set of _X, _Y, _Z
+            base_name = new_header[i].rsplit("_", 1)[0]  # Get the base name without the suffix
             sanitized_header.append(base_name + "_Y")
             sanitized_header.append(base_name + "_Z")
             i += 2
@@ -165,9 +160,7 @@ def validate_and_filter_columns(df):
     Filter only the columns that are in the correct format, ignoring the first column.
     """
     valid_columns = [df.columns[0]] + [
-        col
-        for col in df.columns[1:]
-        if "_" in col and col.split("_")[-1] in ["X", "Y", "Z"]
+        col for col in df.columns[1:] if "_" in col and col.split("_")[-1] in ["X", "Y", "Z"]
     ]
     return df[valid_columns]
 
@@ -184,18 +177,14 @@ def get_conversion_factor():
 
     current_unit_label = tk.Label(convert_window, text="Current Unit:")
     current_unit_label.pack(pady=5)
-    current_unit_listbox = tk.Listbox(
-        convert_window, selectmode=tk.SINGLE, exportselection=False
-    )
+    current_unit_listbox = tk.Listbox(convert_window, selectmode=tk.SINGLE, exportselection=False)
     current_unit_listbox.pack(pady=5)
     for unit in unit_options:
         current_unit_listbox.insert(tk.END, unit)
 
     target_unit_label = tk.Label(convert_window, text="Target Unit:")
     target_unit_label.pack(pady=5)
-    target_unit_listbox = tk.Listbox(
-        convert_window, selectmode=tk.SINGLE, exportselection=False
-    )
+    target_unit_listbox = tk.Listbox(convert_window, selectmode=tk.SINGLE, exportselection=False)
     target_unit_listbox.pack(pady=5)
     for unit in unit_options:
         target_unit_listbox.insert(tk.END, unit)
@@ -214,11 +203,7 @@ def get_conversion_factor():
     convert_window.grab_set()
     convert_window.wait_window()
 
-    return (
-        convert_window.conversion_factor
-        if hasattr(convert_window, "conversion_factor")
-        else 1
-    )
+    return convert_window.conversion_factor if hasattr(convert_window, "conversion_factor") else 1
 
 
 def convert_csv_to_c3d():
@@ -264,9 +249,7 @@ def convert_csv_to_c3d():
 
     point_df.columns = sanitize_header(point_df.columns)
 
-    use_analog = messagebox.askyesno(
-        "Analog Data", "Do you have an analog data CSV file to add?"
-    )
+    use_analog = messagebox.askyesno("Analog Data", "Do you have an analog data CSV file to add?")
     analog_df = None
 
     if use_analog:
@@ -420,9 +403,7 @@ def batch_convert_csv_to_c3d():
 
     print("Step 1: Selecting input directory...")
     # Select input directory containing CSV files
-    input_directory = filedialog.askdirectory(
-        title="Select Input Directory with CSV Files"
-    )
+    input_directory = filedialog.askdirectory(title="Select Input Directory with CSV Files")
     if not input_directory:
         print("No input directory selected. Exiting.")
         messagebox.showerror("Error", "No input directory selected.")
@@ -450,9 +431,7 @@ def batch_convert_csv_to_c3d():
     ]
     if not csv_files:
         print(f"ERROR: No visible CSV files found in {input_directory}")
-        messagebox.showerror(
-            "Error", f"No visible CSV files found in {input_directory}"
-        )
+        messagebox.showerror("Error", f"No visible CSV files found in {input_directory}")
         return
 
     print(f"Found {len(csv_files)} visible CSV files in directory")
@@ -468,9 +447,7 @@ def batch_convert_csv_to_c3d():
 
     if not point_csv_files:
         print(f"ERROR: No point data CSV files found in {input_directory}")
-        messagebox.showerror(
-            "Error", f"No point data CSV files found in {input_directory}"
-        )
+        messagebox.showerror("Error", f"No point data CSV files found in {input_directory}")
         return
 
     print(f"Processing {len(point_csv_files)} point data files:")
@@ -559,13 +536,11 @@ def batch_convert_csv_to_c3d():
     # Process each CSV file
     for i, csv_file in enumerate(point_csv_files, 1):
         print(f"\nProcessing file {i}/{len(point_csv_files)}: {csv_file}")
-        log_file.write(
-            f"\n--- Processing File {i}/{len(point_csv_files)}: {csv_file} ---\n"
-        )
+        log_file.write(f"\n--- Processing File {i}/{len(point_csv_files)}: {csv_file} ---\n")
 
         try:
             print(f"\nProcessing: {csv_file}")
-            log_file.write(f"Status: Processing started\n")
+            log_file.write("Status: Processing started\n")
 
             # Read the CSV file
             csv_path = Path(input_directory) / csv_file
@@ -603,9 +578,7 @@ def batch_convert_csv_to_c3d():
                             )
                             break
                         except Exception as e:
-                            print(
-                                f"Warning: Could not read analog file {analog_name}: {e}"
-                            )
+                            print(f"Warning: Could not read analog file {analog_name}: {e}")
                             log_file.write(
                                 f"Warning: Could not read analog file {analog_name}: {e}\n"
                             )
@@ -646,15 +619,11 @@ def batch_convert_csv_to_c3d():
 
             # Add more context for common errors
             if "utf-8" in error_msg.lower():
-                log_file.write(f"Context: This appears to be a UTF-8 encoding issue\n")
+                log_file.write("Context: This appears to be a UTF-8 encoding issue\n")
             elif "keyerror" in error_msg.lower():
-                log_file.write(
-                    f"Context: This appears to be a column/key access issue\n"
-                )
+                log_file.write("Context: This appears to be a column/key access issue\n")
             elif "shape" in error_msg.lower():
-                log_file.write(
-                    f"Context: This appears to be a data shape/dimension issue\n"
-                )
+                log_file.write("Context: This appears to be a data shape/dimension issue\n")
 
             continue
 
@@ -666,9 +635,7 @@ def batch_convert_csv_to_c3d():
     log_file.write(f"Point data files processed: {len(point_csv_files)}\n")
     log_file.write(f"Successful conversions: {successful_conversions}\n")
     log_file.write(f"Failed conversions: {failed_conversions}\n")
-    log_file.write(
-        f"Success rate: {(successful_conversions/len(point_csv_files)*100):.1f}%\n"
-    )
+    log_file.write(f"Success rate: {(successful_conversions / len(point_csv_files) * 100):.1f}%\n")
 
     if successful_files:
         log_file.write(f"\nSUCCESSFUL CONVERSIONS ({len(successful_files)}):\n")
@@ -682,12 +649,10 @@ def batch_convert_csv_to_c3d():
 
     # Analyze error patterns
     if error_details:
-        log_file.write(f"\nERROR ANALYSIS:\n")
+        log_file.write("\nERROR ANALYSIS:\n")
         error_types = {}
         for file, error in error_details:
-            error_type = (
-                type(error).__name__ if hasattr(error, "__class__") else "Unknown"
-            )
+            error_type = type(error).__name__ if hasattr(error, "__class__") else "Unknown"
             if error_type not in error_types:
                 error_types[error_type] = []
             error_types[error_type].append(file)
@@ -705,17 +670,17 @@ def batch_convert_csv_to_c3d():
     print(f"\nDetailed log saved to: {log_file_path}")
 
     # Show final results
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("BATCH CONVERSION COMPLETED")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"Visible CSV files found: {len(csv_files)}")
     print(f"Point data files processed: {len(point_csv_files)}")
     print(f"Successful conversions: {successful_conversions}")
     print(f"Failed conversions: {failed_conversions}")
-    print(f"Success rate: {(successful_conversions/len(point_csv_files)*100):.1f}%")
+    print(f"Success rate: {(successful_conversions / len(point_csv_files) * 100):.1f}%")
     print(f"Output directory: {batch_output_dir}")
     print(f"Detailed log: {log_file_path}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     if failed_conversions == 0:
         print("PERFECT! All files converted successfully!")
@@ -741,10 +706,10 @@ def batch_convert_csv_to_c3d():
         sorted_errors = sorted(error_counts.items(), key=lambda x: x[1], reverse=True)
         for i, (error_msg, count) in enumerate(sorted_errors[:5]):
             print(
-                f"  {i+1}. {error_msg[:100]}{'...' if len(error_msg) > 100 else ''} ({count} files)"
+                f"  {i + 1}. {error_msg[:100]}{'...' if len(error_msg) > 100 else ''} ({count} files)"
             )
 
-    message = f"Batch conversion completed!\n\nVisible CSV files: {len(csv_files)}\nPoint data files: {len(point_csv_files)}\nSuccessful: {successful_conversions}\nFailed: {failed_conversions}\nSuccess rate: {(successful_conversions/len(point_csv_files)*100):.1f}%\n\nOutput directory: {batch_output_dir}\nDetailed log: {log_file_path.name}"
+    message = f"Batch conversion completed!\n\nVisible CSV files: {len(csv_files)}\nPoint data files: {len(point_csv_files)}\nSuccessful: {successful_conversions}\nFailed: {failed_conversions}\nSuccess rate: {(successful_conversions / len(point_csv_files) * 100):.1f}%\n\nOutput directory: {batch_output_dir}\nDetailed log: {log_file_path.name}"
     messagebox.showinfo("Batch Conversion Complete", message)
 
 
@@ -843,11 +808,7 @@ def auto_create_c3d_from_csv(
             y_data = points_df[y_col].values
             z_data = points_df[z_col].values
 
-            if (
-                np.any(np.isnan(x_data))
-                or np.any(np.isnan(y_data))
-                or np.any(np.isnan(z_data))
-            ):
+            if np.any(np.isnan(x_data)) or np.any(np.isnan(y_data)) or np.any(np.isnan(z_data)):
                 print(f"Warning: NaN values found in marker {label}, replacing with 0")
                 x_data = np.nan_to_num(x_data, nan=0.0)
                 y_data = np.nan_to_num(y_data, nan=0.0)
@@ -894,18 +855,12 @@ def auto_create_c3d_from_csv(
                             analog_values = np.nan_to_num(analog_values, nan=0.0)
                         analog_data[0, i, :] = analog_values
                     except KeyError as e:
-                        raise KeyError(
-                            f"Error accessing analog data for channel '{label}': {e}"
-                        )
+                        raise KeyError(f"Error accessing analog data for channel '{label}': {e}")
                     except Exception as e:
-                        raise Exception(
-                            f"Error processing analog data for channel '{label}': {e}"
-                        )
+                        raise Exception(f"Error processing analog data for channel '{label}': {e}")
 
                 c3d["data"]["analogs"] = analog_data
-                print(
-                    f"Analog data assigned to C3D successfully. Shape: {analog_data.shape}"
-                )
+                print(f"Analog data assigned to C3D successfully. Shape: {analog_data.shape}")
             else:
                 print("No analog channels found, skipping analog data")
 

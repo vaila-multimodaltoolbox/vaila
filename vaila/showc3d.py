@@ -25,12 +25,13 @@ Usage:
 """
 
 import os
-import numpy as np
-import ezc3d
-import matplotlib.pyplot as plt
 import tkinter as tk
 from tkinter import filedialog
-from matplotlib.widgets import Slider, Button
+
+import ezc3d
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib.widgets import Button, Slider
 
 
 def load_c3d_file():
@@ -99,9 +100,7 @@ def select_markers(marker_labels):
 
     # Add Select All and Unselect All buttons.
     btn_select_all = tk.Button(button_frame, text="Select All", command=select_all)
-    btn_unselect_all = tk.Button(
-        button_frame, text="Unselect All", command=unselect_all
-    )
+    btn_unselect_all = tk.Button(button_frame, text="Unselect All", command=unselect_all)
     btn_select_all.pack(side=tk.LEFT, padx=5)
     btn_unselect_all.pack(side=tk.LEFT, padx=5)
 

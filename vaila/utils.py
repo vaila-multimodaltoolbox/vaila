@@ -32,15 +32,12 @@
 """
 
 import os
-import sys
 import subprocess
-import pandas as pd
-import matplotlib.pyplot as plt
-import matplotlib.image as mpimg
+import sys
+
 import cv2
-import tkinter as tk
-from tkinter import filedialog
-from common_utils import determine_header_lines, headersidx, reshapedata
+import matplotlib.image as mpimg
+import matplotlib.pyplot as plt
 
 
 def get_box_coordinates(image_path):
@@ -78,9 +75,7 @@ def draw_box_on_videos(video_directory, coordinates):
         ]
     ):
         input_path = os.path.join(video_directory, video_file)
-        output_path = os.path.join(
-            output_directory, f"{os.path.splitext(video_file)[0]}_boxe.mp4"
-        )
+        output_path = os.path.join(output_directory, f"{os.path.splitext(video_file)[0]}_boxe.mp4")
 
         print(f"Processing {video_file}...")
 

@@ -94,11 +94,11 @@ License: GPL3
 """
 
 import os
-import numpy as np
-import pandas as pd
-from scipy.spatial.transform import Rotation as R
 from datetime import datetime
+
+import pandas as pd
 from rich import print
+from scipy.spatial.transform import Rotation as R
 
 
 def rotdata(data, xth=0, yth=0, zth=0, ordem="xyz"):
@@ -151,8 +151,7 @@ def parse_custom_rotation_input(input_str):
 
         # Check if input contains rotation order specification
         if "," in input_str and any(
-            order in input_str.lower()
-            for order in ["xyz", "xzy", "yxz", "yzx", "zxy", "zyx"]
+            order in input_str.lower() for order in ["xyz", "xzy", "yxz", "yzx", "zxy", "zyx"]
         ):
             # Split by comma and find the rotation order
             parts = input_str.split(",")
@@ -217,9 +216,7 @@ def get_labcoord_angles(option):
                 )
                 for angle in angles
             ]
-            suffix = (
-                f"_custom_{clean_angles[0]}_{clean_angles[1]}_{clean_angles[2]}_{ordem}"
-            )
+            suffix = f"_custom_{clean_angles[0]}_{clean_angles[1]}_{clean_angles[2]}_{ordem}"
             print(
                 f"Using custom rotation: X={angles[0]}, Y={angles[1]}, Z={angles[2]} degrees (order: {ordem.upper()})"
             )
@@ -403,11 +400,7 @@ def main():
     # Get input directory
     while True:
         try:
-            input_dir = (
-                input("\nEnter the path to your CSV files directory: ")
-                .strip()
-                .strip('"')
-            )
+            input_dir = input("\nEnter the path to your CSV files directory: ").strip().strip('"')
             if not input_dir:
                 print("Please enter a valid directory path.")
                 continue
@@ -480,7 +473,7 @@ def main():
             print(f"Error during processing: {e}")
             return
 
-        print(f"\nProcessing completed successfully!")
+        print("\nProcessing completed successfully!")
         print(f"Check the 'rotated_files' subfolder in: {input_dir}")
     else:
         print("Operation cancelled.")

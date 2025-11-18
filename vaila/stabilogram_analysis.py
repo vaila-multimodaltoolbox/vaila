@@ -45,9 +45,9 @@ compute_msd(S_n, fs, delta_t)
 # and so on.
 """
 
-import numpy as np
 import matplotlib.pyplot as plt
-from scipy.signal import welch, savgol_filter, find_peaks
+import numpy as np
+from scipy.signal import find_peaks, savgol_filter, welch
 
 
 def compute_rms(cop_x, cop_y):

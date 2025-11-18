@@ -124,17 +124,17 @@ This script is licensed under the GNU General Public License v3.0.
 ===============================================================================
 """
 
-import os
 import math
-import numpy as np
-import pandas as pd
-from tkinter import Tk, filedialog, messagebox, simpledialog
+import os
+import webbrowser
 from datetime import datetime
 from pathlib import Path
-from rich import print
+from tkinter import Tk, filedialog, messagebox, simpledialog
+
 import matplotlib.pyplot as plt
-import webbrowser
-from typing import Optional, Dict
+import numpy as np
+import pandas as pd
+from rich import print
 
 try:  # Python 3.11+
     import tomllib as _toml_reader  # type: ignore[attr-defined]
@@ -144,7 +144,7 @@ except Exception:  # pragma: no cover
 # -----------------------
 # Jump context management
 # -----------------------
-_JUMP_CONTEXT: Optional[Dict[str, float]] = None
+_JUMP_CONTEXT: dict[str, float] | None = None
 
 
 def _open_jump_help() -> None:
@@ -165,8 +165,8 @@ def _open_jump_help() -> None:
 
 
 def _load_jump_context_from_toml(
-    base_dir: Optional[Path] = None,
-) -> Optional[Dict[str, float]]:
+    base_dir: Path | None = None,
+) -> dict[str, float] | None:
     """Try to load vaila_and_jump_config.toml (prefer the data directory)."""
     search_paths = []
     if base_dir is not None:
@@ -198,7 +198,7 @@ def _load_jump_context_from_toml(
     return None
 
 
-def _save_jump_context_template(dest: Path, ctx: Dict[str, float]) -> None:
+def _save_jump_context_template(dest: Path, ctx: dict[str, float]) -> None:
     content = (
         "# ================================================\n"
         "# vaila_and_jump configuration (per-folder)\n"
@@ -226,8 +226,8 @@ def _save_jump_context_template(dest: Path, ctx: Dict[str, float]) -> None:
 
 
 def _get_or_ask_jump_context(
-    base_dir: Optional[Path] = None,
-) -> Optional[Dict[str, float]]:
+    base_dir: Path | None = None,
+) -> dict[str, float] | None:
     global _JUMP_CONTEXT
     if _JUMP_CONTEXT is not None:
         return _JUMP_CONTEXT
@@ -281,9 +281,7 @@ def _get_or_ask_jump_context(
                 "Save Config",
                 "Save these values to vaila_and_jump_config.toml in the data folder for batch runs?",
             ):
-                dest_dir = (
-                    Path(base_dir) if base_dir is not None else Path(__file__).parent
-                )
+                dest_dir = Path(base_dir) if base_dir is not None else Path(__file__).parent
                 dest = dest_dir / "vaila_and_jump_config.toml"
                 _save_jump_context_template(dest, _JUMP_CONTEXT)
                 messagebox.showinfo("Saved", f"Template saved at: {dest}")
@@ -500,9 +498,7 @@ def identify_jump_phases(data, feet_baseline, _cg_baseline, fps):
             if len(baseline_candidates) > 0:
                 takeoff_frame = baseline_candidates.index[0]
             elif not squat_to_peak_range["cg_y_normalized"].empty:
-                closest_to_baseline_idx = (
-                    (squat_to_peak_range["cg_y_normalized"]).abs().idxmin()
-                )
+                closest_to_baseline_idx = (squat_to_peak_range["cg_y_normalized"]).abs().idxmin()
                 takeoff_frame = closest_to_baseline_idx
 
     # Improved landing detection: when CG returns close to baseline
@@ -515,21 +511,13 @@ def identify_jump_phases(data, feet_baseline, _cg_baseline, fps):
             ]  # 2cm tolerance
             if len(landing_candidates) > 0:
                 landing_frame = landing_candidates.index[0]
-            elif not post_peak_data[
-                "cg_y_normalized"
-            ].empty:  # Check if series is not empty
-                closest_to_baseline_landing_idx = (
-                    (post_peak_data["cg_y_normalized"]).abs().idxmin()
-                )
+            elif not post_peak_data["cg_y_normalized"].empty:  # Check if series is not empty
+                closest_to_baseline_landing_idx = (post_peak_data["cg_y_normalized"]).abs().idxmin()
                 landing_frame = closest_to_baseline_landing_idx
 
     # METHOD 2: Flight time-based height calculation
     flight_time = 0
-    if (
-        takeoff_frame is not None
-        and landing_frame is not None
-        and landing_frame > takeoff_frame
-    ):
+    if takeoff_frame is not None and landing_frame is not None and landing_frame > takeoff_frame:
         flight_time = (landing_frame - takeoff_frame) / fps
     height_from_flight_time = (9.81 * flight_time**2) / 8 if flight_time > 0 else 0
 
@@ -559,17 +547,13 @@ def identify_jump_phases(data, feet_baseline, _cg_baseline, fps):
 
     if "left_foot_index_y_m" in data.columns:
         # Using feet_baseline + 0.02m threshold
-        left_takeoff_candidates = data[
-            data["left_foot_index_y_m"] > feet_baseline + 0.02
-        ]
+        left_takeoff_candidates = data[data["left_foot_index_y_m"] > feet_baseline + 0.02]
         if not left_takeoff_candidates.empty:
             left_takeoff_idx = left_takeoff_candidates.index[0]
 
     if "right_foot_index_y_m" in data.columns:
         # Using feet_baseline + 0.02m threshold
-        right_takeoff_candidates = data[
-            data["right_foot_index_y_m"] > feet_baseline + 0.02
-        ]
+        right_takeoff_candidates = data[data["right_foot_index_y_m"] > feet_baseline + 0.02]
         if not right_takeoff_candidates.empty:
             right_takeoff_idx = right_takeoff_candidates.index[0]
 
@@ -578,9 +562,7 @@ def identify_jump_phases(data, feet_baseline, _cg_baseline, fps):
     right_landing_idx = None
 
     post_peak_data_for_feet = (
-        data[data.index > max_height_frame]
-        if max_height_frame < len(data) - 1
-        else pd.DataFrame()
+        data[data.index > max_height_frame] if max_height_frame < len(data) - 1 else pd.DataFrame()
     )
 
     if "left_foot_index_y_m" in data.columns and not post_peak_data_for_feet.empty:
@@ -601,11 +583,7 @@ def identify_jump_phases(data, feet_baseline, _cg_baseline, fps):
 
     # CORRECTED Propulsion time calculation
     propulsion_time_value = 0
-    if (
-        takeoff_frame is not None
-        and squat_frame is not None
-        and takeoff_frame > squat_frame
-    ):
+    if takeoff_frame is not None and squat_frame is not None and takeoff_frame > squat_frame:
         propulsion_time_value = (takeoff_frame - squat_frame) / fps
 
     ascent_time_value = 0
@@ -644,15 +622,11 @@ def identify_jump_phases(data, feet_baseline, _cg_baseline, fps):
         "right_takeoff_frame": right_takeoff_idx,
         "left_landing_frame": left_landing_idx,
         "right_landing_frame": right_landing_idx,
-        "left_takeoff_time_s": (
-            left_takeoff_idx / fps if left_takeoff_idx is not None else None
-        ),
+        "left_takeoff_time_s": (left_takeoff_idx / fps if left_takeoff_idx is not None else None),
         "right_takeoff_time_s": (
             right_takeoff_idx / fps if right_takeoff_idx is not None else None
         ),
-        "left_landing_time_s": (
-            left_landing_idx / fps if left_landing_idx is not None else None
-        ),
+        "left_landing_time_s": (left_landing_idx / fps if left_landing_idx is not None else None),
         "right_landing_time_s": (
             right_landing_idx / fps if right_landing_idx is not None else None
         ),
@@ -684,9 +658,7 @@ def generate_jump_plots(data, results, output_dir, base_name):
 
     if max_power is not None and time_max_power is not None:
         plt.axvline(time_max_power, color="orange", linestyle=":", label="Max. Power")
-        plt.scatter(
-            time_max_power, max_power, color="orange", zorder=5, label="Max. Power"
-        )
+        plt.scatter(time_max_power, max_power, color="orange", zorder=5, label="Max. Power")
 
     if power_takeoff is not None and takeoff_frame is not None:
         plt.scatter(
@@ -704,9 +676,7 @@ def generate_jump_plots(data, results, output_dir, base_name):
     plt.grid(True)
 
     # Saving the plot
-    power_plot_path = os.path.join(
-        output_dir, f"{base_name}_power_curve_{timestamp}.png"
-    )
+    power_plot_path = os.path.join(output_dir, f"{base_name}_power_curve_{timestamp}.png")
     plt.savefig(power_plot_path, dpi=300, bbox_inches="tight")
     plt.close()
     plot_files.append(power_plot_path)
@@ -836,9 +806,7 @@ def plot_jump_phases_analysis(
     ax.legend(loc="upper left")
 
     # Save the plot
-    plot_path = os.path.join(
-        output_dir, f"{base_name}_jump_phases_analysis_{timestamp}.png"
-    )
+    plot_path = os.path.join(output_dir, f"{base_name}_jump_phases_analysis_{timestamp}.png")
     plt.savefig(plot_path, dpi=300, bbox_inches="tight")
     plt.close()
 
@@ -927,9 +895,7 @@ def plot_jump_cg_feet_analysis(
     )
 
     # Add reference line for initial CG position
-    ax.axhline(
-        y=0, color="gray", linestyle="-", label="Initial CG Position (reference)"
-    )
+    ax.axhline(y=0, color="gray", linestyle="-", label="Initial CG Position (reference)")
 
     # Set labels and title
     ax.set_xlabel("Time (seconds)")
@@ -939,9 +905,7 @@ def plot_jump_cg_feet_analysis(
     ax.legend(loc="upper left")
 
     # Save the plot
-    plot_path = os.path.join(
-        output_dir, f"{base_name}_cg_feet_analysis_{timestamp}.png"
-    )
+    plot_path = os.path.join(output_dir, f"{base_name}_cg_feet_analysis_{timestamp}.png")
     plt.savefig(plot_path, dpi=300, bbox_inches="tight")
     plt.close()
 
@@ -1369,12 +1333,8 @@ def process_mediapipe_data(input_file, output_dir):
                 # Calculate CG and store the results
                 cg_x, cg_y = calculate_cg_frame(temp_df, conversion_factor)
                 # Fix the issue of Series vs scalar
-                cg_x_m_list.append(
-                    float(cg_x.iloc[0]) if hasattr(cg_x, "iloc") else float(cg_x)
-                )
-                cg_y_m_list.append(
-                    float(cg_y.iloc[0]) if hasattr(cg_y, "iloc") else float(cg_y)
-                )
+                cg_x_m_list.append(float(cg_x.iloc[0]) if hasattr(cg_x, "iloc") else float(cg_x))
+                cg_y_m_list.append(float(cg_y.iloc[0]) if hasattr(cg_y, "iloc") else float(cg_y))
 
         # Add the CG columns in meters to the DataFrame
         data["cg_x_m"] = cg_x_m_list
@@ -1403,16 +1363,12 @@ def process_mediapipe_data(input_file, output_dir):
         data = pd.concat([data, conv_df], axis=1)
 
         # Calculate the reference (averages of the first 10 frames)
-        n_baseline_frames_start = int(10)
-        n_baseline_frames_end = int(20)
+        n_baseline_frames_start = 10
+        n_baseline_frames_end = 20
 
         # Calculate reference for the CG (to be used as zero)
-        cg_y_ref = (
-            data["cg_y_m"].iloc[n_baseline_frames_start:n_baseline_frames_end].mean()
-        )
-        cg_x_ref = (
-            data["cg_x_m"].iloc[n_baseline_frames_start:n_baseline_frames_end].mean()
-        )
+        cg_y_ref = data["cg_y_m"].iloc[n_baseline_frames_start:n_baseline_frames_end].mean()
+        cg_x_ref = data["cg_x_m"].iloc[n_baseline_frames_start:n_baseline_frames_end].mean()
 
         # Add this block to create relative versions of all y-coordinates
         print("Creating relative coordinates referenced to initial CG position...")
@@ -1437,25 +1393,19 @@ def process_mediapipe_data(input_file, output_dir):
         data["cg_y_normalized"] = data["cg_y_m"] - cg_y_ref
 
         # Calculate the reference (averages of the first 10 frames)
-        n_baseline_frames_start = int(10)
-        n_baseline_frames_end = int(20)
+        n_baseline_frames_start = 10
+        n_baseline_frames_end = 20
 
         # Calculate reference for the CG (to be used as zero)
-        cg_y_ref = (
-            data["cg_y_m"].iloc[n_baseline_frames_start:n_baseline_frames_end].mean()
-        )
-        cg_x_ref = (
-            data["cg_x_m"].iloc[n_baseline_frames_start:n_baseline_frames_end].mean()
-        )
+        cg_y_ref = data["cg_y_m"].iloc[n_baseline_frames_start:n_baseline_frames_end].mean()
+        cg_x_ref = data["cg_x_m"].iloc[n_baseline_frames_start:n_baseline_frames_end].mean()
 
         # Calculate baseline for the feet
         has_left_foot = "left_foot_index_y_m" in data.columns
         has_right_foot = "right_foot_index_y_m" in data.columns
 
         if has_left_foot and has_right_foot:
-            feet_y_values = (
-                data["left_foot_index_y_m"] + data["right_foot_index_y_m"]
-            ) / 2
+            feet_y_values = (data["left_foot_index_y_m"] + data["right_foot_index_y_m"]) / 2
         elif has_left_foot:
             feet_y_values = data["left_foot_index_y_m"]
         elif has_right_foot:
@@ -1471,9 +1421,7 @@ def process_mediapipe_data(input_file, output_dir):
             else:
                 feet_y_values = data["cg_y_m"] * 0.8  # Estimate
 
-        feet_baseline = feet_y_values.iloc[
-            n_baseline_frames_start:n_baseline_frames_end
-        ].mean()
+        feet_baseline = feet_y_values.iloc[n_baseline_frames_start:n_baseline_frames_end].mean()
 
         # Add basic information
         data["mass_kg"] = mass
@@ -1505,9 +1453,7 @@ def process_mediapipe_data(input_file, output_dir):
             power_propulsion = power[propulsion_frames]
             max_power = np.max(power) if len(power) > 0 else 0
             # Calculate average power during propulsion phase
-            avg_power_propulsion = (
-                np.mean(power_propulsion) if len(power_propulsion) > 0 else 0
-            )
+            avg_power_propulsion = np.mean(power_propulsion) if len(power_propulsion) > 0 else 0
 
             # Corrected: Find the index of the maximum value in the power series
             idx_max_power = np.argmax(
@@ -1526,17 +1472,13 @@ def process_mediapipe_data(input_file, output_dir):
         # Calculate energies
         jump_height = jump_phase_results["height_cg_method_m"]
         velocity_takeoff = calculate_velocity(jump_height) if jump_height else 0
-        potential_energy = (
-            calculate_potential_energy(mass, jump_height) if jump_height else 0
-        )
+        potential_energy = calculate_potential_energy(mass, jump_height) if jump_height else 0
         kinetic_energy = calculate_kinetic_energy(mass, velocity_takeoff)
 
         # Calculate average propulsion power
         propulsion_time = jump_phase_results.get("propulsion_time_s", 0)
         power_avg_propulsion = (
-            (potential_energy + kinetic_energy) / propulsion_time
-            if propulsion_time > 0
-            else 0
+            (potential_energy + kinetic_energy) / propulsion_time if propulsion_time > 0 else 0
         )
 
         # Prepare comprehensive results
@@ -1549,35 +1491,21 @@ def process_mediapipe_data(input_file, output_dir):
                 if jump_phase_results.get("flight_time_s") is not None
                 else None
             ),
-            "velocity_m/s": (
-                round(velocity_takeoff, 3) if velocity_takeoff is not None else None
-            ),
+            "velocity_m/s": (round(velocity_takeoff, 3) if velocity_takeoff is not None else None),
             "potential_energy_J": (
                 round(potential_energy, 3) if potential_energy is not None else None
             ),
-            "kinetic_energy_J": (
-                round(kinetic_energy, 3) if kinetic_energy is not None else None
-            ),
-            "power_takeoff_W": (
-                round(power_takeoff, 3) if power_takeoff is not None else None
-            ),
+            "kinetic_energy_J": (round(kinetic_energy, 3) if kinetic_energy is not None else None),
+            "power_takeoff_W": (round(power_takeoff, 3) if power_takeoff is not None else None),
             "power_avg_propulsion_W": (
-                round(power_avg_propulsion, 3)
-                if power_avg_propulsion is not None
-                else None
+                round(power_avg_propulsion, 3) if power_avg_propulsion is not None else None
             ),
             "power_avg_propulsion_phase_W": (
-                round(avg_power_propulsion, 3)
-                if avg_power_propulsion is not None
-                else None
+                round(avg_power_propulsion, 3) if avg_power_propulsion is not None else None
             ),
             "max_power_W": round(max_power, 3) if max_power is not None else None,
-            "frame_max_power": (
-                int(idx_max_power) if idx_max_power is not None else None
-            ),
-            "time_max_power_s": (
-                round(time_max_power, 3) if time_max_power is not None else None
-            ),
+            "frame_max_power": (int(idx_max_power) if idx_max_power is not None else None),
+            "time_max_power_s": (round(time_max_power, 3) if time_max_power is not None else None),
             "takeoff_frame": int(takeoff_frame) if takeoff_frame is not None else None,
             "max_height_frame": (
                 int(jump_phase_results.get("max_height_frame"))
@@ -1730,9 +1658,7 @@ def process_mediapipe_data(input_file, output_dir):
             ),
             # Heights by different methods
             "height_cg_method_m": jump_phase_results.get("height_cg_method_m"),
-            "height_flight_time_method_m": jump_phase_results.get(
-                "height_flight_time_method_m"
-            ),
+            "height_flight_time_method_m": jump_phase_results.get("height_flight_time_method_m"),
             "height_left_foot_m": jump_phase_results.get("height_left_foot_m"),
             "height_right_foot_m": jump_phase_results.get("height_right_foot_m"),
             "height_avg_feet_m": jump_phase_results.get("height_avg_feet_m"),
@@ -1767,9 +1693,7 @@ def process_mediapipe_data(input_file, output_dir):
         }
 
         # Save complete database CSV
-        output_db_file = os.path.join(
-            output_dir, f"{base_name}_jump_database_{timestamp}.csv"
-        )
+        output_db_file = os.path.join(output_dir, f"{base_name}_jump_database_{timestamp}.csv")
         pd.DataFrame([db_row]).to_csv(output_db_file, index=False, float_format="%.3f")
         print(f"Jump database row saved: {output_db_file}")
 
@@ -1846,7 +1770,9 @@ def process_mediapipe_data(input_file, output_dir):
                 metr = (
                     f"{col[:-2]}_x_m"
                     if col.endswith("_x")
-                    else f"{col[:-2]}_y_m" if col.endswith("_y") else f"{col[:-2]}_z_m"
+                    else f"{col[:-2]}_y_m"
+                    if col.endswith("_y")
+                    else f"{col[:-2]}_z_m"
                 )
                 if metr in data.columns:
                     final_cols.append(metr)
@@ -1868,9 +1794,7 @@ def process_mediapipe_data(input_file, output_dir):
                 final_cols.append(col)
 
         calibrated_data = data[final_cols].copy()
-        output_calibrated_file = os.path.join(
-            output_dir, f"{base_name}_calibrated_{timestamp}.csv"
-        )
+        output_calibrated_file = os.path.join(output_dir, f"{base_name}_calibrated_{timestamp}.csv")
         calibrated_data.to_csv(output_calibrated_file, index=False, float_format="%.6f")
         print(f"Calibrated data saved: {output_calibrated_file}")
 
@@ -1888,17 +1812,11 @@ def process_mediapipe_data(input_file, output_dir):
         plot_files.append(stickfig_output_file)
 
         # Generate HTML report
-        report_path = generate_html_report(
-            data, results, plot_files, output_dir, base_name
-        )
+        report_path = generate_html_report(data, results, plot_files, output_dir, base_name)
 
         # Save summary metrics
-        output_metrics_file = os.path.join(
-            output_dir, f"{base_name}_jump_metrics_{timestamp}.csv"
-        )
-        pd.DataFrame([results]).to_csv(
-            output_metrics_file, index=False, float_format="%.6f"
-        )
+        output_metrics_file = os.path.join(output_dir, f"{base_name}_jump_metrics_{timestamp}.csv")
+        pd.DataFrame([results]).to_csv(output_metrics_file, index=False, float_format="%.6f")
 
         print(f"Jump metrics saved at: {output_metrics_file}")
         print(f"Calibrated data (in meters) saved at: {output_calibrated_file}")
@@ -1908,9 +1826,7 @@ def process_mediapipe_data(input_file, output_dir):
         # Print diagnostic information
         print("Diagnostic info:")
         print(f"  Reference CG position: {cg_y_ref:.3f} m")
-        print(
-            f"  Jump height (CG method): {jump_phase_results.get('height_cg_method_m', 0):.3f} m"
-        )
+        print(f"  Jump height (CG method): {jump_phase_results.get('height_cg_method_m', 0):.3f} m")
         print(f"  Flight time: {jump_phase_results.get('flight_time_s', 0):.3f} s")
         print(f"  Max power: {max_power:.1f} W")
 
@@ -1929,11 +1845,7 @@ def process_all_mediapipe_files(target_dir):
     output_dir = os.path.join(target_dir, f"vaila_mediapipejump_{timestamp}")
     os.makedirs(output_dir, exist_ok=True)
 
-    csv_files = [
-        os.path.join(target_dir, f)
-        for f in os.listdir(target_dir)
-        if f.endswith(".csv")
-    ]
+    csv_files = [os.path.join(target_dir, f) for f in os.listdir(target_dir) if f.endswith(".csv")]
 
     for input_file in csv_files:
         print(f"Processing MediaPipe file: {input_file}")
@@ -1961,20 +1873,12 @@ def process_jump_data(input_file, output_dir, use_time_of_flight):
 
         if use_time_of_flight:
             value_col = next(
-                (
-                    col
-                    for col in columns
-                    if "time" in col.lower() and "contact" not in col.lower()
-                ),
+                (col for col in columns if "time" in col.lower() and "contact" not in col.lower()),
                 columns[1],
             )
         else:
             value_col = next(
-                (
-                    col
-                    for col in columns
-                    if "height" in col.lower() or "heigth" in col.lower()
-                ),
+                (col for col in columns if "height" in col.lower() or "heigth" in col.lower()),
                 columns[1],
             )
 
@@ -2005,26 +1909,16 @@ def process_jump_data(input_file, output_dir, use_time_of_flight):
             potential_energy = calculate_potential_energy(mass, height)
             kinetic_energy = calculate_kinetic_energy(mass, velocity)
             liftoff_force = (
-                calculate_liftoff_force(mass, velocity, contact_time)
-                if contact_time
-                else None
+                calculate_liftoff_force(mass, velocity, contact_time) if contact_time else None
             )
             average_power = (
-                calculate_average_power(potential_energy, contact_time)
-                if contact_time
-                else None
+                calculate_average_power(potential_energy, contact_time) if contact_time else None
             )
             relative_power = (average_power / mass) if average_power else None
             jump_performance_index = (
-                (average_power * time_of_flight)
-                if average_power and time_of_flight
-                else None
+                (average_power * time_of_flight) if average_power and time_of_flight else None
             )
-            total_time = (
-                time_of_flight + contact_time
-                if time_of_flight and contact_time
-                else None
-            )
+            total_time = time_of_flight + contact_time if time_of_flight and contact_time else None
 
             # Append the results for each row
             results.append(
@@ -2033,13 +1927,9 @@ def process_jump_data(input_file, output_dir, use_time_of_flight):
                     "liftoff_force_N": (
                         round(liftoff_force, 3) if liftoff_force is not None else None
                     ),
-                    "velocity_m/s": (
-                        round(velocity, 3) if velocity is not None else None
-                    ),
+                    "velocity_m/s": (round(velocity, 3) if velocity is not None else None),
                     "potential_energy_J": (
-                        round(potential_energy, 3)
-                        if potential_energy is not None
-                        else None
+                        round(potential_energy, 3) if potential_energy is not None else None
                     ),
                     "kinetic_energy_J": (
                         round(kinetic_energy, 3) if kinetic_energy is not None else None
@@ -2055,9 +1945,7 @@ def process_jump_data(input_file, output_dir, use_time_of_flight):
                         if jump_performance_index is not None
                         else None
                     ),
-                    "total_time_s": (
-                        round(total_time, 3) if total_time is not None else None
-                    ),
+                    "total_time_s": (round(total_time, 3) if total_time is not None else None),
                 }
             )
 
@@ -2067,9 +1955,7 @@ def process_jump_data(input_file, output_dir, use_time_of_flight):
         # Generate output file name with timestamp
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         base_name = os.path.splitext(os.path.basename(input_file))[0]
-        output_file_path = os.path.join(
-            output_dir, f"{base_name}_vjump_{timestamp}.csv"
-        )
+        output_file_path = os.path.join(output_dir, f"{base_name}_vjump_{timestamp}.csv")
         results_df.to_csv(output_file_path, index=False)
 
         print(f"Results saved successfully at: {output_file_path}")
@@ -2077,9 +1963,7 @@ def process_jump_data(input_file, output_dir, use_time_of_flight):
         print(f"An error occurred while processing {input_file}: {str(e)}")
 
 
-def calc_fator_convert_mediapipe(
-    df, knee="right_knee", ankle="right_ankle", shank_length_real=0.4
-):
+def calc_fator_convert_mediapipe(df, knee="right_knee", ankle="right_ankle", shank_length_real=0.4):
     # frame 0
     rkx, rky = df[f"{knee}_x"].iloc[0], df[f"{knee}_y"].iloc[0]
     rax, ray = df[f"{ankle}_x"].iloc[0], df[f"{ankle}_y"].iloc[0]
@@ -2174,18 +2058,10 @@ def calculate_cg_frame(df, factor):
         midpoint(df, "right_pinky", "right_index")[1] - df["right_wrist_y"]
     )
     # Left thigh, shank, foot
-    cg_thigh_l_x = df["left_hip_x"] + locations["thigh"] * (
-        df["left_knee_x"] - df["left_hip_x"]
-    )
-    cg_thigh_l_y = df["left_hip_y"] + locations["thigh"] * (
-        df["left_knee_y"] - df["left_hip_y"]
-    )
-    cg_shank_l_x = df["left_knee_x"] + locations["shank"] * (
-        df["left_ankle_x"] - df["left_knee_x"]
-    )
-    cg_shank_l_y = df["left_knee_y"] + locations["shank"] * (
-        df["left_ankle_y"] - df["left_knee_y"]
-    )
+    cg_thigh_l_x = df["left_hip_x"] + locations["thigh"] * (df["left_knee_x"] - df["left_hip_x"])
+    cg_thigh_l_y = df["left_hip_y"] + locations["thigh"] * (df["left_knee_y"] - df["left_hip_y"])
+    cg_shank_l_x = df["left_knee_x"] + locations["shank"] * (df["left_ankle_x"] - df["left_knee_x"])
+    cg_shank_l_y = df["left_knee_y"] + locations["shank"] * (df["left_ankle_y"] - df["left_knee_y"])
     cg_foot_l_x = df["left_heel_x"] + locations["foot"] * (
         df["left_foot_index_x"] - df["left_heel_x"]
     )
@@ -2193,12 +2069,8 @@ def calculate_cg_frame(df, factor):
         df["left_foot_index_y"] - df["left_heel_y"]
     )
     # Right thigh, shank, foot
-    cg_thigh_r_x = df["right_hip_x"] + locations["thigh"] * (
-        df["right_knee_x"] - df["right_hip_x"]
-    )
-    cg_thigh_r_y = df["right_hip_y"] + locations["thigh"] * (
-        df["right_knee_y"] - df["right_hip_y"]
-    )
+    cg_thigh_r_x = df["right_hip_x"] + locations["thigh"] * (df["right_knee_x"] - df["right_hip_x"])
+    cg_thigh_r_y = df["right_hip_y"] + locations["thigh"] * (df["right_knee_y"] - df["right_hip_y"])
     cg_shank_r_x = df["right_knee_x"] + locations["shank"] * (
         df["right_ankle_x"] - df["right_knee_x"]
     )
@@ -2261,11 +2133,7 @@ def process_all_files_in_directory(target_dir, use_time_of_flight):
     os.makedirs(output_dir, exist_ok=True)
 
     # List all .csv files in the target directory
-    csv_files = [
-        os.path.join(target_dir, f)
-        for f in os.listdir(target_dir)
-        if f.endswith(".csv")
-    ]
+    csv_files = [os.path.join(target_dir, f) for f in os.listdir(target_dir) if f.endswith(".csv")]
 
     # Process each .csv file
     for input_file in csv_files:
@@ -2340,9 +2208,7 @@ def generate_normalized_diagnostic_plot(
     landing_time = landing_frame / fps
     max_height_time = max_height_frame / fps
 
-    ax.axvline(
-        x=squat_time, color="brown", linestyle="-", label=f"Squat (Frame {squat_frame})"
-    )
+    ax.axvline(x=squat_time, color="brown", linestyle="-", label=f"Squat (Frame {squat_frame})")
     ax.axvline(
         x=takeoff_time,
         color="purple",
@@ -2368,7 +2234,7 @@ def generate_normalized_diagnostic_plot(
         landing_time,
         alpha=0.2,
         color="yellow",
-        label=f"Flight Phase: {landing_time-takeoff_time:.3f} s",
+        label=f"Flight Phase: {landing_time - takeoff_time:.3f} s",
     )
 
     # Add annotations
@@ -2396,9 +2262,7 @@ def generate_normalized_diagnostic_plot(
     ax.legend(loc="upper left")
 
     # Save plot
-    plot_path = os.path.join(
-        output_dir, f"{base_name}_normalized_diagnostic_{timestamp}.png"
-    )
+    plot_path = os.path.join(output_dir, f"{base_name}_normalized_diagnostic_{timestamp}.png")
     plt.savefig(plot_path, dpi=300, bbox_inches="tight")
     plt.close()
 
@@ -2421,9 +2285,7 @@ def plot_jump_stickfigures_with_cg(
     df = pd.read_csv(csv_file)
 
     # Forçar uso de coordenadas relativas e frames iguais ao subplot
-    print(
-        "STICK FIGURES: Forcing use of relative coordinates and frame logic from subplot..."
-    )
+    print("STICK FIGURES: Forcing use of relative coordinates and frame logic from subplot...")
 
     # Checa se temos coordenadas relativas
     rel_segments_available = ("left_shoulder_x_rel" in df.columns) and (
@@ -2433,12 +2295,8 @@ def plot_jump_stickfigures_with_cg(
     # Prioritize relative coordinates for consistency with plots
     if rel_segments_available:
         suffix = "_rel"
-        possible_cg_y = [
-            c for c in ["cg_y_normalized", "cg_y_m_rel"] if c in df.columns
-        ]
-        possible_cg_x = [
-            c for c in ["cg_x_normalized", "cg_x_m_rel"] if c in df.columns
-        ]
+        possible_cg_y = [c for c in ["cg_y_normalized", "cg_y_m_rel"] if c in df.columns]
+        possible_cg_x = [c for c in ["cg_x_normalized", "cg_x_m_rel"] if c in df.columns]
         print("Using relative coordinates (_rel) for combined visualization")
     else:
         # If no relative coordinates, create them from meter coordinates
@@ -2464,9 +2322,7 @@ def plot_jump_stickfigures_with_cg(
             suffix = "_m"
             possible_cg_y = [c for c in ["cg_y_m"] if c in df.columns]
             possible_cg_x = [c for c in ["cg_x_m"] if c in df.columns]
-            print(
-                "WARNING: Using meter coordinates (_m) - scale may not match other plots"
-            )
+            print("WARNING: Using meter coordinates (_m) - scale may not match other plots")
 
     if not possible_cg_x or not possible_cg_y:
         raise ValueError("Cannot find CG coordinates in the CSV file")
@@ -2493,9 +2349,7 @@ def plot_jump_stickfigures_with_cg(
 
         # Find landing after peak when CG returns near baseline
         post_peak_data = df[df.index > frame_peak]
-        landing_candidates = post_peak_data[
-            abs(post_peak_data[cg_y_col]) <= baseline_tolerance
-        ]
+        landing_candidates = post_peak_data[abs(post_peak_data[cg_y_col]) <= baseline_tolerance]
         if len(landing_candidates) > 0:
             frame_landing = landing_candidates.index[0]
         else:
@@ -2579,9 +2433,7 @@ def plot_jump_stickfigures_with_cg(
             y_end = f"{end}_y{suffix}"
 
             if all(col in row.index for col in [x_start, y_start, x_end, y_end]):
-                if not any(
-                    pd.isna(row[col]) for col in [x_start, y_start, x_end, y_end]
-                ):
+                if not any(pd.isna(row[col]) for col in [x_start, y_start, x_end, y_end]):
                     all_x_values.extend([float(row[x_start]), float(row[x_end])])
                     all_y_values.extend([float(row[y_start]), float(row[y_end])])
 
@@ -2618,9 +2470,7 @@ def plot_jump_stickfigures_with_cg(
             y_end = f"{end}_y{suffix}"
 
             if all(col in row.index for col in [x_start, y_start, x_end, y_end]):
-                if not any(
-                    pd.isna(row[col]) for col in [x_start, y_start, x_end, y_end]
-                ):
+                if not any(pd.isna(row[col]) for col in [x_start, y_start, x_end, y_end]):
                     plt.plot(
                         [row[x_start], row[x_end]],
                         [row[y_start], row[y_end]],
@@ -2737,17 +2587,13 @@ def generate_jump_animation_gif(
     # Use scalar references (first row) if columns exist; fall back to 0.0
     try:
         ref_cg_x = (
-            float(data["reference_cg_x"].iloc[0])
-            if "reference_cg_x" in data.columns
-            else 0.0
+            float(data["reference_cg_x"].iloc[0]) if "reference_cg_x" in data.columns else 0.0
         )
     except Exception:
         ref_cg_x = 0.0
     try:
         ref_cg_y = (
-            float(data["reference_cg_y"].iloc[0])
-            if "reference_cg_y" in data.columns
-            else 0.0
+            float(data["reference_cg_y"].iloc[0]) if "reference_cg_y" in data.columns else 0.0
         )
     except Exception:
         ref_cg_y = 0.0
@@ -2831,9 +2677,7 @@ def generate_jump_animation_gif(
             if "cg_x_m" in data.columns and "cg_y_m" in data.columns:
                 cgx = float(row["cg_x_m"]) - ref_cg_x
                 cgy = float(row["cg_y_m"]) - ref_cg_y
-                ax.plot(
-                    cgx, cgy, "o", color="orange", markersize=6, markeredgecolor="black"
-                )
+                ax.plot(cgx, cgy, "o", color="orange", markersize=6, markeredgecolor="black")
         except Exception:
             pass
 
@@ -2897,12 +2741,8 @@ def plot_jump_stickfigures_subplot(
     # Prioritize relative coordinates for consistency with plots
     if rel_segments_available:
         suffix = "_rel"
-        possible_cg_y = [
-            c for c in ["cg_y_normalized", "cg_y_m_rel"] if c in df.columns
-        ]
-        possible_cg_x = [
-            c for c in ["cg_x_normalized", "cg_x_m_rel"] if c in df.columns
-        ]
+        possible_cg_y = [c for c in ["cg_y_normalized", "cg_y_m_rel"] if c in df.columns]
+        possible_cg_x = [c for c in ["cg_x_normalized", "cg_x_m_rel"] if c in df.columns]
         print("Using relative coordinates (_rel) for combined visualization")
     else:
         # If no relative coordinates, create them from meter coordinates
@@ -2928,9 +2768,7 @@ def plot_jump_stickfigures_subplot(
             suffix = "_m"
             possible_cg_y = [c for c in ["cg_y_m"] if c in df.columns]
             possible_cg_x = [c for c in ["cg_x_m"] if c in df.columns]
-            print(
-                "WARNING: Using meter coordinates (_m) - scale may not match other plots"
-            )
+            print("WARNING: Using meter coordinates (_m) - scale may not match other plots")
 
     if not possible_cg_x or not possible_cg_y:
         raise ValueError("Cannot find CG coordinates in the CSV file")
@@ -2950,18 +2788,13 @@ def plot_jump_stickfigures_subplot(
         takeoff_candidates = df.index[
             (df.index > frame_squat) & (df[cg_y_col] > df[cg_y_col].iloc[frame_initial])
         ]
-        frame_takeoff = (
-            takeoff_candidates.min() if len(takeoff_candidates) > 0 else frame_squat
-        )
+        frame_takeoff = takeoff_candidates.min() if len(takeoff_candidates) > 0 else frame_squat
 
         # Find landing: first frame after peak where CG returns near initial position
         landing_candidates = df.index[
-            (df.index > frame_peak)
-            & (df[cg_y_col] < df[cg_y_col].iloc[frame_initial] + 0.01)
+            (df.index > frame_peak) & (df[cg_y_col] < df[cg_y_col].iloc[frame_initial] + 0.01)
         ]
-        frame_landing = (
-            landing_candidates.min() if len(landing_candidates) > 0 else df.index[-1]
-        )
+        frame_landing = landing_candidates.min() if len(landing_candidates) > 0 else df.index[-1]
 
         frames_plot = [
             frame_initial,
@@ -3048,12 +2881,8 @@ def plot_jump_stickfigures_subplot(
 
             # Update CG columns to match the suffix type
             if suffix == "_rel":
-                possible_cg_y = [
-                    c for c in ["cg_y_normalized", "cg_y_m_rel"] if c in df.columns
-                ]
-                possible_cg_x = [
-                    c for c in ["cg_x_normalized", "cg_x_m_rel"] if c in df.columns
-                ]
+                possible_cg_y = [c for c in ["cg_y_normalized", "cg_y_m_rel"] if c in df.columns]
+                possible_cg_x = [c for c in ["cg_x_normalized", "cg_x_m_rel"] if c in df.columns]
             else:
                 possible_cg_y = [c for c in ["cg_y_m"] if c in df.columns]
                 possible_cg_x = [c for c in ["cg_x_m"] if c in df.columns]
@@ -3102,9 +2931,7 @@ def plot_jump_stickfigures_subplot(
             y_end = f"{end}_y{suffix}"
 
             if all(col in row.index for col in [x_start, y_start, x_end, y_end]):
-                if not any(
-                    pd.isna(row[col]) for col in [x_start, y_start, x_end, y_end]
-                ):
+                if not any(pd.isna(row[col]) for col in [x_start, y_start, x_end, y_end]):
                     all_x_values.extend([float(row[x_start]), float(row[x_end])])
                     all_y_values.extend([float(row[y_start]), float(row[y_end])])
 
@@ -3122,9 +2949,7 @@ def plot_jump_stickfigures_subplot(
         x_max += x_padding
 
     # Plot each phase in its own subplot
-    for i, (ax, frame, label, color) in enumerate(
-        zip(axes, frames_plot, labels_plot, colors)
-    ):
+    for i, (ax, frame, label, color) in enumerate(zip(axes, frames_plot, labels_plot, colors)):
         if frame >= len(df):
             ax.text(
                 0.5,
@@ -3146,9 +2971,7 @@ def plot_jump_stickfigures_subplot(
             y_end = f"{end}_y{suffix}"
 
             if all(col in row.index for col in [x_start, y_start, x_end, y_end]):
-                if not any(
-                    pd.isna(row[col]) for col in [x_start, y_start, x_end, y_end]
-                ):
+                if not any(pd.isna(row[col]) for col in [x_start, y_start, x_end, y_end]):
                     ax.plot(
                         [row[x_start], row[x_end]],
                         [row[y_start], row[y_end]],
@@ -3280,9 +3103,7 @@ def vaila_and_jump():
     root.lift()  # Bring window to the front
 
     if data_type is None:
-        messagebox.showwarning(
-            "Warning", "No data type selected. Exiting.", parent=root
-        )
+        messagebox.showwarning("Warning", "No data type selected. Exiting.", parent=root)
         root.destroy()
         return
 

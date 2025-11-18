@@ -70,25 +70,26 @@ Features soccer field lines and penalty areas.
     - Robust fallback visualization system
 """
 
-import os
-from pathlib import Path
-import open3d as o3d
-import ezc3d
-import numpy as np
-from collections import deque
-import tkinter as tk
-from tkinter import filedialog, messagebox, ttk, simpledialog
-import time
-from rich import print
 import json
-import pandas as pd
-import matplotlib.pyplot as plt
-import matplotlib.animation as animation
-from matplotlib.widgets import Slider, Button
+import os
+import shutil
 import subprocess
 import tempfile
-import shutil
+import time
+import tkinter as tk
 import webbrowser
+from collections import deque
+from pathlib import Path
+from tkinter import filedialog, messagebox, simpledialog, ttk
+
+import ezc3d
+import matplotlib.animation as animation
+import matplotlib.pyplot as plt
+import numpy as np
+import open3d as o3d
+import pandas as pd
+from matplotlib.widgets import Button, Slider
+from rich import print
 
 
 def _create_centered_tk_root():
@@ -99,7 +100,7 @@ def _create_centered_tk_root():
     root.update_idletasks()
     ws = root.winfo_screenwidth()
     hs = root.winfo_screenheight()
-    root.geometry(f"+{ws//2}+{hs//2}")
+    root.geometry(f"+{ws // 2}+{hs // 2}")
     root.attributes("-topmost", True)
     return root
 
@@ -147,9 +148,7 @@ def detect_c3d_units(pts):
     # Method 3: Inter-marker distances analysis
     if pts.shape[0] > 0 and pts.shape[1] > 1:
         # Use multiple frames for better statistics
-        frame_indices = np.linspace(
-            0, pts.shape[0] - 1, min(10, pts.shape[0]), dtype=int
-        )
+        frame_indices = np.linspace(0, pts.shape[0] - 1, min(10, pts.shape[0]), dtype=int)
         all_distances = []
 
         for frame_idx in frame_indices:
@@ -212,9 +211,7 @@ def detect_c3d_units(pts):
     # Decision based on confidence score
     is_millimeters = confidence_score >= 3
 
-    detection_summary = (
-        ", ".join(detection_reasons) if detection_reasons else "no_clear_indicators"
-    )
+    detection_summary = ", ".join(detection_reasons) if detection_reasons else "no_clear_indicators"
     final_method = f"confidence_score_{confidence_score} ({detection_summary})"
 
     return is_millimeters, final_method
@@ -239,9 +236,7 @@ def ask_user_units_c3d():
     main_frame.pack(fill=tk.BOTH, expand=True)
 
     # Title
-    title_label = tk.Label(
-        main_frame, text="C3D Data Units", font=("Arial", 14, "bold")
-    )
+    title_label = tk.Label(main_frame, text="C3D Data Units", font=("Arial", 14, "bold"))
     title_label.pack(pady=(0, 10))
 
     # Explanation
@@ -391,9 +386,7 @@ def load_c3d_file():
 
         # Ask user for confirmation if detection is uncertain
         if uncertain_detection:
-            print(
-                f"[yellow]⚠ Uncertain unit detection (method: {detection_method})[/yellow]"
-            )
+            print(f"[yellow]⚠ Uncertain unit detection (method: {detection_method})[/yellow]")
             user_choice = ask_user_units_c3d()
 
             if user_choice == "mm":
@@ -410,9 +403,7 @@ def load_c3d_file():
             print("[bold green]✓ Applied conversion: MILLIMETERS → METERS[/bold green]")
             print(f"  Method: {detection_method}")
         else:
-            print(
-                "[bold green]✓ No conversion applied: Data already in METERS[/bold green]"
-            )
+            print("[bold green]✓ No conversion applied: Data already in METERS[/bold green]")
             print(f"  Method: {detection_method}")
 
         # Show data statistics after conversion
@@ -427,9 +418,7 @@ def load_c3d_file():
         return pts, filepath, fps, marker_labels
 
     except Exception as e:
-        messagebox.showerror(
-            "Error Loading File", f"Failed to load C3D file:\n{str(e)}"
-        )
+        messagebox.showerror("Error Loading File", f"Failed to load C3D file:\n{str(e)}")
         print(f"[bold red]Error details:[/bold red] {str(e)}")
         exit(1)
 
@@ -474,9 +463,7 @@ def toggle_theme(theme, window=None):
         for widget in window.winfo_children():
             if isinstance(widget, tk.Frame):
                 widget.configure(bg="white")
-            elif isinstance(widget, tk.Label):
-                widget.configure(bg="white", fg="black")
-            elif isinstance(widget, tk.Entry):
+            elif isinstance(widget, tk.Label) or isinstance(widget, tk.Entry):
                 widget.configure(bg="white", fg="black")
             elif isinstance(widget, tk.Listbox):
                 widget.configure(bg="white", fg="black", selectbackground="lightblue")
@@ -570,7 +557,7 @@ def select_markers(marker_labels, c3d_filepath=None):
 
     def load_selection():
         try:
-            with open(selection_file, "r") as f:
+            with open(selection_file) as f:
                 saved_indices = json.load(f)
             listbox.selection_clear(0, tk.END)
             for idx in saved_indices:
@@ -580,17 +567,13 @@ def select_markers(marker_labels, c3d_filepath=None):
                         break
             messagebox.showinfo("Success", f"Selection loaded from:\n{selection_file}")
         except FileNotFoundError:
-            messagebox.showwarning(
-                "Warning", f"No saved selection found at:\n{selection_file}"
-            )
+            messagebox.showwarning("Warning", f"No saved selection found at:\n{selection_file}")
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load selection:\n{str(e)}")
 
     # Add the buttons
     btn_select_all = tk.Button(button_frame, text="Select All", command=select_all)
-    btn_unselect_all = tk.Button(
-        button_frame, text="Unselect All", command=unselect_all
-    )
+    btn_unselect_all = tk.Button(button_frame, text="Unselect All", command=unselect_all)
     btn_save = tk.Button(button_frame, text="Save Selection", command=save_selection)
     btn_load = tk.Button(button_frame, text="Load Selection", command=load_selection)
 
@@ -612,15 +595,15 @@ def select_markers(marker_labels, c3d_filepath=None):
     tk.Button(filter_frame, text="Left", command=lambda: filter_by_prefix("left")).pack(
         side=tk.LEFT, padx=2
     )
-    tk.Button(
-        filter_frame, text="Right", command=lambda: filter_by_prefix("right")
-    ).pack(side=tk.LEFT, padx=2)
+    tk.Button(filter_frame, text="Right", command=lambda: filter_by_prefix("right")).pack(
+        side=tk.LEFT, padx=2
+    )
     tk.Button(filter_frame, text="Head", command=lambda: filter_by_prefix("head")).pack(
         side=tk.LEFT, padx=2
     )
-    tk.Button(
-        filter_frame, text="Spine", command=lambda: filter_by_prefix("spine")
-    ).pack(side=tk.LEFT, padx=2)
+    tk.Button(filter_frame, text="Spine", command=lambda: filter_by_prefix("spine")).pack(
+        side=tk.LEFT, padx=2
+    )
 
     def on_select():
         root.quit()
@@ -646,9 +629,7 @@ def select_markers(marker_labels, c3d_filepath=None):
     root.geometry(f"{w}x{h}+{int(x)}+{int(y)}")
 
     root.mainloop()
-    selected_indices = [
-        int(listbox.get(i).split(":")[0]) for i in listbox.curselection()
-    ]
+    selected_indices = [int(listbox.get(i).split(":")[0]) for i in listbox.curselection()]
     root.destroy()
     return selected_indices
 
@@ -660,9 +641,7 @@ def create_coordinate_lines(axis_length=0.25):
       - Y axis in green
       - Z axis in blue
     """
-    points = np.array(
-        [[0, 0, 0], [axis_length, 0, 0], [0, axis_length, 0], [0, 0, axis_length]]
-    )
+    points = np.array([[0, 0, 0], [axis_length, 0, 0], [0, axis_length, 0], [0, 0, axis_length]])
     lines = np.array([[0, 1], [0, 2], [0, 3]])
     colors = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
     line_set = o3d.geometry.LineSet(
@@ -753,9 +732,7 @@ def get_marker_customization():
         length=300,
     )
     radius_scale.pack(side=tk.LEFT)
-    radius_label = tk.Label(
-        radius_frame, textvariable=radius_var, width=8, font=("Arial", 10)
-    )
+    radius_label = tk.Label(radius_frame, textvariable=radius_var, width=8, font=("Arial", 10))
     radius_label.pack(side=tk.LEFT, padx=10)
 
     # Color selection with predefined colors
@@ -784,7 +761,7 @@ def get_marker_customization():
             "Black": [0.0, 0.0, 0.0],
         }
         r, g, b = colors[color_name]
-        color_hex = f"#{int(r*255):02x}{int(g*255):02x}{int(b*255):02x}"
+        color_hex = f"#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x}"
         preview_frame.configure(bg=color_hex)
 
     # Color buttons in a grid
@@ -1058,7 +1035,7 @@ def run_viewc3d_fallback(points, filepath, fps, marker_labels, selected_indices)
             time_sec = frame_idx / fps if fps > 0 else 0
             ax.set_title(
                 f"C3D Viewer (Matplotlib Fallback)\n"
-                f"{file_name} | Frame {frame_idx+1}/{num_frames} | "
+                f"{file_name} | Frame {frame_idx + 1}/{num_frames} | "
                 f"Time: {time_sec:.2f}s | Valid: {len(valid_points)}/{num_markers}",
                 fontsize=11,
                 pad=20,
@@ -1133,9 +1110,7 @@ def run_viewc3d_fallback(points, filepath, fps, marker_labels, selected_indices)
         fig.canvas.mpl_connect("key_press_event", on_key)
 
         # Add instructions
-        instructions = (
-            " Controls: Space=Play/Pause | ←→=Frame | ↑↓=10 Frames | Mouse=Rotate View"
-        )
+        instructions = " Controls: Space=Play/Pause | ←→=Frame | ↑↓=10 Frames | Mouse=Rotate View"
         plt.figtext(
             0.02,
             0.95,
@@ -1160,9 +1135,7 @@ def run_viewc3d_fallback(points, filepath, fps, marker_labels, selected_indices)
         print("[red]   Install with: pip install matplotlib[/red]")
         return False
     except Exception as e:
-        print(
-            f"[red] Error in matplotlib fallback: {str(e)}[/red]"
-        )  # noqa: F841 - Error details for potential future use
+        print(f"[red] Error in matplotlib fallback: {str(e)}[/red]")  # noqa: F841 - Error details for potential future use
         return False
 
 
@@ -1201,22 +1174,16 @@ def run_viewc3d():
                 "[yellow]  The matplotlib fallback provides full functionality for C3D visualization[/yellow]"
             )
         else:
-            print(
-                "[yellow]  This is common on older Linux systems or remote connections[/yellow]"
-            )
+            print("[yellow]  This is common on older Linux systems or remote connections[/yellow]")
 
         print("[cyan] Switching to matplotlib fallback visualization...[/cyan]")
 
-        success = run_viewc3d_fallback(
-            points, filepath, fps, marker_labels, selected_indices
-        )
+        success = run_viewc3d_fallback(points, filepath, fps, marker_labels, selected_indices)
         if success:
             return
         else:
             print("[red]❌ Both Open3D and matplotlib visualization failed[/red]")
-            print(
-                "[red]Please check your system's graphics drivers and Python environment[/red]"
-            )
+            print("[red]Please check your system's graphics drivers and Python environment[/red]")
             return
 
     # Filter the points array to only the selected markers
@@ -1236,16 +1203,12 @@ def run_viewc3d():
     try:
         vis = o3d.visualization.VisualizerWithKeyCallback()
         # Create window with Blender-like aspect (16:9)
-        window_created = vis.create_window(
-            window_name=window_title, width=1280, height=720
-        )
+        window_created = vis.create_window(window_name=window_title, width=1280, height=720)
 
         if not window_created:
             print("[red] Failed to create Open3D window[/red]")
             print("[cyan] Trying matplotlib fallback...[/cyan]")
-            success = run_viewc3d_fallback(
-                points, filepath, fps, marker_labels, selected_indices
-            )
+            success = run_viewc3d_fallback(points, filepath, fps, marker_labels, selected_indices)
             return
 
     except Exception as e:
@@ -1258,17 +1221,13 @@ def run_viewc3d():
             print(
                 f"[yellow] macOS GLFW error (common on Apple Silicon M1/M2/M3/M4): {str(e)}[/yellow]"
             )
-            print(
-                "[yellow] This is a known issue with Open3D on Apple Silicon Macs[/yellow]"
-            )
+            print("[yellow] This is a known issue with Open3D on Apple Silicon Macs[/yellow]")
             print("[cyan] Switching to matplotlib fallback visualization...[/cyan]")
         else:
             print(f"[red] Open3D window creation failed: {str(e)}[/red]")
             print("[cyan] Trying matplotlib fallback...[/cyan]")
 
-        success = run_viewc3d_fallback(
-            points, filepath, fps, marker_labels, selected_indices
-        )
+        success = run_viewc3d_fallback(points, filepath, fps, marker_labels, selected_indices)
         return
 
     # Remove this line:
@@ -1297,9 +1256,7 @@ def run_viewc3d():
     spheres = []
     spheres_bases = []
     for i in range(num_markers):
-        sphere = o3d.geometry.TriangleMesh.create_sphere(
-            radius=current_radius, resolution=8
-        )
+        sphere = o3d.geometry.TriangleMesh.create_sphere(radius=current_radius, resolution=8)
         base_vertices = np.asarray(sphere.vertices).copy()
         initial_pos = points[0][i]
         sphere.vertices = o3d.utility.Vector3dVector(base_vertices + initial_pos)
@@ -1409,9 +1366,7 @@ def run_viewc3d():
         print("[red] Failed to get view control - camera setup failed[/red]")
         print("[cyan] Trying matplotlib fallback...[/cyan]")
         vis.destroy_window()
-        success = run_viewc3d_fallback(
-            points, filepath, fps, marker_labels, selected_indices
-        )
+        success = run_viewc3d_fallback(points, filepath, fps, marker_labels, selected_indices)
         return
 
     try:
@@ -1449,9 +1404,7 @@ def run_viewc3d():
             fy = fx  # square pixels
             params.intrinsic.width = width
             params.intrinsic.height = height
-            params.intrinsic.set_intrinsics(
-                width, height, fx, fy, width / 2.0, height / 2.0
-            )
+            params.intrinsic.set_intrinsics(width, height, fx, fy, width / 2.0, height / 2.0)
 
             # Vertical FOV implied
             fov_y = 2.0 * np.arctan((height / 2.0) / fy)
@@ -1482,9 +1435,7 @@ def run_viewc3d():
                 pass
 
         # Determine center and ranges (include origin to show axes)
-        data_center = np.array(
-            [ground_center_x, ground_center_y, (data_z_min + data_z_max) / 2]
-        )
+        data_center = np.array([ground_center_x, ground_center_y, (data_z_min + data_z_max) / 2])
         x_range = ground_width
         y_range = ground_height
         z_range = max(0.1, data_z_max - data_z_min)
@@ -1505,17 +1456,13 @@ def run_viewc3d():
             height=720,
             margin=1.35,
         )
-        print(
-            "[green]Camera configured with Blender-like FOV (~40° horiz) and 16:9 aspect[/green]"
-        )
+        print("[green]Camera configured with Blender-like FOV (~40° horiz) and 16:9 aspect[/green]")
 
     except Exception as e:
         print(f"[red] Camera setup failed: {str(e)}[/red]")
         print("[cyan] Trying matplotlib fallback...[/cyan]")
         vis.destroy_window()
-        success = run_viewc3d_fallback(
-            points, filepath, fps, marker_labels, selected_indices
-        )
+        success = run_viewc3d_fallback(points, filepath, fps, marker_labels, selected_indices)
         return
 
     # Configure rendering options
@@ -1642,7 +1589,7 @@ def run_viewc3d():
         if not json_file:
             return False
         try:
-            with open(json_file, "r", encoding="utf-8") as f:
+            with open(json_file, encoding="utf-8") as f:
                 data = json.load(f)
             conns = data.get("connections", [])
         except Exception as exc:
@@ -1841,9 +1788,7 @@ def run_viewc3d():
         """Export the whole sequence as PNG images in a chosen directory."""
         nonlocal current_frame, is_playing
         root = _create_centered_tk_root()
-        out_dir = filedialog.askdirectory(
-            title="Select output directory for PNG sequence"
-        )
+        out_dir = filedialog.askdirectory(title="Select output directory for PNG sequence")
         root.destroy()
         if not out_dir:
             return False
@@ -1869,9 +1814,7 @@ def run_viewc3d():
     # --- Blender-like quick views and video export ---
     def _data_center_for_views():
         try:
-            return np.array(
-                [ground_center_x, ground_center_y, (data_z_min + data_z_max) / 2]
-            )
+            return np.array([ground_center_x, ground_center_y, (data_z_min + data_z_max) / 2])
         except Exception:
             return np.array([0.0, 0.0, 0.0])
 
@@ -1947,9 +1890,7 @@ def run_viewc3d():
                 subprocess.run(cmd, check=True)
                 print("\nMP4 export finished")
             except FileNotFoundError:
-                print(
-                    "\n[red]ffmpeg not found. Install ffmpeg and ensure it is in PATH.[/red]"
-                )
+                print("\n[red]ffmpeg not found. Install ffmpeg and ensure it is in PATH.[/red]")
             except subprocess.CalledProcessError as exc:
                 print(f"\n[red]ffmpeg failed:[/red] {exc}")
         finally:
@@ -1966,9 +1907,7 @@ def run_viewc3d():
         """Render a simple turntable MP4 rotating the view around the scene center."""
         nonlocal is_playing
         root = _create_centered_tk_root()
-        default_name = (
-            os.path.splitext(os.path.basename(filepath))[0] + "_turntable.mp4"
-        )
+        default_name = os.path.splitext(os.path.basename(filepath))[0] + "_turntable.mp4"
         out_path = filedialog.asksaveasfilename(
             title="Save turntable MP4",
             defaultextension=".mp4",
@@ -2012,9 +1951,7 @@ def run_viewc3d():
                 subprocess.run(cmd, check=True)
                 print("\nTurntable export finished")
             except FileNotFoundError:
-                print(
-                    "\n[red]ffmpeg not found. Install ffmpeg and ensure it is in PATH.[/red]"
-                )
+                print("\n[red]ffmpeg not found. Install ffmpeg and ensure it is in PATH.[/red]")
             except subprocess.CalledProcessError as exc:
                 print(f"\n[red]ffmpeg failed:[/red] {exc}")
         finally:
@@ -2077,9 +2014,7 @@ def run_viewc3d():
         else:
             # Show labels - create text geometries for current frame
             frame_data = points[current_frame]
-            for i, (marker_name, marker_pos) in enumerate(
-                zip(selected_marker_names, frame_data)
-            ):
+            for i, (marker_name, marker_pos) in enumerate(zip(selected_marker_names, frame_data)):
                 if not np.isnan(marker_pos).any():
                     # Choose color based on marker name for better distinction
                     first_char = marker_name.lower()[0] if marker_name else "z"
@@ -2122,9 +2057,7 @@ def run_viewc3d():
 
             # Add new labels for current frame
             frame_data = points[current_frame]
-            for i, (marker_name, marker_pos) in enumerate(
-                zip(selected_marker_names, frame_data)
-            ):
+            for i, (marker_name, marker_pos) in enumerate(zip(selected_marker_names, frame_data)):
                 if not np.isnan(marker_pos).any():
                     # Choose color based on marker name for better distinction
                     first_char = marker_name.lower()[0] if marker_name else "z"
@@ -2291,9 +2224,7 @@ def run_viewc3d():
             current_pos = points[current_frame][i]
             if np.isnan(current_pos).any():
                 current_pos = np.zeros(3)
-            new_sphere.vertices = o3d.utility.Vector3dVector(
-                base_vertices + current_pos
-            )
+            new_sphere.vertices = o3d.utility.Vector3dVector(base_vertices + current_pos)
             new_sphere.paint_uniform_color(available_colors[current_color_index][0])
 
             # Update the references
@@ -2364,16 +2295,18 @@ def run_viewc3d():
 
         # Optional per-frame console info
         if verbose_frame[0]:
-            frame_info = f"Frame {current_frame+1}/{num_frames}"
+            frame_info = f"Frame {current_frame + 1}/{num_frames}"
             print(
-                f"\r{frame_info} - Time: {(current_frame/fps):.3f}s", end="", flush=True
+                f"\r{frame_info} - Time: {(current_frame / fps):.3f}s",
+                end="",
+                flush=True,
             )
 
         vis.poll_events()
         vis.update_renderer()
 
     # Update the window title with the current frame
-    frame_info = f"Frame {current_frame+1}/{num_frames}"
+    frame_info = f"Frame {current_frame + 1}/{num_frames}"
     new_title = (
         f"C3D Viewer | File: {file_name} | Markers: {num_markers}/{total_markers} | {frame_info} | FPS: {fps} | "
         "Keys: [←→: Frame, ↑↓: 60 Frames, +/-: Size, C: Color, Space: Play, H: Help] | "
@@ -2386,7 +2319,7 @@ def run_viewc3d():
         vis.set_window_name(new_title)
     except AttributeError:
         # If not available, just print the current frame in the terminal
-        print(f"\rFrame {current_frame+1}/{num_frames}", end="", flush=True)
+        print(f"\rFrame {current_frame + 1}/{num_frames}", end="", flush=True)
 
     vis.poll_events()
     vis.update_renderer()
@@ -2482,34 +2415,22 @@ def run_viewc3d():
             print(f"Z: [{current_z_min:.3f}, {current_z_max:.3f}]")
 
             # Request new limits from user
-            x_min = simpledialog.askfloat(
-                "X Axis", "X minimum:", initialvalue=current_x_min - 2.0
-            )
+            x_min = simpledialog.askfloat("X Axis", "X minimum:", initialvalue=current_x_min - 2.0)
             if x_min is None:
                 return False
-            x_max = simpledialog.askfloat(
-                "X Axis", "X maximum:", initialvalue=current_x_max + 2.0
-            )
+            x_max = simpledialog.askfloat("X Axis", "X maximum:", initialvalue=current_x_max + 2.0)
             if x_max is None:
                 return False
-            y_min = simpledialog.askfloat(
-                "Y Axis", "Y minimum:", initialvalue=current_y_min - 2.0
-            )
+            y_min = simpledialog.askfloat("Y Axis", "Y minimum:", initialvalue=current_y_min - 2.0)
             if y_min is None:
                 return False
-            y_max = simpledialog.askfloat(
-                "Y Axis", "Y maximum:", initialvalue=current_y_max + 2.0
-            )
+            y_max = simpledialog.askfloat("Y Axis", "Y maximum:", initialvalue=current_y_max + 2.0)
             if y_max is None:
                 return False
-            z_min = simpledialog.askfloat(
-                "Z Axis", "Z minimum:", initialvalue=current_z_min - 2.0
-            )
+            z_min = simpledialog.askfloat("Z Axis", "Z minimum:", initialvalue=current_z_min - 2.0)
             if z_min is None:
                 return False
-            z_max = simpledialog.askfloat(
-                "Z Axis", "Z maximum:", initialvalue=current_z_max + 2.0
-            )
+            z_max = simpledialog.askfloat("Z Axis", "Z maximum:", initialvalue=current_z_max + 2.0)
             if z_max is None:
                 return False
 
@@ -2531,9 +2452,7 @@ def run_viewc3d():
 
         if new_width > 0 and new_height > 0:
             new_ground = create_ground_plane(width=new_width, height=new_height)
-            new_ground.translate(
-                np.array([(x_min + x_max) / 2, (y_min + y_max) / 2, 0.0])
-            )
+            new_ground.translate(np.array([(x_min + x_max) / 2, (y_min + y_max) / 2, 0.0]))
             spacing = max(1.0, int(max(new_width, new_height) / 20))
             new_grid = create_ground_grid(
                 x_min=x_min, x_max=x_max, y_min=y_min, y_max=y_max, spacing=spacing
@@ -2556,9 +2475,7 @@ def run_viewc3d():
             default_field_geometries.append(x_marker)
 
         # Apply new camera view
-        new_center = np.array(
-            [(x_min + x_max) / 2, (y_min + y_max) / 2, (z_min + z_max) / 2]
-        )
+        new_center = np.array([(x_min + x_max) / 2, (y_min + y_max) / 2, (z_min + z_max) / 2])
         optimal_zoom = 0.5 / max_range if max_range > 0 else 0.5
         ctr.set_lookat(new_center)
         ctr.set_zoom(optimal_zoom)
@@ -2567,9 +2484,7 @@ def run_viewc3d():
         print(
             f"X: [{x_min:.3f}, {x_max:.3f}] | Y: [{y_min:.3f}, {y_max:.3f}] | Z: [{z_min:.3f}, {z_max:.3f}]"
         )
-        print(
-            f"Center: [{new_center[0]:.3f}, {new_center[1]:.3f}, {new_center[2]:.3f}]"
-        )
+        print(f"Center: [{new_center[0]:.3f}, {new_center[1]:.3f}, {new_center[2]:.3f}]")
 
         return False
 
@@ -2582,9 +2497,7 @@ def run_viewc3d():
 
         if len(valid_data_points) > 0:
             data_center = np.mean(valid_data_points, axis=0)
-            data_range = np.max(valid_data_points, axis=0) - np.min(
-                valid_data_points, axis=0
-            )
+            data_range = np.max(valid_data_points, axis=0) - np.min(valid_data_points, axis=0)
             max_dimension = np.max(data_range)
 
             # Calculate optimal zoom based on data scale
@@ -2728,9 +2641,7 @@ O - Show camera parameters
     # Function to change the ground plane color
     def change_ground_color(_vis_obj):
         nonlocal current_ground_color_index
-        current_ground_color_index = (current_ground_color_index + 1) % len(
-            ground_colors
-        )
+        current_ground_color_index = (current_ground_color_index + 1) % len(ground_colors)
         new_color, color_name = ground_colors[current_ground_color_index]
 
         # Update the ground plane color
@@ -2769,13 +2680,13 @@ O - Show camera parameters
             if len(valid_points) > 0:
                 center = np.mean(valid_points, axis=0)
                 height = np.max(valid_points[:, 2]) - np.min(valid_points[:, 2])
-                print(f"\n=== Frame {current_frame+1}/{num_frames} ===")
+                print(f"\n=== Frame {current_frame + 1}/{num_frames} ===")
                 print(f"Valid markers: {len(valid_points)}/{num_markers}")
                 print(f"Center: [{center[0]:.3f}, {center[1]:.3f}, {center[2]:.3f}]")
                 print(f"Height range: {height:.3f}m")
-                print(f"Time: {(current_frame/fps):.3f}s")
+                print(f"Time: {(current_frame / fps):.3f}s")
             else:
-                print(f"Frame {current_frame+1}: No valid markers")
+                print(f"Frame {current_frame + 1}: No valid markers")
         return False
 
     # Register all shortcuts
@@ -2808,9 +2719,7 @@ O - Show camera parameters
     vis.register_key_callback(ord("E"), jump_to_end)
 
     # New shortcuts for colors and features
-    vis.register_key_callback(
-        ord("T"), toggle_background_advanced
-    )  # Background colored
+    vis.register_key_callback(ord("T"), toggle_background_advanced)  # Background colored
     vis.register_key_callback(ord("Y"), change_ground_color)  # Ground plane colored
     vis.register_key_callback(ord("L"), set_view_limits)
     vis.register_key_callback(ord("I"), show_frame_info)
@@ -2821,9 +2730,7 @@ O - Show camera parameters
     # New advanced features
     vis.register_key_callback(ord("W"), toggle_trails)  # Trails
     vis.register_key_callback(ord("J"), load_skeleton_from_json)  # Skeleton JSON
-    vis.register_key_callback(
-        ord("D"), measure_distance_between_two_markers
-    )  # Distance
+    vis.register_key_callback(ord("D"), measure_distance_between_two_markers)  # Distance
     vis.register_key_callback(ord("K"), save_screenshot)  # Screenshot
     vis.register_key_callback(ord("Z"), export_png_sequence)  # PNG sequence
     # Blender-like views and video
@@ -2831,9 +2738,7 @@ O - Show camera parameters
     vis.register_key_callback(ord("3"), view_right)  # Right
     vis.register_key_callback(ord("7"), view_top)  # Top
     vis.register_key_callback(ord("V"), export_video_mp4)  # MP4 export
-    vis.register_key_callback(
-        ord("9"), render_turntable
-    )  # Turntable render (moved from R)
+    vis.register_key_callback(ord("9"), render_turntable)  # Turntable render (moved from R)
     vis.register_key_callback(ord("R"), reset_camera_view)  # Reset camera view
     # Playback speed and verbose toggle
     vis.register_key_callback(ord("]"), faster_playback)
@@ -2876,9 +2781,7 @@ O - Show camera parameters
             )
             base_vertices = np.asarray(new_sphere.vertices).copy()
             current_pos = points[current_frame][i]
-            new_sphere.vertices = o3d.utility.Vector3dVector(
-                base_vertices + current_pos
-            )
+            new_sphere.vertices = o3d.utility.Vector3dVector(base_vertices + current_pos)
             new_sphere.paint_uniform_color(available_colors[current_color_index][0])
 
             spheres[i] = new_sphere
@@ -2908,9 +2811,7 @@ O - Show camera parameters
         """Draws a 3D circle in Open3D"""
         # Create a circle on the XY plane
         t = np.linspace(0, 2 * np.pi, resolution)
-        points = np.vstack(
-            [radius * np.cos(t), radius * np.sin(t), np.zeros(resolution)]
-        ).T
+        points = np.vstack([radius * np.cos(t), radius * np.sin(t), np.zeros(resolution)]).T
 
         # Find rotation to align the circle's normal with the given normal
         z_axis = np.array([0, 0, 1])
@@ -2941,9 +2842,7 @@ O - Show camera parameters
     ):
         """Draws a 3D arc in Open3D"""
         t = np.linspace(np.deg2rad(start_angle), np.deg2rad(end_angle), resolution)
-        points = np.vstack(
-            [radius * np.cos(t), radius * np.sin(t), np.zeros(resolution)]
-        ).T
+        points = np.vstack([radius * np.cos(t), radius * np.sin(t), np.zeros(resolution)]).T
 
         z_axis = np.array([0, 0, 1])
         rotation = rotation_matrix_from_vectors(z_axis, normal)
@@ -2962,9 +2861,10 @@ O - Show camera parameters
 
     def rotation_matrix_from_vectors(vec1, vec2):
         """Find the rotation matrix that aligns vec1 to vec2"""
-        a, b = (vec1 / np.linalg.norm(vec1)).reshape(3), (
-            vec2 / np.linalg.norm(vec2)
-        ).reshape(3)
+        a, b = (
+            (vec1 / np.linalg.norm(vec1)).reshape(3),
+            (vec2 / np.linalg.norm(vec2)).reshape(3),
+        )
         v = np.cross(a, b)
         c = np.dot(a, b)
         s = np.linalg.norm(v)
@@ -2976,26 +2876,15 @@ O - Show camera parameters
 
     # Replace the simple line drawing with a full field drawing
     def create_full_soccer_field(vis, df):
-        points = {
-            row["point_name"]: (row["x"], row["y"], row["z"])
-            for _, row in df.iterrows()
-        }
+        points = {row["point_name"]: (row["x"], row["y"], row["z"]) for _, row in df.iterrows()}
         geometries = []
 
         # Perimeter
         p = points
-        geometries.append(
-            draw_line_3d(vis, p["bottom_left_corner"], p["top_left_corner"])
-        )
-        geometries.append(
-            draw_line_3d(vis, p["top_left_corner"], p["top_right_corner"])
-        )
-        geometries.append(
-            draw_line_3d(vis, p["top_right_corner"], p["bottom_right_corner"])
-        )
-        geometries.append(
-            draw_line_3d(vis, p["bottom_right_corner"], p["bottom_left_corner"])
-        )
+        geometries.append(draw_line_3d(vis, p["bottom_left_corner"], p["top_left_corner"]))
+        geometries.append(draw_line_3d(vis, p["top_left_corner"], p["top_right_corner"]))
+        geometries.append(draw_line_3d(vis, p["top_right_corner"], p["bottom_right_corner"]))
+        geometries.append(draw_line_3d(vis, p["bottom_right_corner"], p["bottom_left_corner"]))
 
         # Center line
         geometries.append(draw_line_3d(vis, p["midfield_left"], p["midfield_right"]))
@@ -3009,14 +2898,10 @@ O - Show camera parameters
         # Penalty areas and goal areas (rectangles)
         # Left penalty area
         geometries.append(
-            draw_line_3d(
-                vis, p["left_penalty_area_bottom_left"], p["left_penalty_area_top_left"]
-            )
+            draw_line_3d(vis, p["left_penalty_area_bottom_left"], p["left_penalty_area_top_left"])
         )
         geometries.append(
-            draw_line_3d(
-                vis, p["left_penalty_area_top_left"], p["left_penalty_area_top_right"]
-            )
+            draw_line_3d(vis, p["left_penalty_area_top_left"], p["left_penalty_area_top_right"])
         )
         geometries.append(
             draw_line_3d(
@@ -3042,9 +2927,7 @@ O - Show camera parameters
             )
         )
         geometries.append(
-            draw_line_3d(
-                vis, p["right_penalty_area_top_left"], p["right_penalty_area_top_right"]
-            )
+            draw_line_3d(vis, p["right_penalty_area_top_left"], p["right_penalty_area_top_right"])
         )
         geometries.append(
             draw_line_3d(
@@ -3063,46 +2946,30 @@ O - Show camera parameters
 
         # Left goal area (small area)
         geometries.append(
-            draw_line_3d(
-                vis, p["left_goal_area_bottom_left"], p["left_goal_area_top_left"]
-            )
+            draw_line_3d(vis, p["left_goal_area_bottom_left"], p["left_goal_area_top_left"])
         )
         geometries.append(
-            draw_line_3d(
-                vis, p["left_goal_area_top_left"], p["left_goal_area_top_right"]
-            )
+            draw_line_3d(vis, p["left_goal_area_top_left"], p["left_goal_area_top_right"])
         )
         geometries.append(
-            draw_line_3d(
-                vis, p["left_goal_area_top_right"], p["left_goal_area_bottom_right"]
-            )
+            draw_line_3d(vis, p["left_goal_area_top_right"], p["left_goal_area_bottom_right"])
         )
         geometries.append(
-            draw_line_3d(
-                vis, p["left_goal_area_bottom_right"], p["left_goal_area_bottom_left"]
-            )
+            draw_line_3d(vis, p["left_goal_area_bottom_right"], p["left_goal_area_bottom_left"])
         )
 
         # Right goal area (small area)
         geometries.append(
-            draw_line_3d(
-                vis, p["right_goal_area_bottom_left"], p["right_goal_area_top_left"]
-            )
+            draw_line_3d(vis, p["right_goal_area_bottom_left"], p["right_goal_area_top_left"])
         )
         geometries.append(
-            draw_line_3d(
-                vis, p["right_goal_area_top_left"], p["right_goal_area_top_right"]
-            )
+            draw_line_3d(vis, p["right_goal_area_top_left"], p["right_goal_area_top_right"])
         )
         geometries.append(
-            draw_line_3d(
-                vis, p["right_goal_area_top_right"], p["right_goal_area_bottom_right"]
-            )
+            draw_line_3d(vis, p["right_goal_area_top_right"], p["right_goal_area_bottom_right"])
         )
         geometries.append(
-            draw_line_3d(
-                vis, p["right_goal_area_bottom_right"], p["right_goal_area_bottom_left"]
-            )
+            draw_line_3d(vis, p["right_goal_area_bottom_right"], p["right_goal_area_bottom_left"])
         )
 
         # Penalty Arcs
@@ -3118,9 +2985,7 @@ O - Show camera parameters
         # Left penalty area center is at x=11, penalty area edge is at x=16.5
         # Current angles: angle1_l ≈ -53° (left intersection), angle2_l ≈ +53° (right intersection)
         # The direct path from angle1_l to angle2_l goes through 0° (towards center - CORRECT)
-        geometries.append(
-            draw_arc_3d(vis, center_l, [0, 0, 1], radius_l, angle1_l, angle2_l)
-        )
+        geometries.append(draw_arc_3d(vis, center_l, [0, 0, 1], radius_l, angle1_l, angle2_l))
 
         # Right
         center_r = p["right_penalty_spot"]
@@ -3135,9 +3000,7 @@ O - Show camera parameters
         # Current angles: angle1_r ≈ -127° (left intersection), angle2_r ≈ +127° (right intersection)
         # The direct path from angle1_r to angle2_r goes through 0° (towards goal - WRONG)
         # We need the complementary arc that goes through 180° (towards center field - CORRECT)
-        geometries.append(
-            draw_arc_3d(vis, center_r, [0, 0, 1], radius_r, angle2_r, angle1_r + 360)
-        )
+        geometries.append(draw_arc_3d(vis, center_r, [0, 0, 1], radius_r, angle2_r, angle1_r + 360))
 
         return geometries
 
@@ -3227,9 +3090,7 @@ def load_field_lines_from_csv():
 
             # Adjust Z coordinates to ground level if they are close to zero
             lines_points_array = np.array(lines_points)
-            if (
-                np.max(np.abs(lines_points_array[:, 2])) < 0.1
-            ):  # If Z values are very small
+            if np.max(np.abs(lines_points_array[:, 2])) < 0.1:  # If Z values are very small
                 lines_points_array[:, 2] += 0.001  # Raise slightly above ground
                 lines_points = lines_points_array.tolist()
 
@@ -3260,9 +3121,7 @@ def load_field_lines_from_csv():
             # Calculate zoom based on data size
             # For a football field (105m), zoom ~0.003 works well
             optimal_zoom = 0.3 / max_range if max_range > 0 else 0.003
-            optimal_zoom = max(
-                0.001, min(optimal_zoom, 0.1)
-            )  # Limitar entre 0.001 e 0.1
+            optimal_zoom = max(0.001, min(optimal_zoom, 0.1))  # Limitar entre 0.001 e 0.1
 
             print(
                 f"Loaded {len(lines_points)} points and {len(lines_indices)} lines from {os.path.basename(csv_file)}"
