@@ -33,15 +33,15 @@ License:
     GNU General Public License v3.0
 """
 
+import datetime
 import os
 import tkinter as tk
-from tkinter import messagebox, scrolledtext, filedialog, ttk
-import speech_recognition as sr
+from pathlib import Path
+from tkinter import filedialog, messagebox, scrolledtext, ttk
+
 import sounddevice as sd
 import soundfile as sf
-import datetime
-import webbrowser
-from pathlib import Path
+import speech_recognition as sr
 
 # Optional imports with fallbacks
 try:
@@ -205,9 +205,7 @@ SHORTCUTS:
         guide_window.geometry("700x600")
         guide_window.attributes("-topmost", True)
 
-        text_widget = scrolledtext.ScrolledText(
-            guide_window, wrap=tk.WORD, width=80, height=35
-        )
+        text_widget = scrolledtext.ScrolledText(guide_window, wrap=tk.WORD, width=80, height=35)
         text_widget.pack(padx=10, pady=10, fill="both", expand=True)
         text_widget.insert("1.0", guide_text)
         text_widget.config(state="disabled")
@@ -404,9 +402,9 @@ SHORTCUTS:
         text_header = tk.Frame(text_frame)
         text_header.pack(fill="x", pady=5)
 
-        tk.Label(
-            text_header, text="Edit your transcribed text or write a custom prompt:"
-        ).pack(side="left", anchor="w")
+        tk.Label(text_header, text="Edit your transcribed text or write a custom prompt:").pack(
+            side="left", anchor="w"
+        )
         tk.Button(
             text_header,
             text="Text to Audio",
@@ -430,9 +428,7 @@ SHORTCUTS:
         self.text_display.pack(fill="both", expand=True, pady=5)
 
         # Generation section
-        gen_frame = tk.LabelFrame(
-            main_frame, text="3. AI Generation", font=("Arial", 12, "bold")
-        )
+        gen_frame = tk.LabelFrame(main_frame, text="3. AI Generation", font=("Arial", 12, "bold"))
         gen_frame.pack(fill="x", pady=5)
 
         gen_buttons = tk.Frame(gen_frame)
@@ -477,9 +473,7 @@ SHORTCUTS:
 
         tk.Label(api_frame, text="AI Mode:").pack(side="left", padx=5)
         self.api_var = tk.StringVar(value="local")
-        api_combo = ttk.Combobox(
-            api_frame, textvariable=self.api_var, width=15, state="readonly"
-        )
+        api_combo = ttk.Combobox(api_frame, textvariable=self.api_var, width=15, state="readonly")
         api_combo["values"] = ("local", "openai", "custom")
         api_combo.pack(side="left", padx=5)
 
@@ -535,12 +529,12 @@ SHORTCUTS:
 
         image_buttons = tk.Frame(image_frame)
         image_buttons.pack(fill="x", pady=5)
-        tk.Button(
-            image_buttons, text="Open Image URL", command=self.open_image_url
-        ).pack(side="left", padx=5)
-        tk.Button(
-            image_buttons, text="Save Image Info", command=self.save_image_info
-        ).pack(side="left", padx=5)
+        tk.Button(image_buttons, text="Open Image URL", command=self.open_image_url).pack(
+            side="left", padx=5
+        )
+        tk.Button(image_buttons, text="Save Image Info", command=self.save_image_info).pack(
+            side="left", padx=5
+        )
 
         self.image_display = scrolledtext.ScrolledText(
             image_frame, width=100, height=15, font=("Arial", 10)
@@ -571,9 +565,7 @@ SHORTCUTS:
         directory = filedialog.askdirectory(
             title="Select Base Output Directory",
             initialdir=(
-                self.output_dir
-                if os.path.exists(self.output_dir)
-                else os.path.expanduser("~")
+                self.output_dir if os.path.exists(self.output_dir) else os.path.expanduser("~")
             ),
             parent=self.root,
         )
@@ -582,9 +574,7 @@ SHORTCUTS:
             self.dir_var.set(directory)
             self.session_dir = None
             self.session_var.set("No session created")
-            self.status_label.config(
-                text=f"Base directory set to: {directory}", fg="blue"
-            )
+            self.status_label.config(text=f"Base directory set to: {directory}", fg="blue")
             self.show_message(
                 "info",
                 "Directory Selected",
@@ -602,20 +592,14 @@ SHORTCUTS:
     def create_new_session(self):
         """Create a new session directory."""
         if not self.output_dir:
-            self.show_message(
-                "warning", "Warning", "Please select a base directory first."
-            )
+            self.show_message("warning", "Warning", "Please select a base directory first.")
             return
 
         session_path = self.create_session_directory()
         session_name = os.path.basename(session_path)
         self.session_var.set(session_name)
-        self.status_label.config(
-            text=f"New session created: {session_name}", fg="green"
-        )
-        self.show_message(
-            "info", "Session Created", f"New session created:\n{session_path}"
-        )
+        self.status_label.config(text=f"New session created: {session_name}", fg="green")
+        self.show_message("info", "Session Created", f"New session created:\n{session_path}")
         self.transcription_file = None
 
     def record_audio(self):
@@ -634,15 +618,11 @@ SHORTCUTS:
                 print(f"[DEBUG] Using duration from entry: {duration} seconds")
             except ValueError:
                 duration = 10
-                self.status_label.config(
-                    text="Invalid duration. Using default (10s).", fg="red"
-                )
+                self.status_label.config(text="Invalid duration. Using default (10s).", fg="red")
                 print(f"[DEBUG] Invalid duration, using default: {duration} seconds")
 
             sample_rate = 44100
-            self.status_label.config(
-                text=f"Recording for {duration} seconds...", fg="red"
-            )
+            self.status_label.config(text=f"Recording for {duration} seconds...", fg="red")
             self.root.update()
 
             self.show_message(
@@ -672,9 +652,7 @@ SHORTCUTS:
             sf.write(wav_file, audio_data, sample_rate, subtype="PCM_16")
             AUDIO_FILE = wav_file
 
-            print(
-                f"[DEBUG] WAV file saved successfully. Size: {os.path.getsize(wav_file)} bytes"
-            )
+            print(f"[DEBUG] WAV file saved successfully. Size: {os.path.getsize(wav_file)} bytes")
 
             mp3_created = False
             print("[DEBUG] Attempting MP3 conversion...")
@@ -756,9 +734,7 @@ SHORTCUTS:
         if file_path:
             global AUDIO_FILE
             AUDIO_FILE = file_path
-            self.status_label.config(
-                text=f"Loaded: {os.path.basename(file_path)}", fg="blue"
-            )
+            self.status_label.config(text=f"Loaded: {os.path.basename(file_path)}", fg="blue")
 
     def load_transcription(self):
         """Load an existing transcription file."""
@@ -773,7 +749,7 @@ SHORTCUTS:
         )
         if file_path:
             try:
-                with open(file_path, "r", encoding="utf-8") as f:
+                with open(file_path, encoding="utf-8") as f:
                     text = f.read()
 
                 self.transcription_file = file_path
@@ -785,9 +761,7 @@ SHORTCUTS:
                 )
 
             except Exception as e:
-                self.show_message(
-                    "error", "Error", f"Failed to load transcription: {str(e)}"
-                )
+                self.show_message("error", "Error", f"Failed to load transcription: {str(e)}")
 
     def save_transcription_edits(self):
         """Save edited text back to transcription file."""
@@ -801,9 +775,7 @@ SHORTCUTS:
 
         if not self.transcription_file:
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            self.transcription_file = (
-                f"{self.session_dir}/text/transcription_{timestamp}.txt"
-            )
+            self.transcription_file = f"{self.session_dir}/text/transcription_{timestamp}.txt"
 
         try:
             with open(self.transcription_file, "w", encoding="utf-8") as f:
@@ -812,9 +784,7 @@ SHORTCUTS:
                 text=f"Text saved: {os.path.basename(self.transcription_file)}",
                 fg="green",
             )
-            self.show_message(
-                "info", "Success", f"Text saved to:\n{self.transcription_file}"
-            )
+            self.show_message("info", "Success", f"Text saved to:\n{self.transcription_file}")
         except Exception as e:
             self.show_message("error", "Error", f"Failed to save text: {str(e)}")
 
@@ -862,9 +832,7 @@ SHORTCUTS:
                 )
 
         except Exception as e:
-            self.show_message(
-                "error", "TTS Error", f"Failed to generate audio: {str(e)}"
-            )
+            self.show_message("error", "TTS Error", f"Failed to generate audio: {str(e)}")
 
     def _try_pyttsx3_tts(self, text, audio_file):
         """Try pyttsx3 for TTS conversion."""
@@ -974,9 +942,7 @@ Set objFile = Nothing
 Set objVoice = Nothing
 """
 
-            with tempfile.NamedTemporaryFile(
-                mode="w", suffix=".vbs", delete=False
-            ) as f:
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".vbs", delete=False) as f:
                 f.write(vbs_script)
                 vbs_file = f.name
 
@@ -1000,9 +966,7 @@ Set objVoice = Nothing
 
         if not os.path.exists(AUDIO_FILE):
             print(f"[ERROR] Audio file not found: {AUDIO_FILE}")
-            self.show_message(
-                "error", "Error", "No audio file found. Please record audio first."
-            )
+            self.show_message("error", "Error", "No audio file found. Please record audio first.")
             return
 
         print(f"[DEBUG] Transcribing audio file: {AUDIO_FILE}")
@@ -1056,9 +1020,7 @@ Set objVoice = Nothing
                             from pydub import AudioSegment
 
                             audio_segment = AudioSegment.from_file(AUDIO_FILE)
-                            audio_segment = audio_segment.set_frame_rate(
-                                22050
-                            ).set_channels(1)
+                            audio_segment = audio_segment.set_frame_rate(22050).set_channels(1)
 
                             temp_wav = AUDIO_FILE.replace(".wav", "_temp.wav").replace(
                                 ".mp3", "_temp.wav"
@@ -1077,9 +1039,7 @@ Set objVoice = Nothing
 
                     except ImportError:
                         print("[ERROR] No audio conversion libraries available")
-                        print(
-                            "[INFO] Install librosa or pydub for better audio format support:"
-                        )
+                        print("[INFO] Install librosa or pydub for better audio format support:")
                         print("[INFO] pip install librosa")
                         print("[INFO] pip install pydub")
                         raise audio_error
@@ -1117,9 +1077,7 @@ Set objVoice = Nothing
                 if not self.session_dir:
                     self.create_new_session()
 
-                self.transcription_file = (
-                    f"{self.session_dir}/text/transcription_{timestamp}.txt"
-                )
+                self.transcription_file = f"{self.session_dir}/text/transcription_{timestamp}.txt"
 
                 print(f"[DEBUG] Saving transcription to: {self.transcription_file}")
 
@@ -1147,18 +1105,14 @@ Set objVoice = Nothing
 
                 print("[DEBUG] Transcription completed successfully")
             else:
-                error_msg = (
-                    "Could not understand audio in any language (PT-BR, EN-US, ES-ES)"
-                )
+                error_msg = "Could not understand audio in any language (PT-BR, EN-US, ES-ES)"
                 print(f"[ERROR] {error_msg}")
                 raise sr.UnknownValueError(error_msg)
 
         except Exception as e:
             error_detail = str(e)
             print(f"[ERROR] Transcription failed: {error_detail}")
-            self.status_label.config(
-                text=f"Transcription error: {error_detail}", fg="red"
-            )
+            self.status_label.config(text=f"Transcription error: {error_detail}", fg="red")
             self.show_message(
                 "error",
                 "Transcription Error",
@@ -1242,7 +1196,7 @@ Set objVoice = Nothing
             for i, audio_file in enumerate(audio_files):
                 try:
                     # Update status
-                    progress = f"({i+1}/{len(audio_files)})"
+                    progress = f"({i + 1}/{len(audio_files)})"
                     filename = os.path.basename(audio_file)
                     self.status_label.config(
                         text=f"Transcribing {progress}: {filename}", fg="orange"
@@ -1289,9 +1243,7 @@ Set objVoice = Nothing
                         if generate_music:
                             try:
                                 # Generate music code for this transcription
-                                music_code = self._generate_enhanced_music_code(
-                                    text, filename
-                                )
+                                music_code = self._generate_enhanced_music_code(text, filename)
                                 music_file = f"{music_dir}/{base_name}_music.py"
 
                                 with open(music_file, "w", encoding="utf-8") as f:
@@ -1315,7 +1267,7 @@ Set objVoice = Nothing
 
                                     if result.returncode == 0:
                                         results_summary.append(
-                                            f"   MIDI file generated successfully"
+                                            "   MIDI file generated successfully"
                                         )
                                     else:
                                         results_summary.append(
@@ -1332,9 +1284,7 @@ Set objVoice = Nothing
                                 )
                     else:
                         failed += 1
-                        results_summary.append(
-                            f"FAILED: {filename} -> Could not understand audio"
-                        )
+                        results_summary.append(f"FAILED: {filename} -> Could not understand audio")
 
                 except Exception as e:
                     failed += 1
@@ -1342,7 +1292,7 @@ Set objVoice = Nothing
 
             # Create summary report
             summary_content = f"""Batch Transcription Report
-Generated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+Generated: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 Source Directory: {directory}
 Output Directory: {batch_dir}
 
@@ -1382,9 +1332,7 @@ Files saved in: {batch_dir}
             )
 
         except Exception as e:
-            self.status_label.config(
-                text=f"Batch transcription error: {str(e)}", fg="red"
-            )
+            self.status_label.config(text=f"Batch transcription error: {str(e)}", fg="red")
             self.show_message(
                 "error",
                 "Batch Transcription Error",
@@ -1397,12 +1345,10 @@ Files saved in: {batch_dir}
         text = None
         if self.transcription_file and os.path.exists(self.transcription_file):
             try:
-                with open(self.transcription_file, "r", encoding="utf-8") as f:
+                with open(self.transcription_file, encoding="utf-8") as f:
                     text = f.read().strip()
             except Exception as e:
-                self.show_message(
-                    "error", "Error", f"Failed to read transcription file: {str(e)}"
-                )
+                self.show_message("error", "Error", f"Failed to read transcription file: {str(e)}")
                 return
 
         if not text:
@@ -1540,7 +1486,6 @@ print(f"Mood: {mood}, Scale: {scale}, Tempo: {tempo} BPM")
 
     def _generate_enhanced_music_code(self, text, source_filename=""):
         """Generate enhanced music code with more sophisticated analysis."""
-        import random
 
         # Enhanced mood and language analysis
         mood_keywords = {
@@ -1806,7 +1751,7 @@ with open(filename, "wb") as output_file:
     midi.writeFile(output_file)
 
 print(f"MIDI file created: {{filename}}")
-print(f"Mood: {primary_mood}, Scale: {params['scale']}, Tempo: {params['tempo']} BPM")
+print(f"Mood: {primary_mood}, Scale: {params["scale"]}, Tempo: {params["tempo"]} BPM")
 print(f"Complexity: {melody_complexity} ({{word_count}} words)")
 print("Tracks: Melody, Harmony, Bass")
 """
@@ -1817,12 +1762,10 @@ print("Tracks: Melody, Harmony, Bass")
         text = None
         if self.transcription_file and os.path.exists(self.transcription_file):
             try:
-                with open(self.transcription_file, "r", encoding="utf-8") as f:
+                with open(self.transcription_file, encoding="utf-8") as f:
                     text = f.read().strip()
             except Exception as e:
-                self.show_message(
-                    "error", "Error", f"Failed to read transcription file: {str(e)}"
-                )
+                self.show_message("error", "Error", f"Failed to read transcription file: {str(e)}")
                 return
 
         if not text:
@@ -1874,12 +1817,10 @@ Tips for best results:
         text = None
         if self.transcription_file and os.path.exists(self.transcription_file):
             try:
-                with open(self.transcription_file, "r", encoding="utf-8") as f:
+                with open(self.transcription_file, encoding="utf-8") as f:
                     text = f.read().strip()
             except Exception as e:
-                self.show_message(
-                    "error", "Error", f"Failed to read transcription file: {str(e)}"
-                )
+                self.show_message("error", "Error", f"Failed to read transcription file: {str(e)}")
                 return
 
         if not text:
@@ -2006,9 +1947,7 @@ Digital Applications:
                     f"Code executed successfully!\n\nOutput:\n{result.stdout}",
                 )
             else:
-                self.show_message(
-                    "error", "Execution Error", f"Error:\n{result.stderr}"
-                )
+                self.show_message("error", "Execution Error", f"Error:\n{result.stderr}")
 
         except Exception as e:
             self.show_message("error", "Error", f"Failed to execute: {str(e)}")
@@ -2070,9 +2009,7 @@ Digital Applications:
                     # Method 3: Try pygame MIDI playback (basic)
                     if self._try_pygame_conversion(midi_file, mp3_file):
                         mp3_created = True
-                        conversion_log.append(
-                            "SUCCESS: Basic pygame conversion successful!"
-                        )
+                        conversion_log.append("SUCCESS: Basic pygame conversion successful!")
                     else:
                         conversion_log.append("FAILED: Pygame conversion failed")
 
@@ -2125,7 +2062,7 @@ The MIDI file is ready for manual conversion!
                 self.show_message(
                     "warning",
                     "Manual Conversion Required",
-                    f"Automatic MP3 conversion failed.\nPlease see instructions in the display.",
+                    "Automatic MP3 conversion failed.\nPlease see instructions in the display.",
                 )
 
             # Show in music display
@@ -2134,9 +2071,7 @@ The MIDI file is ready for manual conversion!
 
             # Save report
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            report_file = (
-                f"{self.session_dir}/text/mp3_generation_report_{timestamp}.txt"
-            )
+            report_file = f"{self.session_dir}/text/mp3_generation_report_{timestamp}.txt"
 
             with open(report_file, "w", encoding="utf-8") as f:
                 f.write(result_msg)
@@ -2301,9 +2236,7 @@ The MIDI file is ready for manual conversion!
         try:
             with open(filename, "w", encoding="utf-8") as f:
                 f.write(content)
-            self.show_message(
-                "info", "Success", f"Image information saved as: {filename}"
-            )
+            self.show_message("info", "Success", f"Image information saved as: {filename}")
         except Exception as e:
             self.show_message("error", "Error", f"Failed to save: {str(e)}")
 
@@ -2393,7 +2326,7 @@ The MIDI file is ready for manual conversion!
             for i, text_file in enumerate(text_files):
                 try:
                     # Update status
-                    progress = f"({i+1}/{len(text_files)})"
+                    progress = f"({i + 1}/{len(text_files)})"
                     filename = os.path.basename(text_file)
                     self.status_label.config(
                         text=f"Generating music {progress}: {filename}", fg="orange"
@@ -2401,7 +2334,7 @@ The MIDI file is ready for manual conversion!
                     self.root.update()
 
                     # Read transcription
-                    with open(text_file, "r", encoding="utf-8") as f:
+                    with open(text_file, encoding="utf-8") as f:
                         text = f.read().strip()
 
                     if text:
@@ -2414,9 +2347,7 @@ The MIDI file is ready for manual conversion!
                             f.write(music_code)
 
                         successful += 1
-                        results_summary.append(
-                            f"SUCCESS: {filename} -> {base_name}_music.py"
-                        )
+                        results_summary.append(f"SUCCESS: {filename} -> {base_name}_music.py")
 
                         # Try to execute the music code to generate MIDI
                         try:
@@ -2431,9 +2362,7 @@ The MIDI file is ready for manual conversion!
                             )
 
                             if result.returncode == 0:
-                                results_summary.append(
-                                    f"   MIDI file generated successfully"
-                                )
+                                results_summary.append("   MIDI file generated successfully")
 
                                 # Try to convert MIDI to MP3
                                 midi_files = [
@@ -2444,33 +2373,23 @@ The MIDI file is ready for manual conversion!
                                 if midi_files:
                                     midi_path = f"{music_dir}/{midi_files[0]}"
                                     mp3_path = midi_path.replace(".mid", ".mp3")
-                                    if self._try_convert_midi_to_mp3(
-                                        midi_path, mp3_path
-                                    ):
-                                        results_summary.append(
-                                            f"   MP3 file created successfully"
-                                        )
+                                    if self._try_convert_midi_to_mp3(midi_path, mp3_path):
+                                        results_summary.append("   MP3 file created successfully")
                             else:
-                                results_summary.append(
-                                    f"   WARNING: MIDI generation failed"
-                                )
-                        except Exception as exec_error:
-                            results_summary.append(
-                                f"   WARNING: Could not execute music code"
-                            )
+                                results_summary.append("   WARNING: MIDI generation failed")
+                        except Exception:
+                            results_summary.append("   WARNING: Could not execute music code")
                     else:
                         failed += 1
                         results_summary.append(f"FAILED: {filename} -> Empty file")
 
                 except Exception as e:
                     failed += 1
-                    results_summary.append(
-                        f"ERROR: {filename} -> Error: {str(e)[:100]}"
-                    )
+                    results_summary.append(f"ERROR: {filename} -> Error: {str(e)[:100]}")
 
             # Create summary report
             summary_content = f"""Batch Music Generation Report
-Generated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+Generated: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 Source Directory: {directory}
 Output Directory: {music_dir}
 
@@ -2516,9 +2435,7 @@ Next steps:
             )
 
         except Exception as e:
-            self.status_label.config(
-                text=f"Batch music generation error: {str(e)}", fg="red"
-            )
+            self.status_label.config(text=f"Batch music generation error: {str(e)}", fg="red")
             self.show_message(
                 "error",
                 "Batch Music Error",
@@ -2528,10 +2445,7 @@ Next steps:
     def _try_convert_midi_to_mp3(self, midi_path, mp3_path):
         """Try to convert MIDI to MP3 using available tools."""
         # Try FluidSynth first
-        if self._try_fluidsynth_conversion(midi_path, mp3_path):
-            return True
-        # Try TiMidity
-        elif self._try_timidity_conversion(midi_path, mp3_path):
+        if self._try_fluidsynth_conversion(midi_path, mp3_path) or self._try_timidity_conversion(midi_path, mp3_path):
             return True
         return False
 
@@ -2547,16 +2461,12 @@ Next steps:
             if duration < 1 or duration > 600:
                 raise ValueError("Duration must be between 1 and 600 seconds.")
             self.recording_duration = duration
-            self.status_label.config(
-                text=f"Duration set to: {duration} seconds", fg="blue"
-            )
+            self.status_label.config(text=f"Duration set to: {duration} seconds", fg="blue")
             print(f"[DEBUG] Recording duration set to: {duration} seconds")
         except ValueError as e:
             self.show_message("error", "Invalid Duration", str(e))
             self.recording_duration = 10  # Fallback to default
-            self.status_label.config(
-                text="Invalid duration. Using default (10s).", fg="red"
-            )
+            self.status_label.config(text="Invalid duration. Using default (10s).", fg="red")
 
 
 def run_brainstorm():

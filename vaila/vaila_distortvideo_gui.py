@@ -17,28 +17,27 @@ preview in real time.
 ===============================================================================
 """
 
+import math
+import os
+import subprocess
+import tkinter as tk
+from datetime import datetime
+from tkinter import filedialog, messagebox
+
 import cv2
 import numpy as np
 import pandas as pd
-import os
-import pathlib
+from PIL import Image, ImageTk  # To convert images for display with Tkinter
 from rich import print
-import tkinter as tk
-from tkinter import filedialog, messagebox
-from datetime import datetime
+from rich import print as rprint
+from rich.console import Console
 from rich.progress import (
+    BarColumn,
     Progress,
     SpinnerColumn,
-    TimeElapsedColumn,
-    BarColumn,
     TextColumn,
+    TimeElapsedColumn,
 )
-from rich.console import Console
-from rich import print as rprint
-import subprocess
-from PIL import Image, ImageTk  # To convert images for display with Tkinter
-import math
-import pygame
 
 
 def load_distortion_parameters(csv_path):
@@ -101,11 +100,8 @@ def process_video(input_path, output_path, parameters):
             TimeElapsedColumn(),
             console=console,
         ) as progress:
-
             # Add task
-            process_task = progress.add_task(
-                "[cyan]Processing frames...", total=total_frames
-            )
+            process_task = progress.add_task("[cyan]Processing frames...", total=total_frames)
 
             frame_count = 0
             while True:
@@ -169,7 +165,7 @@ def process_video(input_path, output_path, parameters):
                 os.remove(os.path.join(temp_dir, file))
             os.rmdir(temp_dir)
 
-    rprint(f"\n[green]Video processing complete![/green]")
+    rprint("\n[green]Video processing complete![/green]")
     rprint(f"[blue]Output saved as: {output_path}[/blue]")
 
 
@@ -281,9 +277,7 @@ def distort_video_gui():
         p2 = p2_var.get()
 
         # Create the camera matrix and distortion coefficients
-        camera_matrix = np.array(
-            [[fx, 0, cx], [0, fy, cy], [0, 0, 1]], dtype=np.float32
-        )
+        camera_matrix = np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]], dtype=np.float32)
         dist_coeffs = np.array([k1, k2, p1, p2, k3], dtype=np.float32)
         # Calculate the new camera matrix (optional, but useful)
         new_camera_matrix, roi = cv2.getOptimalNewCameraMatrix(
@@ -304,9 +298,7 @@ def distort_video_gui():
         win_h = preview_win.winfo_height()
         new_w = int(win_w * scale)
         new_h = int(win_h * scale)
-        resized = cv2.resize(
-            undistorted, (new_w, new_h), interpolation=cv2.INTER_LINEAR
-        )
+        resized = cv2.resize(undistorted, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
 
         # Convert to RGB and create the image for Tkinter
         resized_rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
@@ -544,9 +536,7 @@ def distort_video_gui_cv2():
     default_cy = orig_height // 2
 
     # Create a window for preview and parameter adjustment using OpenCV
-    window_name = (
-        "Parameter Adjustment (Press 'c' to confirm, 'q' to cancel, 'r' to reset view)"
-    )
+    window_name = "Parameter Adjustment (Press 'c' to confirm, 'q' to cancel, 'r' to reset view)"
     cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
     cv2.resizeWindow(window_name, orig_width, orig_height)
 
@@ -607,9 +597,7 @@ def distort_video_gui_cv2():
         p2 = get_trackbar_value("p2") / 1000.0
         scale = get_trackbar_value("scale") / 100.0
 
-        camera_matrix = np.array(
-            [[fx, 0, cx], [0, fy, cy], [0, 0, 1]], dtype=np.float32
-        )
+        camera_matrix = np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]], dtype=np.float32)
         dist_coeffs = np.array([k1, k2, p1, p2, k3], dtype=np.float32)
         new_camera_matrix, roi = cv2.getOptimalNewCameraMatrix(
             camera_matrix,
@@ -665,15 +653,11 @@ def distort_video_gui_cv2():
                     ] = preview
                 except ValueError:
                     # Fallback if dimensions don't match
-                    preview_resized = cv2.resize(
-                        undistorted, (window_rect[2], window_rect[3])
-                    )
+                    preview_resized = cv2.resize(undistorted, (window_rect[2], window_rect[3]))
                     canvas = preview_resized
             else:
                 # Fallback if offsets are negative
-                preview_resized = cv2.resize(
-                    undistorted, (window_rect[2], window_rect[3])
-                )
+                preview_resized = cv2.resize(undistorted, (window_rect[2], window_rect[3]))
                 canvas = preview_resized
 
             cv2.imshow(window_name, canvas)
@@ -738,9 +722,7 @@ def run_distortvideo_gui():
 
     # Save the parameters to a CSV file in the same directory as the selected video
     base_name = os.path.splitext(os.path.basename(video_path))[0]
-    params_csv = os.path.join(
-        os.path.dirname(video_path), f"{base_name}_parameters.csv"
-    )
+    params_csv = os.path.join(os.path.dirname(video_path), f"{base_name}_parameters.csv")
     try:
         with open(params_csv, "w") as f:
             f.write("fx,fy,cx,cy,k1,k2,k3,p1,p2\n")

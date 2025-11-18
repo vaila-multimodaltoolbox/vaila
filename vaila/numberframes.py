@@ -39,16 +39,16 @@ For more details, visit: https://www.gnu.org/licenses/lgpl-3.0.html
 ===============================================================================
 """
 
-import os
 import json
-from fractions import Fraction
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from rich import print
-import cv2
-import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-from datetime import datetime
+import os
 import subprocess
+import tkinter as tk
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
+from fractions import Fraction
+from tkinter import filedialog, messagebox, ttk
+
+from rich import print
 
 
 def _ffprobe_json(video_path: str) -> dict:
@@ -70,9 +70,7 @@ def _ffprobe_json(video_path: str) -> dict:
         video_path,
     ]
     try:
-        proc = subprocess.run(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-        )
+        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         out = proc.stdout.strip() or "{}"
         return json.loads(out)
     except Exception as exc:  # noqa: BLE001
@@ -247,9 +245,9 @@ def display_video_info(video_infos, output_file):
         )
 
     for i, info in enumerate(video_infos, start=1):
-        ttk.Label(
-            scrollable_frame, text=info["file_name"], font=("Arial", 10, "bold")
-        ).grid(row=i, column=0, sticky=tk.W, pady=5)
+        ttk.Label(scrollable_frame, text=info["file_name"], font=("Arial", 10, "bold")).grid(
+            row=i, column=0, sticky=tk.W, pady=5
+        )
         if "error" in info:
             ttk.Label(scrollable_frame, text=info["error"]).grid(
                 row=i, column=1, columnspan=4, sticky=tk.W, padx=10
@@ -258,23 +256,19 @@ def display_video_info(video_infos, output_file):
             ttk.Label(scrollable_frame, text=info["frame_count"]).grid(
                 row=i, column=1, sticky=tk.W, padx=10
             )
-            ttk.Label(
-                scrollable_frame, text=f"{(info.get('display_fps') or 0):.3f}"
-            ).grid(row=i, column=2, sticky=tk.W, padx=10)
+            ttk.Label(scrollable_frame, text=f"{(info.get('display_fps') or 0):.3f}").grid(
+                row=i, column=2, sticky=tk.W, padx=10
+            )
             ttk.Label(
                 scrollable_frame,
-                text=(
-                    f"{info.get('capture_fps'):.3f}"
-                    if info.get("capture_fps")
-                    else "N/A"
-                ),
+                text=(f"{info.get('capture_fps'):.3f}" if info.get("capture_fps") else "N/A"),
             ).grid(row=i, column=3, sticky=tk.W, padx=10)
             ttk.Label(scrollable_frame, text=(info.get("codec_name") or "N/A")).grid(
                 row=i, column=4, sticky=tk.W, padx=10
             )
-            ttk.Label(
-                scrollable_frame, text=(info.get("container_format") or "N/A")
-            ).grid(row=i, column=5, sticky=tk.W, padx=10)
+            ttk.Label(scrollable_frame, text=(info.get("container_format") or "N/A")).grid(
+                row=i, column=5, sticky=tk.W, padx=10
+            )
             ttk.Label(scrollable_frame, text=info["resolution"]).grid(
                 row=i, column=6, sticky=tk.W, padx=10
             )
@@ -336,9 +330,7 @@ def save_full_metadata_to_file(directory_path, video_infos):
     os.makedirs(output_dir, exist_ok=True)
 
     for info in video_infos:
-        json_file = os.path.join(
-            output_dir, f"{os.path.splitext(info['file_name'])[0]}.json"
-        )
+        json_file = os.path.join(output_dir, f"{os.path.splitext(info['file_name'])[0]}.json")
         try:
             with open(json_file, "w", encoding="utf-8") as f:
                 json.dump(info.get("_raw_json", {}), f, ensure_ascii=False, indent=2)
@@ -365,9 +357,7 @@ def count_frames_in_videos():
     root = tk.Tk()
     root.withdraw()
 
-    directory_path = filedialog.askdirectory(
-        title="Select the directory containing videos"
-    )
+    directory_path = filedialog.askdirectory(title="Select the directory containing videos")
     if not directory_path:
         messagebox.showerror("Error", "No directory selected.")
         return

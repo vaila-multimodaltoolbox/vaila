@@ -33,10 +33,11 @@ Usage:
 """
 
 import os
+from tkinter import Tk, filedialog, messagebox
+
 import numpy as np
 import pandas as pd
 from rich import print
-from tkinter import filedialog, messagebox, Tk
 
 
 def read_pixel_file(file_path):
@@ -54,9 +55,7 @@ def read_ref3d_file(file_path):
 
     # Find all point columns (p1_x, p1_y, p2_x, p2_y, etc.)
     point_columns = [
-        col
-        for col in input_columns
-        if col.startswith("p") and ("_x" in col or "_y" in col)
+        col for col in input_columns if col.startswith("p") and ("_x" in col or "_y" in col)
     ]
 
     # Determine the highest point number
@@ -77,9 +76,7 @@ def read_ref3d_file(file_path):
     for i in range(1, num_points + 1):
         expected_columns.extend([f"p{i}_x", f"p{i}_y", f"p{i}_z"])
     if not all(col in df.columns for col in expected_columns):
-        print(
-            "Error: REF3D file does not contain the expected columns with _z coordinates!"
-        )
+        print("Error: REF3D file does not contain the expected columns with _z coordinates!")
         return None
     return df
 
@@ -127,9 +124,7 @@ def process_files(pixel_file, ref3d_file):
     # Determine the number of points from the pixel file columns
     pixel_columns = list(pixel_df.columns)
     point_columns = [
-        col
-        for col in pixel_columns
-        if col.startswith("p") and ("_x" in col or "_y" in col)
+        col for col in pixel_columns if col.startswith("p") and ("_x" in col or "_y" in col)
     ]
     point_numbers = set()
     for col in point_columns:
@@ -148,9 +143,7 @@ def process_files(pixel_file, ref3d_file):
         ref_coords_arr = []
         ref_line = ref_df.iloc[0]
         for i in range(1, num_points + 1):
-            ref_coords_arr.append(
-                [ref_line[f"p{i}_x"], ref_line[f"p{i}_y"], ref_line[f"p{i}_z"]]
-            )
+            ref_coords_arr.append([ref_line[f"p{i}_x"], ref_line[f"p{i}_y"], ref_line[f"p{i}_z"]])
         ref_coords_arr = np.array(ref_coords_arr)
         for _, row in pixel_df.iterrows():
             pixel_coords_arr = []
@@ -216,9 +209,7 @@ def main():
     pixel_df = read_pixel_file(pixel_file)
     pixel_columns = list(pixel_df.columns)
     point_columns = [
-        col
-        for col in pixel_columns
-        if col.startswith("p") and ("_x" in col or "_y" in col)
+        col for col in pixel_columns if col.startswith("p") and ("_x" in col or "_y" in col)
     ]
     point_numbers = set()
     for col in point_columns:
@@ -245,9 +236,7 @@ def main():
         template_df.to_csv(real_file, index=False)
         messagebox.showinfo("Success", f"REF3D template created: {real_file}")
         print(f"REF3D template created: {real_file}")
-        print(
-            "Please edit the REF3D file with the real coordinates and run the DLT process again."
-        )
+        print("Please edit the REF3D file with the real coordinates and run the DLT process again.")
         return
     else:
         real_file = filedialog.askopenfilename(

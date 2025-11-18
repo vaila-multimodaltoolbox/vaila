@@ -33,17 +33,18 @@ License:
 
 """
 
-import os
 import argparse
-import torch
-import cv2
-import tempfile
+import os
 import shutil
+import tempfile
 from pathlib import Path
-from tqdm import tqdm
+
+import cv2
+import torch
 from einops import rearrange
-from mmagic.apis import init_model, inference_video
+from mmagic.apis import init_model
 from mmagic.utils import register_all_modules
+from tqdm import tqdm
 
 
 # ----------------------------
@@ -95,11 +96,7 @@ def vsr_inference(
     # 2) Processa em janelas deslizantes de 5 frames
     idxs = list(range(num_frames))
     pad = 2
-    padded = (
-        [max(0, i) for i in idxs[:pad]]
-        + idxs
-        + [min(num_frames - 1, i) for i in idxs[-pad:]]
-    )
+    padded = [max(0, i) for i in idxs[:pad]] + idxs + [min(num_frames - 1, i) for i in idxs[-pad:]]
 
     for i in tqdm(range(num_frames), desc="VSR Inference"):
         # constrói janelinha

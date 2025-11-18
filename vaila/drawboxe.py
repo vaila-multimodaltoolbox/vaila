@@ -35,17 +35,18 @@ Change History:
     - v0.0.1: First version
 """
 
-import numpy as np
+import datetime
 import os
+import shutil
 import subprocess
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
-import cv2
+import time
 import tkinter as tk
 from tkinter import filedialog, messagebox
-import time
-import shutil
-import datetime
+
+import cv2
+import matplotlib.patches as patches
+import matplotlib.pyplot as plt
+import numpy as np
 import toml
 
 
@@ -69,9 +70,7 @@ def extract_frames(video_path, frames_dir):
                 video_path,
                 os.path.join(frames_dir, "frame_%09d.png"),
             ]
-            result = subprocess.run(
-                command, check=True, capture_output=True, text=True, shell=True
-            )
+            result = subprocess.run(command, check=True, capture_output=True, text=True, shell=True)
         else:
             command = [
                 "ffmpeg",
@@ -88,9 +87,7 @@ def extract_frames(video_path, frames_dir):
         raise
 
 
-def apply_boxes_directly_to_video(
-    input_path, output_path, coordinates, selections, colors
-):
+def apply_boxes_directly_to_video(input_path, output_path, coordinates, selections, colors):
     vidcap = cv2.VideoCapture(input_path)
     width = int(vidcap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(vidcap.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -252,9 +249,7 @@ original_path = "{escaped_video_path}"
 
 """
 
-    for i, (coords, selection, color) in enumerate(
-        zip(coordinates, selections, colors)
-    ):
+    for i, (coords, selection, color) in enumerate(zip(coordinates, selections, colors)):
         toml_content += f"""
 # ================================================================
 # BOX {i + 1}: {selection[1].upper()} - {selection[0].upper()} MODE
@@ -281,7 +276,7 @@ color_b = {color[2]:.6f}
 def load_config_toml(config_path):
     """Load box configuration from TOML file"""
     try:
-        with open(config_path, "r") as f:
+        with open(config_path) as f:
             config_data = toml.load(f)
 
         coordinates = []
@@ -326,8 +321,8 @@ def get_box_coordinates(image_path, video_path=None):
     }  # Default black
 
     # Add color palette on the side
-    from matplotlib.widgets import Button, Slider, RadioButtons
     from matplotlib.patches import Rectangle as ColorRect
+    from matplotlib.widgets import Button, RadioButtons, Slider
 
     # Left panel for mode and shape selection
     ax_mode = plt.axes([0.02, 0.7, 0.1, 0.15])
@@ -429,9 +424,7 @@ def get_box_coordinates(image_path, video_path=None):
 
     def update_title():
         current_id = polygon_counter["current"] + 1
-        ax.set_title(
-            f"Drawing Shape #{current_id} - Press Enter when done", fontsize=12
-        )
+        ax.set_title(f"Drawing Shape #{current_id} - Press Enter when done", fontsize=12)
         fig.canvas.draw_idle()
 
     def update_status():
@@ -503,9 +496,7 @@ def get_box_coordinates(image_path, video_path=None):
             pick_rect["rect"].remove()
             pick_rect["rect"] = None
 
-        ax.set_title(
-            "All shapes cleared - Drawing boxes on image - Press Enter when done"
-        )
+        ax.set_title("All shapes cleared - Drawing boxes on image - Press Enter when done")
         update_status()
         fig.canvas.draw()
 
@@ -573,8 +564,7 @@ def get_box_coordinates(image_path, video_path=None):
                                 n_points = free_polygon_sizes[free_index]
                                 # For free polygons, remove the duplicate point from closing
                                 box_points = [
-                                    (points[j][0], points[j][1])
-                                    for j in range(i, i + n_points - 1)
+                                    (points[j][0], points[j][1]) for j in range(i, i + n_points - 1)
                                 ]
                                 current_coords.append(box_points)
                                 current_selections.append(current_selection)
@@ -583,10 +573,7 @@ def get_box_coordinates(image_path, video_path=None):
                                 free_index += 1
                         else:
                             if i + 4 <= len(points):
-                                box_points = [
-                                    (points[j][0], points[j][1])
-                                    for j in range(i, i + 4)
-                                ]
+                                box_points = [(points[j][0], points[j][1]) for j in range(i, i + 4)]
                                 current_coords.append(box_points)
                                 current_selections.append(current_selection)
                                 current_colors.append(current_selection[2])
@@ -703,9 +690,7 @@ DRAWBOXE - HELP
 
         if config_path and os.path.exists(config_path):
             try:
-                loaded_coords, loaded_selections, loaded_colors = load_config_toml(
-                    config_path
-                )
+                loaded_coords, loaded_selections, loaded_colors = load_config_toml(config_path)
                 if loaded_coords:
                     # Clear current shapes
                     on_clear_all(None)
@@ -754,9 +739,7 @@ DRAWBOXE - HELP
                             if selection[1] == "free":
                                 free_polygon_sizes.append(len(closed_coords))
 
-                    ax.set_title(
-                        f"Configuration loaded! - {os.path.basename(config_path)}"
-                    )
+                    ax.set_title(f"Configuration loaded! - {os.path.basename(config_path)}")
                     update_status()
                     fig.canvas.draw()
                 else:
@@ -923,11 +906,7 @@ DRAWBOXE - HELP
                         # Remove points from last free polygon
                         if free_polygon_sizes:
                             num_points = free_polygon_sizes.pop()
-                            points = (
-                                points[:-num_points]
-                                if len(points) >= num_points
-                                else []
-                            )
+                            points = points[:-num_points] if len(points) >= num_points else []
                     else:
                         # Remove points from rectangle/trapezoid (4 points)
                         points = points[:-4] if len(points) >= 4 else []
@@ -1206,15 +1185,10 @@ DRAWBOXE - HELP
                 if free_index < len(free_polygon_sizes):
                     n_points = free_polygon_sizes[free_index]
                     box_points = [
-                        (int(points[j][0]), int(points[j][1]))
-                        for j in range(i, i + n_points)
+                        (int(points[j][0]), int(points[j][1])) for j in range(i, i + n_points)
                     ]
                     boxes.append(box_points)
-                    color = (
-                        current_selection[2]
-                        if len(current_selection) > 2
-                        else (0, 0, 0)
-                    )
+                    color = current_selection[2] if len(current_selection) > 2 else (0, 0, 0)
                     colors.append(validate_color(color))
                     i += n_points
                     free_index += 1
@@ -1223,15 +1197,9 @@ DRAWBOXE - HELP
             else:
                 # For rectangle and trapezoid, use 4 points
                 if i + 4 <= len(points):
-                    box_points = [
-                        (int(points[j][0]), int(points[j][1])) for j in range(i, i + 4)
-                    ]
+                    box_points = [(int(points[j][0]), int(points[j][1])) for j in range(i, i + 4)]
                     boxes.append(box_points)
-                    color = (
-                        current_selection[2]
-                        if len(current_selection) > 2
-                        else (0, 0, 0)
-                    )
+                    color = current_selection[2] if len(current_selection) > 2 else (0, 0, 0)
                     colors.append(validate_color(color))
                     i += 4
                 else:
@@ -1251,7 +1219,7 @@ DRAWBOXE - HELP
 
 def load_frame_intervals(file_path):
     intervals = []
-    with open(file_path, "r") as file:
+    with open(file_path) as file:
         for line in file:
             start, end = map(int, line.strip().split(","))
             intervals.append((start, end))
@@ -1272,9 +1240,7 @@ def run_drawboxe():
     root.withdraw()
     root.attributes("-topmost", True)  # Keep dialog on top
 
-    if os.name == "nt":
-        initial_dir = os.path.expanduser("~")
-    elif os.name == "posix":
+    if os.name == "nt" or os.name == "posix":
         initial_dir = os.path.expanduser("~")
     else:
         initial_dir = os.getcwd()
@@ -1299,9 +1265,7 @@ def run_drawboxe():
             ]
         )
     except PermissionError:
-        messagebox.showerror(
-            "Error", f"Permission denied to access directory: {video_directory}"
-        )
+        messagebox.showerror("Error", f"Permission denied to access directory: {video_directory}")
         return
     except Exception as e:
         messagebox.showerror("Error", f"Error accessing directory: {str(e)}")
@@ -1338,9 +1302,7 @@ def run_drawboxe():
     os.makedirs(output_dir, exist_ok=True)
     for video_file in video_files:
         input_path = os.path.join(video_directory, video_file)
-        final_output_path = os.path.join(
-            output_dir, f"{os.path.splitext(video_file)[0]}_dbox.mp4"
-        )
+        final_output_path = os.path.join(output_dir, f"{os.path.splitext(video_file)[0]}_dbox.mp4")
         vidcap = cv2.VideoCapture(input_path)
         fps = vidcap.get(cv2.CAP_PROP_FPS)
         vidcap.release()
@@ -1349,9 +1311,7 @@ def run_drawboxe():
             if os.path.exists(frames_dir):
                 shutil.rmtree(frames_dir)
             extract_frames(input_path, frames_dir)
-            apply_boxes_to_frames(
-                frames_dir, coordinates, selections, colors, frame_intervals
-            )
+            apply_boxes_to_frames(frames_dir, coordinates, selections, colors, frame_intervals)
             reassemble_video(frames_dir, final_output_path, fps)
             clean_up(frames_dir)
         else:

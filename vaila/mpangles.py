@@ -47,13 +47,13 @@ This program is licensed under the AGPL v3.0.
 """
 
 import os
-from rich import print
-import pandas as pd
-import numpy as np
-from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox
+
 import cv2
+import numpy as np
+import pandas as pd
+from rich import print
 
 
 def select_directory():
@@ -69,9 +69,7 @@ def select_directory():
     root.withdraw()  # Hide the main window
 
     try:
-        directory = filedialog.askdirectory(
-            title="Select Directory with CSV Files", mustexist=True
-        )
+        directory = filedialog.askdirectory(title="Select Directory with CSV Files", mustexist=True)
 
         if directory:
             print(f"Selected directory: {directory}")
@@ -237,9 +235,7 @@ def get_vector_landmark(data, landmark):
     try:
         landmark_idx = landmark_names.index(landmark)
     except ValueError:
-        raise ValueError(
-            f"Landmark '{landmark}' not found in the list of valid landmarks"
-        )
+        raise ValueError(f"Landmark '{landmark}' not found in the list of valid landmarks")
 
     # Calculate the column indices for x and y
     # Add 1 to skip the frame column, and multiply by 2 because each landmark has 2 columns
@@ -687,29 +683,18 @@ def process_absolute_angles(input_csv, output_csv):
         left_ear = get_vector_landmark(df, "left_ear")
 
         # Get landmarks and calculate midpoints
-        mid_ear = [
-            compute_midpoint(left, right) for left, right in zip(left_ear, right_ear)
-        ]
+        mid_ear = [compute_midpoint(left, right) for left, right in zip(left_ear, right_ear)]
         mid_shoulder = [
-            compute_midpoint(left, right)
-            for left, right in zip(left_shoulder, right_shoulder)
+            compute_midpoint(left, right) for left, right in zip(left_shoulder, right_shoulder)
         ]
-        mid_hip = [
-            compute_midpoint(left, right) for left, right in zip(left_hip, right_hip)
-        ]
+        mid_hip = [compute_midpoint(left, right) for left, right in zip(left_hip, right_hip)]
 
         # Calculate absolute angles for segments
         right_thigh_angles = np.array(
-            [
-                compute_absolute_angle(hip, knee)
-                for hip, knee in zip(right_hip, right_knee)
-            ]
+            [compute_absolute_angle(hip, knee) for hip, knee in zip(right_hip, right_knee)]
         )
         right_shank_angles = np.array(
-            [
-                compute_absolute_angle(knee, ankle)
-                for knee, ankle in zip(right_knee, right_ankle)
-            ]
+            [compute_absolute_angle(knee, ankle) for knee, ankle in zip(right_knee, right_ankle)]
         )
         right_foot_angles = np.array(
             [
@@ -724,10 +709,7 @@ def process_absolute_angles(input_csv, output_csv):
             ]
         )
         right_forearm_angles = np.array(
-            [
-                compute_absolute_angle(elbow, wrist)
-                for elbow, wrist in zip(right_elbow, right_wrist)
-            ]
+            [compute_absolute_angle(elbow, wrist) for elbow, wrist in zip(right_elbow, right_wrist)]
         )
         right_hand_angles = np.array(
             [
@@ -740,16 +722,10 @@ def process_absolute_angles(input_csv, output_csv):
         )
 
         left_thigh_angles = np.array(
-            [
-                compute_absolute_angle(hip, knee)
-                for hip, knee in zip(left_hip, left_knee)
-            ]
+            [compute_absolute_angle(hip, knee) for hip, knee in zip(left_hip, left_knee)]
         )
         left_shank_angles = np.array(
-            [
-                compute_absolute_angle(knee, ankle)
-                for knee, ankle in zip(left_knee, left_ankle)
-            ]
+            [compute_absolute_angle(knee, ankle) for knee, ankle in zip(left_knee, left_ankle)]
         )
         left_foot_angles = np.array(
             [
@@ -764,10 +740,7 @@ def process_absolute_angles(input_csv, output_csv):
             ]
         )
         left_forearm_angles = np.array(
-            [
-                compute_absolute_angle(elbow, wrist)
-                for elbow, wrist in zip(left_elbow, left_wrist)
-            ]
+            [compute_absolute_angle(elbow, wrist) for elbow, wrist in zip(left_elbow, left_wrist)]
         )
         left_hand_angles = np.array(
             [
@@ -780,16 +753,10 @@ def process_absolute_angles(input_csv, output_csv):
         )
 
         trunk_angles = np.array(
-            [
-                compute_absolute_angle(shoulder, hip)
-                for shoulder, hip in zip(mid_shoulder, mid_hip)
-            ]
+            [compute_absolute_angle(shoulder, hip) for shoulder, hip in zip(mid_shoulder, mid_hip)]
         )
         neck_angles = np.array(
-            [
-                compute_absolute_angle(ear, shoulder)
-                for ear, shoulder in zip(mid_ear, mid_shoulder)
-            ]
+            [compute_absolute_angle(ear, shoulder) for ear, shoulder in zip(mid_ear, mid_shoulder)]
         )
 
         # Create landmarks dictionary
@@ -844,9 +811,7 @@ def process_absolute_angles(input_csv, output_csv):
 
         # Create DataFrame with angles
         angles_df = pd.DataFrame(angles)
-        angles_df.insert(
-            0, "frame_index", df.iloc[:, 0]
-        )  # Add frame index as first column
+        angles_df.insert(0, "frame_index", df.iloc[:, 0])  # Add frame index as first column
 
         # Save to CSV
         angles_df.to_csv(output_csv, index=False, float_format="%.2f")
@@ -906,16 +871,11 @@ def process_angles(input_csv, output_csv, segments=None, format_360=False):
         left_ear = get_vector_landmark(df, "left_ear")
 
         # Get landmarks and calculate midpoints
-        mid_ear = [
-            compute_midpoint(left, right) for left, right in zip(left_ear, right_ear)
-        ]
+        mid_ear = [compute_midpoint(left, right) for left, right in zip(left_ear, right_ear)]
         mid_shoulder = [
-            compute_midpoint(left, right)
-            for left, right in zip(left_shoulder, right_shoulder)
+            compute_midpoint(left, right) for left, right in zip(left_shoulder, right_shoulder)
         ]
-        mid_hip = [
-            compute_midpoint(left, right) for left, right in zip(left_hip, right_hip)
-        ]
+        mid_hip = [compute_midpoint(left, right) for left, right in zip(left_hip, right_hip)]
 
         # Calculate trunk vectors for all frames
         trunk_vectors = []
@@ -964,14 +924,10 @@ def process_angles(input_csv, output_csv, segments=None, format_360=False):
                 # Relative angles
                 # Right side
                 right_shoulder_angles.append(
-                    compute_shoulder_angle(
-                        right_shoulder[i], right_elbow[i], trunk_vectors[i]
-                    )
+                    compute_shoulder_angle(right_shoulder[i], right_elbow[i], trunk_vectors[i])
                 )
                 right_elbow_angles.append(
-                    compute_elbow_angle(
-                        right_shoulder[i], right_elbow[i], right_wrist[i]
-                    )
+                    compute_elbow_angle(right_shoulder[i], right_elbow[i], right_wrist[i])
                 )
                 right_hip_angles.append(
                     compute_hip_angle(right_hip[i], right_knee[i], trunk_vectors[i])
@@ -1001,9 +957,7 @@ def process_angles(input_csv, output_csv, segments=None, format_360=False):
 
                 # Left side
                 left_shoulder_angles.append(
-                    compute_shoulder_angle(
-                        left_shoulder[i], left_elbow[i], trunk_vectors[i]
-                    )
+                    compute_shoulder_angle(left_shoulder[i], left_elbow[i], trunk_vectors[i])
                 )
                 left_elbow_angles.append(
                     compute_elbow_angle(left_shoulder[i], left_elbow[i], left_wrist[i])
@@ -1044,14 +998,10 @@ def process_angles(input_csv, output_csv, segments=None, format_360=False):
                     compute_absolute_angle(right_knee[i], right_ankle[i], format_360)
                 )
                 right_foot_abs_angles.append(
-                    compute_absolute_angle(
-                        right_heel[i], right_foot_index[i], format_360
-                    )
+                    compute_absolute_angle(right_heel[i], right_foot_index[i], format_360)
                 )
                 right_upperarm_abs_angles.append(
-                    compute_absolute_angle(
-                        right_shoulder[i], right_elbow[i], format_360
-                    )
+                    compute_absolute_angle(right_shoulder[i], right_elbow[i], format_360)
                 )
                 right_forearm_abs_angles.append(
                     compute_absolute_angle(right_elbow[i], right_wrist[i], format_360)
@@ -1060,9 +1010,7 @@ def process_angles(input_csv, output_csv, segments=None, format_360=False):
                 try:
                     right_hand_mid = compute_midpoint(right_pinky[i], right_index[i])
                     right_hand_abs_angles.append(
-                        compute_absolute_angle(
-                            right_wrist[i], right_hand_mid, format_360
-                        )
+                        compute_absolute_angle(right_wrist[i], right_hand_mid, format_360)
                     )
                 except:
                     right_hand_abs_angles.append(np.nan)
@@ -1102,7 +1050,7 @@ def process_angles(input_csv, output_csv, segments=None, format_360=False):
                 frame_count += 1
                 if frame_count % 30 == 0:
                     print(
-                        f"Processing frame {frame_count}/{total_frames} ({frame_count/total_frames*100:.1f}%)"
+                        f"Processing frame {frame_count}/{total_frames} ({frame_count / total_frames * 100:.1f}%)"
                     )
             except Exception as e:
                 print(f"Error processing frame {i}: {str(e)}")
@@ -1220,12 +1168,8 @@ def process_angles(input_csv, output_csv, segments=None, format_360=False):
         absolute_output_path = f"{output_basename}_abs.csv"
 
         # Salvar CSVs com os ângulos ordenados
-        relative_angles_df.to_csv(
-            relative_output_path, index=False, float_format="%.2f"
-        )
-        absolute_angles_df.to_csv(
-            absolute_output_path, index=False, float_format="%.2f"
-        )
+        relative_angles_df.to_csv(relative_output_path, index=False, float_format="%.2f")
+        absolute_angles_df.to_csv(absolute_output_path, index=False, float_format="%.2f")
 
         print(f"\nÂngulos relativos salvos em: {relative_output_path}")
         print(f"Ângulos absolutos salvos em: {absolute_output_path}")
@@ -1251,9 +1195,7 @@ def draw_skeleton_and_angles(frame, landmarks, angles, absolute_angles):
     YELLOW = (0, 255, 255)  # Absolute angles
 
     # Calculate mid_hand points
-    right_mid_hand = compute_midpoint(
-        landmarks["right_pinky"], landmarks["right_index"]
-    )
+    right_mid_hand = compute_midpoint(landmarks["right_pinky"], landmarks["right_index"])
     left_mid_hand = compute_midpoint(landmarks["left_pinky"], landmarks["left_index"])
 
     # Add mid_hand to landmarks dictionary
@@ -1679,9 +1621,7 @@ def draw_skeleton_and_angles(frame, landmarks, angles, absolute_angles):
     return frame
 
 
-def process_video_with_visualization(
-    video_path, csv_path, output_dir, format_360=False
-):
+def process_video_with_visualization(video_path, csv_path, output_dir, format_360=False):
     """
     Process video file and create visualization with both relative and absolute angles.
     """
@@ -1711,9 +1651,7 @@ def process_video_with_visualization(
     print(f"Video properties: {width}x{height} @ {fps}fps, {total_frames} frames")
 
     # Create video writer
-    output_video_path = os.path.join(
-        output_dir, f"angles_{os.path.basename(video_path)}"
-    )
+    output_video_path = os.path.join(output_dir, f"angles_{os.path.basename(video_path)}")
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     out = cv2.VideoWriter(output_video_path, fourcc, fps, (width, height))
 
@@ -1749,29 +1687,19 @@ def process_video_with_visualization(
 
         # Right side landmarks
         landmarks["right_shoulder"] = np.array(
-            get_vector_landmark(
-                df.iloc[frame_count : frame_count + 1], "right_shoulder"
-            )[0]
+            get_vector_landmark(df.iloc[frame_count : frame_count + 1], "right_shoulder")[0]
         )
         landmarks["right_elbow"] = np.array(
-            get_vector_landmark(df.iloc[frame_count : frame_count + 1], "right_elbow")[
-                0
-            ]
+            get_vector_landmark(df.iloc[frame_count : frame_count + 1], "right_elbow")[0]
         )
         landmarks["right_wrist"] = np.array(
-            get_vector_landmark(df.iloc[frame_count : frame_count + 1], "right_wrist")[
-                0
-            ]
+            get_vector_landmark(df.iloc[frame_count : frame_count + 1], "right_wrist")[0]
         )
         landmarks["right_pinky"] = np.array(
-            get_vector_landmark(df.iloc[frame_count : frame_count + 1], "right_pinky")[
-                0
-            ]
+            get_vector_landmark(df.iloc[frame_count : frame_count + 1], "right_pinky")[0]
         )
         landmarks["right_index"] = np.array(
-            get_vector_landmark(df.iloc[frame_count : frame_count + 1], "right_index")[
-                0
-            ]
+            get_vector_landmark(df.iloc[frame_count : frame_count + 1], "right_index")[0]
         )
         landmarks["right_hip"] = np.array(
             get_vector_landmark(df.iloc[frame_count : frame_count + 1], "right_hip")[0]
@@ -1780,14 +1708,10 @@ def process_video_with_visualization(
             get_vector_landmark(df.iloc[frame_count : frame_count + 1], "right_knee")[0]
         )
         landmarks["right_ankle"] = np.array(
-            get_vector_landmark(df.iloc[frame_count : frame_count + 1], "right_ankle")[
-                0
-            ]
+            get_vector_landmark(df.iloc[frame_count : frame_count + 1], "right_ankle")[0]
         )
         landmarks["right_foot_index"] = np.array(
-            get_vector_landmark(
-                df.iloc[frame_count : frame_count + 1], "right_foot_index"
-            )[0]
+            get_vector_landmark(df.iloc[frame_count : frame_count + 1], "right_foot_index")[0]
         )
         landmarks["right_heel"] = np.array(
             get_vector_landmark(df.iloc[frame_count : frame_count + 1], "right_heel")[0]
@@ -1795,9 +1719,7 @@ def process_video_with_visualization(
 
         # Left side landmarks
         landmarks["left_shoulder"] = np.array(
-            get_vector_landmark(
-                df.iloc[frame_count : frame_count + 1], "left_shoulder"
-            )[0]
+            get_vector_landmark(df.iloc[frame_count : frame_count + 1], "left_shoulder")[0]
         )
         landmarks["left_elbow"] = np.array(
             get_vector_landmark(df.iloc[frame_count : frame_count + 1], "left_elbow")[0]
@@ -1821,24 +1743,18 @@ def process_video_with_visualization(
             get_vector_landmark(df.iloc[frame_count : frame_count + 1], "left_ankle")[0]
         )
         landmarks["left_foot_index"] = np.array(
-            get_vector_landmark(
-                df.iloc[frame_count : frame_count + 1], "left_foot_index"
-            )[0]
+            get_vector_landmark(df.iloc[frame_count : frame_count + 1], "left_foot_index")[0]
         )
         landmarks["left_heel"] = np.array(
             get_vector_landmark(df.iloc[frame_count : frame_count + 1], "left_heel")[0]
         )
 
         # Calculate midpoints
-        landmarks["mid_hip"] = compute_midpoint(
-            landmarks["left_hip"], landmarks["right_hip"]
-        )
+        landmarks["mid_hip"] = compute_midpoint(landmarks["left_hip"], landmarks["right_hip"])
         landmarks["mid_shoulder"] = compute_midpoint(
             landmarks["left_shoulder"], landmarks["right_shoulder"]
         )
-        landmarks["mid_ear"] = compute_midpoint(
-            landmarks["left_ear"], landmarks["right_ear"]
-        )
+        landmarks["mid_ear"] = compute_midpoint(landmarks["left_ear"], landmarks["right_ear"])
 
         # Initialize angles dictionary with default values
         angles = {
@@ -1863,9 +1779,7 @@ def process_video_with_visualization(
 
         # Calculate trunk vector
         try:
-            trunk_vector = np.array(landmarks["mid_hip"]) - np.array(
-                landmarks["mid_shoulder"]
-            )
+            trunk_vector = np.array(landmarks["mid_hip"]) - np.array(landmarks["mid_shoulder"])
             trunk_norm = np.linalg.norm(trunk_vector)
             if trunk_norm > 0:
                 trunk_vector = trunk_vector / trunk_norm
@@ -2015,9 +1929,7 @@ def process_video_with_visualization(
             )
 
             try:
-                left_hand_mid = compute_midpoint(
-                    landmarks["left_pinky"], landmarks["left_index"]
-                )
+                left_hand_mid = compute_midpoint(landmarks["left_pinky"], landmarks["left_index"])
                 absolute_angles["left_hand_abs"] = compute_absolute_angle(
                     landmarks["left_wrist"], left_hand_mid, format_360
                 )
@@ -2047,7 +1959,7 @@ def process_video_with_visualization(
         frame_count += 1
         if frame_count % 30 == 0:
             print(
-                f"Processing frame {frame_count}/{total_frames} ({frame_count/total_frames*100:.1f}%)"
+                f"Processing frame {frame_count}/{total_frames} ({frame_count / total_frames * 100:.1f}%)"
             )
 
     # Release resources
@@ -2117,12 +2029,8 @@ def process_video_with_visualization(
     relative_angles_csv_path = os.path.join(output_dir, f"{video_basename}_rel.csv")
     absolute_angles_csv_path = os.path.join(output_dir, f"{video_basename}_abs.csv")
 
-    relative_angles_df.to_csv(
-        relative_angles_csv_path, index=False, float_format="%.2f"
-    )
-    absolute_angles_df.to_csv(
-        absolute_angles_csv_path, index=False, float_format="%.2f"
-    )
+    relative_angles_df.to_csv(relative_angles_csv_path, index=False, float_format="%.2f")
+    absolute_angles_df.to_csv(absolute_angles_csv_path, index=False, float_format="%.2f")
 
     print(f"Video processing complete. Output saved to: {output_video_path}")
     print(f"Relative angles saved to: {relative_angles_csv_path}")
@@ -2219,9 +2127,7 @@ def run_mp_angles():
             return
 
         timestamp = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
-        output_dir = os.path.join(
-            os.path.dirname(video_path), f"angles_video_{timestamp}"
-        )
+        output_dir = os.path.join(os.path.dirname(video_path), f"angles_video_{timestamp}")
         process_video_with_visualization(
             video_path, csv_path, output_dir, format_360=use_format_360
         )

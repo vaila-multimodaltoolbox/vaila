@@ -44,13 +44,14 @@ Install via: pip install numpy scipy matplotlib pandas PyWavelets
 """
 
 import os
-import numpy as np
-import matplotlib.pyplot as plt
-import pandas as pd
 from datetime import datetime
-from tkinter import messagebox, filedialog, Tk, simpledialog
-from matplotlib.widgets import Button
+from tkinter import Tk, filedialog, messagebox, simpledialog
+
 import matplotlib.patches as patches
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from matplotlib.widgets import Button
 from scipy.signal import welch
 
 # Import PyWavelets for wavelet analysis if available
@@ -487,9 +488,7 @@ def butter_lowpass_filter(data, cutoff, fs, order=4):
     from scipy.signal import filtfilt
 
     padding_length = fs  # 1 second padding
-    padded_data = np.concatenate(
-        [data[:padding_length][::-1], data, data[-padding_length:][::-1]]
-    )
+    padded_data = np.concatenate([data[:padding_length][::-1], data, data[-padding_length:][::-1]])
     b, a = butter_lowpass(cutoff, fs, order=order)
     y = filtfilt(b, a, padded_data)
     return y[padding_length:-padding_length]
@@ -509,9 +508,7 @@ def butter_bandpass_filter(data, lowcut, highcut, fs, order=4):
     from scipy.signal import filtfilt
 
     padding_length = fs  # 1 second padding
-    padded_data = np.concatenate(
-        [data[:padding_length][::-1], data, data[-padding_length:][::-1]]
-    )
+    padded_data = np.concatenate([data[:padding_length][::-1], data, data[-padding_length:][::-1]])
     b, a = butter_bandpass(lowcut, highcut, fs, order=order)
     y = filtfilt(b, a, padded_data)
     return y[padding_length:-padding_length]
@@ -560,9 +557,7 @@ def calculate_median_frequency_for_window(window, fs):
     nperseg = len(window)
     noverlap = int(nperseg / 2)
     nfft = 1024
-    freqs, psd = welch(
-        window, fs, window="hann", nperseg=nperseg, noverlap=noverlap, nfft=nfft
-    )
+    freqs, psd = welch(window, fs, window="hann", nperseg=nperseg, noverlap=noverlap, nfft=nfft)
     median_freq_idx = np.where(np.cumsum(psd) >= np.sum(psd) / 2)
     if median_freq_idx[0].size > 0:
         median_freq = freqs[median_freq_idx[0][0]]
@@ -600,8 +595,7 @@ def create_statistical_summary(df, output_dir, filename):
                     # New statistical indicators
                     "Skewness": data.skew(),  # Skewness
                     "Kurtosis": data.kurtosis(),  # Kurtosis
-                    "IQR": data.quantile(0.75)
-                    - data.quantile(0.25),  # Interquartile range
+                    "IQR": data.quantile(0.75) - data.quantile(0.25),  # Interquartile range
                     "CV": (
                         data.std() / data.mean() if data.mean() != 0 else np.nan
                     ),  # Coefficient of variation
@@ -664,7 +658,7 @@ def plot_and_save_figures(
             sel_end,
             alpha=0.3,
             color="green",
-            label=f"Selection {i+1}: {sel_start}-{sel_end}",
+            label=f"Selection {i + 1}: {sel_start}-{sel_end}",
         )
 
     axs[0].legend()
@@ -761,7 +755,7 @@ def plot_and_save_figures(
     ax.grid(True)
     ax.plot(freq_max, psd[index_max], "ro", markersize=8)
     ax.annotate(
-        "Max: {:.2f} Hz, {:.2e} dB/Hz".format(freq_max, psd[index_max]),
+        f"Max: {freq_max:.2f} Hz, {psd[index_max]:.2e} dB/Hz",
         xy=(freq_max, psd[index_max]),
         xycoords="data",
         xytext=(+10, +30),
@@ -840,9 +834,7 @@ def emg_analysis_segment(emg_signal, fs, start_index, end_index, segment_name):
         # Filter
         lowcut = 10.0
         highcut = 450.0
-        emg_filtered = butter_bandpass_filter(
-            emg_signal_cut, lowcut, highcut, fs, order=4
-        )
+        emg_filtered = butter_bandpass_filter(emg_signal_cut, lowcut, highcut, fs, order=4)
 
         # Rectify
         emg_abs = full_wave_rectification(emg_filtered)
@@ -860,15 +852,11 @@ def emg_analysis_segment(emg_signal, fs, start_index, end_index, segment_name):
 
         overlap = int(window_length / 2)
         rms_values = calculate_rms(emg_filtered, window_length, overlap)
-        median_freq_values = calculate_median_frequency(
-            emg_filtered, fs, window_length, overlap
-        )
+        median_freq_values = calculate_median_frequency(emg_filtered, fs, window_length, overlap)
 
         # Check for valid calculation results
         if len(rms_values) == 0 or len(median_freq_values) == 0:
-            print(
-                f"Warning: Segment {segment_name} produced no valid RMS/MDF values. Skipping."
-            )
+            print(f"Warning: Segment {segment_name} produced no valid RMS/MDF values. Skipping.")
             return None
 
         # Time arrays
@@ -946,12 +934,9 @@ def emg_analysis_segment(emg_signal, fs, start_index, end_index, segment_name):
 
 def emg_analysis(emg_file, fs, selections, no_plot, output_dir, generate_report=False):
     """Main EMG analysis function with multiple segment support"""
-    from scipy.signal import welch
 
     # Load EMG data
-    emg_signal = np.genfromtxt(
-        emg_file, delimiter=",", skip_header=1, filling_values=0.0
-    )
+    emg_signal = np.genfromtxt(emg_file, delimiter=",", skip_header=1, filling_values=0.0)
     emg_signal[:, 1] = emg_signal[:, 1] * 1000000  # Convert to microVolts
     time_full = np.linspace(0, len(emg_signal) - 1, len(emg_signal))
     emg_signal = emg_signal[:, 1]
@@ -973,26 +958,22 @@ def emg_analysis(emg_file, fs, selections, no_plot, output_dir, generate_report=
         adjusted_end = min(end_index, signal_length)
 
         if adjusted_start >= adjusted_end:
-            print(f"Warning: Invalid segment {i+1} for file {filename}")
+            print(f"Warning: Invalid segment {i + 1} for file {filename}")
             print(f"Original selection: {start_index} to {end_index}")
             print(f"File length: {signal_length} samples")
-            print(f"Skipping this segment.\n")
+            print("Skipping this segment.\n")
             continue
 
         if adjusted_end != end_index:
             print(
-                f"Note: Segment {i+1} end point adjusted from {end_index} to {adjusted_end} due to file length"
+                f"Note: Segment {i + 1} end point adjusted from {end_index} to {adjusted_end} due to file length"
             )
 
-        print(
-            f"Processing segment {i+1} for {filename}: {adjusted_start} to {adjusted_end}"
-        )
+        print(f"Processing segment {i + 1} for {filename}: {adjusted_start} to {adjusted_end}")
 
         # Analyze segment
-        segment_name = f"segment_{i+1}"
-        result = emg_analysis_segment(
-            emg_signal, fs, adjusted_start, adjusted_end, segment_name
-        )
+        segment_name = f"segment_{i + 1}"
+        result = emg_analysis_segment(emg_signal, fs, adjusted_start, adjusted_end, segment_name)
 
         if result is None:
             continue
@@ -1006,9 +987,7 @@ def emg_analysis(emg_file, fs, selections, no_plot, output_dir, generate_report=
             # Basic metrics
             row = {
                 "Segment": segment_name,
-                "Sample": (
-                    result["time_rms"][j] if j < len(result["time_rms"]) else np.nan
-                ),
+                "Sample": (result["time_rms"][j] if j < len(result["time_rms"]) else np.nan),
                 "RMS_microVolts": (
                     result["rms_values"][j] if j < len(result["rms_values"]) else np.nan
                 ),
@@ -1017,9 +996,7 @@ def emg_analysis(emg_file, fs, selections, no_plot, output_dir, generate_report=
                     if j < len(result["median_freq_values"])
                     else np.nan
                 ),
-                "Linear_envelope_microVolts": (
-                    result["signal_integ"] if j == 0 else np.nan
-                ),
+                "Linear_envelope_microVolts": (result["signal_integ"] if j == 0 else np.nan),
                 "Freq_Max_Hz": result["freq_max"] if j == 0 else np.nan,
                 "PSD_Max": result["psd_max"] if j == 0 else np.nan,
             }
@@ -1066,9 +1043,7 @@ def emg_analysis(emg_file, fs, selections, no_plot, output_dir, generate_report=
     if all_results:
         # Create DataFrame directly from the list of dictionaries
         df = pd.DataFrame(all_results)
-        results_file = os.path.join(
-            file_output_dir, f"{filename}_results_emg_labiocom.csv"
-        )
+        results_file = os.path.join(file_output_dir, f"{filename}_results_emg_labiocom.csv")
         df.to_csv(results_file, index=False)
         print(f"Results saved to: {results_file}")
 
@@ -1086,9 +1061,7 @@ def get_interactive_selection(emg_file, fs):
     """Get interactive selection using mouse clicks"""
 
     # Load EMG data for display
-    emg_signal = np.genfromtxt(
-        emg_file, delimiter=",", skip_header=1, filling_values=0.0
-    )
+    emg_signal = np.genfromtxt(emg_file, delimiter=",", skip_header=1, filling_values=0.0)
     emg_signal[:, 1] = emg_signal[:, 1] * 1000000
     samples = np.arange(len(emg_signal))
     emg_signal = emg_signal[:, 1]
@@ -1112,9 +1085,7 @@ def get_interactive_selection(emg_file, fs):
 def get_manual_selection(emg_file, fs):
     """Get manual selection after showing the signal"""
     # Show the signal first
-    emg_signal = np.genfromtxt(
-        emg_file, delimiter=",", skip_header=1, filling_values=0.0
-    )
+    emg_signal = np.genfromtxt(emg_file, delimiter=",", skip_header=1, filling_values=0.0)
     emg_signal[:, 1] = emg_signal[:, 1] * 1000000
     samples = np.arange(len(emg_signal))
     emg_signal = emg_signal[:, 1]
@@ -1159,9 +1130,7 @@ def run_emg_gui():
     # Select input directory with EMG files
     input_path = filedialog.askdirectory(title="Select Directory with EMG Files")
     if not input_path:
-        messagebox.showerror(
-            "No Directory Selected", "No input directory selected. Exiting."
-        )
+        messagebox.showerror("No Directory Selected", "No input directory selected. Exiting.")
         return
 
     # Select reference file for segmentation
@@ -1171,9 +1140,7 @@ def run_emg_gui():
         filetypes=[("CSV files", "*.csv"), ("Text files", "*.txt")],
     )
     if not ref_file:
-        messagebox.showerror(
-            "No Reference File", "No reference file selected. Exiting."
-        )
+        messagebox.showerror("No Reference File", "No reference file selected. Exiting.")
         return
 
     # Get sampling rate
@@ -1221,9 +1188,7 @@ def run_emg_gui():
         initialdir=os.path.dirname(input_path),  # Start from parent of input dir
     )
     if not output_path:
-        messagebox.showerror(
-            "No Output Directory", "No output directory selected. Exiting."
-        )
+        messagebox.showerror("No Output Directory", "No output directory selected. Exiting.")
         return
 
     # Create timestamped directory in output path
@@ -1263,17 +1228,13 @@ def create_index_html(output_dir):
     import os
 
     # Find all subdirectories (one for each processed file)
-    subdirs = [
-        d for d in os.listdir(output_dir) if os.path.isdir(os.path.join(output_dir, d))
-    ]
+    subdirs = [d for d in os.listdir(output_dir) if os.path.isdir(os.path.join(output_dir, d))]
 
     # Find HTML reports in each subdirectory
     reports = []
     for subdir in subdirs:
         subdir_path = os.path.join(output_dir, subdir)
-        html_files = [
-            f for f in os.listdir(subdir_path) if f.endswith("_emg_report.html")
-        ]
+        html_files = [f for f in os.listdir(subdir_path) if f.endswith("_emg_report.html")]
         for html_file in html_files:
             reports.append((subdir, html_file))
 
@@ -1287,9 +1248,7 @@ def create_index_html(output_dir):
         f.write('<html lang="en">\n')
         f.write("<head>\n")
         f.write('    <meta charset="UTF-8">\n')
-        f.write(
-            '    <meta name="viewport" content="width=device-width, initial-scale=1.0">\n'
-        )
+        f.write('    <meta name="viewport" content="width=device-width, initial-scale=1.0">\n')
         f.write("    <title>EMG Analysis Reports</title>\n")
         f.write("    <style>\n")
         f.write(
@@ -1302,18 +1261,12 @@ def create_index_html(output_dir):
         )
         f.write("        a { color: #3498db; text-decoration: none; }\n")
         f.write("        a:hover { text-decoration: underline; }\n")
-        f.write(
-            "        .timestamp { color: #666; font-size: 0.8em; margin-top: 5px; }\n"
-        )
+        f.write("        .timestamp { color: #666; font-size: 0.8em; margin-top: 5px; }\n")
         f.write("    </style>\n")
         f.write("</head>\n")
         f.write("<body>\n")
         f.write("    <h1>EMG Analysis Reports</h1>\n")
-        f.write(
-            "    <p>Generated on "
-            + datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            + "</p>\n"
-        )
+        f.write("    <p>Generated on " + datetime.now().strftime("%Y-%m-%d %H:%M:%S") + "</p>\n")
         f.write("    <ul>\n")
 
         for subdir, html_file in reports:
@@ -1322,9 +1275,7 @@ def create_index_html(output_dir):
 
         f.write("    </ul>\n")
         f.write('    <p style="text-align: center; margin-top: 30px; color: #666;">\n')
-        f.write(
-            "        Generated using vailá Multimodal Toolbox | EMG Analysis Module<br>\n"
-        )
+        f.write("        Generated using vailá Multimodal Toolbox | EMG Analysis Module<br>\n")
         f.write(
             '        <a href="https://doi.org/10.48550/arXiv.2410.07238">vailá: Versatile Anarcho Integrated Liberation Ánalysis in Multimodal Toolbox</a>\n'
         )
@@ -1445,11 +1396,7 @@ def calculate_frequency_domain_features(emg_filtered, fs):
     # Novo: Média Modificada da Frequência de Potência (MMFP)
     # Mais robusta ao ruído que a média tradicional
     total_power = np.sum(psd)
-    mmfp = (
-        np.sum(freqs * np.sqrt(psd)) / np.sum(np.sqrt(psd))
-        if np.sum(np.sqrt(psd)) > 0
-        else 0
-    )
+    mmfp = np.sum(freqs * np.sqrt(psd)) / np.sum(np.sqrt(psd)) if np.sum(np.sqrt(psd)) > 0 else 0
 
     return {
         "mean_frequency": mean_freq,
@@ -1524,9 +1471,7 @@ def calculate_advanced_statistics(signal):
 
         # Complexity
         hjorth_complexity = (
-            np.sqrt(var2 / var1) / hjorth_mobility
-            if var1 > 0 and hjorth_mobility > 0
-            else 0
+            np.sqrt(var2 / var1) / hjorth_mobility if var1 > 0 and hjorth_mobility > 0 else 0
         )
 
     return {
@@ -1581,9 +1526,9 @@ def generate_html_report(output_dir, filename_prefix, summary_df, fs):
         summary_df: DataFrame with statistical summary
         fs: Sampling frequency used in analysis
     """
+    import glob
     import os
     import shutil
-    import glob
 
     # Define report output path
     report_path = os.path.join(output_dir, f"{filename_prefix}_emg_report.html")
@@ -1611,9 +1556,7 @@ def generate_html_report(output_dir, filename_prefix, summary_df, fs):
         )
 
         # Find all segment files for this analysis
-        results_csv = os.path.join(
-            output_dir, f"{filename_prefix}_results_emg_labiocom.csv"
-        )
+        results_csv = os.path.join(output_dir, f"{filename_prefix}_results_emg_labiocom.csv")
         segments_info = ""
         segments = []
 
@@ -1629,14 +1572,14 @@ def generate_html_report(output_dir, filename_prefix, summary_df, fs):
 
                 for segment in segments:
                     segment_data = results_df[results_df["Segment"] == segment]
-                    samples_range = f"{int(segment_data['Sample'].min())} - {int(segment_data['Sample'].max())}"
+                    samples_range = (
+                        f"{int(segment_data['Sample'].min())} - {int(segment_data['Sample'].max())}"
+                    )
                     rms_mean = segment_data["RMS_microVolts"].mean()
                     mf_mean = segment_data["MedianFrequency_Hz"].mean()
 
                     segments_info += f"<tr><td>{segment}</td><td>{samples_range}</td>"
-                    segments_info += (
-                        f"<td>{rms_mean:.2f}</td><td>{mf_mean:.2f}</td></tr>"
-                    )
+                    segments_info += f"<td>{rms_mean:.2f}</td><td>{mf_mean:.2f}</td></tr>"
 
                 segments_info += "</table>"
 
@@ -1649,7 +1592,7 @@ def generate_html_report(output_dir, filename_prefix, summary_df, fs):
                 print(f"Warning: Could not parse results CSV file: {str(e)}")
 
         # Get list of all segment names for the current file
-        segment_names = [f"segment_{i+1}" for i in range(len(segments))]
+        segment_names = [f"segment_{i + 1}" for i in range(len(segments))]
 
         # Update image paths with actual paths - create image galleries for multiple segments
         figure_types = [
@@ -1666,9 +1609,7 @@ def generate_html_report(output_dir, filename_prefix, summary_df, fs):
             # First look for segment-specific images
             found_images = []
             for segment in segment_names:
-                pattern = os.path.join(
-                    output_dir, f"{filename_prefix}_{segment}_{fig_type}.png"
-                )
+                pattern = os.path.join(output_dir, f"{filename_prefix}_{segment}_{fig_type}.png")
                 matching_files = glob.glob(pattern)
                 if matching_files:
                     found_images.append((segment, matching_files[0]))
@@ -1684,26 +1625,24 @@ def generate_html_report(output_dir, filename_prefix, summary_df, fs):
                 # Create image gallery for multiple segments or single image for one segment
                 if len(found_images) > 1:
                     # Create gallery
-                    gallery_html = f'<div class="image-gallery">\n'
+                    gallery_html = '<div class="image-gallery">\n'
                     for segment, img_path in found_images:
                         # Copy the image to the HTML file directory if needed
-                        dest_img_path = os.path.join(
-                            output_dir, os.path.basename(img_path)
-                        )
+                        dest_img_path = os.path.join(output_dir, os.path.basename(img_path))
                         if img_path != dest_img_path:
                             shutil.copy2(img_path, dest_img_path)
 
-                        gallery_html += f'<div class="gallery-item">\n'
-                        gallery_html += f'<img src="{os.path.basename(img_path)}" alt="{segment} {fig_type}">\n'
+                        gallery_html += '<div class="gallery-item">\n'
+                        gallery_html += (
+                            f'<img src="{os.path.basename(img_path)}" alt="{segment} {fig_type}">\n'
+                        )
                         gallery_html += f'<div class="caption">{segment}</div>\n'
-                        gallery_html += f"</div>\n"
-                    gallery_html += f"</div>\n"
+                        gallery_html += "</div>\n"
+                    gallery_html += "</div>\n"
 
                     # Replace placeholder with gallery
                     placeholder = f'<div class="figure">\n        <img src="PLACEHOLDER_{fig_type}.png" alt=".*?">\n        <p class="figure-caption">.*?</p>\n    </div>'
-                    html_content = re.sub(
-                        placeholder, gallery_html, html_content, flags=re.DOTALL
-                    )
+                    html_content = re.sub(placeholder, gallery_html, html_content, flags=re.DOTALL)
                 else:
                     # Single image
                     segment, img_path = found_images[0]
@@ -1755,9 +1694,7 @@ def generate_html_report(output_dir, filename_prefix, summary_df, fs):
             # Format specific columns with appropriate precision
             formatters = {}
             for col in summary_df.columns:
-                if "microVolts" in col or "RMS" in col:
-                    formatters[col] = lambda x: f"{x:.2f}"
-                elif "Frequency" in col or "Hz" in col:
+                if "microVolts" in col or "RMS" in col or "Frequency" in col or "Hz" in col:
                     formatters[col] = lambda x: f"{x:.2f}"
                 elif "ratio" in col.lower() or "index" in col.lower():
                     formatters[col] = lambda x: f"{x:.4f}"
@@ -1765,9 +1702,7 @@ def generate_html_report(output_dir, filename_prefix, summary_df, fs):
                     formatters[col] = lambda x: f"{x:.6f}"
 
             # Convert DataFrame to HTML with formatted numbers
-            summary_html = summary_df.to_html(
-                classes="dataframe", border=0, formatters=formatters
-            )
+            summary_html = summary_df.to_html(classes="dataframe", border=0, formatters=formatters)
 
             # Replace scientific notation in the entire HTML content
             import re

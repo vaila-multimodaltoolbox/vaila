@@ -28,9 +28,10 @@ Requirements:
 
 """
 
-import tkinter as tk
-from PIL import Image, ImageTk  # type: ignore
 import os
+import tkinter as tk
+
+from PIL import Image, ImageTk  # type: ignore
 
 
 def show_vaila_message():
@@ -43,9 +44,7 @@ def show_vaila_message():
     window.geometry("900x820")
 
     # Load the image with an absolute path
-    script_dir = os.path.dirname(
-        os.path.abspath(__file__)
-    )  # Directory of the current script
+    script_dir = os.path.dirname(os.path.abspath(__file__))  # Directory of the current script
     image_path = os.path.join(script_dir, "images", "vaila_logo.png")
 
     try:
