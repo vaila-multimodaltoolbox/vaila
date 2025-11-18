@@ -78,16 +78,10 @@ References:
 
 """
 
-import numpy as np
-from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
-from matplotlib.colors import LinearSegmentedColormap
-
-
 import numpy as np
-from sklearn.decomposition import PCA
-import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap, Normalize
+from sklearn.decomposition import PCA
 
 
 def plot_ellipse_pca(data, confidence=0.95):
@@ -105,9 +99,7 @@ def plot_ellipse_pca(data, confidence=0.95):
 
     # Ellipse parameters
     theta = np.linspace(0, 2 * np.pi, 100)
-    ellipse = np.array(
-        [scaled_eigvals[0] * np.cos(theta), scaled_eigvals[1] * np.sin(theta)]
-    )
+    ellipse = np.array([scaled_eigvals[0] * np.cos(theta), scaled_eigvals[1] * np.sin(theta)])
     ellipse_rot = np.dot(eigvecs.T, ellipse)  # Adjustment for rotated ellipse
 
     # Area and angle of the ellipse
@@ -126,9 +118,7 @@ def plot_ellipse_pca(data, confidence=0.95):
     return area, angle, x_bounds + y_bounds, ellipse_data
 
 
-def plot_cop_pathway_with_ellipse(
-    cop_x, cop_y, area, angle, ellipse_data, title, output_path
-):
+def plot_cop_pathway_with_ellipse(cop_x, cop_y, area, angle, ellipse_data, title, output_path):
     """Plots the CoP pathway along with the 95% confidence ellipse and saves the figure."""
 
     # Unpack ellipse data
@@ -140,9 +130,7 @@ def plot_cop_pathway_with_ellipse(
     )
 
     # Create colormap for CoP path
-    cmap = LinearSegmentedColormap.from_list(
-        "CoP_path", ["blue", "green", "yellow", "red"]
-    )
+    cmap = LinearSegmentedColormap.from_list("CoP_path", ["blue", "green", "yellow", "red"])
 
     # Plot CoP pathway with color segments
     # Plot CoP pathway with cross points using a loop
@@ -158,9 +146,7 @@ def plot_cop_pathway_with_ellipse(
         )
     # Plot start and end points
     plt.plot(cop_x[0], cop_y[0], color="gray", marker=".", markersize=17, label="Start")
-    plt.plot(
-        cop_x[-1], cop_y[-1], color="black", marker=".", markersize=17, label="End"
-    )
+    plt.plot(cop_x[-1], cop_y[-1], color="black", marker=".", markersize=17, label="End")
 
     # Plot the ellipse
     plt.plot(ellipse_x, ellipse_y, color="gray", linestyle="--", linewidth=2)
@@ -191,12 +177,10 @@ def plot_cop_pathway_with_ellipse(
 
     # Calculate margins to expand the xlim and ylim
     x_margin = 0.02 * (
-        np.max([np.max(ellipse_x), np.max(cop_x)])
-        - np.min([np.min(ellipse_x), np.min(cop_x)])
+        np.max([np.max(ellipse_x), np.max(cop_x)]) - np.min([np.min(ellipse_x), np.min(cop_x)])
     )
     y_margin = 0.02 * (
-        np.max([np.max(ellipse_y), np.max(cop_y)])
-        - np.min([np.min(ellipse_y), np.min(cop_y)])
+        np.max([np.max(ellipse_y), np.max(cop_y)]) - np.min([np.min(ellipse_y), np.min(cop_y)])
     )
 
     # Adjust xlim and ylim based on ellipse bounds and add margin
@@ -217,15 +201,11 @@ def plot_cop_pathway_with_ellipse(
     # Add colorbar for time progression
     sm = plt.cm.ScalarMappable(cmap=cmap, norm=Normalize(vmin=0, vmax=len(cop_x)))
     sm.set_array([])
-    cbar = plt.colorbar(
-        sm, ax=plt.gca(), orientation="vertical", fraction=0.046, pad=0.04
-    )
+    cbar = plt.colorbar(sm, ax=plt.gca(), orientation="vertical", fraction=0.046, pad=0.04)
     cbar.set_label("Time Progression [%]", rotation=270, labelpad=15)
 
     # Set the title of the plot
-    plt.title(
-        f"{title}\n95% Ellipse (Area: {area:.2f} cm², Angle: {angle:.2f}°)", fontsize=12
-    )
+    plt.title(f"{title}\n95% Ellipse (Area: {area:.2f} cm², Angle: {angle:.2f}°)", fontsize=12)
 
     # Save the figure
     plt.savefig(f"{output_path}.png")

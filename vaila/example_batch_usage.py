@@ -28,9 +28,8 @@ from pathlib import Path
 # Add the current directory to Python path to import readcsv_export
 sys.path.append(str(Path(__file__).parent))
 
-from readcsv_export import batch_convert_csv_to_c3d, auto_create_c3d_from_csv
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 
 def create_sample_csv_files(output_dir, num_files=3):
@@ -60,7 +59,7 @@ def create_sample_csv_files(output_dir, num_files=3):
         }
 
         df = pd.DataFrame(data)
-        filename = f"sample_data_{i+1:02d}.csv"
+        filename = f"sample_data_{i + 1:02d}.csv"
         filepath = os.path.join(output_dir, filename)
         df.to_csv(filepath, index=False)
         print(f"Created sample file: {filepath}")
@@ -89,7 +88,7 @@ def demonstrate_batch_processing():
     print("6. Wait for processing to complete")
 
     print(
-        f'\nOr run directly: python -c "from readcsv_export import batch_convert_csv_to_c3d; batch_convert_csv_to_c3d()"'
+        '\nOr run directly: python -c "from readcsv_export import batch_convert_csv_to_c3d; batch_convert_csv_to_c3d()"'
     )
 
 

@@ -41,17 +41,17 @@ License:
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
-import os
-from pathlib import Path
-from rich import print
-import pandas as pd
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
-import tkinter as tk
-from tkinter import filedialog, Button, Frame, messagebox
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
-import numpy as np
 import math
+import os
+import tkinter as tk
+from tkinter import Button, Frame, filedialog, messagebox
+
+import matplotlib.patches as patches
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+from rich import print
 
 
 def draw_line(ax, point1, point2, **kwargs):
@@ -73,9 +73,7 @@ def draw_rectangle(ax, bottom_left_corner, width, height, **kwargs):
 
 def draw_arc(ax, center, radius, theta1, theta2, **kwargs):
     """Draws an arc with the specified parameters."""
-    arc = patches.Arc(
-        center, 2 * radius, 2 * radius, theta1=theta1, theta2=theta2, **kwargs
-    )
+    arc = patches.Arc(center, 2 * radius, 2 * radius, theta1=theta1, theta2=theta2, **kwargs)
     ax.add_patch(arc)
 
 
@@ -122,8 +120,7 @@ def plot_field(df, show_reference_points=True, show_axis_values=False):
 
     # Convert DataFrame to dictionary for easier access
     points = {
-        row["point_name"]: (row["x"], row["y"], row["point_number"])
-        for _, row in df.iterrows()
+        row["point_name"]: (row["x"], row["y"], row["point_number"]) for _, row in df.iterrows()
     }
 
     # Draw extended area (including margin around the field)
@@ -229,13 +226,9 @@ def plot_field(df, show_reference_points=True, show_axis_values=False):
 
     # Left penalty area - dimensions from points
     lp_bottom_left = points["left_penalty_area_bottom_left"]
-    lp_width = (
-        points["left_penalty_area_top_left"][0]
-        - points["left_penalty_area_bottom_left"][0]
-    )
+    lp_width = points["left_penalty_area_top_left"][0] - points["left_penalty_area_bottom_left"][0]
     lp_height = (
-        points["left_penalty_area_bottom_right"][1]
-        - points["left_penalty_area_bottom_left"][1]
+        points["left_penalty_area_bottom_right"][1] - points["left_penalty_area_bottom_left"][1]
     )
     draw_rectangle(
         ax,
@@ -250,13 +243,8 @@ def plot_field(df, show_reference_points=True, show_axis_values=False):
 
     # Left goal area - dimensions from points
     lg_bottom_left = points["left_goal_area_bottom_left"]
-    lg_width = (
-        points["left_goal_area_top_left"][0] - points["left_goal_area_bottom_left"][0]
-    )
-    lg_height = (
-        points["left_goal_area_bottom_right"][1]
-        - points["left_goal_area_bottom_left"][1]
-    )
+    lg_width = points["left_goal_area_top_left"][0] - points["left_goal_area_bottom_left"][0]
+    lg_height = points["left_goal_area_bottom_right"][1] - points["left_goal_area_bottom_left"][1]
     draw_rectangle(
         ax,
         lg_bottom_left[0:2],
@@ -302,9 +290,7 @@ def plot_field(df, show_reference_points=True, show_axis_values=False):
     l_y_for_top_angle = max(y_intersect_1_l, y_intersect_2_l)
 
     l_bottom_angle = math.degrees(
-        math.atan2(
-            l_y_for_bottom_angle - l_arc_center[1], l_intersect_x - l_arc_center[0]
-        )
+        math.atan2(l_y_for_bottom_angle - l_arc_center[1], l_intersect_x - l_arc_center[0])
     )
     l_top_angle = math.degrees(
         math.atan2(l_y_for_top_angle - l_arc_center[1], l_intersect_x - l_arc_center[0])
@@ -344,13 +330,9 @@ def plot_field(df, show_reference_points=True, show_axis_values=False):
         "right_penalty_area_top_left"
     ]  # This point is (xmin_box, ymin_box) for this box
     rp_width = (
-        points["right_penalty_area_bottom_right"][0]
-        - points["right_penalty_area_top_left"][0]
+        points["right_penalty_area_bottom_right"][0] - points["right_penalty_area_top_left"][0]
     )
-    rp_height = (
-        points["right_penalty_area_top_right"][1]
-        - points["right_penalty_area_top_left"][1]
-    )
+    rp_height = points["right_penalty_area_top_right"][1] - points["right_penalty_area_top_left"][1]
     draw_rectangle(
         ax,
         rp_anchor[0:2],
@@ -364,13 +346,8 @@ def plot_field(df, show_reference_points=True, show_axis_values=False):
 
     # Right goal area - dimensions from points
     rg_anchor = points["right_goal_area_top_left"]  # This point is (xmin_box, ymin_box)
-    rg_width = (
-        points["right_goal_area_bottom_right"][0]
-        - points["right_goal_area_top_left"][0]
-    )
-    rg_height = (
-        points["right_goal_area_top_right"][1] - points["right_goal_area_top_left"][1]
-    )
+    rg_width = points["right_goal_area_bottom_right"][0] - points["right_goal_area_top_left"][0]
+    rg_height = points["right_goal_area_top_right"][1] - points["right_goal_area_top_left"][1]
     draw_rectangle(
         ax,
         rg_anchor[0:2],
@@ -418,16 +395,12 @@ def plot_field(df, show_reference_points=True, show_axis_values=False):
         math.atan2(r_y_for_top_angle - r_arc_center[1], r_intersect_x - r_arc_center[0])
     )
     r_bottom_angle_calc = math.degrees(
-        math.atan2(
-            r_y_for_bottom_angle - r_arc_center[1], r_intersect_x - r_arc_center[0]
-        )
+        math.atan2(r_y_for_bottom_angle - r_arc_center[1], r_intersect_x - r_arc_center[0])
     )
 
     # Original code logic: theta1=top_angle, theta2=bottom_angle
     # Ensure correct order for drawing the visible segment.
-    if (
-        abs(r_bottom_angle_calc - r_top_angle_calc) > 180
-    ):  # If it's the major arc, swap them
+    if abs(r_bottom_angle_calc - r_top_angle_calc) > 180:  # If it's the major arc, swap them
         if r_top_angle_calc < r_bottom_angle_calc:
             r_top_angle_calc += 360
         else:
@@ -480,9 +453,7 @@ def plot_field(df, show_reference_points=True, show_axis_values=False):
                 color="black",
                 fontsize=8,
                 weight="bold",
-                bbox=dict(
-                    facecolor="white", alpha=0.7, boxstyle="round", pad=0.2
-                ),  # added pad
+                bbox=dict(facecolor="white", alpha=0.7, boxstyle="round", pad=0.2),  # added pad
                 zorder=10,
             )
 
@@ -903,9 +874,7 @@ def run_soccerfield():
     manual_marker_mode = [False]  # Whether manual marker mode is active
     current_marker_number = [1]  # Número do marcador atual
     current_frame = [0]  # Frame atual
-    frame_markers = (
-        {}
-    )  # Dicionário para armazenar marcadores por frame: {frame: {marker_num: (x, y)}}
+    frame_markers = {}  # Dicionário para armazenar marcadores por frame: {frame: {marker_num: (x, y)}}
     manual_marker_artists = []  # Lista para armazenar objetos visuais dos marcadores
 
     def load_field(custom_file=None):
@@ -1060,7 +1029,7 @@ def run_soccerfield():
         try:
             print(f"\nStarting file loading: {csv_path}")
             # Check if file exists and can be read
-            with open(csv_path, "r") as f:
+            with open(csv_path) as f:
                 first_line = f.readline()
                 print(f"First line of file: {first_line}")
 
@@ -1100,11 +1069,7 @@ def run_soccerfield():
 
         markers_df = pd.read_csv(current_markers_csv[0])
         marker_names = sorted(
-            {
-                col.split("_")[0]
-                for col in markers_df.columns
-                if "_x" in col or "_y" in col
-            }
+            {col.split("_")[0] for col in markers_df.columns if "_x" in col or "_y" in col}
         )
 
         if not marker_names:
@@ -1121,9 +1086,7 @@ def run_soccerfield():
         scrollbar = tk.Scrollbar(frame)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-        listbox = tk.Listbox(
-            frame, selectmode=tk.MULTIPLE, yscrollcommand=scrollbar.set
-        )
+        listbox = tk.Listbox(frame, selectmode=tk.MULTIPLE, yscrollcommand=scrollbar.set)
         listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.config(command=listbox.yview)
 
@@ -1150,9 +1113,7 @@ def run_soccerfield():
             selections = [listbox.get(i) for i in listbox.curselection()]
             if not selections:
                 selected_markers[0] = None  # Muda de [] para None
-                messagebox.showinfo(
-                    "Info", "No markers selected. None will be displayed."
-                )
+                messagebox.showinfo("Info", "No markers selected. None will be displayed.")
             else:
                 selected_markers[0] = selections
                 print(f"Markers selected: {selections}")
@@ -1202,9 +1163,7 @@ def run_soccerfield():
 
         if manual_marker_mode[0]:
             manual_marker_button.config(text="Disable Manual Markers")
-            print(
-                "Manual marker mode enabled. Left-click to add, right-click to delete."
-            )
+            print("Manual marker mode enabled. Left-click to add, right-click to delete.")
             print("Hold Shift + left-click to create next marker number.")
             print("Press Ctrl+S to save markers to CSV.")
         else:
@@ -1280,9 +1239,7 @@ def run_soccerfield():
             )
 
             # Armazenar os objetos para possível exclusão
-            manual_marker_artists.append(
-                (circle, text, x, y, marker_num, current_frame_idx)
-            )
+            manual_marker_artists.append((circle, text, x, y, marker_num, current_frame_idx))
 
             # Atualizar o canvas
             current_canvas[0].draw()
@@ -1327,9 +1284,7 @@ def run_soccerfield():
 
             if closest_idx >= 0:
                 # Remover artists do plot
-                circle, text, _, _, marker_num, frame_idx = manual_marker_artists[
-                    closest_idx
-                ]
+                circle, text, _, _, marker_num, frame_idx = manual_marker_artists[closest_idx]
                 circle.remove()
                 text.remove()
 
@@ -1337,10 +1292,7 @@ def run_soccerfield():
                 del manual_marker_artists[closest_idx]
 
                 # Remover do dicionário de frames
-                if (
-                    frame_idx in frame_markers
-                    and marker_num in frame_markers[frame_idx]
-                ):
+                if frame_idx in frame_markers and marker_num in frame_markers[frame_idx]:
                     del frame_markers[frame_idx][marker_num]
 
                 # Se o frame ficou vazio, remover o frame
@@ -1461,10 +1413,7 @@ def run_soccerfield():
             # Reset CSV loaded state
             current_markers_csv[0] = None
             selected_markers[0] = None
-            if (
-                "select_markers_button" in locals()
-                or "select_markers_button" in globals()
-            ):
+            if "select_markers_button" in locals() or "select_markers_button" in globals():
                 select_markers_button.config(state=tk.DISABLED)
 
             # Update the canvas
@@ -1503,9 +1452,9 @@ def run_soccerfield():
         canvas.create_window((0, 0), window=content_frame, anchor=tk.NW)
 
         # Add help text content
-        tk.Label(
-            content_frame, text="Soccer Field Visualization", font=("Arial", 16, "bold")
-        ).pack(anchor=tk.W, pady=(0, 10))
+        tk.Label(content_frame, text="Soccer Field Visualization", font=("Arial", 16, "bold")).pack(
+            anchor=tk.W, pady=(0, 10)
+        )
 
         # Introduction
         tk.Label(
@@ -1517,9 +1466,9 @@ def run_soccerfield():
         ).pack(anchor=tk.W, pady=(0, 10))
 
         # Section: Buttons
-        tk.Label(
-            content_frame, text="Button Functions:", font=("Arial", 12, "bold")
-        ).pack(anchor=tk.W, pady=(10, 5))
+        tk.Label(content_frame, text="Button Functions:", font=("Arial", 12, "bold")).pack(
+            anchor=tk.W, pady=(10, 5)
+        )
 
         button_help = [
             ("Load Default Field", "Opens the standard soccer field visualization."),
@@ -1555,17 +1504,15 @@ def run_soccerfield():
                 font=("Arial", 10, "bold"),
                 width=30,
                 anchor=tk.W,
-            ).pack(
-                side=tk.LEFT
-            )  # Increased width from 25 to 30
-            tk.Label(
-                frame, text=desc, font=("Arial", 10), justify=tk.LEFT, wraplength=430
-            ).pack(side=tk.LEFT, fill=tk.X, expand=True)
+            ).pack(side=tk.LEFT)  # Increased width from 25 to 30
+            tk.Label(frame, text=desc, font=("Arial", 10), justify=tk.LEFT, wraplength=430).pack(
+                side=tk.LEFT, fill=tk.X, expand=True
+            )
 
         # Section: Creating markers
-        tk.Label(
-            content_frame, text="Creating Markers:", font=("Arial", 12, "bold")
-        ).pack(anchor=tk.W, pady=(20, 5))
+        tk.Label(content_frame, text="Creating Markers:", font=("Arial", 12, "bold")).pack(
+            anchor=tk.W, pady=(20, 5)
+        )
 
         marker_help = [
             ("1. Enable marker mode by clicking 'Create Manual Markers'"),
@@ -1577,14 +1524,14 @@ def run_soccerfield():
         ]
 
         for step in marker_help:
-            tk.Label(
-                content_frame, text=step, font=("Arial", 10), justify=tk.LEFT
-            ).pack(anchor=tk.W, pady=2)
+            tk.Label(content_frame, text=step, font=("Arial", 10), justify=tk.LEFT).pack(
+                anchor=tk.W, pady=2
+            )
 
         # Section: Toolbar
-        tk.Label(
-            content_frame, text="Field Navigation Toolbar:", font=("Arial", 12, "bold")
-        ).pack(anchor=tk.W, pady=(20, 5))
+        tk.Label(content_frame, text="Field Navigation Toolbar:", font=("Arial", 12, "bold")).pack(
+            anchor=tk.W, pady=(20, 5)
+        )
 
         toolbar_help = [
             ("Home", "Reset the view to the original zoom level"),
@@ -1602,17 +1549,15 @@ def run_soccerfield():
                 font=("Arial", 10, "bold"),
                 width=15,
                 anchor=tk.W,
-            ).pack(
-                side=tk.LEFT
-            )  # Increased width from 10 to 15
-            tk.Label(
-                frame, text=desc, font=("Arial", 10), justify=tk.LEFT, wraplength=500
-            ).pack(side=tk.LEFT, fill=tk.X, expand=True)
+            ).pack(side=tk.LEFT)  # Increased width from 10 to 15
+            tk.Label(frame, text=desc, font=("Arial", 10), justify=tk.LEFT, wraplength=500).pack(
+                side=tk.LEFT, fill=tk.X, expand=True
+            )
 
         # Tips and keyboard shortcuts
-        tk.Label(
-            content_frame, text="Tips & Shortcuts:", font=("Arial", 12, "bold")
-        ).pack(anchor=tk.W, pady=(20, 5))
+        tk.Label(content_frame, text="Tips & Shortcuts:", font=("Arial", 12, "bold")).pack(
+            anchor=tk.W, pady=(20, 5)
+        )
 
         tips = [
             "• When saving manually created markers (Ctrl+S), the CSV will be saved in the same location and with the same name as your PNG file.",
@@ -1663,7 +1608,7 @@ def run_soccerfield():
         try:
             print(f"\nStarting scout CSV loading: {csv_path}")
             # Check if file exists and can be read
-            with open(csv_path, "r") as f:
+            with open(csv_path) as f:
                 first_line = f.readline()
                 print(f"First line of file: {first_line}")
 
@@ -1700,9 +1645,7 @@ def run_soccerfield():
     def open_scout_filters_dialog():
         """Opens a dialog to select teams, players, and actions for scout data"""
         if not current_scout_csv[0] or not os.path.exists(current_scout_csv[0]):
-            messagebox.showerror(
-                "Error", "No scout CSV loaded. Load a scout CSV first."
-            )
+            messagebox.showerror("Error", "No scout CSV loaded. Load a scout CSV first.")
             return
 
         try:
@@ -1833,15 +1776,9 @@ def run_soccerfield():
                 action_listbox.selection_clear(0, tk.END)
 
             def apply_filters():
-                team_selections = [
-                    team_listbox.get(i) for i in team_listbox.curselection()
-                ]
-                player_selections = [
-                    player_listbox.get(i) for i in player_listbox.curselection()
-                ]
-                action_selections = [
-                    action_listbox.get(i) for i in action_listbox.curselection()
-                ]
+                team_selections = [team_listbox.get(i) for i in team_listbox.curselection()]
+                player_selections = [player_listbox.get(i) for i in player_listbox.curselection()]
+                action_selections = [action_listbox.get(i) for i in action_listbox.curselection()]
 
                 if not team_selections:
                     selected_teams[0] = None

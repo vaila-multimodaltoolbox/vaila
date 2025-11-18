@@ -30,13 +30,14 @@ Description:
 """
 
 import os
+from datetime import datetime
 from pathlib import Path
-from rich import print
+from tkinter import Tk, filedialog, messagebox, simpledialog
+
 import numpy as np
 import pandas as pd
 from numpy.linalg import inv
-from tkinter import filedialog, Tk, messagebox, simpledialog
-from datetime import datetime
+from rich import print
 
 
 def read_coordinates(file_path, usecols=None):
@@ -51,18 +52,14 @@ def rec2d(A, cc2d):
     for k in range(nlin):
         x = cc2d[k, 0]
         y = cc2d[k, 1]
-        cc2d1 = np.matrix(
-            [[A[0] - x * A[6], A[1] - x * A[7]], [A[3] - y * A[6], A[4] - y * A[7]]]
-        )
+        cc2d1 = np.matrix([[A[0] - x * A[6], A[1] - x * A[7]], [A[3] - y * A[6], A[4] - y * A[7]]])
         cc2d2 = np.matrix([[x - A[2]], [y - A[5]]])
         G1 = inv(cc2d1) * cc2d2
         H[k, :] = G1.transpose()
     return np.asarray(H)
 
 
-def process_files_in_directory(
-    dlt_params, input_directory, output_directory, data_rate
-):
+def process_files_in_directory(dlt_params, input_directory, output_directory, data_rate):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_dir = os.path.join(output_directory, f"vaila_rec2d_{timestamp}")
     os.makedirs(output_dir, exist_ok=True)
@@ -81,9 +78,7 @@ def process_files_in_directory(
     for csv_file in csv_files:
         files_processed += 1
         progress = (files_processed / total_files) * 100
-        print(
-            f"Processing file {files_processed}/{total_files} ({progress:.1f}%): {csv_file}"
-        )
+        print(f"Processing file {files_processed}/{total_files} ({progress:.1f}%): {csv_file}")
 
         pixel_file = os.path.join(input_directory, csv_file)
         pixel_coords_df = pd.read_csv(pixel_file)
@@ -112,9 +107,7 @@ def process_files_in_directory(
         rec_coords_df = pd.DataFrame(rec_coords_array, columns=pixel_coords_df.columns)
 
         # Save with timestamp
-        output_file = os.path.join(
-            output_dir, f"{os.path.splitext(csv_file)[0]}_{timestamp}.2d"
-        )
+        output_file = os.path.join(output_dir, f"{os.path.splitext(csv_file)[0]}_{timestamp}.2d")
         rec_coords_df.to_csv(output_file, index=False, float_format="%.6f")
 
     print("\n=== Processing Complete ===")
@@ -153,18 +146,14 @@ def run_rec2d_one_dlt2d():
 
     # Step 2: Select input directory with CSV files
     print("Step 2: Selecting input directory...")
-    input_directory = filedialog.askdirectory(
-        title="Select Directory Containing CSV Files"
-    )
+    input_directory = filedialog.askdirectory(title="Select Directory Containing CSV Files")
     if not input_directory:
         print("Input directory selection cancelled.")
         return
 
     # Step 3: Select output directory
     print("Step 3: Selecting output directory...")
-    output_directory = filedialog.askdirectory(
-        title="Select Output Directory for Results"
-    )
+    output_directory = filedialog.askdirectory(title="Select Output Directory for Results")
     if not output_directory:
         print("Output directory selection cancelled.")
         return
@@ -175,9 +164,7 @@ def run_rec2d_one_dlt2d():
         "Data Frequency", "Enter the data frequency (Hz):", minvalue=1, initialvalue=100
     )
     if data_rate is None:
-        messagebox.showerror(
-            "Error", "Data frequency is required. Operation cancelled."
-        )
+        messagebox.showerror("Error", "Data frequency is required. Operation cancelled.")
         return
 
     # Load and validate DLT parameters
@@ -185,15 +172,13 @@ def run_rec2d_one_dlt2d():
     dlt_params_df = pd.read_csv(dlt_file)
 
     if dlt_params_df.shape[0] < 1:
-        messagebox.showerror(
-            "Error", "DLT file should contain at least one set of DLT parameters."
-        )
+        messagebox.showerror("Error", "DLT file should contain at least one set of DLT parameters.")
         return
 
     # Use the first set of DLT parameters
     dlt_params = dlt_params_df.iloc[0, 1:].to_numpy()
 
-    print(f"Configuration complete:")
+    print("Configuration complete:")
     print(f"  - DLT file: {os.path.basename(dlt_file)}")
     print(f"  - Input directory: {input_directory}")
     print(f"  - Output directory: {output_directory}")

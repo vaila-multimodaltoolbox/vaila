@@ -155,19 +155,13 @@ def choose_analysis_type():
     )
     btn_cop_balance.pack(pady=5)
 
-    btn_force_cmj = tk.Button(
-        choice_window, text="Force CMJ Analysis", command=select_force_cmj
-    )
+    btn_force_cmj = tk.Button(choice_window, text="Force CMJ Analysis", command=select_force_cmj)
     btn_force_cmj.pack(pady=5)
 
-    btn_fix_noise = tk.Button(
-        choice_window, text="Fix Noise Signal", command=select_fix_noise
-    )
+    btn_fix_noise = tk.Button(choice_window, text="Fix Noise Signal", command=select_fix_noise)
     btn_fix_noise.pack(pady=5)
 
-    btn_calculate_cop = tk.Button(
-        choice_window, text="Calculate CoP", command=select_calculate_cop
-    )
+    btn_calculate_cop = tk.Button(choice_window, text="Calculate CoP", command=select_calculate_cop)
     btn_calculate_cop.pack(pady=5)
 
     # New button for "Gait Analysis"
@@ -178,9 +172,7 @@ def choose_analysis_type():
     )
     btn_gait_analysis.pack(pady=7)
 
-    btn_sit_to_stand = tk.Button(
-        choice_window, text="Sit to Stand", command=select_sit_to_stand
-    )
+    btn_sit_to_stand = tk.Button(choice_window, text="Sit to Stand", command=select_sit_to_stand)
     btn_sit_to_stand.pack(pady=7)
 
     choice_window.mainloop()

@@ -105,25 +105,25 @@ License:
 """
 
 import os
+from datetime import datetime
+from tkinter import Tk, filedialog, messagebox
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-from datetime import datetime
-from tkinter import messagebox, filedialog, Tk
-from vaila.filtering import apply_filter
-from vaila.rotation import createortbase, calcmatrot, rotmat2euler
-from vaila.plotting import plot_orthonormal_bases
-from vaila.readcsv import get_csv_headers, select_headers_gui
-from vaila.dialogsuser_cluster import get_user_inputs
 from PIL import Image
 from rich import print
+
+from vaila.dialogsuser_cluster import get_user_inputs
+from vaila.filtering import apply_filter
+from vaila.plotting import plot_orthonormal_bases
+from vaila.readcsv import get_csv_headers, select_headers_gui
+from vaila.rotation import calcmatrot, createortbase, rotmat2euler
 
 # import ipdb
 
 
-def save_results_to_csv(
-    base_dir, time, cluster1_euler_angles, cluster2_euler_angles, file_name
-):
+def save_results_to_csv(base_dir, time, cluster1_euler_angles, cluster2_euler_angles, file_name):
     results = {
         "time": time,
         "cluster1_euler_x": cluster1_euler_angles[:, 0],
@@ -144,14 +144,10 @@ def read_anatomical_csv(file_path):
     try:
         data = pd.read_csv(file_path)
         cluster1_median = (
-            data[["cluster1_euler_x", "cluster1_euler_y", "cluster1_euler_z"]]
-            .median()
-            .values
+            data[["cluster1_euler_x", "cluster1_euler_y", "cluster1_euler_z"]].median().values
         )
         cluster2_median = (
-            data[["cluster2_euler_x", "cluster2_euler_y", "cluster2_euler_z"]]
-            .median()
-            .values
+            data[["cluster2_euler_x", "cluster2_euler_y", "cluster2_euler_z"]].median().values
         )
         return {"cluster1": cluster1_median, "cluster2": cluster2_median}
     except Exception as e:
@@ -272,9 +268,7 @@ def analyze_cluster_data():
 
     current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
     base_dir_figures = os.path.join(save_directory, f"Cluster_{current_time}/figures")
-    base_dir_processed_data = os.path.join(
-        save_directory, f"Cluster_{current_time}/processed_data"
-    )
+    base_dir_processed_data = os.path.join(save_directory, f"Cluster_{current_time}/processed_data")
     os.makedirs(base_dir_figures, exist_ok=True)
     os.makedirs(base_dir_processed_data, exist_ok=True)
 
@@ -287,9 +281,7 @@ def analyze_cluster_data():
             filetypes=[("CSV files", "*.csv")],
         )
         if not anatomical_file_path:
-            messagebox.showerror(
-                "No File Selected", "No anatomical data file selected. Exiting."
-            )
+            messagebox.showerror("No File Selected", "No anatomical data file selected. Exiting.")
             root.destroy()
             return
 
@@ -333,9 +325,7 @@ def analyze_cluster_data():
 
         # Extract points based on user input
         points = [dataf[:, i : i + 3] for i in range(0, 18, 3)]
-        cluster1_p1, cluster1_p2, cluster1_p3, cluster2_p1, cluster2_p2, cluster2_p3 = (
-            points
-        )
+        cluster1_p1, cluster1_p2, cluster1_p3, cluster2_p1, cluster2_p2, cluster2_p3 = points
 
         print("Points extracted for clusters")
 
