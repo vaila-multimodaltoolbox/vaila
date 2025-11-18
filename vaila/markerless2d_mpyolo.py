@@ -42,24 +42,21 @@ License:
     This project is licensed under the terms of AGPLv3.0.
 """
 
+import colorsys  # Adicionar esta importação no topo do arquivo
+import datetime
 import os
+import subprocess
+import threading
+import tkinter as tk
 from pathlib import Path
+from tkinter import filedialog, ttk
+
 import cv2
 import mediapipe as mp
 import numpy as np
-import torch
-import tkinter as tk
-from tkinter import filedialog
-from ultralytics import YOLO
-import datetime
 import pandas as pd
-import subprocess
-from rich import print as rprint
-import time
-from tkinter import ttk
-from urllib.request import urlretrieve  # New import for downloading models
-import threading
-import colorsys  # Adicionar esta importação no topo do arquivo
+import torch
+from ultralytics import YOLO
 
 # Configurações para evitar conflitos
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
@@ -204,9 +201,7 @@ def get_color_palette(num_colors=200):
         v_level = 0.7 + 0.3 * ((i // 3) % 4) / 3  # Varies between 0.7 and 1.0
 
         rgb = colorsys.hsv_to_rgb(h, s_level, v_level)
-        additional_colors.append(
-            (int(rgb[2] * 255), int(rgb[1] * 255), int(rgb[0] * 255))
-        )
+        additional_colors.append((int(rgb[2] * 255), int(rgb[1] * 255), int(rgb[0] * 255)))
 
     # Combine base + additional colors
     result = base_palette.copy() + additional_colors
@@ -254,9 +249,7 @@ def download_model(model_name):
 
     # Check if model already exists
     if os.path.exists(model_path):
-        print(
-            f"Model {model_name} already exists at {model_path}, using existing file."
-        )
+        print(f"Model {model_name} already exists at {model_path}, using existing file.")
         return model_path
 
     print(f"Downloading {model_name} to {model_path}...")
@@ -415,9 +408,7 @@ def get_parameters_dialog():
     yolo_frame = tk.LabelFrame(scrollable_frame, text="YOLO Parameters", padx=5, pady=5)
     yolo_frame.pack(padx=10, pady=5, fill="x")
 
-    mp_frame = tk.LabelFrame(
-        scrollable_frame, text="MediaPipe Parameters", padx=5, pady=5
-    )
+    mp_frame = tk.LabelFrame(scrollable_frame, text="MediaPipe Parameters", padx=5, pady=5)
     mp_frame.pack(padx=10, pady=5, fill="x")
 
     # Processing mode selection - using dropdown menu
@@ -425,9 +416,7 @@ def get_parameters_dialog():
     mode_select_frame.pack(fill="x", padx=5, pady=5)
 
     # Label for the dropdown
-    tk.Label(mode_select_frame, text="Select processing mode:").pack(
-        side="left", padx=(0, 5)
-    )
+    tk.Label(mode_select_frame, text="Select processing mode:").pack(side="left", padx=(0, 5))
 
     # Create dropdown (Combobox) for mode selection
     mode_var = tk.StringVar(value="sequential")
@@ -547,9 +536,7 @@ Multithreaded Tracking:
 
     # MediaPipe parameters
     # Adiciona combobox para static_image_mode
-    tk.Label(mp_frame, text="Static Image Mode (True/False):").grid(
-        row=0, column=0, sticky="e"
-    )
+    tk.Label(mp_frame, text="Static Image Mode (True/False):").grid(row=0, column=0, sticky="e")
     mp_static_mode = tk.Entry(mp_frame)
     mp_static_mode.insert(0, "False")
     mp_static_mode.grid(row=0, column=1)
@@ -560,16 +547,12 @@ Multithreaded Tracking:
     mp_complexity.insert(0, "2")
     mp_complexity.grid(row=2, column=1)
 
-    tk.Label(mp_frame, text="Detection Confidence (0-1):").grid(
-        row=3, column=0, sticky="e"
-    )
+    tk.Label(mp_frame, text="Detection Confidence (0-1):").grid(row=3, column=0, sticky="e")
     mp_detection_conf = tk.Entry(mp_frame)
     mp_detection_conf.insert(0, "0.15")
     mp_detection_conf.grid(row=3, column=1)
 
-    tk.Label(mp_frame, text="Tracking Confidence (0-1):").grid(
-        row=4, column=0, sticky="e"
-    )
+    tk.Label(mp_frame, text="Tracking Confidence (0-1):").grid(row=4, column=0, sticky="e")
     mp_tracking_conf = tk.Entry(mp_frame)
     mp_tracking_conf.insert(0, "0.15")
     mp_tracking_conf.grid(row=4, column=1)
@@ -580,9 +563,7 @@ Multithreaded Tracking:
     )
     enhanced_frame.pack(padx=10, pady=5, fill="x")
 
-    tk.Label(enhanced_frame, text="Bbox Scale Factor (2-8):").grid(
-        row=0, column=0, sticky="e"
-    )
+    tk.Label(enhanced_frame, text="Bbox Scale Factor (2-8):").grid(row=0, column=0, sticky="e")
     scale_factor = tk.Entry(enhanced_frame)
     scale_factor.insert(0, "4")
     scale_factor.grid(row=0, column=1)
@@ -592,9 +573,7 @@ Multithreaded Tracking:
         font=("Arial", 8, "italic"),
     ).grid(row=1, column=0, columnspan=2)
 
-    tk.Label(enhanced_frame, text="Safety Margin (0.1-0.5):").grid(
-        row=2, column=0, sticky="e"
-    )
+    tk.Label(enhanced_frame, text="Safety Margin (0.1-0.5):").grid(row=2, column=0, sticky="e")
     safety_margin = tk.Entry(enhanced_frame)
     safety_margin.insert(0, "0.25")
     safety_margin.grid(row=2, column=1)
@@ -618,9 +597,7 @@ Multithreaded Tracking:
             # Parse class numbers
             class_str = class_entry.get().strip()
             if not class_str:
-                tk.messagebox.showerror(
-                    "Error", "Please enter at least one class number"
-                )
+                tk.messagebox.showerror("Error", "Please enter at least one class number")
                 return
 
             try:
@@ -628,9 +605,7 @@ Multithreaded Tracking:
                 # Validate class numbers
                 invalid_classes = [x for x in selected_classes if x not in COCO_CLASSES]
                 if invalid_classes:
-                    tk.messagebox.showerror(
-                        "Error", f"Invalid class numbers: {invalid_classes}"
-                    )
+                    tk.messagebox.showerror("Error", f"Invalid class numbers: {invalid_classes}")
                     return
                 params["yolo_classes"] = selected_classes
             except ValueError:
@@ -643,9 +618,7 @@ Multithreaded Tracking:
             # Adiciona static_image_mode aos parâmetros
             static_mode_text = mp_static_mode.get().strip().lower()
             if static_mode_text not in ["true", "false"]:
-                tk.messagebox.showerror(
-                    "Error", "Static Image Mode must be 'True' or 'False'"
-                )
+                tk.messagebox.showerror("Error", "Static Image Mode must be 'True' or 'False'")
                 return
             params["mp_static_mode"] = static_mode_text == "true"
 
@@ -662,21 +635,17 @@ Multithreaded Tracking:
                 return
 
             if not (0.1 <= safety_margin_val <= 0.5):
-                tk.messagebox.showerror(
-                    "Error", "Safety Margin must be between 0.1 and 0.5"
-                )
+                tk.messagebox.showerror("Error", "Safety Margin must be between 0.1 and 0.5")
                 return
 
             params["scale_factor"] = scale_factor_val
             params["safety_margin"] = safety_margin_val
 
             dialog.quit()
-        except ValueError as e:
+        except ValueError:
             tk.messagebox.showerror("Error", "Please enter valid values")
 
-    tk.Button(scrollable_frame, text="Start Processing", command=on_submit).pack(
-        pady=10
-    )
+    tk.Button(scrollable_frame, text="Start Processing", command=on_submit).pack(pady=10)
 
     # No final da função, configure o tamanho do canvas
     canvas.config(width=1004, height=748)  # Ligeiramente menor que a janela
@@ -801,7 +770,6 @@ def process_person_with_mediapipe_enhanced(
                 and original_y1 - tolerance <= global_y <= original_y2 + tolerance
                 and landmark.visibility > 0.3
             ):  # Only accept visible landmarks
-
                 valid_landmarks_count += 1
 
                 # Store pixel coordinates
@@ -858,9 +826,7 @@ def process_person_with_mediapipe_enhanced(
         temp_landmarks.landmark = []
 
         for i, landmark in enumerate(results.pose_landmarks.landmark):
-            if not (
-                np.isnan(landmarks_pixels[i]["x"]) or np.isnan(landmarks_pixels[i]["y"])
-            ):
+            if not (np.isnan(landmarks_pixels[i]["x"]) or np.isnan(landmarks_pixels[i]["y"])):
                 temp_landmarks.landmark.append(landmark)
 
         # Draw landmarks on scaled crop if we have valid landmarks
@@ -875,7 +841,8 @@ def process_person_with_mediapipe_enhanced(
                     circle_radius=4,  # Green, larger for scaled image
                 ),
                 connection_drawing_spec=mp_drawing.DrawingSpec(
-                    color=(255, 255, 255), thickness=2  # White connections
+                    color=(255, 255, 255),
+                    thickness=2,  # White connections
                 ),
             )
 
@@ -897,9 +864,7 @@ def process_person_with_mediapipe_enhanced(
 
 
 # Keep the original function for backward compatibility
-def process_person_with_mediapipe(
-    frame, bbox, pose, width, height, mp_drawing, mp_pose
-):
+def process_person_with_mediapipe(frame, bbox, pose, width, height, mp_drawing, mp_pose):
     """Original function - now calls the enhanced version with default parameters"""
     return process_person_with_mediapipe_enhanced(
         frame,
@@ -1078,9 +1043,7 @@ def process_yolo_tracking(video_path, output_dir, model, params):
                 }
 
                 # Append to CSV
-                pd.DataFrame([row_data]).to_csv(
-                    csv_path, mode="a", header=False, index=False
-                )
+                pd.DataFrame([row_data]).to_csv(csv_path, mode="a", header=False, index=False)
 
         frame_idx += 1
         if frame_idx % 30 == 0:
@@ -1139,9 +1102,10 @@ def process_mediapipe_pose(video_path, output_dir, tracking_data, params):
                     ]
                 )
 
-            with open(norm_csv_path, "w") as f_norm, open(
-                pixel_csv_path, "w"
-            ) as f_pixel:
+            with (
+                open(norm_csv_path, "w") as f_norm,
+                open(pixel_csv_path, "w") as f_pixel,
+            ):
                 f_norm.write(",".join(headers) + "\n")
                 f_pixel.write(",".join(headers) + "\n")
 
@@ -1149,11 +1113,7 @@ def process_mediapipe_pose(video_path, output_dir, tracking_data, params):
             for frame_idx in range(total_frames):
                 # Check if this frame has a detection for this person
                 frame_data = next(
-                    (
-                        data
-                        for data in tracking_data[0][object_id]
-                        if data["frame"] == frame_idx
-                    ),
+                    (data for data in tracking_data[0][object_id] if data["frame"] == frame_idx),
                     None,
                 )
 
@@ -1168,9 +1128,7 @@ def process_mediapipe_pose(video_path, output_dir, tracking_data, params):
                     pose_estimator, _ = pose_manager.get_pose_estimator(bbox, object_id)
 
                     # Process the pose and get landmarks
-                    landmarks = process_single_pose(
-                        frame, bbox, pose_estimator, width, height
-                    )
+                    landmarks = process_single_pose(frame, bbox, pose_estimator, width, height)
 
                     if landmarks:
                         # Save normalized landmarks
@@ -1199,11 +1157,7 @@ def process_mediapipe_pose(video_path, output_dir, tracking_data, params):
                             coord for landmark in pixel_landmarks for coord in landmark
                         ]
                         landmarks_pixel_str = ",".join(
-                            (
-                                ""
-                                if (isinstance(value, float) and np.isnan(value))
-                                else str(value)
-                            )
+                            ("" if (isinstance(value, float) and np.isnan(value)) else str(value))
                             for value in flat_landmarks_pixel
                         )
 
@@ -1224,7 +1178,7 @@ def process_mediapipe_pose(video_path, output_dir, tracking_data, params):
                 # Show progress
                 if frame_idx % 30 == 0:
                     print(
-                        f"\rProcessing person {object_id}: {(frame_idx/total_frames)*100:.1f}% ({frame_idx}/{total_frames})",
+                        f"\rProcessing person {object_id}: {(frame_idx / total_frames) * 100:.1f}% ({frame_idx}/{total_frames})",
                         end="",
                     )
 
@@ -1323,9 +1277,7 @@ def create_visualization_video(video_path, output_dir, tracking_data, params):
                     cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
 
                     # Create label with class name and object ID
-                    label = (
-                        f"{COCO_CLASSES.get(class_id, str(class_id))} ID:{object_id}"
-                    )
+                    label = f"{COCO_CLASSES.get(class_id, str(class_id))} ID:{object_id}"
                     (label_width, label_height), baseline = cv2.getTextSize(
                         label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2
                     )
@@ -1359,9 +1311,7 @@ def create_visualization_video(video_path, output_dir, tracking_data, params):
                                 try:
                                     x = frame_landmarks.get(f"landmark_{i}_x")
                                     y = frame_landmarks.get(f"landmark_{i}_y")
-                                    vis = frame_landmarks.get(
-                                        f"landmark_{i}_visibility", 0.0
-                                    )
+                                    vis = frame_landmarks.get(f"landmark_{i}_visibility", 0.0)
 
                                     if (
                                         x is not None
@@ -1372,7 +1322,7 @@ def create_visualization_video(video_path, output_dir, tracking_data, params):
                                         landmarks.append((int(x), int(y), vis))
                                     else:
                                         landmarks.append(None)
-                                except (KeyError, TypeError) as e:
+                                except (KeyError, TypeError):
                                     landmarks.append(None)
 
                             # Draw connections between landmarks
@@ -1413,7 +1363,7 @@ def create_visualization_video(video_path, output_dir, tracking_data, params):
             frame_idx += 1
             if frame_idx % 30 == 0:
                 print(
-                    f"\rCreating visualization: {(frame_idx/total_frames)*100:.1f}%",
+                    f"\rCreating visualization: {(frame_idx / total_frames) * 100:.1f}%",
                     end="",
                 )
 
@@ -1635,9 +1585,7 @@ def run_tracker_in_thread(model_path, video_source, tracker_config, output_dir, 
                 }
 
                 # Append to CSV
-                pd.DataFrame([row_data]).to_csv(
-                    csv_path, mode="a", header=False, index=False
-                )
+                pd.DataFrame([row_data]).to_csv(csv_path, mode="a", header=False, index=False)
 
         frame_idx += 1
         if frame_idx % 30 == 0:
@@ -1666,9 +1614,7 @@ def run_multithreaded_tracking():
     """
     root = tk.Tk()
     root.withdraw()
-    video_dir = filedialog.askdirectory(
-        title="Select Directory with Videos for Tracking"
-    )
+    video_dir = filedialog.askdirectory(title="Select Directory with Videos for Tracking")
     if not video_dir:
         print("No directory selected for tracking. Exiting.")
         return
@@ -1767,7 +1713,7 @@ def process_video_enhanced(video_path, output_dir, model, params, mp_pose, mp_dr
     using 4x scaling and safety margins to prevent landmarks from exploding outside bbox.
     """
     print(f"Starting enhanced processing with scale factor: {params['scale_factor']}x")
-    print(f"Safety margin: {params['safety_margin']*100:.0f}%")
+    print(f"Safety margin: {params['safety_margin'] * 100:.0f}%")
 
     # Open video
     cap = cv2.VideoCapture(video_path)
@@ -1853,9 +1799,7 @@ def process_video_enhanced(video_path, output_dir, model, params, mp_pose, mp_dr
 
                         # Initialize CSV file for this person if needed
                         if object_id not in csv_files:
-                            csv_path = os.path.join(
-                                output_dir, f"person_{object_id}_enhanced.csv"
-                            )
+                            csv_path = os.path.join(output_dir, f"person_{object_id}_enhanced.csv")
                             csv_files[object_id] = csv_path
 
                             # Create CSV with enhanced headers
@@ -1926,16 +1870,14 @@ def process_video_enhanced(video_path, output_dir, model, params, mp_pose, mp_dr
 
             frame_idx += 1
             if frame_idx % 30 == 0:
-                success_rate = (
-                    successful_pose_detections / max(total_person_detections, 1)
-                ) * 100
+                success_rate = (successful_pose_detections / max(total_person_detections, 1)) * 100
                 print(
-                    f"\rProcessing frame {frame_idx}/{total_frames} ({(frame_idx/total_frames)*100:.1f}%) - "
+                    f"\rProcessing frame {frame_idx}/{total_frames} ({(frame_idx / total_frames) * 100:.1f}%) - "
                     f"Pose success: {success_rate:.1f}%",
                     end="",
                 )
 
-        print(f"\nCompleted enhanced processing!")
+        print("\nCompleted enhanced processing!")
         print(f"Total person detections: {total_person_detections}")
         print(f"Successful pose detections: {successful_pose_detections}")
         print(
@@ -1943,9 +1885,7 @@ def process_video_enhanced(video_path, output_dir, model, params, mp_pose, mp_dr
         )
 
         # Create enhanced visualization
-        create_enhanced_visualization_video(
-            video_path, output_dir, tracking_data, params
-        )
+        create_enhanced_visualization_video(video_path, output_dir, tracking_data, params)
 
         # Save processing parameters
         params_file = os.path.join(output_dir, "enhanced_processing_parameters.json")
@@ -1965,12 +1905,10 @@ def process_video_enhanced(video_path, output_dir, model, params, mp_pose, mp_dr
         pose.close()
 
     print(f"\nEnhanced processing complete! Results saved to: {output_dir}")
-    print(f"Key improvements applied:")
+    print("Key improvements applied:")
     print(f"  - {params['scale_factor']}x bbox scaling for better pose detection")
-    print(
-        f"  - {params['safety_margin']*100:.0f}% safety margin to prevent landmark explosion"
-    )
-    print(f"  - Landmark validation with minimum 10/33 valid landmarks required")
+    print(f"  - {params['safety_margin'] * 100:.0f}% safety margin to prevent landmark explosion")
+    print("  - Landmark validation with minimum 10/33 valid landmarks required")
 
     # Try to open output folder
     try:
@@ -2073,7 +2011,7 @@ def create_enhanced_visualization_video(video_path, output_dir, tracking_data, p
                 break
 
             # Add enhanced processing info overlay
-            info_text = f"Enhanced: {params['scale_factor']}x scaling, {params['safety_margin']*100:.0f}% margin"
+            info_text = f"Enhanced: {params['scale_factor']}x scaling, {params['safety_margin'] * 100:.0f}% margin"
             cv2.putText(
                 frame,
                 info_text,
@@ -2147,9 +2085,7 @@ def create_enhanced_visualization_video(video_path, output_dir, tracking_data, p
                                 try:
                                     x = frame_landmarks.get(f"landmark_{i}_x_px")
                                     y = frame_landmarks.get(f"landmark_{i}_y_px")
-                                    vis = frame_landmarks.get(
-                                        f"landmark_{i}_visibility", 0.0
-                                    )
+                                    vis = frame_landmarks.get(f"landmark_{i}_visibility", 0.0)
 
                                     if (
                                         x is not None
@@ -2196,7 +2132,7 @@ def create_enhanced_visualization_video(video_path, output_dir, tracking_data, p
             frame_idx += 1
             if frame_idx % 30 == 0:
                 print(
-                    f"\rCreating enhanced visualization: {(frame_idx/total_frames)*100:.1f}%",
+                    f"\rCreating enhanced visualization: {(frame_idx / total_frames) * 100:.1f}%",
                     end="",
                 )
 

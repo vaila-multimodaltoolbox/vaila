@@ -1,8 +1,9 @@
-from vpython import canvas, sphere, vector, rate, scene
-import ezc3d
-import numpy as np
 import tkinter as tk
 from tkinter import filedialog
+
+import ezc3d
+import numpy as np
+from vpython import rate, scene, sphere, vector
 
 
 def load_c3d_file():
@@ -43,9 +44,7 @@ def create_spheres(points_frame, radius=0.01):
     """
     spheres_list = []
     for pt in points_frame:
-        s = sphere(
-            pos=vector(pt[0], pt[1], pt[2]), radius=radius, color=vector(1, 0, 0)
-        )
+        s = sphere(pos=vector(pt[0], pt[1], pt[2]), radius=radius, color=vector(1, 0, 0))
         spheres_list.append(s)
     return spheres_list
 
@@ -86,10 +85,8 @@ def main():
             return  # Ignora outras teclas
 
         update_spheres(spheres_list, points[current_frame])
-        scene.title = (
-            f"Visualizador C3D com VPython - Frame {current_frame+1}/{num_frames}"
-        )
-        print(f"Frame: {current_frame+1}/{num_frames}")
+        scene.title = f"Visualizador C3D com VPython - Frame {current_frame + 1}/{num_frames}"
+        print(f"Frame: {current_frame + 1}/{num_frames}")
 
     # Associa a função de evento de tecla à cena
     scene.bind("keydown", keydown)

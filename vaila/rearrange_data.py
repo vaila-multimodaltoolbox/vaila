@@ -42,21 +42,21 @@ Change History:
     - v0.0.1: Initial version with core functionalities for CSV reordering and unit conversion
 """
 
+import gc
 import os
 import pathlib
-from rich import print
+import tkinter as tk
+from datetime import datetime
+from tkinter import Scrollbar, filedialog, messagebox, simpledialog
+
 import numpy as np
 import pandas as pd
-import scipy
-import tkinter as tk
-from tkinter import filedialog, simpledialog, messagebox, Scrollbar
-from datetime import datetime
-from vaila import modifylabref
-from vaila.mergestack import select_file, merge_csv_files, stack_csv_files
-from vaila.standardize_header import standardize_header
-from vaila.dlc2vaila import batch_convert_dlc
-import gc
+from rich import print
 
+from vaila import modifylabref
+from vaila.dlc2vaila import batch_convert_dlc
+from vaila.mergestack import merge_csv_files, select_file, stack_csv_files
+from vaila.standardize_header import standardize_header
 
 # Dictionary for metric unit conversions with abbreviations
 CONVERSIONS = {
@@ -263,15 +263,13 @@ def convert_mediapipe_to_pixel_format(file_path, save_directory):
     new_df = pd.DataFrame()
     new_df["frame"] = df.iloc[:, 0]  # Use the first column as "frame"
 
-    columns = df.columns[
-        1:
-    ]  # Ignore the first column, which we already used for "frame"
+    columns = df.columns[1:]  # Ignore the first column, which we already used for "frame"
     for i in range(0, len(columns), 3):
         if i + 1 < len(columns):
             x_col = columns[i]
             y_col = columns[i + 1]
-            new_df[f"p{i//3 + 1}_x"] = df[x_col]
-            new_df[f"p{i//3 + 1}_y"] = df[y_col]
+            new_df[f"p{i // 3 + 1}_x"] = df[x_col]
+            new_df[f"p{i // 3 + 1}_y"] = df[y_col]
 
     # Save the new CSV file in the desired format
     base_name = os.path.splitext(os.path.basename(file_path))[0]
@@ -302,9 +300,7 @@ def batch_convert_mediapipe(directory_path):
 
     # Create a new directory with a timestamp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    save_directory = os.path.join(
-        directory_path, f"Convert_MediaPipe_to_vaila_{timestamp}"
-    )
+    save_directory = os.path.join(directory_path, f"Convert_MediaPipe_to_vaila_{timestamp}")
 
     if not os.path.exists(save_directory):
         os.makedirs(save_directory)
@@ -325,7 +321,7 @@ def convert_kinovea_to_vaila(file_path, save_directory):
         num_columns = len(df.columns) - 1  # Exclude the first column (frame/time)
         num_points = num_columns // 2  # Each point has X and Y
         correct_header = ["frame"] + [
-            f"p{i+1}_{coord}" for i in range(num_points) for coord in ["x", "y"]
+            f"p{i + 1}_{coord}" for i in range(num_points) for coord in ["x", "y"]
         ]
 
         # Assign the correct header to the DataFrame
@@ -369,9 +365,7 @@ def batch_convert_kinovea(directory_path):
 
     # Create a subdirectory to save the converted files
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    save_directory = os.path.join(
-        directory_path, f"Convert_Kinovea_to_vaila_{timestamp}"
-    )
+    save_directory = os.path.join(directory_path, f"Convert_Kinovea_to_vaila_{timestamp}")
     os.makedirs(save_directory, exist_ok=True)
 
     converted_files = []
@@ -402,7 +396,7 @@ def batch_convert_kinovea(directory_path):
             success_message += error_message
         messagebox.showinfo("Batch Conversion Completed", success_message)
     elif errors:
-        error_message = f"All files failed to convert.\nErrors:\n" + "\n".join(
+        error_message = "All files failed to convert.\nErrors:\n" + "\n".join(
             f"{name}: {error}" for name, error in errors
         )
         print(error_message)
@@ -432,9 +426,7 @@ class ColumnReorderGUI(tk.Tk):
             )  # Arquivos maiores que 100MB são considerados grandes
 
             if self.is_large_file:
-                print(
-                    f"Large file detected ({file_size_mb:.2f} MB). Loading in simplified mode..."
-                )
+                print(f"Large file detected ({file_size_mb:.2f} MB). Loading in simplified mode...")
                 self.setup_large_file_gui(full_path)
             else:
                 self.setup_normal_gui(full_path)
@@ -461,9 +453,7 @@ class ColumnReorderGUI(tk.Tk):
         try:
             # Ler apenas o cabeçalho e as primeiras linhas
             print("Reading file headers...")
-            self.df = pd.read_csv(
-                file_path, nrows=5
-            )  # Ler apenas 5 linhas para exemplo
+            self.df = pd.read_csv(file_path, nrows=5)  # Ler apenas 5 linhas para exemplo
             self.max_decimal_places = 3  # Valor padrão para arquivos grandes
             self.scientific_notation = False
 
@@ -484,8 +474,8 @@ class ColumnReorderGUI(tk.Tk):
         """Configuration for small files"""
         try:
             self.df = pd.read_csv(file_path)
-            self.max_decimal_places, self.scientific_notation = (
-                detect_precision_and_notation(file_path)
+            self.max_decimal_places, self.scientific_notation = detect_precision_and_notation(
+                file_path
             )
             self.setup_gui(is_large_file=False)
         except pd.errors.ParserError:
@@ -533,41 +523,31 @@ class ColumnReorderGUI(tk.Tk):
             "Press Ctrl+Z to undo.\nPress Esc to save and exit."
         )
         if is_large_file:
-            instructions_text += (
-                "\nLarge File Mode: Changes will be applied to the entire file."
-            )
+            instructions_text += "\nLarge File Mode: Changes will be applied to the entire file."
 
-        self.instructions = tk.Label(
-            scrollable_frame, text=instructions_text, font=("default", 10)
-        )
+        self.instructions = tk.Label(scrollable_frame, text=instructions_text, font=("default", 10))
         self.instructions.grid(row=1, column=0, columnspan=3, pady=10, sticky="n")
 
         # Rest of the GUI configuration remains the same
         self.header_frame = tk.Frame(scrollable_frame)
-        self.header_frame.grid(
-            row=2, column=0, columnspan=2, pady=10, padx=10, sticky="nsew"
-        )
+        self.header_frame.grid(row=2, column=0, columnspan=2, pady=10, padx=10, sticky="nsew")
 
         # Labels for number and name
-        self.number_label = tk.Label(
-            self.header_frame, text="Number", font=("default", 12, "bold")
-        )
+        self.number_label = tk.Label(self.header_frame, text="Number", font=("default", 12, "bold"))
         self.number_label.grid(row=0, column=0, padx=(10, 5), pady=(10, 0))
 
-        self.name_label = tk.Label(
-            self.header_frame, text="Name", font=("default", 12, "bold")
-        )
+        self.name_label = tk.Label(self.header_frame, text="Name", font=("default", 12, "bold"))
         self.name_label.grid(row=0, column=1, padx=(5, 10), pady=(10, 0))
 
         # Show shape with additional information for large files
         if is_large_file:
-            shape_text = f"Shape: {self.df.shape[0]} rows (showing first 5) x {self.df.shape[1]} columns"
+            shape_text = (
+                f"Shape: {self.df.shape[0]} rows (showing first 5) x {self.df.shape[1]} columns"
+            )
         else:
             shape_text = f"Shape: {self.df.shape}"
 
-        self.shape_label = tk.Label(
-            self.header_frame, text=shape_text, font=("default", 12)
-        )
+        self.shape_label = tk.Label(self.header_frame, text=shape_text, font=("default", 12))
         self.shape_label.grid(row=0, column=2, padx=(5, 10), pady=(10, 0))
 
         # Listboxes
@@ -602,9 +582,7 @@ class ColumnReorderGUI(tk.Tk):
         merge_button = tk.Button(button_frame, text="Merge CSV", command=self.merge_csv)
         merge_button.grid(row=2, column=0, padx=5, pady=5, sticky="n")
 
-        stack_button = tk.Button(
-            button_frame, text="Stack/Append CSV", command=self.stack_csv
-        )
+        stack_button = tk.Button(button_frame, text="Stack/Append CSV", command=self.stack_csv)
         stack_button.grid(row=3, column=0, padx=5, pady=5, sticky="n")
 
         # Add new YOLO Tracker button
@@ -667,7 +645,9 @@ class ColumnReorderGUI(tk.Tk):
 
         # Custom Math Operation button
         custom_math_button = tk.Button(
-            button_frame, text="Custom Math Operation", command=self.custom_math_operation
+            button_frame,
+            text="Custom Math Operation",
+            command=self.custom_math_operation,
         )
         custom_math_button.grid(row=12, column=0, padx=5, pady=5, sticky="n")
 
@@ -763,9 +743,7 @@ class ColumnReorderGUI(tk.Tk):
                 )
                 if new_position is not None:
                     new_position -= 1  # Adjust for 0-based indexing
-                    selected_headers = [
-                        self.current_order[i] for i in range(start, end + 1)
-                    ]
+                    selected_headers = [self.current_order[i] for i in range(start, end + 1)]
                     for i in range(start, end + 1):
                         del self.current_order[start]
                     for i, header in enumerate(selected_headers):
@@ -841,25 +819,17 @@ class ColumnReorderGUI(tk.Tk):
         # Walk through the original directory, ignoring files with timestamps
         for root, _, files in os.walk(self.directory_path):
             for file_name in files:
-                if file_name.endswith(".csv") and not self.is_file_already_processed(
-                    file_name
-                ):
+                if file_name.endswith(".csv") and not self.is_file_already_processed(file_name):
                     file_path = os.path.join(root, file_name)
                     df = pd.read_csv(file_path)
-                    row_df = df.iloc[
-                        start : end + 1
-                    ]  # The end + 1 ensures 'end' is included
+                    row_df = df.iloc[start : end + 1]  # The end + 1 ensures 'end' is included
                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                     base_name = os.path.splitext(os.path.basename(file_name))[0]
-                    new_file_name = (
-                        f"{base_name}_{timestamp}_selrows_{start + 1}_{end + 1}.csv"
-                    )
+                    new_file_name = f"{base_name}_{timestamp}_selrows_{start + 1}_{end + 1}.csv"
                     new_file_path = os.path.join(self.rearranged_path, new_file_name)
 
                     # Save only the file with the timestamp
-                    save_dataframe(
-                        row_df, new_file_path, row_df.columns, self.max_decimal_places
-                    )
+                    save_dataframe(row_df, new_file_path, row_df.columns, self.max_decimal_places)
                     print(f"Selected row range saved to {new_file_path}")
 
         messagebox.showinfo(
@@ -881,9 +851,7 @@ class ColumnReorderGUI(tk.Tk):
         # Walk through the original directory, ignoring files with timestamps
         for root, _, files in os.walk(self.directory_path):
             for file_name in files:
-                if file_name.endswith(".csv") and not self.is_file_already_processed(
-                    file_name
-                ):
+                if file_name.endswith(".csv") and not self.is_file_already_processed(file_name):
                     file_path = os.path.join(root, file_name)
                     df = pd.read_csv(file_path)
                     deleted_df = df.drop(
@@ -891,9 +859,7 @@ class ColumnReorderGUI(tk.Tk):
                     )  # Convert slice to list for drop method
                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                     base_name = os.path.splitext(os.path.basename(file_name))[0]
-                    new_file_name = (
-                        f"{base_name}_{timestamp}_delrows_{start + 1}_{end + 1}.csv"
-                    )
+                    new_file_name = f"{base_name}_{timestamp}_delrows_{start + 1}_{end + 1}.csv"
                     new_file_path = os.path.join(self.rearranged_path, new_file_name)
 
                     # Save only the file with the timestamp
@@ -948,7 +914,7 @@ class ColumnReorderGUI(tk.Tk):
                     self.current_order,
                     self.rearranged_path,
                     "",
-                    {i: max_decimal_places for i in range(len(self.current_order))},
+                    dict.fromkeys(range(len(self.current_order)), max_decimal_places),
                 )
             messagebox.showinfo(
                 "Success",
@@ -982,7 +948,7 @@ class ColumnReorderGUI(tk.Tk):
                     self.current_order,
                     self.rearranged_path,
                     "_final",
-                    {i: max_decimal_places for i in range(len(self.current_order))},
+                    dict.fromkeys(range(len(self.current_order)), max_decimal_places),
                 )
             messagebox.showinfo(
                 "Success",
@@ -1039,13 +1005,9 @@ class ColumnReorderGUI(tk.Tk):
             text="Column Conversion Options",
             font=("default", 10, "bold"),
         )
-        conversion_frame.grid(
-            row=2, column=0, columnspan=3, pady=20, padx=20, sticky="ew"
-        )
+        conversion_frame.grid(row=2, column=0, columnspan=3, pady=20, padx=20, sticky="ew")
 
-        self.conversion_option = tk.StringVar(
-            value="all_columns"
-        )  # Default to convert all columns
+        self.conversion_option = tk.StringVar(value="all_columns")  # Default to convert all columns
 
         # Radio button for converting all columns
         all_columns_radio = tk.Radiobutton(
@@ -1126,24 +1088,16 @@ class ColumnReorderGUI(tk.Tk):
             "meters_per_second_squared",
             "gravitational_force",
         ] and target_unit in ["meters_per_second_squared", "gravitational_force"]:
-            if (
-                current_unit == "meters_per_second_squared"
-                and target_unit == "gravitational_force"
-            ):
+            if current_unit == "meters_per_second_squared" and target_unit == "gravitational_force":
                 conversion_factor = 1 / 9.80665
             elif (
-                current_unit == "gravitational_force"
-                and target_unit == "meters_per_second_squared"
+                current_unit == "gravitational_force" and target_unit == "meters_per_second_squared"
             ):
                 conversion_factor = 9.80665
             else:
-                conversion_factor = (
-                    CONVERSIONS[target_unit][0] / CONVERSIONS[current_unit][0]
-                )
+                conversion_factor = CONVERSIONS[target_unit][0] / CONVERSIONS[current_unit][0]
         else:
-            conversion_factor = (
-                CONVERSIONS[target_unit][0] / CONVERSIONS[current_unit][0]
-            )
+            conversion_factor = CONVERSIONS[target_unit][0] / CONVERSIONS[current_unit][0]
 
         # Iterate over all CSV files in the directory
         if not os.path.exists(self.rearranged_path):
@@ -1167,16 +1121,12 @@ class ColumnReorderGUI(tk.Tk):
                 print(f"IGNORING first column (time/frame) for {file_name}")
                 # Only convert columns from index 1 onwards (ignore first column)
                 if len(df_converted.columns) > 1:
-                    df_converted.iloc[:, 1:] = (
-                        df_converted.iloc[:, 1:] * conversion_factor
-                    )
+                    df_converted.iloc[:, 1:] = df_converted.iloc[:, 1:] * conversion_factor
                     print(
-                        f"Applied conversion factor {conversion_factor} to columns 1-{len(df_converted.columns)-1}"
+                        f"Applied conversion factor {conversion_factor} to columns 1-{len(df_converted.columns) - 1}"
                     )
                 else:
-                    print(
-                        f"Warning: {file_name} has only one column. No conversion applied."
-                    )
+                    print(f"Warning: {file_name} has only one column. No conversion applied.")
             else:
                 print(f"CONVERTING ALL columns for {file_name}")
                 # Convert all columns
@@ -1194,9 +1144,7 @@ class ColumnReorderGUI(tk.Tk):
             )
 
             # Add clear indication in filename about what was converted
-            conversion_suffix = (
-                "_FIRST_IGNORED" if ignore_first_column else "_ALL_CONVERTED"
-            )
+            conversion_suffix = "_FIRST_IGNORED" if ignore_first_column else "_ALL_CONVERTED"
             new_file_name = f"{base_name}_unit_{current_unit_name}_to_{target_unit_name}{conversion_suffix}_{timestamp}.csv"
             new_file_path = os.path.join(self.rearranged_path, new_file_name)
 
@@ -1215,9 +1163,7 @@ class ColumnReorderGUI(tk.Tk):
 
             if ignore_first_column:
                 success_message += "\n\nCONVERSION DETAILS:"
-                success_message += (
-                    "\n- FIRST column was IGNORED (preserved original values)"
-                )
+                success_message += "\n- FIRST column was IGNORED (preserved original values)"
                 success_message += "\n- Only DATA columns were converted"
             else:
                 success_message += "\n\nCONVERSION DETAILS:"
@@ -1403,9 +1349,7 @@ class ColumnReorderGUI(tk.Tk):
                 filetypes=[("CSV files", "*.csv")],
             )
             if save_path:
-                stack_csv_files(
-                    base_file, stack_file, save_path, stack_position or "end"
-                )
+                stack_csv_files(base_file, stack_file, save_path, stack_position or "end")
 
     def save_second_half(self):
         """Save the second half of each CSV file into `self.rearranged_path`."""
@@ -1438,9 +1382,7 @@ class ColumnReorderGUI(tk.Tk):
 
             second_half.to_csv(new_path, index=False)
 
-        messagebox.showinfo(
-            "Success", f"Second half of CSV files saved in: {self.rearranged_path}"
-        )
+        messagebox.showinfo("Success", f"Second half of CSV files saved in: {self.rearranged_path}")
 
     def reset_index_column_0(self):
         """
@@ -1489,7 +1431,7 @@ class ColumnReorderGUI(tk.Tk):
         title_label = tk.Label(
             operation_window,
             text="Apply Custom Mathematical Operation",
-            font=("default", 14, "bold")
+            font=("default", 14, "bold"),
         )
         title_label.pack(pady=10)
 
@@ -1514,7 +1456,7 @@ class ColumnReorderGUI(tk.Tk):
             text=instructions_text,
             font=("default", 9),
             justify=tk.LEFT,
-            bg="lightyellow"
+            bg="lightyellow",
         )
         instructions_label.pack(pady=10, padx=10, fill=tk.X)
 
@@ -1522,7 +1464,7 @@ class ColumnReorderGUI(tk.Tk):
         column_frame = tk.LabelFrame(
             operation_window,
             text="Select Columns to Apply Operation",
-            font=("default", 10, "bold")
+            font=("default", 10, "bold"),
         )
         column_frame.pack(pady=10, padx=10, fill=tk.BOTH, expand=True)
 
@@ -1535,14 +1477,14 @@ class ColumnReorderGUI(tk.Tk):
             selectmode=tk.MULTIPLE,
             width=60,
             height=10,
-            yscrollcommand=scrollbar.set
+            yscrollcommand=scrollbar.set,
         )
         column_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
         scrollbar.config(command=column_listbox.yview)
 
         # Populate with current columns
         for i, header in enumerate(self.current_order):
-            column_listbox.insert(tk.END, f"{i+1}: {header}")
+            column_listbox.insert(tk.END, f"{i + 1}: {header}")
 
         # Select all / Clear all buttons
         select_button_frame = tk.Frame(operation_window)
@@ -1551,14 +1493,14 @@ class ColumnReorderGUI(tk.Tk):
         select_all_btn = tk.Button(
             select_button_frame,
             text="Select All",
-            command=lambda: column_listbox.select_set(0, tk.END)
+            command=lambda: column_listbox.select_set(0, tk.END),
         )
         select_all_btn.pack(side=tk.LEFT, padx=5)
 
         clear_all_btn = tk.Button(
             select_button_frame,
             text="Clear Selection",
-            command=lambda: column_listbox.selection_clear(0, tk.END)
+            command=lambda: column_listbox.selection_clear(0, tk.END),
         )
         clear_all_btn.pack(side=tk.LEFT, padx=5)
 
@@ -1566,14 +1508,14 @@ class ColumnReorderGUI(tk.Tk):
         expression_frame = tk.LabelFrame(
             operation_window,
             text="Mathematical Expression",
-            font=("default", 10, "bold")
+            font=("default", 10, "bold"),
         )
         expression_frame.pack(pady=10, padx=10, fill=tk.X)
 
         expression_label = tk.Label(
             expression_frame,
             text="Enter expression (use 'x' for column value):",
-            font=("default", 10)
+            font=("default", 10),
         )
         expression_label.pack(pady=5, padx=10, anchor=tk.W)
 
@@ -1587,7 +1529,7 @@ class ColumnReorderGUI(tk.Tk):
             expression_frame,
             text="Test Expression",
             command=lambda: self.test_expression(expression_entry.get(), column_listbox),
-            bg="lightblue"
+            bg="lightblue",
         )
         test_button.pack(pady=5)
 
@@ -1603,7 +1545,7 @@ class ColumnReorderGUI(tk.Tk):
             ),
             font=("default", 11, "bold"),
             bg="lightgreen",
-            width=15
+            width=15,
         )
         apply_button.pack(side=tk.LEFT, padx=10)
 
@@ -1612,7 +1554,7 @@ class ColumnReorderGUI(tk.Tk):
             text="Cancel",
             command=operation_window.destroy,
             font=("default", 11),
-            width=15
+            width=15,
         )
         cancel_button.pack(side=tk.LEFT, padx=10)
 
@@ -1626,9 +1568,7 @@ class ColumnReorderGUI(tk.Tk):
             # Import all necessary libraries first
             import numpy as np
             import pandas as pd
-            import scipy
-            import scipy.signal
-            
+
             # Get selected columns
             selected_idx = column_listbox.curselection()
             if not selected_idx:
@@ -1653,7 +1593,7 @@ class ColumnReorderGUI(tk.Tk):
 
             # Get sample values
             sample_values = df[column_name].values
-            
+
             result_values = []
             for val in sample_values:
                 x = val  # Make 'x' available in expression
@@ -1667,7 +1607,7 @@ class ColumnReorderGUI(tk.Tk):
                     messagebox.showerror(
                         "Expression Error",
                         f"Error evaluating expression with value {val}:\n{str(e)}\n\n"
-                        f"Make sure to use 'np.' prefix for NumPy functions (e.g., np.sqrt(x))"
+                        f"Make sure to use 'np.' prefix for NumPy functions (e.g., np.sqrt(x))",
                     )
                     return
 
@@ -1699,7 +1639,7 @@ class ColumnReorderGUI(tk.Tk):
 
             # Get selected column names
             selected_columns = [self.current_order[i] for i in selected_idx]
-            
+
             # Confirm operation
             confirm_msg = (
                 f"Apply operation '{expression}' to {len(selected_columns)} column(s):\n"
@@ -1707,7 +1647,7 @@ class ColumnReorderGUI(tk.Tk):
             )
             if len(selected_columns) > 5:
                 confirm_msg += f"\n... and {len(selected_columns) - 5} more"
-            
+
             if not messagebox.askyesno("Confirm Operation", confirm_msg):
                 return
 
@@ -1718,8 +1658,6 @@ class ColumnReorderGUI(tk.Tk):
             # Import all necessary libraries for eval
             import numpy as np
             import pandas as pd
-            import scipy
-            import scipy.signal
 
             # Process each file
             processed_files = 0
@@ -1740,11 +1678,11 @@ class ColumnReorderGUI(tk.Tk):
                 for column_name in selected_columns:
                     if column_name in df_modified.columns:
                         print(f"Applying '{expression}' to column '{column_name}' in {file_name}")
-                        
+
                         # Apply the expression to the column
                         original_values = df_modified[column_name].values
                         new_values = []
-                        
+
                         for val in original_values:
                             x = val  # Make 'x' available in expression
                             try:
@@ -1756,7 +1694,7 @@ class ColumnReorderGUI(tk.Tk):
                             except Exception as e:
                                 print(f"Error evaluating expression for value {val}: {e}")
                                 new_values.append(np.nan)
-                        
+
                         df_modified[column_name] = new_values
                     else:
                         print(f"Warning: Column '{column_name}' not found in {file_name}")
@@ -1764,22 +1702,33 @@ class ColumnReorderGUI(tk.Tk):
                 # Generate output filename - clean expression for safe filename
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 base_name = os.path.splitext(file_name)[0]
-                
+
                 # Create a safe filename by removing special characters
                 expr_clean = expression.replace(" ", "")
                 # Replace operators with words
                 replacements = {
-                    "*": "mult", "/": "div", "+": "plus", "-": "minus",
-                    "**": "pow", "(": "", ")": "", ".": "_",
-                    "[": "", "]": "", ",": "_", "=": "eq",
-                    "<": "lt", ">": "gt", "!": "not"
+                    "*": "mult",
+                    "/": "div",
+                    "+": "plus",
+                    "-": "minus",
+                    "**": "pow",
+                    "(": "",
+                    ")": "",
+                    ".": "_",
+                    "[": "",
+                    "]": "",
+                    ",": "_",
+                    "=": "eq",
+                    "<": "lt",
+                    ">": "gt",
+                    "!": "not",
                 }
                 for old, new in replacements.items():
                     expr_clean = expr_clean.replace(old, new)
-                
+
                 # Limit length and ensure alphanumeric
-                expr_clean = ''.join(c for c in expr_clean if c.isalnum() or c == '_')[:30]
-                
+                expr_clean = "".join(c for c in expr_clean if c.isalnum() or c == "_")[:30]
+
                 new_file_name = f"{base_name}_{timestamp}_mathop_{expr_clean}.csv"
                 new_file_path = os.path.join(self.rearranged_path, new_file_name)
 
@@ -1798,7 +1747,7 @@ class ColumnReorderGUI(tk.Tk):
                 if len(selected_columns) > 3:
                     success_message += f"... and {len(selected_columns) - 3} more"
                 success_message += f"\n\nFiles saved in: {self.rearranged_path}"
-                
+
                 messagebox.showinfo("Operation Complete", success_message)
             else:
                 messagebox.showwarning("No Files Processed", "No valid CSV files were processed.")
@@ -1808,6 +1757,7 @@ class ColumnReorderGUI(tk.Tk):
         except Exception as e:
             print(f"Error applying math operation: {e}")
             import traceback
+
             traceback.print_exc()
             messagebox.showerror("Error", f"An error occurred:\n{str(e)}")
 
@@ -1870,9 +1820,7 @@ def batch_convert_dvideo(directory_path):
 
     # Create a new directory with a timestamp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    save_directory = os.path.join(
-        directory_path, f"Convert_Dvideo_to_vaila_{timestamp}"
-    )
+    save_directory = os.path.join(directory_path, f"Convert_Dvideo_to_vaila_{timestamp}")
 
     if not os.path.exists(save_directory):
         os.makedirs(save_directory)
@@ -1885,9 +1833,7 @@ def batch_convert_dvideo(directory_path):
     print(f"All files have been converted and saved to {save_directory}")
 
 
-def convert_yolo_tracker_to_pixel_format(
-    tracker_file, save_directory=None, chunk_size=10000
-):
+def convert_yolo_tracker_to_pixel_format(tracker_file, save_directory=None, chunk_size=10000):
     """Convert a YOLO tracker file to a Vaila CSV file."""
     # Print the directory and name of the script being executed
     print(f"Running script: {pathlib.Path(__file__).name}")
@@ -1917,9 +1863,7 @@ def convert_yolo_tracker_to_pixel_format(
         first_chunk = True
 
         # Usar chunked reading para processar o arquivo
-        for chunk_number, chunk in enumerate(
-            pd.read_csv(tracker_file, chunksize=chunk_size)
-        ):
+        for chunk_number, chunk in enumerate(pd.read_csv(tracker_file, chunksize=chunk_size)):
             print(f"Processing chunk {chunk_number + 1}...")
 
             # Criar todos os dados em um dicionário primeiro
@@ -1931,11 +1875,11 @@ def convert_yolo_tracker_to_pixel_format(
                 y_col = f"Y_{person_id}"
 
                 if x_col in chunk.columns and y_col in chunk.columns:
-                    data[f"p{idx+1}_x"] = chunk[x_col]
-                    data[f"p{idx+1}_y"] = chunk[y_col]
+                    data[f"p{idx + 1}_x"] = chunk[x_col]
+                    data[f"p{idx + 1}_y"] = chunk[y_col]
                 else:
-                    data[f"p{idx+1}_x"] = np.nan
-                    data[f"p{idx+1}_y"] = np.nan
+                    data[f"p{idx + 1}_x"] = np.nan
+                    data[f"p{idx + 1}_y"] = np.nan
 
             # Criar o DataFrame de uma vez só com todas as colunas
             new_chunk = pd.DataFrame(data)
@@ -1967,9 +1911,7 @@ def batch_convert_yolo_tracker(directory_path=None):
     Batch converts all YOLO tracker files in a directory to pixel format.
     """
     if directory_path is None:
-        directory_path = filedialog.askdirectory(
-            title="Select Directory with YOLO Tracker Files"
-        )
+        directory_path = filedialog.askdirectory(title="Select Directory with YOLO Tracker Files")
 
     if not directory_path:
         print("No directory selected.")
@@ -1984,9 +1926,7 @@ def batch_convert_yolo_tracker(directory_path=None):
 
     if not potential_files:
         print("No YOLO tracker files found in the directory.")
-        messagebox.showwarning(
-            "No Files Found", "No YOLO tracker files found in the directory."
-        )
+        messagebox.showwarning("No Files Found", "No YOLO tracker files found in the directory.")
         return
 
     # Create output directory
@@ -2059,7 +1999,7 @@ def batch_convert_yolo_tracker(directory_path=None):
             success_message += error_message
         messagebox.showinfo("Conversion Complete", success_message)
     elif errors:
-        error_message = f"All files failed to convert.\nErrors:\n" + "\n".join(
+        error_message = "All files failed to convert.\nErrors:\n" + "\n".join(
             f"{name}: {error}" for name, error in errors
         )
         print(error_message)
@@ -2075,17 +2015,13 @@ def rearrange_data_in_directory():
     root = tk.Tk()
     root.withdraw()
 
-    selected_directory = filedialog.askdirectory(
-        title="Select Directory Containing CSV Files"
-    )
+    selected_directory = filedialog.askdirectory(title="Select Directory Containing CSV Files")
     if not selected_directory:
         print("No directory selected.")
         return
 
     # Find all CSV files in the selected directory
-    file_names = sorted(
-        [f for f in os.listdir(selected_directory) if f.endswith(".csv")]
-    )
+    file_names = sorted([f for f in os.listdir(selected_directory) if f.endswith(".csv")])
 
     # If no CSV files are found, continue and open the GUI
     if not file_names:

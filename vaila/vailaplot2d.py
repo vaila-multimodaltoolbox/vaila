@@ -50,40 +50,45 @@ New Features in v0.1.0:
 ================================================================================
 """
 
-import matplotlib.pyplot as plt
-import pandas as pd
 from tkinter import (
-    Tk,
+    END,
+    MULTIPLE,
     Button,
-    filedialog,
-    Toplevel,
-    Scrollbar,
     Frame,
-    messagebox,
     Label,
     LabelFrame,
-    StringVar,
-    END,
     Listbox,
-    MULTIPLE,
+    Scrollbar,
+    StringVar,
+    Tk,
+    Toplevel,
+    filedialog,
+    messagebox,
 )
+
+import matplotlib.pyplot as plt
+import pandas as pd
+
 try:
     from spm1d import stats
+
     SPM_SUPPORT = True
 except ImportError:
     SPM_SUPPORT = False
     stats = None
     print("Warning: spm1d not available. SPM plot support disabled.")
+import gc  # For garbage collection
 import os
+from pathlib import Path
+
 import matplotlib.colors as mcolors
 import numpy as np
 from rich import print
-from pathlib import Path
-import gc  # For garbage collection
 
 # Try to import additional libraries for different file formats
 try:
     import openpyxl  # For Excel files
+
     EXCEL_SUPPORT = True
 except ImportError:
     EXCEL_SUPPORT = False
@@ -93,12 +98,14 @@ except ImportError:
 ODS_SUPPORT = False
 try:
     from odf import opendocument  # type: ignore[import]
+
     ODS_SUPPORT = True
 except ImportError:
     print("Warning: odfpy not available. ODS file support limited.")
 
 try:
     from ezc3d import c3d  # For C3D files
+
     C3D_SUPPORT = True
 except ImportError:
     C3D_SUPPORT = False
@@ -204,15 +211,11 @@ class PlotGUI:
         main_frame.pack(fill="both", expand=True)
 
         # Title
-        title_label = Label(
-            main_frame, text="vailá 2D Plotting Tool", font=("Arial", 16, "bold")
-        )
+        title_label = Label(main_frame, text="vailá 2D Plotting Tool", font=("Arial", 16, "bold"))
         title_label.pack(pady=(0, 20))
 
         # Plot type selection frame
-        plot_type_frame = LabelFrame(
-            main_frame, text="Select Plot Type", padx=15, pady=15
-        )
+        plot_type_frame = LabelFrame(main_frame, text="Select Plot Type", padx=15, pady=15)
         plot_type_frame.pack(fill="x", pady=10)
 
         # Create 2 rows with 3 columns each for better layout
@@ -225,7 +228,7 @@ class PlotGUI:
             command=lambda: self._set_plot_type("time_scatter"),
             width=20,
             height=2,
-            font=("Arial", 10)
+            font=("Arial", 10),
         )
         btn_time.grid(row=0, column=0, padx=8, pady=8, sticky="ew")
         self.plot_buttons.append(btn_time)
@@ -236,7 +239,7 @@ class PlotGUI:
             command=lambda: self._set_plot_type("angle_angle"),
             width=20,
             height=2,
-            font=("Arial", 10)
+            font=("Arial", 10),
         )
         btn_angle.grid(row=0, column=1, padx=8, pady=8, sticky="ew")
         self.plot_buttons.append(btn_angle)
@@ -247,7 +250,7 @@ class PlotGUI:
             command=lambda: self._set_plot_type("confidence_interval"),
             width=20,
             height=2,
-            font=("Arial", 10)
+            font=("Arial", 10),
         )
         btn_ci.grid(row=0, column=2, padx=8, pady=8, sticky="ew")
         self.plot_buttons.append(btn_ci)
@@ -259,7 +262,7 @@ class PlotGUI:
             command=lambda: self._set_plot_type("boxplot"),
             width=20,
             height=2,
-            font=("Arial", 10)
+            font=("Arial", 10),
         )
         btn_box.grid(row=1, column=0, padx=8, pady=8, sticky="ew")
         self.plot_buttons.append(btn_box)
@@ -270,7 +273,7 @@ class PlotGUI:
             command=lambda: self._set_plot_type("spm"),
             width=20,
             height=2,
-            font=("Arial", 10)
+            font=("Arial", 10),
         )
         btn_spm.grid(row=1, column=1, padx=8, pady=8, sticky="ew")
         self.plot_buttons.append(btn_spm)
@@ -285,20 +288,32 @@ class PlotGUI:
 
         # Create a more organized layout with better spacing
         btn_clear_plots = Button(
-            control_frame, text="Clear All Plots", command=self._clear_plots,
-            width=18, height=2, font=("Arial", 10)
+            control_frame,
+            text="Clear All Plots",
+            command=self._clear_plots,
+            width=18,
+            height=2,
+            font=("Arial", 10),
         )
         btn_clear_plots.grid(row=0, column=0, padx=8, pady=8, sticky="ew")
 
         btn_clear_data = Button(
-            control_frame, text="Clear All Data", command=self._clear_data,
-            width=18, height=2, font=("Arial", 10)
+            control_frame,
+            text="Clear All Data",
+            command=self._clear_data,
+            width=18,
+            height=2,
+            font=("Arial", 10),
         )
         btn_clear_data.grid(row=0, column=1, padx=8, pady=8, sticky="ew")
 
         btn_new_figure = Button(
-            control_frame, text="New Figure", command=self._new_figure,
-            width=18, height=2, font=("Arial", 10)
+            control_frame,
+            text="New Figure",
+            command=self._new_figure,
+            width=18,
+            height=2,
+            font=("Arial", 10),
         )
         btn_new_figure.grid(row=0, column=2, padx=8, pady=8, sticky="ew")
 
@@ -306,7 +321,9 @@ class PlotGUI:
             control_frame,
             text="Save Current Figure",
             command=self._save_figure,
-            width=18, height=2, font=("Arial", 10)
+            width=18,
+            height=2,
+            font=("Arial", 10),
         )
         btn_save_figure.grid(row=1, column=0, padx=8, pady=8, sticky="ew")
 
@@ -331,13 +348,9 @@ class PlotGUI:
         # Update status
         self.status_var.set(f"Selected plot type: {ptype}")
 
-        # Highlight selected button
+        # Reset all buttons to default (let Tkinter use system default)
         for btn in self.plot_buttons:
-            btn.config(bg="SystemButtonFace")  # Reset all buttons
-
-        for btn in self.plot_buttons:
-            if btn["text"].lower().replace("-", "_").replace(" ", "_") == ptype:
-                btn.config(bg="lightblue")  # Highlight selected button
+            btn.config(bg="")  # Empty string resets to system default
 
         # Start file selection in a separate window
         self.selection_window = FileSelectionWindow(self.root, ptype)
@@ -398,8 +411,9 @@ class FileSelectionWindow:
         main_frame.pack(fill="both", expand=True)
 
         # Title
-        title_label = Label(main_frame, text="File and Header Selection",
-                           font=("Arial", 16, "bold"))
+        title_label = Label(
+            main_frame, text="File and Header Selection", font=("Arial", 16, "bold")
+        )
         title_label.pack(pady=(0, 25))
 
         # Status display section
@@ -409,7 +423,9 @@ class FileSelectionWindow:
         self.file_count_label = Label(status_frame, text="Files selected: 0", font=("Arial", 10))
         self.file_count_label.pack(anchor="w")
 
-        self.header_count_label = Label(status_frame, text="Headers selected: 0", font=("Arial", 10))
+        self.header_count_label = Label(
+            status_frame, text="Headers selected: 0", font=("Arial", 10)
+        )
         self.header_count_label.pack(anchor="w")
 
         self.status_label = Label(status_frame, text="Ready", font=("Arial", 10))
@@ -420,22 +436,52 @@ class FileSelectionWindow:
         button_frame.pack(fill="x", pady=(0, 25))
 
         # Top row buttons
-        Button(button_frame, text="Select File", command=self.on_select_file,
-               width=15, height=2, font=("Arial", 10)).grid(row=0, column=0, padx=8, pady=5)
+        Button(
+            button_frame,
+            text="Select File",
+            command=self.on_select_file,
+            width=15,
+            height=2,
+            font=("Arial", 10),
+        ).grid(row=0, column=0, padx=8, pady=5)
 
-        Button(button_frame, text="Clear Selections", command=self.on_clear,
-               width=18, height=2, font=("Arial", 10)).grid(row=0, column=1, padx=8, pady=5)
+        Button(
+            button_frame,
+            text="Clear Selections",
+            command=self.on_clear,
+            width=18,
+            height=2,
+            font=("Arial", 10),
+        ).grid(row=0, column=1, padx=8, pady=5)
 
         # Bottom row buttons
-        Button(button_frame, text="Plot", command=self.on_plot,
-               width=12, height=2, font=("Arial", 10), bg="#4CAF50", fg="white").grid(row=1, column=0, padx=8, pady=5)
+        Button(
+            button_frame,
+            text="Plot",
+            command=self.on_plot,
+            width=12,
+            height=2,
+            font=("Arial", 10),
+        ).grid(row=1, column=0, padx=8, pady=5)
 
-        Button(button_frame, text="Add More", command=self.on_add_more,
-               width=12, height=2, font=("Arial", 10)).grid(row=1, column=1, padx=8, pady=5)
+        Button(
+            button_frame,
+            text="Add More",
+            command=self.on_add_more,
+            width=12,
+            height=2,
+            font=("Arial", 10),
+        ).grid(row=1, column=1, padx=8, pady=5)
 
         # Close button at bottom
-        close_btn = Button(main_frame, text="Close", command=self.on_close,
-                          width=12, height=2, font=("Arial", 10))
+        close_btn = Button(
+            main_frame,
+            text="Close",
+            command=self.on_close,
+            width=12,
+            height=2,
+            font=("Arial", 10),
+        )
         close_btn.pack(pady=(25, 0))
 
     def on_select_file(self):
@@ -448,28 +494,37 @@ class FileSelectionWindow:
             if file_path not in loaded_data_cache:
                 try:
                     # Determine file format and read accordingly
-                    file_ext = file_path.lower().split('.')[-1]
-                    
-                    if file_ext == 'csv':
-                        loaded_data_cache[file_path] = read_csv_with_encoding(file_path, skipfooter=0)
-                    elif file_ext == 'xlsx':
+                    file_ext = file_path.lower().split(".")[-1]
+
+                    if file_ext == "csv":
+                        loaded_data_cache[file_path] = read_csv_with_encoding(
+                            file_path, skipfooter=0
+                        )
+                    elif file_ext == "xlsx":
                         loaded_data_cache[file_path] = read_excel_with_sheet_selection(file_path)
-                    elif file_ext == 'ods':
+                    elif file_ext == "ods":
                         if ODS_SUPPORT:
-                            loaded_data_cache[file_path] = pd.read_excel(file_path, engine='odf')
+                            loaded_data_cache[file_path] = pd.read_excel(file_path, engine="odf")
                         else:
-                            messagebox.showerror("Error", "ODS support not available. Install odfpy.")
+                            messagebox.showerror(
+                                "Error", "ODS support not available. Install odfpy."
+                            )
                             return
-                    elif file_ext == 'c3d':
+                    elif file_ext == "c3d":
                         loaded_data_cache[file_path] = read_c3d_file(file_path)
                     else:
-                        loaded_data_cache[file_path] = read_csv_with_encoding(file_path, skipfooter=0)
-                    
+                        loaded_data_cache[file_path] = read_csv_with_encoding(
+                            file_path, skipfooter=0
+                        )
+
                     if loaded_data_cache[file_path] is None:
-                        messagebox.showerror("Error", f"Failed to load file: {os.path.basename(file_path)}")
+                        messagebox.showerror(
+                            "Error",
+                            f"Failed to load file: {os.path.basename(file_path)}",
+                        )
                         self.selected_files.remove(file_path)
                         return
-                        
+
                     self.status_label.config(text=f"Loaded: {os.path.basename(file_path)}")
                 except Exception as e:
                     messagebox.showerror("Error", f"Failed to load file: {str(e)}")
@@ -481,7 +536,7 @@ class FileSelectionWindow:
             if not headers:
                 messagebox.showerror("Error", f"No headers found in {os.path.basename(file_path)}")
                 return
-                
+
             selected = select_headers_gui(headers, file_path)
             if selected:
                 self.selected_headers.extend(selected)
@@ -502,9 +557,7 @@ class FileSelectionWindow:
     def on_plot(self):
         """Handler for plotting the selected data"""
         if not self.selected_files or not self.selected_headers:
-            messagebox.showwarning(
-                "Warning", "Please select at least one file and header."
-            )
+            messagebox.showwarning("Warning", "Please select at least one file and header.")
             return
 
         # Update global variables with local selections
@@ -531,7 +584,7 @@ class FileSelectionWindow:
             plot_spm()
 
         # Update parent status
-        if hasattr(self.parent, 'status_var'):
+        if hasattr(self.parent, "status_var"):
             self.parent.status_var.set(f"Plot created: {self.plot_type}")
 
         self.window.destroy()
@@ -558,33 +611,35 @@ def select_plot_type():
 
 def plot_time_scatter():
     """Plot time series data from selected files and headers"""
-    print(f"[DEBUG] plot_time_scatter called")
+    print("[DEBUG] plot_time_scatter called")
     print(f"[DEBUG] selected_files: {selected_files}")
     print(f"[DEBUG] selected_headers: {selected_headers}")
-    
+
     # Always ensure we're plotting to a new figure
     if not plt.get_fignums():
         plt.figure()
 
     plot_count = 0
     for file_idx, file_path in enumerate(selected_files):
-        print(f"[DEBUG] Processing file {file_idx + 1}/{len(selected_files)}: {os.path.basename(file_path)}")
-        
+        print(
+            f"[DEBUG] Processing file {file_idx + 1}/{len(selected_files)}: {os.path.basename(file_path)}"
+        )
+
         # Use cached data if available
         if file_path in loaded_data_cache:
             data = loaded_data_cache[file_path]
             print(f"[DEBUG] Using cached data for {os.path.basename(file_path)}")
         else:
             # Determine file format and read accordingly
-            file_ext = file_path.lower().split('.')[-1]
+            file_ext = file_path.lower().split(".")[-1]
             try:
-                if file_ext == 'csv':
+                if file_ext == "csv":
                     data = read_csv_with_encoding(file_path, skipfooter=0)
-                elif file_ext == 'xlsx':
+                elif file_ext == "xlsx":
                     data = pd.read_excel(file_path)
-                elif file_ext == 'ods':
-                    data = pd.read_excel(file_path, engine='odf')
-                elif file_ext == 'c3d':
+                elif file_ext == "ods":
+                    data = pd.read_excel(file_path, engine="odf")
+                elif file_ext == "c3d":
                     data = read_c3d_file(file_path)
                     if data is None:
                         continue
@@ -605,19 +660,19 @@ def plot_time_scatter():
         print(f"[DEBUG] X-axis column: {x_column}")
 
         # Check if Time column is problematic (only 0s and 1s or not increasing properly)
-        if x_column.lower() in ['time', 'tempo', 'frame']:
+        if x_column.lower() in ["time", "tempo", "frame"]:
             unique_time_values = sorted(data[x_column].unique())
             if len(unique_time_values) <= 2 or not data[x_column].is_monotonic_increasing:
                 print(f"[WARNING] Time column has issues: {unique_time_values}")
                 print("[DEBUG] Using row index as X-axis instead")
                 # Create a proper time axis using row index
                 data = data.copy()
-                data.insert(0, 'Time_Index', range(1, len(data) + 1))
-                x_column = 'Time_Index'
+                data.insert(0, "Time_Index", range(1, len(data) + 1))
+                x_column = "Time_Index"
 
         for header_idx, header in enumerate(selected_headers):
             print(f"[DEBUG] Checking header {header_idx + 1}/{len(selected_headers)}: {header}")
-            
+
             if header not in data.columns:
                 print(f"[WARNING] Header '{header}' not found in data columns")
                 print(f"[DEBUG] Available columns: {list(data.columns)}")
@@ -630,7 +685,7 @@ def plot_time_scatter():
             color = predefined_colors[
                 (file_idx * len(selected_headers) + header_idx) % len(predefined_colors)
             ]
-            
+
             print(f"[DEBUG] Plotting {header} with color {color}")
             plt.plot(
                 data[x_column],
@@ -643,28 +698,31 @@ def plot_time_scatter():
     print(f"[DEBUG] Total plots created: {plot_count}")
 
     if plot_count == 0:
-        messagebox.showwarning("Warning", "No data was plotted. Please check your file and header selections.")
+        messagebox.showwarning(
+            "Warning",
+            "No data was plotted. Please check your file and header selections.",
+        )
         return
 
     # Set x-label based on the first column name
     if selected_files:
         first_file_data = loaded_data_cache.get(selected_files[0])
         if first_file_data is None:
-            file_ext = selected_files[0].lower().split('.')[-1]
+            file_ext = selected_files[0].lower().split(".")[-1]
             try:
-                if file_ext == 'csv':
+                if file_ext == "csv":
                     first_file_data = read_csv_with_encoding(selected_files[0], skipfooter=1)
-                elif file_ext == 'xlsx':
+                elif file_ext == "xlsx":
                     if EXCEL_SUPPORT:
                         first_file_data = pd.read_excel(selected_files[0])
                     else:
                         first_file_data = None
-                elif file_ext == 'ods':
+                elif file_ext == "ods":
                     if ODS_SUPPORT:
-                        first_file_data = pd.read_excel(selected_files[0], engine='odf')
+                        first_file_data = pd.read_excel(selected_files[0], engine="odf")
                     else:
                         first_file_data = None
-                elif file_ext == 'c3d':
+                elif file_ext == "c3d":
                     first_file_data = read_c3d_file(selected_files[0])
                 else:
                     first_file_data = None
@@ -674,10 +732,13 @@ def plot_time_scatter():
         if first_file_data is not None and len(first_file_data.columns) > 0:
             # Check if we're using Time_Index as x-axis
             x_label = first_file_data.columns[0]
-            if x_label.lower() in ['time', 'tempo', 'frame']:
+            if x_label.lower() in ["time", "tempo", "frame"]:
                 unique_time_values = sorted(first_file_data[x_label].unique())
-                if len(unique_time_values) <= 2 or not first_file_data[x_label].is_monotonic_increasing:
-                    x_label = 'Sample Index'
+                if (
+                    len(unique_time_values) <= 2
+                    or not first_file_data[x_label].is_monotonic_increasing
+                ):
+                    x_label = "Sample Index"
             plt.xlabel(x_label)
 
     plt.ylabel("Values")
@@ -690,10 +751,10 @@ def plot_time_scatter():
 
 def plot_angle_angle():
     """Plot angle-angle diagrams from selected files and headers"""
-    print(f"[DEBUG] plot_angle_angle called")
+    print("[DEBUG] plot_angle_angle called")
     print(f"[DEBUG] selected_files: {selected_files}")
     print(f"[DEBUG] selected_headers: {selected_headers}")
-    
+
     # Always ensure we're plotting to a new figure
     if not plt.get_fignums():
         plt.figure()
@@ -705,15 +766,15 @@ def plot_angle_angle():
             data = loaded_data_cache[file_path]
         else:
             # Determine file format and read accordingly
-            file_ext = file_path.lower().split('.')[-1]
+            file_ext = file_path.lower().split(".")[-1]
             try:
-                if file_ext == 'csv':
+                if file_ext == "csv":
                     data = read_csv_with_encoding(file_path, skipfooter=0)
-                elif file_ext == 'xlsx':
+                elif file_ext == "xlsx":
                     data = pd.read_excel(file_path)
-                elif file_ext == 'ods':
-                    data = pd.read_excel(file_path, engine='odf')
-                elif file_ext == 'c3d':
+                elif file_ext == "ods":
+                    data = pd.read_excel(file_path, engine="odf")
+                elif file_ext == "c3d":
                     data = read_c3d_file(file_path)
                     if data is None:
                         continue
@@ -759,10 +820,10 @@ def plot_angle_angle():
 
 def plot_confidence_interval():
     """Plot data with confidence intervals"""
-    print(f"[DEBUG] plot_confidence_interval called")
+    print("[DEBUG] plot_confidence_interval called")
     print(f"[DEBUG] selected_files: {selected_files}")
     print(f"[DEBUG] selected_headers: {selected_headers}")
-    
+
     # Always ensure we're plotting to a new figure
     if not plt.get_fignums():
         plt.figure()
@@ -774,15 +835,15 @@ def plot_confidence_interval():
             data = loaded_data_cache[file_path]
         else:
             # Determine file format and read accordingly
-            file_ext = file_path.lower().split('.')[-1]
+            file_ext = file_path.lower().split(".")[-1]
             try:
-                if file_ext == 'csv':
+                if file_ext == "csv":
                     data = read_csv_with_encoding(file_path, skipfooter=0)
-                elif file_ext == 'xlsx':
+                elif file_ext == "xlsx":
                     data = pd.read_excel(file_path)
-                elif file_ext == 'ods':
-                    data = pd.read_excel(file_path, engine='odf')
-                elif file_ext == 'c3d':
+                elif file_ext == "ods":
+                    data = pd.read_excel(file_path, engine="odf")
+                elif file_ext == "c3d":
                     data = read_c3d_file(file_path)
                     if data is None:
                         continue
@@ -822,7 +883,9 @@ def plot_confidence_interval():
             # Plot median and confidence interval
             color = predefined_colors[file_idx % len(predefined_colors)]
             plt.plot(
-                median_values, label=f"{os.path.basename(file_path)} - Median", color=color
+                median_values,
+                label=f"{os.path.basename(file_path)} - Median",
+                color=color,
             )
             plt.fill_between(
                 range(len(median_values)),
@@ -854,10 +917,10 @@ def plot_confidence_interval():
 
 def plot_boxplot():
     """Create boxplots for selected data"""
-    print(f"[DEBUG] plot_boxplot called")
+    print("[DEBUG] plot_boxplot called")
     print(f"[DEBUG] selected_files: {selected_files}")
     print(f"[DEBUG] selected_headers: {selected_headers}")
-    
+
     # Always ensure we're plotting to a new figure
     if not plt.get_fignums():
         plt.figure()
@@ -869,15 +932,15 @@ def plot_boxplot():
             data = loaded_data_cache[file_path]
         else:
             # Determine file format and read accordingly
-            file_ext = file_path.lower().split('.')[-1]
+            file_ext = file_path.lower().split(".")[-1]
             try:
-                if file_ext == 'csv':
+                if file_ext == "csv":
                     data = read_csv_with_encoding(file_path, skipfooter=0)
-                elif file_ext == 'xlsx':
+                elif file_ext == "xlsx":
                     data = pd.read_excel(file_path)
-                elif file_ext == 'ods':
-                    data = pd.read_excel(file_path, engine='odf')
-                elif file_ext == 'c3d':
+                elif file_ext == "ods":
+                    data = pd.read_excel(file_path, engine="odf")
+                elif file_ext == "c3d":
                     data = read_c3d_file(file_path)
                     if data is None:
                         continue
@@ -901,9 +964,7 @@ def plot_boxplot():
         return
 
     plt.boxplot(data_dict.values(), notch=True, patch_artist=True)
-    colors_list = [
-        predefined_colors[i % len(predefined_colors)] for i in range(len(data_dict))
-    ]
+    colors_list = [predefined_colors[i % len(predefined_colors)] for i in range(len(data_dict))]
     for patch, color in zip(plt.gca().artists, colors_list):
         patch.set_facecolor(color)
 
@@ -918,14 +979,17 @@ def plot_boxplot():
 
 def plot_spm():
     """Perform statistical parametric mapping analysis"""
-    print(f"[DEBUG] plot_spm called")
+    print("[DEBUG] plot_spm called")
     print(f"[DEBUG] selected_files: {selected_files}")
     print(f"[DEBUG] selected_headers: {selected_headers}")
-    
+
     if not SPM_SUPPORT:
-        messagebox.showerror("Error", "SPM analysis requires spm1d library.\nInstall with: pip install spm1d")
+        messagebox.showerror(
+            "Error",
+            "SPM analysis requires spm1d library.\nInstall with: pip install spm1d",
+        )
         return
-    
+
     # Always ensure we're plotting to a new figure
     if not plt.get_fignums():
         plt.figure()
@@ -937,15 +1001,15 @@ def plot_spm():
             data = loaded_data_cache[file_path]
         else:
             # Determine file format and read accordingly
-            file_ext = file_path.lower().split('.')[-1]
+            file_ext = file_path.lower().split(".")[-1]
             try:
-                if file_ext == 'csv':
+                if file_ext == "csv":
                     data = read_csv_with_encoding(file_path, skipfooter=0)
-                elif file_ext == 'xlsx':
+                elif file_ext == "xlsx":
                     data = pd.read_excel(file_path)
-                elif file_ext == 'ods':
-                    data = pd.read_excel(file_path, engine='odf')
-                elif file_ext == 'c3d':
+                elif file_ext == "ods":
+                    data = pd.read_excel(file_path, engine="odf")
+                elif file_ext == "c3d":
                     data = read_c3d_file(file_path)
                     if data is None:
                         continue
@@ -959,9 +1023,7 @@ def plot_spm():
 
         headers = [header for header in selected_headers if header in data.columns]
         if len(headers) < 2:
-            messagebox.showwarning(
-                "Warning", "Please select at least two headers for SPM plot."
-            )
+            messagebox.showwarning("Warning", "Please select at least two headers for SPM plot.")
             return
 
         try:
@@ -971,7 +1033,8 @@ def plot_spm():
 
             if len(yA) == 0 or len(yB) == 0:
                 messagebox.showwarning(
-                    "Warning", f"No valid data in {os.path.basename(file_path)} for SPM analysis."
+                    "Warning",
+                    f"No valid data in {os.path.basename(file_path)} for SPM analysis.",
                 )
                 continue
 
@@ -983,7 +1046,8 @@ def plot_spm():
 
         except Exception as e:
             messagebox.showwarning(
-                "Warning", f"Error in SPM analysis for {os.path.basename(file_path)}: {str(e)}"
+                "Warning",
+                f"Error in SPM analysis for {os.path.basename(file_path)}: {str(e)}",
             )
             continue
 
@@ -1007,8 +1071,8 @@ def select_file():
             ("C3D files", "*.c3d"),
             ("Excel files", "*.xlsx"),
             ("LibreOffice files", "*.ods"),
-            ("All files", "*.*")
-        ]
+            ("All files", "*.*"),
+        ],
     )
     root.destroy()
     return file_path
@@ -1052,16 +1116,18 @@ def get_file_headers(file_path):
         return list(loaded_data_cache[file_path].columns)
 
     # Determine file format and read accordingly
-    file_ext = file_path.lower().split('.')[-1]
+    file_ext = file_path.lower().split(".")[-1]
 
     try:
-        if file_ext == 'csv':
+        if file_ext == "csv":
             # Use simple approach that works with any CSV structure
             try:
                 df = pd.read_csv(file_path, nrows=0)
                 loaded_data_cache[file_path] = df
                 columns = list(df.columns)
-                print(f"Extracted {len(columns)} columns from {file_path}: {columns[:5]}...")  # Show first 5
+                print(
+                    f"Extracted {len(columns)} columns from {file_path}: {columns[:5]}..."
+                )  # Show first 5
                 return columns
             except Exception as e:
                 print(f"Error reading CSV headers: {e}")
@@ -1073,34 +1139,38 @@ def get_file_headers(file_path):
                     print(f"Extracted {len(columns)} columns from {file_path}: {columns[:5]}...")
                     return columns
                 return []
-        elif file_ext == 'xlsx':
+        elif file_ext == "xlsx":
             df = read_excel_with_sheet_selection(file_path)
             if df is None:
                 print(f"Failed to read Excel file: {file_path}")
                 return []
-        elif file_ext == 'ods':
+        elif file_ext == "ods":
             if ODS_SUPPORT:
                 try:
                     # Get available sheets for ODS
                     try:
                         from odf import opendocument  # type: ignore[import]
+
                         doc = opendocument.load(file_path)
-                        sheet_names = [sheet.get_attribute('name') for sheet in doc.spreadsheet.getElementsByType(doc.table.Table)]
+                        sheet_names = [
+                            sheet.get_attribute("name")
+                            for sheet in doc.spreadsheet.getElementsByType(doc.table.Table)
+                        ]
                         if len(sheet_names) == 1:
-                            df = pd.read_excel(file_path, engine='odf', sheet_name=sheet_names[0])
+                            df = pd.read_excel(file_path, engine="odf", sheet_name=sheet_names[0])
                         else:
-                            df = pd.read_excel(file_path, engine='odf', sheet_name=sheet_names[0])
+                            df = pd.read_excel(file_path, engine="odf", sheet_name=sheet_names[0])
                             print(f"Loaded first sheet: {sheet_names[0]} from ODS file")
                     except ImportError:
                         # Fallback if odf library structure is different
-                        df = pd.read_excel(file_path, engine='odf')
+                        df = pd.read_excel(file_path, engine="odf")
                 except Exception as e:
                     print(f"Error reading ODS file: {e}")
                     df = None
             else:
                 print(f"ODS support not available for {file_path}")
                 return []
-        elif file_ext == 'c3d':
+        elif file_ext == "c3d":
             df = read_c3d_file(file_path)
             if df is None:
                 print(f"Failed to read C3D file: {file_path}")
@@ -1123,7 +1193,9 @@ def get_file_headers(file_path):
 
         loaded_data_cache[file_path] = df  # Cache it for later use
         columns = list(df.columns)
-        print(f"Extracted {len(columns)} columns from {file_path}: {columns[:5]}...")  # Show first 5
+        print(
+            f"Extracted {len(columns)} columns from {file_path}: {columns[:5]}..."
+        )  # Show first 5
         return columns
 
     except Exception as e:
@@ -1174,9 +1246,7 @@ def detect_c3d_units(pts):
     # Method 3: Inter-marker distances analysis
     if pts.shape[0] > 0 and pts.shape[1] > 1:
         # Use multiple frames for better statistics
-        frame_indices = np.linspace(
-            0, pts.shape[0] - 1, min(10, pts.shape[0]), dtype=int
-        )
+        frame_indices = np.linspace(0, pts.shape[0] - 1, min(10, pts.shape[0]), dtype=int)
         all_distances = []
 
         for frame_idx in frame_indices:
@@ -1239,9 +1309,7 @@ def detect_c3d_units(pts):
     # Decision based on confidence score
     is_millimeters = confidence_score >= 3
 
-    detection_summary = (
-        ", ".join(detection_reasons) if detection_reasons else "no_clear_indicators"
-    )
+    detection_summary = ", ".join(detection_reasons) if detection_reasons else "no_clear_indicators"
     final_method = f"confidence_score_{confidence_score} ({detection_summary})"
 
     return is_millimeters, final_method
@@ -1281,7 +1349,11 @@ def read_c3d_file(file_path):
             analog_labels = c3d_data["parameters"]["ANALOG"]["LABELS"]["value"]
             if isinstance(analog_labels[0], list):
                 analog_labels = analog_labels[0]
-            analog_units = c3d_data["parameters"]["ANALOG"].get("UNITS", {}).get("value", ["Unknown"] * len(analog_labels))
+            analog_units = (
+                c3d_data["parameters"]["ANALOG"]
+                .get("UNITS", {})
+                .get("value", ["Unknown"] * len(analog_labels))
+            )
             print(f"Analog data shape: {analogs.shape}")
             print(f"Number of analog channels: {len(analog_labels)}")
             print(f"Analog labels: {analog_labels[:5]}...")  # Show first 5
@@ -1320,9 +1392,7 @@ def read_c3d_file(file_path):
             print("[bold green]✓ Applied conversion: MILLIMETERS → METERS[/bold green]")
             print(f"  Method: {detection_method}")
         else:
-            print(
-                "[bold green]✓ No conversion applied: Data already in METERS[/bold green]"
-            )
+            print("[bold green]✓ No conversion applied: Data already in METERS[/bold green]")
             print(f"  Method: {detection_method}")
 
         # Show data statistics after conversion
@@ -1356,10 +1426,10 @@ def read_c3d_file(file_path):
                 print(f"Added analog: {label}")
 
             # Add analog time column
-            data_dict['Analog_Time'] = analog_time_values
+            data_dict["Analog_Time"] = analog_time_values
 
         # Add time columns (use marker time as primary)
-        data_dict['Time'] = marker_time_values
+        data_dict["Time"] = marker_time_values
         print(f"Using marker time as primary (length: {len(marker_time_values)})")
 
         df = pd.DataFrame(data_dict)
@@ -1371,6 +1441,7 @@ def read_c3d_file(file_path):
     except Exception as e:
         print(f"Error reading C3D file: {str(e)}")
         import traceback
+
         traceback.print_exc()
         return None
 
@@ -1378,21 +1449,21 @@ def read_c3d_file(file_path):
 def read_csv_with_encoding(file_path, skipfooter=0, engine=None):
     """Read CSV file with automatic encoding detection"""
     # Common encodings to try
-    encodings = ['utf-8', 'utf-8-sig', 'latin1', 'cp1252', 'iso-8859-1']
+    encodings = ["utf-8", "utf-8-sig", "latin1", "cp1252", "iso-8859-1"]
 
     # Prepare read_csv arguments
-    read_args = {'encoding': None}
+    read_args = {"encoding": None}
     if skipfooter > 0:
-        read_args['skipfooter'] = skipfooter
+        read_args["skipfooter"] = skipfooter
         if engine is None:
-            engine = 'python'  # Force python engine when using skipfooter
+            engine = "python"  # Force python engine when using skipfooter
 
     if engine is not None:
-        read_args['engine'] = engine
+        read_args["engine"] = engine
 
     for encoding in encodings:
         try:
-            read_args['encoding'] = encoding
+            read_args["encoding"] = encoding
             df = pd.read_csv(file_path, **read_args)
             print(f"Successfully read {file_path} with encoding: {encoding}")
             if skipfooter > 0:
@@ -1402,7 +1473,7 @@ def read_csv_with_encoding(file_path, skipfooter=0, engine=None):
             continue
         except Exception as e:
             # If it's not a Unicode error, it might be a different issue
-            if 'codec' in str(e).lower() and 'decode' in str(e).lower():
+            if "codec" in str(e).lower() and "decode" in str(e).lower():
                 continue
             else:
                 # Re-raise non-encoding errors
@@ -1410,8 +1481,8 @@ def read_csv_with_encoding(file_path, skipfooter=0, engine=None):
 
     # If all encodings fail, try with error handling
     try:
-        read_args['encoding'] = 'utf-8'
-        read_args['errors'] = 'replace'
+        read_args["encoding"] = "utf-8"
+        read_args["errors"] = "replace"
         df = pd.read_csv(file_path, **read_args)
         print(f"Read {file_path} with UTF-8 and error replacement")
         return df
@@ -1451,8 +1522,11 @@ def select_headers_gui(headers, file_path=None):
             try:
                 import json
                 import os
+
                 base_name = os.path.splitext(os.path.basename(file_path))[0]
-                selection_file = os.path.join(os.path.dirname(file_path), f"{base_name}_header_selection.json")
+                selection_file = os.path.join(
+                    os.path.dirname(file_path), f"{base_name}_header_selection.json"
+                )
 
                 with open(selection_file, "w") as f:
                     json.dump(selected, f)
@@ -1466,11 +1540,14 @@ def select_headers_gui(headers, file_path=None):
             try:
                 import json
                 import os
+
                 base_name = os.path.splitext(os.path.basename(file_path))[0]
-                selection_file = os.path.join(os.path.dirname(file_path), f"{base_name}_header_selection.json")
+                selection_file = os.path.join(
+                    os.path.dirname(file_path), f"{base_name}_header_selection.json"
+                )
 
                 if os.path.exists(selection_file):
-                    with open(selection_file, "r") as f:
+                    with open(selection_file) as f:
                         saved_selection = json.load(f)
 
                     # Clear current selection
@@ -1484,7 +1561,9 @@ def select_headers_gui(headers, file_path=None):
 
                     messagebox.showinfo("Success", f"Selection loaded from:\n{selection_file}")
                 else:
-                    messagebox.showwarning("Warning", f"No saved selection found at:\n{selection_file}")
+                    messagebox.showwarning(
+                        "Warning", f"No saved selection found at:\n{selection_file}"
+                    )
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to load selection:\n{str(e)}")
 
@@ -1496,7 +1575,7 @@ def select_headers_gui(headers, file_path=None):
     instructions = Label(
         selection_window,
         text="Click to select headers (hold Ctrl for multiple). Press Enter to confirm.",
-        font=("Arial", 10)
+        font=("Arial", 10),
     )
     instructions.pack(pady=10)
 
@@ -1517,7 +1596,7 @@ def select_headers_gui(headers, file_path=None):
         width=80,
         height=25,
         yscrollcommand=scrollbar.set,
-        font=("Arial", 10)
+        font=("Arial", 10),
     )
     listbox.pack(side="left", fill="both", expand=True)
 
@@ -1525,7 +1604,7 @@ def select_headers_gui(headers, file_path=None):
 
     # Populate listbox with headers
     for i, header in enumerate(headers):
-        listbox.insert(END, f"{i+1:2d}: {header}")
+        listbox.insert(END, f"{i + 1:2d}: {header}")
 
     # Button frame
     btn_frame = Frame(selection_window)
@@ -1539,8 +1618,12 @@ def select_headers_gui(headers, file_path=None):
     Button(left_frame, text="Clear All", command=unselect_all, width=12).pack(side="left", padx=5)
 
     if file_path:
-        Button(left_frame, text="Save Selection", command=save_selection, width=15).pack(side="left", padx=5)
-        Button(left_frame, text="Load Selection", command=load_selection, width=15).pack(side="left", padx=5)
+        Button(left_frame, text="Save Selection", command=save_selection, width=15).pack(
+            side="left", padx=5
+        )
+        Button(left_frame, text="Load Selection", command=load_selection, width=15).pack(
+            side="left", padx=5
+        )
 
     # Right side button
     Button(
@@ -1550,7 +1633,7 @@ def select_headers_gui(headers, file_path=None):
         width=18,
         bg="#4CAF50",
         fg="white",
-        font=("Arial", 10, "bold")
+        font=("Arial", 10, "bold"),
     ).pack(side="right")
 
     # Bind Enter key to confirm
@@ -1597,14 +1680,15 @@ def test_csv_reading():
         print(f"  Contains problematic last row: {df_with_skip.iloc[-1, 0] == 1.0}")
 
         # Check if Force.Fz3 column has non-zero values
-        if 'Force.Fz3' in df_with_skip.columns:
-            non_zero_count = (df_with_skip['Force.Fz3'] != 0).sum()
+        if "Force.Fz3" in df_with_skip.columns:
+            non_zero_count = (df_with_skip["Force.Fz3"] != 0).sum()
             print(f"  Non-zero values in Force.Fz3: {non_zero_count}/{len(df_with_skip)}")
         else:
             print("  Force.Fz3 column not found in DataFrame")
 
     except Exception as e:
         print(f"  Error: {e}")
+
 
 if __name__ == "__main__":
     # Uncomment the line below to test CSV reading

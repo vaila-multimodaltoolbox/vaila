@@ -71,48 +71,49 @@ References:
 """
 
 import os
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
 from tkinter import (
+    BooleanVar,
+    Button,
+    Canvas,
+    Checkbutton,
+    Frame,
+    Scrollbar,
     Tk,
     Toplevel,
-    Canvas,
-    Scrollbar,
-    Frame,
-    Button,
-    Checkbutton,
-    BooleanVar,
-    messagebox,
     filedialog,
+    messagebox,
     simpledialog,
 )
-from .ellipse import plot_ellipse_pca, plot_cop_pathway_with_ellipse
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+
+from .ellipse import plot_cop_pathway_with_ellipse, plot_ellipse_pca
 from .filter_utils import butter_filter
-from .stabilogram_analysis import (
-    compute_rms,
-    compute_speed,
-    compute_power_spectrum,
-    compute_msd,
-    count_zero_crossings,
-    count_peaks,
-    compute_sway_density,
-    compute_total_path_length,
-    plot_stabilogram,
-    plot_power_spectrum,
-    save_metrics_to_csv,
-)
 from .spectral_features import (
-    total_power,
+    centroid_frequency,
+    energy_content_0_5_2,
+    energy_content_above_2,
+    energy_content_below_0_5,
+    frequency_dispersion,
+    frequency_quotient,
     power_frequency_50,
     power_frequency_95,
     power_mode,
-    centroid_frequency,
-    frequency_dispersion,
-    energy_content_below_0_5,
-    energy_content_0_5_2,
-    energy_content_above_2,
-    frequency_quotient,
+    total_power,
+)
+from .stabilogram_analysis import (
+    compute_msd,
+    compute_power_spectrum,
+    compute_rms,
+    compute_sway_density,
+    compute_total_path_length,
+    count_peaks,
+    count_zero_crossings,
+    plot_power_spectrum,
+    plot_stabilogram,
+    save_metrics_to_csv,
 )
 
 
@@ -127,9 +128,7 @@ def convert_to_cm(data, unit):
         "cm": 1,
     }
     if unit not in conversion_factors:
-        raise ValueError(
-            f"Unsupported unit '{unit}'. Please use m, mm, ft, in, yd, or cm."
-        )
+        raise ValueError(f"Unsupported unit '{unit}'. Please use m, mm, ft, in, yd, or cm.")
     return data * conversion_factors[unit]
 
 
@@ -155,13 +154,9 @@ def select2headers(file_path):
 
     def on_select():
         nonlocal selected_headers
-        selected_headers = [
-            header for header, var in zip(headers, header_vars) if var.get()
-        ]
+        selected_headers = [header for header, var in zip(headers, header_vars) if var.get()]
         if len(selected_headers) != 2:
-            messagebox.showinfo(
-                "Info", "Please select exactly two (2) headers for analysis."
-            )
+            messagebox.showinfo("Info", "Please select exactly two (2) headers for analysis.")
             return
         selection_window.quit()
         selection_window.destroy()
@@ -175,11 +170,9 @@ def select2headers(file_path):
             var.set(False)
 
     selection_window = Toplevel()
-    selection_window.title(
-        "Select two (2) Cx and Cy components from Headers for Force Plate Data"
-    )
+    selection_window.title("Select two (2) Cx and Cy components from Headers for Force Plate Data")
     selection_window.geometry(
-        f"{selection_window.winfo_screenwidth()}x{int(selection_window.winfo_screenheight()*0.8)}"
+        f"{selection_window.winfo_screenwidth()}x{int(selection_window.winfo_screenheight() * 0.8)}"
     )
 
     canvas = Canvas(selection_window)
@@ -207,9 +200,7 @@ def select2headers(file_path):
     btn_frame.pack(side="right", padx=10, pady=10, anchor="center")
 
     Button(btn_frame, text="Select All", command=select_all).pack(side="top", pady=5)
-    Button(btn_frame, text="Unselect All", command=unselect_all).pack(
-        side="top", pady=5
-    )
+    Button(btn_frame, text="Unselect All", command=unselect_all).pack(side="top", pady=5)
     Button(btn_frame, text="Confirm", command=on_select).pack(side="top", pady=5)
 
     selection_window.mainloop()
@@ -317,12 +308,10 @@ def plot_final_figure(
 
     # Adjust the limits of the plot to ensure both the CoP pathway and ellipse are visible
     x_margin = 0.02 * (
-        np.max([np.max(ellipse_x), np.max(X_n)])
-        - np.min([np.min(ellipse_x), np.min(X_n)])
+        np.max([np.max(ellipse_x), np.max(X_n)]) - np.min([np.min(ellipse_x), np.min(X_n)])
     )
     y_margin = 0.02 * (
-        np.max([np.max(ellipse_y), np.max(Y_n)])
-        - np.min([np.min(ellipse_y), np.min(Y_n)])
+        np.max([np.max(ellipse_y), np.max(Y_n)]) - np.min([np.min(ellipse_y), np.min(Y_n)])
     )
 
     ax2.set_xlim(
@@ -335,9 +324,7 @@ def plot_final_figure(
     )
 
     # Subplot for result variables (combined column 2)
-    ax3 = fig.add_subplot(
-        1, 2, 2
-    )  # Use a single subplot that spans both rows in the second column
+    ax3 = fig.add_subplot(1, 2, 2)  # Use a single subplot that spans both rows in the second column
     ax3.axis("off")  # Hide axes to focus on the text
     text_str = "\n".join(
         [f"{key}: {value}" for key, value in metrics.items()]
@@ -359,18 +346,14 @@ def plot_final_figure(
     plt.close()
 
 
-def analyze_data_2d(
-    data, output_dir, file_name, fs, plate_width, plate_height, timestamp
-):
+def analyze_data_2d(data, output_dir, file_name, fs, plate_width, plate_height, timestamp):
     """Analyzes selected 2D data and saves the results."""
     print(f"Starting analysis for file: {file_name}")
 
     # Apply the Butterworth filter to the data
     try:
         print("Applying Butterworth filter...")
-        dataf = butter_filter(
-            data, fs, filter_type="low", cutoff=10, order=4, padding=True
-        )
+        dataf = butter_filter(data, fs, filter_type="low", cutoff=10, order=4, padding=True)
     except ValueError as e:
         print(f"Filtering error: {e}")
         return
@@ -529,9 +512,7 @@ def analyze_data_2d(
     # Plot CoP pathway with confidence ellipse
     print("Plotting CoP pathway with ellipse...")
     cop_pathway_file = os.path.join(output_dir, f"{file_name}_cop_pathway.png")
-    plot_cop_pathway_with_ellipse(
-        X_n, Y_n, area, angle, ellipse_data, file_name, cop_pathway_file
-    )
+    plot_cop_pathway_with_ellipse(X_n, Y_n, area, angle, ellipse_data, file_name, cop_pathway_file)
 
     # Create final figure
     print("Creating final figure...")
@@ -656,9 +637,7 @@ def main():
                 messagebox.showerror(
                     "Header Error", f"Selected headers not found in file {file_name}."
                 )
-                print(
-                    f"Error: Selected headers not found in file {file_name}. Skipping file."
-                )
+                print(f"Error: Selected headers not found in file {file_name}. Skipping file.")
                 continue
             data = df_full[selected_headers].to_numpy()
 

@@ -6,9 +6,9 @@ Author: Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 14 October 2024
-Update Date: 15 October 2025
-Version: 0.0.8
-Python Version: 3.12.11
+Update Date: 17 November 2025
+Version: 0.0.9
+Python Version: 3.12.12
 
 Description:
 ------------
@@ -54,23 +54,24 @@ For more details, visit: https://www.gnu.org/licenses/lgpl-3.0.html
 ===============================================================================
 """
 
-import os
-from pathlib import Path
-import pandas as pd
-import numpy as np
-from pykalman import KalmanFilter
-from scipy.signal import savgol_filter
-from statsmodels.nonparametric.smoothers_lowess import lowess
-from tkinter import filedialog, messagebox
-from scipy.interpolate import UnivariateSpline
-import tkinter as tk
-from rich import print
-from statsmodels.tsa.arima.model import ARIMA
-import sys
-import toml
 import datetime
+import os
+import sys
+import tkinter as tk
+from pathlib import Path
+from tkinter import filedialog, messagebox
+
+import numpy as np
+import pandas as pd
+import toml
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
+from pykalman import KalmanFilter
+from rich import print
+from scipy.interpolate import UnivariateSpline
+from scipy.signal import savgol_filter
+from statsmodels.nonparametric.smoothers_lowess import lowess
+from statsmodels.tsa.arima.model import ARIMA
 
 # Import filter_utils - handle both relative and absolute imports
 try:
@@ -79,9 +80,7 @@ except ImportError:
     try:
         from filter_utils import butter_filter
     except ImportError:
-        print(
-            "Warning: filter_utils not found. Butterworth filtering will be disabled."
-        )
+        print("Warning: filter_utils not found. Butterworth filtering will be disabled.")
 
         def butter_filter(data, **kwargs):
             print("Butterworth filter not available - filter_utils not found")
@@ -98,9 +97,7 @@ def save_config_to_toml(config, filepath):
         f.write("# ================================================================\n")
         f.write("#\n")
         f.write("# HOW TO USE THIS FILE:\n")
-        f.write(
-            "# 1. Edit the values below to customize your interpolation and smoothing.\n"
-        )
+        f.write("# 1. Edit the values below to customize your interpolation and smoothing.\n")
         f.write("# 2. Save this file.\n")
         f.write("# 3. In the script, click 'Load TOML configuration'.\n")
         f.write("# 4. Select this file and run your analysis.\n")
@@ -112,9 +109,7 @@ def save_config_to_toml(config, filepath):
         f.write("#\n")
         f.write("# Each section below controls a part of the processing.\n")
         f.write("# All options are explained with examples.\n")
-        f.write(
-            "# ================================================================\n\n"
-        )
+        f.write("# ================================================================\n\n")
 
         # Interpolation section
         f.write("[interpolation]\n")
@@ -160,13 +155,9 @@ def save_config_to_toml(config, filepath):
         f.write("mode = 1             # 1 = simple, 2 = advanced\n")
         f.write("# Butterworth:\n")
         f.write("cutoff = 4.0        # Cutoff frequency in Hz (e.g. 4.0, 10.0)\n")
-        f.write(
-            "fs = 30.0           # Sampling frequency (video FPS, e.g. 30.0, 100.0)\n"
-        )
+        f.write("fs = 30.0           # Sampling frequency (video FPS, e.g. 30.0, 100.0)\n")
         f.write("# Splines:\n")
-        f.write(
-            "smoothing_factor = 1.0   # 0 = no smoothing, 1 = moderate, 10+ = strong\n"
-        )
+        f.write("smoothing_factor = 1.0   # 0 = no smoothing, 1 = moderate, 10+ = strong\n")
         f.write("# ARIMA:\n")
         f.write("p = 1                # AR order\n")
         f.write("d = 0                # Difference order\n")
@@ -184,12 +175,22 @@ def save_config_to_toml(config, filepath):
         f.write("# Split the data into two parts?\n")
         f.write("# enabled = true/false\n")
         f.write("enabled = false\n\n")
+
+        # Sample rate section
+        f.write("[time_column]\n")
+        f.write("# Sample rate for Time column recalculation.\n")
+        f.write(
+            "# If the first column is 'Time', enter the sample rate (Hz) to recalculate time values.\n"
+        )
+        f.write("# Leave empty or set to 0 to use original time values from the file.\n")
+        f.write("# Example: 2000.0 for 2000 Hz, 10000.0 for 10000 Hz\n")
+        f.write("sample_rate = 0.0  # Set to 0 to use original time values\n\n")
     print(f"Configuration saved in: {filepath}")
 
 
 def load_config_from_toml(filepath):
     """Load the configuration from a TOML file and return a dictionary."""
-    with open(filepath, "r", encoding="utf-8") as f:
+    with open(filepath, encoding="utf-8") as f:
         config = toml.load(f)
     print(f"Configuration loaded from: {filepath}")
     return config
@@ -249,6 +250,7 @@ class InterpolationConfigDialog:
         self.arima_p = tk.StringVar(value="1")
         self.arima_d = tk.StringVar(value="0")
         self.arima_q = tk.StringVar(value="0")
+        self.sample_rate = tk.StringVar(value="")
         self.loaded_toml = None
         self.use_toml = False
         self.test_data = None
@@ -317,9 +319,7 @@ class InterpolationConfigDialog:
 
         # Create scrollable frame
         canvas = tk.Canvas(main_container, highlightthickness=0)
-        scrollbar = tk.Scrollbar(
-            main_container, orient="vertical", command=canvas.yview
-        )
+        scrollbar = tk.Scrollbar(main_container, orient="vertical", command=canvas.yview)
         scrollable_frame = tk.Frame(canvas)
 
         scrollable_frame.bind(
@@ -351,6 +351,7 @@ class InterpolationConfigDialog:
         self.create_parameters_section(right_column)
         self.create_padding_section(right_column)
         self.create_gap_section(right_column)
+        self.create_sample_rate_section(right_column)
 
         # Bottom buttons
         self.create_buttons(scrollable_frame)
@@ -379,9 +380,9 @@ class InterpolationConfigDialog:
             anchor="w", padx=10, pady=5
         )
 
-        tk.Label(
-            frame, text="Enter gap filling method (1-6):", font=("Arial", 11, "bold")
-        ).pack(anchor="w", padx=10, pady=8)
+        tk.Label(frame, text="Enter gap filling method (1-6):", font=("Arial", 11, "bold")).pack(
+            anchor="w", padx=10, pady=8
+        )
         self.interp_entry = tk.Entry(frame, font=("Arial", 12))
         self.interp_entry.insert(0, "1")
         self.interp_entry.pack(fill="x", padx=10, pady=5)
@@ -409,9 +410,9 @@ class InterpolationConfigDialog:
             anchor="w", padx=10, pady=5
         )
 
-        tk.Label(
-            frame, text="Enter smoothing method (1-7):", font=("Arial", 11, "bold")
-        ).pack(anchor="w", padx=10, pady=8)
+        tk.Label(frame, text="Enter smoothing method (1-7):", font=("Arial", 11, "bold")).pack(
+            anchor="w", padx=10, pady=8
+        )
         self.smooth_entry = tk.Entry(frame, font=("Arial", 12))
         self.smooth_entry.insert(0, "1")
         self.smooth_entry.pack(fill="x", padx=10, pady=5)
@@ -472,9 +473,9 @@ class InterpolationConfigDialog:
         )
         frame.pack(fill="x", pady=(0, 15))
 
-        tk.Label(
-            frame, text="Padding length (% of data):", font=("Arial", 11, "bold")
-        ).pack(anchor="w", padx=10, pady=5)
+        tk.Label(frame, text="Padding length (% of data):", font=("Arial", 11, "bold")).pack(
+            anchor="w", padx=10, pady=5
+        )
         self.padding_entry = tk.Entry(frame, font=("Arial", 12))
         self.padding_entry.insert(0, "10")
         self.padding_entry.pack(fill="x", padx=10, pady=5)
@@ -490,9 +491,9 @@ class InterpolationConfigDialog:
         )
         frame.pack(fill="x", pady=(0, 15))
 
-        tk.Label(
-            frame, text="Maximum gap size to fill (frames):", font=("Arial", 11, "bold")
-        ).pack(anchor="w", padx=10, pady=5)
+        tk.Label(frame, text="Maximum gap size to fill (frames):", font=("Arial", 11, "bold")).pack(
+            anchor="w", padx=10, pady=5
+        )
         self.max_gap_entry = tk.Entry(frame, font=("Arial", 12))
         self.max_gap_entry.insert(0, "60")
         self.max_gap_entry.pack(fill="x", padx=10, pady=5)
@@ -500,6 +501,34 @@ class InterpolationConfigDialog:
         tk.Label(
             frame,
             text="Note: Gaps larger than this value will be left as NaN. Set to 0 to fill all gaps.",
+            foreground="blue",
+            justify="left",
+            wraplength=400,
+            font=("Arial", 10),
+        ).pack(anchor="w", padx=10, pady=5)
+
+    def create_sample_rate_section(self, parent):
+        """Create sample rate configuration"""
+        frame = tk.LabelFrame(
+            parent,
+            text="Time Column Configuration",
+            padx=15,
+            pady=12,
+            font=("Arial", 12, "bold"),
+        )
+        frame.pack(fill="x", pady=(0, 15))
+
+        tk.Label(
+            frame,
+            text="Sample rate (Hz) for Time column:",
+            font=("Arial", 11, "bold"),
+        ).pack(anchor="w", padx=10, pady=5)
+        self.sample_rate_entry = tk.Entry(frame, font=("Arial", 12), textvariable=self.sample_rate)
+        self.sample_rate_entry.pack(fill="x", padx=10, pady=5)
+
+        tk.Label(
+            frame,
+            text="Note: If the first column is 'Time', enter the sample rate (Hz) to recalculate time values. Leave empty to use original time values.",
             foreground="blue",
             justify="left",
             wraplength=400,
@@ -516,9 +545,7 @@ class InterpolationConfigDialog:
             pady=12,
             font=("Arial", 12, "bold"),
         )
-        analysis_frame.grid(
-            row=1, column=0, columnspan=2, sticky="ew", padx=15, pady=(20, 10)
-        )
+        analysis_frame.grid(row=1, column=0, columnspan=2, sticky="ew", padx=15, pady=(20, 10))
         analysis_btns_frame = tk.Frame(analysis_frame)
         analysis_btns_frame.pack(pady=10)
 
@@ -612,9 +639,7 @@ class InterpolationConfigDialog:
                 self.params_widgets.append(label)
 
         except ValueError:
-            label = tk.Label(
-                self.params_frame, text="Please enter a valid method number (1-7)"
-            )
+            label = tk.Label(self.params_frame, text="Please enter a valid method number (1-7)")
             label.pack(anchor="w", padx=5, pady=5)
             self.params_widgets.append(label)
 
@@ -625,9 +650,7 @@ class InterpolationConfigDialog:
             self.params_frame, text="Window length (must be odd):", font=("Arial", 11)
         )
         label1.pack(anchor="w", padx=5, pady=2)
-        entry1 = tk.Entry(
-            self.params_frame, textvariable=self.savgol_window, font=("Arial", 11)
-        )
+        entry1 = tk.Entry(self.params_frame, textvariable=self.savgol_window, font=("Arial", 11))
         entry1.pack(fill="x", padx=5, pady=2)
 
         # Tooltip for window length
@@ -641,13 +664,9 @@ class InterpolationConfigDialog:
         tooltip1.pack(anchor="w", padx=5, pady=(0, 5))
 
         # Polynomial order
-        label2 = tk.Label(
-            self.params_frame, text="Polynomial order:", font=("Arial", 11)
-        )
+        label2 = tk.Label(self.params_frame, text="Polynomial order:", font=("Arial", 11))
         label2.pack(anchor="w", padx=5, pady=2)
-        entry2 = tk.Entry(
-            self.params_frame, textvariable=self.savgol_poly, font=("Arial", 11)
-        )
+        entry2 = tk.Entry(self.params_frame, textvariable=self.savgol_poly, font=("Arial", 11))
         entry2.pack(fill="x", padx=5, pady=2)
 
         # Tooltip for polynomial order
@@ -669,9 +688,7 @@ class InterpolationConfigDialog:
         # Fraction
         label1 = tk.Label(self.params_frame, text="Fraction (0-1):", font=("Arial", 11))
         label1.pack(anchor="w", padx=5, pady=2)
-        entry1 = tk.Entry(
-            self.params_frame, textvariable=self.lowess_frac, font=("Arial", 11)
-        )
+        entry1 = tk.Entry(self.params_frame, textvariable=self.lowess_frac, font=("Arial", 11))
         entry1.pack(fill="x", padx=5, pady=2)
 
         # Tooltip for fraction
@@ -685,13 +702,9 @@ class InterpolationConfigDialog:
         tooltip1.pack(anchor="w", padx=5, pady=(0, 5))
 
         # Iterations
-        label2 = tk.Label(
-            self.params_frame, text="Number of iterations:", font=("Arial", 11)
-        )
+        label2 = tk.Label(self.params_frame, text="Number of iterations:", font=("Arial", 11))
         label2.pack(anchor="w", padx=5, pady=2)
-        entry2 = tk.Entry(
-            self.params_frame, textvariable=self.lowess_it, font=("Arial", 11)
-        )
+        entry2 = tk.Entry(self.params_frame, textvariable=self.lowess_it, font=("Arial", 11))
         entry2.pack(fill="x", padx=5, pady=2)
 
         # Tooltip for iterations
@@ -711,13 +724,9 @@ class InterpolationConfigDialog:
     def create_butterworth_params(self):
         """Create Butterworth parameters"""
         # Cutoff frequency
-        label1 = tk.Label(
-            self.params_frame, text="Cutoff frequency (Hz):", font=("Arial", 11)
-        )
+        label1 = tk.Label(self.params_frame, text="Cutoff frequency (Hz):", font=("Arial", 11))
         label1.pack(anchor="w", padx=5, pady=2)
-        entry1 = tk.Entry(
-            self.params_frame, textvariable=self.butter_cutoff, font=("Arial", 11)
-        )
+        entry1 = tk.Entry(self.params_frame, textvariable=self.butter_cutoff, font=("Arial", 11))
         entry1.pack(fill="x", padx=5, pady=2)
 
         # Tooltip for cutoff frequency
@@ -731,13 +740,9 @@ class InterpolationConfigDialog:
         tooltip1.pack(anchor="w", padx=5, pady=(0, 5))
 
         # Sampling frequency
-        label2 = tk.Label(
-            self.params_frame, text="Sampling frequency (Hz):", font=("Arial", 11)
-        )
+        label2 = tk.Label(self.params_frame, text="Sampling frequency (Hz):", font=("Arial", 11))
         label2.pack(anchor="w", padx=5, pady=2)
-        entry2 = tk.Entry(
-            self.params_frame, textvariable=self.butter_fs, font=("Arial", 11)
-        )
+        entry2 = tk.Entry(self.params_frame, textvariable=self.butter_fs, font=("Arial", 11))
         entry2.pack(fill="x", padx=5, pady=2)
 
         # Tooltip for sampling frequency
@@ -757,9 +762,7 @@ class InterpolationConfigDialog:
     def create_kalman_params(self):
         """Create Kalman parameters"""
         # EM iterations
-        label1 = tk.Label(
-            self.params_frame, text="Number of EM iterations:", font=("Arial", 11)
-        )
+        label1 = tk.Label(self.params_frame, text="Number of EM iterations:", font=("Arial", 11))
         label1.pack(anchor="w", padx=5, pady=2)
         entry1 = tk.Entry(
             self.params_frame, textvariable=self.kalman_iterations, font=("Arial", 11)
@@ -781,9 +784,7 @@ class InterpolationConfigDialog:
             self.params_frame, text="Processing Mode (1=1D, 2=2D):", font=("Arial", 11)
         )
         label2.pack(anchor="w", padx=5, pady=2)
-        entry2 = tk.Entry(
-            self.params_frame, textvariable=self.kalman_mode, font=("Arial", 11)
-        )
+        entry2 = tk.Entry(self.params_frame, textvariable=self.kalman_mode, font=("Arial", 11))
         entry2.pack(fill="x", padx=5, pady=2)
 
         # Tooltip for processing mode
@@ -803,13 +804,9 @@ class InterpolationConfigDialog:
     def create_splines_params(self):
         """Create Splines parameters"""
         # Smoothing factor
-        label = tk.Label(
-            self.params_frame, text="Smoothing factor (s):", font=("Arial", 11)
-        )
+        label = tk.Label(self.params_frame, text="Smoothing factor (s):", font=("Arial", 11))
         label.pack(anchor="w", padx=5, pady=2)
-        entry = tk.Entry(
-            self.params_frame, textvariable=self.spline_smoothing, font=("Arial", 11)
-        )
+        entry = tk.Entry(self.params_frame, textvariable=self.spline_smoothing, font=("Arial", 11))
         entry.pack(fill="x", padx=5, pady=2)
 
         # Tooltip for smoothing factor
@@ -830,9 +827,7 @@ class InterpolationConfigDialog:
         # AR order (p)
         label1 = tk.Label(self.params_frame, text="AR order (p):", font=("Arial", 11))
         label1.pack(anchor="w", padx=5, pady=2)
-        entry1 = tk.Entry(
-            self.params_frame, textvariable=self.arima_p, font=("Arial", 11)
-        )
+        entry1 = tk.Entry(self.params_frame, textvariable=self.arima_p, font=("Arial", 11))
         entry1.pack(fill="x", padx=5, pady=2)
 
         # Tooltip for AR order
@@ -846,13 +841,9 @@ class InterpolationConfigDialog:
         tooltip1.pack(anchor="w", padx=5, pady=(0, 5))
 
         # Difference order (d)
-        label2 = tk.Label(
-            self.params_frame, text="Difference order (d):", font=("Arial", 11)
-        )
+        label2 = tk.Label(self.params_frame, text="Difference order (d):", font=("Arial", 11))
         label2.pack(anchor="w", padx=5, pady=2)
-        entry2 = tk.Entry(
-            self.params_frame, textvariable=self.arima_d, font=("Arial", 11)
-        )
+        entry2 = tk.Entry(self.params_frame, textvariable=self.arima_d, font=("Arial", 11))
         entry2.pack(fill="x", padx=5, pady=2)
 
         # Tooltip for difference order
@@ -868,9 +859,7 @@ class InterpolationConfigDialog:
         # MA order (q)
         label3 = tk.Label(self.params_frame, text="MA order (q):", font=("Arial", 11))
         label3.pack(anchor="w", padx=5, pady=2)
-        entry3 = tk.Entry(
-            self.params_frame, textvariable=self.arima_q, font=("Arial", 11)
-        )
+        entry3 = tk.Entry(self.params_frame, textvariable=self.arima_q, font=("Arial", 11))
         entry3.pack(fill="x", padx=5, pady=2)
 
         # Tooltip for MA order
@@ -912,23 +901,17 @@ class InterpolationConfigDialog:
             smooth_num = int(self.smooth_entry.get())
 
             if not (1 <= interp_num <= 7):
-                messagebox.showerror(
-                    "Error", "Gap filling method must be between 1 and 7"
-                )
+                messagebox.showerror("Error", "Gap filling method must be between 1 and 7")
                 return False
 
             if not (1 <= smooth_num <= 7):
-                messagebox.showerror(
-                    "Error", "Smoothing method must be between 1 and 7"
-                )
+                messagebox.showerror("Error", "Smoothing method must be between 1 and 7")
                 return False
 
             # Validate parameters specifically
             if smooth_num == 2:  # Savitzky-Golay
                 if not self.savgol_window.get() or not self.savgol_poly.get():
-                    messagebox.showerror(
-                        "Error", "Savitzky-Golay parameters are required"
-                    )
+                    messagebox.showerror("Error", "Savitzky-Golay parameters are required")
                     return False
 
                 window = int(self.savgol_window.get())
@@ -954,16 +937,12 @@ class InterpolationConfigDialog:
 
             elif smooth_num == 4:  # Kalman
                 if not self.kalman_iterations.get():
-                    messagebox.showerror(
-                        "Error", "Kalman filter iterations are required"
-                    )
+                    messagebox.showerror("Error", "Kalman filter iterations are required")
                     return False
 
                 n_iter = int(self.kalman_iterations.get())
                 if n_iter <= 0:
-                    messagebox.showerror(
-                        "Error", "Number of iterations must be positive"
-                    )
+                    messagebox.showerror("Error", "Number of iterations must be positive")
                     return False
 
             elif smooth_num == 5:  # Butterworth
@@ -1014,9 +993,7 @@ class InterpolationConfigDialog:
 
                 s = float(self.spline_smoothing.get())
                 if s < 0:
-                    messagebox.showerror(
-                        "Error", "Smoothing factor must be non-negative"
-                    )
+                    messagebox.showerror("Error", "Smoothing factor must be non-negative")
                 return False
 
             return True
@@ -1089,9 +1066,7 @@ class InterpolationConfigDialog:
                 n_iter = int(self.kalman_iterations.get())
                 mode = int(self.kalman_mode.get())
                 if mode not in [1, 2]:
-                    messagebox.showerror(
-                        "Error", "Kalman mode must be 1 (1D) or 2 (2D)"
-                    )
+                    messagebox.showerror("Error", "Kalman mode must be 1 (1D) or 2 (2D)")
                     return False
                 params_text = f"EM Iterations: {n_iter}, Processing Mode: {mode}"
                 print(f"APPLY: Kalman settings - n_iter={n_iter}, mode={mode}")
@@ -1136,16 +1111,14 @@ Padding: {self.padding_entry.get()}%
 Method Specific Parameters:
 {params_text}
 
-Split Data: {'Yes' if self.split_var.get() else 'No'}
+Split Data: {"Yes" if self.split_var.get() else "No"}
 
 Parameters have been confirmed and will be used for processing.
 """
             messagebox.showinfo("Parameters Confirmed", confirmation)
 
             # Change the color of the button to indicate that the parameters have been confirmed
-            self.confirm_button.configure(
-                bg="pale green", text="Parameters Confirmed ✓"
-            )
+            self.confirm_button.configure(bg="pale green", text="Parameters Confirmed ✓")
 
         except ValueError as e:
             messagebox.showerror("Error", f"Invalid parameter value: {str(e)}")
@@ -1158,6 +1131,24 @@ Parameters have been confirmed and will be used for processing.
             padding = self.loaded_toml.get("padding", {})
             split = self.loaded_toml.get("split", {})
             smooth_params = {k: v for k, v in smoothing.items() if k != "method"}
+            sample_rate = None
+            time_config = self.loaded_toml.get("time_column", {})
+            if "sample_rate" in time_config:
+                try:
+                    sample_rate_val = float(time_config["sample_rate"])
+                    if sample_rate_val > 0:
+                        sample_rate = sample_rate_val
+                except (ValueError, TypeError):
+                    sample_rate = None
+            # Also check old format for backward compatibility
+            elif "sample_rate" in self.loaded_toml:
+                try:
+                    sample_rate_val = float(self.loaded_toml["sample_rate"])
+                    if sample_rate_val > 0:
+                        sample_rate = sample_rate_val
+                except (ValueError, TypeError):
+                    sample_rate = None
+
             self.result = {
                 "padding": float(padding.get("percent", 10)),
                 "interp_method": interp.get("method", "linear"),
@@ -1165,6 +1156,7 @@ Parameters have been confirmed and will be used for processing.
                 "smooth_params": smooth_params,
                 "max_gap": int(interp.get("max_gap", 60)),
                 "do_split": bool(split.get("enabled", False)),
+                "sample_rate": sample_rate,
             }
         else:
             try:
@@ -1244,9 +1236,7 @@ Parameters have been confirmed and will be used for processing.
                     n_iter = int(self.kalman_iterations.get())
                     mode = int(self.kalman_mode.get())
                     if mode not in [1, 2]:
-                        messagebox.showerror(
-                            "Error", "Kalman mode must be 1 (1D) or 2 (2D)"
-                        )
+                        messagebox.showerror("Error", "Kalman mode must be 1 (1D) or 2 (2D)")
                         return False
                     smooth_params = {"n_iter": n_iter, "mode": mode}
                     print(f"APPLY: Kalman settings - n_iter={n_iter}, mode={mode}")
@@ -1255,16 +1245,12 @@ Parameters have been confirmed and will be used for processing.
                     cutoff = float(self.butter_cutoff.get())
                     fs = float(self.butter_fs.get())
                     smooth_params = {"cutoff": cutoff, "fs": fs}
-                    print(
-                        f"APPLY: Butterworth settings - cutoff={cutoff} Hz, fs={fs} Hz"
-                    )
+                    print(f"APPLY: Butterworth settings - cutoff={cutoff} Hz, fs={fs} Hz")
 
                 elif smooth_method == 6:  # Splines
                     smoothing_factor = float(self.spline_smoothing.get())
                     smooth_params = {"smoothing_factor": smoothing_factor}
-                    print(
-                        f"APPLY: Spline Smoothing settings - smoothing_factor={smoothing_factor}"
-                    )
+                    print(f"APPLY: Spline Smoothing settings - smoothing_factor={smoothing_factor}")
 
                 elif smooth_method == 7:  # ARIMA
                     p = int(self.arima_p.get())
@@ -1280,7 +1266,7 @@ Parameters have been confirmed and will be used for processing.
 - Max Gap Size: {max_gap} frames
 - Smoothing Method: {smooth_map[smooth_method]}
 - Padding: {padding}%
-- Split Data: {'Yes' if do_split else 'No'}
+- Split Data: {"Yes" if do_split else "No"}
 """
 
                 if smooth_method == 2:  # Savitzky-Golay
@@ -1290,9 +1276,7 @@ Parameters have been confirmed and will be used for processing.
                 elif smooth_method == 3:  # LOWESS
                     frac = float(self.lowess_frac.get())
                     it = int(self.lowess_it.get())
-                    summary += (
-                        f"\nLOWESS Parameters:\n- Fraction: {frac}\n- Iterations: {it}"
-                    )
+                    summary += f"\nLOWESS Parameters:\n- Fraction: {frac}\n- Iterations: {it}"
                 elif smooth_method == 4:  # Kalman
                     n_iter = int(self.kalman_iterations.get())
                     mode = int(self.kalman_mode.get())
@@ -1303,9 +1287,7 @@ Parameters have been confirmed and will be used for processing.
                     summary += f"\nButterworth Parameters:\n- Cutoff Frequency: {cutoff} Hz\n- Sampling Frequency: {fs} Hz"
                 elif smooth_method == 6:  # Splines
                     s = float(self.spline_smoothing.get())
-                    summary += (
-                        f"\nSpline Smoothing Parameters:\n- Smoothing Factor: {s}"
-                    )
+                    summary += f"\nSpline Smoothing Parameters:\n- Smoothing Factor: {s}"
                 elif smooth_method == 7:  # ARIMA
                     order = (
                         int(smooth_params["p"]),
@@ -1313,6 +1295,21 @@ Parameters have been confirmed and will be used for processing.
                         int(smooth_params["q"]),
                     )
                     summary += f"\nARIMA Parameters:\n- Order: {order}"
+
+                # Get sample rate if provided
+                sample_rate_str = self.sample_rate.get().strip()
+                sample_rate = None
+                if sample_rate_str:
+                    try:
+                        sample_rate = float(sample_rate_str)
+                        if sample_rate <= 0:
+                            messagebox.showerror("Error", "Sample rate must be positive")
+                            self.result = None
+                            return
+                    except ValueError:
+                        messagebox.showerror("Error", "Invalid sample rate value")
+                        self.result = None
+                        return
 
                 if messagebox.askokcancel("Confirm Parameters", summary):
                     config_result = {
@@ -1322,6 +1319,7 @@ Parameters have been confirmed and will be used for processing.
                         "smooth_params": smooth_params,
                         "max_gap": max_gap,
                         "do_split": do_split,
+                        "sample_rate": sample_rate,
                     }
 
                     print("\nDEBUG - Final Configuration:")
@@ -1355,9 +1353,7 @@ Parameters have been confirmed and will be used for processing.
         if file_path:
             config = self.get_current_config()
             save_config_to_toml(config, file_path)
-            messagebox.showinfo(
-                "Template created", f"Template TOML created in:\n{file_path}"
-            )
+            messagebox.showinfo("Template created", f"Template TOML created in:\n{file_path}")
 
     def load_toml_config(self):
         from tkinter import filedialog, messagebox
@@ -1370,19 +1366,13 @@ Parameters have been confirmed and will be used for processing.
             config = load_config_from_toml(file_path)
             self.loaded_toml = config
             self.use_toml = True
-            self.toml_label.config(
-                text=f"TOML loaded: {os.path.basename(file_path)}", fg="green"
-            )
+            self.toml_label.config(text=f"TOML loaded: {os.path.basename(file_path)}", fg="green")
             self.apply_toml_to_gui(config)
             summary = f"TOML loaded: {os.path.basename(file_path)}\n"
             summary += f"[interpolation] method: {config.get('interpolation', {}).get('method')}\n"
             summary += f"max_gap: {config.get('interpolation', {}).get('max_gap')}\n"
-            summary += (
-                f"[smoothing] method: {config.get('smoothing', {}).get('method')}\n"
-            )
-            summary += (
-                f"[padding] percent: {config.get('padding', {}).get('percent')}\n"
-            )
+            summary += f"[smoothing] method: {config.get('smoothing', {}).get('method')}\n"
+            summary += f"[padding] percent: {config.get('padding', {}).get('percent')}\n"
             summary += f"[split] enabled: {config.get('split', {}).get('enabled')}\n"
             print("\n=== TOML configuration loaded and will be used ===\n" + summary)
             messagebox.showinfo("TOML Parameters Loaded", summary)
@@ -1441,11 +1431,23 @@ Parameters have been confirmed and will be used for processing.
                 "d": int(self.arima_d.get()),
                 "q": int(self.arima_q.get()),
             }
+        # Get sample rate if provided
+        sample_rate_str = self.sample_rate.get().strip()
+        sample_rate = None
+        if sample_rate_str:
+            try:
+                sample_rate = float(sample_rate_str)
+                if sample_rate <= 0:
+                    sample_rate = None
+            except ValueError:
+                sample_rate = None
+
         config = {
             "interpolation": {"method": interp_method, "max_gap": max_gap},
             "smoothing": {"method": smooth_method, **smoothing_params},
             "padding": {"percent": padding},
             "split": {"enabled": do_split},
+            "time_column": {"sample_rate": sample_rate if sample_rate else 0.0},
         }
         return config
 
@@ -1473,18 +1475,21 @@ Parameters have been confirmed and will be used for processing.
         padding = config.get("padding", {})
         split = config.get("split", {})
         self.interp_entry.delete(0, tk.END)
-        self.interp_entry.insert(
-            0, str(interp_map_rev.get(interp.get("method", "linear"), 1))
-        )
+        self.interp_entry.insert(0, str(interp_map_rev.get(interp.get("method", "linear"), 1)))
         self.smooth_entry.delete(0, tk.END)
-        self.smooth_entry.insert(
-            0, str(smooth_map_rev.get(smoothing.get("method", "none"), 1))
-        )
+        self.smooth_entry.insert(0, str(smooth_map_rev.get(smoothing.get("method", "none"), 1)))
         self.max_gap_entry.delete(0, tk.END)
         self.max_gap_entry.insert(0, str(interp.get("max_gap", 60)))
         self.padding_entry.delete(0, tk.END)
         self.padding_entry.insert(0, str(padding.get("percent", 10)))
         self.split_var.set(bool(split.get("enabled", False)))
+        # Sample rate
+        time_config = config.get("time_column", {})
+        sample_rate_value = time_config.get("sample_rate", 0.0)
+        if sample_rate_value and sample_rate_value > 0:
+            self.sample_rate.set(str(sample_rate_value))
+        else:
+            self.sample_rate.set("")
         # Specific smoothing parameters
         if smoothing.get("method") == "savgol":
             self.savgol_window.set(str(smoothing.get("window_length", 7)))
@@ -1517,15 +1522,11 @@ Parameters have been confirmed and will be used for processing.
             smooth_num = int(self.smooth_entry.get())
 
             if not (1 <= interp_num <= 6):
-                messagebox.showerror(
-                    "Error", "Gap filling method must be between 1 and 6"
-                )
+                messagebox.showerror("Error", "Gap filling method must be between 1 and 6")
                 return False
 
             if not (1 <= smooth_num <= 7):
-                messagebox.showerror(
-                    "Error", "Smoothing method must be between 1 and 7"
-                )
+                messagebox.showerror("Error", "Smoothing method must be between 1 and 7")
                 return False
 
             # Validate specific method parameters
@@ -1575,9 +1576,7 @@ Parameters have been confirmed and will be used for processing.
             return True
 
         except ValueError as e:
-            messagebox.showerror(
-                "Error", f"Please enter valid numeric values: {str(e)}"
-            )
+            messagebox.showerror("Error", f"Please enter valid numeric values: {str(e)}")
             return False
 
     def get_config(self):
@@ -1634,6 +1633,17 @@ Parameters have been confirmed and will be used for processing.
                 "q": int(self.arima_q.get()),
             }
 
+        # Get sample rate if provided
+        sample_rate_str = self.sample_rate.get().strip()
+        sample_rate = None
+        if sample_rate_str:
+            try:
+                sample_rate = float(sample_rate_str)
+                if sample_rate <= 0:
+                    sample_rate = None
+            except ValueError:
+                sample_rate = None
+
         return {
             "padding": float(self.padding_entry.get()),
             "interp_method": interp_map[interp_method],
@@ -1641,6 +1651,7 @@ Parameters have been confirmed and will be used for processing.
             "smooth_params": smooth_params,
             "max_gap": int(self.max_gap_entry.get()),
             "do_split": self.split_var.get(),
+            "sample_rate": sample_rate,
         }
 
     def ok(self):
@@ -1669,9 +1680,7 @@ Parameters have been confirmed and will be used for processing.
                     text=f"Test data: {os.path.basename(file_path)} ({len(self.test_data)} rows, {len(self.test_data.columns)} columns)",
                     fg="green",
                 )
-                messagebox.showinfo(
-                    "Success", f"Loaded test data: {os.path.basename(file_path)}"
-                )
+                messagebox.showinfo("Success", f"Loaded test data: {os.path.basename(file_path)}")
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to load test data: {str(e)}")
                 self.test_data = None
@@ -1690,9 +1699,7 @@ Parameters have been confirmed and will be used for processing.
         analysis_window.geometry("1200x800")
 
         # Get all numeric columns for analysis
-        numeric_cols = self.test_data.select_dtypes(
-            include=[np.number]
-        ).columns.tolist()
+        numeric_cols = self.test_data.select_dtypes(include=[np.number]).columns.tolist()
 
         if len(numeric_cols) == 0:
             messagebox.showerror("Error", "No numeric columns found in test data!")
@@ -1703,9 +1710,7 @@ Parameters have been confirmed and will be used for processing.
         selection_frame = tk.Frame(analysis_window, padx=10, pady=10)
         selection_frame.pack(side=tk.TOP, fill=tk.X)
 
-        tk.Label(selection_frame, text="Select column to analyze:").pack(
-            side=tk.LEFT, padx=5
-        )
+        tk.Label(selection_frame, text="Select column to analyze:").pack(side=tk.LEFT, padx=5)
 
         # Column selection dropdown
         selected_column = tk.StringVar(value=numeric_cols[0])
@@ -1716,9 +1721,7 @@ Parameters have been confirmed and will be used for processing.
         tk.Button(
             selection_frame,
             text="Analyze Column",
-            command=lambda: self.perform_analysis(
-                analysis_window, selected_column.get()
-            ),
+            command=lambda: self.perform_analysis(analysis_window, selected_column.get()),
             bg="#4CAF50",
             fg="white",
         ).pack(side=tk.LEFT, padx=5)
@@ -1747,11 +1750,7 @@ Parameters have been confirmed and will be used for processing.
 
             # Apply padding if necessary
             padding_percent = config["padding"]
-            pad_len = (
-                int(len(residuals) * padding_percent / 100)
-                if padding_percent > 0
-                else 0
-            )
+            pad_len = int(len(residuals) * padding_percent / 100) if padding_percent > 0 else 0
 
             if pad_len > 0:
                 # Pad with edge values
@@ -1767,9 +1766,7 @@ Parameters have been confirmed and will be used for processing.
                 )
             elif config["smooth_method"] == "lowess":
                 params = config["smooth_params"]
-                filtered_residuals = lowess_smooth(
-                    padded_residuals, params["frac"], params["it"]
-                )
+                filtered_residuals = lowess_smooth(padded_residuals, params["frac"], params["it"])
             elif config["smooth_method"] == "kalman":
                 params = config["smooth_params"]
                 filtered_residuals = kalman_smooth(
@@ -1789,9 +1786,7 @@ Parameters have been confirmed and will be used for processing.
                     filtered_residuals = padded_residuals
             elif config["smooth_method"] == "splines":
                 params = config["smooth_params"]
-                filtered_residuals = spline_smooth(
-                    padded_residuals, s=params["smoothing_factor"]
-                )
+                filtered_residuals = spline_smooth(padded_residuals, s=params["smoothing_factor"])
             elif config["smooth_method"] == "arima":
                 params = config["smooth_params"]
                 order = (params["p"], params["d"], params["q"])
@@ -1814,20 +1809,20 @@ Parameters have been confirmed and will be used for processing.
         # Force update of all widgets before analysis
         print("\n[DEBUG] Performing analysis...")
         print(f"[DEBUG] Column: {column_name}")
-        
+
         # Force focus to trigger any pending updates
         self.window.focus_force()
         self.window.update()
         self.window.update_idletasks()
-        
+
         # Clear previous plots
         for widget in self.plot_frame.winfo_children():
             widget.destroy()
 
         # Get current configuration with forced parameter update
         config = self.get_current_analysis_config()
-        
-        print(f"[DEBUG] Using config for analysis:")
+
+        print("[DEBUG] Using config for analysis:")
         print(f"  Interp method: {config['interp_method']}")
         print(f"  Smooth method: {config['smooth_method']}")
         print(f"  Smooth params: {config['smooth_params']}")
@@ -1847,9 +1842,7 @@ Parameters have been confirmed and will be used for processing.
             frame_numbers = np.arange(len(original_data))
 
         # Apply current configuration to process data
-        processed_data, padded_data = self.process_column_for_analysis(
-            original_data, config
-        )
+        processed_data, padded_data = self.process_column_for_analysis(original_data, config)
 
         # Calculate derivatives
         first_derivative = np.gradient(processed_data)
@@ -1878,19 +1871,19 @@ Parameters have been confirmed and will be used for processing.
             color="blue",
         )
         ax1.plot(
-            frame_numbers, 
-            processed_data, 
-            ".", 
-            label="Processed", 
+            frame_numbers,
+            processed_data,
+            ".",
+            label="Processed",
             markersize=4,
             color="red",
-            alpha=0.7
+            alpha=0.7,
         )
-        ax1.set_title(f"Original vs Processed - {column_name}", fontweight='bold')
-        ax1.set_xlabel("Frame", fontweight='bold')
-        ax1.set_ylabel("Value", fontweight='bold')
-        ax1.legend(loc='best')
-        ax1.grid(True, alpha=0.3, linestyle='--')
+        ax1.set_title(f"Original vs Processed - {column_name}", fontweight="bold")
+        ax1.set_xlabel("Frame", fontweight="bold")
+        ax1.set_ylabel("Value", fontweight="bold")
+        ax1.legend(loc="best")
+        ax1.grid(True, alpha=0.3, linestyle="--")
 
         # Plot 2: Residuals (Original and Filtered) - usando pontos
         ax2 = fig.add_subplot(3, 2, 2)
@@ -1913,11 +1906,11 @@ Parameters have been confirmed and will be used for processing.
             color="red",
         )
         ax2.axhline(y=0, color="k", linestyle="--", alpha=0.5, linewidth=1.5)
-        ax2.set_title("Residuals (Original - Processed)", fontweight='bold')
-        ax2.set_xlabel("Frame", fontweight='bold')
-        ax2.set_ylabel("Residual", fontweight='bold')
-        ax2.legend(loc='best')
-        ax2.grid(True, alpha=0.3, linestyle='--')
+        ax2.set_title("Residuals (Original - Processed)", fontweight="bold")
+        ax2.set_xlabel("Frame", fontweight="bold")
+        ax2.set_ylabel("Residual", fontweight="bold")
+        ax2.legend(loc="best")
+        ax2.grid(True, alpha=0.3, linestyle="--")
 
         # Calculate and display RMS error
         rms_error = np.sqrt(np.nanmean(residuals**2))
@@ -1932,30 +1925,50 @@ Parameters have been confirmed and will be used for processing.
 
         # Plot 3: First Derivative (Velocity) - mantém linha
         ax3 = fig.add_subplot(3, 2, 3)
-        ax3.plot(frame_numbers, first_derivative, "-", linewidth=1.5, color="magenta", alpha=0.7)
+        ax3.plot(
+            frame_numbers,
+            first_derivative,
+            "-",
+            linewidth=1.5,
+            color="magenta",
+            alpha=0.7,
+        )
         ax3.axhline(y=0, color="k", linestyle="-", alpha=0.3, linewidth=0.5)
-        ax3.set_title("First Derivative (Velocity)", fontweight='bold')
-        ax3.set_xlabel("Frame", fontweight='bold')
-        ax3.set_ylabel("dY/dX", fontweight='bold')
-        ax3.grid(True, alpha=0.3, linestyle='--')
+        ax3.set_title("First Derivative (Velocity)", fontweight="bold")
+        ax3.set_xlabel("Frame", fontweight="bold")
+        ax3.set_ylabel("dY/dX", fontweight="bold")
+        ax3.grid(True, alpha=0.3, linestyle="--")
 
         # Plot 4: Second Derivative (Acceleration) - mantém linha
         ax4 = fig.add_subplot(3, 2, 4)
-        ax4.plot(frame_numbers, second_derivative, "-", linewidth=1.5, color="cyan", alpha=0.7)
+        ax4.plot(
+            frame_numbers,
+            second_derivative,
+            "-",
+            linewidth=1.5,
+            color="cyan",
+            alpha=0.7,
+        )
         ax4.axhline(y=0, color="k", linestyle="-", alpha=0.3, linewidth=0.5)
-        ax4.set_title("Second Derivative (Acceleration)", fontweight='bold')
-        ax4.set_xlabel("Frame", fontweight='bold')
-        ax4.set_ylabel("d²Y/dX²", fontweight='bold')
-        ax4.grid(True, alpha=0.3, linestyle='--')
+        ax4.set_title("Second Derivative (Acceleration)", fontweight="bold")
+        ax4.set_xlabel("Frame", fontweight="bold")
+        ax4.set_ylabel("d²Y/dX²", fontweight="bold")
+        ax4.grid(True, alpha=0.3, linestyle="--")
 
         # Plot 5: Histogram of Residuals (melhorado)
         ax5 = fig.add_subplot(3, 2, 5)
         if np.any(valid_mask):
-            ax5.hist(residuals[valid_mask], bins=30, edgecolor="black", alpha=0.7, color='steelblue')
-            ax5.set_title("Distribution of Residuals", fontweight='bold')
-            ax5.set_xlabel("Residual Value", fontweight='bold')
-            ax5.set_ylabel("Frequency", fontweight='bold')
-            ax5.grid(True, alpha=0.3, linestyle='--', axis="y")
+            ax5.hist(
+                residuals[valid_mask],
+                bins=30,
+                edgecolor="black",
+                alpha=0.7,
+                color="steelblue",
+            )
+            ax5.set_title("Distribution of Residuals", fontweight="bold")
+            ax5.set_xlabel("Residual Value", fontweight="bold")
+            ax5.set_ylabel("Frequency", fontweight="bold")
+            ax5.grid(True, alpha=0.3, linestyle="--", axis="y")
 
             # Add normal distribution overlay
             from scipy import stats
@@ -1965,10 +1978,7 @@ Parameters have been confirmed and will be used for processing.
             x = np.linspace(np.nanmin(residuals), np.nanmax(residuals), 100)
             ax5.plot(
                 x,
-                stats.norm.pdf(x, mu, sigma)
-                * len(residuals[valid_mask])
-                * (x[1] - x[0])
-                * 30,
+                stats.norm.pdf(x, mu, sigma) * len(residuals[valid_mask]) * (x[1] - x[0]) * 30,
                 "r-",
                 linewidth=2,
                 label=f"Normal(μ={mu:.3f}, σ={sigma:.3f})",
@@ -1987,18 +1997,23 @@ Parameters have been confirmed and will be used for processing.
             fft = np.fft.rfft(signal_windowed)
             freq = np.fft.rfftfreq(len(signal), 1.0)  # Assuming 1 frame = 1 time unit
 
-            ax6.semilogy(freq[1:], np.abs(fft[1:]), "-", linewidth=1.5, color='darkblue', alpha=0.7)
-            ax6.set_title("Frequency Spectrum (FFT)", fontweight='bold')
-            ax6.set_xlabel("Frequency (cycles/frame)", fontweight='bold')
-            ax6.set_ylabel("Magnitude (log scale)", fontweight='bold')
-            ax6.grid(True, alpha=0.3, linestyle='--', which='both')
+            ax6.semilogy(
+                freq[1:],
+                np.abs(fft[1:]),
+                "-",
+                linewidth=1.5,
+                color="darkblue",
+                alpha=0.7,
+            )
+            ax6.set_title("Frequency Spectrum (FFT)", fontweight="bold")
+            ax6.set_xlabel("Frequency (cycles/frame)", fontweight="bold")
+            ax6.set_ylabel("Magnitude (log scale)", fontweight="bold")
+            ax6.grid(True, alpha=0.3, linestyle="--", which="both")
 
         # Add configuration info as title
         config_text = f"Config: {config['interp_method']} interp, {config['smooth_method']} smooth"
         if config["smooth_method"] != "none":
-            params_str = ", ".join(
-                [f"{k}={v}" for k, v in config["smooth_params"].items()]
-            )
+            params_str = ", ".join([f"{k}={v}" for k, v in config["smooth_params"].items()])
             config_text += f" ({params_str})"
         config_text += " | Residuals filtered with same method"
         fig.suptitle(config_text, y=0.98, fontsize=12)
@@ -2023,9 +2038,9 @@ Parameters have been confirmed and will be used for processing.
         try:
             # Force update of all parameter values from Entry widgets
             self.window.update_idletasks()
-            
+
             # Force explicit update from param_entries if they exist
-            if hasattr(self, 'param_entries'):
+            if hasattr(self, "param_entries"):
                 if "cutoff" in self.param_entries:
                     try:
                         cutoff_value = self.param_entries["cutoff"].get()
@@ -2033,7 +2048,7 @@ Parameters have been confirmed and will be used for processing.
                         print(f"[DEBUG] Updated cutoff to: {cutoff_value}")
                     except Exception as e:
                         print(f"[DEBUG] Error updating cutoff: {e}")
-                
+
                 if "fs" in self.param_entries:
                     try:
                         fs_value = self.param_entries["fs"].get()
@@ -2041,7 +2056,7 @@ Parameters have been confirmed and will be used for processing.
                         print(f"[DEBUG] Updated fs to: {fs_value}")
                     except Exception as e:
                         print(f"[DEBUG] Error updating fs: {e}")
-            
+
             interp_map = {
                 1: "linear",
                 2: "cubic",
@@ -2068,25 +2083,33 @@ Parameters have been confirmed and will be used for processing.
                     "window_length": int(self.savgol_window.get()),
                     "polyorder": int(self.savgol_poly.get()),
                 }
-                print(f"[DEBUG] Savgol params: window={smooth_params['window_length']}, poly={smooth_params['polyorder']}")
+                print(
+                    f"[DEBUG] Savgol params: window={smooth_params['window_length']}, poly={smooth_params['polyorder']}"
+                )
             elif smooth_method == 3:  # LOWESS
                 smooth_params = {
                     "frac": float(self.lowess_frac.get()),
                     "it": int(self.lowess_it.get()),
                 }
-                print(f"[DEBUG] LOWESS params: frac={smooth_params['frac']}, it={smooth_params['it']}")
+                print(
+                    f"[DEBUG] LOWESS params: frac={smooth_params['frac']}, it={smooth_params['it']}"
+                )
             elif smooth_method == 4:  # Kalman
                 smooth_params = {
                     "n_iter": int(self.kalman_iterations.get()),
                     "mode": int(self.kalman_mode.get()),
                 }
-                print(f"[DEBUG] Kalman params: n_iter={smooth_params['n_iter']}, mode={smooth_params['mode']}")
+                print(
+                    f"[DEBUG] Kalman params: n_iter={smooth_params['n_iter']}, mode={smooth_params['mode']}"
+                )
             elif smooth_method == 5:  # Butterworth
                 smooth_params = {
                     "cutoff": float(self.butter_cutoff.get()),
                     "fs": float(self.butter_fs.get()),
                 }
-                print(f"[DEBUG] Butterworth params: cutoff={smooth_params['cutoff']}, fs={smooth_params['fs']}")
+                print(
+                    f"[DEBUG] Butterworth params: cutoff={smooth_params['cutoff']}, fs={smooth_params['fs']}"
+                )
             elif smooth_method == 6:  # Splines
                 smooth_params = {"smoothing_factor": float(self.spline_smoothing.get())}
                 print(f"[DEBUG] Splines params: smoothing={smooth_params['smoothing_factor']}")
@@ -2096,7 +2119,9 @@ Parameters have been confirmed and will be used for processing.
                     "d": int(self.arima_d.get()),
                     "q": int(self.arima_q.get()),
                 }
-                print(f"[DEBUG] ARIMA params: p={smooth_params['p']}, d={smooth_params['d']}, q={smooth_params['q']}")
+                print(
+                    f"[DEBUG] ARIMA params: p={smooth_params['p']}, d={smooth_params['d']}, q={smooth_params['q']}"
+                )
 
             config = {
                 "interp_method": interp_map[int(self.interp_entry.get())],
@@ -2105,13 +2130,14 @@ Parameters have been confirmed and will be used for processing.
                 "padding": float(self.padding_entry.get()),
                 "max_gap": int(self.max_gap_entry.get()),
             }
-            
+
             print(f"[DEBUG] Final analysis config: {config}")
             return config
-            
+
         except Exception as e:
             print(f"[ERROR] Error getting analysis config: {e}")
             import traceback
+
             traceback.print_exc()
             # Return default config if any error
             return {
@@ -2158,9 +2184,7 @@ Parameters have been confirmed and will be used for processing.
                     )
                 elif config["smooth_method"] == "lowess":
                     params = config["smooth_params"]
-                    padded_data = lowess_smooth(
-                        padded_data, params["frac"], params["it"]
-                    )
+                    padded_data = lowess_smooth(padded_data, params["frac"], params["it"])
                 elif config["smooth_method"] == "kalman":
                     params = config["smooth_params"]
                     padded_data = kalman_smooth(
@@ -2178,9 +2202,7 @@ Parameters have been confirmed and will be used for processing.
                         )
                 elif config["smooth_method"] == "splines":
                     params = config["smooth_params"]
-                    padded_data = spline_smooth(
-                        padded_data, s=params["smoothing_factor"]
-                    )
+                    padded_data = spline_smooth(padded_data, s=params["smoothing_factor"])
                 elif config["smooth_method"] == "arima":
                     params = config["smooth_params"]
                     order = (params["p"], params["d"], params["q"])
@@ -2238,12 +2260,8 @@ def generate_report(dest_dir, config, processed_files):
             f.write("-" * 80 + "\n")
 
             if config["smooth_method"] == "savgol":
-                f.write(
-                    f"Window Length: {config['smooth_params'].get('window_length', 7)}\n"
-                )
-                f.write(
-                    f"Polynomial Order: {config['smooth_params'].get('polyorder', 2)}\n"
-                )
+                f.write(f"Window Length: {config['smooth_params'].get('window_length', 7)}\n")
+                f.write(f"Polynomial Order: {config['smooth_params'].get('polyorder', 2)}\n")
 
             elif config["smooth_method"] == "lowess":
                 f.write(f"Fraction: {config['smooth_params'].get('frac', 0.3)}\n")
@@ -2253,12 +2271,8 @@ def generate_report(dest_dir, config, processed_files):
                 f.write(f"EM Iterations: {config['smooth_params'].get('n_iter', 5)}\n")
 
             elif config["smooth_method"] == "butterworth":
-                f.write(
-                    f"Cutoff Frequency: {config['smooth_params'].get('cutoff', 10)} Hz\n"
-                )
-                f.write(
-                    f"Sampling Frequency: {config['smooth_params'].get('fs', 100)} Hz\n"
-                )
+                f.write(f"Cutoff Frequency: {config['smooth_params'].get('cutoff', 10)} Hz\n")
+                f.write(f"Sampling Frequency: {config['smooth_params'].get('fs', 100)} Hz\n")
 
             elif config["smooth_method"] == "splines":
                 f.write(
@@ -2292,9 +2306,7 @@ def generate_report(dest_dir, config, processed_files):
             # Details of columns with interpolated values
             if file_info["columns_with_missing"]:
                 f.write("  - Columns with missing values:\n")
-                for col_name, missing_count in file_info[
-                    "columns_with_missing"
-                ].items():
+                for col_name, missing_count in file_info["columns_with_missing"].items():
                     f.write(f"    - {col_name}: {missing_count} missing values\n")
 
             # Additional information if applicable
@@ -2320,9 +2332,7 @@ def generate_report(dest_dir, config, processed_files):
                     processed_df = pd.read_csv(file_info["output_path"])
 
                     # Find first numeric column (excluding the first column which is usually frame number)
-                    numeric_cols = original_df.select_dtypes(
-                        include=[np.number]
-                    ).columns
+                    numeric_cols = original_df.select_dtypes(include=[np.number]).columns
                     if len(numeric_cols) > 1:  # Skip first column if it's numeric
                         first_numeric_col = numeric_cols[1]
                     else:
@@ -2356,9 +2366,7 @@ def generate_report(dest_dir, config, processed_files):
                         + ", ".join([f"{x:.2f}%" for x in differences])
                         + "\n"
                     )
-                    f.write(
-                        f"Average Difference (first 10): {np.mean(differences):.2f}%\n"
-                    )
+                    f.write(f"Average Difference (first 10): {np.mean(differences):.2f}%\n")
                     f.write("-" * 40 + "\n")
 
                     # Complete column comparison
@@ -2383,9 +2391,7 @@ def generate_report(dest_dir, config, processed_files):
                     min_diff = np.min(all_differences)
 
                     # Write statistics
-                    f.write(
-                        f"Total number of values compared: {len(all_differences)}\n"
-                    )
+                    f.write(f"Total number of values compared: {len(all_differences)}\n")
                     f.write(f"Mean difference: {mean_diff:.2f}%\n")
                     f.write(f"Standard deviation: {std_diff:.2f}%\n")
                     f.write(f"Maximum difference: {max_diff:.2f}%\n")
@@ -2430,9 +2436,7 @@ def generate_report(dest_dir, config, processed_files):
         f.write(
             "- Processed files include the interpolation and smoothing method in their filenames.\n"
         )
-        f.write(
-            "- Files are saved with the same number of decimal places as the original files.\n"
-        )
+        f.write("- Files are saved with the same number of decimal places as the original files.\n")
         f.write(
             "- The output directory includes the processing methods in its name for easy reference.\n"
         )
@@ -2444,53 +2448,53 @@ def generate_report(dest_dir, config, processed_files):
 
 def sanitize_filename(name):
     """Sanitize filename/directory name by removing or replacing special characters.
-    
+
     Args:
         name: String to sanitize
-        
+
     Returns:
         str: Sanitized string safe for filesystem use
     """
     # Replace dots and special characters with underscores
     replacements = {
-        '.': '_',
-        '/': '_',
-        '\\': '_',
-        ':': '_',
-        '*': '_',
-        '?': '_',
-        '"': '_',
-        '<': '_',
-        '>': '_',
-        '|': '_',
-        ' ': '_',
-        '=': 'eq',
-        '+': 'plus',
-        '-': 'minus',
-        '(': '',
-        ')': '',
-        '[': '',
-        ']': '',
-        '{': '',
-        '}': '',
-        ',': '_'
+        ".": "_",
+        "/": "_",
+        "\\": "_",
+        ":": "_",
+        "*": "_",
+        "?": "_",
+        '"': "_",
+        "<": "_",
+        ">": "_",
+        "|": "_",
+        " ": "_",
+        "=": "eq",
+        "+": "plus",
+        "-": "minus",
+        "(": "",
+        ")": "",
+        "[": "",
+        "]": "",
+        "{": "",
+        "}": "",
+        ",": "_",
     }
-    
+
     sanitized = name
     for old_char, new_char in replacements.items():
         sanitized = sanitized.replace(old_char, new_char)
-    
+
     # Remove multiple consecutive underscores
-    while '__' in sanitized:
-        sanitized = sanitized.replace('__', '_')
-    
+    while "__" in sanitized:
+        sanitized = sanitized.replace("__", "_")
+
     # Remove leading/trailing underscores
-    sanitized = sanitized.strip('_')
-    
+    sanitized = sanitized.strip("_")
+
     # Ensure it's not empty
     if not sanitized:
-        sanitized = 'sanitized'
-    
+        sanitized = "sanitized"
+
     return sanitized
 
 
@@ -2694,19 +2698,15 @@ def kalman_smooth(data, n_iter=5, mode=1):
                 )
 
                 # Apply EM algorithm and smoothing
-                smoothed_state_means, _ = kf.em(
-                    data[:, j : j + 1], n_iter=n_iter
-                ).smooth(data[:, j : j + 1])
-                filtered_data[:, j] = (
-                    alpha * smoothed_state_means[:, 0] + (1 - alpha) * data[:, j]
+                smoothed_state_means, _ = kf.em(data[:, j : j + 1], n_iter=n_iter).smooth(
+                    data[:, j : j + 1]
                 )
+                filtered_data[:, j] = alpha * smoothed_state_means[:, 0] + (1 - alpha) * data[:, j]
 
         else:  # mode == 2
             # Process x,y pairs together
             if n_features % 2 != 0:
-                raise ValueError(
-                    "For 2D mode, number of features must be even (x,y pairs)"
-                )
+                raise ValueError("For 2D mode, number of features must be even (x,y pairs)")
 
             filtered_data = np.empty_like(data)
             for j in range(0, n_features, 2):
@@ -2786,14 +2786,10 @@ def kalman_smooth(data, n_iter=5, mode=1):
                 observations = np.column_stack([data[:, j], data[:, j + 1]])
 
                 # Apply EM algorithm and smoothing
-                smoothed_state_means, _ = kf.em(observations, n_iter=n_iter).smooth(
-                    observations
-                )
+                smoothed_state_means, _ = kf.em(observations, n_iter=n_iter).smooth(observations)
 
                 # Extract x,y positions from smoothed state means
-                filtered_data[:, j] = (
-                    alpha * smoothed_state_means[:, 0] + (1 - alpha) * data[:, j]
-                )
+                filtered_data[:, j] = alpha * smoothed_state_means[:, 0] + (1 - alpha) * data[:, j]
                 filtered_data[:, j + 1] = (
                     alpha * smoothed_state_means[:, 1] + (1 - alpha) * data[:, j + 1]
                 )
@@ -2859,9 +2855,7 @@ def arima_smooth(data, order=(1, 0, 0)):
 
                 valid_data = col_data[valid_mask]
                 if len(valid_data) < max(order) + 1:
-                    print(
-                        f"Warning: Not enough data points for ARIMA model in column {j}"
-                    )
+                    print(f"Warning: Not enough data points for ARIMA model in column {j}")
                     smoothed[:, j] = col_data
                     continue
 
@@ -2917,21 +2911,70 @@ def process_file(file_path, dest_dir, config):
         file_info["original_size"] = len(df)
         file_info["original_columns"] = len(df.columns)
 
-        # Preserve the first column as integers
+        # Detect if first column is Time
         first_col = df.columns[0]
-        df[first_col] = df[first_col].astype(int)
+        is_time_column = first_col.lower() in ["time", "t", "tempo"]
 
-        # Generate complete sequence of indices
-        min_frame = df[first_col].min()
-        max_frame = df[first_col].max()
-        print(f"Frame range: {min_frame} to {max_frame}")
+        # Get sample rate from config
+        sample_rate = config.get("sample_rate")
 
-        # Create DataFrame with all frames
-        all_frames = pd.DataFrame({first_col: range(min_frame, max_frame + 1)})
+        # Store original first column values
+        original_first_col = df[first_col].copy()
 
-        # Merge with original data to identify gaps
-        df = pd.merge(all_frames, df, on=first_col, how="left")
-        print(f"Shape after adding missing frames: {df.shape}")
+        if is_time_column:
+            print(f"Detected Time column: {first_col}")
+            # If time column, preserve original values and calculate based on sample rate if provided
+            if sample_rate is not None and sample_rate > 0:
+                print(f"Using sample rate: {sample_rate} Hz to recalculate time")
+                # Calculate time based on sample rate
+                df[first_col] = np.arange(len(df)) / sample_rate
+                # Store original time values for reference
+                original_time_values = original_first_col.values
+            else:
+                print("Using original time values from file")
+                # Use original time values
+                df[first_col] = original_first_col
+                # Try to detect sample rate from time differences
+                if len(df) > 1:
+                    time_diffs = np.diff(df[first_col].dropna().values)
+                    if len(time_diffs) > 0:
+                        avg_diff = np.mean(time_diffs[time_diffs > 0])
+                        if avg_diff > 0:
+                            detected_sample_rate = 1.0 / avg_diff
+                            print(
+                                f"Detected sample rate from time column: {detected_sample_rate:.2f} Hz"
+                            )
+                            sample_rate = detected_sample_rate
+
+            # For time column, we work with indices internally
+            df["_internal_index"] = np.arange(len(df))
+            min_frame = 0
+            max_frame = len(df) - 1
+            print(f"Time column detected. Data range: {min_frame} to {max_frame} rows")
+        else:
+            # For non-time columns, treat as frame numbers
+            print(f"First column '{first_col}' treated as frame numbers")
+            # Try to preserve as integers if possible, otherwise use as-is
+            try:
+                df[first_col] = df[first_col].astype(int)
+                min_frame = int(df[first_col].min())
+                max_frame = int(df[first_col].max())
+                print(f"Frame range: {min_frame} to {max_frame}")
+
+                # Create DataFrame with all frames
+                all_frames = pd.DataFrame({first_col: range(min_frame, max_frame + 1)})
+
+                # Merge with original data to identify gaps
+                df = pd.merge(all_frames, df, on=first_col, how="left")
+                print(f"Shape after adding missing frames: {df.shape}")
+            except (ValueError, TypeError):
+                # If conversion fails, treat as continuous data
+                print(
+                    f"Warning: Could not convert '{first_col}' to integers. Treating as continuous data."
+                )
+                df["_internal_index"] = np.arange(len(df))
+                min_frame = 0
+                max_frame = len(df) - 1
 
         # Count missing values
         file_info["total_missing"] = df.isna().sum().sum()
@@ -2951,22 +2994,60 @@ def process_file(file_path, dest_dir, config):
             pad_len = int(len(df) * padding_percent / 100)
             print(f"Applying padding of {pad_len} frames")
 
-            # Criar frames para padding
-            pad_before = pd.DataFrame(
-                {first_col: range(min_frame - pad_len, min_frame)}
-            )
-            pad_after = pd.DataFrame(
-                {first_col: range(max_frame + 1, max_frame + pad_len + 1)}
-            )
+            if is_time_column:
+                # For time column, calculate time values for padding
+                if sample_rate is not None and sample_rate > 0:
+                    # Calculate time before and after
+                    first_time = df[first_col].iloc[0]
+                    last_time = df[first_col].iloc[-1]
+                    time_step = 1.0 / sample_rate
 
-            # Em vez de preencher com NaN, preencher com os valores das bordas
-            for col in df.columns[1:]:
-                # Usar o valor do primeiro registro para o padding inicial
-                pad_before[col] = df[col].iloc[0]
-                # Usar o valor do último registro para o padding final
-                pad_after[col] = df[col].iloc[-1]
+                    # Create time values for padding
+                    pad_before_times = np.arange(
+                        first_time - pad_len * time_step, first_time, time_step
+                    )
+                    pad_after_times = np.arange(
+                        last_time + time_step,
+                        last_time + (pad_len + 1) * time_step,
+                        time_step,
+                    )
 
-            # Concatenar com padding
+                    pad_before = pd.DataFrame({first_col: pad_before_times})
+                    pad_after = pd.DataFrame({first_col: pad_after_times})
+                else:
+                    # Use original time values pattern
+                    first_time = df[first_col].iloc[0]
+                    last_time = df[first_col].iloc[-1]
+                    if len(df) > 1:
+                        time_step = df[first_col].iloc[1] - df[first_col].iloc[0]
+                    else:
+                        time_step = 0.001  # Default fallback
+
+                    pad_before_times = np.arange(
+                        first_time - pad_len * time_step, first_time, time_step
+                    )
+                    pad_after_times = np.arange(
+                        last_time + time_step,
+                        last_time + (pad_len + 1) * time_step,
+                        time_step,
+                    )
+
+                    pad_before = pd.DataFrame({first_col: pad_before_times})
+                    pad_after = pd.DataFrame({first_col: pad_after_times})
+            else:
+                # For frame numbers
+                pad_before = pd.DataFrame({first_col: range(min_frame - pad_len, min_frame)})
+                pad_after = pd.DataFrame({first_col: range(max_frame + 1, max_frame + pad_len + 1)})
+
+            # Fill padding with edge values for other columns
+            for col in df.columns:
+                if col != first_col:
+                    # Use the value of the first record for initial padding
+                    pad_before[col] = df[col].iloc[0]
+                    # Use the value of the last record for final padding
+                    pad_after[col] = df[col].iloc[-1]
+
+            # Concatenate with padding
             df = pd.concat([pad_before, df, pad_after]).reset_index(drop=True)
             print(f"Shape after padding: {df.shape}")
 
@@ -3061,9 +3142,7 @@ def process_file(file_path, dest_dir, config):
                             )
 
                             # Get non-NaN values for training
-                            valid_data = np.array(df[col].dropna().values).reshape(
-                                -1, 1
-                            )
+                            valid_data = np.array(df[col].dropna().values).reshape(-1, 1)
                             if len(valid_data) > 0:
                                 # Train the filter
                                 kf = kf.em(valid_data, n_iter=5)
@@ -3080,17 +3159,11 @@ def process_file(file_path, dest_dir, config):
                             print(f"Error applying Kalman filter: {str(e)}")
                 else:  # No gap size limit
                     if config["interp_method"] == "linear":
-                        df[col] = df[col].interpolate(
-                            method="linear", limit_direction="both"
-                        )
+                        df[col] = df[col].interpolate(method="linear", limit_direction="both")
                     elif config["interp_method"] == "nearest":
-                        df[col] = df[col].interpolate(
-                            method="nearest", limit_direction="both"
-                        )
+                        df[col] = df[col].interpolate(method="nearest", limit_direction="both")
                     elif config["interp_method"] == "cubic":
-                        df[col] = df[col].interpolate(
-                            method="cubic", limit_direction="both"
-                        )
+                        df[col] = df[col].interpolate(method="cubic", limit_direction="both")
                     elif config["interp_method"] == "kalman":
                         try:
                             kf = KalmanFilter(
@@ -3105,9 +3178,7 @@ def process_file(file_path, dest_dir, config):
                             )
 
                             # Get non-NaN values for training
-                            valid_data = np.array(df[col].dropna().values).reshape(
-                                -1, 1
-                            )
+                            valid_data = np.array(df[col].dropna().values).reshape(-1, 1)
                             if len(valid_data) > 0:
                                 # Train the filter
                                 kf = kf.em(valid_data, n_iter=5)
@@ -3143,18 +3214,14 @@ def process_file(file_path, dest_dir, config):
 
                     elif config["smooth_method"] == "lowess":
                         params = config["smooth_params"]
-                        df[col] = lowess_smooth(
-                            df[col].values, params["frac"], params["it"]
-                        )
+                        df[col] = lowess_smooth(df[col].values, params["frac"], params["it"])
                         print(
                             f"Applied LOWESS smoothing with fraction={params['frac']}, iterations={params['it']}"
                         )
 
                     elif config["smooth_method"] == "kalman":
                         params = config["smooth_params"]
-                        df[col] = kalman_smooth(
-                            df[col].values, params["n_iter"], params["mode"]
-                        )
+                        df[col] = kalman_smooth(df[col].values, params["n_iter"], params["mode"])
                         print(
                             f"Applied Kalman filter with {params['n_iter']} iterations in {params['mode']} mode"
                         )
@@ -3162,16 +3229,12 @@ def process_file(file_path, dest_dir, config):
                     elif config["smooth_method"] == "butterworth":
                         params = config["smooth_params"]
                         try:
-                            data = df[
-                                col
-                            ].to_numpy()  # Use to_numpy() instead of .values
+                            data = df[col].to_numpy()  # Use to_numpy() instead of .values
                             if np.isnan(data).any():
                                 print(
                                     f"Warning: Column {col} contains NaN values. Interpolating before filtering..."
                                 )
-                                data = (
-                                    pd.Series(data).interpolate(method="linear").values
-                                )
+                                data = pd.Series(data).interpolate(method="linear").values
 
                             fs = float(params["fs"])
                             cutoff = float(params["cutoff"])
@@ -3179,9 +3242,7 @@ def process_file(file_path, dest_dir, config):
                             # Garantir que a frequência de corte seja razoável
                             if cutoff >= fs / 2:
                                 cutoff = fs / 2 - 1
-                                print(
-                                    f"Warning: Adjusted cutoff frequency to {cutoff} Hz"
-                                )
+                                print(f"Warning: Adjusted cutoff frequency to {cutoff} Hz")
 
                             # Usar a função butter_filter do filter_utils.py
                             filtered = butter_filter(
@@ -3199,9 +3260,7 @@ def process_file(file_path, dest_dir, config):
                                 df[col] = filtered
                                 print(f"Successfully filtered column {col}")
                             else:
-                                print(
-                                    f"Warning: No change detected after filtering column {col}"
-                                )
+                                print(f"Warning: No change detected after filtering column {col}")
 
                         except Exception as e:
                             print(f"Error filtering column {col}: {str(e)}")
@@ -3210,9 +3269,7 @@ def process_file(file_path, dest_dir, config):
 
                     elif config["smooth_method"] == "splines":
                         params = config["smooth_params"]
-                        df[col] = spline_smooth(
-                            df[col].values, s=float(params["smoothing_factor"])
-                        )
+                        df[col] = spline_smooth(df[col].values, s=float(params["smoothing_factor"]))
                         print(
                             f"Applied Spline smoothing with smoothing factor={params['smoothing_factor']}"
                         )
@@ -3229,19 +3286,111 @@ def process_file(file_path, dest_dir, config):
                     file_info["warnings"].append(error_msg)
 
         # Remove padding
-        print(
-            f"\nRemoving padding (keeping only frames from {min_frame} to {max_frame})"
-        )
-        df = df[df[first_col].between(min_frame, max_frame)].reset_index(drop=True)
+        print("\nRemoving padding")
+        if is_time_column:
+            # For time column, remove padding based on original time range
+            original_length = file_info["original_size"]
+            pad_len = int(original_length * padding_percent / 100) if padding_percent > 0 else 0
+
+            if pad_len > 0:
+                df = df.iloc[pad_len:-pad_len].reset_index(drop=True)
+
+            # Recalculate time for the final data
+            if sample_rate is not None and sample_rate > 0:
+                # Use sample rate to calculate time
+                df[first_col] = np.arange(len(df)) / sample_rate
+                print(f"Recalculated time using sample rate: {sample_rate} Hz")
+            else:
+                # Use original time values pattern
+                if len(original_first_col) > 0:
+                    first_time = float(original_first_col.iloc[0])
+                    if len(original_first_col) > 1:
+                        # Detect time step from original
+                        time_step = float(original_first_col.iloc[1] - original_first_col.iloc[0])
+                        df[first_col] = np.arange(len(df)) * time_step + first_time
+                        print(f"Recalculated time using detected time step: {time_step} s")
+                    else:
+                        # Single value, use sample rate if available
+                        if sample_rate is not None and sample_rate > 0:
+                            df[first_col] = np.arange(len(df)) / sample_rate
+                        else:
+                            df[first_col] = (
+                                np.arange(len(df)) * 0.001 + first_time
+                            )  # Default 1ms step
+                else:
+                    # Fallback: use sample rate or default
+                    if sample_rate is not None and sample_rate > 0:
+                        df[first_col] = np.arange(len(df)) / sample_rate
+                    else:
+                        df[first_col] = np.arange(len(df)) * 0.001  # Default 1ms step
+        else:
+            # For frame numbers
+            print(f"Keeping only frames from {min_frame} to {max_frame}")
+            df = df[df[first_col].between(min_frame, max_frame)].reset_index(drop=True)
+
         print(f"Final shape after removing padding: {df.shape}")
+
+        # Remove internal index column if it exists
+        if "_internal_index" in df.columns:
+            df = df.drop(columns=["_internal_index"])
 
         # Detect float format from original file
         float_format = detect_float_format(file_info["original_path"])
         print(f"Using float format: {float_format}")
 
+        # For time column, ensure proper precision
+        time_precision = None
+        if is_time_column:
+            if sample_rate is not None and sample_rate > 0:
+                # Use precision based on sample rate (same logic as readc3d_export.py)
+                try:
+                    from .readc3d_export import get_time_precision
+                except ImportError:
+                    try:
+                        from readc3d_export import get_time_precision
+                    except ImportError:
+                        # Fallback: define function locally
+                        import math
+
+                        def get_time_precision(freq):
+                            if freq <= 1000:
+                                return 3
+                            else:
+                                interval = 1.0 / freq
+                                decimal_places = max(3, int(math.ceil(-math.log10(interval))))
+                                return decimal_places
+
+                time_precision = get_time_precision(sample_rate)
+                print(f"Time column will be formatted with {time_precision} decimal places")
+            else:
+                # Try to detect precision from original time values
+                if len(original_first_col) > 1:
+                    # Check decimal places in original time values
+                    sample_time = float(original_first_col.iloc[1])
+                    time_str = f"{sample_time:.10f}".rstrip("0").rstrip(".")
+                    if "." in time_str:
+                        time_precision = len(time_str.split(".")[1])
+                    else:
+                        time_precision = 3  # Default
+                    print(
+                        f"Detected time precision from original file: {time_precision} decimal places"
+                    )
+
         # Save processed DataFrame
         print(f"\nSaving processed file to: {output_path}")
-        df.to_csv(output_path, index=False, float_format=float_format)
+
+        # If time column has specific precision, format it separately
+        if is_time_column and time_precision is not None:
+            # Create a copy for saving
+            df_to_save = df.copy()
+            # Format time column with specific precision
+            df_to_save[first_col] = df_to_save[first_col].apply(lambda x: f"{x:.{time_precision}f}")
+            # Save with default float format for other columns
+            df_to_save.to_csv(output_path, index=False, float_format=float_format)
+        else:
+            # Save normally
+            df.to_csv(output_path, index=False, float_format=float_format)
+
         print("File saved successfully!")
 
         return file_info
@@ -3330,7 +3479,7 @@ def run_fill_split_dialog(parent=None):
             elif config["smooth_method"] == "lowess":
                 frac = config["smooth_params"].get("frac", 0.3)
                 it = config["smooth_params"].get("it", 3)
-                smooth_info += f"_frac{int(frac*100)}_it{it}"
+                smooth_info += f"_frac{int(frac * 100)}_it{it}"
                 print("\nDEBUG - LOWESS Configuration:")
                 print(f"Fraction: {frac}")
                 print(f"Iterations: {it}")
@@ -3366,9 +3515,7 @@ def run_fill_split_dialog(parent=None):
     for filename in os.listdir(source_dir):
         if filename.endswith(".csv"):
             try:
-                file_info = process_file(
-                    os.path.join(source_dir, filename), dest_dir, config
-                )
+                file_info = process_file(os.path.join(source_dir, filename), dest_dir, config)
                 if file_info is not None:
                     processed_files.append(file_info)
                 else:
