@@ -43,10 +43,12 @@ License:
 """
 
 import os
-from pathlib import Path
-from rich import print
 import tkinter as tk
+from pathlib import Path
 from tkinter import filedialog, messagebox
+
+from rich import print
+
 from vaila.sync_flash import (
     get_median_brightness,
 )  # Imports the automatic synchronization feature
@@ -85,9 +87,9 @@ def get_sync_info(video_files):
             self.create_widgets()
 
         def create_widgets(self):
-            tk.Label(
-                self, text="Enter Keyframes for Synchronization", font=("Arial", 14)
-            ).pack(pady=10)
+            tk.Label(self, text="Enter Keyframes for Synchronization", font=("Arial", 14)).pack(
+                pady=10
+            )
 
             frame = tk.Frame(self)
             frame.pack(fill=tk.BOTH, expand=True)
@@ -111,9 +113,7 @@ def get_sync_info(video_files):
             tk.Label(header_frame, text="Video File", width=40, anchor="w").pack(
                 side=tk.LEFT, padx=5
             )
-            tk.Label(header_frame, text="Keyframe", width=10, anchor="w").pack(
-                side=tk.LEFT, padx=5
-            )
+            tk.Label(header_frame, text="Keyframe", width=10, anchor="w").pack(side=tk.LEFT, padx=5)
 
             for video_file in self.video_files:
                 row = tk.Frame(scrollable_frame)
@@ -197,18 +197,14 @@ def get_sync_info(video_files):
         def on_ok(self):
             selected_index = self.main_video_combobox.curselection()
             if not selected_index:
-                messagebox.showerror(
-                    "Error", "Please select the main video for synchronization."
-                )
+                messagebox.showerror("Error", "Please select the main video for synchronization.")
                 return
 
             try:
                 frame_initial = int(self.frame_initial_entry.get())
                 frame_final = int(self.frame_final_entry.get())
             except ValueError:
-                messagebox.showerror(
-                    "Error", "Please enter valid start and end frames."
-                )
+                messagebox.showerror("Error", "Please enter valid start and end frames.")
                 return
 
             main_video = self.video_files[selected_index[0]]
@@ -233,9 +229,7 @@ def sync_videos():
     root = tk.Tk()
     root.withdraw()
 
-    video_directory = filedialog.askdirectory(
-        title="Select the directory containing videos"
-    )
+    video_directory = filedialog.askdirectory(title="Select the directory containing videos")
     if not video_directory:
         print("No video directory selected.")
         return
@@ -298,9 +292,7 @@ def sync_videos():
         adjusted_sync_data.append([video_file, new_name, initial_frame, final_frame])
 
     write_sync_file(adjusted_sync_data, output_file)
-    print(
-        "Sync file created successfully! Now use Cut Videos to synchronize the videos."
-    )
+    print("Sync file created successfully! Now use Cut Videos to synchronize the videos.")
 
     # Display success message
     messagebox.showinfo(

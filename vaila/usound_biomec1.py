@@ -13,16 +13,15 @@ Version: 0.0.7
 - Additional edge-only comparison visualization
 """
 
-import cv2
-import pandas as pd
-import numpy as np
-import math
-import sys
-from pathlib import Path
-import tkinter as tk
-from tkinter import filedialog, simpledialog
-import os
 import datetime
+import math
+import os
+import tkinter as tk
+from pathlib import Path
+from tkinter import filedialog, simpledialog
+
+import cv2
+import numpy as np
 from rich import print
 
 
@@ -122,10 +121,7 @@ def process_images(input_dir, output_csv, scale=None):
         f.write("File,p1_x,p1_y,p2_x,p2_y,Dist_px,Width_cm\n")
 
     # Main window with instructions in title
-    title = (
-        "Measure width: click left then right edge | "
-        "u=undo r=reset n=next image q=quit"
-    )
+    title = "Measure width: click left then right edge | u=undo r=reset n=next image q=quit"
     cv2.namedWindow(title, cv2.WINDOW_NORMAL)
 
     # Dictionary to store all measurements by image
@@ -155,7 +151,7 @@ def process_images(input_dir, output_csv, scale=None):
         cv2.setMouseCallback(title, mouse_event, state)
 
         print(f"\n=== Measuring width in {state['img_name']} ===")
-        print(f"→ Calibration: 1/scale = {1/scale:.2f} px/cm")
+        print(f"→ Calibration: 1/scale = {1 / scale:.2f} px/cm")
         print("→ Click at LEFT edge, then RIGHT edge to measure width")
         print("→ Press 'n' for next image, 'q' to finish")
 
@@ -417,17 +413,11 @@ def create_comparison_images(cropped_paths, output_dir):
 
             # Edge-enhanced overlay
             edge_path = os.path.join(edges_dir, f"{name_i}_edge_{name_j}.jpg")
-            overlay_with_edges(
-                cropped_paths[i], cropped_paths[j], edge_path, edge_params
-            )
+            overlay_with_edges(cropped_paths[i], cropped_paths[j], edge_path, edge_params)
 
             # Edges only (black and red)
-            edges_only_path = os.path.join(
-                edges_only_dir, f"{name_i}_edges_{name_j}.jpg"
-            )
-            edges_only_comparison(
-                cropped_paths[i], cropped_paths[j], edges_only_path, edge_params
-            )
+            edges_only_path = os.path.join(edges_only_dir, f"{name_i}_edges_{name_j}.jpg")
+            edges_only_comparison(cropped_paths[i], cropped_paths[j], edges_only_path, edge_params)
 
     print(f"Side by side comparisons saved in: {sidebyside_dir}")
     print(f"Overlay comparisons saved in: {overlay_dir}")
@@ -441,12 +431,8 @@ def side_by_side_images(img_path1, img_path2, output_path):
     img2 = cv2.imread(img_path2)
 
     # Add image labels
-    cv2.putText(
-        img1, "Image 1", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2
-    )
-    cv2.putText(
-        img2, "Image 2", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2
-    )
+    cv2.putText(img1, "Image 1", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
+    cv2.putText(img2, "Image 2", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
 
     # Resize to same height
     h = min(img1.shape[0], img2.shape[0])
@@ -476,15 +462,11 @@ def overlay_images(img_path1, img_path2, output_path, alpha=0.5, add_labels=True
     if add_labels:
         # Image 1: Green box + label
         cv2.rectangle(img1, (10, 10), (120, 40), (0, 200, 0), -1)
-        cv2.putText(
-            img1, "Image 1", (15, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2
-        )
+        cv2.putText(img1, "Image 1", (15, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
 
         # Image 2: Blue box + label
         cv2.rectangle(img2, (10, 10), (120, 40), (200, 0, 0), -1)
-        cv2.putText(
-            img2, "Image 2", (15, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2
-        )
+        cv2.putText(img2, "Image 2", (15, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
 
     # Create blend
     overlay = cv2.addWeighted(img1, alpha, img2, 1 - alpha, 0)
@@ -505,12 +487,8 @@ def overlay_with_edges(img_path1, img_path2, output_path, edge_params):
     # Extract edges from second image with adjusted parameters
     img2_gray = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY)
     if edge_params["blur"] > 1:
-        img2_gray = cv2.GaussianBlur(
-            img2_gray, (edge_params["blur"], edge_params["blur"]), 0
-        )
-    img2_edges = cv2.Canny(
-        img2_gray, edge_params["threshold1"], edge_params["threshold2"]
-    )
+        img2_gray = cv2.GaussianBlur(img2_gray, (edge_params["blur"], edge_params["blur"]), 0)
+    img2_edges = cv2.Canny(img2_gray, edge_params["threshold1"], edge_params["threshold2"])
     img2_edges = cv2.cvtColor(img2_edges, cv2.COLOR_GRAY2BGR)
 
     # Red edges

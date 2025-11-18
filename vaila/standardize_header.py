@@ -45,12 +45,13 @@ python standardize_header.py
 """
 
 import os
-from rich import print
-import pandas as pd
 import tkinter as tk
-from tkinter import filedialog, messagebox, simpledialog
 from datetime import datetime
 from io import StringIO
+from tkinter import filedialog, messagebox
+
+import pandas as pd
+from rich import print
 
 
 def standardize_header():
@@ -59,9 +60,7 @@ def standardize_header():
     Allows the user to select the header line and specify rows to delete.
     """
     # Open a window to select the directory containing CSV files
-    directory_path = filedialog.askdirectory(
-        title="Select Directory Containing CSV Files"
-    )
+    directory_path = filedialog.askdirectory(title="Select Directory Containing CSV Files")
     if not directory_path:
         return
 
@@ -79,7 +78,7 @@ def standardize_header():
     # Read the first file to display the first few lines
     first_file_path = os.path.join(directory_path, csv_files[0])
     try:
-        with open(first_file_path, "r") as file:
+        with open(first_file_path) as file:
             lines = file.readlines()
     except Exception as e:
         messagebox.showerror("Error", f"Unable to read the file: {e}")
@@ -102,9 +101,7 @@ def standardize_header():
                 messagebox.showerror("Error", "Invalid line number.")
                 return
         except ValueError:
-            messagebox.showerror(
-                "Error", "Please enter a valid line number for the header."
-            )
+            messagebox.showerror("Error", "Please enter a valid line number for the header.")
             return
 
         # Get the range or single row to delete
@@ -137,21 +134,17 @@ def standardize_header():
             file_path = os.path.join(directory_path, file_name)
             try:
                 # Read the file, skipping problematic lines
-                with open(file_path, "r") as file:
+                with open(file_path) as file:
                     all_lines = file.readlines()
 
                 # Try reading the file with the selected header line and cleaning rows
                 try:
-                    df = pd.read_csv(
-                        file_path, header=selected_line, skip_blank_lines=False
-                    )
-                except pd.errors.ParserError as pe:
+                    df = pd.read_csv(file_path, header=selected_line, skip_blank_lines=False)
+                except pd.errors.ParserError:
                     # Handle tokenizing errors by cleaning lines manually
                     cleaned_lines = []
                     for line in all_lines:
-                        if len(line.split(",")) == len(
-                            all_lines[selected_line].split(",")
-                        ):
+                        if len(line.split(",")) == len(all_lines[selected_line].split(",")):
                             cleaned_lines.append(line)
                     df = pd.read_csv(
                         StringIO("".join(cleaned_lines)),
@@ -160,9 +153,7 @@ def standardize_header():
 
                 # Calculate the actual row indices to delete in the DataFrame
                 rows_to_delete_after_header = [
-                    row - (selected_line + 1)
-                    for row in rows_to_delete
-                    if row > selected_line
+                    row - (selected_line + 1) for row in rows_to_delete if row > selected_line
                 ]
 
                 # Delete the specified rows if they exist
@@ -213,9 +204,7 @@ def standardize_header():
     delete_rows_entry = tk.Entry(header_window)
     delete_rows_entry.pack()
 
-    confirm_button = tk.Button(
-        header_window, text="Confirm", command=choose_header_line
-    )
+    confirm_button = tk.Button(header_window, text="Confirm", command=choose_header_line)
     confirm_button.pack()
 
 

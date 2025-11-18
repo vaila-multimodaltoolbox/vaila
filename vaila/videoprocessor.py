@@ -42,14 +42,15 @@ Installation of FFmpeg (for video processing):
 
 """
 
+import json
 import os
 import pathlib
-from rich import print
-import time
 import subprocess
-import json
+import time
 from tkinter import filedialog, messagebox, simpledialog
+
 import tqdm
+from rich import print
 
 
 def check_ffmpeg_installed():
@@ -143,9 +144,7 @@ def detect_hardware_encoder():
                 )
 
                 if "Error" not in test_result.stderr:
-                    print(
-                        "Intel Quick Sync hardware encoding confirmed working (h264_qsv)"
-                    )
+                    print("Intel Quick Sync hardware encoding confirmed working (h264_qsv)")
                     return {
                         "encoder": "h264_qsv",
                         "quality_param": "preset",
@@ -212,9 +211,7 @@ def check_video_size(video_path):
         return True, ""  # Proceed in case of error
 
 
-def process_videos_merge(
-    source_dir, target_dir, use_text_file=False, text_file_path=None
-):
+def process_videos_merge(source_dir, target_dir, use_text_file=False, text_file_path=None):
     # Create a new directory with timestamp
     timestamp = time.strftime("%Y%m%d%H%M%S")
     output_dir = os.path.join(target_dir, f"mergedvid_{timestamp}")
@@ -224,7 +221,7 @@ def process_videos_merge(
 
     # Use provided text file if specified
     if use_text_file and text_file_path:
-        with open(text_file_path, "r") as file:
+        with open(text_file_path) as file:
             for line in file.readlines():
                 line = line.strip()
                 if line:
@@ -245,7 +242,9 @@ def process_videos_merge(
     quality_values = encoder_info["quality_values"]
 
     # Ask user to choose quality by number (1-9) - moved outside the loop
-    quality_msg = "Choose quality level (1-9):\n1-3: Fast (lower quality)\n4-6: Medium\n7-9: High (slower)"
+    quality_msg = (
+        "Choose quality level (1-9):\n1-3: Fast (lower quality)\n4-6: Medium\n7-9: High (slower)"
+    )
     quality_num = simpledialog.askinteger(
         "Quality Level", quality_msg, minvalue=1, maxvalue=9, initialvalue=5
     )
@@ -437,35 +436,33 @@ def process_videos_merge(
                 f"{os.path.splitext(os.path.basename(video_path))[0]}_merge_frames.txt",
             )
             with open(log_file_path, "w") as log_file:
-                log_file.write(f"DETAILED VIDEO MERGE REPORT\n")
-                log_file.write(f"=========================\n\n")
+                log_file.write("DETAILED VIDEO MERGE REPORT\n")
+                log_file.write("=========================\n\n")
                 log_file.write(f"Source Video: {video_path}\n")
                 log_file.write(f"Output Video: {output_video}\n")
-                log_file.write(
-                    f"Processing Date: {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-                )
+                log_file.write(f"Processing Date: {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n")
 
-                log_file.write(f"ORIGINAL VIDEO DETAILS\n")
-                log_file.write(f"---------------------\n")
+                log_file.write("ORIGINAL VIDEO DETAILS\n")
+                log_file.write("---------------------\n")
                 log_file.write(f"Resolution: {width} x {height}\n")
                 log_file.write(f"Frame Rate: {frame_rate} fps\n")
                 log_file.write(f"Duration: {duration:.2f} seconds\n")
                 log_file.write(f"Total Frames: {total_frames}\n\n")
 
-                log_file.write(f"MERGED VIDEO STRUCTURE\n")
-                log_file.write(f"---------------------\n")
-                log_file.write(f"Part 1 (Original Video):\n")
-                log_file.write(f"  - Start Frame: 0\n")
+                log_file.write("MERGED VIDEO STRUCTURE\n")
+                log_file.write("---------------------\n")
+                log_file.write("Part 1 (Original Video):\n")
+                log_file.write("  - Start Frame: 0\n")
                 log_file.write(f"  - End Frame: {total_frames - 1}\n")
                 log_file.write(f"  - Duration: {duration:.2f} seconds\n\n")
 
-                log_file.write(f"Part 2 (Reversed Video):\n")
+                log_file.write("Part 2 (Reversed Video):\n")
                 log_file.write(f"  - Start Frame: {reverse_start_frame}\n")
                 log_file.write(f"  - End Frame: {merged_frames - 1}\n")
                 log_file.write(f"  - Duration: {duration:.2f} seconds\n\n")
 
-                log_file.write(f"MERGED VIDEO DETAILS\n")
-                log_file.write(f"-------------------\n")
+                log_file.write("MERGED VIDEO DETAILS\n")
+                log_file.write("-------------------\n")
                 log_file.write(f"Total Frames: {merged_frames}\n")
                 log_file.write(f"Total Duration: {merged_duration:.2f} seconds\n")
                 log_file.write(f"Encoder: {encoder}\n")
@@ -475,7 +472,7 @@ def process_videos_merge(
                 output_size_mb = os.path.getsize(output_video) / (1024 * 1024)
                 log_file.write(f"File Size: {output_size_mb:.2f} MB\n")
 
-                log_file.write(f"\nFFmpeg Command Used:\n")
+                log_file.write("\nFFmpeg Command Used:\n")
                 log_file.write(f"{' '.join(ffmpeg_command)}\n")
 
             # Registre tempo de execução por vídeo
@@ -483,7 +480,7 @@ def process_videos_merge(
             # ... processamento ...
             elapsed = time.time() - start_time
             print(
-                f"Processed in {elapsed:.2f} seconds ({os.path.getsize(output_video)/1024/1024:.2f} MB)"
+                f"Processed in {elapsed:.2f} seconds ({os.path.getsize(output_video) / 1024 / 1024:.2f} MB)"
             )
 
             print(f"Video processed and saved to: {output_video}")
@@ -493,9 +490,7 @@ def process_videos_merge(
             print(f"Error processing video {video_path}: {e}")
 
 
-def process_videos_split(
-    source_dir, target_dir, use_text_file=False, text_file_path=None
-):
+def process_videos_split(source_dir, target_dir, use_text_file=False, text_file_path=None):
     # Create a new directory with timestamp
     timestamp = time.strftime("%Y%m%d%H%M%S")
     output_dir = os.path.join(target_dir, f"splitvid_{timestamp}")
@@ -505,7 +500,7 @@ def process_videos_split(
 
     # Use provided text file if specified
     if use_text_file and text_file_path:
-        with open(text_file_path, "r") as file:
+        with open(text_file_path) as file:
             for line in file.readlines():
                 line = line.strip()
                 if line:
@@ -645,16 +640,14 @@ def process_videos_split(
                 f"{os.path.splitext(os.path.basename(video_path))[0]}_split_frames.txt",
             )
             with open(log_file_path, "w") as log_file:
-                log_file.write(f"DETAILED VIDEO SPLIT REPORT\n")
-                log_file.write(f"=========================\n\n")
+                log_file.write("DETAILED VIDEO SPLIT REPORT\n")
+                log_file.write("=========================\n\n")
                 log_file.write(f"Source Video: {video_path}\n")
                 log_file.write(f"Output Video: {output_video}\n")
-                log_file.write(
-                    f"Processing Date: {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-                )
+                log_file.write(f"Processing Date: {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n")
 
-                log_file.write(f"ORIGINAL VIDEO DETAILS\n")
-                log_file.write(f"---------------------\n")
+                log_file.write("ORIGINAL VIDEO DETAILS\n")
+                log_file.write("---------------------\n")
                 log_file.write(f"Resolution: {width} x {height}\n")
                 log_file.write(
                     f"Frame Rate: {frame_rate if isinstance(frame_rate, str) else frame_rate:.2f} fps\n"
@@ -662,31 +655,31 @@ def process_videos_split(
                 log_file.write(f"Duration: {duration:.2f} seconds\n")
                 log_file.write(f"Total Frames: {total_frames}\n\n")
 
-                log_file.write(f"SPLIT DETAILS\n")
-                log_file.write(f"------------\n")
-                log_file.write(f"First Half (Discarded):\n")
-                log_file.write(f"  - Start Frame: 0\n")
+                log_file.write("SPLIT DETAILS\n")
+                log_file.write("------------\n")
+                log_file.write("First Half (Discarded):\n")
+                log_file.write("  - Start Frame: 0\n")
                 log_file.write(f"  - End Frame: {half_frame - 1}\n")
                 log_file.write(f"  - Duration: {half_duration:.2f} seconds\n\n")
 
-                log_file.write(f"Second Half (Kept):\n")
+                log_file.write("Second Half (Kept):\n")
                 log_file.write(f"  - Start Frame: {half_frame}\n")
                 log_file.write(f"  - End Frame: {total_frames - 1}\n")
                 log_file.write(f"  - Duration: {second_half_duration:.2f} seconds\n\n")
 
-                log_file.write(f"OUTPUT VIDEO DETAILS\n")
-                log_file.write(f"-------------------\n")
+                log_file.write("OUTPUT VIDEO DETAILS\n")
+                log_file.write("-------------------\n")
                 log_file.write(f"Total Frames: {total_frames - half_frame}\n")
                 log_file.write(f"Total Duration: {second_half_duration:.2f} seconds\n")
                 log_file.write(f"Encoder: {encoder}\n")
                 log_file.write(f"Encoding Parameters: {quality_param}={preset_value}\n")
-                log_file.write(f"Pixel Format: yuv420p\n")
+                log_file.write("Pixel Format: yuv420p\n")
 
                 # Adicionar tamanho do arquivo
                 output_size_mb = os.path.getsize(output_video) / (1024 * 1024)
                 log_file.write(f"File Size: {output_size_mb:.2f} MB\n")
 
-                log_file.write(f"\nFFmpeg Command Used:\n")
+                log_file.write("\nFFmpeg Command Used:\n")
                 log_file.write(f"{' '.join(ffmpeg_command)}\n")
 
             print(f"Video processed and saved to: {output_video}")
@@ -737,9 +730,7 @@ def process_videos_gui():
             merge_multivideos.run_merge_multivideos()
             return
         except Exception as e:
-            messagebox.showerror(
-                "Error", f"Failed to start multi-video merger: {str(e)}"
-            )
+            messagebox.showerror("Error", f"Failed to start multi-video merger: {str(e)}")
             return
 
     # For other operations, continue with existing code

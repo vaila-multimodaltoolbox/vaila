@@ -65,13 +65,13 @@ This script is distributed under the GPL3 License.
 ================================================================================
 """
 
-import numpy as np
 import os
+
 import matplotlib.pyplot as plt
+import numpy as np
 import plotly.graph_objs as go
 from plotly.subplots import make_subplots
 from rich import print
-from pathlib import Path
 
 
 def get_colors():
@@ -125,9 +125,7 @@ def plot_orthonormal_bases_matplotlib(
     title="Orthonormal Bases",
 ):
     # Get colors for Jacksonville Jaguars and Jumbo Shrimp inspired clusters
-    trunk_axis_colors, trunk_marker_colors, pelvis_axis_colors, pelvis_marker_colors = (
-        get_colors()
-    )
+    trunk_axis_colors, trunk_marker_colors, pelvis_axis_colors, pelvis_marker_colors = get_colors()
 
     fig = plt.figure()
     ax = fig.add_subplot(111, projection="3d")
@@ -157,9 +155,7 @@ def plot_orthonormal_bases_matplotlib(
         )
 
     # Iterate through bases, points, and labels for plotting
-    for i, (bases, pm, points, label) in enumerate(
-        zip(bases_list, pm_list, points_list, labels)
-    ):
+    for i, (bases, pm, points, label) in enumerate(zip(bases_list, pm_list, points_list, labels)):
         if "cluster1" in label.lower():
             # Use Jacksonville Jaguars colors for Cluster 1 (Trunk)
             axis_colors = trunk_axis_colors
@@ -211,9 +207,7 @@ def plot_orthonormal_bases_plotly(
     title="Orthonormal Bases",
 ):
     # Get colors inspired by Jacksonville Jaguars and Jumbo Shrimp teams
-    trunk_axis_colors, trunk_marker_colors, pelvis_axis_colors, pelvis_marker_colors = (
-        get_colors()
-    )
+    trunk_axis_colors, trunk_marker_colors, pelvis_axis_colors, pelvis_marker_colors = get_colors()
 
     frames = []
     axis_length = 0.2
@@ -223,9 +217,7 @@ def plot_orthonormal_bases_plotly(
 
     marker_labels = ["Marker 1", "Marker 2", "Marker 3"]
 
-    fig = make_subplots(
-        rows=1, cols=1, specs=[[{"type": "scatter3d"}]], subplot_titles=[title]
-    )
+    fig = make_subplots(rows=1, cols=1, specs=[[{"type": "scatter3d"}]], subplot_titles=[title])
 
     for frame in range(len(pm_list[0])):
         data = []
@@ -270,14 +262,12 @@ def plot_orthonormal_bases_plotly(
                         z=[origin[2], origin[2] + axis[2] * axis_length],
                         mode="lines",
                         line=dict(color=color, width=6),
-                        name=f'{label} Axis {["X", "Y", "Z"][k]}',
+                        name=f"{label} Axis {['X', 'Y', 'Z'][k]}",
                     )
                 )
 
         # Global coordinate system (red, green, blue)
-        for i, (axis, color) in enumerate(
-            zip(global_coordinate_system, ["red", "green", "blue"])
-        ):
+        for i, (axis, color) in enumerate(zip(global_coordinate_system, ["red", "green", "blue"])):
             data.append(
                 go.Scatter3d(
                     x=[0, axis[0] * axis_length],
@@ -285,7 +275,7 @@ def plot_orthonormal_bases_plotly(
                     z=[0, axis[2] * axis_length],
                     mode="lines",
                     line=dict(color=color, width=4),
-                    name=f'Global Axis {["X", "Y", "Z"][i]}',
+                    name=f"Global Axis {['X', 'Y', 'Z'][i]}",
                 )
             )
 
@@ -314,9 +304,7 @@ def plot_orthonormal_bases_plotly(
             transition=dict(duration=0),
             x=0,
             y=0,
-            currentvalue=dict(
-                font=dict(size=14), prefix="Frame: ", visible=True, xanchor="center"
-            ),
+            currentvalue=dict(font=dict(size=14), prefix="Frame: ", visible=True, xanchor="center"),
             len=1.0,
         )
     ]
@@ -362,9 +350,7 @@ def plot_orthonormal_bases_4points_matplotlib(
     global_coordinate_system=None,
     title="Orthonormal Bases with 4 Points",
 ):
-    trunk_axis_colors, trunk_marker_colors, pelvis_axis_colors, pelvis_marker_colors = (
-        get_colors()
-    )
+    trunk_axis_colors, trunk_marker_colors, pelvis_axis_colors, pelvis_marker_colors = get_colors()
 
     fig = plt.figure()
     ax = fig.add_subplot(111, projection="3d")
@@ -391,9 +377,7 @@ def plot_orthonormal_bases_4points_matplotlib(
             linewidth=1,
         )
 
-    for i, (bases, pm, points, label) in enumerate(
-        zip(bases_list, pm_list, points_list, labels)
-    ):
+    for i, (bases, pm, points, label) in enumerate(zip(bases_list, pm_list, points_list, labels)):
         if "trunk" in label.lower():
             axis_colors = trunk_axis_colors
             marker_colors = trunk_marker_colors
@@ -436,9 +420,7 @@ def plot_orthonormal_bases_4points_plotly(
     global_coordinate_system=None,
     title="Orthonormal Bases with 4 Points",
 ):
-    trunk_axis_colors, trunk_marker_colors, pelvis_axis_colors, pelvis_marker_colors = (
-        get_colors()
-    )
+    trunk_axis_colors, trunk_marker_colors, pelvis_axis_colors, pelvis_marker_colors = get_colors()
 
     frames = []
     axis_length = 0.2
@@ -448,9 +430,7 @@ def plot_orthonormal_bases_4points_plotly(
 
     marker_labels = ["Marker 1", "Marker 2", "Marker 3", "Marker 4"]
 
-    fig = make_subplots(
-        rows=1, cols=1, specs=[[{"type": "scatter3d"}]], subplot_titles=[title]
-    )
+    fig = make_subplots(rows=1, cols=1, specs=[[{"type": "scatter3d"}]], subplot_titles=[title])
 
     for frame in range(len(pm_list[0])):
         data = []
@@ -489,13 +469,11 @@ def plot_orthonormal_bases_4points_plotly(
                         z=[origin[2], origin[2] + axis[2] * axis_length],
                         mode="lines",
                         line=dict(color=color, width=4),
-                        name=f'{label} Axis {["X", "Y", "Z"][k]}',
+                        name=f"{label} Axis {['X', 'Y', 'Z'][k]}",
                     )
                 )
 
-        for i, (axis, color) in enumerate(
-            zip(global_coordinate_system, ["red", "green", "blue"])
-        ):
+        for i, (axis, color) in enumerate(zip(global_coordinate_system, ["red", "green", "blue"])):
             data.append(
                 go.Scatter3d(
                     x=[0, axis[0] * axis_length],
@@ -503,7 +481,7 @@ def plot_orthonormal_bases_4points_plotly(
                     z=[0, axis[2] * axis_length],
                     mode="lines",
                     line=dict(color=color, width=4),
-                    name=f'Global Axis {["X", "Y", "Z"][i]}',
+                    name=f"Global Axis {['X', 'Y', 'Z'][i]}",
                 )
             )
 

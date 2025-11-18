@@ -17,12 +17,10 @@ Each button triggers the respective function that executes the corresponding ML 
 """
 
 import os
-from rich import print
-import platform
-import subprocess
-import sys
 import tkinter as tk
-from tkinter import ttk, messagebox, Toplevel
+from tkinter import ttk
+
+from rich import print
 
 """
 This module creates a new window with buttons for:

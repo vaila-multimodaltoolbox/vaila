@@ -49,12 +49,13 @@ License:
     This project is licensed under the terms of GNU General Public License v3.0.
 """
 
-import os
-import pygame
-import cv2
 import datetime
-from tkinter import Tk, filedialog, messagebox
+import os
 from pathlib import Path
+from tkinter import Tk, filedialog, messagebox
+
+import cv2
+import pygame
 from rich import print
 
 
@@ -66,9 +67,7 @@ def save_cuts_to_txt(video_path, cuts):
 
         with open(str(txt_path), "w", encoding="utf-8", errors="replace") as f:
             f.write(f"Cuts for video: {video_name}\n")
-            f.write(
-                f"Created: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-            )
+            f.write(f"Created: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
             f.write("-" * 50 + "\n")
             for i, (start, end) in enumerate(cuts, 1):
                 f.write(f"Cut {i}: Frame {start + 1} to {end + 1}\n")
@@ -76,16 +75,12 @@ def save_cuts_to_txt(video_path, cuts):
         return txt_path
     except UnicodeEncodeError:
         # Fallback para nomes com caracteres especiais
-        safe_name = "".join(
-            c if c.isalnum() or c in "._- " else "_" for c in video_name
-        )
+        safe_name = "".join(c if c.isalnum() or c in "._- " else "_" for c in video_name)
         txt_path = Path(video_path).parent / f"{safe_name}_cuts.txt"
 
         with open(str(txt_path), "w", encoding="utf-8", errors="replace") as f:
             f.write(f"Cuts for video: {video_name}\n")
-            f.write(
-                f"Created: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-            )
+            f.write(f"Created: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
             f.write("-" * 50 + "\n")
             for i, (start, end) in enumerate(cuts, 1):
                 f.write(f"Cut {i}: Frame {start + 1} to {end + 1}\n")
@@ -103,7 +98,7 @@ def load_sync_file(video_path):
 
     for sync_file in sync_files:
         try:
-            with open(sync_file, "r", encoding="utf-8") as f:
+            with open(sync_file, encoding="utf-8") as f:
                 lines = f.readlines()
 
             # Check if this is a sync file (contains video file names and frame data)
@@ -131,7 +126,7 @@ def load_cuts_from_txt(video_path):
 
     cuts = []
     if txt_path.exists():
-        with open(txt_path, "r", encoding="utf-8") as f:
+        with open(txt_path, encoding="utf-8") as f:
             lines = f.readlines()[3:]  # Skip header lines
             for line in lines:
                 if line.strip():
@@ -158,7 +153,7 @@ def load_cuts_or_sync(video_path):
 
 def load_sync_file_from_dialog(video_path):
     """Open dialog to select sync file and load cuts from it."""
-    from tkinter import filedialog, Tk
+    from tkinter import Tk, filedialog
 
     root = Tk()
     root.withdraw()
@@ -177,7 +172,7 @@ def load_sync_file_from_dialog(video_path):
     sync_data = {}  # Store all sync data for batch processing
 
     try:
-        with open(sync_file, "r", encoding="utf-8") as f:
+        with open(sync_file, encoding="utf-8") as f:
             lines = f.readlines()
 
         for line in lines:
@@ -248,9 +243,7 @@ def batch_process_sync_videos(video_path, sync_data):
 
             # Skip if start frame is beyond video length
             if start_frame >= total_frames:
-                print(
-                    f"Warning: Start frame {start_frame} beyond video length for {video_file}"
-                )
+                print(f"Warning: Start frame {start_frame} beyond video length for {video_file}")
                 continue
 
             # Adjust end frame if needed
@@ -324,9 +317,7 @@ def play_video_with_cuts(video_path):
     window_height = max(480, min(window_height, max_height))
 
     # Initialize window
-    screen = pygame.display.set_mode(
-        (window_width, window_height + 80), pygame.RESIZABLE
-    )
+    screen = pygame.display.set_mode((window_width, window_height + 80), pygame.RESIZABLE)
     pygame.display.set_caption(
         "Space:Play/Pause | ←→:Frame | S:Start | E:End | R:Reset | DEL:Remove | L:List | F:Load Sync | ESC:Save"
     )
@@ -371,23 +362,17 @@ def play_video_with_cuts(video_path):
 
         # Draw frame information and cut markers
         font = pygame.font.Font(None, 24)
-        frame_text = font.render(
-            f"Frame: {frame_count + 1}/{total_frames}", True, (255, 255, 255)
-        )
+        frame_text = font.render(f"Frame: {frame_count + 1}/{total_frames}", True, (255, 255, 255))
         slider_surface.blit(frame_text, (10, 10))
 
         # Draw current cut information
         if current_start is not None:
-            cut_text = font.render(
-                f"Current Cut Start: {current_start + 1}", True, (0, 255, 0)
-            )
+            cut_text = font.render(f"Current Cut Start: {current_start + 1}", True, (0, 255, 0))
             slider_surface.blit(cut_text, (10, 50))
 
         # Draw number of cuts and sync status
         sync_status = " (SYNC)" if using_sync_file else ""
-        cuts_text = font.render(
-            f"Cuts: {len(cuts)}{sync_status}", True, (255, 255, 255)
-        )
+        cuts_text = font.render(f"Cuts: {len(cuts)}{sync_status}", True, (255, 255, 255))
         slider_surface.blit(cuts_text, (window_width - 150, 50))
 
         # Draw help button
@@ -546,9 +531,7 @@ def play_video_with_cuts(video_path):
         label = ttk.Label(root, text="Processing videos in batch...")
         label.pack(pady=10)
 
-        progress = ttk.Progressbar(
-            root, orient="horizontal", length=300, mode="determinate"
-        )
+        progress = ttk.Progressbar(root, orient="horizontal", length=300, mode="determinate")
         progress.pack(pady=10)
         progress["maximum"] = len(video_files)
 
@@ -661,9 +644,7 @@ def play_video_with_cuts(video_path):
 
             # Process each cut
             for i, (start_frame, end_frame) in enumerate(cuts):
-                output_path = (
-                    output_dir / f"{video_name}_frame_{start_frame}_to_{end_frame}.mp4"
-                )
+                output_path = output_dir / f"{video_name}_frame_{start_frame}_to_{end_frame}.mp4"
                 out = cv2.VideoWriter(
                     str(output_path),
                     cv2.VideoWriter.fourcc(*"mp4v"),
@@ -736,9 +717,7 @@ def play_video_with_cuts(video_path):
         screen.blit(frame_surface, (x_offset, y_offset))
 
         # Draw controls
-        slider_x, slider_width, slider_y, slider_height, help_button_rect = (
-            draw_controls()
-        )
+        slider_x, slider_width, slider_y, slider_height, help_button_rect = draw_controls()
         pygame.display.flip()
 
         for event in pygame.event.get():
@@ -801,7 +780,7 @@ def play_video_with_cuts(video_path):
                     if cuts:
                         cuts_info = "\n".join(
                             [
-                                f"Cut {i+1}: Frame {start + 1} to {end + 1}"
+                                f"Cut {i + 1}: Frame {start + 1} to {end + 1}"
                                 for i, (start, end) in enumerate(cuts)
                             ]
                         )
@@ -809,9 +788,7 @@ def play_video_with_cuts(video_path):
                     else:
                         messagebox.showinfo("Cuts List", "No cuts marked yet")
                 elif event.key == pygame.K_f:  # Load sync file
-                    new_cuts, is_sync, new_sync_data = load_sync_file_from_dialog(
-                        video_path
-                    )
+                    new_cuts, is_sync, new_sync_data = load_sync_file_from_dialog(video_path)
                     if new_cuts:
                         cuts = new_cuts
                         using_sync_file = is_sync
@@ -894,9 +871,7 @@ def run_cutvideo():
             os.environ["LIBGL_ALWAYS_SOFTWARE"] = "1"
             os.environ["SDL_VIDEODRIVER"] = "x11"
         except Exception:
-            print(
-                "If you experience graphics issues, try running: export LIBGL_ALWAYS_SOFTWARE=1"
-            )
+            print("If you experience graphics issues, try running: export LIBGL_ALWAYS_SOFTWARE=1")
 
     video_path = get_video_path()
     if not video_path:

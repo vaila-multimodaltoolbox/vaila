@@ -26,18 +26,18 @@ Requirements:
 
 import os
 import subprocess
-from datetime import datetime
 import tkinter as tk
+from datetime import datetime
 from tkinter import filedialog, messagebox
+
 from rich import print
 from rich.progress import (
+    BarColumn,
     Progress,
     SpinnerColumn,
     TextColumn,
-    BarColumn,
     TimeElapsedColumn,
 )
-from pathlib import Path
 
 # Global counters
 success_count = 0
@@ -46,11 +46,7 @@ failure_count = 0
 
 def find_ts_videos(directory: str) -> list:
     """Return a list of all .ts files in the given directory."""
-    return [
-        os.path.join(directory, f)
-        for f in os.listdir(directory)
-        if f.lower().endswith(".ts")
-    ]
+    return [os.path.join(directory, f) for f in os.listdir(directory) if f.lower().endswith(".ts")]
 
 
 def run_convert_ts_to_mp4(input_dir: str, output_dir: str):
@@ -100,12 +96,8 @@ def run_convert_ts_to_mp4(input_dir: str, output_dir: str):
             ]
 
             try:
-                print(
-                    f"[cyan]Converting:[/cyan] {os.path.basename(ts_path)} → {base}.mp4"
-                )
-                subprocess.run(
-                    cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-                )
+                print(f"[cyan]Converting:[/cyan] {os.path.basename(ts_path)} → {base}.mp4")
+                subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                 success_count += 1
             except subprocess.CalledProcessError as e:
                 print(f"[red]Failed:[/red] {os.path.basename(ts_path)}")
@@ -123,9 +115,7 @@ def convert_ts_to_mp4_gui():
     root = tk.Tk()
     root.withdraw()  # hide main window
 
-    messagebox.showinfo(
-        "Select Folder", "Select the directory containing .ts videos to convert."
-    )
+    messagebox.showinfo("Select Folder", "Select the directory containing .ts videos to convert.")
     input_dir = filedialog.askdirectory(title="Select .ts Videos Directory")
     if not input_dir:
         messagebox.showwarning("No Selection", "No directory selected, exiting.")

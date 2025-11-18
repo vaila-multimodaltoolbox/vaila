@@ -46,24 +46,25 @@ For more details, visit: https://www.gnu.org/licenses/lgpl-3.0.html
 =============================================================================
 """
 
-import os
-from rich import print
 import json
+import os
 import pickle
+from tkinter import Tk, filedialog
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-import matplotlib.pyplot as plt
-from sklearn.preprocessing import StandardScaler
+from rich import print
 from sklearn.metrics import (
-    mean_squared_error,
-    mean_absolute_error,
-    r2_score,
     explained_variance_score,
     max_error,
+    mean_absolute_error,
+    mean_squared_error,
     median_absolute_error,
+    r2_score,
 )
-from tkinter import Tk, filedialog, messagebox
+from sklearn.preprocessing import StandardScaler
 from tqdm import tqdm  # For progress bar
 
 # import argparse
@@ -73,9 +74,7 @@ from tqdm import tqdm  # For progress bar
 def calculate_metrics(y_true, y_pred):
     epsilon = 1e-10  # To avoid division by zero
     interval_tolerance = 0.1  # 10% tolerance
-    within_tolerance = np.abs(y_true - y_pred) <= interval_tolerance * np.abs(
-        y_true + epsilon
-    )
+    within_tolerance = np.abs(y_true - y_pred) <= interval_tolerance * np.abs(y_true + epsilon)
     accuracy_within_tolerance = np.mean(within_tolerance) * 100  # Accuracy percentage
     return {
         "MSE": mean_squared_error(y_true, y_pred),
@@ -83,8 +82,7 @@ def calculate_metrics(y_true, y_pred):
         "MAE": mean_absolute_error(y_true, y_pred),
         "MedAE": median_absolute_error(y_true, y_pred),
         "Max_Error": max_error(y_true, y_pred),
-        "RAE": np.sum(np.abs(y_true - y_pred))
-        / np.sum(np.abs(y_true - np.mean(y_true))),
+        "RAE": np.sum(np.abs(y_true - y_pred)) / np.sum(np.abs(y_true - np.mean(y_true))),
         "Accuracy(%)": accuracy_within_tolerance,
         "R²": r2_score(y_true, y_pred),
         "Explained_Variance": explained_variance_score(y_true, y_pred),
@@ -92,9 +90,7 @@ def calculate_metrics(y_true, y_pred):
 
 
 # Function to open a file dialog and select a file
-def select_file(
-    title="Select a File", filetypes=(("CSV Files", "*.csv"), ("All Files", "*.*"))
-):
+def select_file(title="Select a File", filetypes=(("CSV Files", "*.csv"), ("All Files", "*.*"))):
     root = Tk()
     root.withdraw()  # Hide the main window
     file_path = filedialog.askopenfilename(title=title, filetypes=filetypes)
@@ -120,9 +116,7 @@ def plot_metrics(metrics_df, target_name, save_dir):
     num_models = len(model_names)
 
     # Generate a color palette with enough colors for all models
-    palette = sns.color_palette(
-        "husl", num_models
-    )  # You can change "husl" to other palettes
+    palette = sns.color_palette("husl", num_models)  # You can change "husl" to other palettes
 
     for metric in metrics:
         plt.figure(figsize=(10, 6))
@@ -133,9 +127,7 @@ def plot_metrics(metrics_df, target_name, save_dir):
 
         for i, model in enumerate(model_names):
             values = metrics_df[metrics_df["Model"] == model][metric].values
-            plt.bar(
-                model, values, color=palette[i], label=model
-            )  # Use color from palette
+            plt.bar(model, values, color=palette[i], label=model)  # Use color from palette
 
         plt.title(f"{metric} for {target_name}")
         plt.ylabel(metric)
@@ -252,7 +244,7 @@ def run_ml_valid_models():
         # Load scaler parameters
         scaler_path = os.path.join(target_path, "scaler_params.json")
         if os.path.exists(scaler_path):
-            with open(scaler_path, "r") as f:
+            with open(scaler_path) as f:
                 scaler_params = json.load(f)
                 scaler = StandardScaler()
                 scaler.mean_ = np.array(scaler_params["mean"])
@@ -261,12 +253,8 @@ def run_ml_valid_models():
             print(f"Loaded scaler parameters from: {scaler_path}")
 
         # Process each model
-        model_files = [
-            f for f in os.scandir(target_path) if f.name.endswith("_model.pkl")
-        ]
-        for model_file in tqdm(
-            model_files, desc=f"Validating models for {target}", unit="model"
-        ):
+        model_files = [f for f in os.scandir(target_path) if f.name.endswith("_model.pkl")]
+        for model_file in tqdm(model_files, desc=f"Validating models for {target}", unit="model"):
             model_name = model_file.name.replace("_model.pkl", "")
             print(f"\nValidating model: {model_name}")
 
@@ -283,12 +271,14 @@ def run_ml_valid_models():
         # Save metrics
         if target_metrics:
             metrics_df = pd.DataFrame(target_metrics)
-            metrics_file = os.path.join(target_path, f"validation_metrics.csv")
+            metrics_file = os.path.join(target_path, "validation_metrics.csv")
             metrics_df.to_csv(metrics_file, index=False)
             print(f"Validation metrics saved to: {metrics_file}")
 
             # The plots will be saved in the same directory as the CSV
-            plots_dir = target_path  # Change to target_path to save plots in the same directory as the CSV
+            plots_dir = (
+                target_path  # Change to target_path to save plots in the same directory as the CSV
+            )
 
             # Plot the metrics and save them as PNGs
             metrics_df = pd.read_csv(metrics_file)

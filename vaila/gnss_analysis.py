@@ -16,35 +16,37 @@ Autor: Seu Nome
 Data: 2024-10-13
 """
 
-import sys
-import gpxpy
 import csv
-from datetime import datetime
 import logging
-from typing import List, Dict, Any
+import sys
 import tkinter as tk
-from tkinter import messagebox, filedialog
+from datetime import datetime
+from tkinter import filedialog, messagebox
+from typing import Any
+
+import gpxpy
 import pandas as pd
 
 try:
     import simplekml
 except ImportError:
     simplekml = None
-from dateutil.parser import parse as parse_date
 import os
+
 import folium
+from dateutil.parser import parse as parse_date
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 
-def read_gpx_file(gpx_file_name: str) -> List[Dict[str, Any]]:
+def read_gpx_file(gpx_file_name: str) -> list[dict[str, Any]]:
     """
     Lê um arquivo GPX e retorna uma lista de pontos com dados extraídos.
     """
     points = []
 
     try:
-        with open(gpx_file_name, "r") as gpx_file:
+        with open(gpx_file_name) as gpx_file:
             gpx = gpxpy.parse(gpx_file)
 
         for track in gpx.tracks:
@@ -55,9 +57,7 @@ def read_gpx_file(gpx_file_name: str) -> List[Dict[str, Any]]:
                 # Obtém o start_time a partir do primeiro ponto com tempo válido
                 start_time = next((p.time for p in segment.points if p.time), None)
                 if not start_time:
-                    logging.warning(
-                        "Segmento sem tempo inicial válido. Pulando segmento."
-                    )
+                    logging.warning("Segmento sem tempo inicial válido. Pulando segmento.")
                     continue
 
                 for point in segment.points:
@@ -102,7 +102,7 @@ def read_gpx_file(gpx_file_name: str) -> List[Dict[str, Any]]:
     return points
 
 
-def export_to_csv(points: List[Dict[str, Any]], output_csv_file: str) -> None:
+def export_to_csv(points: list[dict[str, Any]], output_csv_file: str) -> None:
     """
     Exporta a lista de pontos para um arquivo CSV.
     """
@@ -140,9 +140,7 @@ def convert_gpx_to_csv():
     base = os.path.basename(gpx_file)
     name_no_ext, _ = os.path.splitext(base)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_file = os.path.join(
-        os.path.dirname(gpx_file), f"{name_no_ext}_{timestamp}.csv"
-    )
+    output_file = os.path.join(os.path.dirname(gpx_file), f"{name_no_ext}_{timestamp}.csv")
 
     try:
         points = read_gpx_file(gpx_file)
@@ -162,9 +160,7 @@ def convert_gpx_to_kml():
     base = os.path.basename(gpx_file)
     name_no_ext, _ = os.path.splitext(base)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_file = os.path.join(
-        os.path.dirname(gpx_file), f"{name_no_ext}_{timestamp}.kml"
-    )
+    output_file = os.path.join(os.path.dirname(gpx_file), f"{name_no_ext}_{timestamp}.kml")
 
     try:
         points = read_gpx_file(gpx_file)
@@ -190,9 +186,7 @@ def convert_gpx_to_kmz():
     base = os.path.basename(gpx_file)
     name_no_ext, _ = os.path.splitext(base)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_file = os.path.join(
-        os.path.dirname(gpx_file), f"{name_no_ext}_{timestamp}.kmz"
-    )
+    output_file = os.path.join(os.path.dirname(gpx_file), f"{name_no_ext}_{timestamp}.kmz")
 
     try:
         points = read_gpx_file(gpx_file)
@@ -218,9 +212,7 @@ def convert_csv_to_gpx():
     base = os.path.basename(csv_file)
     name_no_ext, _ = os.path.splitext(base)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_file = os.path.join(
-        os.path.dirname(csv_file), f"{name_no_ext}_{timestamp}.gpx"
-    )
+    output_file = os.path.join(os.path.dirname(csv_file), f"{name_no_ext}_{timestamp}.gpx")
 
     try:
         df = pd.read_csv(csv_file)
@@ -228,11 +220,7 @@ def convert_csv_to_gpx():
 
         gpx = gpxpy.gpx.GPX()
         for _, row in df.iterrows():
-            t = (
-                parse_date(row["time"])
-                if "time" in row and pd.notna(row["time"])
-                else None
-            )
+            t = parse_date(row["time"]) if "time" in row and pd.notna(row["time"]) else None
             wp = gpxpy.gpx.GPXWaypoint(
                 latitude=row["latitude"],
                 longitude=row["longitude"],
@@ -257,9 +245,7 @@ def convert_csv_to_kml():
     base = os.path.basename(csv_file)
     name_no_ext, _ = os.path.splitext(base)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_file = os.path.join(
-        os.path.dirname(csv_file), f"{name_no_ext}_{timestamp}.kml"
-    )
+    output_file = os.path.join(os.path.dirname(csv_file), f"{name_no_ext}_{timestamp}.kml")
 
     try:
         df = pd.read_csv(csv_file)
@@ -285,9 +271,7 @@ def convert_csv_to_kmz():
     base = os.path.basename(csv_file)
     name_no_ext, _ = os.path.splitext(base)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_file = os.path.join(
-        os.path.dirname(csv_file), f"{name_no_ext}_{timestamp}.kmz"
-    )
+    output_file = os.path.join(os.path.dirname(csv_file), f"{name_no_ext}_{timestamp}.kmz")
 
     try:
         df = pd.read_csv(csv_file)
@@ -339,15 +323,11 @@ def distance_analysis():
 
 
 def unit_conversion():
-    messagebox.showinfo(
-        "Unit Conversion", "Unit conversion functionality is not implemented yet."
-    )
+    messagebox.showinfo("Unit Conversion", "Unit conversion functionality is not implemented yet.")
 
 
 def speed_analysis():
-    messagebox.showinfo(
-        "Speed Analysis", "Speed analysis functionality is not implemented yet."
-    )
+    messagebox.showinfo("Speed Analysis", "Speed analysis functionality is not implemented yet.")
 
 
 def trajectory_analysis():
@@ -408,12 +388,10 @@ def plot_gnss_data():
                 lats = df["latitude"].tolist()
                 lons = df["longitude"].tolist()
             else:
-                messagebox.showerror(
-                    "Error", "CSV must have 'latitude' and 'longitude' columns."
-                )
+                messagebox.showerror("Error", "CSV must have 'latitude' and 'longitude' columns.")
                 return
         elif ext == ".gpx":
-            with open(file_path, "r") as f:
+            with open(file_path) as f:
                 gpx = gpxpy.parse(f)
             for track in gpx.tracks:
                 for segment in track.segments:
@@ -453,9 +431,7 @@ def plot_gnss_data():
 
     # Static Map using Matplotlib (for quick visualization)
     plt.figure(figsize=(10, 8))
-    plt.plot(
-        lons, lats, linestyle="-", marker="o", color="blue", markersize=5, linewidth=2
-    )
+    plt.plot(lons, lats, linestyle="-", marker="o", color="blue", markersize=5, linewidth=2)
     plt.scatter(lons[0], lats[0], c="green", s=100, label="Start")
     plt.scatter(lons[-1], lats[-1], c="red", s=100, label="End")
     plt.xlabel("Longitude")
@@ -469,15 +445,9 @@ def plot_gnss_data():
     # Interactive Map using Folium (see [Folium Getting Started](https://python-visualization.github.io/folium/latest/getting_started.html))
     if lats and lons:
         m = folium.Map(location=[lats[0], lons[0]], zoom_start=12)
-        folium.PolyLine(
-            list(zip(lats, lons)), color="blue", weight=2.5, opacity=1
-        ).add_to(m)
-        folium.Marker(
-            [lats[0], lons[0]], popup="Start", icon=folium.Icon(color="green")
-        ).add_to(m)
-        folium.Marker(
-            [lats[-1], lons[-1]], popup="End", icon=folium.Icon(color="red")
-        ).add_to(m)
+        folium.PolyLine(list(zip(lats, lons)), color="blue", weight=2.5, opacity=1).add_to(m)
+        folium.Marker([lats[0], lons[0]], popup="Start", icon=folium.Icon(color="green")).add_to(m)
+        folium.Marker([lats[-1], lons[-1]], popup="End", icon=folium.Icon(color="red")).add_to(m)
         # Save the map in the same directory as the input file
         base = os.path.basename(file_path)
         name_no_ext, _ = os.path.splitext(base)
@@ -569,6 +539,7 @@ def kmz_conversion():
 def convert_kml_to_gpx():
     """Converts a KML file to GPX."""
     import xml.etree.ElementTree as ET
+
     import gpxpy.gpx
 
     kml_file = filedialog.askopenfilename(
@@ -594,16 +565,12 @@ def convert_kml_to_gpx():
                     lon = float(parts[0])
                     lat = float(parts[1])
                     elev = float(parts[2]) if len(parts) >= 3 and parts[2] else None
-                    wp = gpxpy.gpx.GPXWaypoint(
-                        latitude=lat, longitude=lon, elevation=elev
-                    )
+                    wp = gpxpy.gpx.GPXWaypoint(latitude=lat, longitude=lon, elevation=elev)
                     gpx.waypoints.append(wp)
         base = os.path.basename(kml_file)
         name_no_ext, _ = os.path.splitext(base)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_file = os.path.join(
-            os.path.dirname(kml_file), f"{name_no_ext}_{timestamp}.gpx"
-        )
+        output_file = os.path.join(os.path.dirname(kml_file), f"{name_no_ext}_{timestamp}.gpx")
         with open(output_file, "w", encoding="utf-8") as f:
             f.write(gpx.to_xml())
         messagebox.showinfo("Success", f"KML data converted and saved to {output_file}")
@@ -613,8 +580,8 @@ def convert_kml_to_gpx():
 
 def convert_kml_to_csv():
     """Converts a KML file to CSV."""
-    import xml.etree.ElementTree as ET
     import csv
+    import xml.etree.ElementTree as ET
 
     kml_file = filedialog.askopenfilename(
         title="Select KML File", filetypes=[("KML Files", "*.kml")]
@@ -642,9 +609,7 @@ def convert_kml_to_csv():
         base = os.path.basename(kml_file)
         name_no_ext, _ = os.path.splitext(base)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_file = os.path.join(
-            os.path.dirname(kml_file), f"{name_no_ext}_{timestamp}.csv"
-        )
+        output_file = os.path.join(os.path.dirname(kml_file), f"{name_no_ext}_{timestamp}.csv")
         with open(output_file, "w", newline="", encoding="utf-8") as csvfile:
             fieldnames = ["latitude", "longitude", "elevation"]
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
@@ -669,22 +634,19 @@ def convert_kml_to_kmz():
         base = os.path.basename(kml_file)
         name_no_ext, _ = os.path.splitext(base)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_file = os.path.join(
-            os.path.dirname(kml_file), f"{name_no_ext}_{timestamp}.kmz"
-        )
+        output_file = os.path.join(os.path.dirname(kml_file), f"{name_no_ext}_{timestamp}.kmz")
         with zipfile.ZipFile(output_file, "w", zipfile.ZIP_DEFLATED) as z:
             z.write(kml_file, arcname="doc.kml")
-        messagebox.showinfo(
-            "Success", f"KML data compressed and saved to {output_file}"
-        )
+        messagebox.showinfo("Success", f"KML data compressed and saved to {output_file}")
     except Exception as e:
         messagebox.showerror("Error", f"An error occurred: {e}")
 
 
 def convert_kmz_to_gpx():
     """Converts a KMZ file to GPX."""
-    import zipfile
     import xml.etree.ElementTree as ET
+    import zipfile
+
     import gpxpy.gpx
 
     kmz_file = filedialog.askopenfilename(
@@ -693,9 +655,8 @@ def convert_kmz_to_gpx():
     if not kmz_file:
         return
     try:
-        with zipfile.ZipFile(kmz_file, "r") as z:
-            with z.open("doc.kml") as kml_file:
-                tree = ET.parse(kml_file)
+        with zipfile.ZipFile(kmz_file, "r") as z, z.open("doc.kml") as kml_file:
+            tree = ET.parse(kml_file)
         root = tree.getroot()
         ns = {"kml": "http://www.opengis.net/kml/2.2"}
         coords_elements = root.findall(".//kml:coordinates", ns)
@@ -711,16 +672,12 @@ def convert_kmz_to_gpx():
                     lon = float(parts[0])
                     lat = float(parts[1])
                     elev = float(parts[2]) if len(parts) >= 3 and parts[2] else None
-                    wp = gpxpy.gpx.GPXWaypoint(
-                        latitude=lat, longitude=lon, elevation=elev
-                    )
+                    wp = gpxpy.gpx.GPXWaypoint(latitude=lat, longitude=lon, elevation=elev)
                     gpx.waypoints.append(wp)
         base = os.path.basename(kmz_file)
         name_no_ext, _ = os.path.splitext(base)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_file = os.path.join(
-            os.path.dirname(kmz_file), f"{name_no_ext}_{timestamp}.gpx"
-        )
+        output_file = os.path.join(os.path.dirname(kmz_file), f"{name_no_ext}_{timestamp}.gpx")
         with open(output_file, "w", encoding="utf-8") as f:
             f.write(gpx.to_xml())
         messagebox.showinfo("Success", f"KMZ data converted and saved to {output_file}")
@@ -730,9 +687,9 @@ def convert_kmz_to_gpx():
 
 def convert_kmz_to_csv():
     """Converts a KMZ file to CSV."""
-    import zipfile
-    import xml.etree.ElementTree as ET
     import csv
+    import xml.etree.ElementTree as ET
+    import zipfile
 
     kmz_file = filedialog.askopenfilename(
         title="Select KMZ File", filetypes=[("KMZ Files", "*.kmz")]
@@ -740,9 +697,8 @@ def convert_kmz_to_csv():
     if not kmz_file:
         return
     try:
-        with zipfile.ZipFile(kmz_file, "r") as z:
-            with z.open("doc.kml") as kml_file:
-                tree = ET.parse(kml_file)
+        with zipfile.ZipFile(kmz_file, "r") as z, z.open("doc.kml") as kml_file:
+            tree = ET.parse(kml_file)
         root = tree.getroot()
         ns = {"kml": "http://www.opengis.net/kml/2.2"}
         coords_elements = root.findall(".//kml:coordinates", ns)
@@ -762,9 +718,7 @@ def convert_kmz_to_csv():
         base = os.path.basename(kmz_file)
         name_no_ext, _ = os.path.splitext(base)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_file = os.path.join(
-            os.path.dirname(kmz_file), f"{name_no_ext}_{timestamp}.csv"
-        )
+        output_file = os.path.join(os.path.dirname(kmz_file), f"{name_no_ext}_{timestamp}.csv")
         with open(output_file, "w", newline="", encoding="utf-8") as csvfile:
             fieldnames = ["latitude", "longitude", "elevation"]
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
@@ -786,20 +740,15 @@ def convert_kmz_to_kml():
     if not kmz_file:
         return
     try:
-        with zipfile.ZipFile(kmz_file, "r") as z:
-            with z.open("doc.kml") as kml_file:
-                content = kml_file.read()
+        with zipfile.ZipFile(kmz_file, "r") as z, z.open("doc.kml") as kml_file:
+            content = kml_file.read()
         base = os.path.basename(kmz_file)
         name_no_ext, _ = os.path.splitext(base)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_file = os.path.join(
-            os.path.dirname(kmz_file), f"{name_no_ext}_{timestamp}.kml"
-        )
+        output_file = os.path.join(os.path.dirname(kmz_file), f"{name_no_ext}_{timestamp}.kml")
         with open(output_file, "wb") as f:
             f.write(content)
-        messagebox.showinfo(
-            "Success", f"KMZ extracted and saved as KML to {output_file}"
-        )
+        messagebox.showinfo("Success", f"KMZ extracted and saved as KML to {output_file}")
     except Exception as e:
         messagebox.showerror("Error", f"An error occurred: {e}")
 
@@ -809,9 +758,7 @@ def run_gnss_analysis_gui():
     root.title("Select Analysis Option")
     root.geometry("600x400")
 
-    header = tk.Label(
-        root, text="Select the type of analysis to perform:", font=("Arial", 16)
-    )
+    header = tk.Label(root, text="Select the type of analysis to perform:", font=("Arial", 16))
     header.pack(pady=20)
 
     button_frame = tk.Frame(root)

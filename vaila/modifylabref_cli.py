@@ -1,7 +1,9 @@
 import os
+from datetime import datetime
+
 import numpy as np
 import pandas as pd
-from datetime import datetime
+
 from vaila.rotation import rotdata
 
 
@@ -47,9 +49,7 @@ def process_files(input_dir, output_dir, labcoord_angles, suffix):
         # Verificar se a coluna "Time" está presente em qualquer variação de maiúsculas e minúsculas
         time_col_present = any(col.lower() == "time" for col in data.columns)
         if not time_col_present:
-            print(
-                f"Error: Column 'Time' not found in {file_name}. Please include a 'Time' column."
-            )
+            print(f"Error: Column 'Time' not found in {file_name}. Please include a 'Time' column.")
             continue
 
         # Renomear a coluna de tempo para garantir que tenha um nome consistente

@@ -138,9 +138,7 @@ def frequency_dispersion(freqs, psd, fmin=0.15, fmax=5):
 def energy_content(freqs, psd, f_low, f_high, fmin=0.15, fmax=5):
     """Calculates the energy content between f_low and f_high Hz."""
     fmin, fmax = adjust_frequency_range(freqs, fmin, fmax)
-    idx = np.where(
-        (freqs >= f_low) & (freqs <= f_high) & (freqs >= fmin) & (freqs <= fmax)
-    )
+    idx = np.where((freqs >= f_low) & (freqs <= f_high) & (freqs >= fmin) & (freqs <= fmax))
     selected_powers = psd[idx]
     if len(selected_powers) == 0:
         return np.nan
@@ -165,9 +163,7 @@ def energy_content_above_2(freqs, psd, fmin=0.15, fmax=5):
 def frequency_quotient(freqs, psd, fmin=0.15, fmax=5):
     """Calculates the frequency quotient."""
     power_below_2 = energy_content(freqs, psd, f_low=0, f_high=2, fmin=fmin, fmax=fmax)
-    power_above_2 = energy_content(
-        freqs, psd, f_low=2, f_high=fmax, fmin=fmin, fmax=fmax
-    )
+    power_above_2 = energy_content(freqs, psd, f_low=2, f_high=fmax, fmin=fmin, fmax=fmax)
     if power_below_2 == 0:
         return np.nan
     return power_above_2 / power_below_2

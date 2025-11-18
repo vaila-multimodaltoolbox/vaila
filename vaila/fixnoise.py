@@ -25,23 +25,24 @@ Instructions:
 
 """
 
-import pandas as pd
-import matplotlib.pyplot as plt
+import glob
+import os
+from datetime import datetime
 from tkinter import (
+    BooleanVar,
+    Button,
+    Canvas,
+    Checkbutton,
+    Frame,
+    Scrollbar,
     Tk,
     Toplevel,
-    Canvas,
-    Scrollbar,
-    Frame,
-    Button,
-    Checkbutton,
-    BooleanVar,
-    messagebox,
     filedialog,
+    messagebox,
 )
-import os
-import glob
-from datetime import datetime
+
+import matplotlib.pyplot as plt
+import pandas as pd
 
 # Print the directory and name of the script being executed
 print(f"Running script: {os.path.basename(__file__)}")
@@ -65,9 +66,7 @@ def select_headers_and_load_data(file_path):
 
     def on_select():
         nonlocal selected_headers
-        selected_headers = [
-            header for header, var in zip(headers, header_vars) if var.get()
-        ]
+        selected_headers = [header for header, var in zip(headers, header_vars) if var.get()]
         selection_window.quit()
         selection_window.destroy()
 
@@ -82,7 +81,7 @@ def select_headers_and_load_data(file_path):
     selection_window = Toplevel()
     selection_window.title("Select Headers")
     selection_window.geometry(
-        f"{selection_window.winfo_screenwidth()}x{int(selection_window.winfo_screenheight()*0.9)}"
+        f"{selection_window.winfo_screenwidth()}x{int(selection_window.winfo_screenheight() * 0.9)}"
     )
 
     canvas = Canvas(selection_window)
@@ -225,17 +224,13 @@ def process_files_in_directory(directory):
 
         data = read_csv_full(file_path)
         if selected_column not in data.columns:
-            messagebox.showerror(
-                "Error", f"Column '{selected_column}' not found in the data."
-            )
+            messagebox.showerror("Error", f"Column '{selected_column}' not found in the data.")
             return  # Exit if the column is not found
 
         target_column_index = data.columns.get_loc(
             selected_column
         )  # Get the index of the selected column
-        indices = makefig1(
-            data.iloc[:, target_column_index]
-        )  # Access the column safely
+        indices = makefig1(data.iloc[:, target_column_index])  # Access the column safely
         if indices:  # Only if points were selected
             modified_data = replace_segments(data, indices, target_column_index)
             new_filename = os.path.join(
@@ -257,9 +252,7 @@ def process_files_in_directory(directory):
 def main():
     root = Tk()
     root.withdraw()  # Hide the main Tkinter window
-    directory_path = filedialog.askdirectory(
-        title="Select Directory Containing CSV Files"
-    )
+    directory_path = filedialog.askdirectory(title="Select Directory Containing CSV Files")
 
     if not directory_path:
         messagebox.showerror("Error", "No directory selected.")

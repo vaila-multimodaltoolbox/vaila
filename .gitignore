@@ -85,6 +85,11 @@ venv.bak/
 .mocap_env/
 site/
 
+# uv (Python package manager)
+.uv/
+uv.lock
+.python-version
+
 # Spyder project settings
 .spyderproject
 .spyproject

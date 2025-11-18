@@ -1,0 +1,189 @@
+[project]
+name = "vaila"
+version = "0.2.0"
+description = "Versatile Anarcho Integrated Liberation Ánalysis - Multimodal Toolbox for Biomechanics and Motion Analysis"
+readme = "README.md"
+requires-python = ">=3.12"
+license = {text = "AGPL-3.0-or-later"}
+authors = [
+    {name = "Paulo R. P. Santiago", email = "paulosantiago@usp.br"},
+    {name = "Guilherme Cesar"},
+    {name = "Ligia Mochida"},
+    {name = "Bruno Bedo"}
+]
+keywords = ["biomechanics", "motion-analysis", "multimodal", "imu", "mocap", "markerless"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: GNU Affero General Public License v3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+]
+
+dependencies = [
+    # Core scientific computing
+    "numpy",
+    "pandas",
+    "scipy",
+    "scikit-learn",
+    "statsmodels",
+    
+    # Visualization
+    "matplotlib",
+    "seaborn",
+    "plotly",
+    "pillow",
+    
+    # Data processing
+    "dask",
+    "distributed",
+    "h5py",
+    "openpyxl",
+    "lxml",
+    
+    # Jupyter and interactive computing
+    "ipython",
+    "jupyterlab",
+    "notebook",
+    "matplotlib-inline",
+    
+    # Web frameworks
+    "flask",
+    "dash",
+    "dash-core-components",
+    "dash-html-components",
+    "dash-table",
+    "werkzeug",
+    "itsdangerous",
+    "blinker",
+    
+    # Database and data formats
+    "sqlalchemy",
+    "ezc3d",
+    "toml",
+    
+    # Computer vision and image processing
+    "opencv-contrib-python",
+    "imageio",
+    "imageio-ffmpeg",
+    "moviepy",
+    
+    # Machine learning and AI
+    "jax",
+    "jaxlib",
+    "xgboost",
+    "mediapipe",
+    
+    # 3D processing
+    "open3d",
+    "glfw",
+    
+    # Signal processing and biomechanics
+    "imufusion",
+    "neurokit2",
+    "biosppy",
+    "entropy",
+    "pykalman",
+    "spm1d",
+    
+    # Audio processing
+    "librosa",
+    "pydub",
+    "sounddevice",
+    "soundfile",
+    "SpeechRecognition",
+    "pyttsx3",
+    "gtts",
+    "midiutil",
+    "mido",
+    
+    # Geospatial
+    "gpxpy",
+    "simplekml",
+    "folium",
+    
+    # Networking and remote access
+    "paramiko",
+    "scp",
+    
+    # Utilities
+    "einops",
+    "absl-py",
+    "bcrypt",
+    "python-dotenv",
+    "pygame",
+    "PySide6",
+    "tenacity",
+    "retrying",
+    "watchdog",
+    "wordcloud",
+    "rich",
+    "ydata_profiling",
+    "xonsh[full]",
+    "intel-openmp",
+    "yt-dlp",
+    "openai",
+    "odfpy",
+    "psutil",
+    "pyzmq",
+    "protobuf",
+]
+
+[project.scripts]
+vaila = "vaila:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv.sources]
+# If you need to specify custom sources for packages, add them here
+
+[tool.uv.workspace]
+# Workspace configuration if needed
+
+[tool.ruff]
+# Ruff configuration
+# See https://docs.astral.sh/ruff/configuration/
+target-version = "py312"
+line-length = 100
+exclude = [
+    ".git",
+    ".venv",
+    "__pycache__",
+    "*.pyc",
+    "build",
+    "dist",
+    ".uv",
+    "uv.lock",
+]
+
+[tool.ruff.lint]
+# Enable specific rule sets
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "SIM", # flake8-simplify
+]
+
+ignore = [
+    "E501",  # Line too long (handled by formatter)
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Ignore specific rules for specific file patterns
+"__init__.py" = ["F401"]  # Allow unused imports in __init__.py
+"*.pyi" = ["E501"]  # Allow long lines in type stubs
+
+[tool.ruff.format]
+# Formatting options
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
