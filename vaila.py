@@ -4,8 +4,8 @@ vaila.py
 ===============================================================================
 Author: Prof. Paulo R. P. Santiago
 Date: 07 October 2024
-Update: 10 November 2025
-Version updated: 0.2.0
+Update: 18 November 2025
+Version updated: 0.2.1
 Python Version: 3.12.12
 
 Example of usage:
@@ -181,7 +181,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 17.November.2025 v0.2.0 (Python 3.12.12)
+vailá - 18.November.2025 v0.2.1 (Python 3.12.12)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -282,7 +282,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 17.November.2025 v0.2.0 (Python 3.12.12)")
+        self.title("vailá - 18.November.2025 v0.2.1 (Python 3.12.12)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -2442,92 +2442,65 @@ class Vaila(tk.Tk):
         webbrowser.open("https://github.com/vaila-multimodaltoolbox/vaila")
 
     def open_terminal_shell(self):
-        # Open a new terminal with the Conda environment activated using xonsh
-        """Opens a new terminal with the Conda environment activated using xonsh.
+        # Open a new terminal with uv run xonsh
+        """Opens a new terminal with xonsh shell using uv run.
 
         The Multimodal Toolbox provides a convenient way to open a new terminal with
-        the Conda environment activated. On macOS, the Terminal app is used. On Windows,
+        xonsh shell. On macOS, the Terminal app is used. On Windows,
         PowerShell 7 is used, and on Linux, the default terminal emulator is used.
 
-        The Conda environment is activated using the `conda activate` command, and then
-        the xonsh shell is started. This allows you to access the Conda environment and
-        any packages installed in it, as well as the xonsh shell features.
+        The xonsh shell is started using `uv run xonsh`, which automatically uses
+        the project's virtual environment and dependencies managed by uv.
 
-        Note that this function detects both Anaconda and Miniconda installations
-        automatically and uses the appropriate conda path.
+        Note: This function requires uv to be installed and the command to be run
+        from the project root directory.
         """
         import os
+        from pathlib import Path
+
+        # Get the project root directory (where pyproject.toml should be)
+        try:
+            # Try to get the directory of this script
+            script_dir = Path(__file__).parent.absolute()
+            # If we're in vaila/vaila.py, go up one level to project root
+            if script_dir.name == "vaila" and (script_dir.parent / "pyproject.toml").exists():
+                project_root = script_dir.parent
+            else:
+                # Otherwise, assume current directory or script directory
+                project_root = Path.cwd()
+                if not (project_root / "pyproject.toml").exists():
+                    project_root = script_dir
+        except:
+            project_root = Path.cwd()
+
+        project_root_str = str(project_root)
 
         if platform.system() == "Darwin":  # For macOS
-            # Detect Conda installation (Anaconda or Miniconda)
-            conda_path = None
-            if os.path.exists(os.path.expanduser("~/anaconda3/etc/profile.d/conda.sh")):
-                conda_path = "~/anaconda3/etc/profile.d/conda.sh"
-            elif os.path.exists(os.path.expanduser("~/miniconda3/etc/profile.d/conda.sh")):
-                conda_path = "~/miniconda3/etc/profile.d/conda.sh"
-
-            if conda_path:
-                subprocess.Popen(
-                    [
-                        "osascript",
-                        "-e",
-                        f'tell application "Terminal" to do script "source {conda_path} && conda activate vaila && xonsh"',
-                    ]
-                )
-            else:
-                messagebox.showerror("Error", "Conda not found in anaconda3 or miniconda3.")
+            subprocess.Popen(
+                [
+                    "osascript",
+                    "-e",
+                    f'tell application "Terminal" to do script "cd {project_root_str} && uv run xonsh"',
+                ]
+            )
 
         elif platform.system() == "Windows":  # For Windows
-            # Detect Conda installation (Anaconda or Miniconda)
-            conda_hook = None
-            user_profile = os.environ.get("USERPROFILE", "")
-
-            if os.path.exists(
-                os.path.join(user_profile, "anaconda3", "shell", "condabin", "conda-hook.ps1")
-            ):
-                conda_hook = os.path.join(
-                    user_profile, "anaconda3", "shell", "condabin", "conda-hook.ps1"
-                )
-            elif os.path.exists(
-                os.path.join(user_profile, "miniconda3", "shell", "condabin", "conda-hook.ps1")
-            ):
-                conda_hook = os.path.join(
-                    user_profile, "miniconda3", "shell", "condabin", "conda-hook.ps1"
-                )
-            elif os.path.exists("C:\\ProgramData\\anaconda3\\shell\\condabin\\conda-hook.ps1"):
-                conda_hook = "C:\\ProgramData\\anaconda3\\shell\\condabin\\conda-hook.ps1"
-            elif os.path.exists("C:\\ProgramData\\miniconda3\\shell\\condabin\\conda-hook.ps1"):
-                conda_hook = "C:\\ProgramData\\miniconda3\\shell\\condabin\\conda-hook.ps1"
-
-            if conda_hook:
-                subprocess.Popen(
-                    f"start pwsh -NoExit -Command \"& '{conda_hook}'; conda activate vaila; xonsh\"",
-                    shell=True,
-                )
-            else:
-                messagebox.showerror("Error", "Conda not found in anaconda3 or miniconda3.")
+            subprocess.Popen(
+                f'start pwsh -NoExit -Command "cd {project_root_str}; uv run xonsh"',
+                shell=True,
+            )
 
         elif platform.system() == "Linux":  # For Linux
-            # Detect Conda installation (Anaconda or Miniconda)
-            conda_path = None
-            if os.path.exists(os.path.expanduser("~/anaconda3/etc/profile.d/conda.sh")):
-                conda_path = "~/anaconda3/etc/profile.d/conda.sh"
-            elif os.path.exists(os.path.expanduser("~/miniconda3/etc/profile.d/conda.sh")):
-                conda_path = "~/miniconda3/etc/profile.d/conda.sh"
-
-            if conda_path:
-                subprocess.Popen(
-                    [
-                        "x-terminal-emulator",
-                        "-e",
-                        "bash",
-                        "-c",
-                        f"source {conda_path} && conda activate vaila && xonsh",
-                    ],
-                    start_new_session=True,
-                )
-            else:
-                messagebox.showerror("Error", "Conda not found in anaconda3 or miniconda3.")
+            subprocess.Popen(
+                [
+                    "x-terminal-emulator",
+                    "-e",
+                    "bash",
+                    "-c",
+                    f"cd {project_root_str} && uv run xonsh",
+                ],
+                start_new_session=True,
+            )
 
     def quit_app(self):
         """Quits the Multimodal Toolbox application.

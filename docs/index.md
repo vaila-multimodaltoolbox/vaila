@@ -116,17 +116,42 @@ All buttons in the vailá GUI (`vaila.py`) are documented in **[docs/vaila_butto
 
 ## 🛠 Installation & Setup
 
+### ⚡ Powered by *uv*
+
+*vailá* now uses **[uv](https://github.com/astral-sh/uv)**, an extremely fast Python package installer and resolver, written in Rust. **uv is the recommended installation method for all platforms** (Windows, Linux, macOS) due to its **10-100x faster installation** and **faster execution times** compared to Conda.
+
+**Note:** Conda installation methods are still available but are now considered legacy due to slower installation and execution times.
+
 ### 🔹 Prerequisites
 
-✔ **Conda**: Install [Anaconda](https://www.anaconda.com/download/success) and ensure it is accessible from the command line.
-✔ **FFmpeg**: Required for video processing functionalities.
+✔ **uv**: Will be automatically installed by the installation scripts, or install manually from [https://github.com/astral-sh/uv](https://github.com/astral-sh/uv)  
+✔ **FFmpeg**: Required for video processing functionalities (installed automatically on Windows)
 
-### 🔹 Clone the Repository
+### 🔹 Installation Methods
 
-```bash
+**Windows (Recommended):**
+```powershell
 git clone https://github.com/vaila-multimodaltoolbox/vaila
 cd vaila
+.\install_vaila_win_uv.ps1
 ```
+
+**Linux and macOS (Using uv):**
+```bash
+# Install uv
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Clone and install
+git clone https://github.com/vaila-multimodaltoolbox/vaila
+cd vaila
+uv sync
+
+# Run vailá
+uv run vaila.py
+```
+
+**Legacy Conda Method:**
+See the [main README.md](../README.md) for Conda installation instructions (slower, not recommended).
 
 ---
 
