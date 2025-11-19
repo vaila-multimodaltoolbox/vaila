@@ -32,10 +32,16 @@
     </ul>
   
     <h3>Installation Instructions</h3>
+    <h4>⚡ Powered by <em>uv</em> (Recommended)</h4>
+    <p>
+      <em>vailá</em> now uses <strong><a href="https://github.com/astral-sh/uv">uv</a></strong>, an extremely fast Python package installer. 
+      <strong>uv is the recommended installation method</strong> for all platforms due to its <strong>10-100x faster installation</strong> 
+      and <strong>faster execution times</strong> compared to Conda.
+    </p>
     <h4>Prerequisites</h4>
     <ul>
-      <li><strong>Anaconda:</strong> Ensure that Anaconda is installed and configured.</li>
-      <li><strong>FFmpeg:</strong> Required for video processing functionalities.</li>
+      <li><strong>uv:</strong> Will be automatically installed by the installation scripts, or install manually from <a href="https://github.com/astral-sh/uv">https://github.com/astral-sh/uv</a></li>
+      <li><strong>FFmpeg:</strong> Required for video processing functionalities (installed automatically on Windows)</li>
     </ul>
     <h4>Steps</h4>
     <ol>
@@ -47,13 +53,28 @@ cd vaila</code></pre>
       <li>
         <strong>Set up the environment:</strong>
         <ul>
-          <li><strong>Linux:</strong> Run <code>./install_vaila_linux.sh</code></li>
-          <li><strong>macOS:</strong> Run <code>./install_vaila_mac.sh</code></li>
-          <li><strong>Windows:</strong> Run the PowerShell script: <code>.\install_vaila_win.ps1</code></li>
+          <li><strong>Windows (Recommended):</strong> Run <code>.\install_vaila_win_uv.ps1</code></li>
+          <li><strong>Linux and macOS (Using uv):</strong>
+            <pre><code># Install uv
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Sync dependencies
+uv sync</code></pre>
+          </li>
+          <li><strong>Legacy Conda Method (slower):</strong>
+            <ul>
+              <li><strong>Linux:</strong> Run <code>./install_vaila_linux.sh</code></li>
+              <li><strong>macOS:</strong> Run <code>./install_vaila_mac.sh</code></li>
+              <li><strong>Windows:</strong> Run <code>.\install_vaila_win.ps1</code></li>
+            </ul>
+          </li>
         </ul>
       </li>
       <li>
         <strong>Run vailá:</strong>
+        <p><strong>Using uv (Recommended):</strong></p>
+        <pre><code>uv run vaila.py</code></pre>
+        <p><strong>Using Conda (Legacy):</strong></p>
         <pre><code>conda activate vaila
 python vaila.py</code></pre>
       </li>
@@ -96,6 +117,9 @@ python vaila.py</code></pre>
     <p>
       After setting up the environment, run vailá using:
     </p>
+    <p><strong>Using uv (Recommended):</strong></p>
+    <pre><code>uv run vaila.py</code></pre>
+    <p><strong>Using Conda (Legacy):</strong></p>
     <pre><code>conda activate vaila
 python vaila.py</code></pre>
     <p>
@@ -144,10 +168,16 @@ python vaila.py</code></pre>
     </ul>
   
     <h3>Instruções de Instalação</h3>
+    <h4>⚡ Powered by <em>uv</em> (Recomendado)</h4>
+    <p>
+      <em>vailá</em> agora usa <strong><a href="https://github.com/astral-sh/uv">uv</a></strong>, um instalador de pacotes Python extremamente rápido. 
+      <strong>uv é o método de instalação recomendado</strong> para todas as plataformas devido à sua <strong>instalação 10-100x mais rápida</strong> 
+      e <strong>tempos de execução mais rápidos</strong> em comparação com Conda.
+    </p>
     <h4>Pré-requisitos</h4>
     <ul>
-      <li><strong>Anaconda:</strong> Certifique-se de que o Anaconda está instalado e configurado.</li>
-      <li><strong>FFmpeg:</strong> Necessário para funcionalidades de processamento de vídeo.</li>
+      <li><strong>uv:</strong> Será instalado automaticamente pelos scripts de instalação, ou instale manualmente em <a href="https://github.com/astral-sh/uv">https://github.com/astral-sh/uv</a></li>
+      <li><strong>FFmpeg:</strong> Necessário para funcionalidades de processamento de vídeo (instalado automaticamente no Windows)</li>
     </ul>
     <h4>Passos</h4>
     <ol>
@@ -159,13 +189,28 @@ cd vaila</code></pre>
       <li>
         <strong>Configurar o ambiente:</strong>
         <ul>
-          <li><strong>Linux:</strong> Execute <code>./install_vaila_linux.sh</code></li>
-          <li><strong>macOS:</strong> Execute <code>./install_vaila_mac.sh</code></li>
-          <li><strong>Windows:</strong> Execute o script PowerShell: <code>.\install_vaila_win.ps1</code></li>
+          <li><strong>Windows (Recomendado):</strong> Execute <code>.\install_vaila_win_uv.ps1</code></li>
+          <li><strong>Linux e macOS (Usando uv):</strong>
+            <pre><code># Instalar uv
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Sincronizar dependências
+uv sync</code></pre>
+          </li>
+          <li><strong>Método Conda Legacy (mais lento):</strong>
+            <ul>
+              <li><strong>Linux:</strong> Execute <code>./install_vaila_linux.sh</code></li>
+              <li><strong>macOS:</strong> Execute <code>./install_vaila_mac.sh</code></li>
+              <li><strong>Windows:</strong> Execute <code>.\install_vaila_win.ps1</code></li>
+            </ul>
+          </li>
         </ul>
       </li>
       <li>
         <strong>Inicie o vailá:</strong>
+        <p><strong>Usando uv (Recomendado):</strong></p>
+        <pre><code>uv run vaila.py</code></pre>
+        <p><strong>Usando Conda (Legacy):</strong></p>
         <pre><code>conda activate vaila
 python vaila.py</code></pre>
       </li>
@@ -199,6 +244,9 @@ python vaila.py</code></pre>
     <p>
       Após configurar o ambiente, inicie o vailá com o comando:
     </p>
+    <p><strong>Usando uv (Recomendado):</strong></p>
+    <pre><code>uv run vaila.py</code></pre>
+    <p><strong>Usando Conda (Legacy):</strong></p>
     <pre><code>conda activate vaila
 python vaila.py</code></pre>
     <p>
