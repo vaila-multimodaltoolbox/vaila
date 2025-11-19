@@ -1,142 +1,191 @@
 <#
     Script: uninstall_vaila_win.ps1
-    Description: Uninstalls the vaila - Multimodal Toolbox from Windows 11,
-                 removing the Conda environment, deleting program files from
-                 AppData\Local\vaila, removing FFmpeg if installed,
+    Description: Uninstalls the vaila - Multimodal Toolbox from Windows,
+                 removing both uv virtual environment (.venv) and Conda environment (legacy),
+                 deleting program files from installation locations, removing FFmpeg if installed,
                  removing vaila profiles from Windows Terminal, and deleting
                  Start Menu and Desktop shortcuts.
     Creation Date: 10 Jan 2025
-    Last Update: 31 May 2025
+    Last Update: 18 November 2025
     Author: Paulo R. P. Santiago
+    Version: 0.2.1
 #>
 
-# Check for administrative privileges
-If (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator"))
-{
-    Write-Warning "This script needs to be run as an Administrator."
-    Exit
+$ErrorActionPreference = "Continue"
+
+Write-Host "============================================================" -ForegroundColor Cyan
+Write-Host "vaila - Multimodal Toolbox Uninstallation" -ForegroundColor Cyan
+Write-Host "============================================================" -ForegroundColor Cyan
+Write-Host ""
+
+# Check if running as administrator (optional, but helpful for system-wide installations)
+$isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+If ($isAdmin) {
+    Write-Host "Running with Administrator privileges." -ForegroundColor Green
+} Else {
+    Write-Host "Running without Administrator privileges (user-level uninstallation)." -ForegroundColor Yellow
+}
+Write-Host ""
+
+# Define possible installation paths
+# Only check 64-bit Program Files (x86 is not used for vaila)
+$possiblePaths = @()
+If ($isAdmin) {
+    $possiblePaths += "${env:ProgramFiles}\vaila"  # 64-bit only
+    Write-Host "Checking system-wide installation locations (Administrator mode)..." -ForegroundColor Yellow
+}
+$possiblePaths += "$env:USERPROFILE\vaila"
+$possiblePaths += "$env:LOCALAPPDATA\vaila"
+
+# Find actual installation path
+$vailaProgramPath = $null
+ForEach ($path in $possiblePaths) {
+    # Skip x86 paths - vaila should only be in 64-bit Program Files
+    If ($path -like "*Program Files (x86)*") {
+        Write-Host "Skipping x86 path (vaila should only be in 64-bit Program Files): $path" -ForegroundColor Yellow
+        Continue
+    }
+    If (Test-Path $path) {
+        $vailaProgramPath = $path
+        Write-Host "Found vaila installation at: $vailaProgramPath" -ForegroundColor Green
+        Break
+    }
 }
 
-# Define installation path in AppData\Local
-$vailaProgramPath = "$env:LOCALAPPDATA\vaila"
-
-# Check if Conda is installed
-If (-Not (Get-Command conda -ErrorAction SilentlyContinue)) {
-    Write-Warning "Conda is not installed or not in the PATH. Uninstallation cannot proceed."
-    Exit
-}
-
-# Remove the 'vaila' Conda environment
-Write-Output "Checking if the 'vaila' Conda environment exists..."
-$envExists = conda env list | Select-String -Pattern "^vaila"
-If ($envExists) {
-    Write-Output "Removing the 'vaila' Conda environment..."
+# Remove uv virtual environment (.venv) if it exists
+If ($vailaProgramPath -and (Test-Path "$vailaProgramPath\.venv")) {
+    Write-Host "Removing uv virtual environment (.venv)..." -ForegroundColor Yellow
     Try {
-        conda env remove -n vaila -y
-        Write-Output "'vaila' Conda environment removed successfully."
+        Remove-Item -Path "$vailaProgramPath\.venv" -Recurse -Force -ErrorAction Stop
+        Write-Host "uv virtual environment removed successfully." -ForegroundColor Green
     } Catch {
-        Write-Error "Failed to remove the 'vaila' environment. Error: $_"
+        Write-Warning "Failed to remove uv virtual environment: $_"
     }
 } Else {
-    Write-Output "'vaila' Conda environment does not exist."
+    Write-Host "No uv virtual environment (.venv) found." -ForegroundColor Yellow
 }
 
-# ------------------------ NEW BLOCK: Conda Cleanup ------------------------
-Write-Output "Checking and removing possible pinned conda versions..."
-Try {
-    conda config --remove-key pinned_packages
-    Write-Output "Pinned version removed (if it existed)."
-} Catch {
-    Write-Output "No pinned version found or error removing."
+# Remove Conda environment (legacy) if Conda is installed
+If (Get-Command conda -ErrorAction SilentlyContinue) {
+    Write-Host "Checking for Conda environment (legacy)..." -ForegroundColor Yellow
+    Try {
+        $envExists = conda env list 2>$null | Select-String -Pattern "^vaila"
+        If ($envExists) {
+            Write-Host "Removing the 'vaila' Conda environment (legacy)..." -ForegroundColor Yellow
+            conda env remove -n vaila -y 2>$null
+            Write-Host "'vaila' Conda environment removed successfully." -ForegroundColor Green
+        } Else {
+            Write-Host "'vaila' Conda environment does not exist." -ForegroundColor Yellow
+        }
+    } Catch {
+        Write-Warning "Could not check/remove Conda environment: $_"
+    }
+    
+    # Cleanup Conda cache (optional)
+    Write-Host "Cleaning Conda cache (if applicable)..." -ForegroundColor Yellow
+    Try {
+        conda clean --all -y 2>$null | Out-Null
+        Write-Host "Conda cache cleaned." -ForegroundColor Green
+    } Catch {
+        Write-Host "Conda cache cleanup skipped (not critical)." -ForegroundColor Yellow
+    }
+} Else {
+    Write-Host "Conda is not installed. Skipping Conda environment removal." -ForegroundColor Yellow
 }
-
-Write-Output "Cleaning conda cache..."
-Try {
-    conda clean --all -y
-    Write-Output "Conda cache cleaned."
-} Catch {
-    Write-Warning "Unable to clean conda cache."
-}
-
-$condaVersion = conda --version
-Write-Output "Current conda version: $condaVersion"
-# ---------------------------------------------------------------------------
 
 # Uninstall FFmpeg if installed by the script
-Write-Output "Checking if FFmpeg is installed..."
+Write-Host "Checking if FFmpeg is installed..." -ForegroundColor Yellow
 If (Get-Command ffmpeg -ErrorAction SilentlyContinue) {
-    Write-Output "Uninstalling FFmpeg..."
+    Write-Host "Uninstalling FFmpeg..." -ForegroundColor Yellow
     Try {
-        winget uninstall --id Gyan.FFmpeg -e --silent
-        Write-Output "FFmpeg uninstalled successfully."
+        winget uninstall --id Gyan.FFmpeg -e --silent 2>$null | Out-Null
+        Write-Host "FFmpeg uninstalled successfully." -ForegroundColor Green
     } Catch {
         Write-Warning "Failed to uninstall FFmpeg via winget. Skipping."
     }
 } Else {
-    Write-Output "FFmpeg is not installed via this script."
+    Write-Host "FFmpeg is not installed via this script." -ForegroundColor Yellow
 }
 
-# Remove program files from AppData\Local\vaila
-If (Test-Path $vailaProgramPath) {
-    Write-Output "Deleting vaila program files from $vailaProgramPath..."
-    Remove-Item -Recurse -Force -Path $vailaProgramPath
-    Write-Output "Program files deleted."
+# Remove program files from installation location
+If ($vailaProgramPath -and (Test-Path $vailaProgramPath)) {
+    Write-Host "Deleting vaila program files from $vailaProgramPath..." -ForegroundColor Yellow
+    Try {
+        Remove-Item -Recurse -Force -Path $vailaProgramPath -ErrorAction Stop
+        Write-Host "Program files deleted successfully." -ForegroundColor Green
+    } Catch {
+        Write-Warning "Failed to delete program files: $_"
+        Write-Host "You may need to manually delete: $vailaProgramPath" -ForegroundColor Yellow
+    }
 } Else {
-    Write-Output "vaila program files not found at $vailaProgramPath."
+    Write-Host "vaila program files not found in standard installation locations." -ForegroundColor Yellow
+    Write-Host "Checked locations:" -ForegroundColor Yellow
+    ForEach ($path in $possiblePaths) {
+        Write-Host "  - $path" -ForegroundColor Gray
+    }
 }
 
 # Remove Windows Terminal profile for vaila
+Write-Host "Removing Windows Terminal profile..." -ForegroundColor Yellow
 $wtPath = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe"
 If (Test-Path $wtPath) {
-    Write-Output "Checking for vaila profile in Windows Terminal settings..."
     $settingsPath = "$wtPath\LocalState\settings.json"
     If (Test-Path $settingsPath) {
-        $settingsJson = Get-Content -Path $settingsPath -Raw | ConvertFrom-Json
+        Try {
+            $settingsJson = Get-Content -Path $settingsPath -Raw | ConvertFrom-Json
 
-        # Remove all vaila profiles from the list
-        $updatedProfiles = $settingsJson.profiles.list | Where-Object { $_.name -ne "vaila" }
-        $settingsJson.profiles.list = $updatedProfiles
+            # Remove all vaila profiles from the list
+            $updatedProfiles = $settingsJson.profiles.list | Where-Object { $_.name -ne "vaila" }
+            $settingsJson.profiles.list = $updatedProfiles
 
-        # Save updated settings with UTF-8 encoding
-        $settingsJson | ConvertTo-Json -Depth 100 | Out-File -FilePath $settingsPath -Encoding UTF8
-        Write-Output "vaila profile removed from Windows Terminal."
+            # Save updated settings with UTF-8 encoding
+            $settingsJson | ConvertTo-Json -Depth 100 | Out-File -FilePath $settingsPath -Encoding UTF8
+            Write-Host "vaila profile removed from Windows Terminal." -ForegroundColor Green
+        } Catch {
+            Write-Warning "Failed to remove Windows Terminal profile: $_"
+        }
     } Else {
-        Write-Output "Windows Terminal settings.json not found. Skipping profile removal."
+        Write-Host "Windows Terminal settings.json not found. Skipping profile removal." -ForegroundColor Yellow
     }
 } Else {
-    Write-Output "Windows Terminal is not installed, skipping profile removal."
+    Write-Host "Windows Terminal is not installed, skipping profile removal." -ForegroundColor Yellow
 }
 
 # Remove Desktop shortcut
+Write-Host "Removing Desktop shortcut..." -ForegroundColor Yellow
 $desktopShortcutPath = "$env:USERPROFILE\Desktop\vaila.lnk"
 If (Test-Path $desktopShortcutPath) {
-    Write-Output "Removing Desktop shortcut..."
-    Remove-Item $desktopShortcutPath -Force
-    Write-Output "Desktop shortcut removed."
+    Try {
+        Remove-Item $desktopShortcutPath -Force -ErrorAction Stop
+        Write-Host "Desktop shortcut removed." -ForegroundColor Green
+    } Catch {
+        Write-Warning "Failed to remove Desktop shortcut: $_"
+    }
 } Else {
-    Write-Output "Desktop shortcut not found."
+    Write-Host "Desktop shortcut not found." -ForegroundColor Yellow
 }
 
-# ---------------------------------------------------
 # Remove Start Menu shortcuts from both common and user locations
-# ---------------------------------------------------
+Write-Host "Removing Start Menu shortcuts..." -ForegroundColor Yellow
 
 # Common Start Menu
 $commonStartMenuPrograms = [System.Environment]::GetFolderPath("CommonPrograms")
 $commonStartMenuVailaLnk = Join-Path $commonStartMenuPrograms "vaila\vaila.lnk"
 If (Test-Path $commonStartMenuVailaLnk) {
-    Write-Output "Removing common Start Menu shortcut..."
-    Remove-Item $commonStartMenuVailaLnk -Force
-    Write-Output "Common Start Menu shortcut removed."
-    
-    $commonStartMenuVailaFolder = Join-Path $commonStartMenuPrograms "vaila"
-    if ((Test-Path $commonStartMenuVailaFolder) -and ((Get-ChildItem $commonStartMenuVailaFolder | Measure-Object).Count -eq 0)) {
-        Write-Output "Removing empty common Start Menu folder..."
-        Remove-Item $commonStartMenuVailaFolder -Force
-        Write-Output "Common Start Menu folder removed."
+    Try {
+        Remove-Item $commonStartMenuVailaLnk -Force -ErrorAction Stop
+        Write-Host "Common Start Menu shortcut removed." -ForegroundColor Green
+        
+        $commonStartMenuVailaFolder = Join-Path $commonStartMenuPrograms "vaila"
+        if ((Test-Path $commonStartMenuVailaFolder) -and ((Get-ChildItem $commonStartMenuVailaFolder -ErrorAction SilentlyContinue | Measure-Object).Count -eq 0)) {
+            Remove-Item $commonStartMenuVailaFolder -Force -ErrorAction SilentlyContinue
+            Write-Host "Common Start Menu folder removed." -ForegroundColor Green
+        }
+    } Catch {
+        Write-Warning "Failed to remove common Start Menu shortcut: $_"
     }
 } Else {
-    Write-Output "No common Start Menu shortcut found."
+    Write-Host "No common Start Menu shortcut found." -ForegroundColor Yellow
 }
 
 # User Start Menu
@@ -144,19 +193,25 @@ $userStartMenuPrograms = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Pr
 $userStartMenuVailaLnk = Join-Path $userStartMenuPrograms "vaila\vaila.lnk"
 
 If (Test-Path $userStartMenuVailaLnk) {
-    Write-Output "Removing user Start Menu shortcut..."
-    Remove-Item $userStartMenuVailaLnk -Force
-    Write-Output "User Start Menu shortcut removed."
-    
-    $userStartMenuVailaFolder = Join-Path $userStartMenuPrograms "vaila"
-    if ((Test-Path $userStartMenuVailaFolder) -and ((Get-ChildItem $userStartMenuVailaFolder | Measure-Object).Count -eq 0)) {
-        Write-Output "Removing empty user Start Menu folder..."
-        Remove-Item $userStartMenuVailaFolder -Force
-        Write-Output "User Start Menu folder removed."
+    Try {
+        Remove-Item $userStartMenuVailaLnk -Force -ErrorAction Stop
+        Write-Host "User Start Menu shortcut removed." -ForegroundColor Green
+        
+        $userStartMenuVailaFolder = Join-Path $userStartMenuPrograms "vaila"
+        if ((Test-Path $userStartMenuVailaFolder) -and ((Get-ChildItem $userStartMenuVailaFolder -ErrorAction SilentlyContinue | Measure-Object).Count -eq 0)) {
+            Remove-Item $userStartMenuVailaFolder -Force -ErrorAction SilentlyContinue
+            Write-Host "User Start Menu folder removed." -ForegroundColor Green
+        }
+    } Catch {
+        Write-Warning "Failed to remove user Start Menu shortcut: $_"
     }
 } Else {
-    Write-Output "No user Start Menu shortcut found."
+    Write-Host "No user Start Menu shortcut found." -ForegroundColor Yellow
 }
 
-Write-Output "vaila uninstallation completed successfully!"
+Write-Host ""
+Write-Host "============================================================" -ForegroundColor Green
+Write-Host "vaila uninstallation completed successfully!" -ForegroundColor Green
+Write-Host "============================================================" -ForegroundColor Green
+Write-Host ""
 Pause
