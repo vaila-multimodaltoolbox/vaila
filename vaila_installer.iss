@@ -2,7 +2,7 @@
 ; vaila Installer Script
 
 #define MyAppName "vaila"
-#define MyAppVersion "0.10.17"
+#define MyAppVersion "0.2.1"
 #define MyAppPublisher "Prof. Dr. Paulo R. P. Santiago"
 #define MyAppURL "https://github.com/vaila-multimodaltoolbox/vaila"
 
@@ -16,7 +16,13 @@ AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}
 AppUpdatesURL={#MyAppURL}
-DefaultDirName={autopf}\{#MyAppName}
+; Set the icon for the uninstall entry in Programs and Features
+UninstallDisplayIcon={app}\docs\images\vaila_ico.ico
+; Force 64-bit installation to use C:\Program Files (not Program Files (x86))
+ArchitecturesInstallIn64BitMode=x64
+; Use {pf64} to explicitly target 64-bit Program Files directory
+; This ensures installation in C:\Program Files\vaila (not C:\Program Files (x86)\vaila)
+DefaultDirName={pf64}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 ; Remove the following line to not require administrator privileges
 PrivilegesRequired=admin
@@ -35,22 +41,26 @@ InfoBeforeFile=README.md
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
-Source: "install_vaila_win.ps1"; DestDir: "{app}"; Flags: ignoreversion
+Source: "vaila.py"; DestDir: "{app}"; Flags: ignoreversion
+Source: "install_vaila_win_uv.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "uninstall_vaila_win.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "vaila\*"; DestDir: "{app}\vaila"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "docs\*"; DestDir: "{app}\docs"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "yaml_for_conda_env\*"; DestDir: "{app}\yaml_for_conda_env"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "tests\*"; DestDir: "{app}\tests"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "pyproject.toml"; DestDir: "{app}"; Flags: ignoreversion
 Source: "LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{autoprograms}\{#MyAppName}\{#MyAppName}"; Filename: "pwsh.exe"; Parameters: "-ExecutionPolicy Bypass -NoExit -Command ""& '{app}\run_vaila.ps1'"""; IconFilename: "{app}\docs\images\vaila_ico.ico"; WorkingDir: "{app}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "pwsh.exe"; Parameters: "-ExecutionPolicy Bypass -NoExit -Command ""& '{app}\run_vaila.ps1'"""; IconFilename: "{app}\docs\images\vaila_ico.ico"; WorkingDir: "{app}"
+Name: "{autoprograms}\{#MyAppName}\{#MyAppName}"; Filename: "pwsh.exe"; Parameters: "-ExecutionPolicy Bypass -NoExit -File ""{app}\run_vaila.ps1"""; IconFilename: "{app}\docs\images\vaila_ico.ico"; WorkingDir: "{app}"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "pwsh.exe"; Parameters: "-ExecutionPolicy Bypass -NoExit -File ""{app}\run_vaila.ps1"""; IconFilename: "{app}\docs\images\vaila_ico.ico"; WorkingDir: "{app}"
 
 [Run]
 ; Execute the PowerShell installation script with administrator privileges
-Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -NoExit -File ""{app}\install_vaila_win.ps1"""; Flags: runascurrentuser shellexec postinstall; Description: "Run vaila installation"
+; Use -File instead of -Command for better reliability with paths containing spaces
+; Note: Removing runascurrentuser so the script runs with installer's admin privileges
+; This ensures the script can create .venv in Program Files
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\install_vaila_win_uv.ps1"""; WorkingDir: "{app}"; Flags: shellexec waituntilterminated postinstall; Description: "Run vaila installation (uv-based)"
 
 [Code]
 // This code is executed before installation begins
@@ -65,21 +75,8 @@ begin
     exit;
   end;
   
-  // Check if Anaconda/Conda is installed (improved check)
-  if not DirExists(ExpandConstant('{userdocs}\..\Anaconda3')) and 
-     not DirExists(ExpandConstant('{userdocs}\..\miniconda3')) and
-     not DirExists(ExpandConstant('{userdocs}\..\anaconda3')) and
-     not DirExists(ExpandConstant('{userdocs}\..\Miniconda3')) then
-  begin
-    if MsgBox('Anaconda/Miniconda was not detected in the default location.' + #13#10 +
-             'vaila requires Anaconda or Miniconda to function properly.' + #13#10 + #13#10 +
-             'Please install Anaconda or Miniconda from: https://docs.conda.io/en/latest/miniconda.html' + #13#10 + #13#10 +
-             'Do you want to continue anyway?', mbConfirmation, MB_YESNO) = IDNO then
-    begin
-      Result := False;
-      exit;
-    end;
-  end;
+  // Note: uv will be automatically installed by the installation script if not present
+  // No need to check for uv here as the script handles it automatically
   
   // Check Windows version (vaila works best on Windows 10/11)
   if GetWindowsVersion < $06040000 then // Windows 10 or later
@@ -101,42 +98,49 @@ procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then
   begin
-    // Create a more robust execution script for vaila
+    // Create a more robust execution script for vaila using uv
     SaveStringToFile(ExpandConstant('{app}\run_vaila.ps1'), 
-      '# Script to run vaila' + #13#10 +
+      '# Script to run vaila using uv' + #13#10 +
       '# Automatically created by the installer' + #13#10 + #13#10 +
       'try {' + #13#10 +
-      '    $condaPath = (& conda info --base).Trim()' + #13#10 +
-      '    & "$condaPath\shell\condabin\conda-hook.ps1"' + #13#10 +
-      '    conda activate vaila' + #13#10 +
-      '    cd "' + ExpandConstant('{app}') + '"' + #13#10 +
-      '    python vaila.py' + #13#10 +
+      '    Set-Location "' + ExpandConstant('{app}') + '"' + #13#10 +
+      '    & uv run "' + ExpandConstant('{app}') + '\vaila.py"' + #13#10 +
       '} catch {' + #13#10 +
-      '    Write-Host "Error: Could not start vaila. Please ensure Conda is properly installed." -ForegroundColor Red' + #13#10 +
+      '    Write-Host "Error: Could not start vaila. Please ensure uv is properly installed." -ForegroundColor Red' + #13#10 +
+      '    Write-Host "You can run the installation script again: install_vaila_win_uv.ps1" -ForegroundColor Yellow' + #13#10 +
       '    Read-Host "Press Enter to exit"' + #13#10 +
       '}',
       False);
     
     // Show completion message
     MsgBox('vaila has been installed successfully!' + #13#10 + #13#10 +
-           'The installation script will now run to set up the Conda environment.' + #13#10 +
+           'The installation script will now run to set up the Python environment using uv.' + #13#10 +
            'This may take several minutes. Please wait for the process to complete.' + #13#10 + #13#10 +
            'After installation, you can launch vaila from:' + #13#10 +
-           '- Start Menu > vaila' + #13#10 +
-           '- Desktop shortcut' + #13#10 + #13#10 +
+           '- Desktop shortcut' + #13#10 +
+           '- Start Menu > vaila' + #13#10 + #13#10 +
            'For more information, visit: {#MyAppURL}', mbInformation, MB_OK);
   end;
 end;
 
 [Registry]
-Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{#MyAppName}"; ValueType: string; ValueName: "DisplayName"; ValueData: "{#MyAppName}"; Flags: uninsdeletekey
-Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{#MyAppName}"; ValueType: string; ValueName: "UninstallString"; ValueData: "{uninstallexe}"; Flags: uninsdeletekey
-Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{#MyAppName}"; ValueType: string; ValueName: "DisplayIcon"; ValueData: "{app}\docs\images\vaila_ico.ico"; Flags: uninsdeletekey
-Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{#MyAppName}"; ValueType: string; ValueName: "Publisher"; ValueData: "{#MyAppPublisher}"; Flags: uninsdeletekey
-Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{#MyAppName}"; ValueType: string; ValueName: "URLInfoAbout"; ValueData: "{#MyAppURL}"; Flags: uninsdeletekey
-Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{#MyAppName}"; ValueType: string; ValueName: "DisplayVersion"; ValueData: "{#MyAppVersion}"; Flags: uninsdeletekey
+; Registry entries for Windows Add/Remove Programs (Programs and Features)
+; Note: Inno Setup automatically creates the main uninstall entry using the AppId.
+; We only add extra fields that are not created automatically.
+; Using the AppId directly (without outer braces) ensures we modify the same registry entry.
+; Note: DisplayIcon is set via UninstallDisplayIcon in [Setup] section, so we don't add it here.
+Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\DC7B1ECD-6AC7-4F0E-91AB-58F0E3C6DAA9"; ValueType: string; ValueName: "HelpLink"; ValueData: "{#MyAppURL}"; Flags: uninsdeletevalue
+Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\DC7B1ECD-6AC7-4F0E-91AB-58F0E3C6DAA9"; ValueType: string; ValueName: "InstallLocation"; ValueData: "{app}"; Flags: uninsdeletevalue
+
+[UninstallRun]
+; Execute the PowerShell uninstall script before deleting files
+; This script handles removal of uv/Conda environments, shortcuts, Windows Terminal profiles, etc.
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\uninstall_vaila_win.ps1"""; Flags: runascurrentuser waituntilterminated; RunOnceId: "UninstallVaila"
 
 [UninstallDelete]
+; The PowerShell script handles most deletions (uv/Conda environments, shortcuts, etc.)
+; These entries serve as backup cleanup in case the script doesn't remove everything
+; Note: The script removes the {app} directory, so this may not execute if script succeeds
 Type: filesandordirs; Name: "{app}"
 Type: files; Name: "{userdesktop}\{#MyAppName}.lnk"
 Type: files; Name: "{group}\{#MyAppName}\{#MyAppName}.lnk"
