@@ -8,19 +8,23 @@
   <table>
     <tr>
       <th>Operating System</th>
-      <th>Conda Environment Status</th>
-    </tr>
-    <tr>
-      <td><strong>🐧 Linux</strong></td>
-      <td>✅ OK</td>
-    </tr>
-    <tr>
-      <td><strong>🍎 macOS</strong></td>
-      <td>✅ OK</td>
+      <th>Installation Method</th>
+      <th>Status</th>
     </tr>
     <tr>
       <td><strong>🪟 Windows</strong></td>
-      <td>✅ OK</td>
+      <td>uv (Recommended)</td>
+      <td>✅ Ready</td>
+    </tr>
+    <tr>
+      <td><strong>🐧 Linux</strong></td>
+      <td>uv (Recommended)</td>
+      <td>✅ Ready</td>
+    </tr>
+    <tr>
+      <td><strong>🍎 macOS</strong></td>
+      <td>uv (Recommended)</td>
+      <td>✅ Ready</td>
     </tr>
   </table>
 </div>
@@ -84,25 +88,32 @@ Com *vailá*, você é convidado a explorar, experimentar e criar sem restriçõ
 
 ## Installation and Setup
 
-### Prerequisites
+### ⚡ New Engine: Powered by *uv*
 
-- **Conda**: Ensure that either [Anaconda](https://www.anaconda.com/download/success) or [Miniconda](https://docs.conda.io/en/latest/miniconda.html) is installed and accessible from the command line.
+*vailá* has migrated to **[uv](https://github.com/astral-sh/uv)**, an extremely fast Python package installer and resolver, written in Rust. **uv is now the recommended installation method for all platforms** (Windows, Linux, macOS).
 
-- **FFmpeg**: Required for video processing functionalities.
+**Why uv is recommended:**
 
-### Clone the Repository
+- **Speed:** Installation is **10-100x faster** than traditional Conda setups.
+- **Performance:** **Faster execution times** compared to Conda environments.
+- **Simplicity:** You no longer *need* to pre-install Anaconda or Miniconda manually.
+- **Reliability:** Uses a strictly locked dependency file (`uv.lock`) ensuring that what runs on our machine runs on yours.
+- **Modern:** Built with Rust, following Python packaging standards (`pyproject.toml`).
 
-```bash
-git clone https://github.com/vaila-multimodaltoolbox/vaila
-cd vaila
-```
+**Note:** Conda installation methods are still available but are now considered legacy due to slower installation and execution times.
+
+For more information about uv, visit: [https://github.com/astral-sh/uv](https://github.com/astral-sh/uv)
+
+---
 
 ## Installation Instructions
 
 
 ---
 
-## 🪟 For Windows:
+## 🪟 For Windows
+
+Installation is now streamlined using **uv**. Simply download and run the installation script.
 
 ### YouTube: How to Install *vailá* on Windows 11
 
@@ -114,74 +125,88 @@ cd vaila
 
 > *vailá* values freedom and the goodwill to learn. If you are not the owner of your computer and do not have permission to perform the installation, we recommend doing it on your own computer. If you are prevented from installing software, it means you are not prepared to liberate yourself, make your modifications, and create, which is the philosophy of *vailá!*
 
-If you need any further adjustments or have additional requests, feel free to let me know!
+### 1. **Download *vailá***
 
-### 1. **Install Anaconda or Miniconda**
-   - Download and install either:
-     - **[Anaconda](https://www.anaconda.com/download/success)** (full distribution with many pre-installed packages)
-     - **[Miniconda](https://docs.conda.io/en/latest/miniconda.html)** (minimal installer with just conda, Python, and essential packages)
-   - For Anaconda: REMEMBER to install "Admin for all users" [Anaconda install](https://www.anaconda.com/docs/getting-started/anaconda/advanced-install/multi-user)
-   - Ensure that **Conda** is accessible from the terminal after installation.
-
-### 2. **Download *vailá***
-   - Use **Git** to clone the repository:
-     ```bash
+   - **Option A (Git):**
+     ```powershell
      git clone https://github.com/vaila-multimodaltoolbox/vaila
      cd vaila
      ```
-   - **Or download the zip file**:
-     - Go to [*vailá* GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila), download the `.zip` file, and extract the contents.
-     - **Included the Reminder**: Added a note in both the **Download *vailá*** section and the **Important Notes** section to remind users to rename the directory from `vaila-main` to `vaila` if they downloaded the zip file.
 
-### 3. **Run the Installation Script**
-   - Open **PowerShell** (with Anaconda/Miniconda initialized) or **Anaconda/Miniconda PowerShell Prompt**.
-   - Navigate to the directory where *vailá* was downloaded or extracted.
-    - - Normally use this command if you have downloaded *vailá* from Downloads
-     ```powershell
-     cd "C:\Users\$env:USERNAME\Downloads\vaila"
-     ```
-   - Execute the installation script:
-     ```powershell
-     .\install_vaila_win.ps1
-     ```
+   - **Option B (Zip):**
+     - Download the `.zip` file from the [*vailá* GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
+     - Extract it
+     - **Important:** Rename the folder from `vaila-main` to `vaila`
 
-### 4. **Automatic Configuration**
-   - The script will:
-     - Set up the Conda environment using `yaml_for_conda_env/vaila_win.yaml`.
-     - Copy *vailá* program files to `C:\Users\<YourUser>\AppData\Local\vaila`.
-     - Initialize Conda for PowerShell.
-     - Install **PowerShell 7** using **winget**.
-     - Install **Chocolatey** package manager.
-     - Install **rsync** via Chocolatey for file synchronization.
-     - Install and configure **OpenSSH** for secure communication.
-     - Install **FFmpeg** and **Windows Terminal** using **winget**.
-     - Add a profile for *vailá* in **Windows Terminal** for quick access.
-     - Set appropriate permissions for the installation directories.
-     - Create shortcuts for launching *vailá*:
-       - **Desktop shortcut**: A shortcut will be created on your desktop.
-       - **Start Menu shortcut**: A shortcut will be added to the Windows Start Menu.
+### 2. **Run the Installation Script**
+
+   Open **PowerShell** inside the `vaila` folder and run:
+   
+   ```powershell
+   .\install_vaila_win_uv.ps1
+   ```
+
+   **Note:** If you run as **Administrator**, *vailá* installs to `C:\Program Files\vaila`. If you run as a **Standard User**, it installs to your user profile (`~\vaila`).
+
+### 3. **What the Script Does**
+
+   The installation script automatically:
+   - Checks for **uv**; if missing, installs it automatically
+   - Installs **Python 3.12.12** (via uv) securely isolated for *vailá*
+   - Creates a virtual environment (`.venv`) and syncs all dependencies from `pyproject.toml`
+   - Prompts you to optionally install **PyTorch/YOLO** (GPU/CPU) stack
+   - Installs **FFmpeg** and **Windows Terminal** (if running as Administrator)
+   - Configures shortcuts:
+     - **Desktop shortcut** with proper icon
+     - **Start Menu shortcut**
+     - **Windows Terminal profile** for quick access
+   - Sets appropriate permissions for the installation directories
 
 ### ⚠️ **Important Notes**
-   - Ensure **Conda** (from either Anaconda or Miniconda installation) is accessible from the command line before running the script.
-   - The installation script requires administrative privileges to install system components.
-   - The installation script dynamically configures paths, so no manual adjustments are necessary for user-specific directories.
-   - **Miniconda users**: The script will work perfectly with Miniconda - it automatically detects your conda installation path.
 
-### 5. **Launching *vailá***
-   - After installation, you can launch *vailá*:
-     - Using the Desktop shortcut.
-     - From the **Windows Start Menu** under *vailá*.
-     - From **Windows Terminal** via the pre-configured *vailá* profile.
-     - Manually, by running the following commands:
-       ```powershell
-       conda activate vaila
-       python vaila.py
-       ```
+   - The installation script requires **administrative privileges** to install system components (FFmpeg, Windows Terminal)
+   - If you run without admin privileges, some features may be skipped, but *vailá* will still be installed
+   - The script dynamically configures paths, so no manual adjustments are necessary
+   - **No Conda required:** The new installation method does not require Anaconda or Miniconda
+
+### 4. **Launching *vailá***
+
+   After installation, you can launch *vailá*:
+   - Using the **Desktop shortcut** (with proper icon)
+   - From the **Windows Start Menu** under *vailá*
+   - From **Windows Terminal** via the pre-configured *vailá* profile
+   - Manually, by running:
+     ```powershell
+     cd path\to\vaila
+     uv run vaila.py
+     ```
 ---
 
 ## 🐧 For Linux:
 
-**Note**: These scripts work with both Anaconda and Miniconda installations.
+Installation using **uv** is recommended for faster installation and execution times.
+
+### Using uv (Recommended)
+
+See the [Installation using uv (All Platforms)](#installation-using-uv-all-platforms) section below for step-by-step instructions.
+
+**Quick start:**
+```bash
+# Install uv
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Clone and install vailá
+git clone https://github.com/vaila-multimodaltoolbox/vaila
+cd vaila
+uv sync
+
+# Run vailá
+uv run vaila.py
+```
+
+### Legacy Conda Installation
+
+If you prefer the legacy Conda method (slower installation and execution):
 
 1. **Make the installation script executable**:
 
@@ -189,21 +214,19 @@ If you need any further adjustments or have additional requests, feel free to le
 sudo chmod +x install_vaila_linux.sh
 ```
 
-2. **Run instalation script**:
+2. **Run installation script**:
 
 ```bash
 ./install_vaila_linux.sh
 ```
 
 - The script will:
-
   - Set up the Conda environment using `./yaml_for_conda_env/vaila_linux.yaml`.
-  - Copy program files to your home directory (~/vaila).
+  - Copy program files to your home directory (`~/vaila`).
   - Install ffmpeg from system repositories.
   - Create a desktop entry for easy access.
 
 3. **Notes**:
-
 - Run the script as your regular user, not with sudo.
 - Ensure that Conda (Anaconda or Miniconda) is added to your PATH and accessible from the command line.
 - The script automatically detects your conda installation directory.
@@ -212,7 +235,29 @@ sudo chmod +x install_vaila_linux.sh
 
 ## 🍎 For macOS:
 
-**Note**: These scripts work with both Anaconda and Miniconda installations.
+Installation using **uv** is recommended for faster installation and execution times.
+
+### Using uv (Recommended)
+
+See the [Installation using uv (All Platforms)](#installation-using-uv-all-platforms) section below for step-by-step instructions.
+
+**Quick start:**
+```bash
+# Install uv
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Clone and install vailá
+git clone https://github.com/vaila-multimodaltoolbox/vaila
+cd vaila
+uv sync
+
+# Run vailá
+uv run vaila.py
+```
+
+### Legacy Conda Installation
+
+If you prefer the legacy Conda method (slower installation and execution):
 
 1. **Make the installation script executable**:
 
@@ -235,45 +280,107 @@ sudo chmod +x install_vaila_mac.sh
   - Create a symbolic link in `/Applications` to the app in your home directory.
 
 3. **Notes**:
-  
 - You may be prompted for your password when the script uses sudo to create the symbolic link.
 - Ensure that Conda (Anaconda or Miniconda) is added to your PATH and accessible from the command line.
 - **Important for Miniconda users**: The macOS script currently has a hardcoded path that assumes Anaconda installation. This will be fixed in the next update to automatically detect conda installation paths.
+
+---
+
+## Installation using uv (All Platforms)
+
+**uv** is the recommended installation method for all platforms (Windows, Linux, macOS) due to its **10-100x faster installation** and **faster execution times** compared to Conda. This method leverages the modern `pyproject.toml` standard.
+
+### 1. **Install uv** (if you haven't yet):
+
+**On macOS/Linux:**
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+**On Windows:**
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+### 2. **Clone or Download *vailá***
+
+```bash
+git clone https://github.com/vaila-multimodaltoolbox/vaila
+cd vaila
+```
+
+### 3. **Sync the Project**
+
+Navigate to the *vailá* folder and run:
+
+```bash
+uv sync
+```
+
+This creates the virtual environment (`.venv`) and installs all dependencies listed in `pyproject.toml`.
+
+### 4. **Run *vailá***
+
+```bash
+uv run vaila.py
+```
+
+**Note:** The `uv sync` command automatically creates and manages the virtual environment, so you don't need to manually activate it. The `uv run` command handles everything for you.
 
 
 ---
 
 ## Running the Application
 
-### Running the Application After installation, you can launch *vailá* from your applications menu or directly from the terminal, depending on your operating system.
+After installation, you can launch *vailá* from your applications menu or directly from the terminal, depending on your operating system.
 
-- 🐧 Linux and 🍎 macOS: **From the Terminal bash or zsh**
+### 🚀 Using uv (Recommended)
 
-1. Navigate to the `vaila` directory:
-   
-  ```bash
-  cd ~/vaila
-  ``` 
+**uv** provides faster execution times and is the recommended method for all platforms.
 
-and run command:
-
-  ```bash
-  conda activate vaila
-  python3 vaila.py
+**Windows:**
+- Use the **Desktop** or **Start Menu shortcut** created by the installer
+- Or from **Windows Terminal** via the pre-configured *vailá* profile
+- Or from command line:
+  ```powershell
+  cd path\to\vaila
+  uv run vaila.py
   ```
 
-- 🪟 Windows
-
-- Click on the `vailá` icon in the Applications menu or use the shortcut in desktop or Windows Terminal.
-
-- Windows: **From the Windows Terminal (Anaconda/Miniconda in path) or use Anaconda/Miniconda PowerShell**
-
-1. Open Anaconda Prompt, Miniconda Prompt, or Anaconda/Miniconda Powershell Prompt (PowerShell is recommended) and run command:
-
-```Anaconda/Miniconda Powershell
-conda activate vaila
-python vaila.py
+**Linux and macOS:**
+```bash
+cd ~/vaila
+uv run vaila.py
 ```
+
+### 🐍 Using Conda (Legacy)
+
+If you installed using the legacy Conda method (slower execution):
+
+**Linux and macOS: From the Terminal (bash or zsh)**
+
+1. Navigate to the `vaila` directory:
+   ```bash
+   cd ~/vaila
+   ```
+
+2. Activate the Conda environment and run:
+   ```bash
+   conda activate vaila
+   python3 vaila.py
+   ```
+
+**Windows: From Windows Terminal or Anaconda/Miniconda PowerShell**
+
+1. Open Anaconda Prompt, Miniconda Prompt, or Anaconda/Miniconda PowerShell Prompt (PowerShell is recommended)
+
+2. Run:
+   ```powershell
+   conda activate vaila
+   python vaila.py
+   ```
+
+**Note:** You can also click on the `vailá` icon in the Applications menu or use the shortcut on desktop or Windows Terminal.
 
 ---
 
@@ -375,6 +482,22 @@ sudo chmod +x uninstall_vaila_mac.sh
 
 ## For Uninstallation on Windows 🪟
 
+### If you installed using uv (New Method)
+
+1. **Manual Removal**:
+   - Delete the installation directory:
+     - If installed as Administrator: `C:\Program Files\vaila`
+     - If installed as Standard User: `C:\Users\<YourUser>\vaila`
+   - Remove the Desktop shortcut
+   - Remove the Start Menu shortcut
+   - Remove the Windows Terminal profile manually (if needed)
+
+2. **Windows Terminal Profile Removal**:
+   - Open Windows Terminal settings (JSON)
+   - Remove the `vaila` profile entry from `profiles.list`
+
+### If you installed using Conda (Legacy Method)
+
 1. **Run the uninstallation script as Administrator in Anaconda/Miniconda PowerShell Prompt**:
 
 - PowerShell Script:
@@ -383,7 +506,7 @@ sudo chmod +x uninstall_vaila_mac.sh
   .\uninstall_vaila_win.ps1
   ```
 
-1. **Follow the Instructions Displayed by the Script**:
+2. **Follow the Instructions Displayed by the Script**:
 
 - The script will:
   - Remove the `vaila` Conda environment.
@@ -391,7 +514,7 @@ sudo chmod +x uninstall_vaila_mac.sh
   - Remove the Windows Terminal profile (settings.json file).
   - Delete the desktop shortcut if it exists.
 
-1. **Manual Removal of Windows Terminal Profile (if necessary)**:
+3. **Manual Removal of Windows Terminal Profile (if necessary)**:
 
 - If the Windows Terminal profile is not removed automatically (e.g., when using the `uninstall_vaila_win.ps1` script), you may need to remove it manually:
 
