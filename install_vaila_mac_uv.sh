@@ -57,6 +57,16 @@ if [ ${#MISSING_DEPS[@]} -gt 0 ]; then
     brew install "${MISSING_DEPS[@]}"
 fi
 
+# Install python-tk for Python 3.12 (required for tkinter/GUI)
+echo ""
+echo "Checking for python-tk@3.12 (required for tkinter/GUI)..."
+if ! brew list --formula | grep -q "^python-tk@3.12\$"; then
+    echo "Installing python-tk@3.12..."
+    brew install python-tk@3.12
+else
+    echo "python-tk@3.12 is already installed."
+fi
+
 # Install uv if not present
 echo ""
 echo "Checking for uv installation..."
@@ -192,23 +202,57 @@ echo "Installing vaila dependencies with uv..."
 echo "This may take a few minutes on first run..."
 uv sync
 
-# Prompt user about installing PyTorch/YOLO stack
+# Detect architecture before showing options
 echo ""
+echo "Checking system architecture..."
+ARCH=$(uname -m)
+if [[ "$ARCH" == "arm64" ]]; then
+    echo "Apple Silicon (ARM64) detected."
+    PYTORCH_CONFIG="PyTorch with MPS (GPU acceleration via Metal Performance Shaders)"
+    PYTORCH_NOTE="PyTorch will automatically use MPS (GPU) on Apple Silicon."
+elif [[ "$ARCH" == "x86_64" ]]; then
+    echo "Intel Mac (x86_64) detected."
+    PYTORCH_CONFIG="PyTorch CPU-only (macOS Intel doesn't support MPS)"
+    PYTORCH_NOTE="PyTorch will run on CPU."
+else
+    echo "Architecture $ARCH detected."
+    PYTORCH_CONFIG="PyTorch (architecture: $ARCH)"
+    PYTORCH_NOTE="PyTorch will be installed for this architecture."
+fi
+echo ""
+
+# Set default option based on architecture
+# On ARM64 (Apple Silicon), default to installing PyTorch since MPS GPU acceleration is available
+if [[ "$ARCH" == "arm64" ]]; then
+    DEFAULT_PYTORCH_OPTION=2
+    DEFAULT_TEXT="(default: 2 - recommended for Apple Silicon)"
+else
+    DEFAULT_PYTORCH_OPTION=1
+    DEFAULT_TEXT="(default: 1)"
+fi
+
+# Prompt user about installing PyTorch/YOLO stack
 echo "---------------------------------------------"
 echo "PyTorch / YOLO installation options"
-echo "  [1] Skip (default)"
-echo "  [2] Install PyTorch + YOLO (ultralytics/boxmot)"
+echo "  [1] Skip"
+echo "  [2] Install $PYTORCH_CONFIG"
+echo "      + YOLO (ultralytics, boxmot)"
 echo "---------------------------------------------"
-printf "Choose an option [1-2]: "
+printf "Choose an option [1-2] $DEFAULT_TEXT: "
 read INSTALL_OPTION
-INSTALL_OPTION=${INSTALL_OPTION:-1}
+INSTALL_OPTION=${INSTALL_OPTION:-$DEFAULT_PYTORCH_OPTION}
 
 if [[ "$INSTALL_OPTION" == "2" ]]; then
     echo ""
-    echo "Installing PyTorch (macOS uses MPS acceleration automatically if available)..."
-    # On macOS, standard torch usually supports MPS.
+    echo "Installing PyTorch..."
     if uv pip install torch torchvision torchaudio; then
         echo "PyTorch installed successfully."
+        
+        echo ""
+        echo "Note: $PYTORCH_NOTE"
+        if [[ "$ARCH" == "arm64" ]]; then
+            echo "      If MPS is unavailable, it will fall back to CPU."
+        fi
         
         echo ""
         echo "Installing YOLO dependencies (ultralytics, boxmot)..."
@@ -236,14 +280,51 @@ if ! uv pip install pycairo; then
     }
 fi
 
+# Verify tkinter availability
+echo ""
+echo "Verifying tkinter availability..."
+if uv run python -c "import tkinter" 2>/dev/null; then
+    echo "tkinter is available."
+else
+    echo ""
+    echo "Warning: tkinter is not available in the Python environment."
+    echo "This is required for the GUI. Attempting to fix..."
+    echo ""
+    echo "Note: On macOS, tkinter requires python-tk from Homebrew."
+    echo "If tkinter is still not available after installation, you may need to:"
+    echo "  1. Ensure python-tk is installed: brew install python-tk"
+    echo "  2. Or use the system Python instead of uv's Python"
+    echo ""
+    echo "For now, continuing installation. If GUI doesn't work, run:"
+    echo "  brew install python-tk"
+    echo "  Then reinstall vaila or manually link tkinter to your Python environment."
+fi
+
 # Create a run_vaila.sh script using uv
 RUN_SCRIPT="$VAILA_HOME/run_vaila.sh"
 echo ""
 echo "Creating run_vaila.sh script..."
 cat <<EOF > "$RUN_SCRIPT"
 #!/bin/bash
-cd "$VAILA_HOME"
-uv run "$VAILA_HOME/vaila.py"
+# Change to vaila directory (where pyproject.toml and .venv are located)
+cd "$VAILA_HOME" || {
+    echo "Error: Cannot change to directory $VAILA_HOME"
+    exit 1
+}
+
+# Ensure uv is in PATH
+export PATH="\$HOME/.local/bin:\$HOME/.cargo/bin:\$PATH"
+
+# Verify we're in the correct directory (must have pyproject.toml and .venv)
+if [ ! -f "pyproject.toml" ]; then
+    echo "Error: pyproject.toml not found in $VAILA_HOME"
+    exit 1
+fi
+
+# Run vaila using uv run from the project directory
+# uv run must be executed from the directory containing pyproject.toml
+uv run python vaila.py
+
 # Keep terminal open after execution
 echo
 echo "Program finished. Press Enter to close this window..."
@@ -302,13 +383,84 @@ EOF
 
 chmod +x "$APP_DIR/Contents/MacOS/vaila"
 
-# Try to copy icon if it exists
-ICON_SRC="$VAILA_HOME/vaila/images/vaila.icns"
-if [ -f "$ICON_SRC" ]; then
-    cp "$ICON_SRC" "$APP_DIR/Contents/Resources/"
+# Try to find or create the icon
+ICON_CREATED=false
+
+# First, try to find existing .icns file
+ICON_SRC=""
+for icon_path in "$VAILA_HOME/vaila/images/vaila.icns" "$VAILA_HOME/docs/images/vaila.icns" "$PROJECT_DIR/vaila/images/vaila.icns" "$PROJECT_DIR/docs/images/vaila.icns"; do
+    if [ -f "$icon_path" ]; then
+        ICON_SRC="$icon_path"
+        break
+    fi
+done
+
+# If .icns not found, try to create it from .iconset directory
+if [ -z "$ICON_SRC" ]; then
+    ICONSET_DIR=""
+    for iconset_path in "$VAILA_HOME/docs/images/vaila.iconset" "$PROJECT_DIR/docs/images/vaila.iconset" "$VAILA_HOME/vaila/images/vaila.iconset" "$PROJECT_DIR/vaila/images/vaila.iconset"; do
+        if [ -d "$iconset_path" ]; then
+            ICONSET_DIR="$iconset_path"
+            break
+        fi
+    done
+    
+    if [ -n "$ICONSET_DIR" ]; then
+        echo "Found iconset directory at $ICONSET_DIR"
+        echo "Converting iconset to .icns format..."
+        
+        # Create temporary .icns file
+        TEMP_ICNS="/tmp/vaila.icns"
+        if command -v iconutil &> /dev/null; then
+            # Use iconutil to convert .iconset to .icns
+            if iconutil -c icns "$ICONSET_DIR" -o "$TEMP_ICNS" 2>/dev/null; then
+                ICON_SRC="$TEMP_ICNS"
+                ICON_CREATED=true
+                echo "Icon converted successfully from iconset."
+            else
+                echo "Warning: Failed to convert iconset to .icns using iconutil."
+            fi
+        else
+            echo "Warning: iconutil not found. Cannot convert iconset to .icns."
+        fi
+    fi
+fi
+
+# Copy icon to app bundle if found or created
+if [ -n "$ICON_SRC" ]; then
+    echo "Copying icon to application bundle..."
+    cp "$ICON_SRC" "$APP_DIR/Contents/Resources/vaila.icns"
+    echo "Icon copied successfully."
+    
+    # Clean up temporary file if we created it
+    if [ "$ICON_CREATED" = true ] && [ "$ICON_SRC" = "/tmp/vaila.icns" ]; then
+        rm -f "$TEMP_ICNS"
+    fi
+    
+    # Update icon cache for macOS Finder
+    echo "Updating macOS icon cache..."
+    touch "$APP_DIR"
+    # Register with LaunchServices
+    /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$APP_DIR" 2>/dev/null || true
+    # Restart Finder to show updated icon
+    killall Finder 2>/dev/null || true
+else
+    echo "Warning: Icon file (vaila.icns or vaila.iconset) not found. Application will use default icon."
+    echo "Expected locations:"
+    echo "  - $VAILA_HOME/docs/images/vaila.icns"
+    echo "  - $VAILA_HOME/docs/images/vaila.iconset/"
 fi
 
 echo "Application Bundle created. You can find 'vaila' in your Applications folder."
+
+# Force macOS to refresh the icon cache
+echo ""
+echo "Refreshing macOS icon cache..."
+touch "$APP_DIR"
+# Update icon database
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$APP_DIR" 2>/dev/null || true
+# Restart Finder to show updated icon
+killall Finder 2>/dev/null || true
 
 # Ensure the application directory is owned by the user and has the correct permissions
 echo "Ensuring correct ownership and permissions..."
