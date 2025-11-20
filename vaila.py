@@ -4,8 +4,8 @@ vaila.py
 ===============================================================================
 Author: Prof. Paulo R. P. Santiago
 Date: 07 October 2024
-Update: 18 November 2025
-Version updated: 0.2.1
+Update: 20 November 2025
+Version updated: 0.2.2
 Python Version: 3.12.12
 
 Example of usage:
@@ -30,64 +30,6 @@ handle complex biomechanical workflows, including kinematic and kinetic data
 processing, visualization, and data conversion, as discussed in the associated
 paper. The system fosters a collaborative, transparent environment for research,
 allowing users to customize and expand the toolbox with new functionalities.
-
-Key Features:
--------------
-1. **Multimodal Data Integration**:
-   - Supports data from IMUs, markerless tracking (2D and 3D), MoCap systems,
-     force plates, GNSS/GPS, EMG, and other biomechanical sensors.
-
-2. **Data Processing and Batch Operations**:
-   - Batch processing for large datasets across modalities, including video
-     synchronization, pixel extraction, DLT-based 2D/3D reconstructions, and
-     force analysis.
-
-3. **Data Conversion and File Management**:
-   - Converts between multiple data formats (C3D <--> CSV), automates renaming,
-     copying, and managing large sets of biomechanical files.
-
-4. **Visualization**:
-   - Includes 2D and 3D plotting of biomechanical data using libraries such as
-     Matplotlib, Plotly and Open3D.
-
-5. **Cross-Platform**:
-   - Designed for macOS, Linux, and Windows, with full transparency of execution
-     flow through rich terminal outputs and print statements for debugging.
-
-6. **Open Field Test Analysis** (New Feature):
-   - Provides tools for analyzing open field test data for rodents, including
-     calculations of total distance traveled, speed, and time spent in each zone.
-
-7. **Video Distortion** (New Feature):
-   - Provides tools for distorting videos, including adding noise, blurring,
-     and other effects.
-
-8. **Audio Video Processing** (New Feature):
-   - Provides tools for processing audio and video files, including inserting
-     audio into videos and downloading videos from YouTube.
-
-9. **Install .exe Windows**:
-   - Provides a script to install the vailá toolbox as an .exe file for Windows.
-
-10. **Soccer Field** (New Feature):
-    - Provides a script to create a soccer field video.
-
-11. **Distort Video** (New Feature):
-    - Provides a script to distort videos, including adding noise, blurring,
-      and other effects.
-
-12. **Get Pixel Coordinates** (New Feature):
-    - Provides a script to get the pixel coordinates of a video.
-
-13. **Markerless 2D and 3D and Live with YOLO and MediaPipe** (New Feature):
-    - Provides a script to analyze markerless live data, including joint angles
-      and movement data.
-
-14. **Relative Angles** (New Feature):
-    - Provides a script to calculate relative angles between body segments.
-
-15. **Ultrasound** (New Feature):
-    - Provides a script to analyze ultrasound data from images.
 
 Usage:
 ------
@@ -181,7 +123,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 18.November.2025 v0.2.1 (Python 3.12.12)
+vailá - 20.November.2025 v0.2.2 (Python 3.12.12)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -282,7 +224,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 18.November.2025 v0.2.1 (Python 3.12.12)")
+        self.title("vailá - 20.November.2025 v0.2.2 (Python 3.12.12)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
