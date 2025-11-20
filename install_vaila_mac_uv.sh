@@ -356,9 +356,13 @@ cat <<EOF > "$APP_DIR/Contents/Info.plist"
     <string>vaila</string>
     <key>CFBundleIconFile</key>
     <string>vaila.icns</string>
+    <key>CFBundleIconName</key>
+    <string>vaila</string>
     <key>CFBundleIdentifier</key>
     <string>com.vaila.toolbox</string>
     <key>CFBundleName</key>
+    <string>vaila</string>
+    <key>CFBundleDisplayName</key>
     <string>vaila</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
@@ -368,6 +372,8 @@ cat <<EOF > "$APP_DIR/Contents/Info.plist"
     <string>0.2.0</string>
     <key>LSMinimumSystemVersion</key>
     <string>10.13</string>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.utilities</string>
     <key>Terminal</key>
     <true/>
 </dict>
@@ -395,7 +401,7 @@ for icon_path in "$VAILA_HOME/vaila/images/vaila.icns" "$VAILA_HOME/docs/images/
     fi
 done
 
-# If .icns not found, try to create it from .iconset directory
+# If .icns not found, try to create it from .iconset directory using iconutil
 if [ -z "$ICON_SRC" ]; then
     ICONSET_DIR=""
     for iconset_path in "$VAILA_HOME/docs/images/vaila.iconset" "$PROJECT_DIR/docs/images/vaila.iconset" "$VAILA_HOME/vaila/images/vaila.iconset" "$PROJECT_DIR/vaila/images/vaila.iconset"; do
@@ -407,7 +413,7 @@ if [ -z "$ICON_SRC" ]; then
     
     if [ -n "$ICONSET_DIR" ]; then
         echo "Found iconset directory at $ICONSET_DIR"
-        echo "Converting iconset to .icns format..."
+        echo "Converting iconset to .icns format using iconutil..."
         
         # Create temporary .icns file
         TEMP_ICNS="/tmp/vaila.icns"
@@ -416,13 +422,84 @@ if [ -z "$ICON_SRC" ]; then
             if iconutil -c icns "$ICONSET_DIR" -o "$TEMP_ICNS" 2>/dev/null; then
                 ICON_SRC="$TEMP_ICNS"
                 ICON_CREATED=true
-                echo "Icon converted successfully from iconset."
+                echo "Icon converted successfully from iconset using iconutil."
             else
                 echo "Warning: Failed to convert iconset to .icns using iconutil."
             fi
         else
-            echo "Warning: iconutil not found. Cannot convert iconset to .icns."
+            echo "Warning: iconutil not found. Trying Pillow as fallback..."
         fi
+    fi
+fi
+
+# If still no .icns, try to create it from PNG using Pillow
+if [ -z "$ICON_SRC" ]; then
+    PNG_SRC=""
+    for png_path in "$VAILA_HOME/docs/images/vaila_logo.png" "$PROJECT_DIR/docs/images/vaila_logo.png" \
+                     "$VAILA_HOME/docs/images/vaila_ico.png" "$PROJECT_DIR/docs/images/vaila_ico.png" \
+                     "$VAILA_HOME/vaila/images/vaila_logo.png" "$PROJECT_DIR/vaila/images/vaila_logo.png" \
+                     "$VAILA_HOME/vaila/images/vaila_ico_mac.png" "$PROJECT_DIR/vaila/images/vaila_ico_mac.png"; do
+        if [ -f "$png_path" ]; then
+            PNG_SRC="$png_path"
+            break
+        fi
+    done
+    
+    if [ -n "$PNG_SRC" ]; then
+        echo "Found PNG image at $PNG_SRC"
+        echo "Creating .icns from PNG using Pillow..."
+        
+        # Create temporary .icns file
+        TEMP_ICNS="/tmp/vaila.icns"
+        
+        # Use Python with Pillow to convert PNG to ICNS
+        cat > /tmp/create_icns.py << 'PYTHON_SCRIPT'
+import sys
+from PIL import Image
+
+def create_icns_from_png(png_path, icns_path):
+    try:
+        # Open the PNG image
+        img = Image.open(png_path)
+        
+        # Convert RGBA to RGB if needed (ICNS format doesn't support alpha well)
+        if img.mode in ('RGBA', 'LA', 'P'):
+            # Create a white background
+            rgb_img = Image.new('RGB', img.size, (255, 255, 255))
+            if img.mode == 'P':
+                img = img.convert('RGBA')
+            rgb_img.paste(img, mask=img.split()[3] if img.mode == 'RGBA' else None)
+            img = rgb_img
+        
+        # Save as ICNS
+        img.save(icns_path, format='ICNS')
+        return True
+    except Exception as e:
+        print(f"Error creating ICNS: {e}", file=sys.stderr)
+        return False
+
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        sys.exit(1)
+    png_path = sys.argv[1]
+    icns_path = sys.argv[2]
+    success = create_icns_from_png(png_path, icns_path)
+    sys.exit(0 if success else 1)
+PYTHON_SCRIPT
+
+        # Run the Python script using uv run python
+        if uv run python /tmp/create_icns.py "$PNG_SRC" "$TEMP_ICNS" 2>/dev/null; then
+            if [ -f "$TEMP_ICNS" ]; then
+                ICON_SRC="$TEMP_ICNS"
+                ICON_CREATED=true
+                echo "Icon created successfully from PNG using Pillow."
+            fi
+        else
+            echo "Warning: Failed to create .icns from PNG using Pillow."
+        fi
+        
+        # Clean up temporary Python script
+        rm -f /tmp/create_icns.py
     fi
 fi
 
@@ -451,16 +528,70 @@ else
     echo "  - $VAILA_HOME/docs/images/vaila.iconset/"
 fi
 
-echo "Application Bundle created. You can find 'vaila' in your Applications folder."
+echo "Application Bundle created at $APP_DIR."
 
-# Force macOS to refresh the icon cache
+# Force macOS to recognize the icon properly BEFORE creating symlink
 echo ""
-echo "Refreshing macOS icon cache..."
-touch "$APP_DIR"
-# Update icon database
+echo "Setting application icon..."
+
+# Set icon using sips (built-in macOS tool) - this helps macOS recognize the icon
+if [ -f "$APP_DIR/Contents/Resources/vaila.icns" ] && command -v sips &> /dev/null; then
+    echo "Applying icon to app bundle using sips..."
+    sips -i "$APP_DIR/Contents/Resources/vaila.icns" &>/dev/null || true
+fi
+
+# Use SetFile if available (from Xcode Command Line Tools) to set bundle bit
+if command -v SetFile &> /dev/null; then
+    echo "Setting bundle bit with SetFile..."
+    SetFile -a C "$APP_DIR" 2>/dev/null || true
+fi
+
+# Register the app bundle with Launch Services BEFORE creating symlink
+echo "Registering app bundle with Launch Services..."
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$APP_DIR" 2>/dev/null || true
-# Restart Finder to show updated icon
+
+# Force touch to update timestamps (helps Finder refresh)
+touch "$APP_DIR" 2>/dev/null || true
+touch "$APP_DIR/Contents/Resources/vaila.icns" 2>/dev/null || true
+touch "$APP_DIR/Contents/Info.plist" 2>/dev/null || true
+
+# Create a symbolic link in /Applications (like the Conda script does)
+# This is important for macOS to properly recognize the app icon
+echo ""
+echo "Creating symbolic link in /Applications..."
+if [ -e "/Applications/vaila.app" ]; then
+    echo "Removing existing symlink in /Applications..."
+    sudo rm -rf "/Applications/vaila.app"
+fi
+
+echo "Creating symlink from /Applications/vaila.app to $APP_DIR..."
+sudo ln -s "$APP_DIR" "/Applications/vaila.app"
+
+# Ensure the symbolic link has the correct permissions
+if [ -L "/Applications/vaila.app" ]; then
+    sudo chown -h "${USER}:admin" "/Applications/vaila.app"
+    echo "Symlink created successfully in /Applications."
+    
+    # Register symlink with Launch Services
+    echo "Registering symlink with Launch Services..."
+    /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "/Applications/vaila.app" 2>/dev/null || true
+    touch "/Applications/vaila.app" 2>/dev/null || true
+else
+    echo "Warning: Failed to create symlink in /Applications."
+fi
+
+# Rebuild Launch Services database for Applications folder
+echo ""
+echo "Rebuilding Launch Services cache..."
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -kill -r -domain local -domain system -domain user 2>/dev/null || true
+
+# Restart Finder and Dock to show updated icon
+echo "Restarting Finder and Dock..."
 killall Finder 2>/dev/null || true
+killall Dock 2>/dev/null || true
+
+echo ""
+echo "Icon cache refreshed. The vaila logo should appear correctly now."
 
 # Ensure the application directory is owned by the user and has the correct permissions
 echo "Ensuring correct ownership and permissions..."
@@ -473,5 +604,7 @@ echo "vaila installation completed successfully!"
 echo "============================================================"
 echo "You can run vaila by:"
 echo "1. Running: $RUN_SCRIPT"
-echo "2. Opening 'vaila' from your Applications folder (~/Applications/vaila.app)"
+echo "2. Opening 'vaila' from your Applications folder"
+echo "   - Launchpad or /Applications/vaila.app (recommended)"
+echo "   - Or ~/Applications/vaila.app"
 echo ""
