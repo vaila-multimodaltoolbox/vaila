@@ -392,11 +392,12 @@ chmod +x "$APP_DIR/Contents/MacOS/vaila"
 # Try to find or create the icon
 ICON_CREATED=false
 
-# First, try to find existing .icns file
+# First, try to find existing .icns file - prioritize docs/images/vaila.icns
 ICON_SRC=""
-for icon_path in "$VAILA_HOME/vaila/images/vaila.icns" "$VAILA_HOME/docs/images/vaila.icns" "$PROJECT_DIR/vaila/images/vaila.icns" "$PROJECT_DIR/docs/images/vaila.icns"; do
+for icon_path in "$PROJECT_DIR/docs/images/vaila.icns" "$VAILA_HOME/docs/images/vaila.icns" "$PROJECT_DIR/vaila/images/vaila.icns" "$VAILA_HOME/vaila/images/vaila.icns"; do
     if [ -f "$icon_path" ]; then
         ICON_SRC="$icon_path"
+        echo "Found icon at: $ICON_SRC"
         break
     fi
 done
@@ -534,26 +535,43 @@ echo "Application Bundle created at $APP_DIR."
 echo ""
 echo "Setting application icon..."
 
-# Set icon using sips (built-in macOS tool) - this helps macOS recognize the icon
-if [ -f "$APP_DIR/Contents/Resources/vaila.icns" ] && command -v sips &> /dev/null; then
-    echo "Applying icon to app bundle using sips..."
-    sips -i "$APP_DIR/Contents/Resources/vaila.icns" &>/dev/null || true
+# Apply icon using multiple methods to ensure macOS recognizes it
+if [ -f "$APP_DIR/Contents/Resources/vaila.icns" ]; then
+    echo "Applying icon to app bundle..."
+    
+    # Method 1: Use sips to set icon resource (built-in macOS tool)
+    if command -v sips &> /dev/null; then
+        echo "  Using sips to set icon resource..."
+        sips -i "$APP_DIR/Contents/Resources/vaila.icns" &>/dev/null || true
+    fi
+    
+    # Method 2: Use iconutil to convert and verify icon
+    if command -v iconutil &> /dev/null; then
+        echo "  Verifying icon format..."
+        iconutil -c icns "$APP_DIR/Contents/Resources/vaila.icns" -o /tmp/vaila_test.icns &>/dev/null || true
+        rm -f /tmp/vaila_test.icns
+    fi
+    
+    # Method 3: Use SetFile to set bundle attributes
+    if command -v SetFile &> /dev/null; then
+        echo "  Setting bundle attributes with SetFile..."
+        SetFile -a C "$APP_DIR" 2>/dev/null || true
+        SetFile -a B "$APP_DIR" 2>/dev/null || true
+    fi
+    
+    # Method 4: Use touchfile to update timestamps (helps Finder refresh)
+    touch "$APP_DIR" 2>/dev/null || true
+    touch "$APP_DIR/Contents/Resources/vaila.icns" 2>/dev/null || true
+    touch "$APP_DIR/Contents/Info.plist" 2>/dev/null || true
+    
+    # Method 5: Register with Launch Services multiple times
+    echo "  Registering with Launch Services..."
+    /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$APP_DIR" 2>/dev/null || true
+    /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -kill -r -domain local -domain system -domain user 2>/dev/null || true
+    /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$APP_DIR" 2>/dev/null || true
+    
+    echo "Icon applied successfully."
 fi
-
-# Use SetFile if available (from Xcode Command Line Tools) to set bundle bit
-if command -v SetFile &> /dev/null; then
-    echo "Setting bundle bit with SetFile..."
-    SetFile -a C "$APP_DIR" 2>/dev/null || true
-fi
-
-# Register the app bundle with Launch Services BEFORE creating symlink
-echo "Registering app bundle with Launch Services..."
-/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$APP_DIR" 2>/dev/null || true
-
-# Force touch to update timestamps (helps Finder refresh)
-touch "$APP_DIR" 2>/dev/null || true
-touch "$APP_DIR/Contents/Resources/vaila.icns" 2>/dev/null || true
-touch "$APP_DIR/Contents/Info.plist" 2>/dev/null || true
 
 # Create a symbolic link in /Applications (like the Conda script does)
 # This is important for macOS to properly recognize the app icon
