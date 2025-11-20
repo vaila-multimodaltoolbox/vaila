@@ -172,12 +172,43 @@ echo "Installing vaila dependencies with uv..."
 echo "This may take a few minutes on first run..."
 uv sync
 
-# Prompt user about installing PyTorch/YOLO stack
+# Detect NVIDIA GPU
 echo ""
+echo "Checking for NVIDIA GPU..."
+NVIDIA_GPU_DETECTED=false
+if command -v nvidia-smi &> /dev/null; then
+    if nvidia-smi &> /dev/null; then
+        NVIDIA_GPU_DETECTED=true
+        echo "NVIDIA GPU detected!"
+        nvidia-smi --query-gpu=name --format=csv,noheader | head -1 | sed 's/^/  GPU: /'
+    else
+        echo "nvidia-smi found but no GPU detected (drivers may not be installed)."
+    fi
+else
+    echo "No NVIDIA GPU detected (nvidia-smi not found)."
+fi
+echo ""
+
+# Prepare GPU info for prompt
+if [[ "$NVIDIA_GPU_DETECTED" == true ]]; then
+    GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)
+    PYTORCH_DESC="PyTorch (CPU or CUDA/GPU) + YOLO"
+    PYTORCH_NOTE="NVIDIA GPU detected: $GPU_NAME"
+else
+    PYTORCH_DESC="PyTorch (CPU or CUDA/GPU) + YOLO"
+    PYTORCH_NOTE="No NVIDIA GPU detected (CUDA option requires GPU)"
+fi
+
+# Prompt user about installing PyTorch/YOLO stack
 echo "---------------------------------------------"
 echo "PyTorch / YOLO installation options"
 echo "  [1] Skip (default)"
-echo "  [2] Install PyTorch + YOLO (ultralytics/boxmot)"
+echo "  [2] Install $PYTORCH_DESC"
+if [[ "$NVIDIA_GPU_DETECTED" == true ]]; then
+    echo "      ($PYTORCH_NOTE)"
+else
+    echo "      Note: $PYTORCH_NOTE"
+fi
 echo "---------------------------------------------"
 printf "Choose an option [1-2]: "
 read INSTALL_OPTION
@@ -186,9 +217,19 @@ INSTALL_OPTION=${INSTALL_OPTION:-1}
 if [[ "$INSTALL_OPTION" == "2" ]]; then
     PYTORCH_INSTALLED=false
     echo ""
-    echo "Select PyTorch build:"
-    echo "  [1] CPU-only (default)"
-    echo "  [2] CUDA (requires NVIDIA GPU + drivers)"
+    
+    # Show options based on GPU detection (informative only)
+    if [[ "$NVIDIA_GPU_DETECTED" == true ]]; then
+        echo "Select PyTorch build:"
+        echo "  [1] CPU-only"
+        echo "  [2] CUDA/GPU (NVIDIA GPU detected: $GPU_NAME)"
+    else
+        echo "Select PyTorch build:"
+        echo "  [1] CPU-only"
+        echo "  [2] CUDA/GPU (requires NVIDIA GPU + drivers)"
+        echo "     Note: No NVIDIA GPU detected. CUDA will not work without GPU."
+    fi
+    
     printf "Choose an option [1-2]: "
     read PYTORCH_OPTION
     PYTORCH_OPTION=${PYTORCH_OPTION:-1}
@@ -198,19 +239,25 @@ if [[ "$INSTALL_OPTION" == "2" ]]; then
         echo "Installing PyTorch with CUDA support..."
         if uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121; then
             PYTORCH_INSTALLED=true
+            echo "PyTorch with CUDA installed successfully."
         else
-            echo "Warning: Failed to install CUDA-enabled PyTorch. You can retry later with:"
+            echo "Warning: Failed to install CUDA-enabled PyTorch."
+            echo "This may be due to missing NVIDIA drivers or incompatible CUDA version."
+            echo "You can retry later with:"
             echo "  uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121"
         fi
-    else
+    elif [[ "$PYTORCH_OPTION" == "1" ]]; then
         echo ""
         echo "Installing CPU-only PyTorch..."
         if uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu; then
             PYTORCH_INSTALLED=true
+            echo "CPU-only PyTorch installed successfully."
         else
             echo "Warning: Failed to install CPU-only PyTorch. You can retry later with:"
             echo "  uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu"
         fi
+    else
+        echo "Invalid option. Skipping PyTorch installation."
     fi
 
     if [ "$PYTORCH_INSTALLED" = true ]; then
