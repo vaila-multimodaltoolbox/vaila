@@ -3,7 +3,7 @@ name = "vaila"
 version = "0.2.0"
 description = "Versatile Anarcho Integrated Liberation Ánalysis - Multimodal Toolbox for Biomechanics and Motion Analysis"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.13"
 license = {text = "AGPL-3.0-or-later"}
 authors = [
     {name = "Paulo R. P. Santiago", email = "paulosantiago@usp.br"},
@@ -33,6 +33,7 @@ dependencies = [
     "seaborn",
     "plotly",
     "pillow",
+    "pycairo",
     
     # Data processing
     "dask",
@@ -120,7 +121,7 @@ dependencies = [
     "rich",
     "ydata_profiling",
     "xonsh[full]",
-    "intel-openmp",
+    "intel-openmp; sys_platform != 'darwin' and (platform_machine == 'x86_64' or platform_machine == 'AMD64')",
     "yt-dlp",
     "openai",
     "odfpy",
