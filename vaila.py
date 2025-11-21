@@ -4,8 +4,8 @@ vaila.py
 ===============================================================================
 Author: Prof. Paulo R. P. Santiago
 Date: 07 October 2024
-Update: 20 November 2025
-Version updated: 0.2.2
+Update: 21 November 2025
+Version updated: 0.2.3
 Python Version: 3.12.12
 
 Example of usage:
@@ -123,7 +123,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 20.November.2025 v0.2.2 (Python 3.12.12)
+vailá - 21.November.2025 v0.2.3 (Python 3.12.12)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -224,7 +224,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 20.November.2025 v0.2.2 (Python 3.12.12)")
+        self.title("vailá - 21.November.2025 v0.2.3 (Python 3.12.12)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -262,8 +262,8 @@ class Vaila(tk.Tk):
         Adjusts the window dimensions, button width, and font size based on the operating system.
         """
         if platform.system() == "Darwin":  # macOS
-            self.geometry("1620x920")  # Wider window for macOS FullHD screens
-            self.button_width = 15  # Wider buttons for better layout
+            self.geometry("1280x800")  # Adjusted window for macOS laptop screens
+            self.button_width = 10  # Wider buttons for better layout
             self.font_size = 11  # Standard font size
         elif platform.system() == "Windows":  # Windows
             self.geometry("1024x920")  # Compact horizontal size for Windows
@@ -374,11 +374,21 @@ class Vaila(tk.Tk):
 
         # Create a canvas to add scrollbar
         canvas = tk.Canvas(self)
+        
+        # Create scrollbars
+        v_scrollbar = ttk.Scrollbar(self, orient="vertical", command=canvas.yview)
+        h_scrollbar = ttk.Scrollbar(self, orient="horizontal", command=canvas.xview)
+
+        # Pack scrollbars and canvas
+        # Pack horizontal scrollbar at the bottom first
+        h_scrollbar.pack(side=tk.BOTTOM, fill="x")
+        # Pack vertical scrollbar at the right
+        v_scrollbar.pack(side=tk.RIGHT, fill="y")
+        # Pack canvas to fill the rest
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        # Add a scrollbar to the canvas
-        scrollbar = ttk.Scrollbar(self, orient="vertical", command=canvas.yview)
-        scrollbar.pack(side=tk.RIGHT, fill="y")
+        # Configure canvas
+        canvas.configure(yscrollcommand=v_scrollbar.set, xscrollcommand=h_scrollbar.set)
 
         # Create a frame inside the canvas to hold all content
         scrollable_frame = tk.Frame(canvas)
@@ -388,7 +398,6 @@ class Vaila(tk.Tk):
 
         # Add the scrollable frame to the canvas
         canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
 
         """
             A - File Manager Avaliable: 
