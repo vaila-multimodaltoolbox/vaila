@@ -47,6 +47,9 @@ var/
 .installed.cfg
 *.egg
 MANIFEST
+*.exe
+*.dmg
+*.deb
 
 # PyInstaller
 # Usually these files are written by a python script from a template
