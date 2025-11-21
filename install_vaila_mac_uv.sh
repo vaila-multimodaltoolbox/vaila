@@ -535,42 +535,28 @@ echo "Application Bundle created at $APP_DIR."
 echo ""
 echo "Setting application icon..."
 
-# Apply icon using multiple methods to ensure macOS recognizes it
+# Apply icon using Python script (AppKit)
 if [ -f "$APP_DIR/Contents/Resources/vaila.icns" ]; then
-    echo "Applying icon to app bundle..."
+    echo "Applying icon to app bundle using Python script..."
     
-    # Method 1: Use sips to set icon resource (built-in macOS tool)
-    if command -v sips &> /dev/null; then
-        echo "  Using sips to set icon resource..."
-        sips -i "$APP_DIR/Contents/Resources/vaila.icns" &>/dev/null || true
+    # Run the Python script using uv run python
+    if uv run python "$PROJECT_DIR/set_mac_icon.py" "$APP_DIR" "$APP_DIR/Contents/Resources/vaila.icns"; then
+        echo "Icon applied successfully to App Bundle."
+    else
+        echo "Warning: Failed to apply icon to App Bundle using Python script."
     fi
     
-    # Method 2: Use iconutil to convert and verify icon
-    if command -v iconutil &> /dev/null; then
-        echo "  Verifying icon format..."
-        iconutil -c icns "$APP_DIR/Contents/Resources/vaila.icns" -o /tmp/vaila_test.icns &>/dev/null || true
-        rm -f /tmp/vaila_test.icns
+    # Also try to apply to the installation directory
+    echo "Applying icon to installation directory..."
+    if uv run python "$PROJECT_DIR/set_mac_icon.py" "$VAILA_HOME" "$APP_DIR/Contents/Resources/vaila.icns"; then
+        echo "Icon applied successfully to installation directory."
+    else
+        echo "Warning: Failed to apply icon to installation directory."
     fi
-    
-    # Method 3: Use SetFile to set bundle attributes
-    if command -v SetFile &> /dev/null; then
-        echo "  Setting bundle attributes with SetFile..."
-        SetFile -a C "$APP_DIR" 2>/dev/null || true
-        SetFile -a B "$APP_DIR" 2>/dev/null || true
-    fi
-    
-    # Method 4: Use touchfile to update timestamps (helps Finder refresh)
-    touch "$APP_DIR" 2>/dev/null || true
-    touch "$APP_DIR/Contents/Resources/vaila.icns" 2>/dev/null || true
-    touch "$APP_DIR/Contents/Info.plist" 2>/dev/null || true
-    
-    # Method 5: Register with Launch Services multiple times
-    echo "  Registering with Launch Services..."
-    /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$APP_DIR" 2>/dev/null || true
-    /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -kill -r -domain local -domain system -domain user 2>/dev/null || true
-    /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$APP_DIR" 2>/dev/null || true
-    
-    echo "Icon applied successfully."
+
+    # Force Finder refresh
+    touch "$APP_DIR"
+    touch "$VAILA_HOME"
 fi
 
 # Create a symbolic link in /Applications (like the Conda script does)

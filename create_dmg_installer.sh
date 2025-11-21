@@ -227,12 +227,11 @@ if [ ! -f "$DMG_TEMP_DIR/vaila.app/Contents/Resources/vaila.icns" ]; then
         echo "Icon copied to vaila.app in DMG temp directory."
         
         # Apply icon attributes to vaila.app in DMG (before creating DMG)
-        if command -v sips &> /dev/null; then
-            sips -i "$DMG_TEMP_DIR/vaila.app/Contents/Resources/vaila.icns" &>/dev/null || true
-        fi
-        if command -v SetFile &> /dev/null; then
-            SetFile -a C "$DMG_TEMP_DIR/vaila.app" 2>/dev/null || true
-            SetFile -a B "$DMG_TEMP_DIR/vaila.app" 2>/dev/null || true
+        echo "Applying icon to vaila.app in DMG..."
+        if uv run python "$PROJECT_DIR/set_mac_icon.py" "$DMG_TEMP_DIR/vaila.app" "$DMG_TEMP_DIR/vaila.app/Contents/Resources/vaila.icns"; then
+             echo "Icon applied successfully to vaila.app in DMG."
+        else
+             echo "Warning: Failed to apply icon to vaila.app in DMG using Python script."
         fi
     else
         echo "Error: Could not find icon source to copy to vaila.app in DMG."
@@ -318,23 +317,19 @@ done
 
 if [ -n "$DMG_ICON" ]; then
     echo "Found icon at: $DMG_ICON"
-    # Use sips to attach icon resource to DMG file
-    if command -v sips &> /dev/null; then
-        sips -i "$DMG_ICON" &>/dev/null || true
-    fi
-    # Use DeRez/Rez to copy icon resource if available (more reliable)
-    if command -v DeRez &> /dev/null && command -v Rez &> /dev/null; then
-        TEMP_RSRC="/tmp/vaila_dmg_icon.rsrc"
-        # Extract icon resource
-        DeRez -only icns "$DMG_ICON" > "$TEMP_RSRC" 2>/dev/null || true
-        if [ -f "$TEMP_RSRC" ]; then
-            # Append icon resource to DMG file
-            Rez -append "$TEMP_RSRC" -o "$DMG_OUTPUT" 2>/dev/null || true
-            # Mark DMG file with custom icon attribute
-            if command -v SetFile &> /dev/null; then
-                SetFile -a C "$DMG_OUTPUT" 2>/dev/null || true
-            fi
-            rm -f "$TEMP_RSRC"
+    # Use Python script to set DMG file icon
+    echo "Setting DMG file icon using Python script..."
+    if uv run python "$PROJECT_DIR/set_mac_icon.py" "$DMG_OUTPUT" "$DMG_ICON"; then
+        echo "DMG file icon set successfully."
+    else
+        echo "Warning: Failed to set DMG file icon using Python script."
+        
+        # Fallback to sips/SetFile if Python script fails (though unlikely if dependencies are met)
+        if command -v sips &> /dev/null; then
+            sips -i "$DMG_ICON" &>/dev/null || true
+        fi
+        if command -v SetFile &> /dev/null; then
+            SetFile -a C "$DMG_OUTPUT" 2>/dev/null || true
         fi
     fi
     # Update Finder cache
