@@ -4,7 +4,7 @@ vaila.py
 ===============================================================================
 Author: Prof. Paulo R. P. Santiago
 Date: 07 October 2024
-Update: 21 November 2025
+Update: 12 December 2025
 Version updated: 0.2.3
 Python Version: 3.12.12
 
@@ -123,7 +123,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 21.November.2025 v0.2.3 (Python 3.12.12)
+vailá - 12.December.2025 v0.2.3 (Python 3.12.12)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -134,7 +134,8 @@ Mocap fullbody_c3d           Markerless_3D      Markerless_2D_MP and YOLO
                    v               v               v        
    CUBE2D  --> +---------------------------------------+ <-- Vector Coding
    IMU_csv --> |       vailá - multimodal toolbox      | <-- Cluster_csv
-Open Field --> +---------------------------------------+ <-- Force Plate
+Open Field --> |                                       | <-- Force Plate
+startblock --> +---------------------------------------+ <-- GRF Analysis
               ^                   |                    ^ <-- YOLOv11 and MediaPipe
         EMG__/                    v                     \__Tracker YOLOv11 or YOLOv12
                +--------------------------------------+
@@ -160,7 +161,7 @@ B3_r4_c1 - Tracker        B3_r4_c2 - ML Walkway      B3_r4_c3 - Markerless Hands
 B3_r4_c4 - MP Angles      B3_r4_c5 - Markerless Live
 
 B3_r5_c1 - Ultrasound     B3_r5_c2 - Brainstorm      B3_r5_c3 - Scout
-B3_r5_c4 - vailá          B3_r5_c5 - vailá
+B3_r5_c4 - StartBlock    B3_r5_c5 - vailá
 
 ============================== Tools Available (Frame C) ===================
 -> C_A: Data Files
@@ -224,7 +225,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 21.November.2025 v0.2.3 (Python 3.12.12)")
+        self.title("vailá - 12.December.2025 v0.2.3 (Python 3.12.12)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -797,8 +798,16 @@ class Vaila(tk.Tk):
             command=self.scout,
         )
 
-        # B5_r5_c4 - vailá
-        vaila_btn4 = tk.Button(
+        # B5_r5_c4 - Start Block
+        startblock_btn = tk.Button(
+            row5_frame,
+            text="Start Block",
+            width=button_width,
+            command=self.startblock,
+        )
+
+        # B5_r5_c5 - vailá
+        vaila_btn5 = tk.Button(
             row5_frame,
             text="vailá",
             width=button_width,
@@ -817,7 +826,7 @@ class Vaila(tk.Tk):
         ultrasound_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         brainstorm_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         scout_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
-        vaila_btn4.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        startblock_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         vaila_btn5.pack(side="left", expand=True, fill="x", padx=2, pady=2)
 
         ## VVVVVVVVVVVVVVV TOOLS BUTTONS VVVVVVVVVVVVVVVV
@@ -1759,6 +1768,13 @@ class Vaila(tk.Tk):
     def scout(self):
         """Runs the Scout module in a separate process to avoid Tk conflicts."""
         run_vaila_module("vaila.scout_vaila", "vaila/scout_vaila.py")
+
+    # B_r5_c4 - Start Block
+    def startblock(self):
+        """Runs the Start Block (Ground Reaction Force) analysis module."""
+        from vaila import startblock
+
+        startblock.run_startblock_gui()
 
     # C_r1_c1
     def reorder_csv_data(self):
