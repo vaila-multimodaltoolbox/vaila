@@ -92,7 +92,8 @@ The vailá toolbox comprises the following modules:
   - Model Validation
   - Prediction with Pre-trained Models
 - **File Management**
-- **Video Processing**
+- **Video Processing:**
+  - DrawBoxe - Draw boxes and polygons on videos
 - **Visualization**
 
 ## How to Use
@@ -117,6 +118,10 @@ The graphical interface allows you to select the desired module. For example, wh
 - **[GUI Button Documentation](vaila_buttons/README.md)** - Complete documentation for all GUI buttons
 - **[Script Help Files](../vaila/help/README.md)** - Help for individual Python scripts
 - **[Main Documentation](index.md)** - Overview and module documentation
+
+### Video Processing Tools
+
+- **[DrawBoxe](../vaila/help/tools/drawboxe.html)** - Draw boxes and polygons on videos with frame interval support
 
 ## Contributing
 
