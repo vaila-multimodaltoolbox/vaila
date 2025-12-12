@@ -166,6 +166,13 @@ echo ""
 echo "Generating lock file (uv.lock)..."
 uv lock
 
+# Install Cairo dependencies BEFORE uv sync (needed for pycairo compilation)
+echo ""
+echo "Installing Cairo system dependencies (required for pycairo)..."
+sudo apt install -y libcairo2-dev pkg-config python3-dev build-essential || {
+    echo "Warning: Failed to install Cairo dependencies. pycairo may fail to build."
+}
+
 # Sync dependencies (install all packages from pyproject.toml)
 echo ""
 echo "Installing vaila dependencies with uv..."
@@ -278,17 +285,20 @@ else
     echo "  YOLO stack  : uv pip install ultralytics boxmot"
 fi
 
-# Install Cairo dependencies and pycairo
+# Verify pycairo installation (should already be installed via uv sync)
 echo ""
-echo "Installing Cairo dependencies..."
-sudo apt install -y libcairo2-dev pkg-config python3-dev || true
-
-echo "Installing pycairo..."
-if ! uv pip install pycairo; then
-    echo "Warning: pycairo installation failed. Trying with force-reinstall..."
-    uv pip install --force-reinstall --no-cache-dir pycairo || {
-        echo "Warning: pycairo installation failed. This may cause issues with the application."
-    }
+echo "Verifying pycairo installation..."
+if ! uv pip show pycairo &>/dev/null; then
+    echo "pycairo not found. Attempting to install..."
+    if ! uv pip install pycairo; then
+        echo "Warning: pycairo installation failed. Trying with force-reinstall..."
+        uv pip install --force-reinstall --no-cache-dir pycairo || {
+            echo "Warning: pycairo installation failed. This may cause issues with the application."
+            echo "Make sure libcairo2-dev is installed: sudo apt install -y libcairo2-dev pkg-config python3-dev"
+        }
+    fi
+else
+    echo "pycairo is already installed."
 fi
 
 # Install and configure SSH
