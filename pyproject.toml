@@ -27,27 +27,23 @@ dependencies = [
     "scipy",
     "scikit-learn",
     "statsmodels",
-    
     # Visualization
     "matplotlib",
     "seaborn",
     "plotly",
     "pillow",
     "pycairo",
-    
     # Data processing
     "dask",
     "distributed",
     "h5py",
     "openpyxl",
     "lxml",
-    
     # Jupyter and interactive computing
     "ipython",
     "jupyterlab",
     "notebook",
     "matplotlib-inline",
-    
     # Web frameworks
     "flask",
     "dash",
@@ -57,28 +53,23 @@ dependencies = [
     "werkzeug",
     "itsdangerous",
     "blinker",
-    
     # Database and data formats
     "sqlalchemy",
     "ezc3d",
     "toml",
-    
     # Computer vision and image processing
     "opencv-contrib-python",
     "imageio",
     "imageio-ffmpeg",
     "moviepy",
-    
     # Machine learning and AI
     "jax",
     "jaxlib",
     "xgboost",
     "mediapipe",
-    
     # 3D processing
     "open3d",
     "glfw",
-    
     # Signal processing and biomechanics
     "imufusion",
     "neurokit2",
@@ -86,7 +77,6 @@ dependencies = [
     "entropy",
     "pykalman",
     "spm1d",
-    
     # Audio processing
     "librosa",
     "pydub",
@@ -97,16 +87,13 @@ dependencies = [
     "gtts",
     "midiutil",
     "mido",
-    
     # Geospatial
     "gpxpy",
     "simplekml",
     "folium",
-    
     # Networking and remote access
     "paramiko",
     "scp",
-    
     # Utilities
     "einops",
     "absl-py",
@@ -129,6 +116,7 @@ dependencies = [
     "pyzmq",
     "protobuf",
     "pyobjc-framework-Cocoa; sys_platform == 'darwin'",
+    "opencv-python>=4.11.0.86",
 ]
 
 [project.scripts]

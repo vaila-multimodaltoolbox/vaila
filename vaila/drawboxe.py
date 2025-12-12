@@ -47,7 +47,7 @@ import cv2
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
 import numpy as np
-import toml
+import toml  # type: ignore[import-untyped]
 
 
 def save_first_frame(video_path, frame_path):
@@ -206,7 +206,7 @@ def clean_up(directory):
     os.rmdir(directory)
 
 
-def save_config_toml(video_path, coordinates, selections, colors):
+def save_config_toml(video_path, coordinates, selections, colors, frame_intervals=None):
     """Save box configuration to TOML file"""
     basename = os.path.splitext(os.path.basename(video_path))[0]
     config_path = os.path.join(os.path.dirname(video_path), f"{basename}_dbox.toml")
@@ -232,6 +232,7 @@ def save_config_toml(video_path, coordinates, selections, colors):
 # - Colors are stored as RGB values (0-1 range)
 # - Modes: "inside" (fills selected area) or "outside" (fills everything except selected area)
 # - Shapes: "rectangle", "trapezoid", or "free"
+# - Frame intervals (optional): define which frames to process (start_frame, end_frame)
 # ================================================================
 
 [description]
@@ -240,7 +241,7 @@ purpose = "This file contains polygon/box definitions for video processing"
 usage = "Load this configuration to apply the same boxes to multiple videos"
 author = "Prof. Dr. Paulo R. P. Santiago"
 github = "https://github.com/paulopreto/vaila-multimodaltoolbox"
-version = "0.0.6"
+version = "0.0.7"
 date = "{datetime.datetime.now().strftime("%Y-%m-%d")}"
 
 [video_info]
@@ -248,6 +249,35 @@ basename = "{basename}"
 original_path = "{escaped_video_path}"
 
 """
+
+    # Add frame intervals section (always include commented example)
+    toml_content += """
+# ================================================================
+# FRAME INTERVALS (OPTIONAL)
+# ================================================================
+# Define which frame ranges to process. If not specified, all frames will be processed.
+# Format: start_frame, end_frame (inclusive, 0-indexed)
+# 
+# Example: To process frames 100-200 and 500-600, uncomment and modify:
+# [[frame_intervals]]
+# id = 1
+# start_frame = 100
+# end_frame = 200
+#
+# [[frame_intervals]]
+# id = 2
+# start_frame = 500
+# end_frame = 600
+# ================================================================
+"""
+    
+    # Add actual frame intervals if provided
+    if frame_intervals:
+        for i, (start, end) in enumerate(frame_intervals):
+            toml_content += f"[[frame_intervals]]\n"
+            toml_content += f"id = {i + 1}\n"
+            toml_content += f"start_frame = {start}\n"
+            toml_content += f"end_frame = {end}\n\n"
 
     for i, (coords, selection, color) in enumerate(zip(coordinates, selections, colors)):
         toml_content += f"""
@@ -282,7 +312,16 @@ def load_config_toml(config_path):
         coordinates = []
         selections = []
         colors = []
+        frame_intervals = []
 
+        # Load frame intervals if present
+        for interval in config_data.get("frame_intervals", []):
+            start = interval.get("start_frame")
+            end = interval.get("end_frame")
+            if start is not None and end is not None:
+                frame_intervals.append((int(start), int(end)))
+
+        # Load boxes
         for box in config_data.get("boxes", []):
             # Convert coordinates
             coords = []
@@ -301,10 +340,11 @@ def load_config_toml(config_path):
                 selections.append((box["mode"], box["shape"], color))
                 colors.append(color)
 
-        return coordinates, selections, colors
+        # Return None for frame_intervals if empty (for backward compatibility)
+        return coordinates, selections, colors, (frame_intervals if frame_intervals else None)
     except Exception as e:
         print(f"Error loading config: {e}")
-        return [], [], []
+        return [], [], [], None
 
 
 def get_box_coordinates(image_path, video_path=None):
@@ -690,7 +730,7 @@ DRAWBOXE - HELP
 
         if config_path and os.path.exists(config_path):
             try:
-                loaded_coords, loaded_selections, loaded_colors = load_config_toml(config_path)
+                loaded_coords, loaded_selections, loaded_colors, _ = load_config_toml(config_path)
                 if loaded_coords:
                     # Clear current shapes
                     on_clear_all(None)
@@ -1280,21 +1320,43 @@ def run_drawboxe():
         first_frame_path, os.path.join(video_directory, first_video)
     )
     os.remove(first_frame_path)
-    use_intervals = messagebox.askyesno(
-        "Frame Intervals", "Do you want to use frame intervals from a .txt file?"
-    )
+    
+    # Check if there's a TOML config file with frame intervals
     frame_intervals = None
-    if use_intervals:
-        intervals_file = filedialog.askopenfilename(
-            parent=root,
-            title="Select the .txt file with frame intervals",
-            filetypes=[("Text files", "*.txt")],
+    basename = os.path.splitext(first_video)[0]
+    config_path = os.path.join(video_directory, f"{basename}_dbox.toml")
+    
+    if os.path.exists(config_path):
+        try:
+            _, _, _, loaded_intervals = load_config_toml(config_path)
+            if loaded_intervals:
+                use_toml_intervals = messagebox.askyesno(
+                    "Frame Intervals Found",
+                    f"Frame intervals found in TOML config file.\n\n"
+                    f"Intervals: {loaded_intervals}\n\n"
+                    f"Do you want to use these intervals?"
+                )
+                if use_toml_intervals:
+                    frame_intervals = loaded_intervals
+        except Exception as e:
+            print(f"Warning: Could not load frame intervals from TOML: {e}")
+    
+    # If no intervals from TOML, ask user
+    if frame_intervals is None:
+        use_intervals = messagebox.askyesno(
+            "Frame Intervals", "Do you want to use frame intervals from a .txt file?"
         )
-        if intervals_file:
-            frame_intervals = load_frame_intervals(intervals_file)
-        else:
-            messagebox.showerror("Error", "No .txt file selected.")
-            return
+        if use_intervals:
+            intervals_file = filedialog.askopenfilename(
+                parent=root,
+                title="Select the .txt file with frame intervals",
+                filetypes=[("Text files", "*.txt")],
+            )
+            if intervals_file:
+                frame_intervals = load_frame_intervals(intervals_file)
+            else:
+                messagebox.showerror("Error", "No .txt file selected.")
+                return
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     output_dir = os.path.join(video_directory, f"video_2_drawbox_{timestamp}")
     if os.path.exists(output_dir):
