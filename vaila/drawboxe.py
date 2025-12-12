@@ -26,6 +26,7 @@ License:
     This project is licensed under the terms of GNU General Public License v3.0.
 
 Change History:
+    - v0.0.8: Removed frame intervals feature - simplified to always apply boxes to all frames
     - v0.0.7: Added hatching to indicate outside mode
     - v0.0.6: Added support for free polygon boxes
     - v0.0.5: Added support for trapezoid boxes
@@ -140,49 +141,6 @@ def apply_boxes_directly_to_video(input_path, output_path, coordinates, selectio
     print(f"Saved to: {output_path}")
     out.release()
     vidcap.release()
-
-
-def apply_boxes_to_frames(frames_dir, coordinates, selections, colors, frame_intervals):
-    for filename in sorted(os.listdir(frames_dir)):
-        frame_number = int(filename.split("_")[1].split(".")[0])
-        for start_frame, end_frame in frame_intervals:
-            if start_frame <= frame_number <= end_frame:
-                frame_path = os.path.join(frames_dir, filename)
-                img = cv2.imread(frame_path)
-
-                for coords, selection, color in zip(coordinates, selections, colors):
-                    mode = selection[0]
-                    shape_type = selection[1]
-                    # Converter cor de matplotlib (0-1) para OpenCV (0-255) BGR
-                    bgr_color = (
-                        int(color[2] * 255),
-                        int(color[1] * 255),
-                        int(color[0] * 255),
-                    )
-
-                    if shape_type == "rectangle":
-                        x1, y1 = int(coords[0][0]), int(coords[0][1])
-                        x2, y2 = int(coords[2][0]), int(coords[2][1])
-                        x1, x2 = min(x1, x2), max(x1, x2)
-                        y1, y2 = min(y1, y2), max(y1, y2)
-                        if mode == "inside":
-                            img[y1:y2, x1:x2] = bgr_color
-                        else:
-                            # For outside mode, fill everything except the rectangle
-                            mask = np.ones(img.shape[:2], dtype=np.uint8)
-                            cv2.rectangle(mask, (x1, y1), (x2, y2), 0, -1)
-                            img[mask == 1] = bgr_color
-                    elif shape_type in ("trapezoid", "free"):
-                        pts = np.array(coords, np.int32).reshape((-1, 1, 2))
-                        if mode == "inside":
-                            cv2.fillPoly(img, [pts], bgr_color)
-                        else:
-                            # For outside mode, fill everything except the polygon
-                            mask = np.ones(img.shape[:2], dtype=np.uint8)
-                            cv2.fillPoly(mask, [pts], 0)
-                            img[mask == 1] = bgr_color
-
-                cv2.imwrite(frame_path, img)
 
 
 def reassemble_video(frames_dir, output_path, fps):
@@ -1217,15 +1175,6 @@ DRAWBOXE - HELP
     return boxes, selections, colors
 
 
-def load_frame_intervals(file_path):
-    intervals = []
-    with open(file_path) as file:
-        for line in file:
-            start, end = map(int, line.strip().split(","))
-            intervals.append((start, end))
-    return intervals
-
-
 def show_feedback_message():
     print("vailá!")
     time.sleep(2)
@@ -1280,21 +1229,6 @@ def run_drawboxe():
         first_frame_path, os.path.join(video_directory, first_video)
     )
     os.remove(first_frame_path)
-    use_intervals = messagebox.askyesno(
-        "Frame Intervals", "Do you want to use frame intervals from a .txt file?"
-    )
-    frame_intervals = None
-    if use_intervals:
-        intervals_file = filedialog.askopenfilename(
-            parent=root,
-            title="Select the .txt file with frame intervals",
-            filetypes=[("Text files", "*.txt")],
-        )
-        if intervals_file:
-            frame_intervals = load_frame_intervals(intervals_file)
-        else:
-            messagebox.showerror("Error", "No .txt file selected.")
-            return
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     output_dir = os.path.join(video_directory, f"video_2_drawbox_{timestamp}")
     if os.path.exists(output_dir):
@@ -1303,21 +1237,9 @@ def run_drawboxe():
     for video_file in video_files:
         input_path = os.path.join(video_directory, video_file)
         final_output_path = os.path.join(output_dir, f"{os.path.splitext(video_file)[0]}_dbox.mp4")
-        vidcap = cv2.VideoCapture(input_path)
-        fps = vidcap.get(cv2.CAP_PROP_FPS)
-        vidcap.release()
-        if frame_intervals:
-            frames_dir = os.path.join(video_directory, "frames_temp")
-            if os.path.exists(frames_dir):
-                shutil.rmtree(frames_dir)
-            extract_frames(input_path, frames_dir)
-            apply_boxes_to_frames(frames_dir, coordinates, selections, colors, frame_intervals)
-            reassemble_video(frames_dir, final_output_path, fps)
-            clean_up(frames_dir)
-        else:
-            apply_boxes_directly_to_video(
-                input_path, final_output_path, coordinates, selections, colors
-            )
+        apply_boxes_directly_to_video(
+            input_path, final_output_path, coordinates, selections, colors
+        )
     show_feedback_message()
     print("All videos processed and saved to the output directory.")
     messagebox.showinfo("Completed", "All videos have been processed successfully!")

@@ -467,7 +467,7 @@ def process_single_file(csv_file, show_plot=True, output_dir=None,
         positive_peak_idx = np.argmax(y_data)
         positive_peak_value = y_data[positive_peak_idx]
         positive_peak_time = x[positive_peak_idx]
-        print(f"  ⚠️  No positive value above baseline found, using global maximum")
+        print(f"No positive value above baseline found, using global maximum")
     
     print(f"\nPositive peak detected (from back to front):")
     print(f"  Index: {positive_peak_idx}")
@@ -506,7 +506,7 @@ def process_single_file(csv_file, show_plot=True, output_dir=None,
         surge_start_idx = 0
         surge_start_time = x[0]
         surge_start_derivative = derivative[0]
-        print(f"  ⚠️  Using first point as surge start")
+        print(f"Using first point as surge start")
     
     print(f"\nSurge start (maximum negative derivative) detected:")
     print(f"  Index: {surge_start_idx}")
@@ -564,7 +564,7 @@ def process_single_file(csv_file, show_plot=True, output_dir=None,
         end_surge_idx = min(minimum_idx + 1, len(y_data) - 1)
         end_surge_time = x[end_surge_idx]
         end_surge_derivative = derivative[end_surge_idx]
-        print(f"  ⚠️  Using point after minimum as end surge")
+        print(f"Using point after minimum as end surge")
     
     print(f"\nEnd of negative surge (maximum positive derivative after minimum) detected:")
     print(f"  Index: {end_surge_idx}")
@@ -704,15 +704,6 @@ def process_single_file(csv_file, show_plot=True, output_dir=None,
     plt.savefig(output_plot, dpi=300, bbox_inches='tight')
     print(f"\nPlot saved to: {output_plot}")
 
-    # Save processed data to output directory
-    output_csv = output_dir / f"{csv_file.stem}_processed.csv"
-    df_processed = pd.DataFrame({
-        df.columns[0]: x,
-        df.columns[1]: y_data
-    })
-    df_processed.to_csv(output_csv, index=False)
-    print(f"Processed data saved to: {output_csv}")
-
     # Prepare results dictionary for report
     results_dict = {
         'reaction_time_surge_to_peak': reaction_time_surge_to_peak,
@@ -727,6 +718,57 @@ def process_single_file(csv_file, show_plot=True, output_dir=None,
         'positive_peak_time': positive_peak_time,
         'baseline_initial': baseline_initial,
     }
+
+    # Save analysis results to CSV output directory
+    output_csv = output_dir / f"{csv_file.stem}_results.csv"
+    df_results = pd.DataFrame({
+        'Metric': [
+            'Reaction Time (Surge Start → Peak) (ms)',
+            'Reaction Time (Surge Start → Peak) (s)',
+            'Reaction Time (End Surge → Peak) (ms)',
+            'Reaction Time (End Surge → Peak) (s)',
+            'Surge Start Time (ms)',
+            'Surge Start Time (s)',
+            'End Surge Time (ms)',
+            'End Surge Time (s)',
+            'Positive Peak Time (ms)',
+            'Positive Peak Time (s)',
+            'Positive Peak Value (kg)',
+            'Minimum Time (ms)',
+            'Minimum Time (s)',
+            'Minimum Value (kg)',
+            'Positive Force Maximum (kg)',
+            'Positive Force Mean (kg)',
+            'Positive Force Area (kg·ms)',
+            'Positive Force Duration (ms)',
+            'Positive Force Duration (s)',
+            'Baseline Initial (kg)'
+        ],
+        'Value': [
+            reaction_time_surge_to_peak,
+            reaction_time_surge_to_peak / 1000.0,
+            reaction_time_end_surge_to_peak,
+            reaction_time_end_surge_to_peak / 1000.0,
+            surge_start_time,
+            surge_start_time / 1000.0,
+            end_surge_time,
+            end_surge_time / 1000.0,
+            positive_peak_time,
+            positive_peak_time / 1000.0,
+            positive_peak_value,
+            minimum_time,
+            minimum_time / 1000.0,
+            minimum_value,
+            positive_force_max,
+            positive_force_mean,
+            positive_force_area,
+            positive_duration,
+            positive_duration / 1000.0,
+            baseline_initial
+        ]
+    })
+    df_results.to_csv(output_csv, index=False)
+    print(f"Analysis results saved to: {output_csv}")
 
     # Generate HTML report in output directory
     html_output = output_dir / f"{csv_file.stem}_report.html"
