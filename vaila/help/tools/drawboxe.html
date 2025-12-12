@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -12,7 +12,7 @@
             background-color: #f5f5f5;
         }
         .container {
-            max-width: 800px;
+            max-width: 1000px;
             margin: 0 auto;
             background: white;
             padding: 30px;
@@ -20,14 +20,21 @@
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
         h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
-        h2 { color: #34495e; margin-top: 30px; }
+        h2 { color: #34495e; margin-top: 30px; border-bottom: 2px solid #ecf0f1; padding-bottom: 5px; }
+        h3 { color: #555; margin-top: 20px; }
         .module-info { background: #ecf0f1; padding: 15px; border-radius: 5px; margin: 20px 0; }
         .functions { background: #f8f9fa; padding: 15px; border-left: 4px solid #28a745; margin: 15px 0; }
         .docstring { background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 15px 0; }
-        .errorr { background: #f8d7da; padding: 15px; border-left: 4px solid #dc3545; margin: 15px 0; }
-        code { background: #e9ecef; padding: 2px 6px; border-radius: 3px; }
-        pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; }
+        .info-box { background: #d1ecf1; padding: 15px; border-left: 4px solid #17a2b8; margin: 15px 0; }
+        .warning-box { background: #f8d7da; padding: 15px; border-left: 4px solid #dc3545; margin: 15px 0; }
+        .success-box { background: #d4edda; padding: 15px; border-left: 4px solid #28a745; margin: 15px 0; }
+        code { background: #e9ecef; padding: 2px 6px; border-radius: 3px; font-family: 'Courier New', monospace; }
+        pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; border: 1px solid #dee2e6; }
         .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #6c757d; font-size: 0.9em; }
+        ul li { margin: 5px 0; }
+        table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+        table th, table td { border: 1px solid #dee2e6; padding: 8px; text-align: left; }
+        table th { background-color: #f8f9fa; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -37,65 +44,321 @@
         <div class="module-info">
             <h3>📋 Module Information</h3>
             <p><strong>Category:</strong> Tools</p>
-            <p><strong>File:</strong> vaila\drawboxe.py</p>
-            <p><strong>Lines:</strong> 1368</p>
-            <p><strong>Size:</strong> 51486 characters</p>
+            <p><strong>File:</strong> vaila/drawboxe.py</p>
+            <p><strong>Lines:</strong> 1390</p>
             <p><strong>Version:</strong> 0.0.7</p>
             <p><strong>Author:</strong> Paulo Roberto Pereira Santiago</p>
             <p><strong>GUI Interface:</strong> ✅ Yes</p>
+            <p><strong>Email:</strong> paulosantiago@usp.br</p>
+            <p><strong>GitHub:</strong> <a href="https://github.com/vaila-multimodaltoolbox/vaila">vaila-multimodaltoolbox/vaila</a></p>
         </div>
-
-        
 
         <div class="docstring">
             <h3>📖 Description</h3>
-            <pre>
-Project: vailá Multimodal Toolbox
-Script: drawboxe.py - Draw boxes on videos
-
-Author: Paulo Roberto Pereira Santiago
-Email: paulosantiago@usp.br
-GitHub: https://github.com/vaila-multimodaltoolbox/vaila
-Creation Date: 28 October 2024
-Update Date: 25 July 2025
-Version: 0.0.7
-Description:
-    Draw boxes on videos.
-    This script is a modified version of the original drawboxe.py script.
-    Draw trapezoid and free polygon boxes.
-
-Usage:
-    Run the script from the command line:
-        python drawboxe.py
-
-Requirements:
-    - Python 3.x
-    - OpenCV
-    - Tkinter (for GUI operations)
-
-License:
-    This project is licensed under the terms of GNU General Public License v3.0.
-
-Change History:
-    - v0.0.7: Added hatching to indicate outside mode
-    - v0.0.6: Added support for free polygon boxes
-    - v0.0.5: Added support for trapezoid boxes
-    - v0.0.4: Added support for rectangle boxes
-    - v0.0.3: Added support for frame intervals
-    - v0.0.2: Added support for multiple videos
-    - v...</pre>
+            <p>
+                <strong>drawboxe</strong> is a tool for drawing boxes and polygons on videos. 
+                It allows you to create rectangular, trapezoidal, and free-form polygons to process videos, 
+                filling specific areas or excluding areas from processing.
+            </p>
+            <p>
+                <strong>Main features:</strong>
+            </p>
+            <ul>
+                <li>Drawing rectangular, trapezoidal, and free-form polygons</li>
+                <li>"Inside" mode (fills selected area) and "Outside" mode (fills everything except the area)</li>
+                <li>Custom color selection via RGB sliders or color picker</li>
+                <li>Batch processing support for multiple videos</li>
+                <li>Frame intervals (process only specific frames)</li>
+                <li>Save and load configurations in TOML files</li>
+            </ul>
         </div>
 
+        <h2>🎯 How to Use</h2>
+        
+        <h3>1. Starting drawboxe</h3>
+        <p>Run the script from the command line or through the vailá graphical interface:</p>
+        <pre><code>python drawboxe.py</code></pre>
+        <p>Or through vailá: <strong>Tools → Video Processing → DrawBoxe</strong></p>
+
+        <h3>2. Selecting Video Directory</h3>
+        <p>When started, drawboxe will ask you to select a directory containing the videos to be processed.</p>
+        <div class="info-box">
+            <strong>📁 Supported formats:</strong> MP4, AVI, MOV, MKV
+        </div>
+
+        <h3>3. Drawing Shapes</h3>
+        <p>The first frame of the first video will be displayed for you to draw shapes:</p>
+        
+        <h4>🔷 Shape Types:</h4>
+        <table>
+            <tr>
+                <th>Shape</th>
+                <th>How to Draw</th>
+                <th>Clicks Required</th>
+            </tr>
+            <tr>
+                <td><strong>Rectangle</strong></td>
+                <td>Click on two opposite corners</td>
+                <td>2 clicks</td>
+            </tr>
+            <tr>
+                <td><strong>Trapezoid</strong></td>
+                <td>Click on the 4 vertices of the trapezoid</td>
+                <td>4 clicks</td>
+            </tr>
+            <tr>
+                <td><strong>Free</strong> (Free Polygon)</td>
+                <td>Click on multiple points, then press 'z' to close</td>
+                <td>3+ clicks + 'z' key</td>
+            </tr>
+        </table>
+
+        <h4>📋 Fill Modes:</h4>
+        <ul>
+            <li><strong>Inside:</strong> Fills only the selected area with the chosen color</li>
+            <li><strong>Outside:</strong> Fills everything except the selected area (indicated by hatching ///)</li>
+        </ul>
+
+        <h2>⌨️ Keyboard Shortcuts</h2>
+        <table>
+            <tr>
+                <th>Key</th>
+                <th>Action</th>
+            </tr>
+            <tr>
+                <td><code>e</code></td>
+                <td>Toggle mode (Inside/Outside)</td>
+            </tr>
+            <tr>
+                <td><code>t</code></td>
+                <td>Toggle shape (Rectangle/Trapezoid/Free)</td>
+            </tr>
+            <tr>
+                <td><code>c</code></td>
+                <td>Activate color picker (select color from image)</td>
+            </tr>
+            <tr>
+                <td><code>z</code></td>
+                <td>Finish free polygon (close current polygon)</td>
+            </tr>
+            <tr>
+                <td><code>d</code></td>
+                <td>Complete current polygon (move to next)</td>
+            </tr>
+            <tr>
+                <td><code>r</code></td>
+                <td>Clear all shapes</td>
+            </tr>
+            <tr>
+                <td><code>w</code></td>
+                <td>Save configuration (TOML file)</td>
+            </tr>
+            <tr>
+                <td><code>q</code></td>
+                <td>Load configuration (TOML file)</td>
+            </tr>
+            <tr>
+                <td><code>a</code></td>
+                <td>Abort script (exit without processing)</td>
+            </tr>
+            <tr>
+                <td><code>Enter</code></td>
+                <td>Save and exit (process videos)</td>
+            </tr>
+        </table>
+
+        <h2>🖱️ Mouse Actions</h2>
+        <ul>
+            <li><strong>Left Click:</strong> Add point (shape definition)</li>
+            <li><strong>Right Click:</strong> Undo last point or remove last shape</li>
+            <li><strong>Drag (with Color Picker active):</strong> Select area to extract color</li>
+        </ul>
+
+        <h2>🎨 Color Selection</h2>
+        <p>You can choose colors in two ways:</p>
+        <ol>
+            <li><strong>RGB Sliders:</strong> Use the sliders on the right panel to adjust Red, Green, and Blue values (0-255)</li>
+            <li><strong>Color Picker:</strong> Click the "Pick Color" button or press 'c', then drag on the image to select an area and extract the average color</li>
+        </ol>
+        <div class="info-box">
+            <strong>💡 Tip:</strong> Color preview is displayed in the "Color Preview" panel
+        </div>
+
+        <h2>💾 TOML Configuration Files</h2>
+        
+        <h3>File Structure</h3>
+        <p>drawboxe automatically saves the configuration in a <code>[video]_dbox.toml</code> file in the same directory as the video.</p>
+
+        <h3>TOML File Example</h3>
+        <pre><code># ================================================================
+# DrawBoxe Configuration File
+# Generated automatically by drawboxe.py in vaila Multimodal Analysis Toolbox
+# Created: 2025-01-15 10:30:00
+# ================================================================
+
+[description]
+title = "DrawBoxe Configuration File"
+version = "0.0.7"
+
+[video_info]
+basename = "my_video"
+original_path = "/path/to/my_video.mp4"
+
+# ================================================================
+# FRAME INTERVALS (OPTIONAL)
+# ================================================================
+# Define which frame ranges to process. If not specified, all frames will be processed.
+# Format: start_frame, end_frame (inclusive, 0-indexed)
+# 
+# Example: To process frames 100-200 and 500-600, uncomment and modify:
+# [[frame_intervals]]
+# id = 1
+# start_frame = 100
+# end_frame = 200
+#
+# [[frame_intervals]]
+# id = 2
+# start_frame = 500
+# end_frame = 600
+# ================================================================
+
+# Example of frame intervals (uncomment and modify as needed):
+# [[frame_intervals]]
+# id = 1
+# start_frame = 0
+# end_frame = 100
+
+# [[frame_intervals]]
+# id = 2
+# start_frame = 200
+# end_frame = 300
+
+# ================================================================
+# BOX 1: RECTANGLE - INSIDE MODE
+# ================================================================
+[[boxes]]
+id = 1
+mode = "inside"
+shape = "rectangle"
+color_r = 1.000000
+color_g = 0.000000
+color_b = 0.000000
+coord_1_x = 100.500000
+coord_1_y = 150.300000
+coord_2_x = 300.200000
+coord_2_y = 150.300000
+coord_3_x = 300.200000
+coord_3_y = 250.800000
+coord_4_x = 100.500000
+coord_4_y = 250.800000
+</code></pre>
+
+        <h3>📝 How to Define Frame Intervals in TOML</h3>
+        <div class="info-box">
+            <p><strong>Step by step:</strong></p>
+            <ol>
+                <li>Open the <code>[video]_dbox.toml</code> file in a text editor</li>
+                <li>Locate the <code># FRAME INTERVALS (OPTIONAL)</code> section</li>
+                <li>Uncomment (remove the <code>#</code>) from the frame intervals example lines</li>
+                <li>Modify the <code>start_frame</code> and <code>end_frame</code> values as needed</li>
+                <li>You can add multiple intervals, each with a different <code>id</code></li>
+                <li>Save the file</li>
+                <li>When processing, drawboxe will ask if you want to use the intervals from the TOML</li>
+            </ol>
+        </div>
+
+        <div class="warning-box">
+            <strong>⚠️ Important:</strong>
+            <ul>
+                <li>Frames are indexed starting from 0 (first frame = 0)</li>
+                <li>Intervals are inclusive (start_frame and end_frame are processed)</li>
+                <li>If you don't specify frame intervals, all frames will be processed</li>
+                <li>You can have multiple intervals in the same file</li>
+            </ul>
+        </div>
+
+        <h3>Practical Example of Frame Intervals</h3>
+        <p>To process only frames 0-100, 200-300, and 500-600:</p>
+        <pre><code>[[frame_intervals]]
+id = 1
+start_frame = 0
+end_frame = 100
+
+[[frame_intervals]]
+id = 2
+start_frame = 200
+end_frame = 300
+
+[[frame_intervals]]
+id = 3
+start_frame = 500
+end_frame = 600</code></pre>
+
+        <h2>📤 Video Processing</h2>
+        <p>After drawing shapes and pressing <code>Enter</code>:</p>
+        <ol>
+            <li>drawboxe will ask if you want to use frame intervals from a .txt file or from the TOML</li>
+            <li>If you already have a TOML file with frame intervals, it will be automatically detected</li>
+            <li>Videos will be processed and saved in a <code>video_2_drawbox_[timestamp]</code> directory</li>
+            <li>Processed videos will have the suffix <code>_dbox.mp4</code></li>
+        </ol>
+
+        <h2>🔧 Main Functions</h2>
         <div class="functions">
-            <h3>🔧 Main Functions</h3>
-            <p><strong>Total functions found:</strong> 20</p>
-            <ul><li><code>save_first_frame</code></li><li><code>extract_frames</code></li><li><code>apply_boxes_directly_to_video</code></li><li><code>apply_boxes_to_frames</code></li><li><code>reassemble_video</code></li><li><code>clean_up</code></li><li><code>save_config_toml</code></li><li><code>load_config_toml</code></li><li><code>get_box_coordinates</code></li><li><code>load_frame_intervals</code></li><li><code>show_feedback_message</code></li><li><code>run_drawboxe</code></li><li><code>validate_color</code></li><li><code>update_mode</code></li><li><code>update_shape</code></li><li><code>update_color</code></li><li><code>update_title</code></li><li><code>update_status</code></li><li><code>on_pick_color</code></li><li><code>on_clear_all</code></li></ul>
+            <h3>Total functions: 20</h3>
+            <ul>
+                <li><code>save_first_frame</code> - Saves the first frame of the video</li>
+                <li><code>extract_frames</code> - Extracts all frames from the video</li>
+                <li><code>apply_boxes_directly_to_video</code> - Applies boxes directly to the video</li>
+                <li><code>apply_boxes_to_frames</code> - Applies boxes to specific frames</li>
+                <li><code>reassemble_video</code> - Reassembles the video from frames</li>
+                <li><code>clean_up</code> - Cleans up temporary files</li>
+                <li><code>save_config_toml</code> - Saves configuration to TOML</li>
+                <li><code>load_config_toml</code> - Loads configuration from TOML</li>
+                <li><code>get_box_coordinates</code> - Graphical interface for drawing boxes</li>
+                <li><code>load_frame_intervals</code> - Loads frame intervals from .txt file</li>
+                <li><code>run_drawboxe</code> - Main execution function</li>
+            </ul>
         </div>
+
+        <h2>⚠️ Warnings and Limitations</h2>
+        <div class="warning-box">
+            <ul>
+                <li>Clicks outside the image are ignored</li>
+                <li>Free polygons need at least 3 points</li>
+                <li>Processing large videos may take time</li>
+                <li>Make sure you have enough disk space for processed videos</li>
+                <li>FFmpeg must be installed on the system for frame extraction</li>
+            </ul>
+        </div>
+
+        <h2>📚 Requirements</h2>
+        <ul>
+            <li>Python 3.x</li>
+            <li>OpenCV (cv2)</li>
+            <li>Matplotlib</li>
+            <li>NumPy</li>
+            <li>Tkinter (usually included with Python)</li>
+            <li>TOML (for configuration files)</li>
+            <li>FFmpeg (for video processing)</li>
+        </ul>
+
+        <h2>📝 Version History</h2>
+        <ul>
+            <li><strong>v0.0.7:</strong> Added hatching to indicate "outside" mode</li>
+            <li><strong>v0.0.6:</strong> Support for free polygons</li>
+            <li><strong>v0.0.5:</strong> Support for trapezoidal boxes</li>
+            <li><strong>v0.0.4:</strong> Support for rectangular boxes</li>
+            <li><strong>v0.0.3:</strong> Support for frame intervals</li>
+            <li><strong>v0.0.2:</strong> Support for multiple videos</li>
+            <li><strong>v0.0.1:</strong> Initial version</li>
+        </ul>
 
         <div class="footer">
-            <p>📅 Generated automatically on: 15/10/2025 08:04:44</p>
+            <p>📅 Generated automatically on: January 15, 2025</p>
             <p>🔗 Part of vailá - Multimodal Toolbox</p>
             <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
+            <p>📧 Contact: paulosantiago@usp.br</p>
         </div>
     </div>
 </body>
