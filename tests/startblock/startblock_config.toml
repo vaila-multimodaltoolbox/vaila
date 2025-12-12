@@ -1,0 +1,43 @@
+# Start Block Analysis Configuration File
+# This file allows you to configure all analysis parameters without using the GUI
+
+[processing]
+# Processing mode: "single" for single file, "batch" for directory batch processing
+mode = "single"
+
+# Input path (file or directory depending on mode)
+# Leave empty to use GUI file/directory picker
+input_path = ""
+
+# Output directory (leave empty to use same directory as input, or specify custom path)
+# If empty: output will be created in the same directory as the input file/directory
+# If specified: output will be created at the specified path
+output_dir = ""
+
+[signal]
+# Signal processing options
+# sampling_rate_hz: Sampling rate in Hz (default: 80 Hz)
+sampling_rate_hz = 80.0
+
+[detection]
+# Detection parameters
+# baseline_window: Number of points to use for baseline calculation
+# (or percentage if < 1.0, e.g., 0.1 = 10%)
+baseline_window = 50
+
+# negative_threshold_offset: Offset from baseline to detect negative peak (in kg)
+negative_threshold_offset = 0.5
+
+[output]
+# Output options
+# show_plot: If true, displays interactive plot (only for single file mode)
+show_plot = true
+
+# generate_html_report: If true, generates HTML report
+generate_html_report = true
+
+# generate_csv: If true, saves processed CSV file
+generate_csv = true
+
+# generate_plot: If true, saves plot PNG file
+generate_plot = true
