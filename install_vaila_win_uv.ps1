@@ -18,7 +18,7 @@
         - Can run without administrator privileges (some features may be skipped)
     Author: Prof. Dr. Paulo R. P. Santiago
     Creation: 17 November 2025
-    Updated: 18 November 2025
+    Updated: 17 December 2025
     Version: 0.2.1
     OS: Windows 11
     Reference: https://docs.astral.sh/uv/
@@ -138,6 +138,13 @@ If (-Not $uvInstalled) {
     }
 } Else {
     Write-Host "uv is already installed." -ForegroundColor Green
+    Write-Host "Updating uv..." -ForegroundColor Yellow
+    Try {
+        & uv self update
+        Write-Host "uv updated successfully." -ForegroundColor Green
+    } Catch {
+        Write-Warning "Failed to update uv. Continuing with current version."
+    }
 }
 
 # Get uv version
