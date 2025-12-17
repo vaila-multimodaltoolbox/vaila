@@ -1,7 +1,7 @@
 # ================================================================
 # MediaPipe 2D Analysis Configuration File
 # Generated automatically by markerless_2D_analysis.py in vaila Multimodal Analysis Toolbox
-# Created: 2025-07-25 11:46:14
+# Created: 2025-12-17 14:56:38
 # ================================================================
 #
 # HOW TO USE THIS FILE:
@@ -67,7 +67,7 @@ resize_scale = 2                      # Scale factor (2-8)
 # ADVANCED FILTERING AND INTERPOLATION
 # ================================================================
 # Fill gaps and smooth the landmark data after detection
-enable_advanced_filtering = true    # Use advanced processing (true/false)
+enable_advanced_filtering = false    # Use advanced processing (true/false)
 #                                     # true = apply smoothing and gap filling
 #                                     # false = use raw MediaPipe output
 interp_method = "linear"             # How to fill missing data
@@ -76,7 +76,7 @@ interp_method = "linear"             # How to fill missing data
 #                         # "nearest" = copy nearest valid point
 #                         # "kalman" = predictive filling
 #                         # "none" = don't fill gaps
-smooth_method = "butterworth"               # Type of smoothing to apply
+smooth_method = "none"               # Type of smoothing to apply
 #                       # "none" = no smoothing
 #                       # "butterworth" = most common for biomechanics
 #                       # "savgol" = preserves signal features
@@ -130,7 +130,7 @@ lowess_it = 3          # Number of iterations (usually 1-5)
 # Best for: General biomechanics analysis (most used in research)
 # Common use: Human movement, sports analysis, gait analysis
 # IMPORTANT: Match butter_fs to your video frame rate!
-butter_cutoff = 5.0    # Cutoff frequency in Hz - ADJUST THIS!
+butter_cutoff = 4.0    # Cutoff frequency in Hz - ADJUST THIS!
 #                      # Lower = more smoothing:
 #                      #   3Hz = heavy smoothing (slow movements)
 #                      #   6Hz = medium smoothing (normal walking)
