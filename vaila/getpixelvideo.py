@@ -6,9 +6,9 @@ vailá - Multimodal Toolbox
 Author: Prof. Dr. Paulo R. P. Santiago
 https://github.com/paulopreto/vaila-multimodaltoolbox
 Date: 22 July 2025
-Update: 16 September 2025
-Version: 0.1.0
-Python Version: 3.12.11
+Update: 17 December 2025
+Version: 0.2.0
+Python Version: 3.12.12
 
 Description:
 ------------
@@ -96,7 +96,7 @@ def get_color_for_id(marker_id):
 
 # Removed pygame_file_dialog - now using Tkinter directly for file dialogs
 # Tkinter dialogs block Pygame events to avoid conflicts
-def _removed_pygame_file_dialog(
+def pygame_file_dialog(
     initial_dir=None, file_extensions=None, restore_screen=None, restore_size=None
 ):
     """
@@ -133,6 +133,33 @@ def _removed_pygame_file_dialog(
     selected_file = None
     scroll_offset = 0
     selected_index = 0
+    items = []
+
+    # Function to reload directory contents
+    def load_directory(directory):
+        new_items = []
+        # Add parent directory option
+        if directory != os.path.dirname(directory):
+            new_items.append(("..", True))  # True = is directory
+
+        try:
+            # Get files and directories
+            dir_items = sorted(os.listdir(directory))
+            for item in dir_items:
+                item_path = os.path.join(directory, item)
+                try:
+                    is_dir = os.path.isdir(item_path)
+                    # Show directories and files matching extensions
+                    if is_dir or any(item.lower().endswith(ext) for ext in file_extensions_lower):
+                        new_items.append((item, is_dir))
+                except (OSError, PermissionError):
+                    continue
+        except (OSError, PermissionError):
+            pass
+        return new_items
+
+    # Initial load
+    items = load_directory(current_dir)
 
     # Save current display mode if provided
     if restore_size:
@@ -156,31 +183,6 @@ def _removed_pygame_file_dialog(
     input_active = False
 
     while running:
-        # Get directory contents
-        try:
-            items = []
-            # Add parent directory option
-            if current_dir != os.path.dirname(current_dir):
-                items.append(("..", True))  # True = is directory
-
-            # Get files and directories
-            try:
-                dir_items = sorted(os.listdir(current_dir))
-            except PermissionError:
-                dir_items = []
-
-            for item in dir_items:
-                item_path = os.path.join(current_dir, item)
-                try:
-                    is_dir = os.path.isdir(item_path)
-                    # Show directories and files matching extensions
-                    if is_dir or any(item.lower().endswith(ext) for ext in file_extensions_lower):
-                        items.append((item, is_dir))
-                except (OSError, PermissionError):
-                    continue
-        except (OSError, PermissionError):
-            items = []
-
         # Filter visible items based on scroll
         visible_items = items[scroll_offset : scroll_offset + 20]
 
@@ -188,7 +190,7 @@ def _removed_pygame_file_dialog(
         dialog_screen.fill((40, 40, 40))
 
         # Draw title
-        title = font.render("Select CSV File", True, (255, 255, 255))
+        title = font.render(f"Select File ({len(items)} items)", True, (255, 255, 255))
         dialog_screen.blit(title, (10, 10))
 
         # Draw current path
@@ -214,8 +216,13 @@ def _removed_pygame_file_dialog(
 
         # Draw scrollbar if needed
         if len(items) > 20:
-            scrollbar_height = int((20 / len(items)) * list_height)
-            scrollbar_y = list_y + int((scroll_offset / len(items)) * list_height)
+            scrollbar_height = max(20, int((20 / len(items)) * list_height))
+            max_scroll = len(items) - 20
+            if max_scroll > 0:
+                scrollbar_y = list_y + int((scroll_offset / max_scroll) * (list_height - scrollbar_height))
+            else:
+                scrollbar_y = list_y
+            
             scrollbar_rect = pygame.Rect(dialog_width - 30, scrollbar_y, 20, scrollbar_height)
             pygame.draw.rect(dialog_screen, (100, 100, 100), scrollbar_rect)
 
@@ -223,9 +230,7 @@ def _removed_pygame_file_dialog(
         item_height = 25
         for i, (item, is_dir) in enumerate(visible_items):
             y_pos = list_y + 5 + (i * item_height)
-            if y_pos + item_height > list_y + list_height:
-                break
-
+            
             # Draw background for item
             item_rect = pygame.Rect(12, y_pos - 2, dialog_width - 44, item_height)
             if is_dir:
@@ -323,6 +328,7 @@ def _removed_pygame_file_dialog(
                                 current_dir = os.path.dirname(current_dir)
                             else:
                                 current_dir = os.path.join(current_dir, item)
+                            items = load_directory(current_dir)
                             selected_index = 0
                             scroll_offset = 0
                             text_input = ""
@@ -358,6 +364,7 @@ def _removed_pygame_file_dialog(
                             test_path = os.path.expanduser(text_input)
                             if os.path.isdir(test_path):
                                 current_dir = test_path
+                                items = load_directory(current_dir)
                                 text_input = ""
                                 selected_index = 0
                                 scroll_offset = 0
@@ -372,79 +379,93 @@ def _removed_pygame_file_dialog(
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 x, y = event.pos
 
-                # Check path input field
-                if input_rect.collidepoint(x, y):
-                    input_active = True
+                if event.button == 1: # Left click
+                    # Check path input field
+                    if input_rect.collidepoint(x, y):
+                        input_active = True
 
-                # Check file list
-                elif list_rect.collidepoint(x, y):
-                    rel_y = y - list_y - 5
-                    clicked_index = rel_y // item_height
-                    if 0 <= clicked_index < len(visible_items):
-                        item, is_dir = visible_items[clicked_index]
-                        clicked_absolute_index = scroll_offset + clicked_index
+                    # Check file list
+                    elif list_rect.collidepoint(x, y):
+                        rel_y = y - list_y - 5
+                        clicked_index = rel_y // item_height
+                        if 0 <= clicked_index < len(visible_items):
+                            item, is_dir = visible_items[clicked_index]
+                            clicked_absolute_index = scroll_offset + clicked_index
 
-                        # If clicking on already selected item, treat as double-click/open
-                        if selected_index == clicked_absolute_index:
-                            if is_dir:
-                                # Enter directory
-                                if item == "..":
-                                    current_dir = os.path.dirname(current_dir)
+                            # If clicking on already selected item, treat as double-click/open
+                            if selected_index == clicked_absolute_index:
+                                if is_dir:
+                                    # Enter directory
+                                    if item == "..":
+                                        current_dir = os.path.dirname(current_dir)
+                                    else:
+                                        current_dir = os.path.join(current_dir, item)
+                                    items = load_directory(current_dir)
+                                    selected_index = 0
+                                    scroll_offset = 0
+                                    text_input = ""
                                 else:
-                                    current_dir = os.path.join(current_dir, item)
-                                selected_index = 0
-                                scroll_offset = 0
-                                text_input = ""
+                                    # Select file
+                                    selected_file = os.path.join(current_dir, item)
+                                    running = False
                             else:
-                                # Select file
+                                # Just select the item
+                                selected_index = clicked_absolute_index
+                                # If it's a directory and user clicks, enter it immediately (optional style)
+                                # But standard behavior is usually double click. 
+                                # However, existing code had immediate entry logic, let's keep it consistent
+                                if is_dir:
+                                    if item == "..":
+                                        current_dir = os.path.dirname(current_dir)
+                                    else:
+                                        current_dir = os.path.join(current_dir, item)
+                                    items = load_directory(current_dir)
+                                    selected_index = 0
+                                    scroll_offset = 0
+                                    text_input = ""
+
+                    # Check buttons
+                    elif up_button.collidepoint(x, y):
+                        parent_dir = os.path.dirname(current_dir)
+                        if parent_dir != current_dir:  # Not at filesystem root
+                            # Go up one directory
+                            current_dir = parent_dir
+                            items = load_directory(current_dir)
+                            selected_index = 0
+                            scroll_offset = 0
+                            text_input = ""
+
+                    elif open_button.collidepoint(x, y):
+                        if visible_items and selected_index - scroll_offset < len(visible_items):
+                            item, is_dir = visible_items[selected_index - scroll_offset]
+                            if not is_dir:
                                 selected_file = os.path.join(current_dir, item)
                                 running = False
-                        else:
-                            # Just select the item
-                            selected_index = clicked_absolute_index
-                            # If it's a directory and user clicks, enter it immediately
-                            if is_dir and event.button == 1:
-                                if item == "..":
-                                    current_dir = os.path.dirname(current_dir)
-                                else:
-                                    current_dir = os.path.join(current_dir, item)
-                                selected_index = 0
-                                scroll_offset = 0
-                                text_input = ""
-
-                # Check buttons
-                elif up_button.collidepoint(x, y):
-                    parent_dir = os.path.dirname(current_dir)
-                    if parent_dir != current_dir:  # Not at filesystem root
-                        # Go up one directory
-                        current_dir = parent_dir
-                        selected_index = 0
-                        scroll_offset = 0
-                        text_input = ""
-
-                elif open_button.collidepoint(x, y):
-                    if visible_items and selected_index - scroll_offset < len(visible_items):
-                        item, is_dir = visible_items[selected_index - scroll_offset]
-                        if not is_dir:
-                            selected_file = os.path.join(current_dir, item)
+                        elif text_input and os.path.isfile(text_input):
+                            selected_file = text_input
                             running = False
-                    elif text_input and os.path.isfile(text_input):
-                        selected_file = text_input
-                        running = False
 
-                elif cancel_button.collidepoint(x, y):
-                    running = False
-                    selected_file = None
+                    elif cancel_button.collidepoint(x, y):
+                        running = False
+                        selected_file = None
 
             elif event.type == pygame.MOUSEWHEEL:
                 # Scroll through items - MOUSEWHEEL doesn't have pos, use mouse position
                 mouse_x, mouse_y = pygame.mouse.get_pos()
                 if list_rect.collidepoint(mouse_x, mouse_y):
-                    scroll_offset = max(0, min(scroll_offset - event.y, len(items) - 20))
+                    # Faster scrolling: 5 items per tick
+                    scroll_offset = max(0, min(scroll_offset - (event.y * 5), len(items) - 20))
+                    
+                    # Ensure selected_index stays valid if we want, or just leave it off-screen
+                    # but if we scroll, we might want to keep selection in view? 
+                    # Actually standard behavior allows selection to go off screen.
+                    # But if user presses arrow keys, it should jump back.
+                    # Current logic forces it into view:
                     if selected_index < scroll_offset:
-                        selected_index = scroll_offset
+                         # Don't change selection just by scrolling, unless we want to
+                         pass
                     elif selected_index >= scroll_offset + 20:
-                        selected_index = scroll_offset + 19
+                         pass
 
         pygame.time.Clock().tick(60)
 
@@ -1111,54 +1132,69 @@ def play_video_with_controls(video_path, coordinates=None):
                 print(f"Error trying to backup 1-line: {e}")
 
     def show_file_path_dialog():
-        """Simple Tkinter file dialog to select CSV file - blocks Pygame events"""
-        from tkinter import Tk
-        from tkinter.filedialog import askopenfilename
-
+        """
+        Select a CSV file.
+        On Linux: Uses Pygame-native dialog to avoid conflicts/freezes.
+        On others: Uses Tkinter dialog.
+        """
+        import platform
+        
         # Determine initial directory from video path
         initial_dir = os.path.dirname(video_path) if video_path else os.path.expanduser("~")
 
-        # Block Pygame from processing mouse and keyboard events while Tkinter is open
-        # This prevents Pygame from capturing events that should go to Tkinter
-        pygame.event.set_blocked([pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP, pygame.MOUSEMOTION, 
-                                  pygame.KEYDOWN, pygame.KEYUP])
-        
-        # Clear any pending events
-        pygame.event.clear()
-        
-        try:
-            # Create Tkinter root window (hidden)
-            root = Tk()
-            root.withdraw()  # Hide the root window
-            root.attributes("-topmost", True)  # Bring to front
-            root.update_idletasks()  # Ensure window is ready
-            
-            # Show file dialog (this will block until user selects or cancels)
-            filename = askopenfilename(
-                title="Select CSV File",
-                initialdir=initial_dir,
-                filetypes=[("CSV Files", "*.csv"), ("All Files", "*.*")],
+        if platform.system() == "Linux":
+            # Use the Pygame native dialog
+            return pygame_file_dialog(
+                initial_dir=initial_dir,
+                file_extensions=[".csv"],
+                restore_size=(window_width, window_height + 80)
             )
+        else:
+            # Use Tkinter for Windows/Mac
+            from tkinter import Tk
+            from tkinter.filedialog import askopenfilename
+
+            # Block Pygame from processing mouse and keyboard events while Tkinter is open
+            # This prevents Pygame from capturing events that should go to Tkinter
+            pygame.event.set_blocked([pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP, pygame.MOUSEMOTION, 
+                                      pygame.KEYDOWN, pygame.KEYUP])
             
-            result = filename if filename else None
-        except Exception as e:
-            print(f"Error in file dialog: {e}")
-            result = None
-        finally:
-            # Clean up Tkinter
-            try:
-                root.destroy()
-            except:
-                pass
-            
-            # Re-enable Pygame events
-            pygame.event.set_allowed([pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP, pygame.MOUSEMOTION,
-                                     pygame.KEYDOWN, pygame.KEYUP])
-            
-            # Clear any events that accumulated while dialog was open
+            # Clear any pending events
             pygame.event.clear()
-        
-        return result
+            
+            try:
+                # Create Tkinter root window (hidden)
+                root = Tk()
+                root.withdraw()  # Hide the root window
+                root.attributes("-topmost", True)  # Bring to front
+                root.update_idletasks()  # Ensure window is ready
+                
+                # Show file dialog (this will block until user selects or cancels)
+                filename = askopenfilename(
+                    title="Select CSV File",
+                    initialdir=initial_dir,
+                    filetypes=[("CSV Files", "*.csv"), ("All Files", "*.*")],
+                )
+                
+                result = filename if filename else None
+            except Exception as e:
+                print(f"Error in file dialog: {e}")
+                result = None
+            finally:
+                # Clean up Tkinter
+                try:
+                    root.destroy()
+                except:
+                    pass
+                
+                # Re-enable Pygame events
+                pygame.event.set_allowed([pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP, pygame.MOUSEMOTION,
+                                         pygame.KEYDOWN, pygame.KEYUP])
+                
+                # Clear any events that accumulated while dialog was open
+                pygame.event.clear()
+            
+            return result
 
     def reload_coordinates():
         """Load a new coordinates file during execution"""
