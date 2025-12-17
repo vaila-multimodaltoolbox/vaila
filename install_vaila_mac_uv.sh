@@ -20,8 +20,8 @@
 #                                                                                       #
 # Author: Prof. Dr. Paulo R. P. Santiago                                                #
 # Creation: 20 November 2025      
-# Update: 20 November 2025                                                              #
-# Version: 0.2.0                                                                        #
+# Update: 17 December 2025                                                              #
+# Version: 0.2.1                                                                        #
 # OS: macOS (Apple Silicon or Intel)                                                    #
 #########################################################################################
 
@@ -97,8 +97,11 @@ if ! command -v uv &> /dev/null; then
         exit 1
     fi
     echo "uv installed successfully!"
+    echo "uv installed successfully!"
 else
     echo "uv is already installed."
+    echo "Updating uv..."
+    uv self update || echo "Warning: Failed to update uv. Continuing with current version."
 fi
 
 # Get uv version
