@@ -488,7 +488,7 @@ class PynaltyApp:
         self.screen.blit(info_surf, (20, h - 55))
         
         # Shortcuts Hint (Bottom Right)
-        hint = "H: Help | F: FPS | S: Save TOML | C: Save CSV"
+        hint = "H: Help | F: FPS | S: Save All Results"
         hint_surf = self.font.render(hint, True, (200, 200, 200))
         self.screen.blit(hint_surf, (w - hint_surf.get_width() - 20, h - 55))
 
@@ -509,7 +509,7 @@ class PynaltyApp:
                 instr = f"{evt.instructions} ({pts} remaining)"
 
         if self.current_event_idx >= 0 and self.all_events_done():
-             instr = "All Set! Press S (TOML) or C (CSV) to Save."
+             instr = "All Set! Press S to Save All Results."
              st_color = (100, 255, 100)
             
         txt_surf = self.font_big.render(instr, True, st_color)
@@ -554,7 +554,7 @@ class PynaltyApp:
             "  ENTER            : Set Frame (for current step)",
             "  Left Click       : Mark Points (Ball/GK)",
             "  Right Click      : Undo / Remove Point",
-            "  S / C            : Save TOML / CSV",
+            "  S                : Save All Results (TOML + CSV + HTML)",
             "  F                : Change FPS",
             "  H                : Toggle Help",
             "  ESC              : Exit"
@@ -876,7 +876,7 @@ class PynaltyApp:
                     elif event.key == pygame.K_MINUS or event.key == pygame.K_KP_MINUS:
                          self.zoom = max(self.zoom / 1.1, 0.1)
 
-                    elif event.key == pygame.K_s or event.key == pygame.K_c:
+                    elif event.key == pygame.K_s:
                         ok = self.save_results_package()
                         if ok:
                             self.feedback_msg = "All Results Saved!"
@@ -1202,16 +1202,16 @@ class PynaltyApp:
              p_z = rec2d(dlt_inv, axis_z)
              
              # Draw Lines
-             # Origin -> X (Blue)
+             # Origin -> X (Red )
              sx0, sy0 = self.image_to_screen_coords(p_origin[0,0], p_origin[0,1])
              sxX, syX = self.image_to_screen_coords(p_x[0,0], p_x[0,1])
-             pygame.draw.line(self.screen, (0, 0, 255), (sx0, sy0), (sxX, syX), 3)
-             self.screen.blit(self.font.render("X", True, (0,0,255)), (sxX, syX))
+             pygame.draw.line(self.screen, (255, 0, 0), (sx0, sy0), (sxX, syX), 5)
+             self.screen.blit(self.font.render("X", True, (255,0,0)), (sxX, syX))
              
-             # Origin -> Z (Red)
+             # Origin -> Z (Blue)
              sxZ, syZ = self.image_to_screen_coords(p_z[0,0], p_z[0,1])
-             pygame.draw.line(self.screen, (255, 0, 0), (sx0, sy0), (sxZ, syZ), 3)
-             self.screen.blit(self.font.render("Z", True, (255,0,0)), (sxZ, syZ))
+             pygame.draw.line(self.screen, (0, 0, 255), (sx0, sy0), (sxZ, syZ), 5)
+             self.screen.blit(self.font.render("Z", True, (0,0,255)), (sxZ, syZ))
              
              # Draw Origin Dot
              pygame.draw.circle(self.screen, YELLOW, (sx0, sy0), 4)
