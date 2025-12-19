@@ -4,8 +4,8 @@ vaila.py
 ===============================================================================
 Author: Prof. Paulo R. P. Santiago
 Date: 07 October 2024
-Update: 17 December 2025
-Version updated: 0.2.4
+Update: 19 December 2025
+Version updated: 0.3.0
 Python Version: 3.12.12
 
 Example of usage:
@@ -123,7 +123,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 17.December.2025 v0.2.4 (Python 3.12.12)
+vailá - 19.December.2025 v0.3.0 (Python 3.12.12)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -225,7 +225,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 17.December.2025 v0.2.4 (Python 3.12.12)")
+        self.title("vailá - 19.December.2025 v0.3.0 (Python 3.12.12)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -806,12 +806,12 @@ class Vaila(tk.Tk):
             command=self.startblock,
         )
 
-        # B5_r5_c5 - vailá
-        vaila_btn5 = tk.Button(
+        # B5_r5_c5 - Pynalty
+        pynalty_btn = tk.Button(
             row5_frame,
-            text="vailá",
+            text="Pynalty",
             width=button_width,
-            command=self.show_vaila_message,
+            command=self.pynalty,
         )
 
         # B5_r5_c5 - vailá
@@ -827,7 +827,7 @@ class Vaila(tk.Tk):
         brainstorm_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         scout_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         startblock_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
-        vaila_btn5.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        pynalty_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
 
         ## VVVVVVVVVVVVVVV TOOLS BUTTONS VVVVVVVVVVVVVVVV
         # Tools Frame
@@ -2502,6 +2502,12 @@ class Vaila(tk.Tk):
         from vaila.vailaplot3d import run_plot_3d
 
         run_plot_3d()
+
+
+
+    def pynalty(self):
+        """Runs the Pynalty analysis tool."""
+        run_vaila_module("vaila.pynalty", "vaila/pynalty.py")
 
 
 if __name__ == "__main__":
