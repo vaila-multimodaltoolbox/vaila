@@ -123,8 +123,7 @@
                         Calibration).</li>
                     <li><strong>Automatic Calculation:</strong> Computes distance, velocity (m/s and km/h) using DLT 2D
                         reconstruction.</li>
-                    <li><strong>Data Export:</strong> Save results to <strong>TOML</strong> (for reloading) and
-                        <strong>CSV</strong> (for Excel/Analysis).
+                    <li><strong>Data Export:</strong> Save complete results package including <strong>TOML</strong> (for reloading), <strong>CSV</strong> (for Excel/Analysis), <strong>HTML report</strong>, and <strong>snapshot images</strong>.
                     </li>
                     <li><strong>Interactive GUI:</strong> Zoom, pan, frame slider, visual markers, and help overlay.
                     </li>
@@ -215,11 +214,7 @@
                 </tr>
                 <tr>
                     <td><span class="key">S</span></td>
-                    <td>Save Analysis to TOML</td>
-                </tr>
-                <tr>
-                    <td><span class="key">C</span></td>
-                    <td>Save Results to CSV</td>
+                    <td>Save All Results (TOML + CSV + HTML + Snapshots)</td>
                 </tr>
                 <tr>
                     <td><span class="key">L</span></td>
@@ -236,8 +231,21 @@
             </table>
         </section>
 
+        <section id="saving">
+            <h2>4. Saving and Loading</h2>
+            <p>
+                Press <span class="key">S</span> to save all results in a complete package:
+            </p>
+            <ul>
+                <li><strong>TOML file:</strong> Contains marked points and state (use <span class="key">L</span> to reload and resume work later)</li>
+                <li><strong>CSV file:</strong> Contains final calculated statistics (Velocity, Distance, Coordinates) and raw points for reporting</li>
+                <li><strong>HTML report:</strong> Visual report with metrics and snapshots</li>
+                <li><strong>Snapshot images:</strong> PNG images of key events (GK Move, Kick, Goal, Calibration)</li>
+            </ul>
+        </section>
+
         <section id="troubleshooting">
-            <h2>4. Troubleshooting</h2>
+            <h2>5. Troubleshooting</h2>
             <ul>
                 <li><strong>Wrong Velocity?</strong> Ensure the goal calibration points are clicked in the correct order
                     (Bottom-Left -> Top-Left -> Top-Right -> Bottom-Right). The system assumes standard goal dimensions
