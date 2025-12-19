@@ -555,6 +555,7 @@ class PynaltyApp:
             "  Left Click       : Mark Points (Ball/GK)",
             "  Right Click      : Undo / Remove Point",
             "  S                : Save All Results (TOML + CSV + HTML)",
+            "  L                : Load Analysis from TOML",
             "  F                : Change FPS",
             "  H                : Toggle Help",
             "  ESC              : Exit"
