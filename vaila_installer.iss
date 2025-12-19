@@ -134,11 +134,12 @@ Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\DC7B1EC
 
 [UninstallRun]
 ; Execute the PowerShell uninstall script before deleting files
-; This script handles removal of uv/Conda environments, shortcuts, Windows Terminal profiles, etc.
+; This script handles removal of uv virtual environment (.venv), shortcuts, Windows Terminal profiles, etc.
+; Note: Also removes legacy Conda environments if present from old installations
 Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\uninstall_vaila_win.ps1"""; Flags: runascurrentuser waituntilterminated; RunOnceId: "UninstallVaila"
 
 [UninstallDelete]
-; The PowerShell script handles most deletions (uv/Conda environments, shortcuts, etc.)
+; The PowerShell script handles most deletions (uv .venv, legacy Conda environments if present, shortcuts, etc.)
 ; These entries serve as backup cleanup in case the script doesn't remove everything
 ; Note: The script removes the {app} directory, so this may not execute if script succeeds
 Type: filesandordirs; Name: "{app}"

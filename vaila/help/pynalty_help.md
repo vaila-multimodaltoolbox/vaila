@@ -13,7 +13,7 @@
 - **Video-Based Analysis:** Analyze penalty kicks directly from video files.
 - **State-Based Workflow:** Guided step-by-step process (Kick Frame -> Goal Frame -> Calibration).
 - **Automatic Calculation:** Computes distance, velocity (m/s and km/h) using DLT 2D reconstruction.
-- **Data Export:** Save results to **TOML** (for reloading) and **CSV** (for Excel/Analysis).
+- **Data Export:** Save complete results package including **TOML** (for reloading), **CSV** (for Excel/Analysis), **HTML report**, and **snapshot images**.
 - **Interactive GUI:** Zoom, pan, frame slider, and visual markers.
 - **Help Overlay:** Press **H** for quick reference.
 
@@ -54,16 +54,18 @@
 | **ENTER** | Confirm Frame Selection (Kick/GK/Goal) |
 | **Left Click** | Mark Ball / GK / Calibration Point |
 | **Right Click** | Undo Last Mark / Go Back Step |
-| **S** | Save Analysis to TOML |
-| **C** | Save Results to CSV |
+| **S** | Save All Results (TOML + CSV + HTML + Snapshots) |
 | **L** | Load Analysis from TOML |
 | **F** | Change Video FPS (Manual Override) |
 | **H** | Toggle Help Overlay |
 
 ## Saving and Loading
 
-- **TOML (S Key):** Saves marked points and state. Use this to resume work later (Load with **L**).
-- **CSV (C Key):** Saves final calculated statistics (Velocity, Distance, Coordinates) and raw points to a CSV file for reporting.
+- **S Key:** Saves all results in a complete package:
+  - **TOML file:** Contains marked points and state (use **L** to reload and resume work later)
+  - **CSV file:** Contains final calculated statistics (Velocity, Distance, Coordinates) and raw points for reporting
+  - **HTML report:** Visual report with metrics and snapshots
+  - **Snapshot images:** PNG images of key events (GK Move, Kick, Goal, Calibration)
 
 ## Troubleshooting
 
