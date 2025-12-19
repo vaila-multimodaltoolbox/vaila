@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,18 +12,41 @@
             line-height: 1.6;
             background-color: #f5f5f5;
         }
+
         .container {
             max-width: 1200px;
             margin: 0 auto;
             background: white;
             padding: 30px;
             border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
         }
-        h1 { color: #2c3e50; text-align: center; border-bottom: 3px solid #3498db; padding-bottom: 20px; }
-        h2 { color: #34495e; margin-top: 40px; border-left: 5px solid #3498db; padding-left: 15px; }
-        .category { margin: 20px 0; }
-        .module-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px; margin: 15px 0; }
+
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 20px;
+        }
+
+        h2 {
+            color: #34495e;
+            margin-top: 40px;
+            border-left: 5px solid #3498db;
+            padding-left: 15px;
+        }
+
+        .category {
+            margin: 20px 0;
+        }
+
+        .module-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 15px;
+            margin: 15px 0;
+        }
+
         .module-card {
             border: 1px solid #ddd;
             border-radius: 8px;
@@ -30,20 +54,57 @@
             background: #f8f9fa;
             transition: box-shadow 0.3s;
         }
-        .module-card:hover { box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
-        .module-name { font-weight: bold; color: #2c3e50; margin-bottom: 10px; }
-        .module-links { margin-top: 10px; }
-        .module-links a { margin-right: 15px; text-decoration: none; padding: 5px 10px; border-radius: 3px; }
-        .html-link { background: #007bff; color: white; }
-        .md-link { background: #28a745; color: white; }
-        .footer { margin-top: 50px; padding-top: 20px; border-top: 1px solid #dee2e6; text-align: center; color: #6c757d; }
+
+        .module-card:hover {
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .module-name {
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+
+        .module-links {
+            margin-top: 10px;
+        }
+
+        .module-links a {
+            margin-right: 15px;
+            text-decoration: none;
+            padding: 5px 10px;
+            border-radius: 3px;
+        }
+
+        .html-link {
+            background: #007bff;
+            color: white;
+        }
+
+        .md-link {
+            background: #28a745;
+            color: white;
+        }
+
+        .footer {
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 1px solid #dee2e6;
+            text-align: center;
+            color: #6c757d;
+        }
     </style>
 </head>
+
 <body>
     <div class="container">
         <h1>📚 vailá - Help Documentation</h1>
         <p style="text-align: center; font-size: 1.1em; color: #666; margin-bottom: 40px;">
             Automatically generated documentation for all Python modules in vailá Multimodal Toolbox
+        </p>
+        <p style="text-align: center; font-size: 1.1em; color: #3498db; margin-bottom: 40px;">
+            <a href="../../docs/index.md" style="text-decoration: none; font-weight: bold;">📂 Open Project
+                Documentation (./docs)</a>
         </p>
 
         <div style="text-align: center; margin: 30px 0;">
@@ -157,6 +218,14 @@
                     <div class="module-links">
                         <a href="analysis/vaila_and_jump.html" class="html-link">📄 HTML</a>
                         <a href="analysis/vaila_and_jump.md" class="md-link">📝 Markdown</a>
+                    </div>
+                </div>
+
+                <div class="module-card">
+                    <div class="module-name">pynalty</div>
+                    <div class="module-links">
+                        <a href="pynalty_help.html" class="html-link">📄 HTML</a>
+                        <a href="pynalty_help.md" class="md-link">📝 Markdown</a>
                     </div>
                 </div>
 
@@ -1003,4 +1072,5 @@
         </div>
     </div>
 </body>
+
 </html>
