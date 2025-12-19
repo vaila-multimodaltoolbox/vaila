@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pynalty - Documentation</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+        }
+
+        h2 {
+            color: #34495e;
+            border-left: 4px solid #3498db;
+            padding-left: 15px;
+            margin-top: 30px;
+        }
+
+        h3 {
+            color: #2980b9;
+            margin-top: 25px;
+        }
+
+        .version-info {
+            background-color: #ecf0f1;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+
+        .feature-box {
+            background-color: #e8f4fd;
+            border: 1px solid #3498db;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+
+        .warning {
+            background-color: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+
+        .key {
+            background-color: #e9ecef;
+            border: 1px solid #adb5bd;
+            border-radius: 3px;
+            padding: 2px 6px;
+            font-family: monospace;
+            font-weight: bold;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+
+        th,
+        td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Pynalty - Penalty Kick Analysis Tool</h1>
+
+        <div class="version-info">
+            <strong>Version:</strong> 0.1.0<br>
+            <strong>Date:</strong> 19 December 2025<br>
+            <strong>Project:</strong> vailá - Multimodal Toolbox
+        </div>
+
+        <section id="overview">
+            <h2>1. Overview</h2>
+            <p>
+                <strong>Pynalty</strong> is a specialized video analysis tool designed to calculate penalty kick
+                statistics, specifically the ball's velocity and distance traveled.
+                Integrated into the <strong>vailá</strong> toolbox, it provides a user-friendly interface to mark
+                critical moments (kick and goal) and positions to automatically compute results based on goal
+                calibration.
+            </p>
+
+            <div class="feature-box">
+                <h3>Key Features:</h3>
+                <ul>
+                    <li><strong>Video-Based Analysis:</strong> Analyze penalty kicks directly from video files.</li>
+                    <li><strong>State-Based Workflow:</strong> Guided step-by-step process (Kick Frame -> Goal Frame ->
+                        Calibration).</li>
+                    <li><strong>Automatic Calculation:</strong> Computes distance, velocity (m/s and km/h) using DLT 2D
+                        reconstruction.</li>
+                    <li><strong>Data Export:</strong> Save results to <strong>TOML</strong> (for reloading) and
+                        <strong>CSV</strong> (for Excel/Analysis).
+                    </li>
+                    <li><strong>Interactive GUI:</strong> Zoom, pan, frame slider, visual markers, and help overlay.
+                    </li>
+                </ul>
+            </div>
+        </section>
+
+        <section id="workflow">
+            <h2>2. Workflow</h2>
+            <ol>
+                <li><strong>Launch Pynalty</strong>: Click the "Pynalty" button in the vailá main window (Frame B, Row
+                    5).</li>
+                <li><strong>Load Video</strong>: Select the video file containing the penalty kick.</li>
+                <li><strong>Select Kick Frame:</strong> Use arrows/slider to find the moment the kicker hits the
+                    ball. Press <strong>ENTER</strong>.</li>
+                <li><strong>Mark Ball:</strong> Click on the center of the ball.</li>
+                <li><strong>Mark Goalkeeper (Kick):</strong> Click on the center of the Goalkeeper at the kick
+                    moment.</li>
+                <li><strong>Select GK Move Frame:</strong> Navigate to the frame where the Goalkeeper STARTS moving.
+                    Press <strong>ENTER</strong>.</li>
+                <li><strong>Select Goal Frame:</strong> Navigate to the moment the ball crosses the goal line (or is
+                    saved). Press <strong>ENTER</strong>.</li>
+                <li><strong>Mark Ball (Goal):</strong> Click on the center of the ball at the goal line.</li>
+                <li><strong>Mark Goalkeeper (Goal):</strong> Click on the center of the Goalkeeper at the goal
+                    moment.</li>
+                <li><strong>Calibration:</strong> Click the 4 corners of the goal in the specified order (displayed
+                    on screen).</li>
+                <li><strong>Results:</strong> View distance, velocity, and GK response time statistics.</li>
+            </ol>
+        </section>
+
+        <section id="controls">
+            <h2>3. Controls</h2>
+
+            <h3>Navigation</h3>
+            <table>
+                <tr>
+                    <th>Key</th>
+                    <th>Action</th>
+                </tr>
+                <tr>
+                    <td><span class="key">SPACE</span></td>
+                    <td>Play / Pause Video</td>
+                </tr>
+                <tr>
+                    <td><span class="key">Left / Right Arrows</span></td>
+                    <td>Previous / Next Frame</td>
+                </tr>
+                <tr>
+                    <td><span class="key">Up / Down Arrows</span></td>
+                    <td>+/- 10 Frames</td>
+                </tr>
+                <tr>
+                    <td><span class="key">Mouse Wheel</span></td>
+                    <td>Zoom In / Out</td>
+                </tr>
+                <tr>
+                    <td><span class="key">+ / -</span></td>
+                    <td>Zoom In / Out</td>
+                </tr>
+                <tr>
+                    <td><span class="key">Middle Click + Drag</span></td>
+                    <td>Pan Image</td>
+                </tr>
+                <tr>
+                    <td><span class="key">Slider (Bottom)</span></td>
+                    <td>Drag to seek frames</td>
+                </tr>
+            </table>
+
+            <h3>Actions</h3>
+            <table>
+                <tr>
+                    <th>Key</th>
+                    <th>Action</th>
+                </tr>
+                <tr>
+                    <td><span class="key">ENTER</span></td>
+                    <td>Confirm Frame Selection</td>
+                </tr>
+                <tr>
+                    <td><span class="key">Left Click</span></td>
+                    <td>Mark Point</td>
+                </tr>
+                <tr>
+                    <td><span class="key">Right Click</span></td>
+                    <td>Undo Last Mark / Go Back</td>
+                </tr>
+                <tr>
+                    <td><span class="key">S</span></td>
+                    <td>Save Analysis to TOML</td>
+                </tr>
+                <tr>
+                    <td><span class="key">C</span></td>
+                    <td>Save Results to CSV</td>
+                </tr>
+                <tr>
+                    <td><span class="key">L</span></td>
+                    <td>Load Analysis from TOML</td>
+                </tr>
+                <tr>
+                    <td><span class="key">F</span></td>
+                    <td>Change Video FPS</td>
+                </tr>
+                <tr>
+                    <td><span class="key">H</span></td>
+                    <td>Toggle Help Overlay</td>
+                </tr>
+            </table>
+        </section>
+
+        <section id="troubleshooting">
+            <h2>4. Troubleshooting</h2>
+            <ul>
+                <li><strong>Wrong Velocity?</strong> Ensure the goal calibration points are clicked in the correct order
+                    (Bottom-Left -> Top-Left -> Top-Right -> Bottom-Right). The system assumes standard goal dimensions
+                    (7.32m x 2.44m).</li>
+                <li><strong>Video not loading?</strong> Ensure <code>opencv-python</code> is installed and the video
+                    format is supported.</li>
+            </ul>
+        </section>
+    </div>
+</body>
+
+</html>
