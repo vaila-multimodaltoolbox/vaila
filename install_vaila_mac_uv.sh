@@ -97,7 +97,6 @@ if ! command -v uv &> /dev/null; then
         exit 1
     fi
     echo "uv installed successfully!"
-    echo "uv installed successfully!"
 else
     echo "uv is already installed."
     echo "Updating uv..."
@@ -541,6 +540,9 @@ echo "Setting application icon..."
 # Apply icon using Python script (AppKit)
 if [ -f "$APP_DIR/Contents/Resources/vaila.icns" ]; then
     echo "Applying icon to app bundle using Python script..."
+    
+    # Ensure we're in the project directory for uv to work correctly
+    cd "$VAILA_HOME"
     
     # Run the Python script using uv run python
     if uv run python "$PROJECT_DIR/set_mac_icon.py" "$APP_DIR" "$APP_DIR/Contents/Resources/vaila.icns"; then

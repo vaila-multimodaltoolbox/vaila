@@ -4,8 +4,8 @@ vaila.py
 ===============================================================================
 Author: Prof. Paulo R. P. Santiago
 Date: 07 October 2024
-Update: 19 December 2025
-Version updated: 0.3.0
+Update: 20 December 2025
+Version updated: 0.3.1
 Python Version: 3.12.12
 
 Example of usage:
@@ -123,24 +123,25 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 19.December.2025 v0.3.0 (Python 3.12.12)
+vailá - 20.December.2025 v0.3.1 (Python 3.12.12)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
-                           \/  \/|_/|/|_/\/|_/                   
+                           \/  \/|_/|/|_/\/|_/
 ##########################################################################
 Mocap fullbody_c3d           Markerless_3D      Markerless_2D_MP and YOLO
                   \                |                /
-                   v               v               v        
+                   v               v               v
    CUBE2D  --> +---------------------------------------+ <-- Vector Coding
-   IMU_csv --> |       vailá - multimodal toolbox      | <-- Cluster_csv
-Open Field --> |                                       | <-- Force Plate
-startblock --> +---------------------------------------+ <-- GRF Analysis
-              ^                   |                    ^ <-- YOLOv11 and MediaPipe
-        EMG__/                    v                     \__Tracker YOLOv11 or YOLOv12
-               +--------------------------------------+
-               | Results: Processed Data and Figures  | 
-               +--------------------------------------+
+   IMU_csv --> |                                       | <-- Cluster_csv
+Open Field --> |       vailá - multimodal toolbox      | <-- Force Plate
+ StartBlock -->|                                       | <-- GRF Analysis
+               +---------------------------------------+ <-- etc, etc, etc.
+                                 |
+                                 V
+        +---------------------------------------------------+
+        | Processed Data, Figures and Reports etc, etc, etc.|
+        +---------------------------------------------------+
 
 ============================ File Manager (Frame A) ========================
 A_r1_c1 - Rename          A_r1_c2 - Import           A_r1_c3 - Export
@@ -161,7 +162,7 @@ B3_r4_c1 - Tracker        B3_r4_c2 - ML Walkway      B3_r4_c3 - Markerless Hands
 B3_r4_c4 - MP Angles      B3_r4_c5 - Markerless Live
 
 B3_r5_c1 - Ultrasound     B3_r5_c2 - Brainstorm      B3_r5_c3 - Scout
-B3_r5_c4 - StartBlock    B3_r5_c5 - vailá
+B3_r5_c4 - StartBlock     B3_r5_c5 - Pynalty
 
 ============================== Tools Available (Frame C) ===================
 -> C_A: Data Files
@@ -225,7 +226,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 19.December.2025 v0.3.0 (Python 3.12.12)")
+        self.title("vailá - 20.December.2025 v0.3.1 (Python 3.12.12)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -375,7 +376,7 @@ class Vaila(tk.Tk):
 
         # Create a canvas to add scrollbar
         canvas = tk.Canvas(self)
-        
+
         # Create scrollbars
         v_scrollbar = ttk.Scrollbar(self, orient="vertical", command=canvas.yview)
         h_scrollbar = ttk.Scrollbar(self, orient="horizontal", command=canvas.xview)
@@ -401,7 +402,7 @@ class Vaila(tk.Tk):
         canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
 
         """
-            A - File Manager Avaliable: 
+            A - File Manager Avaliable:
             - Rename
             - Import
             - Export
@@ -814,12 +815,12 @@ class Vaila(tk.Tk):
             command=self.pynalty,
         )
 
-        # B5_r5_c5 - vailá
-        vaila_btn5 = tk.Button(
+        # B5_r5_c6 - Pynalty
+        pynalty_btn = tk.Button(
             row5_frame,
-            text="vailá",
+            text="Pynalty",
             width=button_width,
-            command=self.show_vaila_message,
+            command=self.pynalty,
         )
 
         # Pack row5 buttons
@@ -2422,7 +2423,7 @@ class Vaila(tk.Tk):
         Note: This function requires uv to be installed and the command to be run
         from the project root directory.
         """
-        import os
+        # import os
         from pathlib import Path
 
         # Get the project root directory (where pyproject.toml should be)
@@ -2437,7 +2438,7 @@ class Vaila(tk.Tk):
                 project_root = Path.cwd()
                 if not (project_root / "pyproject.toml").exists():
                     project_root = script_dir
-        except:
+        except Exception:
             project_root = Path.cwd()
 
         project_root_str = str(project_root)

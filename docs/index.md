@@ -60,39 +60,47 @@ All buttons in the vailá GUI (`vaila.py`) are documented in **[docs/vaila_butto
 - **[Tools Buttons](vaila_buttons/README.md#tools-frame-c)**: Data Files, Video Processing, Visualization tools
 
 **Quick Links:**
+
 - **[Markerless 2D Analysis](vaila_buttons/markerless-2d-button.md)** (B1_r1_c4) - Advanced pose estimation with MediaPipe and YOLOv11
 - **[All Button Documentation](vaila_buttons/README.md)** - Complete list of all GUI buttons
 
 ### 📖 Module Documentation
 
 #### **Markerless Analysis**
+
 - **[2D Analysis](modules/markerless-analysis/markerless-2d-analysis.md)**: Advanced 2D pose estimation with MediaPipe
 - **[3D Analysis](modules/markerless-analysis/markerless-3d-analysis.md)**: 3D pose reconstruction from monocular video
 - **[Live Analysis](modules/markerless-analysis/markerless-live.md)**: Real-time markerless tracking
 
 #### **Motion Capture**
+
 - **[Full Body Analysis](modules/motion-capture/mocap-full-body.md)**: Complete motion capture data processing
 - **[Cluster Analysis](modules/motion-capture/cluster-analysis.md)**: Anatomical marker cluster analysis
 
 #### **Sensor Analysis**
+
 - **[IMU Analysis](modules/sensors/imu-analysis.md)**: Inertial measurement unit data processing
 - **[Force Plate Analysis](modules/sensors/force-plate.md)**: Ground reaction force analysis
 - **[EMG Analysis](modules/sensors/emg-analysis.md)**: Electromyography signal processing
 - **[GNSS/GPS Analysis](modules/sensors/gnss-gps.md)**: GPS trajectory analysis
 
 #### **Data Processing Tools**
+
 - **[C3D ↔ CSV Conversion](modules/tools/c3d-csv-conversion.md)**: Motion capture file format conversion
 - **[Data Filtering](modules/tools/data-filtering.md)**: Advanced signal processing algorithms
 
 #### **Video Processing Tools**
+
 - **[Video Tools](modules/tools/video-tools.md)**: Video manipulation and processing
 - **[Video Compression](modules/tools/video-compression.md)**: Multi-format video compression
 
 #### **Visualization Tools**
+
 - **[2D Plotting](modules/visualization/plot-2d.md)**: Comprehensive 2D data visualization
 - **[View 3D](modules/visualization/view3d.md)**: 3D data visualization
 
 #### **Machine Learning**
+
 - **[ML Walkway](modules/ml-walkway/ml-walkway.md)**: Complete machine learning walkway analysis system
 - **[Model Training](modules/ml-walkway/model-training.md)**: Train custom ML models for gait analysis
 - **[Model Validation](modules/ml-walkway/model-validation.md)**: Validate trained ML models
@@ -103,6 +111,7 @@ All buttons in the vailá GUI (`vaila.py`) are documented in **[docs/vaila_butto
 - **[YOLO Tracking](modules/ml-walkway/yolo-tracking.md)**: YOLO object detection and tracking
 
 #### **Specialized Tools**
+
 - **[Vector Coding](modules/tools/vector-coding.md)**: Joint coupling analysis
 - **[Open Field Analysis](modules/tools/open-field.md)**: Animal behavior analysis
 - **[Vertical Jump Analysis](modules/tools/vertical-jump.md)**: Jump performance metrics
@@ -111,6 +120,10 @@ All buttons in the vailá GUI (`vaila.py`) are documented in **[docs/vaila_butto
 
 - **[Complete Module List](api/modules.md)**: Comprehensive reference of all vailá modules
 - **[Function Reference](api/functions.md)**: Detailed function documentation
+
+### 📖 Script Help Documentation
+
+- **[Script Help Index](../vaila/help/index.html)**: Complete documentation for all Python modules and scripts in vailá
 
 ---
 
@@ -130,6 +143,7 @@ All buttons in the vailá GUI (`vaila.py`) are documented in **[docs/vaila_butto
 ### 🔹 Installation Methods
 
 **Windows (Recommended):**
+
 ```powershell
 git clone https://github.com/vaila-multimodaltoolbox/vaila
 cd vaila
@@ -137,6 +151,7 @@ cd vaila
 ```
 
 **Linux and macOS (Using uv):**
+
 ```bash
 # Install uv
 curl -LsSf https://astral.sh/uv/install.sh | sh
