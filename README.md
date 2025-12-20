@@ -42,6 +42,7 @@ The analysis of human movement is fundamental in both health and sports biomecha
 - [Running the Application](#running-the-application)
 - [Uninstallation Instructions](#unistallation-instructions)
 - [Project Structure](#project-structure)
+- [Documentation](#documentation)
 - [Citing *vailá*](#citing-vailá)
 - [Authors](#authors)
 - [Contribution](#contribution)
@@ -692,6 +693,30 @@ vaila
 │   ├── yolov11track.py             # YOLOv11 based tracking
 │   └── yolov12track.py             # YOLOv12 based tracking
 ```
+
+## Documentation
+
+### 📚 Script Help Documentation
+
+Comprehensive documentation for all Python scripts and modules in vailá:
+
+- **[Script Help Index (HTML)](vaila/help/index.html)** - Complete documentation for all Python modules and scripts (HTML version)
+- **[Script Help Index (Markdown)](vaila/help/index.md)** - Complete documentation for all Python modules and scripts (Markdown version)
+
+The help documentation includes detailed information about:
+- Module descriptions and functionality
+- Configuration parameters
+- Usage instructions
+- Input/output formats
+- Requirements and dependencies
+
+### 📖 Additional Documentation
+
+- **[Project Documentation](docs/index.md)** - Overview and module documentation
+- **[Help Guide](docs/help.md)** - User guide and installation instructions
+- **[GUI Button Documentation](docs/vaila_buttons/README.md)** - Complete documentation for all GUI buttons
+
+---
 
 ## Citing *vailá*
 
