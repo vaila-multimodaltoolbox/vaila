@@ -60,8 +60,8 @@ def create_button_doc(button_info):
 
 ## Overview
 
-**Button Position:** {pos}  
-**Method Name:** `{method}`  
+**Button Position:** {pos}
+**Method Name:** `{method}`
 **Button Text:** {text}
 
 ## Description
@@ -103,8 +103,8 @@ This button integrates with other vailá modules:
 
 ---
 
-**Last Updated:** November 2025  
-**Part of vailá - Multimodal Toolbox**  
+**Last Updated:** November 2025
+**Part of vailá - Multimodal Toolbox**
 **License:** AGPLv3.0
 """
 
