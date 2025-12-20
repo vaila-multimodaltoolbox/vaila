@@ -45,7 +45,6 @@ fi
 # Define paths
 USER_HOME="$HOME"
 VAILA_HOME="$USER_HOME/vaila"
-APP_PATH="$USER_HOME/Applications/vaila.app"  # App is created in ~/Applications/ by install script
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DMG_NAME="vaila_installer"
 DMG_TEMP_DIR="/tmp/vaila_dmg"
@@ -65,9 +64,7 @@ if [ ! -f "$PROJECT_DIR/install_vaila_mac_uv.sh" ]; then
 fi
 
 echo "Preparing DMG installer with all necessary files..."
-
-echo "Preparing DMG installer..."
-echo "Source: $APP_PATH"
+echo "Source directory: $PROJECT_DIR"
 echo "Output: $DMG_OUTPUT"
 echo ""
 
@@ -209,39 +206,6 @@ sleep 3
 
 # Configure DMG window appearance using AppleScript
 echo "Configuring DMG window appearance..."
-if [ ! -f "$DMG_TEMP_DIR/vaila.app/Contents/Resources/vaila.icns" ]; then
-    echo "Warning: vaila.app icon not found in DMG temp directory. Copying from source..."
-    # Ensure Resources directory exists
-    mkdir -p "$DMG_TEMP_DIR/vaila.app/Contents/Resources"
-    # Use DMG_ICON if available, otherwise try to find it again
-    if [ -z "$DMG_ICON" ] || [ ! -f "$DMG_ICON" ]; then
-        for icon_path in "$PROJECT_DIR/docs/images/vaila.icns" "$PROJECT_DIR/vaila/images/vaila.icns" "$VAILA_HOME/docs/images/vaila.icns"; do
-            if [ -f "$icon_path" ]; then
-                DMG_ICON="$icon_path"
-                break
-            fi
-        done
-    fi
-    if [ -n "$DMG_ICON" ] && [ -f "$DMG_ICON" ]; then
-        cp "$DMG_ICON" "$DMG_TEMP_DIR/vaila.app/Contents/Resources/vaila.icns"
-        echo "Icon copied to vaila.app in DMG temp directory."
-        
-        # Apply icon attributes to vaila.app in DMG (before creating DMG)
-        echo "Applying icon to vaila.app in DMG..."
-        if uv run python "$PROJECT_DIR/set_mac_icon.py" "$DMG_TEMP_DIR/vaila.app" "$DMG_TEMP_DIR/vaila.app/Contents/Resources/vaila.icns"; then
-             echo "Icon applied successfully to vaila.app in DMG."
-        else
-             echo "Warning: Failed to apply icon to vaila.app in DMG using Python script."
-        fi
-    else
-        echo "Error: Could not find icon source to copy to vaila.app in DMG."
-    fi
-else
-    echo "vaila.app icon found in DMG temp directory."
-fi
-
-# Configure DMG window appearance using AppleScript
-echo "Configuring DMG window appearance..."
 osascript << 'APPLESCRIPT'
 tell application "Finder"
     activate
@@ -319,12 +283,14 @@ if [ -n "$DMG_ICON" ]; then
     echo "Found icon at: $DMG_ICON"
     # Use Python script to set DMG file icon
     echo "Setting DMG file icon using Python script..."
+    # Change to project directory to ensure uv can find pyproject.toml
+    cd "$PROJECT_DIR"
     if uv run python "$PROJECT_DIR/set_mac_icon.py" "$DMG_OUTPUT" "$DMG_ICON"; then
         echo "DMG file icon set successfully."
     else
         echo "Warning: Failed to set DMG file icon using Python script."
         
-        # Fallback to sips/SetFile if Python script fails (though unlikely if dependencies are met)
+        # Fallback to sips/SetFile if Python script fails
         if command -v sips &> /dev/null; then
             sips -i "$DMG_ICON" &>/dev/null || true
         fi
@@ -335,7 +301,6 @@ if [ -n "$DMG_ICON" ]; then
     # Update Finder cache
     touch "$DMG_OUTPUT" 2>/dev/null || true
     killall Finder 2>/dev/null || true
-    echo "DMG file icon set successfully."
 else
     echo "Warning: DMG file icon (vaila.icns) not found. DMG file will use default icon."
 fi
@@ -354,7 +319,11 @@ echo "File: $DMG_OUTPUT"
 echo "Size: $DMG_SIZE_MB"
 echo ""
 echo "The DMG installer is ready for distribution!"
-echo "Users can double-click the .dmg file and drag vaila.app"
-echo "to Applications to install."
+echo "Users should:"
+echo "  1. Double-click the .dmg file to mount it"
+echo "  2. Copy the 'vaila_installer' folder to their Desktop or desired location"
+echo "  3. Open Terminal and run:"
+echo "     cd ~/Desktop/vaila_installer"
+echo "     ./install_vaila_mac_uv.sh"
 echo ""
 
