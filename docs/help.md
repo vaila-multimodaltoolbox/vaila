@@ -13,6 +13,7 @@ All buttons in the vailá GUI (`vaila.py`) are documented in **[vaila_buttons/](
 - **[Tools Buttons](vaila_buttons/README.md#tools-frame-c)**: Data Files, Video Processing, Visualization tools
 
 **Quick Links:**
+
 - **[Markerless 2D Analysis](vaila_buttons/markerless-2d-button.md)** (B1_r1_c4) - Advanced pose estimation with MediaPipe and YOLOv11
 - **[All Button Documentation](vaila_buttons/README.md)** - Complete list of all GUI buttons
 
@@ -38,19 +39,22 @@ All buttons in the vailá GUI (`vaila.py`) are documented in **[vaila_buttons/](
 ### Steps
 
 1. **Clone the repository:**
+
    ```bash
    git clone https://github.com/vaila-multimodaltoolbox/vaila.git
    cd vaila
    ```
 
 2. **Set up the environment:**
-   
+
    **Windows (Recommended):**
+
    ```powershell
    .\install_vaila_win_uv.ps1
    ```
-   
+
    **Linux and macOS (Using uv):**
+
    ```bash
    # Install uv
    curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -58,20 +62,22 @@ All buttons in the vailá GUI (`vaila.py`) are documented in **[vaila_buttons/](
    # Sync dependencies
    uv sync
    ```
-   
+
    **Legacy Conda Method:**
    - **Linux:** Run `./install_vaila_linux.sh`
    - **macOS:** Run `./install_vaila_mac.sh`
    - **Windows:** Run `.\install_vaila_win.ps1` (Conda-based, slower)
 
 3. **Run vailá:**
-   
+
    **Using uv (Recommended):**
+
    ```bash
    uv run vaila.py
    ```
-   
+
    **Using Conda (Legacy):**
+
    ```bash
    conda activate vaila
    python vaila.py
@@ -101,11 +107,13 @@ The vailá toolbox comprises the following modules:
 After setting up the environment, run vailá using:
 
 **Using uv (Recommended):**
+
 ```bash
 uv run vaila.py
 ```
 
 **Using Conda (Legacy):**
+
 ```bash
 conda activate vaila
 python vaila.py
@@ -116,6 +124,7 @@ The graphical interface allows you to select the desired module. For example, wh
 ## Related Documentation
 
 - **[GUI Button Documentation](vaila_buttons/README.md)** - Complete documentation for all GUI buttons
+- **[Script Help Index](../vaila/help/index.html)** - Complete documentation for all Python modules and scripts
 - **[Script Help Files](../vaila/help/README.md)** - Help for individual Python scripts
 - **[Main Documentation](index.md)** - Overview and module documentation
 
@@ -147,4 +156,3 @@ If vailá is useful for your research, please cite:
 ---
 
 © 2024 vailá - Multimodal Toolbox. All rights reserved.
-
