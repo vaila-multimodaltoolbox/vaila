@@ -1379,12 +1379,31 @@ def process_videos_in_directory(existing_root=None):
         root = tk.Tk()
         root.withdraw()
 
+    # Helper function to prepare root window for dialogs on macOS
+    # Fixes issue where dialogs appear in wrong position (bottom corner) on macOS
+    def prepare_root_for_dialog():
+        if platform.system() == "Darwin":  # macOS
+            root.deiconify()
+            root.update_idletasks()
+            # Position window in a visible location (small window at top-left)
+            root.geometry("1x1+100+100")
+            root.lift()
+            root.update_idletasks()
+
+    # Select input directory
+    prepare_root_for_dialog()
     input_dir = filedialog.askdirectory(title="Select the input directory containing videos")
+    if platform.system() == "Darwin" and existing_root is None:
+        root.withdraw()  # Hide root window again after dialog closes
     if not input_dir:
         messagebox.showerror("Error", "No input directory selected.")
         return
 
+    # Select output base directory
+    prepare_root_for_dialog()
     output_base = filedialog.askdirectory(title="Select the base output directory")
+    if platform.system() == "Darwin" and existing_root is None:
+        root.withdraw()  # Hide root window again after dialog closes
     if not output_base:
         messagebox.showerror("Error", "No output directory selected.")
         return
