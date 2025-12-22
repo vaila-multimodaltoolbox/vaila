@@ -172,8 +172,13 @@ uv lock
 # Install Cairo dependencies BEFORE uv sync (needed for pycairo compilation)
 echo ""
 echo "Installing Cairo system dependencies (required for pycairo)..."
+echo "This ensures pycairo can be compiled successfully during uv sync."
+sudo apt update
 sudo apt install -y libcairo2-dev pkg-config python3-dev build-essential || {
     echo "Warning: Failed to install Cairo dependencies. pycairo may fail to build."
+    echo "You may need to run this manually:"
+    echo "  sudo apt update"
+    echo "  sudo apt install -y libcairo2-dev pkg-config python3-dev build-essential"
 }
 
 # Sync dependencies (install all packages from pyproject.toml)
