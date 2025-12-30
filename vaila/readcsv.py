@@ -1033,9 +1033,7 @@ def read_csv_generic(file_path):
 
         # Check for and filter extreme outliers after unit conversion
         print("\nChecking for extreme outliers...")
-        temp_points_converted = np.stack(
-            [marker_data[marker] for marker in valid_markers], axis=1
-        )
+        temp_points_converted = np.stack([marker_data[marker] for marker in valid_markers], axis=1)
         valid_coords = temp_points_converted[~np.isnan(temp_points_converted)]
 
         if len(valid_coords) > 0:
