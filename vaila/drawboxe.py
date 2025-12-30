@@ -270,11 +270,11 @@ original_path = "{escaped_video_path}"
 # end_frame = 600
 # ================================================================
 """
-    
+
     # Add actual frame intervals if provided
     if frame_intervals:
         for i, (start, end) in enumerate(frame_intervals):
-            toml_content += f"[[frame_intervals]]\n"
+            toml_content += "[[frame_intervals]]\n"
             toml_content += f"id = {i + 1}\n"
             toml_content += f"start_frame = {start}\n"
             toml_content += f"end_frame = {end}\n\n"
@@ -1320,12 +1320,12 @@ def run_drawboxe():
         first_frame_path, os.path.join(video_directory, first_video)
     )
     os.remove(first_frame_path)
-    
+
     # Check if there's a TOML config file with frame intervals
     frame_intervals = None
     basename = os.path.splitext(first_video)[0]
     config_path = os.path.join(video_directory, f"{basename}_dbox.toml")
-    
+
     if os.path.exists(config_path):
         try:
             _, _, _, loaded_intervals = load_config_toml(config_path)
@@ -1334,13 +1334,13 @@ def run_drawboxe():
                     "Frame Intervals Found",
                     f"Frame intervals found in TOML config file.\n\n"
                     f"Intervals: {loaded_intervals}\n\n"
-                    f"Do you want to use these intervals?"
+                    f"Do you want to use these intervals?",
                 )
                 if use_toml_intervals:
                     frame_intervals = loaded_intervals
         except Exception as e:
             print(f"Warning: Could not load frame intervals from TOML: {e}")
-    
+
     # If no intervals from TOML, ask user
     if frame_intervals is None:
         use_intervals = messagebox.askyesno(
