@@ -1,6 +1,7 @@
-import sys
 import os
 import platform
+import sys
+
 
 def set_icon(target_path, icon_path):
     """
@@ -50,6 +51,7 @@ def set_icon(target_path, icon_path):
     except Exception as e:
         print(f"An error occurred: {e}")
         return False
+
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
