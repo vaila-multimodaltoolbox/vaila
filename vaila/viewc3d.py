@@ -10,9 +10,12 @@ Please see AUTHORS for contributors.
 
 ================================================================================
 Author: Paulo Santiago
-Version: 0.0.9
+Version: 0.1.0
 Created: 06 February 2025
-Last Updated: 15 September 2025
+Last Updated: 30 December 2025
+
+To run:
+uv run viewc3d.py
 
 Description:
 ------------
@@ -70,6 +73,7 @@ Features soccer field lines and penalty areas.
     - Robust fallback visualization system
 """
 
+import contextlib
 import json
 import os
 import shutil
@@ -463,7 +467,7 @@ def toggle_theme(theme, window=None):
         for widget in window.winfo_children():
             if isinstance(widget, tk.Frame):
                 widget.configure(bg="white")
-            elif isinstance(widget, tk.Label) or isinstance(widget, tk.Entry):
+            elif isinstance(widget, (tk.Label, tk.Entry)):
                 widget.configure(bg="white", fg="black")
             elif isinstance(widget, tk.Listbox):
                 widget.configure(bg="white", fg="black", selectbackground="lightblue")
@@ -533,7 +537,12 @@ def select_markers(marker_labels, c3d_filepath=None):
 
     # Initial population
     update_listbox()
-    search_var.trace("w", lambda *args: update_listbox())
+    # Use trace_add for Python 3.12+, fallback to trace for older versions
+    try:
+        search_var.trace_add("write", lambda *args: update_listbox())
+    except AttributeError:
+        # Fallback for older Python versions
+        search_var.trace("w", lambda *args: update_listbox())
 
     # Create a frame for extra control buttons
     button_frame = tk.Frame(root)
@@ -1116,7 +1125,7 @@ def run_viewc3d_fallback(points, filepath, fps, marker_labels, selected_indices)
             0.95,
             instructions,
             fontsize=10,
-            bbox=dict(boxstyle="round,pad=0.5", facecolor="lightblue", alpha=0.8),
+            bbox={"boxstyle": "round,pad=0.5", "facecolor": "lightblue", "alpha": 0.8},
         )
 
         # Plot initial frame
@@ -1378,11 +1387,11 @@ def run_viewc3d():
             right = np.cross(forward, upn)
             right = right / (np.linalg.norm(right) + 1e-12)
             up2 = np.cross(right, forward)
-            R = np.eye(4)
+            R = np.eye(4)  # noqa: N806
             R[0, :3] = right
             R[1, :3] = up2
             R[2, :3] = -forward
-            T = np.eye(4)
+            T = np.eye(4)  # noqa: N806
             T[:3, 3] = -eye
             return R @ T
 
@@ -1509,10 +1518,8 @@ def run_viewc3d():
             print(f"[yellow]Could not add geometry: {exc}[/yellow]")
 
     def _safe_remove_geometry(geometry):
-        try:
+        with contextlib.suppress(Exception):
             vis.remove_geometry(geometry, reset_bounding_box=False)
-        except Exception:
-            pass
 
     def _color_map_speed(speeds):
         """Map speeds (array) to RGB colors (blue->green->red)."""
@@ -1521,10 +1528,7 @@ def run_viewc3d():
         v = np.array(speeds)
         v = np.nan_to_num(v, nan=0.0, posinf=0.0, neginf=0.0)
         v_min, v_max = float(np.min(v)), float(np.max(v))
-        if v_max - v_min < 1e-9:
-            t = np.zeros_like(v)
-        else:
-            t = (v - v_min) / (v_max - v_min)
+        t = np.zeros_like(v) if v_max - v_min < 1e-9 else (v - v_min) / (v_max - v_min)
         # simple RGB mapping
         colors = np.stack([t, 1.0 - np.abs(t - 0.5) * 2.0, 1.0 - t], axis=1)
         colors = np.clip(colors, 0.0, 1.0)
@@ -1697,7 +1701,7 @@ def run_viewc3d():
         if not skeleton_linesets:
             return
         frame = points[frame_idx]
-        for ls, (ia, ib) in zip(skeleton_linesets, skeleton_connections):
+        for ls, (ia, ib) in zip(skeleton_linesets, skeleton_connections, strict=True):
             pa = frame[ia]
             pb = frame[ib]
             if np.isnan(pa).any() or np.isnan(pb).any():
@@ -1897,10 +1901,8 @@ def run_viewc3d():
             current_frame = start_frame
             update_spheres(points[current_frame])
             is_playing = was_playing
-            try:
+            with contextlib.suppress(Exception):
                 shutil.rmtree(tmp_dir)
-            except Exception:
-                pass
         return False
 
     def render_turntable(_vis_obj):
@@ -1925,10 +1927,8 @@ def run_viewc3d():
         try:
             for i in range(frames):
                 # Small horizontal rotate per frame
-                try:
+                with contextlib.suppress(Exception):
                     ctr.rotate(10, 0)
-                except Exception:
-                    pass
                 vis.update_renderer()
                 png_path = os.path.join(tmp_dir, f"frame_{i:05d}.png")
                 vis.capture_screen_image(png_path, do_render=True)
@@ -1956,10 +1956,8 @@ def run_viewc3d():
                 print(f"\n[red]ffmpeg failed:[/red] {exc}")
         finally:
             is_playing = was_playing
-            try:
+            with contextlib.suppress(Exception):
                 shutil.rmtree(tmp_dir)
-            except Exception:
-                pass
         return False
 
     # Frame control variables and callback definitions
@@ -1986,8 +1984,10 @@ def run_viewc3d():
 
         return False
 
-    def create_text_geometry(text, position, size=0.1, color=[1, 1, 1]):
+    def create_text_geometry(text, position, size=0.1, color=None):
         """Create a 3D text geometry (simplified using a small cube as placeholder)"""
+        if color is None:
+            color = [1, 1, 1]
         # Note: Open3D doesn't have native text rendering in 3D space
         # We'll create a small cube with the label as a visual indicator
         # The cube will be positioned above the marker
@@ -2014,7 +2014,7 @@ def run_viewc3d():
         else:
             # Show labels - create text geometries for current frame
             frame_data = points[current_frame]
-            for i, (marker_name, marker_pos) in enumerate(zip(selected_marker_names, frame_data)):
+            for marker_name, marker_pos in zip(selected_marker_names, frame_data, strict=True):
                 if not np.isnan(marker_pos).any():
                     # Choose color based on marker name for better distinction
                     first_char = marker_name.lower()[0] if marker_name else "z"
@@ -2057,7 +2057,7 @@ def run_viewc3d():
 
             # Add new labels for current frame
             frame_data = points[current_frame]
-            for i, (marker_name, marker_pos) in enumerate(zip(selected_marker_names, frame_data)):
+            for marker_name, marker_pos in zip(selected_marker_names, frame_data, strict=True):
                 if not np.isnan(marker_pos).any():
                     # Choose color based on marker name for better distinction
                     first_char = marker_name.lower()[0] if marker_name else "z"
@@ -2123,18 +2123,14 @@ def run_viewc3d():
                     if default_field_geometries:
                         print("\nRemoving default ground plane and grid.")
                         for geom in default_field_geometries:
-                            try:
+                            with contextlib.suppress(Exception):
                                 vis.remove_geometry(geom, reset_bounding_box=False)
-                            except Exception:
-                                pass
                         default_field_geometries = []  # Clear so we don't remove again
 
                     # Remove old field lines
                     for geom in current_field_lines:
-                        try:
+                        with contextlib.suppress(Exception):
                             vis.remove_geometry(geom, reset_bounding_box=False)
-                        except Exception:
-                            pass
 
                     if isinstance(result, pd.DataFrame):
                         # --- Full Soccer Field from CSV ---
@@ -2439,10 +2435,8 @@ def run_viewc3d():
 
         # Remove old default geometries
         for geom in default_field_geometries:
-            try:
+            with contextlib.suppress(Exception):
                 vis.remove_geometry(geom, reset_bounding_box=False)
-            except Exception:
-                pass
         default_field_geometries.clear()
 
         # Create new ground, grid, and markers based on user limits
@@ -2798,7 +2792,9 @@ O - Show camera parameters
 
     # --- Field Drawing Logic from soccerfield.py ---
 
-    def draw_line_3d(vis, p1, p2, color=[1, 1, 1], width=0.02):
+    def draw_line_3d(vis, p1, p2, color=None, width=0.02):
+        if color is None:
+            color = [1, 1, 1]
         """Draws a 3D line in Open3D"""
         line_set = o3d.geometry.LineSet()
         line_set.points = o3d.utility.Vector3dVector([p1, p2])
@@ -2807,7 +2803,9 @@ O - Show camera parameters
         vis.add_geometry(line_set, reset_bounding_box=False)
         return line_set
 
-    def draw_circle_3d(vis, center, normal, radius, color=[1, 1, 1], resolution=100):
+    def draw_circle_3d(vis, center, normal, radius, color=None, resolution=100):
+        if color is None:
+            color = [1, 1, 1]
         """Draws a 3D circle in Open3D"""
         # Create a circle on the XY plane
         t = np.linspace(0, 2 * np.pi, resolution)
@@ -2837,9 +2835,11 @@ O - Show camera parameters
         radius,
         start_angle,
         end_angle,
-        color=[1, 1, 1],
+        color=None,
         resolution=50,
     ):
+        if color is None:
+            color = [1, 1, 1]
         """Draws a 3D arc in Open3D"""
         t = np.linspace(np.deg2rad(start_angle), np.deg2rad(end_angle), resolution)
         points = np.vstack([radius * np.cos(t), radius * np.sin(t), np.zeros(resolution)]).T
@@ -3025,10 +3025,8 @@ O - Show camera parameters
                 last_time = current_time
         else:
             time.sleep(0.01)  # Small sleep to reduce CPU usage when not playing
-        try:
+        with contextlib.suppress(Exception):
             vis.update_renderer()
-        except Exception:
-            pass
     vis.destroy_window()
 
 
@@ -3065,7 +3063,7 @@ def load_field_lines_from_csv():
             current_line_start_index = 0
 
             # Process points, treating blank rows as line breaks
-            for i, row in df.iterrows():
+            for _, row in df.iterrows():
                 if row.isnull().all():
                     # End of a line strip. Connect points if there are any.
                     if len(lines_points) > current_line_start_index + 1:

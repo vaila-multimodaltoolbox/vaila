@@ -4,8 +4,8 @@ vaila.py
 ===============================================================================
 Author: Prof. Paulo R. P. Santiago
 Date: 07 October 2024
-Update: 20 December 2025
-Version updated: 0.3.1
+Update: 30 December 2025
+Version updated: 0.3.2
 Python Version: 3.12.12
 
 Example of usage:
@@ -123,7 +123,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 20.December.2025 v0.3.1 (Python 3.12.12)
+vailá - 30.December.2025 v0.3.2 (Python 3.12.12)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -226,7 +226,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 20.December.2025 v0.3.1 (Python 3.12.12)")
+        self.title("vailá - 30.December.2025 v0.3.2 (Python 3.12.12)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -2503,8 +2503,6 @@ class Vaila(tk.Tk):
         from vaila.vailaplot3d import run_plot_3d
 
         run_plot_3d()
-
-
 
     def pynalty(self):
         """Runs the Pynalty analysis tool."""
