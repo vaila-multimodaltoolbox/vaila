@@ -2445,7 +2445,9 @@ Next steps:
     def _try_convert_midi_to_mp3(self, midi_path, mp3_path):
         """Try to convert MIDI to MP3 using available tools."""
         # Try FluidSynth first
-        if self._try_fluidsynth_conversion(midi_path, mp3_path) or self._try_timidity_conversion(midi_path, mp3_path):
+        if self._try_fluidsynth_conversion(midi_path, mp3_path) or self._try_timidity_conversion(
+            midi_path, mp3_path
+        ):
             return True
         return False
 
