@@ -42,7 +42,6 @@ import os
 # Configure SDL environment variables BEFORE importing pygame
 # to prevent EGL/OpenGL warnings on Linux systems
 import platform
-import sys
 from contextlib import redirect_stderr
 from pathlib import Path
 
@@ -219,10 +218,12 @@ def pygame_file_dialog(
             scrollbar_height = max(20, int((20 / len(items)) * list_height))
             max_scroll = len(items) - 20
             if max_scroll > 0:
-                scrollbar_y = list_y + int((scroll_offset / max_scroll) * (list_height - scrollbar_height))
+                scrollbar_y = list_y + int(
+                    (scroll_offset / max_scroll) * (list_height - scrollbar_height)
+                )
             else:
                 scrollbar_y = list_y
-            
+
             scrollbar_rect = pygame.Rect(dialog_width - 30, scrollbar_y, 20, scrollbar_height)
             pygame.draw.rect(dialog_screen, (100, 100, 100), scrollbar_rect)
 
@@ -230,7 +231,7 @@ def pygame_file_dialog(
         item_height = 25
         for i, (item, is_dir) in enumerate(visible_items):
             y_pos = list_y + 5 + (i * item_height)
-            
+
             # Draw background for item
             item_rect = pygame.Rect(12, y_pos - 2, dialog_width - 44, item_height)
             if is_dir:
@@ -379,7 +380,7 @@ def pygame_file_dialog(
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 x, y = event.pos
 
-                if event.button == 1: # Left click
+                if event.button == 1:  # Left click
                     # Check path input field
                     if input_rect.collidepoint(x, y):
                         input_active = True
@@ -412,7 +413,7 @@ def pygame_file_dialog(
                                 # Just select the item
                                 selected_index = clicked_absolute_index
                                 # If it's a directory and user clicks, enter it immediately (optional style)
-                                # But standard behavior is usually double click. 
+                                # But standard behavior is usually double click.
                                 # However, existing code had immediate entry logic, let's keep it consistent
                                 if is_dir:
                                     if item == "..":
@@ -455,17 +456,17 @@ def pygame_file_dialog(
                 if list_rect.collidepoint(mouse_x, mouse_y):
                     # Faster scrolling: 5 items per tick
                     scroll_offset = max(0, min(scroll_offset - (event.y * 5), len(items) - 20))
-                    
+
                     # Ensure selected_index stays valid if we want, or just leave it off-screen
-                    # but if we scroll, we might want to keep selection in view? 
+                    # but if we scroll, we might want to keep selection in view?
                     # Actually standard behavior allows selection to go off screen.
                     # But if user presses arrow keys, it should jump back.
                     # Current logic forces it into view:
                     if selected_index < scroll_offset:
-                         # Don't change selection just by scrolling, unless we want to
-                         pass
+                        # Don't change selection just by scrolling, unless we want to
+                        pass
                     elif selected_index >= scroll_offset + 20:
-                         pass
+                        pass
 
         pygame.time.Clock().tick(60)
 
@@ -1138,7 +1139,7 @@ def play_video_with_controls(video_path, coordinates=None):
         On others: Uses Tkinter dialog.
         """
         import platform
-        
+
         # Determine initial directory from video path
         initial_dir = os.path.dirname(video_path) if video_path else os.path.expanduser("~")
 
@@ -1147,7 +1148,7 @@ def play_video_with_controls(video_path, coordinates=None):
             return pygame_file_dialog(
                 initial_dir=initial_dir,
                 file_extensions=[".csv"],
-                restore_size=(window_width, window_height + 80)
+                restore_size=(window_width, window_height + 80),
             )
         else:
             # Use Tkinter for Windows/Mac
@@ -1156,26 +1157,33 @@ def play_video_with_controls(video_path, coordinates=None):
 
             # Block Pygame from processing mouse and keyboard events while Tkinter is open
             # This prevents Pygame from capturing events that should go to Tkinter
-            pygame.event.set_blocked([pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP, pygame.MOUSEMOTION, 
-                                      pygame.KEYDOWN, pygame.KEYUP])
-            
+            pygame.event.set_blocked(
+                [
+                    pygame.MOUSEBUTTONDOWN,
+                    pygame.MOUSEBUTTONUP,
+                    pygame.MOUSEMOTION,
+                    pygame.KEYDOWN,
+                    pygame.KEYUP,
+                ]
+            )
+
             # Clear any pending events
             pygame.event.clear()
-            
+
             try:
                 # Create Tkinter root window (hidden)
                 root = Tk()
                 root.withdraw()  # Hide the root window
                 root.attributes("-topmost", True)  # Bring to front
                 root.update_idletasks()  # Ensure window is ready
-                
+
                 # Show file dialog (this will block until user selects or cancels)
                 filename = askopenfilename(
                     title="Select CSV File",
                     initialdir=initial_dir,
                     filetypes=[("CSV Files", "*.csv"), ("All Files", "*.*")],
                 )
-                
+
                 result = filename if filename else None
             except Exception as e:
                 print(f"Error in file dialog: {e}")
@@ -1186,14 +1194,21 @@ def play_video_with_controls(video_path, coordinates=None):
                     root.destroy()
                 except:
                     pass
-                
+
                 # Re-enable Pygame events
-                pygame.event.set_allowed([pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP, pygame.MOUSEMOTION,
-                                         pygame.KEYDOWN, pygame.KEYUP])
-                
+                pygame.event.set_allowed(
+                    [
+                        pygame.MOUSEBUTTONDOWN,
+                        pygame.MOUSEBUTTONUP,
+                        pygame.MOUSEMOTION,
+                        pygame.KEYDOWN,
+                        pygame.KEYUP,
+                    ]
+                )
+
                 # Clear any events that accumulated while dialog was open
                 pygame.event.clear()
-            
+
             return result
 
     def reload_coordinates():
@@ -1812,7 +1827,9 @@ def play_video_with_controls(video_path, coordinates=None):
                     remove_marker()
 
                 # Add sequential mode toggle with 'o' key
-                elif event.key == pygame.K_o or event.key == pygame.K_s:  # Toggle sequential mode with 'o' key
+                elif (
+                    event.key == pygame.K_o or event.key == pygame.K_s
+                ):  # Toggle sequential mode with 'o' key
                     if not one_line_mode:  # Only toggle if not in one-line mode
                         sequential_mode = not sequential_mode
                         save_message_text = (

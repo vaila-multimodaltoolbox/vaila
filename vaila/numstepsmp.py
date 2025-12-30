@@ -1004,9 +1004,7 @@ def count_steps(
     }
 
 
-def export_results(
-    results: dict[str, Any], csv_path: str, output_path: str | None = None
-) -> str:
+def export_results(results: dict[str, Any], csv_path: str, output_path: str | None = None) -> str:
     """
     Exports the analysis results to a CSV or TXT file.
 
