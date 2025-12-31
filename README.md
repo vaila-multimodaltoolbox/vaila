@@ -750,36 +750,6 @@ If you use *vailá* in your research or project, please consider citing our work
 - [*vailá* on arXiv](https://arxiv.org/abs/2410.07238)
 - [*vailá* GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
 
-## Authors
-
-- **Paulo Roberto Pereira Santiago** [ORCID: 0000-0002-9460-8847](https://orcid.org/0000-0002-9460-8847)  
-  Biomechanics and Motor Control Lab, School of Physical Education and Sport of Ribeirão Preto, University of São Paulo, Brazil  
-  Graduate Program in Rehabilitation and Functional Performance, Ribeirão Preto Medical School, University of São Paulo, Brazil  
-
-- **Abel Gonçalves Chinaglia** [ORCID: 0000-0002-6955-7187](https://orcid.org/0000-0002-6955-7187)  
-  Graduate Program in Rehabilitation and Functional Performance, Ribeirão Preto Medical School, University of São Paulo, Brazil  
-
-- **Kira Flanagan** [ORCID: 0000-0003-0317-6346](https://orcid.org/0000-0003-0317-6346)  
-  College of Computing, Engineering and Construction, University of North Florida, USA  
-
-- **Bruno Luiz de Souza Bedo** [ORCID: 0000-0003-3821-2327](https://orcid.org/0000-0003-3821-2327)  
-  Laboratory of Technology and Sports Performance Analysis, School of Physical Education and Sport, University of São Paulo, Brazil  
-
-- **Ligia Yumi Mochida** [ORCID: 0009-0005-7266-3799](https://orcid.org/0009-0005-7266-3799)  
-  Laboratory of Applied Biomechanics and Engineering, Brooks College of Health, University of North Florida, USA  
-  Department of Physical Therapy, Brooks College of Health, University of North Florida, USA  
-
-- **Juan Aceros** [ORCID: 0000-0001-6381-7032](https://orcid.org/0000-0001-6381-7032)  
-  Laboratory of Applied Biomechanics and Engineering, Brooks College of Health, University of North Florida, USA  
-  College of Computing, Engineering and Construction, University of North Florida, USA
-
-- **Aline Bononi** [ORCID: 0000-0001-8169-0864](https://orcid.org/0000-0001-8169-0864)
-  Municipal Pharmacy of Ribeirão Preto - Brazil
-
-- **Guilherme Manna Cesar** [ORCID: 0000-0002-5596-9439](https://orcid.org/0000-0002-5596-9439)  
-  Laboratory of Applied Biomechanics and Engineering, Brooks College of Health, University of North Florida, USA  
-  Department of Physical Therapy, Brooks College of Health, University of North Florida, USA  
-
 ## Contribution
 
 We encourage creativity and innovation to enhance and expand the functionality of this toolbox. You can make a difference by contributing to the project! To get involved, feel free to fork the repository, experiment with new ideas, and create a branch for your changes. When you're ready, submit a pull request so we can review and potentially integrate your contributions.
@@ -794,6 +764,7 @@ maintains the freedom of the software and requires source code availability.
 
 For more details, see the [LICENSE](LICENSE) file or visit: 
 https://www.gnu.org/licenses/agpl-3.0.html
+
 
 
 
