@@ -743,6 +743,17 @@ If you use *vailá* in your research or project, please consider citing our work
   pages={e462--e462},
   year={2025}
 }
+
+@article{Mochida2025,
+  author = {Mochida, Ligia Yumi and Santiago, Paulo R. P. and Lamb, Miranda and Cesar, Guilherme M.},
+  title = {Multimodal Motion Capture Toolbox for Enhanced Analysis of Intersegmental Coordination in Children with Cerebral Palsy and Typically Developing},
+  journal = {Journal of Visualized Experiments},
+  year = {2025},
+  number = {206},
+  pages = {e69604},
+  doi = {10.3791/69604},
+  url = {https://www.jove.com/t/69604/multimodal-motion-capture-toolbox-for-enhanced-analysis}
+}
 ```
 
 ## You can also refer to the tool's GitHub repository for more details and updates:
@@ -764,6 +775,7 @@ maintains the freedom of the software and requires source code availability.
 
 For more details, see the [LICENSE](LICENSE) file or visit: 
 https://www.gnu.org/licenses/agpl-3.0.html
+
 
 
 
