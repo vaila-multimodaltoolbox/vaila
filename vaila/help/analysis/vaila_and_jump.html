@@ -12,7 +12,7 @@
             background-color: #f5f5f5;
         }
         .container {
-            max-width: 800px;
+            max-width: 1000px;
             margin: 0 auto;
             background: white;
             padding: 30px;
@@ -21,13 +21,22 @@
         }
         h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
         h2 { color: #34495e; margin-top: 30px; }
+        h3 { color: #2980b9; margin-top: 20px; }
         .module-info { background: #ecf0f1; padding: 15px; border-radius: 5px; margin: 20px 0; }
         .functions { background: #f8f9fa; padding: 15px; border-left: 4px solid #28a745; margin: 15px 0; }
         .docstring { background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 15px 0; }
-        .errorr { background: #f8d7da; padding: 15px; border-left: 4px solid #dc3545; margin: 15px 0; }
-        code { background: #e9ecef; padding: 2px 6px; border-radius: 3px; }
+        .new-feature { background: #d4edda; padding: 15px; border-left: 4px solid #28a745; margin: 15px 0; }
+        .metrics { background: #e7f3ff; padding: 15px; border-left: 4px solid #3498db; margin: 15px 0; }
+        code { background: #e9ecef; padding: 2px 6px; border-radius: 3px; font-family: 'Courier New', monospace; }
         pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; }
         .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #6c757d; font-size: 0.9em; }
+        ul { margin: 10px 0; padding-left: 20px; }
+        li { margin: 5px 0; }
+        .badge { display: inline-block; padding: 3px 8px; border-radius: 3px; font-size: 0.85em; font-weight: bold; }
+        .badge-new { background: #28a745; color: white; }
+        .badge-risk { background: #dc3545; color: white; }
+        .badge-moderate { background: #ffc107; color: black; }
+        .badge-good { background: #28a745; color: white; }
     </style>
 </head>
 <body>
@@ -38,55 +47,200 @@
             <h3>📋 Module Information</h3>
             <p><strong>Category:</strong> Analysis</p>
             <p><strong>File:</strong> vaila\vaila_and_jump.py</p>
-            <p><strong>Lines:</strong> 3310</p>
-            <p><strong>Size:</strong> 120960 characters</p>
-            <p><strong>Version:</strong> 0.1.0</p>
+            <p><strong>Lines:</strong> 4514</p>
+            <p><strong>Size:</strong> ~150000 characters</p>
+            <p><strong>Version:</strong> 0.1.1</p>
             <p><strong>Author:</strong> Prof. Paulo R. P. Santiago</p>
             <p><strong>GUI Interface:</strong> ✅ Yes</p>
+            <p><strong>Last Update:</strong> 04 Jan 2026</p>
         </div>
-
-        
 
         <div class="docstring">
             <h3>📖 Description</h3>
-            <pre>
-===============================================================================
-vaila_and_jump.py
-===============================================================================
-Author: Prof. Paulo R. P. Santiago
-Email: paulosantiago@usp.br
-GitHub: https://github.com/vaila-multimodaltoolbox/vaila
-Creation Date: 24 Oct 2024
-Update Date: 14 Aug 2025
-Version: 0.1.0
-Python Version: 3.12.11
+            <p>This script processes jump data from multiple .csv files in a specified directory, performing biomechanical calculations based on either the time of flight or the jump height. The results are saved in a new output directory with a timestamp for each processed file.</p>
+            
+            <p>For MediaPipe data, the script automatically inverts y-coordinates (1.0 - y) to transform from screen coordinates (where y increases downward) to biomechanical coordinates (where y increases upward). This allows proper visualization and analysis of the jumping motion.</p>
+        </div>
 
-Description:
-------------
-This script processes jump data from multiple .csv files in a specified directory,
-performing biomechanical calculations based on either the time of flight or the
-jump height. The results are saved in a new output directory with a timestamp
-for each processed file.
+        <div class="new-feature">
+            <h3>🆕 New Features in v0.1.1</h3>
+            <ul>
+                <li><strong>FPPA (Frontal Plane Projection Angle):</strong> Rigorous 2D vector-based calculation for clinical validity</li>
+                <li><strong>Landing Phase Analysis:</strong> Multiple time points (IC, IC+40ms, IC+100ms, Max Valgus) based on scientific literature</li>
+                <li><strong>Risk Classification:</strong> Evidence-based categorization (< 5° Good, 5°-10° Moderate, > 10° High Risk)</li>
+                <li><strong>FPPA Time Series Plot:</strong> Visualization of adduction/abduction angles over time with key events</li>
+                <li><strong>Multi-Moment Landing Analysis:</strong> Stick figures showing FPPA values, knee/ankle separation, and risk classification</li>
+                <li><strong>Consistent Visualization:</strong> Right side FPPA sign inversion for uniform display (both sides show valgus as positive)</li>
+            </ul>
+        </div>
 
-For MediaPipe data, the script automatically inverts y-coordinates (1.0 - y) to
-transform from screen coordinates (where y increases downward) to biomechanical
-coordinates (where y increases upward). This allows proper visualization and
-analysis of the jumping motion.
+        <div class="metrics">
+            <h3>📊 Key Metrics Explained</h3>
+            
+            <h4>FPPA (Frontal Plane Projection Angle)</h4>
+            <p>The FPPA is calculated using a rigorous 2D vector-based method:</p>
+            <ul>
+                <li><strong>Vector v1 (Femur):</strong> From HIP to KNEE</li>
+                <li><strong>Vector v2 (Tibia):</strong> From KNEE to ANKLE</li>
+                <li><strong>Internal Angle:</strong> Calculated at the knee joint using dot product and cross product</li>
+                <li><strong>Convention:</strong>
+                    <ul>
+                        <li>0° = straight alignment (180° internal angle)</li>
+                        <li>Positive = Valgus (knee collapses medially/inward)</li>
+                        <li>Negative = Varus (knee collapses laterally/outward)</li>
+                    </ul>
+                </li>
+                <li><strong>Right Side:</strong> Sign is inverted for consistent visualization (both sides show valgus as positive)</li>
+            </ul>
 
-Features:
----------
-- Supports two calculation...</pre>
+            <h4>Risk Classification</h4>
+            <p>Based on scientific evidence (DOI: 10.1016/j.heliyon.2024):</p>
+            <ul>
+                <li><span class="badge badge-good">< 5°</span> Good Alignment - Low risk</li>
+                <li><span class="badge badge-moderate">5° - 10°</span> Moderate Risk - Requires attention</li>
+                <li><span class="badge badge-risk">> 10°</span> High Risk / Excessive Dynamic Valgus - Significant risk factor</li>
+            </ul>
+
+            <h4>Landing Phase Analysis</h4>
+            <p>Based on "Mechanisms for Noncontact Anterior Cruciate Ligament Injury":</p>
+            <ul>
+                <li><strong>Initial Contact (IC):</strong> Moment of landing</li>
+                <li><strong>IC + 40ms:</strong> Critical window for ACL injury risk</li>
+                <li><strong>IC + 100ms:</strong> Extended landing phase analysis</li>
+                <li><strong>Max Valgus:</strong> Maximum valgus angle within 0.2s post-landing window</li>
+            </ul>
         </div>
 
         <div class="functions">
             <h3>🔧 Main Functions</h3>
-            <p><strong>Total functions found:</strong> 20</p>
-            <ul><li><code>calculate_force</code></li><li><code>calculate_jump_height</code></li><li><code>calculate_power</code></li><li><code>calculate_velocity</code></li><li><code>calculate_kinetic_energy</code></li><li><code>calculate_potential_energy</code></li><li><code>calculate_average_power</code></li><li><code>calculate_liftoff_force</code></li><li><code>calculate_time_of_flight</code></li><li><code>calculate_baseline</code></li><li><code>identify_jump_phases</code></li><li><code>generate_jump_plots</code></li><li><code>plot_jump_phases_analysis</code></li><li><code>plot_jump_cg_feet_analysis</code></li><li><code>generate_html_report</code></li><li><code>process_mediapipe_data</code></li><li><code>process_all_mediapipe_files</code></li><li><code>process_jump_data</code></li><li><code>calc_fator_convert_mediapipe</code></li><li><code>calc_fator_convert_mediapipe_simple</code></li></ul>
+            <p><strong>Total functions found:</strong> 30+</p>
+            
+            <h4>Core Calculation Functions:</h4>
+            <ul>
+                <li><code>calculate_force</code> - Calculate weight force based on mass</li>
+                <li><code>calculate_jump_height</code> - Calculate jump height from time of flight</li>
+                <li><code>calculate_power</code> - Calculate power output during jump</li>
+                <li><code>calculate_velocity</code> - Calculate takeoff velocity</li>
+                <li><code>calculate_kinetic_energy</code> - Calculate kinetic energy</li>
+                <li><code>calculate_potential_energy</code> - Calculate potential energy</li>
+            </ul>
+
+            <h4>Kinematic Analysis <span class="badge badge-new">NEW</span>:</h4>
+            <ul>
+                <li><code>calculate_kinematics</code> - Calculate advanced kinematic metrics for injury screening
+                    <ul>
+                        <li>FPPA (Frontal Plane Projection Angle) using rigorous 2D vector method</li>
+                        <li>Valgus Ratio (Knee-Hip Separation Ratio)</li>
+                        <li>KASR (Knee-to-Ankle Separation Ratio)</li>
+                        <li>Landing Stability (Sway)</li>
+                        <li>Risk classification based on scientific evidence</li>
+                    </ul>
+                </li>
+            </ul>
+
+            <h4>Visualization Functions <span class="badge badge-new">NEW</span>:</h4>
+            <ul>
+                <li><code>plot_valgus_ratio</code> - Generate plot of Knee-Hip Separation Ratio over time</li>
+                <li><code>plot_fppa_time_series</code> - Generate time series plot of FPPA angles with key events</li>
+                <li><code>plot_valgus_event</code> - Generate annotated stick figure plots for Squat and Landing events
+                    <ul>
+                        <li>Multi-moment landing analysis (IC, IC+40ms, IC+100ms, Max Valgus)</li>
+                        <li>Displays FPPA values with risk classification</li>
+                        <li>Shows knee and ankle separation distances</li>
+                    </ul>
+                </li>
+                <li><code>generate_jump_plots</code> - Generate power curve visualizations</li>
+                <li><code>plot_jump_phases_analysis</code> - Generate visualization showing jump phases</li>
+                <li><code>generate_jump_animation_gif</code> - Generate animated GIF of jump cycle</li>
+            </ul>
+
+            <h4>Data Processing:</h4>
+            <ul>
+                <li><code>process_mediapipe_data</code> - Process MediaPipe data and generate visualizations</li>
+                <li><code>process_all_mediapipe_files</code> - Process all MediaPipe CSV files in directory</li>
+                <li><code>calc_fator_convert_mediapipe</code> - Calculate conversion factor from normalized to meters</li>
+            </ul>
+
+            <h4>Reporting:</h4>
+            <ul>
+                <li><code>generate_html_report</code> - Generate comprehensive HTML report with all metrics and plots</li>
+            </ul>
+        </div>
+
+        <div class="docstring">
+            <h3>📝 Usage</h3>
+            <ol>
+                <li>Run the script: <code>python vaila_and_jump.py</code></li>
+                <li>Select the target directory containing .csv files</li>
+                <li>Choose data type:
+                    <ul>
+                        <li><strong>Option 1:</strong> Time of Flight Data</li>
+                        <li><strong>Option 2:</strong> Jump Height Data</li>
+                        <li><strong>Option 3:</strong> MediaPipe Shank Length Data</li>
+                    </ul>
+                </li>
+                <li>For MediaPipe data, provide:
+                    <ul>
+                        <li>Subject mass (kg)</li>
+                        <li>Video FPS (frames per second)</li>
+                        <li>Shank length (m) for calibration</li>
+                    </ul>
+                </li>
+                <li>The script processes all files and generates comprehensive reports</li>
+            </ol>
+        </div>
+
+        <div class="docstring">
+            <h3>📁 Input File Formats</h3>
+            
+            <h4>1. Time-of-flight based format:</h4>
+            <pre>mass_kg,time_of_flight_s,contact_time_s
+75.0,0.45,0.22
+80.2,0.42,0.25</pre>
+
+            <h4>2. Jump-height based format:</h4>
+            <pre>mass_kg,height_m,contact_time_s
+75.0,0.25,0.22
+80.2,0.22,0.25</pre>
+
+            <h4>3. MediaPipe pose estimation format:</h4>
+            <p>CSV file with MediaPipe pose landmark coordinates (frame_index, nose_x, nose_y, etc.)</p>
+        </div>
+
+        <div class="docstring">
+            <h3>🎯 Output</h3>
+            <p>The script generates:</p>
+            <ul>
+                <li><strong>CSV files:</strong> Jump metrics, calibrated data, database entries</li>
+                <li><strong>Visualizations:</strong> PNG plots of all analyses</li>
+                <li><strong>HTML Report:</strong> Comprehensive report with all metrics, plots, and risk classifications</li>
+                <li><strong>Animated GIF:</strong> Jump cycle animation (if imageio is available)</li>
+            </ul>
+        </div>
+
+        <div class="docstring">
+            <h3>📚 Scientific References</h3>
+            <ul>
+                <li>Santiago, P. R. P., et al. (2024). vailá: Versatile Anarcho Integrated Liberation Ánalysis in Multimodal Toolbox. arXiv preprint arXiv:2410.07238</li>
+                <li>Mechanisms for Noncontact Anterior Cruciate Ligament Injury (DOI: 10.1016/j.heliyon.2024)</li>
+                <li>Samozino, P., et al. (2008). A simple method for measuring force, velocity and power output during squat jump. Journal of Biomechanics, 41(14), 2940-2945.</li>
+            </ul>
+        </div>
+
+        <div class="docstring">
+            <h3>⚠️ Notes</h3>
+            <ul>
+                <li>Ensure all necessary libraries are installed (pandas, numpy, matplotlib, tkinter)</li>
+                <li>For accurate results, MediaPipe landmark detection should be of good quality</li>
+                <li>Shank length calibration is critical for accurate metric calculations</li>
+                <li>FPPA calculations use rigorous vector-based methods for clinical validity</li>
+                <li>Right side FPPA values are inverted for consistent visualization (both sides show valgus as positive)</li>
+            </ul>
         </div>
 
         <div class="footer">
-            <p>📅 Generated automatically on: 15/10/2025 08:04:44</p>
-            <p>🔗 Part of vailá - Multimodal Toolbox</p>
+            <p>📅 <strong>Last Updated:</strong> 04 Jan 2026</p>
+            <p>🔗 <strong>Part of vailá - Multimodal Toolbox</strong></p>
             <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
         </div>
     </div>
