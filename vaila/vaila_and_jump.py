@@ -6,9 +6,9 @@ Author: Prof. Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 24 Oct 2024
-Update Date: 14 Aug 2025
-Version: 0.1.0
-Python Version: 3.12.11
+Update Date: 04 Jan 2026
+Version: 0.1.1
+Python Version: 3.12.12
 
 Description:
 ------------
@@ -633,7 +633,1165 @@ def identify_jump_phases(data, feet_baseline, _cg_baseline, fps):
     }
 
 
+
+def calculate_kinematics(data, results):
+    """
+    Calculate advanced kinematic metrics for injury screening (Valgus, Stability).
+    
+    Based on scientific literature (DOI: 10.1016/j.heliyon.2024 - Figure 4) for clinical validity
+    of pre-season assessment.
+
+    Metrics:
+    1. Knee-Hip Separation Ratio (Valgus Ratio): dist_knees / dist_hips
+    2. FPPA (Frontal Plane Projection Angle): Rigorous 2D vector-based calculation
+       - Vector v1: HIP -> KNEE (Femur)
+       - Vector v2: KNEE -> ANKLE (Tibia)
+       - Angle calculated using atan2 for precise vector angle computation
+    3. Landing Stability (Sway): Horizontal CG range in 0.4s post-landing window
+
+    Args:
+        data (pd.DataFrame): DataFrame with landmark data. 
+                             Tries to use '_m' columns if available, else normalized.
+        results (dict): Dictionary containing jump phase frames.
+
+    Returns:
+        dict: Dictionary with new kinematic metrics added.
+    """
+    kinematics = {}
+    fps = results.get("fps", 30)
+
+    # Helper for Euclidean distance
+    def dist_2d(p1_x, p1_y, p2_x, p2_y):
+        return math.sqrt((p1_x - p2_x) ** 2 + (p1_y - p2_y) ** 2)
+
+    def get_coords(row, prefix):
+        # Prefer meters if available, else normalized
+        if f"{prefix}_x_m" in row and f"{prefix}_y_m" in row:
+            return row[f"{prefix}_x_m"], row[f"{prefix}_y_m"]
+        return row.get(f"{prefix}_x", 0), row.get(f"{prefix}_y", 0)
+
+    def calculate_fppa_vector_2d(hip_x, hip_y, knee_x, knee_y, ankle_x, ankle_y):
+        """
+        Calculate FPPA (Frontal Plane Projection Angle) using rigorous 2D vector method.
+        
+        Based on scientific literature: DOI 10.1016/j.heliyon.2024 - Figure 4
+        
+        FPPA is calculated as the internal angle at the knee joint between:
+        - Vector v1: HIP -> KNEE (Femur vector)
+        - Vector v2: KNEE -> ANKLE (Tibia vector)
+        
+        The FPPA represents the deviation from straight alignment (180°).
+        
+        Args:
+            hip_x, hip_y: Hip coordinates
+            knee_x, knee_y: Knee coordinates  
+            ankle_x, ankle_y: Ankle coordinates
+            
+        Returns:
+            float: FPPA angle in degrees
+            - 0° = straight alignment (180° internal angle)
+            - Positive = Varus (Abduction - knee collapses laterally/outward away from midline)
+            - Negative = Valgus (Adduction - knee collapses medially/inward toward midline)
+        """
+        # Vector v1: HIP -> KNEE (Femur vector, pointing from hip to knee)
+        v1_x = knee_x - hip_x
+        v1_y = knee_y - hip_y
+        
+        # Vector v2: KNEE -> ANKLE (Tibia vector, pointing from knee to ankle)
+        v2_x = ankle_x - knee_x
+        v2_y = ankle_y - knee_y
+        
+        # Check for zero vectors
+        mag_v1 = math.sqrt(v1_x**2 + v1_y**2)
+        mag_v2 = math.sqrt(v2_x**2 + v2_y**2)
+        
+        if mag_v1 < 1e-6 or mag_v2 < 1e-6:
+            return 0.0
+        
+        # Calculate vectors pointing away from knee (for internal angle calculation)
+        # Vector from knee to hip (reversed v1)
+        ba_x = hip_x - knee_x
+        ba_y = hip_y - knee_y
+        
+        # Vector from knee to ankle (v2)
+        bc_x = ankle_x - knee_x
+        bc_y = ankle_y - knee_y
+        
+        # Calculate internal angle using dot product method
+        # cos(θ) = (BA · BC) / (|BA| * |BC|)
+        mag_ba = math.sqrt(ba_x**2 + ba_y**2)
+        mag_bc = math.sqrt(bc_x**2 + bc_y**2)
+        
+        if mag_ba < 1e-6 or mag_bc < 1e-6:
+            return 0.0
+        
+        dot_product = ba_x * bc_x + ba_y * bc_y
+        cos_angle = dot_product / (mag_ba * mag_bc)
+        
+        # Clamp to [-1, 1] to avoid numerical errors
+        cos_angle = max(-1.0, min(1.0, cos_angle))
+        
+        # Calculate internal angle at the knee (in degrees)
+        internal_angle_deg = math.degrees(math.acos(cos_angle))
+        
+        # Calculate cross product to determine valgus/varus direction
+        # Cross product = ba_x * bc_y - ba_y * bc_x
+        cross_product = ba_x * bc_y - ba_y * bc_x
+        
+        # FPPA is the deviation from 180° (straight alignment)
+        # Internal angle of 180° = straight leg = 0° FPPA
+        # Internal angle < 180° = valgus collapse (positive FPPA)
+        # Internal angle > 180° = varus collapse (negative FPPA)
+        deviation = 180.0 - internal_angle_deg
+        
+        # Use cross product sign to determine valgus/varus
+        # In biomechanical coordinates (Y up, X right):
+        # - For left leg: positive cross product → valgus (knee moves right/medial)
+        # - For right leg: negative cross product → valgus (knee moves left/medial)
+        # We use absolute deviation and apply sign based on cross product
+        if abs(deviation) < 0.1:  # Essentially straight
+            fppa_angle = 0.0
+        else:
+            # Apply sign: positive = varus (abduction/lateral), negative = valgus (adduction/medial)
+            if cross_product > 0:
+                fppa_angle = abs(deviation)  # Varus (positive) - Abduction/Lateral collapse
+            else:
+                fppa_angle = -abs(deviation)  # Valgus (negative) - Adduction/Medial collapse
+        
+        return fppa_angle
+    
+    propulsion_frame = results.get("propulsion_start_frame")
+    landing_frame = results.get("landing_frame")
+
+    # Time series for Valgus Ratio and FPPA (For plotting)
+    valgus_ratio_series = []
+    fppa_left_series = []
+    fppa_right_series = []
+    knee_sep_series = []
+    ankle_sep_series = []
+    
+    # Calculate for all frames (for plotting)
+    if "left_knee_x" in data.columns: # Check if we have data
+        for i in range(len(data)):
+            row = data.iloc[i]
+            lh_x, lh_y = get_coords(row, "left_hip")
+            rh_x, rh_y = get_coords(row, "right_hip")
+            lk_x, lk_y = get_coords(row, "left_knee")
+            rk_x, rk_y = get_coords(row, "right_knee")
+            la_x, la_y = get_coords(row, "left_ankle")
+            ra_x, ra_y = get_coords(row, "right_ankle")
+            
+            hip_sep = dist_2d(lh_x, lh_y, rh_x, rh_y)
+            knee_sep = dist_2d(lk_x, lk_y, rk_x, rk_y)
+            ankle_sep = dist_2d(la_x, la_y, ra_x, ra_y)
+            
+            ratio = knee_sep / hip_sep if hip_sep > 0 else np.nan
+            valgus_ratio_series.append(ratio)
+            knee_sep_series.append(knee_sep)
+            ankle_sep_series.append(ankle_sep)
+            
+            # Calculate FPPA for time series
+            # For right side, we invert the sign to match left side convention
+            # Both sides: positive = varus (abduction), negative = valgus (adduction)
+            fppa_left = calculate_fppa_vector_2d(lh_x, lh_y, lk_x, lk_y, la_x, la_y)
+            fppa_right_raw = calculate_fppa_vector_2d(rh_x, rh_y, rk_x, rk_y, ra_x, ra_y)
+            # Invert right side to match left side convention (valgus = positive)
+            # This ensures both sides show valgus as positive values
+            fppa_right = -fppa_right_raw if fppa_right_raw is not None and not math.isnan(fppa_right_raw) else np.nan
+            fppa_left_series.append(fppa_left if fppa_left is not None and not math.isnan(fppa_left) else np.nan)
+            fppa_right_series.append(fppa_right)
+    
+    kinematics["valgus_ratio_series"] = valgus_ratio_series
+    kinematics["fppa_left_series"] = fppa_left_series
+    kinematics["fppa_right_series"] = fppa_right_series
+    kinematics["knee_sep_series"] = knee_sep_series
+    kinematics["ankle_sep_series"] = ankle_sep_series
+
+    # 1. Valgus Ratio & 2. FPPA & Knee Angle
+    # Calculate for Initial Contact (landing) and Max Flexion (squat/propulsion)
+    for phase_name, frame_idx in [("squat", propulsion_frame), ("landing", landing_frame)]:
+        if frame_idx is None or frame_idx >= len(data):
+            continue
+            
+        row = data.iloc[frame_idx]
+        
+        lh_x, lh_y = get_coords(row, "left_hip")
+        rh_x, rh_y = get_coords(row, "right_hip")
+        lk_x, lk_y = get_coords(row, "left_knee")
+        rk_x, rk_y = get_coords(row, "right_knee")
+        la_x, la_y = get_coords(row, "left_ankle")
+        ra_x, ra_y = get_coords(row, "right_ankle")
+
+        # Valgus Ratio
+        hip_sep = dist_2d(lh_x, lh_y, rh_x, rh_y)
+        knee_sep = dist_2d(lk_x, lk_y, rk_x, rk_y)
+        
+        if hip_sep > 0:
+            kinematics[f"valgus_ratio_{phase_name}"] = knee_sep / hip_sep
+            kinematics[f"hip_sep_{phase_name}_m"] = hip_sep
+            kinematics[f"knee_sep_{phase_name}_m"] = knee_sep
+        else:
+            kinematics[f"valgus_ratio_{phase_name}"] = None
+
+        # FPPA (Frontal Plane Projection Angle) - Rigorous 2D vector calculation
+        # IMPORTANT: For right side, we invert the sign to match left side convention
+        # This ensures both sides show varus (lateral collapse) as positive values
+        # and valgus (medial collapse) as negative values, for consistent visualization
+        fppa_left = calculate_fppa_vector_2d(lh_x, lh_y, lk_x, lk_y, la_x, la_y)
+        fppa_right_raw = calculate_fppa_vector_2d(rh_x, rh_y, rk_x, rk_y, ra_x, ra_y)
+        fppa_right = -fppa_right_raw if fppa_right_raw is not None else None
+        
+        kinematics[f"fppa_left_{phase_name}_deg"] = fppa_left
+        kinematics[f"fppa_right_{phase_name}_deg"] = fppa_right
+
+        # Knee Relative Angle (Hip-Knee-Ankle) - same as FPPA for consistency
+        kinematics[f"knee_angle_left_{phase_name}_deg"] = fppa_left
+        kinematics[f"knee_angle_right_{phase_name}_deg"] = fppa_right
+
+        # KASR (Knee-to-Ankle Separation Ratio) & KSD
+        ankle_sep = dist_2d(la_x, la_y, ra_x, ra_y)
+        
+        if ankle_sep > 0:
+            kinematics[f"kasr_{phase_name}"] = knee_sep / ankle_sep
+        else:
+            kinematics[f"kasr_{phase_name}"] = None
+            
+        kinematics[f"ksd_{phase_name}_m"] = knee_sep
+        kinematics[f"ankle_sep_{phase_name}_m"] = ankle_sep
+
+    # 3. Landing Phase Analysis (IC, +40ms, +100ms, Max Valgus)
+    # Based on Mechanisms for Noncontact Anterior Cruciate Ligament Injury
+    if landing_frame is not None and landing_frame < len(data):
+        # Calculate FPPA at specific time points after landing
+        # IC + 40ms
+        frame_40ms = landing_frame + int(0.040 * fps)
+        if frame_40ms < len(data):
+            row_40ms = data.iloc[frame_40ms]
+            lh_x, lh_y = get_coords(row_40ms, "left_hip")
+            rh_x, rh_y = get_coords(row_40ms, "right_hip")
+            lk_x, lk_y = get_coords(row_40ms, "left_knee")
+            rk_x, rk_y = get_coords(row_40ms, "right_knee")
+            la_x, la_y = get_coords(row_40ms, "left_ankle")
+            ra_x, ra_y = get_coords(row_40ms, "right_ankle")
+            
+            fppa_left_40ms = calculate_fppa_vector_2d(lh_x, lh_y, lk_x, lk_y, la_x, la_y)
+            fppa_right_40ms_raw = calculate_fppa_vector_2d(rh_x, rh_y, rk_x, rk_y, ra_x, ra_y)
+            # Invert right side to match left side convention (valgus = positive)
+            fppa_right_40ms = -fppa_right_40ms_raw if fppa_right_40ms_raw is not None else None
+            kinematics["fppa_left_landing_40ms_deg"] = fppa_left_40ms
+            kinematics["fppa_right_landing_40ms_deg"] = fppa_right_40ms
+            kinematics["landing_40ms_frame"] = frame_40ms
+        
+        # IC + 100ms
+        frame_100ms = landing_frame + int(0.100 * fps)
+        if frame_100ms < len(data):
+            row_100ms = data.iloc[frame_100ms]
+            lh_x, lh_y = get_coords(row_100ms, "left_hip")
+            rh_x, rh_y = get_coords(row_100ms, "right_hip")
+            lk_x, lk_y = get_coords(row_100ms, "left_knee")
+            rk_x, rk_y = get_coords(row_100ms, "right_knee")
+            la_x, la_y = get_coords(row_100ms, "left_ankle")
+            ra_x, ra_y = get_coords(row_100ms, "right_ankle")
+            
+            fppa_left_100ms = calculate_fppa_vector_2d(lh_x, lh_y, lk_x, lk_y, la_x, la_y)
+            fppa_right_100ms_raw = calculate_fppa_vector_2d(rh_x, rh_y, rk_x, rk_y, ra_x, ra_y)
+            # Invert right side to match left side convention (valgus = positive)
+            fppa_right_100ms = -fppa_right_100ms_raw if fppa_right_100ms_raw is not None else None
+            kinematics["fppa_left_landing_100ms_deg"] = fppa_left_100ms
+            kinematics["fppa_right_landing_100ms_deg"] = fppa_right_100ms
+            kinematics["landing_100ms_frame"] = frame_100ms
+        
+        # Max Valgus Calculation
+        # Find maximum valgus angle between landing_frame and landing_frame + 0.2s
+        window_frames = int(0.2 * fps)  # 0.2 seconds window
+        end_window = min(len(data), landing_frame + window_frames)
+        
+        max_valgus_left = None
+        max_valgus_right = None
+        max_valgus_frame_left = None
+        max_valgus_frame_right = None
+        
+        if end_window > landing_frame:
+            for frame_idx in range(landing_frame, end_window):
+                if frame_idx >= len(data):
+                    break
+                    
+                row = data.iloc[frame_idx]
+                
+                lh_x, lh_y = get_coords(row, "left_hip")
+                rh_x, rh_y = get_coords(row, "right_hip")
+                lk_x, lk_y = get_coords(row, "left_knee")
+                rk_x, rk_y = get_coords(row, "right_knee")
+                la_x, la_y = get_coords(row, "left_ankle")
+                ra_x, ra_y = get_coords(row, "right_ankle")
+                
+                # Calculate FPPA for this frame
+                fppa_left = calculate_fppa_vector_2d(lh_x, lh_y, lk_x, lk_y, la_x, la_y)
+                fppa_right_raw = calculate_fppa_vector_2d(rh_x, rh_y, rk_x, rk_y, ra_x, ra_y)
+                # Invert right side to match left side convention (valgus = positive)
+                fppa_right = -fppa_right_raw if fppa_right_raw is not None else None
+                
+                # Track maximum valgus (positive values indicate valgus)
+                if max_valgus_left is None or (fppa_left is not None and fppa_left > max_valgus_left):
+                    max_valgus_left = fppa_left
+                    max_valgus_frame_left = frame_idx
+                
+                if max_valgus_right is None or (fppa_right is not None and fppa_right > max_valgus_right):
+                    max_valgus_right = fppa_right
+                    max_valgus_frame_right = frame_idx
+        
+        kinematics["max_valgus_angle_left_deg"] = max_valgus_left
+        kinematics["max_valgus_angle_right_deg"] = max_valgus_right
+        kinematics["max_valgus_frame_left"] = max_valgus_frame_left
+        kinematics["max_valgus_frame_right"] = max_valgus_frame_right
+
+    # 4. Landing Stability
+    if landing_frame is not None and landing_frame < len(data):
+        window_frames = int(0.4 * fps)
+        end_window = min(len(data), landing_frame + window_frames)
+        
+        if end_window > landing_frame:
+            # Prefer meters
+            col_to_use = "cg_x_m" if "cg_x_m" in data.columns else "cg_x"
+            # Note: cg_x usually exists if cg_y exists
+            if col_to_use in data.columns:
+                sway_segment = data[col_to_use].iloc[landing_frame:end_window]
+                sway = sway_segment.max() - sway_segment.min()
+                kinematics["landing_stability_sway_x"] = sway
+                kinematics["landing_stability_unit"] = "m" if "_m" in col_to_use else "norm"
+
+    # Validation: Print calculated angles for debugging
+    print("\n=== FPPA Validation (Vector-based calculation) ===")
+    print(f"Squat (Propulsion Start) - Left FPPA: {kinematics.get('fppa_left_squat_deg', 'N/A')}")
+    if isinstance(kinematics.get('fppa_left_squat_deg'), (int, float)):
+        print(f"  Risk: {_get_fppa_risk_classification(kinematics.get('fppa_left_squat_deg'))[0]}")
+    print(f"Squat (Propulsion Start) - Right FPPA: {kinematics.get('fppa_right_squat_deg', 'N/A')}")
+    if isinstance(kinematics.get('fppa_right_squat_deg'), (int, float)):
+        print(f"  Risk: {_get_fppa_risk_classification(kinematics.get('fppa_right_squat_deg'))[0]}")
+    print(f"Initial Contact (Landing) - Left FPPA: {kinematics.get('fppa_left_landing_deg', 'N/A')}")
+    if isinstance(kinematics.get('fppa_left_landing_deg'), (int, float)):
+        print(f"  Risk: {_get_fppa_risk_classification(kinematics.get('fppa_left_landing_deg'))[0]}")
+    print(f"Initial Contact (Landing) - Right FPPA: {kinematics.get('fppa_right_landing_deg', 'N/A')}")
+    if isinstance(kinematics.get('fppa_right_landing_deg'), (int, float)):
+        print(f"  Risk: {_get_fppa_risk_classification(kinematics.get('fppa_right_landing_deg'))[0]}")
+    if kinematics.get('fppa_left_landing_40ms_deg') is not None:
+        print(f"IC + 40ms - Left FPPA: {kinematics.get('fppa_left_landing_40ms_deg'):.2f}° (Frame {kinematics.get('landing_40ms_frame')})")
+        print(f"  Risk: {_get_fppa_risk_classification(kinematics.get('fppa_left_landing_40ms_deg'))[0]}")
+    if kinematics.get('fppa_right_landing_40ms_deg') is not None:
+        print(f"IC + 40ms - Right FPPA: {kinematics.get('fppa_right_landing_40ms_deg'):.2f}° (Frame {kinematics.get('landing_40ms_frame')})")
+        print(f"  Risk: {_get_fppa_risk_classification(kinematics.get('fppa_right_landing_40ms_deg'))[0]}")
+    if kinematics.get('fppa_left_landing_100ms_deg') is not None:
+        print(f"IC + 100ms - Left FPPA: {kinematics.get('fppa_left_landing_100ms_deg'):.2f}° (Frame {kinematics.get('landing_100ms_frame')})")
+        print(f"  Risk: {_get_fppa_risk_classification(kinematics.get('fppa_left_landing_100ms_deg'))[0]}")
+    if kinematics.get('fppa_right_landing_100ms_deg') is not None:
+        print(f"IC + 100ms - Right FPPA: {kinematics.get('fppa_right_landing_100ms_deg'):.2f}° (Frame {kinematics.get('landing_100ms_frame')})")
+        print(f"  Risk: {_get_fppa_risk_classification(kinematics.get('fppa_right_landing_100ms_deg'))[0]}")
+    if kinematics.get('max_valgus_angle_left_deg') is not None:
+        print(f"Max Valgus (0.2s post-landing) - Left: {kinematics.get('max_valgus_angle_left_deg'):.2f}° (Frame {kinematics.get('max_valgus_frame_left')})")
+        print(f"  Risk: {_get_fppa_risk_classification(kinematics.get('max_valgus_angle_left_deg'))[0]}")
+    if kinematics.get('max_valgus_angle_right_deg') is not None:
+        print(f"Max Valgus (0.2s post-landing) - Right: {kinematics.get('max_valgus_angle_right_deg'):.2f}° (Frame {kinematics.get('max_valgus_frame_right')})")
+        print(f"  Risk: {_get_fppa_risk_classification(kinematics.get('max_valgus_angle_right_deg'))[0]}")
+    print("=" * 60)
+
+    return kinematics
+
+
+def plot_valgus_ratio(data, results, output_dir, base_name):
+    """
+    Generate a plot of the Knee-Hip Separation Ratio over time.
+    """
+    if "valgus_ratio_series" not in results or not results["valgus_ratio_series"]:
+        return None
+
+    import matplotlib.pyplot as plt
+    
+    valgus_series = results["valgus_ratio_series"]
+    fps = results.get("fps", 30)
+    time_axis = [i / fps for i in range(len(valgus_series))]
+    
+    plt.figure(figsize=(10, 6))
+    plt.plot(time_axis, valgus_series, label="Knee-Hip Separation Ratio", color="purple", linewidth=2)
+    
+    # Threshold line
+    plt.axhline(y=1.0, color='gray', linestyle='--', alpha=0.5, label="Neutral (1.0)")
+    plt.axhline(y=0.8, color='red', linestyle='--', alpha=0.5, label="High Risk (< 0.8)")
+    
+    # Mark events
+    propulsion_frame = results.get("propulsion_start_frame")
+    landing_frame = results.get("landing_frame")
+    
+    if propulsion_frame is not None and propulsion_frame < len(time_axis):
+        plt.axvline(x=propulsion_frame/fps, color='orange', linestyle=':', label="Squat (Deepest)")
+        val = valgus_series[propulsion_frame]
+        if not math.isnan(val) and val is not None:
+             plt.scatter(propulsion_frame/fps, val, color='orange', zorder=5)
+
+    if landing_frame is not None and landing_frame < len(time_axis):
+        plt.axvline(x=landing_frame/fps, color='green', linestyle=':', label="Landing (Initial)")
+        val = valgus_series[landing_frame]
+        if not math.isnan(val) and val is not None:
+             plt.scatter(landing_frame/fps, val, color='green', zorder=5)
+
+    plt.title("Knee-Hip Separation Ratio (Valgus Screening)")
+    plt.xlabel("Time (s)")
+    plt.ylabel("Ratio (Knee Dist / Hip Dist)")
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    
+    filename = f"{base_name}_valgus_ratio.png"
+    filepath = os.path.join(output_dir, filename)
+    plt.savefig(filepath, dpi=100)
+    plt.close()
+    return filepath
+
+
+def plot_fppa_time_series(data, results, output_dir, base_name):
+    """
+    Generate a time series plot of FPPA (Frontal Plane Projection Angle) showing
+    adduction/abduction (valgus) angles over time, similar to Figure 3 from scientific literature.
+    
+    Shows left and right FPPA with key events highlighted.
+    """
+    if "fppa_left_series" not in results or not results["fppa_left_series"]:
+        return None
+
+    import matplotlib.pyplot as plt
+    
+    fppa_left_series = results["fppa_left_series"]
+    fppa_right_series = results.get("fppa_right_series", [])
+    fps = results.get("fps", 30)
+    
+    # Convert to time in milliseconds relative to landing
+    landing_frame = results.get("landing_frame")
+    if landing_frame is None:
+        return None
+    
+    # Create time axis in milliseconds relative to landing
+    time_ms = [(i - landing_frame) * (1000.0 / fps) for i in range(len(fppa_left_series))]
+    
+    fig, ax = plt.subplots(figsize=(14, 8))
+    
+    # Plot FPPA time series
+    # Convert to numpy arrays and handle NaN values
+    fppa_left_array = np.array(fppa_left_series)
+    fppa_right_array = np.array(fppa_right_series) if fppa_right_series else np.array([])
+    
+    ax.plot(time_ms, fppa_left_array, label="Left FPPA (Adduction/Abduction)", 
+            color="blue", linewidth=2, alpha=0.8)
+    if len(fppa_right_array) > 0:
+        ax.plot(time_ms, fppa_right_array, label="Right FPPA (Adduction/Abduction)", 
+                color="red", linewidth=2, alpha=0.8)
+    
+    # Reference line at 0° (straight alignment)
+    ax.axhline(y=0, color='gray', linestyle='--', linewidth=1, alpha=0.5, label="Straight (0°)")
+    
+    # Risk threshold lines
+    ax.axhline(y=5, color='orange', linestyle=':', linewidth=1, alpha=0.5, label="Moderate Risk (5°)")
+    ax.axhline(y=10, color='red', linestyle=':', linewidth=1, alpha=0.5, label="High Risk (10°)")
+    ax.axhline(y=-5, color='orange', linestyle=':', linewidth=1, alpha=0.5)
+    ax.axhline(y=-10, color='red', linestyle=':', linewidth=1, alpha=0.5)
+    
+    # Mark key events
+    propulsion_frame = results.get("propulsion_start_frame")
+    takeoff_frame = results.get("takeoff_frame")
+    landing_40ms_frame = results.get("landing_40ms_frame")
+    landing_100ms_frame = results.get("landing_100ms_frame")
+    max_valgus_frame_left = results.get("max_valgus_frame_left")
+    max_valgus_frame_right = results.get("max_valgus_frame_right")
+    
+    # Landing (IC) at 0ms
+    ax.axvline(x=0, color='green', linestyle='-', linewidth=2, alpha=0.7, label="IC (Landing)")
+    if landing_frame < len(fppa_left_array):
+        fppa_l_ic = fppa_left_array[landing_frame]
+        if not np.isnan(fppa_l_ic):
+            ax.scatter(0, fppa_l_ic, color='green', s=100, zorder=5, marker='o')
+        if len(fppa_right_array) > 0 and landing_frame < len(fppa_right_array):
+            fppa_r_ic = fppa_right_array[landing_frame]
+            if not np.isnan(fppa_r_ic):
+                ax.scatter(0, fppa_r_ic, color='green', s=100, zorder=5, marker='s')
+    
+    # Squat (Propulsion Start)
+    if propulsion_frame is not None:
+        time_squat_ms = (propulsion_frame - landing_frame) * (1000.0 / fps)
+        ax.axvline(x=time_squat_ms, color='orange', linestyle='--', linewidth=2, alpha=0.7, label="Squat (Propulsion Start)")
+        if propulsion_frame < len(fppa_left_array):
+            fppa_l_squat = fppa_left_array[propulsion_frame]
+            if not np.isnan(fppa_l_squat):
+                ax.scatter(time_squat_ms, fppa_l_squat, color='orange', s=100, zorder=5, marker='o')
+    
+    # Takeoff
+    if takeoff_frame is not None:
+        time_takeoff_ms = (takeoff_frame - landing_frame) * (1000.0 / fps)
+        ax.axvline(x=time_takeoff_ms, color='purple', linestyle='--', linewidth=2, alpha=0.7, label="Takeoff")
+        if takeoff_frame < len(fppa_left_array):
+            fppa_l_to = fppa_left_array[takeoff_frame]
+            if not np.isnan(fppa_l_to):
+                ax.scatter(time_takeoff_ms, fppa_l_to, color='purple', s=100, zorder=5, marker='o')
+    
+    # IC + 40ms
+    if landing_40ms_frame is not None:
+        time_40ms = (landing_40ms_frame - landing_frame) * (1000.0 / fps)
+        ax.axvline(x=time_40ms, color='cyan', linestyle=':', linewidth=2, alpha=0.7, label="IC + 40ms")
+        if landing_40ms_frame < len(fppa_left_array):
+            fppa_l_40 = fppa_left_array[landing_40ms_frame]
+            if not np.isnan(fppa_l_40):
+                ax.scatter(time_40ms, fppa_l_40, color='cyan', s=100, zorder=5, marker='o')
+        if len(fppa_right_array) > 0 and landing_40ms_frame < len(fppa_right_array):
+            fppa_r_40 = fppa_right_array[landing_40ms_frame]
+            if not np.isnan(fppa_r_40):
+                ax.scatter(time_40ms, fppa_r_40, color='cyan', s=100, zorder=5, marker='s')
+    
+    # IC + 100ms
+    if landing_100ms_frame is not None:
+        time_100ms = (landing_100ms_frame - landing_frame) * (1000.0 / fps)
+        ax.axvline(x=time_100ms, color='magenta', linestyle=':', linewidth=2, alpha=0.7, label="IC + 100ms")
+        if landing_100ms_frame < len(fppa_left_array):
+            fppa_l_100 = fppa_left_array[landing_100ms_frame]
+            if not np.isnan(fppa_l_100):
+                ax.scatter(time_100ms, fppa_l_100, color='magenta', s=100, zorder=5, marker='o')
+        if len(fppa_right_array) > 0 and landing_100ms_frame < len(fppa_right_array):
+            fppa_r_100 = fppa_right_array[landing_100ms_frame]
+            if not np.isnan(fppa_r_100):
+                ax.scatter(time_100ms, fppa_r_100, color='magenta', s=100, zorder=5, marker='s')
+    
+    # Max Valgus
+    if max_valgus_frame_left is not None:
+        time_max_valgus_ms = (max_valgus_frame_left - landing_frame) * (1000.0 / fps)
+        if max_valgus_frame_left < len(fppa_left_array):
+            fppa_l_max = fppa_left_array[max_valgus_frame_left]
+            if not np.isnan(fppa_l_max):
+                ax.scatter(time_max_valgus_ms, fppa_l_max, color='red', s=150, zorder=6, 
+                          marker='*', label="Max Valgus (Left)", edgecolors='black', linewidths=1)
+    
+    if max_valgus_frame_right is not None and len(fppa_right_array) > 0:
+        time_max_valgus_ms = (max_valgus_frame_right - landing_frame) * (1000.0 / fps)
+        if max_valgus_frame_right < len(fppa_right_array):
+            fppa_r_max = fppa_right_array[max_valgus_frame_right]
+            if not np.isnan(fppa_r_max):
+                ax.scatter(time_max_valgus_ms, fppa_r_max, color='red', s=150, zorder=6, 
+                          marker='*', label="Max Valgus (Right)", edgecolors='black', linewidths=1)
+    
+    # Labels and formatting
+    ax.set_xlabel("Time (ms) relative to Initial Contact (IC)", fontsize=12)
+    ax.set_ylabel("FPPA (degrees)\nPositive = Varus (Abduction/Lateral), Negative = Valgus (Adduction/Medial)", fontsize=12)
+    ax.set_title("Time Sequence of Knee Adduction/Abduction Angles (FPPA)", fontsize=14, fontweight='bold')
+    ax.grid(True, alpha=0.3)
+    ax.legend(loc='best', fontsize=10, ncol=2)
+    
+    # Set x-axis to show key time points
+    ax.set_xlim(min(time_ms), max(time_ms))
+    
+    filename = f"{base_name}_fppa_time_series.png"
+    filepath = os.path.join(output_dir, filename)
+    plt.savefig(filepath, dpi=100, bbox_inches='tight')
+    plt.close()
+    return filepath
+
+
+def plot_valgus_event(data, results, output_dir, base_name):
+    """
+    Generate annotated stick figure plots for Squat and Landing events.
+    Displays alignment and calculated metrics (Ratio, KASR, FPPA).
+    Includes full body stick figure with head/neck and proper aspect ratio.
+    """
+    import matplotlib.pyplot as plt
+    import matplotlib.patches as patches
+    
+    # #region agent log
+    import json
+    log_path = "/home/preto/Desktop/Preto/vaila/.cursor/debug.log"
+    def log_debug(location, message, data_dict, hypothesis_id):
+        try:
+            with open(log_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps({
+                    "sessionId": "debug-session",
+                    "runId": "run1",
+                    "hypothesisId": hypothesis_id,
+                    "location": location,
+                    "message": message,
+                    "data": data_dict,
+                    "timestamp": datetime.now().timestamp() * 1000
+                }) + "\n")
+        except Exception:
+            pass
+    # #endregion
+    
+    plot_paths = []
+    
+    propulsion_frame = results.get("propulsion_start_frame")
+    landing_frame = results.get("landing_frame")
+    fps = results.get("fps", 30)
+    
+    events = []
+    if propulsion_frame is not None:
+        events.append(("Squat", propulsion_frame, "squat"))
+    # Landing will be handled separately with multiple moments
+    # if landing_frame is not None:
+    #     events.append(("Landing", landing_frame, "landing"))
+
+    body_segments = [
+        # Legs
+        ("left_ankle", "left_knee"),
+        ("left_knee", "left_hip"),
+        ("right_ankle", "right_knee"),
+        ("right_knee", "right_hip"),
+        # Feet
+        ("left_heel", "left_foot_index"),
+        ("right_heel", "right_foot_index"),
+        # Pelvis & Trunk
+        ("left_hip", "right_hip"),
+        ("left_shoulder", "right_shoulder"),
+        ("left_hip", "left_shoulder"),
+        ("right_hip", "right_shoulder"),
+        # Arms
+        ("left_shoulder", "left_elbow"),
+        ("left_elbow", "left_wrist"),
+        ("right_shoulder", "right_elbow"),
+        ("right_elbow", "right_wrist"),
+    ]
+        
+    def get_pt(row, name):
+        # Tries to get meter coords, then normalized
+        if f"{name}_x_m" in row:
+             return row[f"{name}_x_m"], row[f"{name}_y_m"]
+        return row.get(f"{name}_x"), row.get(f"{name}_y")
+    
+    def dist_2d(p1_x, p1_y, p2_x, p2_y):
+        """Calculate Euclidean distance between two 2D points."""
+        if p1_x is None or p1_y is None or p2_x is None or p2_y is None:
+            return None
+        return math.sqrt((p1_x - p2_x) ** 2 + (p1_y - p2_y) ** 2)
+
+    # #region agent log
+    log_debug(
+        f"vaila_and_jump.py:{903}",
+        "plot_valgus_event started",
+        {
+            "num_events": len(events),
+            "events": [e[0] for e in events]
+        },
+        "START"
+    )
+    # #endregion
+    
+    for title, frame_idx, phase_key in events:
+        if frame_idx >= len(data): continue
+        
+        row = data.iloc[frame_idx]
+        
+        # #region agent log
+        log_debug(
+            f"vaila_and_jump.py:{904}",
+            "Processing event",
+            {
+                "title": title,
+                "frame_idx": int(frame_idx),
+                "phase_key": phase_key
+            },
+            "START"
+        )
+        # #endregion
+        
+        # Check validity of key lower body points first
+        check_points = ["left_hip", "right_hip", "left_knee", "right_knee", "left_ankle", "right_ankle"]
+        valid_points = True
+        for pt in check_points:
+            p = get_pt(row, pt)
+            if p[0] is None: 
+                valid_points = False
+                break
+        if not valid_points: continue
+
+        # Calculate data range first to determine appropriate figsize
+        temp_x = []
+        temp_y = []
+        for part_name in ["left_hip", "right_hip", "left_knee", "right_knee", "left_ankle", "right_ankle", "left_shoulder", "right_shoulder", "nose", "left_foot_index", "right_foot_index"]:
+            pt = get_pt(row, part_name)
+            if pt[0] is not None:
+                temp_x.append(pt[0])
+                temp_y.append(pt[1])
+        
+        # For equal aspect ratio plots, use a square or near-square figsize
+        # When set_aspect('equal') is applied, we want 1:1 data unit scaling
+        # Using a square figsize ensures the plot box can be adjusted correctly
+        # The actual data will be scaled to fit within the limits we set
+        figsize = (8, 8)  # Use square figure for equal aspect ratio
+        
+        fig, ax = plt.subplots(figsize=figsize)
+        
+        # #region agent log
+        # Calculate values for logging
+        log_data_x_range = 0
+        log_data_y_range = 0
+        log_data_aspect = 0
+        if temp_x and temp_y:
+            log_data_x_range = float(max(temp_x) - min(temp_x)) if temp_x else 0
+            log_data_y_range = float(max(temp_y) - min(temp_y)) if temp_y else 0
+            if log_data_x_range > 0 and log_data_y_range > 0:
+                x_pad = max(log_data_x_range * 0.2, 0.1)
+                y_pad = max(log_data_y_range * 0.2, 0.1)
+                total_x = log_data_x_range + 2 * x_pad
+                total_y = log_data_y_range + 2 * y_pad
+                log_data_aspect = float(total_y / total_x) if total_x > 0 else 0
+        log_debug(
+            f"vaila_and_jump.py:{974}",
+            "Figure created",
+            {
+                "phase": phase_key,
+                "figsize": list(figsize),
+                "data_x_range": log_data_x_range,
+                "data_y_range": log_data_y_range,
+                "calculated_aspect": log_data_aspect
+            },
+            "FIG"
+        )
+        # #endregion
+        
+        # FIRST: Collect ALL points that will be plotted (including separation lines)
+        # This ensures we calculate limits correctly to include all visible elements
+        all_x = []
+        all_y = []
+        
+        # Collect body segment points
+        for part_name in ["left_hip", "right_hip", "left_knee", "right_knee", "left_ankle", "right_ankle", 
+                          "left_shoulder", "right_shoulder", "nose", "left_foot_index", "right_foot_index",
+                          "left_heel", "right_heel", "left_elbow", "right_elbow", "left_wrist", "right_wrist"]:
+            pt = get_pt(row, part_name)
+            if pt[0] is not None:
+                all_x.append(pt[0])
+                all_y.append(pt[1])
+        
+        # Also include points from separation lines (knee and ankle)
+        lk = get_pt(row, "left_knee")
+        rk = get_pt(row, "right_knee")
+        la = get_pt(row, "left_ankle")
+        ra = get_pt(row, "right_ankle")
+        
+        if lk[0] is not None and rk[0] is not None:
+            all_x.extend([lk[0], rk[0]])
+            all_y.extend([lk[1], rk[1]])
+        
+        if la[0] is not None and ra[0] is not None:
+            all_x.extend([la[0], ra[0]])
+            all_y.extend([la[1], ra[1]])
+        
+        # Calculate limits with padding BEFORE plotting
+        if all_x and all_y:
+            x_min, x_max = min(all_x), max(all_x)
+            y_min, y_max = min(all_y), max(all_y)
+            
+            x_range = x_max - x_min
+            y_range = y_max - y_min
+            
+            # Use 30% padding (increased from 20%) to ensure all elements are visible
+            # Minimum padding of 15cm to ensure enough space
+            x_padding = max(x_range * 0.3, 0.15)
+            y_padding = max(y_range * 0.3, 0.15)
+            
+            # Set limits BEFORE plotting to ensure proper aspect ratio calculation
+            ax.set_xlim(x_min - x_padding, x_max + x_padding)
+            ax.set_ylim(y_min - y_padding, y_max + y_padding)
+        
+        # Plot All Segments
+        for start_part, end_part in body_segments:
+            p1 = get_pt(row, start_part)
+            p2 = get_pt(row, end_part)
+            
+            if p1[0] is not None and p2[0] is not None:
+                color = 'black' # Default
+                linewidth = 2
+                
+                # Colorize sides
+                if "left" in start_part or "left" in end_part:
+                    color = 'blue'
+                elif "right" in start_part or "right" in end_part:
+                    color = 'red'
+                
+                ax.plot([p1[0], p2[0]], [p1[1], p2[1]], color=color, linewidth=linewidth, alpha=0.9)
+                ax.plot(p1[0], p1[1], 'ko', markersize=3)
+                ax.plot(p2[0], p2[1], 'ko', markersize=3)
+        
+        # Plot Neck/Head (Shoulder Midpoint -> Nose)
+        ls = get_pt(row, "left_shoulder")
+        rs = get_pt(row, "right_shoulder")
+        nose = get_pt(row, "nose")
+        
+        if all(x is not None for x in [ls[0], rs[0], nose[0]]):
+            mid_should_x = (ls[0] + rs[0]) / 2
+            mid_should_y = (ls[1] + rs[1]) / 2
+            ax.plot([mid_should_x, nose[0]], [mid_should_y, nose[1]], color='black', linewidth=2)
+            ax.plot(nose[0], nose[1], 'ko', markersize=4)
+
+        # Get key points for specific annotations
+        lk = get_pt(row, "left_knee")
+        rk = get_pt(row, "right_knee")
+        la = get_pt(row, "left_ankle")
+        ra = get_pt(row, "right_ankle")
+        
+        # Knee Sep
+        if lk[0] is not None and rk[0] is not None:
+            ax.plot([lk[0], rk[0]], [lk[1], rk[1]], 'm--', linewidth=2, label='Knee Sep')
+        
+        # Ankle Sep
+        if la[0] is not None and ra[0] is not None:
+            ax.plot([la[0], ra[0]], [la[1], ra[1]], 'c--', linewidth=2, label='Ankle Sep')
+        
+        # Metrics Text
+        metrics_text = f"Event: {title}\nTime: {frame_idx/fps:.2f}s\n\n"        
+        
+        # 1. Valgus Ratio
+        valgus_ratio = results.get(f"valgus_ratio_{phase_key}")
+        if valgus_ratio:
+            status = "HIGH RISK" if valgus_ratio < 0.8 else "Normal"
+            # color = "red" if valgus_ratio < 0.8 else "green" 
+            metrics_text += f"Valgus Ratio: {valgus_ratio:.2f}\n({status})\n"
+        
+        # 2. KASR
+        kasr = results.get(f"kasr_{phase_key}")
+        if kasr:
+            metrics_text += f"KASR: {kasr:.2f}\n"
+
+        # 3. KSD
+        ksd = results.get(f"ksd_{phase_key}_m")
+        if ksd:
+            metrics_text += f"KSD: {ksd*100:.1f} cm\n"
+            
+        # 4. Angles
+        fppa_l = results.get(f"fppa_left_{phase_key}_deg")
+        fppa_r = results.get(f"fppa_right_{phase_key}_deg")
+        if fppa_l: metrics_text += f"FPPA L: {fppa_l:.1f}°\n"
+        if fppa_r: metrics_text += f"FPPA R: {fppa_r:.1f}°\n"
+        
+        # Add textbox
+        props = dict(boxstyle='round', facecolor='white', alpha=0.9)
+        ax.text(0.05, 0.95, metrics_text, transform=ax.transAxes, fontsize=10,
+                verticalalignment='top', bbox=props)
+        
+        ax.set_title(f"Valgus Analysis - {title}")
+        ax.set_xlabel("Medial-Lateral (m)")
+        ax.set_ylabel("Vertical (m)")
+        
+        # #region agent log
+        if all_x and all_y:
+            xlim_after = ax.get_xlim()
+            ylim_after = ax.get_ylim()
+            log_debug(
+                f"vaila_and_jump.py:{1120}",
+                "After set_xlim/set_ylim (before set_aspect)",
+                {
+                    "phase": phase_key,
+                    "xlim": list(xlim_after),
+                    "ylim": list(ylim_after),
+                    "x_padding": float(x_padding) if all_x and all_y else 0.15,
+                    "y_padding": float(y_padding) if all_x and all_y else 0.15
+                },
+                "B"
+            )
+        # #endregion
+        
+        # Set aspect ratio to equal AFTER all elements are plotted and limits are set
+        # Using adjustable='box' tells matplotlib to adjust the plot box size, not data limits
+        # This ensures all plotted elements remain visible
+        ax.set_aspect('equal', adjustable='box')
+        
+        # After setting aspect ratio, verify and adjust limits if needed to ensure all elements are visible
+        # Get current limits after aspect ratio adjustment
+        xlim_current = ax.get_xlim()
+        ylim_current = ax.get_ylim()
+        
+        # Re-check all plotted points to ensure they're within bounds
+        if all_x and all_y:
+            x_min_data = min(all_x)
+            x_max_data = max(all_x)
+            y_min_data = min(all_y)
+            y_max_data = max(all_y)
+            
+            # If data extends beyond current limits, expand them
+            if x_min_data < xlim_current[0] or x_max_data > xlim_current[1]:
+                x_padding_extra = max((x_max_data - x_min_data) * 0.1, 0.1)
+                ax.set_xlim(min(x_min_data - x_padding_extra, xlim_current[0]), 
+                           max(x_max_data + x_padding_extra, xlim_current[1]))
+            
+            if y_min_data < ylim_current[0] or y_max_data > ylim_current[1]:
+                y_padding_extra = max((y_max_data - y_min_data) * 0.1, 0.1)
+                ax.set_ylim(min(y_min_data - y_padding_extra, ylim_current[0]), 
+                           max(y_max_data + y_padding_extra, ylim_current[1]))
+            
+            # Re-apply aspect ratio after adjusting limits
+            ax.set_aspect('equal', adjustable='box')
+        
+        # #region agent log
+        aspect_final = ax.get_aspect()
+        xlim_final = ax.get_xlim()
+        ylim_final = ax.get_ylim()
+        log_debug(
+            f"vaila_and_jump.py:{1143}",
+            "After set_aspect (final)",
+            {
+                "phase": phase_key,
+                "aspect": str(aspect_final),
+                "xlim": list(xlim_final),
+                "ylim": list(ylim_final)
+            },
+            "C"
+        )
+        # #endregion
+        
+        filename = f"{base_name}_valgus_event_{phase_key}.png"
+        filepath = os.path.join(output_dir, filename)
+        
+        # #region agent log
+        aspect_before_save = ax.get_aspect()
+        xlim_before_save = ax.get_xlim()
+        ylim_before_save = ax.get_ylim()
+        log_debug(
+            f"vaila_and_jump.py:{1006}",
+            "Before savefig",
+            {
+                "phase": phase_key,
+                "aspect": str(aspect_before_save),
+                "xlim": list(xlim_before_save),
+                "ylim": list(ylim_before_save)
+            },
+            "E"
+        )
+        # #endregion
+        
+        # Save the figure - do NOT use tight_layout as it can alter aspect ratio
+        # The aspect ratio is already set correctly with adjustable='box'
+        plt.savefig(filepath, dpi=100)
+        
+        # #region agent log
+        aspect_after_save = ax.get_aspect()
+        xlim_after_save = ax.get_xlim()
+        ylim_after_save = ax.get_ylim()
+        log_debug(
+            f"vaila_and_jump.py:{1007}",
+            "After savefig",
+            {
+                "phase": phase_key,
+                "aspect": str(aspect_after_save),
+                "xlim": list(xlim_after_save),
+                "ylim": list(ylim_after_save)
+            },
+            "E"
+        )
+        # #endregion
+        
+        plt.close()
+        plot_paths.append(filepath)
+    
+    # Special handling for Landing: Create multi-moment figure
+    # Based on Mechanisms for Noncontact Anterior Cruciate Ligament Injury
+    if landing_frame is not None and landing_frame < len(data):
+        # Define moments to plot
+        landing_moments = [
+            ("IC (Landing)", landing_frame, "landing"),
+        ]
+        
+        # Add 40ms moment if available
+        frame_40ms = landing_frame + int(0.040 * fps)
+        if frame_40ms < len(data) and results.get("landing_40ms_frame") is not None:
+            landing_moments.append(("IC + 40ms", frame_40ms, "landing_40ms"))
+        
+        # Add 100ms moment if available
+        frame_100ms = landing_frame + int(0.100 * fps)
+        if frame_100ms < len(data) and results.get("landing_100ms_frame") is not None:
+            landing_moments.append(("IC + 100ms", frame_100ms, "landing_100ms"))
+        
+        # Add Max Valgus moment if available
+        max_valgus_frame_left = results.get("max_valgus_frame_left")
+        max_valgus_frame_right = results.get("max_valgus_frame_right")
+        if max_valgus_frame_left is not None or max_valgus_frame_right is not None:
+            # Use the frame with maximum valgus (could be left or right)
+            max_valgus_frame = max_valgus_frame_left if max_valgus_frame_left is not None else max_valgus_frame_right
+            if max_valgus_frame_right is not None and max_valgus_frame_right > max_valgus_frame:
+                max_valgus_frame = max_valgus_frame_right
+            if max_valgus_frame < len(data):
+                landing_moments.append(("Max Valgus", max_valgus_frame, "max_valgus"))
+        
+        # Create figure with subplots for each moment
+        n_moments = len(landing_moments)
+        if n_moments > 0:
+            fig, axes = plt.subplots(1, n_moments, figsize=(6 * n_moments, 8))
+            if n_moments == 1:
+                axes = [axes]
+            
+            # Collect all points across all moments for consistent scaling
+            all_x_global = []
+            all_y_global = []
+            
+            for title, frame_idx, phase_key in landing_moments:
+                if frame_idx >= len(data):
+                    continue
+                row = data.iloc[frame_idx]
+                for part_name in ["left_hip", "right_hip", "left_knee", "right_knee", "left_ankle", "right_ankle", 
+                                  "left_shoulder", "right_shoulder", "nose", "left_foot_index", "right_foot_index",
+                                  "left_heel", "right_heel", "left_elbow", "right_elbow", "left_wrist", "right_wrist"]:
+                    pt = get_pt(row, part_name)
+                    if pt[0] is not None:
+                        all_x_global.append(pt[0])
+                        all_y_global.append(pt[1])
+            
+            # Calculate global limits
+            if all_x_global and all_y_global:
+                x_min_global = min(all_x_global)
+                x_max_global = max(all_x_global)
+                y_min_global = min(all_y_global)
+                y_max_global = max(all_y_global)
+                x_range_global = x_max_global - x_min_global
+                y_range_global = y_max_global - y_min_global
+                x_padding_global = max(x_range_global * 0.3, 0.15)
+                y_padding_global = max(y_range_global * 0.3, 0.15)
+            else:
+                x_min_global, x_max_global = -1, 1
+                y_min_global, y_max_global = -1, 1
+                x_padding_global, y_padding_global = 0.3, 0.3
+            
+            # Plot each moment
+            for ax_idx, (title, frame_idx, phase_key) in enumerate(landing_moments):
+                if frame_idx >= len(data):
+                    continue
+                
+                ax = axes[ax_idx]
+                row = data.iloc[frame_idx]
+                
+                # Check validity
+                check_points = ["left_hip", "right_hip", "left_knee", "right_knee", "left_ankle", "right_ankle"]
+                valid_points = True
+                for pt in check_points:
+                    p = get_pt(row, pt)
+                    if p[0] is None: 
+                        valid_points = False
+                        break
+                if not valid_points:
+                    ax.text(0.5, 0.5, f"Invalid data\n{title}", ha="center", va="center", transform=ax.transAxes)
+                    continue
+                
+                # Plot body segments
+                for start_part, end_part in body_segments:
+                    p1 = get_pt(row, start_part)
+                    p2 = get_pt(row, end_part)
+                    
+                    if p1[0] is not None and p2[0] is not None:
+                        color = 'black'
+                        linewidth = 2
+                        
+                        if "left" in start_part or "left" in end_part:
+                            color = 'blue'
+                        elif "right" in start_part or "right" in end_part:
+                            color = 'red'
+                        
+                        ax.plot([p1[0], p2[0]], [p1[1], p2[1]], color=color, linewidth=linewidth, alpha=0.9)
+                        ax.plot(p1[0], p1[1], 'ko', markersize=3)
+                        ax.plot(p2[0], p2[1], 'ko', markersize=3)
+                
+                # Plot Neck/Head
+                ls = get_pt(row, "left_shoulder")
+                rs = get_pt(row, "right_shoulder")
+                nose = get_pt(row, "nose")
+                
+                if all(x is not None for x in [ls[0], rs[0], nose[0]]):
+                    mid_should_x = (ls[0] + rs[0]) / 2
+                    mid_should_y = (ls[1] + rs[1]) / 2
+                    ax.plot([mid_should_x, nose[0]], [mid_should_y, nose[1]], color='black', linewidth=2)
+                    ax.plot(nose[0], nose[1], 'ko', markersize=4)
+                
+                # Knee and Ankle separation lines
+                lk = get_pt(row, "left_knee")
+                rk = get_pt(row, "right_knee")
+                la = get_pt(row, "left_ankle")
+                ra = get_pt(row, "right_ankle")
+                
+                if lk[0] is not None and rk[0] is not None:
+                    ax.plot([lk[0], rk[0]], [lk[1], rk[1]], 'm--', linewidth=2, label='Knee Sep')
+                
+                if la[0] is not None and ra[0] is not None:
+                    ax.plot([la[0], ra[0]], [la[1], ra[1]], 'c--', linewidth=2, label='Ankle Sep')
+                
+                # Calculate distances for this frame
+                lh = get_pt(row, "left_hip")
+                rh = get_pt(row, "right_hip")
+                knee_sep = dist_2d(lk[0], lk[1], rk[0], rk[1]) if lk[0] is not None and rk[0] is not None else None
+                ankle_sep = dist_2d(la[0], la[1], ra[0], ra[1]) if la[0] is not None and ra[0] is not None else None
+                hip_sep = dist_2d(lh[0], lh[1], rh[0], rh[1]) if lh[0] is not None and rh[0] is not None else None
+                valgus_ratio = (knee_sep / hip_sep) if (knee_sep and hip_sep and hip_sep > 0) else None
+                
+                # Metrics Text
+                metrics_text = f"{title}\nTime: {frame_idx/fps:.3f}s\nFrame: {frame_idx}\n\n"
+                
+                # Get FPPA values based on phase_key
+                if phase_key == "landing":
+                    fppa_l = results.get("fppa_left_landing_deg")
+                    fppa_r = results.get("fppa_right_landing_deg")
+                elif phase_key == "landing_40ms":
+                    fppa_l = results.get("fppa_left_landing_40ms_deg")
+                    fppa_r = results.get("fppa_right_landing_40ms_deg")
+                elif phase_key == "landing_100ms":
+                    fppa_l = results.get("fppa_left_landing_100ms_deg")
+                    fppa_r = results.get("fppa_right_landing_100ms_deg")
+                elif phase_key == "max_valgus":
+                    fppa_l = results.get("max_valgus_angle_left_deg")
+                    fppa_r = results.get("max_valgus_angle_right_deg")
+                else:
+                    fppa_l = None
+                    fppa_r = None
+                
+                # Add FPPA values
+                if fppa_l is not None:
+                    risk_l, color_l = _get_fppa_risk_classification(fppa_l)
+                    metrics_text += f"FPPA L: {fppa_l:.1f}°\n({risk_l})\n"
+                if fppa_r is not None:
+                    risk_r, color_r = _get_fppa_risk_classification(fppa_r)
+                    metrics_text += f"FPPA R: {fppa_r:.1f}°\n({risk_r})\n"
+                
+                # Add distances and ratios
+                if knee_sep is not None:
+                    metrics_text += f"\nKnee Sep: {knee_sep*100:.1f} cm\n"
+                if ankle_sep is not None:
+                    metrics_text += f"Ankle Sep: {ankle_sep*100:.1f} cm\n"
+                if valgus_ratio is not None:
+                    status = "HIGH RISK" if valgus_ratio < 0.8 else "Normal"
+                    metrics_text += f"Valgus Ratio: {valgus_ratio:.2f}\n({status})"
+                
+                # Add legend for lines
+                if ax_idx == 0:  # Only add legend to first subplot
+                    ax.legend(loc='upper right', fontsize=8, framealpha=0.9)
+                
+                # Add textbox
+                props = dict(boxstyle='round', facecolor='white', alpha=0.9)
+                ax.text(0.05, 0.95, metrics_text, transform=ax.transAxes, fontsize=9,
+                        verticalalignment='top', bbox=props)
+                
+                # Set limits and aspect
+                ax.set_xlim(x_min_global - x_padding_global, x_max_global + x_padding_global)
+                ax.set_ylim(y_min_global - y_padding_global, y_max_global + y_padding_global)
+                ax.set_aspect('equal', adjustable='box')
+                
+                ax.set_title(f"{title}", fontsize=11, fontweight='bold')
+                if ax_idx == 0:
+                    ax.set_ylabel("Vertical (m)", fontsize=10)
+                ax.set_xlabel("Medial-Lateral (m)", fontsize=10)
+                ax.grid(True, alpha=0.3)
+            
+            # Overall title
+            fig.suptitle("Landing Phase Analysis - Multiple Moments", fontsize=14, fontweight='bold')
+            plt.tight_layout(rect=[0, 0, 1, 0.96])
+            
+            # Save figure
+            # Use the same naming convention as the original landing plot
+            filename = f"{base_name}_valgus_event_landing.png"
+            filepath = os.path.join(output_dir, filename)
+            plt.savefig(filepath, dpi=100, bbox_inches='tight')
+            plt.close()
+            plot_paths.append(filepath)
+        
+    return plot_paths
+
+
 def generate_jump_plots(data, results, output_dir, base_name):
+
     plot_files = []
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -912,6 +2070,116 @@ def plot_jump_cg_feet_analysis(
     return plot_path
 
 
+def draw_fppa_overlay(ax, hip_x, hip_y, knee_x, knee_y, ankle_x, ankle_y, 
+                     fppa_angle, side="left", color_segment='blue', color_angle='red'):
+    """
+    Draw FPPA overlay on a matplotlib axes, similar to scientific figure 4.
+    
+    Draws the femur (HIP->KNEE) and tibia (KNEE->ANKLE) segments with the FPPA angle
+    displayed at the knee joint.
+    
+    This function can be used for visualization in stick figure plots to show
+    the FPPA angle calculation visually, similar to Figure 4 in scientific papers.
+    
+    Args:
+        ax: Matplotlib axes object
+        hip_x, hip_y: Hip coordinates
+        knee_x, knee_y: Knee coordinates
+        ankle_x, ankle_y: Ankle coordinates
+        fppa_angle: FPPA angle in degrees
+        side: "left" or "right" for labeling
+        color_segment: Color for the segments
+        color_angle: Color for the angle arc
+    """
+    import matplotlib.patches as patches
+    
+    # Draw femur segment (HIP -> KNEE)
+    ax.plot([hip_x, knee_x], [hip_y, knee_y], 
+            color=color_segment, linewidth=2.5, label=f'{side.capitalize()} Femur')
+    ax.plot(hip_x, hip_y, 'o', color=color_segment, markersize=8, label='Hip')
+    ax.plot(knee_x, knee_y, 'o', color=color_segment, markersize=10, label='Knee')
+    
+    # Draw tibia segment (KNEE -> ANKLE)
+    ax.plot([knee_x, ankle_x], [knee_y, ankle_y], 
+            color=color_segment, linewidth=2.5, linestyle='--', label=f'{side.capitalize()} Tibia')
+    ax.plot(ankle_x, ankle_y, 'o', color=color_segment, markersize=8, label='Ankle')
+    
+    # Draw angle arc at the knee
+    # Calculate vectors for angle arc
+    v1_x = knee_x - hip_x
+    v1_y = knee_y - hip_y
+    v2_x = ankle_x - knee_x
+    v2_y = ankle_y - knee_y
+    
+    # Calculate angles
+    angle_v1 = math.atan2(v1_y, v1_x)
+    angle_v2 = math.atan2(v2_y, v2_x)
+    
+    # Draw arc (from v1 to v2)
+    arc_radius = min(
+        math.sqrt(v1_x**2 + v1_y**2),
+        math.sqrt(v2_x**2 + v2_y**2)
+    ) * 0.3
+    
+    # Determine start and end angles for the arc
+    start_angle = math.degrees(angle_v1)
+    end_angle = math.degrees(angle_v2)
+    
+    # Create arc
+    arc = patches.Arc((knee_x, knee_y), arc_radius*2, arc_radius*2,
+                     angle=0, theta1=start_angle, theta2=end_angle,
+                     color=color_angle, linewidth=2)
+    ax.add_patch(arc)
+    
+    # Add angle text near the knee
+    mid_angle = (start_angle + end_angle) / 2
+    text_x = knee_x + arc_radius * 0.7 * math.cos(math.radians(mid_angle))
+    text_y = knee_y + arc_radius * 0.7 * math.sin(math.radians(mid_angle))
+    ax.text(text_x, text_y, f'{fppa_angle:.1f}°', 
+            fontsize=10, color=color_angle, fontweight='bold',
+            bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.8))
+
+
+def _get_fppa_risk_classification(fppa_angle):
+    """
+    Classify FPPA angle into risk categories based on scientific evidence.
+    
+    Args:
+        fppa_angle (float): FPPA angle in degrees
+        
+    Returns:
+        tuple: (classification_text, color_class)
+    """
+    if fppa_angle is None:
+        return ("N/A", "black")
+    
+    abs_angle = abs(fppa_angle)
+    if abs_angle < 5:
+        return ("Good Alignment", "green")
+    elif abs_angle <= 10:
+        return ("Moderate Risk", "orange")
+    else:
+        # Note: High risk applies to both excessive valgus (negative) and varus (positive)
+        return ("High Risk / Excessive Dynamic Valgus or Varus", "red")
+
+
+def _format_fppa_with_risk(fppa_angle):
+    """
+    Format FPPA angle with color coding based on risk classification.
+    
+    Args:
+        fppa_angle (float): FPPA angle in degrees
+        
+    Returns:
+        str: HTML formatted string with color
+    """
+    if fppa_angle is None:
+        return "N/A"
+    
+    classification, color = _get_fppa_risk_classification(fppa_angle)
+    return f'<span style="color: {color}; font-weight: bold;">{fppa_angle:.1f}°</span>'
+
+
 def generate_html_report(data, results, plot_files, output_dir, base_name):
     """
     Generate an HTML report with jump metrics and plots.
@@ -928,153 +2196,153 @@ def generate_html_report(data, results, plot_files, output_dir, base_name):
     """
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     report_path = os.path.join(output_dir, f"{base_name}_report_{timestamp}.html")
+    
+    # Note: Valgus plots should already be generated and included in plot_files
+    # before calling this function
 
     # Create HTML content
     html_content = f"""
     <!DOCTYPE html>
-    <html>
+    <html lang="en">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title><i>vailá</i> - Jump Analysis Report - {base_name}</title>
+        <title>vailá - Jump Analysis Report - {base_name}</title>
         <style>
             body {{
-                font-family: Arial, sans-serif;
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
                 line-height: 1.6;
                 max-width: 1200px;
                 margin: 0 auto;
                 padding: 20px;
                 color: #333;
+                background-color: #fcfcfc;
             }}
             h1 {{
                 color: #2c3e50;
-                border-bottom: 2px solid #3498db;
+                border-bottom: 3px solid #3498db;
                 padding-bottom: 10px;
+                margin-top: 0;
             }}
             h2 {{
                 color: #2980b9;
-                margin-top: 30px;
+                margin-top: 40px;
+                border-bottom: 1px solid #eee;
+                padding-bottom: 5px;
+            }}
+            h3 {{
+                color: #34495e;
+                margin-top: 25px;
             }}
             table {{
                 border-collapse: collapse;
                 width: 100%;
                 margin: 20px 0;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                background-color: white;
             }}
             th, td {{
-                border: 1px solid #ddd;
-                padding: 12px;
+                border: 1px solid #e0e0e0;
+                padding: 12px 15px;
                 text-align: left;
             }}
             th {{
-                background-color: #f2f2f2;
+                background-color: #f8f9fa;
+                font-weight: 600;
+                color: #2c3e50;
             }}
             tr:nth-child(even) {{
                 background-color: #f9f9f9;
             }}
+            tr:hover {{
+                background-color: #f1f1f1;
+            }}
             .img-container {{
                 text-align: center;
                 margin: 30px 0;
+                background: white;
+                padding: 10px;
+                border-radius: 4px;
+                box-shadow: 0 2px 5px rgba(0,0,0,0.05);
             }}
             .img-container img {{
                 max-width: 100%;
                 height: auto;
-                box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+                border-radius: 2px;
             }}
             .note {{
-                background-color: #f8f9fa;
-                border-left: 4px solid #4caf50;
+                background-color: #e8f5e9;
+                border-left: 5px solid #4caf50;
                 padding: 15px;
                 margin: 20px 0;
+                border-radius: 0 4px 4px 0;
             }}
             .references {{
-                margin-top: 50px;
+                margin-top: 60px;
                 background-color: #f8f9fa;
-                border-left: 4px solid #3498db;
-                padding: 15px;
+                border-left: 5px solid #3498db;
+                padding: 20px;
+                font-size: 0.9em;
+            }}
+            .references h3 {{
+                margin-top: 0;
             }}
             .footer {{
                 margin-top: 50px;
                 border-top: 1px solid #ddd;
                 padding-top: 20px;
                 color: #7f8c8d;
-                font-size: 0.9em;
+                font-size: 0.85em;
                 text-align: center;
+            }}
+            .warning {{
+                color: #c0392b;
+                font-weight: bold;
             }}
         </style>
     </head>
     <body>
         <h1>Jump Analysis Report</h1>
-        <p><strong>Subject:</strong> {base_name}</p>
+        <p><strong>Subject ID:</strong> {base_name}</p>
         <p><strong>Date:</strong> {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>
         
         <div class="note">
-            <h3>Coordinate System</h3>
-            <p>This analysis uses a biomechanical coordinate system where:</p>
+            <h3>Methodology & Coordinate System</h3>
+            <p>This analysis utilizes a biomechanical coordinate system:</p>
             <ul>
-                <li>Origin coordinates system is at the bottom left</li>
-                <li>X-axis: positive to the right</li>
-                <li>Y-axis: positive upward</li>
-                <li>Z-axis: positive forward</li>
-                <li>All measurements are in meters</li>
-                <li>MediaPipe coordinates were transformed to match this convention, and all measurements are in meters.</li>
-                <li>Jump height is measured relative to the initial center of gravity (CG) position, which is calculated as the average CG position during 10 to 20 frames.</li>
+                <li><strong>Origin:</strong> Bottom-left corner (0,0)</li>
+                <li><strong>X-axis:</strong> Positive to the right (Medial-Lateral)</li>
+                <li><strong>Y-axis:</strong> Positive upward (Vertical)</li>
+                <li><strong>Z-axis:</strong> Positive forward (Anterior-Posterior)</li>
+                <li><strong>Units:</strong> Meters (m)</li>
             </ul>
-            <p><strong>Important:</strong> Jump height is measured relative to the initial center of gravity (CG) position,
-            which is calculated as the average CG position during the first 10 frames. This reference position is set as zero,
-            so all vertical measurements represent displacement from this initial position.</p>
-            <h3>Biomechanical Calculation of Power in the Vertical Jump</h3>
+            <p><strong>Height Calculation:</strong> Jump height is measured relative to the <em>initial center of gravity (CG) position</em> (averaged over the first 10-20 frames). This initial height is treated as the zero reference.</p>
+            
+            <h3>Vertical Jump Power Estimation</h3>
             <p>
-            In this report, three power metrics were estimated based on the movement of the center of mass (CG) during the vertical jump:
+            Three power metrics are estimated based on Center of Mass (CG) kinematics:
             </p>
             
             <h4>1. Instantaneous Power</h4>
             <p>
-              Calculated at each instant of the propulsion phase:<br>
-              <span style="font-family: 'Consolas', monospace;">
-                P(t) = F(t) · v(t)
-              </span><br>
-              Onde:
-              <ul>
-                <li>
-                  F(t) = m · [a(t) + g] 
-                  <br>
-                  (total vertical force: mass multiplied by the sum of the vertical acceleration of the CG and gravity)
-                </li>
-                <li>
-                  v(t) = vertical velocity of the CG at time t
-                </li>
-              </ul>
-              Instantaneous power is presented in Watts (W) and its maximum value represents the peak power during the jump.
-            </p>
-            
-            <h4>2. Power at Takeoff</h4>
-            <p>
-              Calculated at the takeoff instant:<br>
-              <span style="font-family: 'Consolas', monospace;">
-                P<sub>takeoff</sub> = F<sub>takeoff</sub> · v<sub>takeoff</sub>
-              </span><br>
-              Considering the values of force and velocity at the exact moment when the CG loses contact with the ground.
-            </p>
-            
-            <h4>3. Average Power in the Propulsion</h4>
-            <p>
-              Calculated by:<br>
-              <span style="font-family: 'Consolas', monospace;">
-                P<sub>average</sub> = (E<sub>kinetic</sub> + E<sub>potential</sub>) / t
-              </span><br>
+              Calculated at each time step <em>t</em> during propulsion:<br>
+              <code>P(t) = F(t) · v(t)</code><br>
               Where:
               <ul>
-                <li>
-                  E<sub>kinetic</sub> = ½ · m · v² (kinetic energy at the takeoff)
-                </li>
-                <li>
-                  E<sub>potential</sub> = m · g · h (potential energy at the maximum height)
-                </li>
-                <li>
-                  t = time between the start of the propulsion (squat) and the takeoff
-                </li>
+                <li><code>F(t) = m · (a(t) + g)</code> : Total vertical ground reaction force</li>
+                <li><code>v(t)</code> : Vertical velocity of the CG</li>
               </ul>
-              Represents the average efficiency of the movement during the propulsion phase.
+            </p>
+            
+            <h4>2. Takeoff Power</h4>
+            <p>
+              Power output at the precise moment of takeoff (toes leave ground).
+            </p>
+            
+            <h4>3. Average Propulsion Power</h4>
+            <p>
+              <code>P<sub>avg</sub> = (KE<sub>takeoff</sub> + PE<sub>max</sub>) / t<sub>propulsion</sub></code><br>
+              Represents the average power output throughout the entire push-off phase.
             </p>
         </div>
         
@@ -1200,6 +2468,104 @@ def generate_html_report(data, results, plot_files, output_dir, base_name):
             </tr>
         </table>
         
+        <h2>Kinematics & Risk Screening</h2>
+        
+        <h3>Stability at Landing (0.4s)</h3>
+        <table>
+            <tr>
+                   <th>Metric</th>
+                   <th>Valor</th>
+                   <th>Status</th>
+            </tr>
+            <tr>
+                <td>Landing Sway (Medi-Lateral)</td>
+                <td>{f"{results.get('landing_stability_sway_x', 0)*100:.2f}" if results.get('landing_stability_unit') == 'm' else f"{results.get('landing_stability_sway_x', 0):.4f}"}</td>
+                <td>{ "cm" if results.get('landing_stability_unit') == 'm' else "normalized" }</td>
+            </tr>
+        </table>
+
+        <h3>Dynamic Valgus & Alignment</h3>
+        <p>Reference values: <strong>Ratio < 0.8</strong> indicates excessive knee approximation (Valgus).</p>
+        <p><strong>FPPA Risk Classification:</strong> &lt; 5° = Good alignment (Green), 5°-10° = Moderate risk (Yellow), &gt; 10° = High risk / Excessive dynamic valgus or varus (Red)</p>
+        <p><strong>FPPA Convention:</strong> Positive = Varus (Abduction/Lateral collapse), Negative = Valgus (Adduction/Medial collapse)</p>
+        
+        <table>
+            <tr>
+                <th>Phase</th>
+                <th>Knee-Hip Separation Ratio</th>
+                <th>FPPA Left (degrees)</th>
+                <th>FPPA Right (degrees)</th>
+            </tr>
+            <tr>
+                <td><strong>Squat (Propulsion Start)</strong></td>
+                <td>
+                    <span style="color: {'red' if results.get('valgus_ratio_squat') is not None and results.get('valgus_ratio_squat') < 0.8 else 'black'}; font-weight: bold;">
+                        {f"{results.get('valgus_ratio_squat', 0):.2f}" if results.get('valgus_ratio_squat') is not None else "N/A"}
+                    </span>
+                </td>
+                <td>
+                    {_format_fppa_with_risk(results.get('fppa_left_squat_deg'))}
+                </td>
+                <td>
+                    {_format_fppa_with_risk(results.get('fppa_right_squat_deg'))}
+                </td>
+            </tr>
+            <tr>
+                <td><strong>Landing (Initial Contact)</strong></td>
+                <td>
+                    <span style="color: {'red' if results.get('valgus_ratio_landing') is not None and results.get('valgus_ratio_landing') < 0.8 else 'black'}; font-weight: bold;">
+                        {f"{results.get('valgus_ratio_landing', 0):.2f}" if results.get('valgus_ratio_landing') is not None else "N/A"}
+                    </span>
+                </td>
+                <td>
+                    {_format_fppa_with_risk(results.get('fppa_left_landing_deg'))}
+                </td>
+                <td>
+                    {_format_fppa_with_risk(results.get('fppa_right_landing_deg'))}
+                </td>
+            </tr>
+        </table>
+        
+        <h3>Landing Phase Analysis - Multiple Moments</h3>
+        <p><em>Based on Mechanisms for Noncontact Anterior Cruciate Ligament Injury</em></p>
+        <table>
+            <tr>
+                <th>Moment</th>
+                <th>FPPA Left (degrees)</th>
+                <th>FPPA Right (degrees)</th>
+                <th>Frame</th>
+                <th>Time (s)</th>
+            </tr>
+            <tr>
+                <td><strong>IC (Initial Contact)</strong></td>
+                <td>{_format_fppa_with_risk(results.get('fppa_left_landing_deg'))}</td>
+                <td>{_format_fppa_with_risk(results.get('fppa_right_landing_deg'))}</td>
+                <td>{results.get('landing_frame', 'N/A')}</td>
+                <td>{f"{results.get('landing_frame', 0) / results.get('fps', 30):.3f}" if results.get('landing_frame') is not None else "N/A"}</td>
+            </tr>
+            <tr>
+                <td><strong>IC + 40ms</strong></td>
+                <td>{_format_fppa_with_risk(results.get('fppa_left_landing_40ms_deg'))}</td>
+                <td>{_format_fppa_with_risk(results.get('fppa_right_landing_40ms_deg'))}</td>
+                <td>{results.get('landing_40ms_frame', 'N/A')}</td>
+                <td>{f"{results.get('landing_40ms_frame', 0) / results.get('fps', 30):.3f}" if results.get('landing_40ms_frame') is not None else "N/A"}</td>
+            </tr>
+            <tr>
+                <td><strong>IC + 100ms</strong></td>
+                <td>{_format_fppa_with_risk(results.get('fppa_left_landing_100ms_deg'))}</td>
+                <td>{_format_fppa_with_risk(results.get('fppa_right_landing_100ms_deg'))}</td>
+                <td>{results.get('landing_100ms_frame', 'N/A')}</td>
+                <td>{f"{results.get('landing_100ms_frame', 0) / results.get('fps', 30):.3f}" if results.get('landing_100ms_frame') is not None else "N/A"}</td>
+            </tr>
+            <tr>
+                <td><strong>Max Valgus (0.2s window)</strong></td>
+                <td>{_format_fppa_with_risk(results.get('max_valgus_angle_left_deg'))}</td>
+                <td>{_format_fppa_with_risk(results.get('max_valgus_angle_right_deg'))}</td>
+                <td>L: {results.get('max_valgus_frame_left', 'N/A')}, R: {results.get('max_valgus_frame_right', 'N/A')}</td>
+                <td>L: {f"{results.get('max_valgus_frame_left', 0) / results.get('fps', 30):.3f}" if results.get('max_valgus_frame_left') is not None else "N/A"}, R: {f"{results.get('max_valgus_frame_right', 0) / results.get('fps', 30):.3f}" if results.get('max_valgus_frame_right') is not None else "N/A"}</td>
+            </tr>
+        </table>
+
         <h2>Jump Phase Frames</h2>
         <table>
             <tr>
@@ -1262,6 +2628,7 @@ def generate_html_report(data, results, plot_files, output_dir, base_name):
               <li>Aragón-Vargas, L. F., & Gross, M. M. (1997). Kinesiological factors in vertical jump performance: differences among individuals. Journal of Applied Biomechanics, 13(1), 24-44.</li>
               <li>Harman, E. A., Rosenstein, M. T., Frykman, P. N., & Rosenstein, R. M. (1991). Estimation of human power output from vertical jump. Journal of Applied Sport Science Research, 5(3), 116-120.</li>
               <li>Sayers, S. P., Harackiewicz, D. V., Harman, E. A., Frykman, P. N., & Rosenstein, M. T. (1999). Cross-validation of three jump power equations. Medicine & Science in Sports & Exercise, 31(4), 572-577.</li>
+              <li>Koga H, Nakamae A, Shima Y, Iwasa J, Myklebust G, Engebretsen L, Bahr R & Krosshaug T. (2010). Mechanisms for noncontact anterior cruciate ligament injuries: knee joint kinematics in 10 injury situations from female team handball and basketball. Am J Sports Med. 2010 Nov;38(11):2218-25. doi: 10.1177/0363546510373570</li>
             </ul>
         </div>
     """
@@ -1810,6 +3177,25 @@ def process_mediapipe_data(input_file, output_dir):
         )
         plot_jump_stickfigures_with_cg(output_calibrated_file, stickfig_output_file)
         plot_files.append(stickfig_output_file)
+
+        # Calculate Kinematics (after processing and calibration)
+        # Note: data should have '_m' columns by now if calibration succeeded
+        kinematic_results = calculate_kinematics(data, results)
+        results.update(kinematic_results)
+        
+        # Generate valgus plots (before HTML report so they're included)
+        valgus_plot = plot_valgus_ratio(data, results, output_dir, base_name)
+        if valgus_plot:
+            plot_files.append(valgus_plot)
+        
+        valgus_event_plots = plot_valgus_event(data, results, output_dir, base_name)
+        if valgus_event_plots:
+            plot_files.extend(valgus_event_plots)
+        
+        # Generate FPPA time series plot
+        fppa_time_series_plot = plot_fppa_time_series(data, results, output_dir, base_name)
+        if fppa_time_series_plot:
+            plot_files.append(fppa_time_series_plot)
 
         # Generate HTML report
         report_path = generate_html_report(data, results, plot_files, output_dir, base_name)
@@ -2683,7 +4069,7 @@ def generate_jump_animation_gif(
 
         ax.set_xlim(x_min, x_max)
         ax.set_ylim(y_min, y_max)
-        ax.set_aspect("equal", "box")
+        ax.set_aspect("equal")
         ax.axis("off")
         # Render using Agg canvas to reliably extract pixel buffer
         try:
@@ -3045,7 +4431,7 @@ def plot_jump_stickfigures_subplot(
         # Add frame info and title
         ax.set_title(f"{label}\n(frame {frame})", fontsize=12)
         ax.set_xlabel("X (m) - relative to initial CG")
-        ax.set_aspect("equal", "box")  # Force equal aspect ratio
+        ax.set_aspect("equal")  # Force equal aspect ratio
 
         # Only add y-label to the first subplot
         if i == 0:
