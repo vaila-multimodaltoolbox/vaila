@@ -1,0 +1,21 @@
+# ================================================
+# vaila_and_jump configuration (per-folder)
+# ================================================
+# Place this file alongside the CSV files you will analyze.
+# It will be loaded automatically so you are not prompted every run.
+#
+# Fields:
+# - mass_kg: Subject mass in kilograms (e.g., 75.0)
+# - fps: Video frame rate (Hz). Use CAPTURE FPS for slow-motion (e.g., 240)
+# - shank_length_m: Estimated shank length (m), used to scale to meters
+#
+# Optional (informative) fields you may add under [notes]:
+# [notes]
+# subject_id = "S01"
+# session = "pre"
+# comment = "CMJ test set"
+# ================================================
+[jump_context]
+mass_kg = 90.000
+fps = 30
+shank_length_m = 0.400
