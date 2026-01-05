@@ -4,8 +4,8 @@
 
 A ferramenta Pixel Coordinate Tool (getpixelvideo.py) é uma ferramenta abrangente de anotação de vídeo que permite marcar e salvar coordenadas de pixels em quadros de vídeo. Desenvolvida pelo Prof. Dr. Paulo R. P. Santiago, esta ferramenta oferece recursos avançados incluindo zoom para anotações precisas, redimensionamento dinâmico da janela, navegação entre quadros, suporte a múltiplos formatos CSV e capacidades avançadas de visualização de dados.
 
-**Version:** 0.0.8  
-**Data:** 27 de Julho de 2025  
+**Version:** 0.3.0  
+**Data:** Janeiro de 2026  
 **Projeto:** vailá - Multimodal Toolbox
 
 ## Principais Recursos
@@ -13,6 +13,8 @@ A ferramenta Pixel Coordinate Tool (getpixelvideo.py) é uma ferramenta abrangen
 - **Suporte Multi-formato:** Carregar e visualizar formatos MediaPipe, YOLO tracking e vailá padrão
 - **Visualização Avançada:** Figuras de palitos para MediaPipe, caixas delimitadoras para YOLO tracking
 - **Marcação Flexível:** Múltiplos modos de marcadores para diferentes necessidades de anotação
+- **Modo Labeling:** Criar anotações de caixas delimitadoras para datasets de Machine Learning
+- **Exportação de Datasets:** Exportar datasets estruturados (train/val/test) com imagens e anotações JSON
 - **Zoom & Navegação:** Capacidades completas de zoom com navegação quadro a quadro
 - **Modo Persistência:** Visualizar trilhas de marcadores através de múltiplos quadros
 - **Auto-detecção:** Detectar automaticamente formato CSV ou seleção manual
@@ -37,7 +39,7 @@ pip install opencv-python pygame pandas numpy
 
 1. **Execute o script:** `python vaila/getpixelvideo.py`
 2. **Selecione file de vídeo:** Escolha o vídeo para processar
-3. **Carregue dados existentes:** Escolha se deseja carregar keypoints existentes
+3. **Carregue dados existentes:** Use o botão 'Load' na interface para carregar keypoints (opcional)
 4. **Selecione formato:** Se carregando dados, escolha o formato CSV:
    - **Auto-detectar (recomendado):** Detecta automaticamente o formato
    - **Formato MediaPipe:** Para dados de landmarks com visualização de stick figure
@@ -124,6 +126,20 @@ frame,p1_x,p1_y,p2_x,p2_y
 - **Ativação:** Pressione tecla S para alternar
 - **Comportamento:** Incremento automático de ID para cada novo marcador
 
+### Modo de Labeling (tecla L)
+- Desenha caixas delimitadoras (bounding boxes) em frames de vídeo
+- Cria datasets para treinamento de detecção de objetos (formato YOLO/COCO)
+- **Caso de uso:** Criação de datasets para Machine Learning
+- **Ativação:** Pressione tecla L ou clique no botão "Labeling"
+- **Comportamento:**
+  - Clique e arraste para desenhar caixas delimitadoras
+  - Pressione Z ou Clique com Botão Direito para remover a última caixa no frame atual
+  - Pressione N para renomear o label do objeto atual
+  - Pressione F5 para salvar o projeto de labeling (JSON)
+  - Pressione F6 para carregar um projeto de labeling (JSON)
+  - Salvar exporta dataset estruturado (train/val/test)
+- **Exportação:** Gera estrutura de pastas com imagens e anotações JSON
+
 ## Comandos do Teclado
 
 ### Navegação de Vídeo
@@ -161,6 +177,11 @@ frame,p1_x,p1_y,p2_x,p2_y
 | **C** | Alternar modo "1 Line" |
 | **S** | Alternar modo Sequencial (apenas no modo Normal) |
 | **P** | Alternar modo Persistência |
+| **L** | Alternar modo Labeling (Bounding Boxes) |
+| **Z / R-Click** | Remover última caixa delimitadora (modo Labeling) |
+| **N** | Renomear label do objeto (modo Labeling) |
+| **F5** | Salvar Projeto de Labeling (JSON) |
+| **F6** | Carregar Projeto de Labeling (JSON) |
 | **1** | Diminuir quadros de persistência |
 | **2** | Aumentar quadros de persistência |
 | **3** | Alternar persistência completa |
@@ -213,6 +234,46 @@ O modo de persistência mostra marcadores de quadros anteriores, criando um "ras
 - Número configurável de quadros para exibir
 - Feedback visual para trajetórias dos marcadores
 
+## Modo de Labeling (Bounding Boxes)
+
+O modo de labeling permite criar anotações de caixas delimitadoras para treinamento de modelos de detecção de objetos.
+
+**Como usar:**
+1. **Ativar:** Pressione a tecla **L** ou clique no botão "Labeling" (ficha verde quando ativo)
+2. **Desenhar caixas:** Clique e arraste no vídeo para desenhar caixas delimitadoras
+3. **Editar:** Pressione **Z** para remover a última caixa no frame atual
+4. **Exportar:** Clique no botão "Save" ou pressione **ESC** para exportar o dataset
+
+**Exportação do Dataset:**
+Ao salvar no modo labeling, o sistema cria uma estrutura de dataset organizada:
+- **train/** (70% dos frames anotados)
+  - `images/` - Imagens dos frames
+  - `labels/` - Anotações JSON
+- **val/** (20% dos frames anotados)
+  - `images/` - Imagens dos frames
+  - `labels/` - Anotações JSON
+- **test/** (10% dos frames anotados)
+  - `images/` - Imagens dos frames
+  - `labels/` - Anotações JSON
+
+**Formato JSON:**
+Cada arquivo JSON contém:
+- `image`: Nome do arquivo de imagem
+- `width`: Largura do vídeo original
+- `height`: Altura do vídeo original
+- `annotations`: Array de caixas delimitadoras com campos:
+  - `x`: Coordenada X (pixel)
+  - `y`: Coordenada Y (pixel)
+  - `w`: Largura (pixel)
+  - `h`: Altura (pixel)
+  - `label`: Classe do objeto (padrão: "object")
+
+**Recursos:**
+- Caixas delimitadoras são salvas por frame
+- Visualização em tempo real durante o desenho
+- Divisão automática train/val/test (70/20/10)
+- Dataset pronto para uso em frameworks de ML (YOLO, COCO, etc.)
+
 ## Salvando e Carregando
 
 ### Opções de Salvamento
@@ -232,9 +293,15 @@ O modo de persistência mostra marcadores de quadros anteriores, criando um "ras
 - **File:** `{nome_do_video}_markers_sequential.csv`
 - **Uso:** Para anotações de múltiplos pontos
 
+#### Salvamento Labeling (Modo de Caixas Delimitadoras)
+- **Formato:** Dataset estruturado com imagens e anotações JSON
+- **Diretório:** `{nome_do_video}_dataset/`
+- **Estrutura:** train/val/test com images/ e labels/
+- **Uso:** Para criação de datasets de Machine Learning (detecção de objetos)
+- **Ativação:** Salvar quando o modo Labeling estiver ativo
+
 ### Carregando Coordenadas
-- Selecione "Yes" quando perguntado ao iniciar
-- Ou clique no botão **Carregar** a qualquer momento
+- Clique no botão **Carregar** a qualquer momento
 - **Auto-detecção:** Detecta automaticamente formato CSV
 - **Seleção manual:** Escolha formato manualmente se necessário
 
@@ -309,6 +376,19 @@ Sistema de backup integrado para segurança dos dados:
 - **Repositório do Projeto:** https://github.com/paulopreto/vaila-multimodaltoolbox
 
 ## Histórico de Versões
+
+### Versão 0.3.0 (Janeiro de 2026)
+- Adicionado Modo de Labeling (Bounding Boxes) para criação de datasets de Machine Learning
+- Implementada exportação de datasets estruturados (train/val/test)
+- Adicionado suporte para anotações JSON com formato customizado
+- Criada função de exportação automática com divisão 70/20/10
+- Adicionado botão "Labeling" na interface
+- Melhorado help dialog com instruções detalhadas do modo labeling
+- **Melhorias:**
+  - Adicionado Salvar/Carregar Projeto (F5/F6) para sessões de labeling (formato JSON)
+  - Adicionada habilidade de Renomear labels de objetos (tecla N)
+  - Adicionado Scroll no Diálogo de Ajuda
+  - Compatibilidade Linux melhorada (movido Tkinter para CLI)
 
 ### Versão 0.0.8 (27 de Julho de 2025)
 - Adicionado suporte para múltiplos formatos CSV (MediaPipe, YOLO tracking, vailá padrão)
