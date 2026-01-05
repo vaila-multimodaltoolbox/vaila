@@ -33,7 +33,8 @@ points, and save results in CSV format.
 
 New Features in This Version:
 ------------------------------
-1. Prompts the user to load existing keypoints from a saved file before starting.
+1. Prompts the user to load existing keypoints from a saved file before starting. (REMOVED)
+2. Allows the user to choose the keypoint file via a file dialog.
 2. Allows the user to choose the keypoint file via a file dialog.
 3. Select keypoint number in the video frame.
 4. Speed in play automa...
@@ -56,6 +57,9 @@ New Features in This Version:
 - `remove_marker`
 - `make_backup`
 - `reload_coordinates`
+- `show_input_dialog`
+- `save_labeling_project`
+- `load_labeling_project`
 
 
 
