@@ -4,8 +4,8 @@
 
 The Pixel Coordinate Tool (getpixelvideo.py) is a comprehensive video annotation tool that allows you to mark and save pixel coordinates in video frames. Developed by Prof. Dr. Paulo R. P. Santiago, this tool offers advanced features including zoom for precise annotations, dynamic window resizing, frame navigation, multi-format CSV support, and advanced data visualization capabilities.
 
-**Version:** 0.0.8  
-**Date:** 27 July 2025  
+**Version:** 0.3.0  
+**Date:** January 2026  
 **Project:** vailá - Multimodal Toolbox
 
 ## Key Features
@@ -13,6 +13,8 @@ The Pixel Coordinate Tool (getpixelvideo.py) is a comprehensive video annotation
 - **Multi-format Support:** Load and visualize MediaPipe, YOLO tracking, and vailá standard formats
 - **Advanced Visualization:** Stick figures for MediaPipe, bounding boxes for YOLO tracking
 - **Flexible Marking:** Multiple marker modes for different annotation needs
+- **Labeling Mode:** Create bounding box annotations for Machine Learning datasets
+- **Dataset Export:** Export structured datasets (train/val/test) with images and JSON annotations
 - **Zoom & Navigation:** Full zoom capabilities with frame-by-frame navigation
 - **Persistence Mode:** View marker trails across multiple frames
 - **Auto-detection:** Automatically detect CSV format or manual selection
@@ -37,7 +39,7 @@ pip install opencv-python pygame pandas numpy
 
 1. **Run the script:** `python vaila/getpixelvideo.py`
 2. **Select video file:** Choose the video to process
-3. **Load existing data:** Choose whether to load existing keypoints
+3. **Load existing data:** Use 'Load' button in interface (optional)
 4. **Select format:** If loading data, choose CSV format:
    - **Auto-detect (recommended):** Automatically detects the format
    - **MediaPipe format:** For landmark data with stick figure visualization
@@ -127,6 +129,20 @@ frame,p1_x,p1_y,p2_x,p2_y
 - **Activation:** Press S key to toggle
 - **Behavior:** Automatic ID increment for each new marker
 
+### Labeling Mode (L key)
+- Draws bounding boxes on video frames
+- Creates datasets for object detection training (YOLO/COCO format)
+- **Use case:** Creating Machine Learning datasets
+- **Activation:** Press L key or click "Labeling" button
+- **Behavior:**
+  - Click and drag to draw bounding boxes
+  - Press Z or Right Click to remove last box in current frame
+  - Press N to rename the current object label
+  - Press F5 to save the labeling project (JSON)
+  - Press F6 to load a labeling project (JSON)
+  - Save (ESC or S) exports structured dataset (train/val/test)
+- **Export:** Generates folder structure with images and JSON annotations
+
 ## Keyboard Commands
 
 ### Video Navigation
@@ -164,6 +180,11 @@ frame,p1_x,p1_y,p2_x,p2_y
 | **C** | Toggle "1 Line" mode |
 | **S** | Toggle Sequential mode (Normal mode only) |
 | **P** | Toggle Persistence mode |
+| **L** | Toggle Labeling mode (Bounding Boxes) |
+| **Z / R-Click** | Remove last bounding box (Labeling mode) |
+| **N** | Rename object label (Labeling mode) |
+| **F5** | Save Labeling Project (JSON) |
+| **F6** | Load Labeling Project (JSON) |
 | **1** | Decrease persistence frames |
 | **2** | Increase persistence frames |
 | **3** | Toggle full persistence |
@@ -235,9 +256,15 @@ Persistence mode shows markers from previous frames, creating a visual "trail":
 - **File:** `{video_name}_markers_sequential.csv`
 - **Use:** For multiple point annotations
 
+#### Labeling Save (Bounding Box Mode)
+- **Format:** Structured dataset with images and JSON annotations
+- **Directory:** `{video_name}_dataset/`
+- **Structure:** train/val/test with images/ and labels/
+- **Use:** For creating Machine Learning datasets (object detection)
+- **Activation:** Save when Labeling mode is active
+
 ### Loading Coordinates
-- Select "Yes" when prompted at startup
-- Or click the **Load** button at any time
+- Click the **Load** button at any time
 - **Auto-detection:** Automatically detects CSV format
 - **Manual selection:** Choose format manually if needed
 
@@ -313,6 +340,19 @@ Built-in backup system for data safety:
 - **Project Repository:** https://github.com/paulopreto/vaila-multimodaltoolbox
 
 ## Version History
+
+### Version 0.3.0 (January 2026)
+- Added Labeling Mode (Bounding Boxes) for creating Machine Learning datasets
+- Implemented structured dataset export (train/val/test)
+- Added support for JSON annotations with custom format
+- Created automatic export function with 70/20/10 split
+- Added "Labeling" button to interface
+- Enhanced help dialog with detailed labeling mode instructions
+- **Improvements:**
+  - Added Save/Load Project (F5/F6) for labeling sessions (JSON format)
+  - Added ability to Rename object labels (N key)
+  - Added Scrolling to Help Dialog
+  - Improved Linux compatibility (removed Tkinter dependency)
 
 ### Version 0.0.8 (27 July 2025)
 - Added support for multiple CSV formats (MediaPipe, YOLO tracking, vailá standard)
