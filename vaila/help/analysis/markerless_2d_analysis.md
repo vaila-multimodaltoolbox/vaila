@@ -4,8 +4,8 @@
 
 - **Category:** Analysis
 - **File:** `vaila/markerless_2d_analysis.py`
-- **Lines:** 3257
-- **Version:** 0.7.0
+- **Lines:** 3659
+- **Version:** 0.7.1
 - **Author:** Paulo Roberto Pereira Santiago
 - **Email:** paulosantiago@usp.br
 - **GitHub:** https://github.com/vaila-multimodaltoolbox/vaila
@@ -18,14 +18,17 @@ This script performs batch processing of videos for 2D pose estimation using Med
 
 ### Key Features
 
-- **MediaPipe Pose Model**: 33 landmark detection and tracking
+- **MediaPipe Pose Model**: 33 landmark detection and tracking (MediaPipe Tasks API 0.10.31+)
 - **Video Resize Functionality**: Optional upscaling (2x-8x) for better detection
+- **Bounding Box (ROI) Selection**: Select region of interest for small subjects or multi-person scenarios
+- **Crop Resize**: Optional upscaling of cropped region for improved detection
 - **Advanced Filtering**: Multiple smoothing algorithms (Butterworth, Savitzky-Golay, LOWESS, Spline, Kalman, ARIMA)
 - **Batch Processing**: Process multiple videos in a single operation
 - **Memory Management**: Intelligent memory management for large video files
 - **CPU Throttling**: Automatic CPU usage monitoring and throttling
-- **TOML Configuration**: Save and load configuration files
+- **TOML Configuration**: Save and load configuration files with GUI auto-population
 - **Linux Batch Processing**: Automatic batch processing for high-resolution videos
+- **Portable Debug Logging**: Cross-platform debug logging system
 
 ## 🔧 Main Functions
 
@@ -102,6 +105,13 @@ This script performs batch processing of videos for 2D pose estimation using Med
 - **resize_scale** (2-8): Scale factor (higher = better detection but slower)
 - **enable_padding** (True/False): Add initial frames for stabilization
 - **pad_start_frames** (0-120): Number of padding frames
+
+### Bounding Box (ROI) Settings
+- **enable_crop** (True/False): Enable bounding box cropping
+- **bbox_x_min, bbox_y_min, bbox_x_max, bbox_y_max** (pixels): ROI coordinates
+- **enable_resize_crop** (True/False): Resize the cropped region
+- **resize_crop_scale** (2-8): Scale factor for cropped region
+- **Visual ROI Selection**: Use "Select ROI from Video" button in GUI to visually select region
 
 ### Advanced Filtering Settings
 - **enable_advanced_filtering** (True/False): Apply smoothing and gap filling
@@ -256,6 +266,13 @@ rich>=13.0.0
 
 ## 📝 Version History
 
+- **v0.7.1** (January 2026): 
+  - Migrated to MediaPipe Tasks API (0.10.31+)
+  - Added bounding box (ROI) selection for small subjects
+  - Added crop resize functionality
+  - Added portable debug logging
+  - Improved coordinate mapping for resized videos
+  - GUI auto-population from TOML configuration
 - **v0.7.0** (November 2025): Added batch processing, improved memory management
 - **v0.6.0** (August 2025): Added video resize functionality and advanced filtering
 - **v0.5.0**: Added temporal filtering and occlusion estimation
