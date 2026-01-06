@@ -4,8 +4,8 @@ vaila.py
 ===============================================================================
 Author: Prof. Paulo R. P. Santiago
 Date: 07 October 2024
-Update: 05 January 2026
-Version updated: 0.3.4
+Update: 06 January 2026
+Version updated: 0.3.5
 Python Version: 3.12.12
 
 Example of usage:
@@ -123,7 +123,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 05.January.2026 v0.3.4 (Python 3.12.12)
+vailá - 06.January.2026 v0.3.5 (Python 3.12.12)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -226,7 +226,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 05.January.2026 v0.3.4 (Python 3.12.12)")
+        self.title("vailá - 06.January.2026 v0.3.5 (Python 3.12.12)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -1226,7 +1226,7 @@ class Vaila(tk.Tk):
         # Label for the license text
         license_text = tk.Label(
             license_frame,
-            text="© 2025 ",
+            text="© 2026 ",
             font=("default", 11),
             anchor="center",
         )

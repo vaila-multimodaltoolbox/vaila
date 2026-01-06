@@ -6,8 +6,8 @@ Author: Prof. Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 24 Oct 2024
-Update Date: 04 Jan 2026
-Version: 0.1.1
+Update Date: 06 Jan 2026
+Version: 0.1.2
 Python Version: 3.12.12
 
 Description:
@@ -124,6 +124,7 @@ This script is licensed under the GNU General Public License v3.0.
 ===============================================================================
 """
 
+import base64
 import math
 import os
 import webbrowser
@@ -192,7 +193,7 @@ def _load_jump_context_from_toml(
                 fps = float(cfg.get("fps", 0))
                 shank = float(cfg.get("shank_length_m", 0.0))
                 if mass > 0 and fps > 0 and shank > 0:
-                    return {"mass_kg": mass, "fps": int(fps), "shank_length_m": shank}
+                    return {"mass_kg": mass, "fps": float(fps), "shank_length_m": shank}
             except Exception:
                 pass
     return None
@@ -219,7 +220,7 @@ def _save_jump_context_template(dest: Path, ctx: dict[str, float]) -> None:
         "# ================================================\n"
         "[jump_context]\n"
         f"mass_kg = {ctx.get('mass_kg', 75.0):.3f}\n"
-        f"fps = {int(ctx.get('fps', 240))}\n"
+        f"fps = {float(ctx.get('fps', 240)):.3f}\n"
         f"shank_length_m = {ctx.get('shank_length_m', 0.40):.3f}\n"
     )
     dest.write_text(content, encoding="utf-8")
@@ -256,8 +257,8 @@ def _get_or_ask_jump_context(
         )
         if mass is None:
             return None
-        fps = simpledialog.askinteger(
-            "FPS", "Enter video FPS (frames/s):", parent=root, minvalue=1, maxvalue=240
+        fps = simpledialog.askfloat(
+            "FPS", "Enter video FPS (frames/s):", parent=root, minvalue=1.0, maxvalue=1000.0
         )
         if fps is None:
             fps = 30
@@ -272,7 +273,7 @@ def _get_or_ask_jump_context(
             shank = 0.40
         _JUMP_CONTEXT = {
             "mass_kg": float(mass),
-            "fps": int(fps),
+            "fps": float(fps),
             "shank_length_m": float(shank),
         }
         # Offer to save template
@@ -809,8 +810,51 @@ def calculate_kinematics(data, results):
 
     # 1. Valgus Ratio & 2. FPPA & Knee Angle
     # Calculate for Initial Contact (landing) and Max Flexion (squat/propulsion)
-    for phase_name, frame_idx in [("squat", propulsion_frame), ("landing", landing_frame)]:
-        if frame_idx is None or frame_idx >= len(data):
+    # Calculate for Initial Contact (landing) and Max Flexion (squat/propulsion)
+    for phase_name, target_frame_idx in [("squat", propulsion_frame), ("landing", landing_frame)]:
+        if target_frame_idx is None:
+            continue
+            
+        # Search for valid frame (with all keypoints) nearby if the specific frame is bad
+        # Search window of +/- 20 frames (approx 0.6s at 30fps) to find valid data
+        frame_idx = None
+        search_window = 20
+        
+        # Check target frame first
+        frames_to_check = [target_frame_idx]
+        # Add neighbors (alternating +1, -1, +2, -2...)
+        for offset in range(1, search_window + 1):
+            if target_frame_idx + offset < len(data):
+                frames_to_check.append(target_frame_idx + offset)
+            if target_frame_idx - offset >= 0:
+                frames_to_check.append(target_frame_idx - offset)
+                
+        for f_idx in frames_to_check:
+            if f_idx >= len(data): continue
+            
+            row = data.iloc[f_idx]
+            
+            # Check if all needed points are present
+            valid_points = True
+            needed_points = ["left_hip", "right_hip", "left_knee", "right_knee", "left_ankle", "right_ankle"]
+            for pt in needed_points:
+                px, py = get_coords(row, pt)
+                if px == 0 and py == 0: # Assuming 0,0 is missing data return from get_coords
+                     # Check if it was really missing in source (using normalized check as proxy if needed, 
+                     # but get_coords returns 0,0 for missing. Ideally we should check strict None but get_coords handles it using .get(...,0))
+                     # However, get_coords returns (0,0) if keys are missing. 
+                     # Better to check if the columns exist and are not NaN?
+                     # heuristic: if hip/knee/ankle is exactly 0,0 it's likely invalid/missing
+                     if px == 0 and py == 0:
+                         valid_points = False
+                         break
+            
+            if valid_points:
+                frame_idx = f_idx
+                break
+        
+        if frame_idx is None:
+            # If still no valid frame found, skip
             continue
             
         row = data.iloc[frame_idx]
@@ -1387,7 +1431,7 @@ def plot_valgus_event(data, results, output_dir, base_name):
             # Use 30% padding (increased from 20%) to ensure all elements are visible
             # Minimum padding of 15cm to ensure enough space
             x_padding = max(x_range * 0.3, 0.15)
-            y_padding = max(y_range * 0.3, 0.15)
+            y_padding = max(y_range * 0.5, 0.3)
             
             # Set limits BEFORE plotting to ensure proper aspect ratio calculation
             ax.set_xlim(x_min - x_padding, x_max + x_padding)
@@ -1464,9 +1508,13 @@ def plot_valgus_event(data, results, output_dir, base_name):
         if fppa_r: metrics_text += f"FPPA R: {fppa_r:.1f}°\n"
         
         # Add textbox
+        # Add textbox outside the plot
         props = dict(boxstyle='round', facecolor='white', alpha=0.9)
-        ax.text(0.05, 0.95, metrics_text, transform=ax.transAxes, fontsize=10,
+        ax.text(1.05, 1.0, metrics_text, transform=ax.transAxes, fontsize=10,
                 verticalalignment='top', bbox=props)
+        
+        # Add legend outside the plot
+        ax.legend(bbox_to_anchor=(1.05, 0.45), loc='upper left', borderaxespad=0.)
         
         ax.set_title(f"Valgus Analysis - {title}")
         ax.set_xlabel("Medial-Lateral (m)")
@@ -1540,6 +1588,10 @@ def plot_valgus_event(data, results, output_dir, base_name):
         
         filename = f"{base_name}_valgus_event_{phase_key}.png"
         filepath = os.path.join(output_dir, filename)
+        
+        # Adjust layout to ensure external text is saved
+        fig.tight_layout()
+        plt.subplots_adjust(right=0.7) # increased margin for text
         
         # #region agent log
         aspect_before_save = ax.get_aspect()
@@ -1643,7 +1695,7 @@ def plot_valgus_event(data, results, output_dir, base_name):
                 x_range_global = x_max_global - x_min_global
                 y_range_global = y_max_global - y_min_global
                 x_padding_global = max(x_range_global * 0.3, 0.15)
-                y_padding_global = max(y_range_global * 0.3, 0.15)
+                y_padding_global = max(y_range_global * 0.5, 0.3)
             else:
                 x_min_global, x_max_global = -1, 1
                 y_min_global, y_max_global = -1, 1
@@ -1756,13 +1808,15 @@ def plot_valgus_event(data, results, output_dir, base_name):
                     metrics_text += f"Valgus Ratio: {valgus_ratio:.2f}\n({status})"
                 
                 # Add legend for lines
-                if ax_idx == 0:  # Only add legend to first subplot
-                    ax.legend(loc='upper right', fontsize=8, framealpha=0.9)
+                # The original legend call for ax_idx == 0 is removed as a new one is added outside the plot.
                 
-                # Add textbox
+                # Add textbox outside
                 props = dict(boxstyle='round', facecolor='white', alpha=0.9)
-                ax.text(0.05, 0.95, metrics_text, transform=ax.transAxes, fontsize=9,
+                ax.text(1.05, 1.0, metrics_text, transform=ax.transAxes, fontsize=9,
                         verticalalignment='top', bbox=props)
+                
+                # Add legend outside
+                ax.legend(bbox_to_anchor=(1.05, 0.45), loc='upper left', borderaxespad=0.)
                 
                 # Set limits and aspect
                 ax.set_xlim(x_min_global - x_padding_global, x_max_global + x_padding_global)
@@ -2196,6 +2250,22 @@ def generate_html_report(data, results, plot_files, output_dir, base_name):
     """
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     report_path = os.path.join(output_dir, f"{base_name}_report_{timestamp}.html")
+
+    # Try to load VAILA logo
+    logo_b64 = ""
+    try:
+        # Assuming typical project structure: vaila/vaila/vaila_and_jump.py -> vaila/docs/images/vaila.png
+        current_file = Path(__file__).resolve()
+        project_root = current_file.parent.parent
+        logo_path = project_root / "docs" / "images" / "vaila.png"
+        
+        if logo_path.exists():
+            with open(logo_path, "rb") as img_file:
+                logo_data = img_file.read()
+                logo_b64 = base64.b64encode(logo_data).decode("utf-8")
+    except Exception as e:
+        print(f"Warning: Could not load logo: {e}")
+
     
     # Note: Valgus plots should already be generated and included in plot_files
     # before calling this function
@@ -2299,9 +2369,23 @@ def generate_html_report(data, results, plot_files, output_dir, base_name):
                 color: #c0392b;
                 font-weight: bold;
             }}
+            .logo-container {{
+                position: absolute;
+                top: 20px;
+                right: 20px;
+                z-index: 1000;
+            }}
+            .logo-img {{
+                width: 150px;
+                height: auto;
+                opacity: 0.9;
+            }}
         </style>
     </head>
     <body>
+        <div class="logo-container">
+            {f'<img src="data:image/png;base64,{logo_b64}" class="logo-img" alt="VAILA Logo">' if logo_b64 else ''}
+        </div>
         <h1>Jump Analysis Report</h1>
         <p><strong>Subject ID:</strong> {base_name}</p>
         <p><strong>Date:</strong> {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>
@@ -3724,22 +3808,28 @@ def plot_jump_stickfigures_with_cg(
 
         # Find takeoff between squat and peak, closest to baseline (0)
         squat_to_peak_range = df.loc[frame_squat:frame_peak]
+        frame_takeoff = frame_squat # Default fallback
         baseline_tolerance = 0.02
-        baseline_candidates = squat_to_peak_range[
-            abs(squat_to_peak_range[cg_y_col]) <= baseline_tolerance
-        ]
-        if len(baseline_candidates) > 0:
-            frame_takeoff = baseline_candidates.index[0]
-        else:
-            frame_takeoff = (squat_to_peak_range[cg_y_col]).abs().idxmin()
+        
+        if not squat_to_peak_range.empty:
+            baseline_candidates = squat_to_peak_range[
+                abs(squat_to_peak_range[cg_y_col]) <= baseline_tolerance
+            ]
+            if len(baseline_candidates) > 0:
+                frame_takeoff = baseline_candidates.index[0]
+            elif not squat_to_peak_range[cg_y_col].empty:
+                frame_takeoff = (squat_to_peak_range[cg_y_col]).abs().idxmin()
 
         # Find landing after peak when CG returns near baseline
         post_peak_data = df[df.index > frame_peak]
-        landing_candidates = post_peak_data[abs(post_peak_data[cg_y_col]) <= baseline_tolerance]
-        if len(landing_candidates) > 0:
-            frame_landing = landing_candidates.index[0]
-        else:
-            frame_landing = (post_peak_data[cg_y_col]).abs().idxmin()
+        frame_landing = len(df) - 1 if not df.empty else 0 # Default fallback
+        
+        if not post_peak_data.empty:
+            landing_candidates = post_peak_data[abs(post_peak_data[cg_y_col]) <= baseline_tolerance]
+            if len(landing_candidates) > 0:
+                frame_landing = landing_candidates.index[0]
+            elif not post_peak_data[cg_y_col].empty:
+                frame_landing = (post_peak_data[cg_y_col]).abs().idxmin()
 
         frames_plot = [
             frame_initial,
@@ -4117,6 +4207,9 @@ def plot_jump_stickfigures_subplot(
     Uses normalized coordinates for consistency.
     """
     df = pd.read_csv(csv_file)
+    
+    # Get FPS for time calculation
+    fps = float(df["fps"].iloc[0]) if "fps" in df.columns else 30.0
 
     # CORRECTED: Force use of relative coordinates (_rel) or normalized coordinates for consistency
     # Check if we have _rel columns for body segments
@@ -4429,7 +4522,8 @@ def plot_jump_stickfigures_subplot(
             ax.set_xlim(x_min, x_max)
 
         # Add frame info and title
-        ax.set_title(f"{label}\n(frame {frame})", fontsize=12)
+        time_s = frame / fps
+        ax.set_title(f"{label}\nFrame: {frame} | Time: {time_s:.3f}s", fontsize=12)
         ax.set_xlabel("X (m) - relative to initial CG")
         ax.set_aspect("equal")  # Force equal aspect ratio
 
@@ -4445,7 +4539,13 @@ def plot_jump_stickfigures_subplot(
             ax.legend(loc="upper right", fontsize=10)
 
     # Add overall title
-    fig.suptitle("Vertical Jump Phases with Center of Gravity (CG)", fontsize=16)
+    # Calculate jump height relative to initial position (assuming normalized or relative coords)
+    try:
+         jump_height = df[cg_y_col].max()
+    except:
+         jump_height = 0
+         
+    fig.suptitle(f"Vertical Jump Phases with Center of Gravity (CG) - CG Jump Height: {jump_height:.3f} m", fontsize=16)
 
     # Adjust layout
     plt.tight_layout(rect=[0, 0, 1, 0.95])  # Leave space for suptitle
