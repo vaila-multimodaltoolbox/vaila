@@ -34,6 +34,7 @@
       <li>Multiple height estimates: CG, flight time, feet-based</li>
       <li>Power metrics: instantaneous, takeoff, average during propulsion</li>
       <li>Bilateral foot timing and height comparisons</li>
+      <li><strong>Kinematic Analysis</strong>: Valgus Ratio, FPPA, and risk screening</li>
     </ul>
 
     <h3>Input Types</h3>
@@ -70,10 +71,12 @@
       <li>Run via vailá GUI or <code>python vaila/vaila_and_jump.py</code></li>
       <li>Choose the target directory with CSV files</li>
       <li>Select data type: (1) Time of Flight, (2) Jump Height, (3) MediaPipe</li>
-      <li>For MediaPipe: enter subject mass (kg), video FPS, and shank length (m). To avoid prompts, place a <code>vaila_and_jump_config.toml</code> next to your CSV files with:<br/>
+      <li>For MediaPipe: enter subject mass (kg), video FPS, and shank length (m).<br/>
+           <strong>Note:</strong> FPS can be a decimal (float) for high-speed cameras.<br/>
+           To avoid prompts, place a <code>vaila_and_jump_config.toml</code> next to your CSV files with:<br/>
         <pre>[jump_context]
 mass_kg = 75.0
-fps = 240
+fps = 240.0
 shank_length_m = 0.40</pre>
       </li>
       <li>Review outputs in the generated timestamped folder</li>
@@ -84,8 +87,16 @@ shank_length_m = 0.40</pre>
       <li>CSV: <code>&lt;name&gt;_jump_metrics_&lt;timestamp&gt;.csv</code></li>
       <li>CSV: <code>&lt;name&gt;_calibrated_&lt;timestamp&gt;.csv</code></li>
       <li>CSV: <code>&lt;name&gt;_jump_database_&lt;timestamp&gt;.csv</code></li>
-      <li>PNG: diagnostic and phases plots; stick-figure visualizations</li>
-      <li>HTML: <code>&lt;name&gt;_report_&lt;timestamp&gt;.html</code></li>
+      <li>PNG: diagnostic and phases plots; stick-figure visualizations (with Time/Height info)</li>
+      <li>PNG: Valgus event analysis with risk metrics (text outside plot)</li>
+      <li>HTML: <code>&lt;name&gt;_report_&lt;timestamp&gt;.html</code> — comprehensive report with risk table</li>
+    </ul>
+
+    <h3>Kinematic Analysis & Risk Screening</h3>
+    <ul>
+       <li><strong>Valgus Ratio</strong>: Knee Sep. / Hip Sep. (&lt; 0.8 indicates risk)</li>
+       <li><strong>FPPA</strong>: Frontal Plane Projection Angle (&gt; 10&deg; indicates high risk)</li>
+       <li><strong>Robustness</strong>: Smart frame search to handle occlusions during Squat phase</li>
     </ul>
 
     <h3>Equations</h3>
@@ -117,6 +128,7 @@ shank_length_m = 0.40</pre>
       <li>Altura por CG, tempo de voo e pés</li>
       <li>Potência instantânea, na decolagem e média na propulsão</li>
       <li>Comparações bilaterais de tempos e alturas dos pés</li>
+      <li><strong>Análise Cinemática</strong>: Razão de Valgo, FPPA e rastreamento de risco</li>
     </ul>
 
     <h3>Tipos de Entrada</h3>
@@ -147,7 +159,7 @@ shank_length_m = 0.40</pre>
       <li>Execute pela GUI do vailá ou <code>python vaila/vaila_and_jump.py</code></li>
       <li>Selecione o diretório com os CSVs</li>
       <li>Escolha: (1) Tempo de Voo, (2) Altura, (3) MediaPipe</li>
-      <li>Para MediaPipe: informe massa (kg), FPS e comprimento da perna (m)</li>
+      <li>Para MediaPipe: informe massa (kg), FPS e comprimento da perna (m). <strong>Nota:</strong> O FPS pode ser um número decimal (float).</li>
       <li>Confira as saídas na pasta com timestamp</li>
     </ol>
 
@@ -156,8 +168,16 @@ shank_length_m = 0.40</pre>
       <li>CSV: <code>&lt;nome&gt;_jump_metrics_&lt;timestamp&gt;.csv</code></li>
       <li>CSV: <code>&lt;nome&gt;_calibrated_&lt;timestamp&gt;.csv</code></li>
       <li>CSV: <code>&lt;nome&gt;_jump_database_&lt;timestamp&gt;.csv</code></li>
-      <li>PNG: gráficos diagnósticos e de fases; figuras de bastão</li>
-      <li>HTML: <code>&lt;nome&gt;_report_&lt;timestamp&gt;.html</code></li>
+      <li>PNG: gráficos de diagnóstico e fases; figuras de bastão (com Tempo/Altura)</li>
+      <li>PNG: análise de valgo com métricas de risco (texto fora do gráfico)</li>
+      <li>HTML: <code>&lt;nome&gt;_report_&lt;timestamp&gt;.html</code> — relatório completo com tabela de riscos</li>
+    </ul>
+
+    <h3>Análise Cinemática e Risco</h3>
+    <ul>
+       <li><strong>Razão de Valgo</strong>: Sep. Joelho / Sep. Quadril (&lt; 0.8 indica risco)</li>
+       <li><strong>FPPA</strong>: Ângulo de Projeção no Plano Frontal (&gt; 10&deg; indica alto risco)</li>
+       <li><strong>Robustez</strong>: Busca inteligente de quadros para lidar com oclusões na fase de Agachamento</li>
     </ul>
 
     <h3>Equações</h3>

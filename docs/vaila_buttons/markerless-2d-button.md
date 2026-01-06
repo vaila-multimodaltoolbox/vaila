@@ -12,9 +12,9 @@ The **Markerless 2D Analysis** button (B1_r1_c4) in the vailá GUI provides acce
 
 ## Available Versions
 
-### Version 1: Standard (MediaPipe Only)
+### Version 1: Standard (MediaPipe Only - CPU)
 - **Script**: `vaila/markerless_2d_analysis.py`
-- **Speed**: Faster processing
+- **Speed**: Faster processing (CPU optimized)
 - **Use Case**: Single-person scenarios, real-time applications
 - **Accuracy**: High for single-person detection
 - **Features**:
@@ -24,6 +24,22 @@ The **Markerless 2D Analysis** button (B1_r1_c4) in the vailá GUI provides acce
   - Batch processing with memory management
   - CPU throttling for resource optimization
   - TOML configuration support
+  - Bounding box (ROI) selection for small subjects
+  - Portable debug logging
+
+### Version 1 GPU: Standard (MediaPipe Only - NVIDIA GPU)
+- **Script**: `vaila/markerless_2d_analysis_nvidia.py`
+- **Speed**: Much faster processing (GPU accelerated)
+- **Use Case**: Single-person scenarios, high-performance requirements
+- **Accuracy**: High for single-person detection (same as CPU version)
+- **Features**:
+  - All features from Version 1 (CPU)
+  - **NVIDIA GPU acceleration** via MediaPipe GPU delegate
+  - **Automatic GPU detection** and testing
+  - **Device selection dialog** (CPU/GPU choice at startup)
+  - GPU information display (name, driver, memory)
+  - Automatic fallback to CPU if GPU unavailable
+  - **Requirements**: NVIDIA GPU with CUDA support and drivers
 
 ### Version 2: Advanced (YOLOv11 + MediaPipe)
 - **Script**: `vaila/markerless2d_analysis_v2.py`
@@ -131,11 +147,18 @@ For each processed video, the module generates:
 
 ## Performance Characteristics
 
-### Version 1 (Standard)
+### Version 1 (Standard - CPU)
 - **Processing Speed**: ~30-60 FPS (CPU, depends on resolution)
 - **Memory Usage**: Moderate (batch processing for large videos)
 - **Best For**: Single-person, high-quality videos
 - **Hardware**: CPU optimized, Linux batch processing
+
+### Version 1 GPU (Standard - NVIDIA GPU)
+- **Processing Speed**: ~60-150+ FPS (GPU, depends on GPU model and resolution)
+- **Memory Usage**: Moderate (GPU memory optimized)
+- **Best For**: Single-person, high-performance requirements, batch processing
+- **Hardware**: NVIDIA GPU with CUDA support required
+- **Speedup**: 2-5x faster than CPU version (depending on GPU)
 
 ### Version 2 (Advanced)
 - **Processing Speed**: ~10-30 FPS (CPU), ~60-120 FPS (GPU)
@@ -148,20 +171,31 @@ For each processed video, the module generates:
 ### Step 1: Launch Module
 1. Click **Markerless 2D Analysis** button (B1_r1_c4)
 2. Select version:
-   - **1**: Standard (MediaPipe only)
+   - **1**: Standard (MediaPipe only - CPU)
+   - **1 GPU**: Standard (MediaPipe only - NVIDIA GPU) - **NEW!**
    - **2**: Advanced (YOLOv11 + MediaPipe)
 
-### Step 2: Configure Parameters
+### Step 2: Device Selection (Version 1 GPU only)
+1. **Automatic GPU Detection**: The script automatically detects NVIDIA GPU availability
+2. **GPU Testing**: MediaPipe GPU delegate is tested automatically
+3. **Device Selection Dialog**: Choose between:
+   - **CPU**: Standard processing (always available)
+   - **GPU**: NVIDIA CUDA acceleration (if available and tested)
+4. **GPU Information Display**: Shows GPU name, driver version, memory, and test status
+5. **Automatic Fallback**: If GPU test fails, CPU is used automatically
+
+### Step 3: Configure Parameters
 1. Select input directory containing videos
 2. Select output base directory
 3. Configure detection parameters via GUI or load TOML file
 
-### Step 3: Process Videos
+### Step 4: Process Videos
 1. Module processes all videos in input directory
 2. Progress displayed in terminal
-3. Output files saved to timestamped directory
+3. GPU/CPU usage information shown (Version 1 GPU)
+4. Output files saved to timestamped directory
 
-### Step 4: Review Results
+### Step 5: Review Results
 1. Check annotated videos for quality
 2. Review CSV files for coordinate data
 3. Examine log files for statistics
@@ -193,7 +227,17 @@ Video Input → Pose Detection → Coordinate Extraction → CSV Export
 - **Python**: 3.12.12+
 - **OS**: Linux, macOS, Windows
 - **RAM**: 4GB minimum (8GB+ recommended for large videos)
-- **GPU**: Optional but recommended for Version 2
+- **GPU**: 
+  - **Version 1 GPU**: NVIDIA GPU with CUDA support required
+  - **Version 2**: Optional but recommended (NVIDIA GPU with CUDA)
+  - **Version 1 (CPU)**: No GPU required
+
+### GPU Requirements (Version 1 GPU)
+- **NVIDIA GPU**: Any CUDA-capable NVIDIA GPU
+- **NVIDIA Drivers**: Latest drivers installed
+- **CUDA Toolkit**: Required for MediaPipe GPU delegate
+- **MediaPipe**: Version 0.10.31+ with GPU delegate support
+- **Testing**: Automatic GPU detection and MediaPipe delegate testing
 
 ### Python Dependencies
 ```bash
@@ -227,7 +271,9 @@ torch>=2.0.0
 
 2. **Slow Processing**
    - **Solution**: Use lower model complexity or smaller YOLO model
-   - **Alternative**: Enable GPU acceleration (Version 2)
+   - **Alternative**: 
+     - Use Version 1 GPU (NVIDIA GPU) for 2-5x speedup
+     - Enable GPU acceleration (Version 2)
 
 3. **Poor Detection**
    - **Solution**: Enable video resize (2x-4x)
@@ -240,19 +286,37 @@ torch>=2.0.0
 
 ### Performance Optimization Tips
 
-- **Single-person videos**: Use Version 1 (Standard)
+- **Single-person videos**: 
+  - Use Version 1 GPU (NVIDIA GPU) for best performance
+  - Use Version 1 (CPU) if no GPU available
 - **Multi-person videos**: Use Version 2 (Advanced)
 - **High-resolution videos**: Enable batch processing (automatic)
 - **Low-quality videos**: Enable resize (2x-4x)
-- **Real-time applications**: Use Version 1 with model_complexity=0
+- **Real-time applications**: Use Version 1 GPU with model_complexity=0
+- **GPU Acceleration**: 
+  - Version 1 GPU provides 2-5x speedup over CPU
+  - Automatic GPU detection and testing ensures compatibility
+  - Fallback to CPU if GPU unavailable or test fails
 
 ## Version History
 
-### Version 0.7.0 (Current - Standard)
+### Version 0.7.1 (Current - Standard CPU)
 - Added batch processing for Linux
 - Improved memory management
 - Enhanced filtering options
 - TOML configuration support
+- Bounding box (ROI) selection for small subjects
+- Portable debug logging
+
+### Version 0.7.1 (Current - Standard GPU) - **NEW!**
+- **NVIDIA GPU acceleration** via MediaPipe GPU delegate
+- **Automatic GPU detection** using nvidia-smi
+- **MediaPipe GPU delegate testing** before use
+- **Device selection dialog** for CPU/GPU choice
+- **GPU information display** (name, driver, memory)
+- **Automatic fallback** to CPU if GPU unavailable
+- All features from CPU version
+- **2-5x performance improvement** over CPU version
 
 ### Version 0.0.2 (Current - Advanced)
 - YOLO11-pose integration
