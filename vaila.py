@@ -1424,25 +1424,125 @@ class Vaila(tk.Tk):
     def markerless_2d_analysis(self):
         """Runs the Markerless 2D Analysis module."""
 
-        # Ask for version choice directly (removed launch method selection)
-        try:
-            version_choice = simpledialog.askstring(
-                "Markerless 2D Analysis Version",
-                "Select version:\n\n1: Standard (Faster, single-person)\n2: Advanced (Slower, multi-person with YOLO)\n\nEnter 1 or 2:",
-                initialvalue="1",
-            )
+        # Create a dialog window for version selection
+        dialog = Toplevel(self)
+        dialog.title("Markerless 2D Analysis - Select Version")
+        dialog.geometry("500x300")
+        dialog.transient(self)
+        dialog.grab_set()
+        
+        # Center the dialog
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
+        y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
+        dialog.geometry(f"+{x}+{y}")
 
-            if not version_choice or version_choice not in ["1", "2"]:
-                return
+        # Create main frame
+        main_frame = tk.Frame(dialog, padx=20, pady=20)
+        main_frame.pack(fill="both", expand=True)
 
-            # Launch in separate process (recommended - no Tkinter conflicts)
-            if version_choice == "1":
-                run_vaila_module("vaila.markerless_2d_analysis")
-            else:
-                run_vaila_module("vaila.markerless2d_analysis_v2")
+        # Title
+        title_label = Label(
+            main_frame,
+            text="Select Markerless 2D Analysis Version",
+            font=("Arial", 12, "bold"),
+        )
+        title_label.pack(pady=(0, 20))
 
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to launch markerless analysis: {e}")
+        # Version selection variable
+        version_var = tk.StringVar(value="1")
+
+        # Version 1: Standard CPU
+        cpu_frame = tk.Frame(main_frame, relief="raised", borderwidth=2, padx=10, pady=10)
+        cpu_frame.pack(fill="x", pady=5)
+        cpu_radio = tk.Radiobutton(
+            cpu_frame,
+            text="Standard CPU",
+            variable=version_var,
+            value="1",
+            font=("Arial", 10),
+        )
+        cpu_radio.pack(anchor="w")
+        cpu_desc = Label(
+            cpu_frame,
+            text="MediaPipe only, single-person, CPU processing",
+            font=("Arial", 9),
+            fg="gray",
+        )
+        cpu_desc.pack(anchor="w", padx=(25, 0))
+
+        # Version 1 GPU: Standard GPU
+        gpu_frame = tk.Frame(main_frame, relief="raised", borderwidth=2, padx=10, pady=10)
+        gpu_frame.pack(fill="x", pady=5)
+        gpu_radio = tk.Radiobutton(
+            gpu_frame,
+            text="Standard GPU (NVIDIA)",
+            variable=version_var,
+            value="1gpu",
+            font=("Arial", 10),
+        )
+        gpu_radio.pack(anchor="w")
+        gpu_desc = Label(
+            gpu_frame,
+            text="MediaPipe only, single-person, GPU accelerated (2-5x faster)",
+            font=("Arial", 9),
+            fg="gray",
+        )
+        gpu_desc.pack(anchor="w", padx=(25, 0))
+
+        # Version 2: Advanced
+        advanced_frame = tk.Frame(main_frame, relief="raised", borderwidth=2, padx=10, pady=10)
+        advanced_frame.pack(fill="x", pady=5)
+        advanced_radio = tk.Radiobutton(
+            advanced_frame,
+            text="Advanced (YOLO + MediaPipe)",
+            variable=version_var,
+            value="2",
+            font=("Arial", 10),
+        )
+        advanced_radio.pack(anchor="w")
+        advanced_desc = Label(
+            advanced_frame,
+            text="Multi-person detection with YOLOv11, slower but more accurate",
+            font=("Arial", 9),
+            fg="gray",
+        )
+        advanced_desc.pack(anchor="w", padx=(25, 0))
+
+        # Buttons frame
+        buttons_frame = tk.Frame(main_frame)
+        buttons_frame.pack(pady=(20, 0))
+
+        def launch_version():
+            version_choice = version_var.get()
+            dialog.destroy()
+
+            try:
+                # Launch in separate process (recommended - no Tkinter conflicts)
+                if version_choice == "1":
+                    run_vaila_module("vaila.markerless_2d_analysis")
+                elif version_choice == "1gpu":
+                    run_vaila_module("vaila.markerless_2d_analysis_nvidia")
+                elif version_choice == "2":
+                    run_vaila_module("vaila.markerless2d_analysis_v2")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to launch markerless analysis: {e}")
+
+        def cancel():
+            dialog.destroy()
+
+        # OK and Cancel buttons
+        ok_button = Button(buttons_frame, text="OK", command=launch_version, width=10)
+        ok_button.pack(side="left", padx=5)
+        cancel_button = Button(buttons_frame, text="Cancel", command=cancel, width=10)
+        cancel_button.pack(side="left", padx=5)
+
+        # Make Enter key trigger OK
+        dialog.bind("<Return>", lambda e: launch_version())
+        dialog.bind("<Escape>", lambda e: cancel())
+
+        # Focus on dialog
+        dialog.focus_set()
 
     # B_r1_c5
     def markerless_3d_analysis(self):
