@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 10 November 2025
-Version: 0.7.0
+Update Date: 06 January 2026
+Version: 0.7.1
 
 Example of usage:
 First activate the vaila environment:
@@ -17,7 +17,7 @@ python markerless_2d_analysis.py -i input_directory -o output_directory -c confi
 
 Description:
 This script performs batch processing of videos for 2D pose estimation using
-MediaPipe's Pose model. It processes videos from a specified input directory,
+MediaPipe's Pose model (Tasks API 0.10.31+). It processes videos from a specified input directory,
 overlays pose landmarks on each video frame, and exports both normalized and
 pixel-based landmark coordinates to CSV files. The script also generates a
 video with the landmarks overlaid on the original frames.
@@ -28,11 +28,21 @@ whether to enable segmentation and smooth segmentation. The default settings
 prioritize the highest detection accuracy and tracking precision, which may
 increase computational cost.
 
+New Features (v0.7.1):
+- MediaPipe Tasks API (0.10.31+) migration
+- Bounding box (ROI) selection for small subjects or multi-person scenarios
+- Optional resize of cropped region for improved detection
+- TOML configuration with GUI auto-population
+- Portable debug logging system
+
 Usage:
 - Run the script to open a graphical interface for selecting the input directory
   containing video files (.mp4, .avi, .mov), the output directory, and for
   specifying the MediaPipe configuration parameters.
 - Choose whether to enable video resize for better pose detection
+- Optionally select a bounding box (ROI) from the first video frame for focused processing
+- Optionally resize the cropped region for better detection of small subjects
+- Load or save TOML configuration files for batch processing
 - The script processes each video, generating an output video with overlaid pose
   landmarks, and CSV files containing both normalized and pixel-based landmark
   coordinates in original video dimensions.
@@ -82,7 +92,44 @@ import mediapipe as mp
 import numpy as np
 import pandas as pd
 import psutil
-from mediapipe.framework.formats import landmark_pb2
+import json
+import os
+import time as _time_module
+import urllib.request
+import subprocess
+# #region agent log
+# Debug logging - uses script directory for portability across OS (Linux, macOS, Windows)
+# Creates .cursor directory in project root if it doesn't exist
+_debug_log_dir = Path(__file__).parent.parent / ".cursor"
+try:
+    _debug_log_dir.mkdir(exist_ok=True)
+except (OSError, PermissionError):
+    # If can't create .cursor, use script directory instead
+    _debug_log_dir = Path(__file__).parent
+_debug_log_path = _debug_log_dir / "debug.log"
+def _debug_log(hypothesis_id, location, message, data=None):
+    try:
+        with open(_debug_log_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":hypothesis_id,"location":location,"message":message,"data":data or {},"timestamp":int(_time_module.time()*1000)})+"\n")
+    except: pass
+# #endregion
+
+# --- NEW IMPORTS FOR THE TASKS API (MediaPipe 0.10.31+) ---
+from mediapipe.tasks import python
+from mediapipe.tasks.python import vision
+
+# MANUAL DEFINITION OF THE BODY CONNECTIONS (since mp.solutions was removed)
+POSE_CONNECTIONS = frozenset([
+    (0, 1), (1, 2), (2, 3), (3, 7), (0, 4), (4, 5), (5, 6), (6, 8), (9, 10),
+    (11, 12), (11, 13), (13, 15), (15, 17), (15, 19), (15, 21), (17, 19),
+    (12, 14), (14, 16), (16, 18), (16, 20), (16, 22), (18, 20), (11, 23),
+    (12, 24), (23, 24), (23, 25), (24, 26), (25, 27), (26, 28), (27, 29),
+    (28, 30), (29, 31), (30, 32), (27, 31), (28, 32)
+])
+
+# #region agent log
+_debug_log("A", "import:100", "After importing mediapipe Tasks API", {"mp_type":str(type(mp)),"has_tasks":hasattr(mp,"tasks"),"mp_attrs":str([x for x in dir(mp) if not x.startswith("_")])[:500]})
+# #endregion
 
 # Additional imports for filtering and interpolation
 from pykalman import KalmanFilter
@@ -549,6 +596,15 @@ def get_default_config():
         },
         "enable_padding": ENABLE_PADDING_DEFAULT,
         "pad_start_frames": PAD_START_FRAMES_DEFAULT,
+        "bounding_box": {
+            "enable_crop": False,
+            "bbox_x_min": 0,
+            "bbox_y_min": 0,
+            "bbox_x_max": 1920,
+            "bbox_y_max": 1080,
+            "enable_resize_crop": False,
+            "resize_crop_scale": 2,
+        },
     }
 
 
@@ -596,6 +652,15 @@ def save_config_to_toml(config, filepath):
             ),
             "enable_padding": str(config.get("enable_padding", ENABLE_PADDING_DEFAULT)).lower(),
             "pad_start_frames": config.get("pad_start_frames", PAD_START_FRAMES_DEFAULT),
+            "bounding_box": {
+                "enable_crop": config.get("enable_crop", False),
+                "bbox_x_min": config.get("bbox_x_min", 0),
+                "bbox_y_min": config.get("bbox_y_min", 0),
+                "bbox_x_max": config.get("bbox_x_max", 1920),
+                "bbox_y_max": config.get("bbox_y_max", 1080),
+                "enable_resize_crop": config.get("enable_resize_crop", False),
+                "resize_crop_scale": config.get("resize_crop_scale", 2),
+            },
         }
 
         with open(filepath, "w") as f:
@@ -878,6 +943,51 @@ def save_config_to_toml(config, filepath):
             )
             f.write("# Recommended: 30-60 for most videos.\n\n")
 
+            f.write("[bounding_box]\n")
+            f.write("# ================================================================\n")
+            f.write("# BOUNDING BOX (ROI) SELECTION FOR SMALL SUBJECTS\n")
+            f.write("# ================================================================\n")
+            f.write("# Crop frames to a region of interest before MediaPipe processing.\n")
+            f.write("# Useful when: multiple people in frame, subject is very small,\n")
+            f.write("# or you want to focus on a specific area.\n\n")
+
+            bb = toml_config["bounding_box"]
+            f.write(
+                f"enable_crop = {str(bb['enable_crop']).lower()}              # Enable bounding box cropping (true/false)\n"
+            )
+            f.write("#                         # true = crop frames to ROI before processing\n")
+            f.write("#                         # false = process full frame (default)\n\n")
+
+            f.write(
+                f"bbox_x_min = {bb['bbox_x_min']}                   # Left edge of ROI in pixels\n"
+            )
+            f.write(
+                f"bbox_y_min = {bb['bbox_y_min']}                   # Top edge of ROI in pixels\n"
+            )
+            f.write(
+                f"bbox_x_max = {bb['bbox_x_max']}                  # Right edge of ROI in pixels\n"
+            )
+            f.write(
+                f"bbox_y_max = {bb['bbox_y_max']}                  # Bottom edge of ROI in pixels\n"
+            )
+            f.write("# Note: Coordinates are in pixels. Use 'Select ROI from Video'\n")
+            f.write("# button in GUI to visually select the region from first video frame.\n\n")
+
+            f.write(
+                f"enable_resize_crop = {str(bb['enable_resize_crop']).lower()}       # Resize the cropped region (true/false)\n"
+            )
+            f.write("#                         # true = upscale cropped region for better detection\n")
+            f.write("#                         # false = use cropped region at original size\n\n")
+
+            f.write(
+                f"resize_crop_scale = {bb['resize_crop_scale']}            # Scale factor for cropped region (2-8)\n"
+            )
+            f.write("#                         # 2 = double size (good for most cases)\n")
+            f.write("#                         # 3-4 = better for very small subjects\n")
+            f.write("#                         # 5-8 = for very distant or tiny people\n")
+            f.write("# This is separate from video_resize. Only the cropped region is resized,\n")
+            f.write("# which is more efficient than resizing the entire video.\n\n")
+
         print(f"Configuration saved to: {filepath}")
         return True
     except Exception as e:
@@ -1019,6 +1129,45 @@ def load_config_from_toml(filepath):
             config["enable_padding"] = ENABLE_PADDING_DEFAULT
             config["pad_start_frames"] = PAD_START_FRAMES_DEFAULT
 
+        # Bounding box section
+        if "bounding_box" in toml_config:
+            bb = toml_config["bounding_box"]
+            print(f"Loading bounding box settings: {list(bb.keys())}")
+            bbox_x_min = int(bb.get("bbox_x_min", 0))
+            bbox_y_min = int(bb.get("bbox_y_min", 0))
+            bbox_x_max = int(bb.get("bbox_x_max", 1920))
+            bbox_y_max = int(bb.get("bbox_y_max", 1080))
+            
+            # Validate coordinates
+            if bbox_x_max <= bbox_x_min or bbox_y_max <= bbox_y_min:
+                print("Warning: Invalid bounding box coordinates, using defaults")
+                bbox_x_min, bbox_y_min, bbox_x_max, bbox_y_max = 0, 0, 1920, 1080
+            
+            config.update(
+                {
+                    "enable_crop": bool(bb.get("enable_crop", False)),
+                    "bbox_x_min": bbox_x_min,
+                    "bbox_y_min": bbox_y_min,
+                    "bbox_x_max": bbox_x_max,
+                    "bbox_y_max": bbox_y_max,
+                    "enable_resize_crop": bool(bb.get("enable_resize_crop", False)),
+                    "resize_crop_scale": int(bb.get("resize_crop_scale", 2)),
+                }
+            )
+        else:
+            print("Warning: No [bounding_box] section found, using defaults")
+            config.update(
+                {
+                    "enable_crop": False,
+                    "bbox_x_min": 0,
+                    "bbox_y_min": 0,
+                    "bbox_x_max": 1920,
+                    "bbox_y_max": 1080,
+                    "enable_resize_crop": False,
+                    "resize_crop_scale": 2,
+                }
+            )
+
         print(f"Configuration loaded successfully from: {filepath}")
         print(f"Total parameters: {len(config)}")
         print(f"Advanced filtering: {config.get('enable_advanced_filtering', False)}")
@@ -1045,10 +1194,11 @@ def get_config_filepath():
 
 
 class ConfidenceInputDialog(tk.simpledialog.Dialog):
-    def __init__(self, parent):
+    def __init__(self, parent, input_dir=None):
         self.loaded_config = None
         self.use_toml = False
         self.toml_path = None
+        self.input_dir = input_dir
         super().__init__(parent, title="MediaPipe and Resize Configuration (or TOML)")
 
     def body(self, master):
@@ -1112,9 +1262,70 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
         self.enable_padding_entry.grid(row=10, column=1)
         self.pad_start_frames_entry.grid(row=11, column=1)
 
+        # Bounding box section
+        bbox_frame = tk.LabelFrame(master, text="Bounding Box (ROI) Selection", padx=10, pady=10)
+        bbox_frame.grid(row=12, column=0, columnspan=2, pady=(10, 0), sticky="ew")
+
+        # Enable crop checkbox
+        self.enable_crop_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(
+            bbox_frame, text="Enable bounding box cropping", variable=self.enable_crop_var
+        ).grid(row=0, column=0, columnspan=2, sticky="w", pady=5)
+
+        # Bounding box coordinates
+        tk.Label(bbox_frame, text="bbox_x_min (pixels):").grid(row=1, column=0, sticky="e", padx=5)
+        self.bbox_x_min_entry = tk.Entry(bbox_frame, width=10)
+        self.bbox_x_min_entry.insert(0, "0")
+        self.bbox_x_min_entry.grid(row=1, column=1, sticky="w", padx=5)
+
+        tk.Label(bbox_frame, text="bbox_y_min (pixels):").grid(row=2, column=0, sticky="e", padx=5)
+        self.bbox_y_min_entry = tk.Entry(bbox_frame, width=10)
+        self.bbox_y_min_entry.insert(0, "0")
+        self.bbox_y_min_entry.grid(row=2, column=1, sticky="w", padx=5)
+
+        tk.Label(bbox_frame, text="bbox_x_max (pixels):").grid(row=3, column=0, sticky="e", padx=5)
+        self.bbox_x_max_entry = tk.Entry(bbox_frame, width=10)
+        self.bbox_x_max_entry.insert(0, "1920")
+        self.bbox_x_max_entry.grid(row=3, column=1, sticky="w", padx=5)
+
+        tk.Label(bbox_frame, text="bbox_y_max (pixels):").grid(row=4, column=0, sticky="e", padx=5)
+        self.bbox_y_max_entry = tk.Entry(bbox_frame, width=10)
+        self.bbox_y_max_entry.insert(0, "1080")
+        self.bbox_y_max_entry.grid(row=4, column=1, sticky="w", padx=5)
+
+        # Normalized coordinates display (read-only)
+        tk.Label(bbox_frame, text="Normalized coordinates:").grid(row=5, column=0, sticky="e", padx=5, pady=(5, 0))
+        self.norm_coords_label = tk.Label(bbox_frame, text="(0.0, 0.0) to (1.0, 1.0)", fg="gray")
+        self.norm_coords_label.grid(row=5, column=1, sticky="w", padx=5, pady=(5, 0))
+
+        # Select ROI button
+        select_roi_btn = tk.Button(
+            bbox_frame,
+            text="Select ROI from Video",
+            command=self.select_roi_from_video,
+            bg="#4CAF50",
+            fg="white",
+        )
+        select_roi_btn.grid(row=6, column=0, columnspan=2, pady=10)
+
+        # Resize crop options
+        self.enable_resize_crop_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(
+            bbox_frame, text="Resize cropped region", variable=self.enable_resize_crop_var
+        ).grid(row=7, column=0, columnspan=2, sticky="w", pady=5)
+
+        tk.Label(bbox_frame, text="Resize crop scale:").grid(row=8, column=0, sticky="e", padx=5)
+        self.resize_crop_scale_entry = tk.Entry(bbox_frame, width=10)
+        self.resize_crop_scale_entry.insert(0, "2")
+        self.resize_crop_scale_entry.grid(row=8, column=1, sticky="w", padx=5)
+
+        # Bind update function to coordinate entries
+        for entry in [self.bbox_x_min_entry, self.bbox_y_min_entry, self.bbox_x_max_entry, self.bbox_y_max_entry]:
+            entry.bind("<KeyRelease>", self.update_normalized_coords)
+
         # TOML section
         toml_frame = tk.LabelFrame(master, text="Advanced Configuration (TOML)", padx=10, pady=10)
-        toml_frame.grid(row=12, column=0, columnspan=2, pady=(10, 0), sticky="ew")
+        toml_frame.grid(row=13, column=0, columnspan=2, pady=(10, 0), sticky="ew")
         btns_frame = tk.Frame(toml_frame)
         btns_frame.pack()
         tk.Button(btns_frame, text="Load Configuration TOML", command=self.load_config_file).pack(
@@ -1170,6 +1381,13 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
                 "_all_smooth_params": default_config["smoothing_params"],
                 "enable_padding": ENABLE_PADDING_DEFAULT,
                 "pad_start_frames": PAD_START_FRAMES_DEFAULT,
+                "enable_crop": default_config["bounding_box"]["enable_crop"],
+                "bbox_x_min": default_config["bounding_box"]["bbox_x_min"],
+                "bbox_y_min": default_config["bounding_box"]["bbox_y_min"],
+                "bbox_x_max": default_config["bounding_box"]["bbox_x_max"],
+                "bbox_y_max": default_config["bounding_box"]["bbox_y_max"],
+                "enable_resize_crop": default_config["bounding_box"]["enable_resize_crop"],
+                "resize_crop_scale": default_config["bounding_box"]["resize_crop_scale"],
             }
             ok = save_config_to_toml(save_config, file_path)
             if ok:
@@ -1204,6 +1422,8 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
                     self.toml_label.config(
                         text=f"TOML loaded: {os.path.basename(file_path)}", fg="green"
                     )
+                    # Populate GUI fields with loaded config values
+                    self.populate_fields_from_config(config)
                     # Show summary of loaded config
                     summary = f"TOML loaded: {os.path.basename(file_path)}\n\n"
                     summary += (
@@ -1226,18 +1446,26 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
                     summary += f"max_gap: {config.get('max_gap')}\n"
                     if "smooth_params" in config:
                         summary += f"smooth_params: {config['smooth_params']}\n"
-                    print("\n=== TOML configuration loaded and will be used ===\n" + summary)
-                    from tkinter import messagebox
-
-                    messagebox.showinfo("TOML Parameters Loaded", summary)
                     summary += (
                         f"enable_padding: {config.get('enable_padding', ENABLE_PADDING_DEFAULT)}\n"
                     )
                     summary += f"pad_start_frames: {config.get('pad_start_frames', PAD_START_FRAMES_DEFAULT)}\n"
+                    summary += f"enable_crop: {config.get('enable_crop', False)}\n"
+                    if config.get("enable_crop", False):
+                        summary += f"bbox: ({config.get('bbox_x_min', 0)}, {config.get('bbox_y_min', 0)}) to ({config.get('bbox_x_max', 1920)}, {config.get('bbox_y_max', 1080)})\n"
+                        summary += f"enable_resize_crop: {config.get('enable_resize_crop', False)}\n"
+                        if config.get("enable_resize_crop", False):
+                            summary += f"resize_crop_scale: {config.get('resize_crop_scale', 2)}\n"
+                    print("\n=== TOML configuration loaded and GUI updated ===\n" + summary)
+                    from tkinter import messagebox
+
+                    messagebox.showinfo("TOML Parameters Loaded", "Configuration loaded and GUI fields updated!\n\n" + summary)
                 else:
                     self.toml_label.config(text="Error loading TOML", fg="red")
             except Exception as e:
                 self.toml_label.config(text=f"Error: {e}", fg="red")
+                from tkinter import messagebox
+                messagebox.showerror("Error", f"Failed to load TOML: {e}")
 
         dialog_root.destroy()
 
@@ -1419,6 +1647,175 @@ For more information, visit: https://github.com/vaila-multimodaltoolbox/vaila
         )
         close_btn.pack(pady=10)
 
+    def update_normalized_coords(self, event=None):
+        """Update normalized coordinates display based on pixel coordinates"""
+        try:
+            x_min = int(self.bbox_x_min_entry.get() or 0)
+            y_min = int(self.bbox_y_min_entry.get() or 0)
+            x_max = int(self.bbox_x_max_entry.get() or 1920)
+            y_max = int(self.bbox_y_max_entry.get() or 1080)
+
+            # Get video dimensions if available
+            if self.input_dir:
+                video_files = [
+                    f
+                    for f in Path(self.input_dir).glob("*.*")
+                    if f.suffix.lower() in [".mp4", ".avi", ".mov"]
+                ]
+                if video_files:
+                    cap = cv2.VideoCapture(str(video_files[0]))
+                    if cap.isOpened():
+                        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                        cap.release()
+
+                        if width > 0 and height > 0:
+                            x_min_norm = x_min / width
+                            y_min_norm = y_min / height
+                            x_max_norm = x_max / width
+                            y_max_norm = y_max / height
+                            self.norm_coords_label.config(
+                                text=f"({x_min_norm:.3f}, {y_min_norm:.3f}) to ({x_max_norm:.3f}, {y_max_norm:.3f})"
+                            )
+                            return
+
+            # Default display if no video dimensions available
+            self.norm_coords_label.config(text="(Set video dimensions to calculate)")
+        except Exception:
+            self.norm_coords_label.config(text="(Invalid coordinates)")
+
+    def select_roi_from_video(self):
+        """Open first video and let user select ROI using cv2.selectROI"""
+        if not self.input_dir:
+            messagebox.showerror("Error", "No input directory specified. Please select input directory first.")
+            return
+
+        # Find first video file
+        video_files = [
+            f
+            for f in Path(self.input_dir).glob("*.*")
+            if f.suffix.lower() in [".mp4", ".avi", ".mov"]
+        ]
+
+        if not video_files:
+            messagebox.showerror("Error", "No video files found in input directory.")
+            return
+
+        first_video = video_files[0]
+        cap = cv2.VideoCapture(str(first_video))
+
+        if not cap.isOpened():
+            messagebox.showerror("Error", f"Could not open video: {first_video}")
+            return
+
+        # Read first frame
+        ret, frame = cap.read()
+        cap.release()
+
+        if not ret:
+            messagebox.showerror("Error", "Could not read first frame from video.")
+            return
+
+        # Let user select ROI
+        print(f"Select ROI from first frame of: {first_video.name}")
+        print("Instructions: Drag to select region, press SPACE or ENTER to confirm, ESC to cancel")
+        roi = cv2.selectROI("Select ROI - Press SPACE/ENTER to confirm, ESC to cancel", frame, False)
+
+        # Check if user cancelled (roi is all zeros)
+        if roi[2] == 0 or roi[3] == 0:
+            print("ROI selection cancelled")
+            cv2.destroyAllWindows()
+            return
+
+        # roi format: (x, y, width, height)
+        x, y, w, h = roi
+        x_min = x
+        y_min = y
+        x_max = x + w
+        y_max = y + h
+
+        # Update entry fields
+        self.bbox_x_min_entry.delete(0, tk.END)
+        self.bbox_x_min_entry.insert(0, str(x_min))
+        self.bbox_y_min_entry.delete(0, tk.END)
+        self.bbox_y_min_entry.insert(0, str(y_min))
+        self.bbox_x_max_entry.delete(0, tk.END)
+        self.bbox_x_max_entry.insert(0, str(x_max))
+        self.bbox_y_max_entry.delete(0, tk.END)
+        self.bbox_y_max_entry.insert(0, str(y_max))
+
+        # Update normalized coordinates display
+        self.update_normalized_coords()
+
+        # Enable crop checkbox
+        self.enable_crop_var.set(True)
+
+        cv2.destroyAllWindows()
+        print(f"ROI selected: ({x_min}, {y_min}) to ({x_max}, {y_max})")
+
+    def populate_fields_from_config(self, config):
+        """Populate GUI fields with values from loaded TOML config"""
+        # MediaPipe parameters
+        self.min_detection_entry.delete(0, tk.END)
+        self.min_detection_entry.insert(0, str(config.get("min_detection_confidence", 0.1)))
+        
+        self.min_tracking_entry.delete(0, tk.END)
+        self.min_tracking_entry.insert(0, str(config.get("min_tracking_confidence", 0.1)))
+        
+        self.model_complexity_entry.delete(0, tk.END)
+        self.model_complexity_entry.insert(0, str(config.get("model_complexity", 2)))
+        
+        self.enable_segmentation_entry.delete(0, tk.END)
+        self.enable_segmentation_entry.insert(0, str(config.get("enable_segmentation", False)))
+        
+        self.smooth_segmentation_entry.delete(0, tk.END)
+        self.smooth_segmentation_entry.insert(0, str(config.get("smooth_segmentation", False)))
+        
+        self.static_image_mode_entry.delete(0, tk.END)
+        self.static_image_mode_entry.insert(0, str(config.get("static_image_mode", False)))
+        
+        self.apply_filtering_entry.delete(0, tk.END)
+        self.apply_filtering_entry.insert(0, str(config.get("apply_filtering", True)))
+        
+        self.estimate_occluded_entry.delete(0, tk.END)
+        self.estimate_occluded_entry.insert(0, str(config.get("estimate_occluded", True)))
+        
+        self.enable_resize_entry.delete(0, tk.END)
+        self.enable_resize_entry.insert(0, str(config.get("enable_resize", False)))
+        
+        self.resize_scale_entry.delete(0, tk.END)
+        self.resize_scale_entry.insert(0, str(config.get("resize_scale", 2)))
+        
+        self.enable_padding_entry.delete(0, tk.END)
+        self.enable_padding_entry.insert(0, str(config.get("enable_padding", ENABLE_PADDING_DEFAULT)))
+        
+        self.pad_start_frames_entry.delete(0, tk.END)
+        self.pad_start_frames_entry.insert(0, str(config.get("pad_start_frames", PAD_START_FRAMES_DEFAULT)))
+        
+        # Bounding box parameters
+        enable_crop = config.get("enable_crop", False)
+        self.enable_crop_var.set(enable_crop)
+        
+        self.bbox_x_min_entry.delete(0, tk.END)
+        self.bbox_x_min_entry.insert(0, str(config.get("bbox_x_min", 0)))
+        
+        self.bbox_y_min_entry.delete(0, tk.END)
+        self.bbox_y_min_entry.insert(0, str(config.get("bbox_y_min", 0)))
+        
+        self.bbox_x_max_entry.delete(0, tk.END)
+        self.bbox_x_max_entry.insert(0, str(config.get("bbox_x_max", 1920)))
+        
+        self.bbox_y_max_entry.delete(0, tk.END)
+        self.bbox_y_max_entry.insert(0, str(config.get("bbox_y_max", 1080)))
+        
+        self.enable_resize_crop_var.set(config.get("enable_resize_crop", False))
+        
+        self.resize_crop_scale_entry.delete(0, tk.END)
+        self.resize_crop_scale_entry.insert(0, str(config.get("resize_crop_scale", 2)))
+        
+        # Update normalized coordinates display
+        self.update_normalized_coords()
+
     def apply(self):
         if self.use_toml and self.loaded_config:
             self.result = self.loaded_config
@@ -1442,10 +1839,18 @@ For more information, visit: https://github.com/vaila-multimodaltoolbox/vaila
                 "_all_smooth_params": get_default_config()["smoothing_params"],
                 "enable_padding": self.enable_padding_entry.get().lower() == "true",
                 "pad_start_frames": int(self.pad_start_frames_entry.get()),
+                # Bounding box settings
+                "enable_crop": self.enable_crop_var.get(),
+                "bbox_x_min": int(self.bbox_x_min_entry.get() or 0),
+                "bbox_y_min": int(self.bbox_y_min_entry.get() or 0),
+                "bbox_x_max": int(self.bbox_x_max_entry.get() or 1920),
+                "bbox_y_max": int(self.bbox_y_max_entry.get() or 1080),
+                "enable_resize_crop": self.enable_resize_crop_var.get(),
+                "resize_crop_scale": int(self.resize_crop_scale_entry.get() or 2),
             }
 
 
-def get_pose_config(existing_root=None):
+def get_pose_config(existing_root=None, input_dir=None):
     if existing_root is not None:
         root = existing_root
     else:
@@ -1454,7 +1859,7 @@ def get_pose_config(existing_root=None):
 
     # Remove automatic creation of default TOML. Only create via button or after processing.
 
-    dialog = ConfidenceInputDialog(root)
+    dialog = ConfidenceInputDialog(root, input_dir=input_dir)
     if dialog.result:
         print("Configuration applied successfully!")
         return dialog.result
@@ -1578,6 +1983,76 @@ def convert_coordinates_to_original(df, metadata, progress_callback=None):
         progress_callback(f"Converted {processed} coordinate pairs back to original scale")
 
     return converted_df
+
+
+def map_landmarks_to_full_frame(landmarks, bbox_config, crop_width, crop_height, processing_width, processing_height, original_width=None, original_height=None):
+    """
+    Map landmarks from cropped/resized space to original video space.
+    
+    Args:
+        landmarks: List of [x, y, z] in normalized crop space (0-1)
+        bbox_config: Dict with bbox coordinates and resize settings
+        crop_width, crop_height: Dimensions of cropped region (after resize if enabled)
+        processing_width, processing_height: Dimensions of processing frame (may be resized video)
+        original_width, original_height: Dimensions of original video (optional, inferred if not provided)
+    
+    Returns:
+        List of [x, y, z] in normalized original video space (0-1)
+    """
+    enable_resize_crop = bbox_config.get("enable_resize_crop", False)
+    resize_crop_scale = bbox_config.get("resize_crop_scale", 1)
+    video_resized = bbox_config.get("video_resized", False)
+    video_resize_scale = bbox_config.get("resize_scale", 1.0)
+    
+    # Get original video dimensions
+    if original_width is None or original_height is None:
+        # Infer from processing dimensions and resize scale
+        if video_resized and video_resize_scale > 1:
+            original_width = int(processing_width / video_resize_scale)
+            original_height = int(processing_height / video_resize_scale)
+        else:
+            original_width = processing_width
+            original_height = processing_height
+    
+    # Use scaled bbox coordinates (they are in processing video coordinates)
+    bbox_x_min_processing = bbox_config.get("bbox_x_min", 0)
+    bbox_y_min_processing = bbox_config.get("bbox_y_min", 0)
+    
+    mapped_landmarks = []
+    for landmark in landmarks:
+        x_norm_crop, y_norm_crop, z = landmark
+        
+        # Step 1: Convert normalized crop → pixel crop-resized
+        x_px_crop_resized = x_norm_crop * crop_width
+        y_px_crop_resized = y_norm_crop * crop_height
+        
+        # Step 2: If resize crop enabled, convert pixel crop-resized → pixel crop
+        if enable_resize_crop and resize_crop_scale > 1:
+            x_px_crop = x_px_crop_resized / resize_crop_scale
+            y_px_crop = y_px_crop_resized / resize_crop_scale
+        else:
+            x_px_crop = x_px_crop_resized
+            y_px_crop = y_px_crop_resized
+        
+        # Step 3: Convert pixel crop → pixel full frame (in processing video coordinates)
+        x_px_full_processing = x_px_crop + bbox_x_min_processing
+        y_px_full_processing = y_px_crop + bbox_y_min_processing
+        
+        # Step 4: If video was resized, convert from processing video → original video
+        if video_resized and video_resize_scale > 1:
+            x_px_full_original = x_px_full_processing / video_resize_scale
+            y_px_full_original = y_px_full_processing / video_resize_scale
+        else:
+            x_px_full_original = x_px_full_processing
+            y_px_full_original = y_px_full_processing
+        
+        # Step 5: Convert pixel original video → normalized original video
+        x_norm_full = x_px_full_original / original_width if original_width > 0 else 0.0
+        y_norm_full = y_px_full_original / original_height if original_height > 0 else 0.0
+        
+        mapped_landmarks.append([x_norm_full, y_norm_full, z])
+    
+    return mapped_landmarks
 
 
 def apply_interpolation_and_smoothing(df, config, progress_callback=None):
@@ -1992,13 +2467,32 @@ def calculate_batch_size(video_path, pose_config):
 
 
 def process_video_batch(
-    frames, pose, pose_config, width, height, progress_callback=None, batch_index=0
+    frames, landmarker, pose_config, width, height, full_width=None, full_height=None, progress_callback=None, batch_index=0, fps=30.0, start_frame_idx=0
 ):
     """
-    Process a batch of frames and return landmarks with CPU throttling
+    Process a batch of frames using MediaPipe Tasks API and return landmarks with CPU throttling.
+    Supports bounding box cropping and coordinate mapping.
     """
+    # Use full dimensions if provided, otherwise use processing dimensions
+    if full_width is None:
+        full_width = width
+    if full_height is None:
+        full_height = height
+
+    # Extract bounding box config
+    enable_crop = pose_config.get("enable_crop", False)
+    bbox_config = {
+        "enable_resize_crop": pose_config.get("enable_resize_crop", False),
+        "resize_crop_scale": pose_config.get("resize_crop_scale", 2),
+        "bbox_x_min": pose_config.get("bbox_x_min", 0),
+        "bbox_y_min": pose_config.get("bbox_y_min", 0),
+        "bbox_x_max": pose_config.get("bbox_x_max", width),
+        "bbox_y_max": pose_config.get("bbox_y_max", height),
+    }
+
     batch_landmarks = []
     batch_pixel_landmarks = []
+    landmarks_history = deque(maxlen=10)
 
     for i, frame in enumerate(frames):
         # CPU throttling check
@@ -2009,23 +2503,24 @@ def process_video_batch(
         if progress_callback and i % 10 == 0:
             progress_callback(f"Processing frame {i + 1}/{len(frames)} in batch")
 
-        results = pose.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+        # Calculate timestamp (must be monotonically increasing)
+        global_frame_idx = start_frame_idx + i
+        timestamp_ms = int((global_frame_idx * 1000) / fps) if fps > 0 else global_frame_idx * 33
 
-        if results.pose_landmarks:
-            landmarks = [
-                [landmark.x, landmark.y, landmark.z] for landmark in results.pose_landmarks.landmark
-            ]
+        # Process frame with Tasks API
+        landmarks = process_frame_with_tasks_api(
+            frame, landmarker, timestamp_ms, enable_crop, bbox_config,
+            width, height, full_width, full_height, pose_config, landmarks_history
+        )
 
-            # Apply occluded landmark estimation if enabled
-            if pose_config.get("estimate_occluded", False):
-                landmarks = estimate_occluded_landmarks(landmarks)
-
+        if landmarks:
+            landmarks_history.append(landmarks)
             batch_landmarks.append(landmarks)
 
-            # Convert to pixel coordinates
+            # Convert to pixel coordinates (using full frame dimensions)
             pixel_landmarks = [
-                [int(landmark[0] * width), int(landmark[1] * height), landmark[2]]
-                for landmark in landmarks
+                [int(lm[0] * full_width), int(lm[1] * full_height), lm[2]]
+                for lm in landmarks
             ]
             batch_pixel_landmarks.append(pixel_landmarks)
         else:
@@ -2074,10 +2569,103 @@ def cleanup_memory():
         )
 
 
+def get_model_path(complexity):
+    """Baixa o modelo correto baseado na complexidade (0=Lite, 1=Full, 2=Heavy)"""
+    models = {
+        0: "pose_landmarker_lite.task",
+        1: "pose_landmarker_full.task",
+        2: "pose_landmarker_heavy.task"
+    }
+    model_name = models.get(complexity, "pose_landmarker_full.task")
+    
+    if not os.path.exists(model_name):
+        print(f"Baixando modelo MediaPipe Tasks ({model_name})... aguarde.")
+        # URLs corretas para os modelos
+        model_urls = {
+            0: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
+            1: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task",
+            2: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_heavy/float16/1/pose_landmarker_heavy.task"
+        }
+        url = model_urls.get(complexity, model_urls[1])
+        try:
+            urllib.request.urlretrieve(url, model_name)
+            print("Download concluído!")
+        except Exception as e:
+            print(f"Erro ao baixar modelo: {e}")
+            raise RuntimeError("Falha ao baixar modelo do MediaPipe.")  
+    return os.path.abspath(model_name)
+
+
+def process_frame_with_tasks_api(frame, landmarker, timestamp_ms, enable_crop, bbox_config, process_width, process_height, original_width, original_height, pose_config, landmarks_history):
+    """
+    Process a single frame using MediaPipe Tasks API.
+    Returns landmarks in normalized coordinates (mapped to full frame if cropping was used).
+    """
+    # Apply bounding box cropping if enabled
+    process_frame = frame
+    actual_process_width = process_width
+    actual_process_height = process_height
+    
+    if enable_crop:
+        x_min = max(0, min(bbox_config["bbox_x_min"], process_width - 1))
+        y_min = max(0, min(bbox_config["bbox_y_min"], process_height - 1))
+        x_max = max(x_min + 1, min(bbox_config["bbox_x_max"], process_width))
+        y_max = max(y_min + 1, min(bbox_config["bbox_y_max"], process_height))
+        process_frame = frame[y_min:y_max, x_min:x_max]
+        actual_process_width = x_max - x_min
+        actual_process_height = y_max - y_min
+        
+        if bbox_config.get("enable_resize_crop", False) and bbox_config.get("resize_crop_scale", 1) > 1:
+            new_w = int(actual_process_width * bbox_config["resize_crop_scale"])
+            new_h = int(actual_process_height * bbox_config["resize_crop_scale"])
+            process_frame = cv2.resize(process_frame, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+            actual_process_width = new_w
+            actual_process_height = new_h
+    
+    # Convert to RGB and create MP Image
+    rgb_frame = cv2.cvtColor(process_frame, cv2.COLOR_BGR2RGB)
+    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
+    
+    # Detect pose
+    pose_landmarker_result = landmarker.detect_for_video(mp_image, timestamp_ms)
+    
+    # Parse results
+    if pose_landmarker_result.pose_landmarks and len(pose_landmarker_result.pose_landmarks) > 0:
+        # Get first pose
+        raw_landmarks = pose_landmarker_result.pose_landmarks[0]
+        landmarks = [[lm.x, lm.y, lm.z] for lm in raw_landmarks]
+        
+        # Map coordinates to full frame if cropping was used
+        if enable_crop:
+            # Pass processing dimensions (may be resized) and original dimensions
+            landmarks = map_landmarks_to_full_frame(
+                landmarks, bbox_config, actual_process_width, actual_process_height, 
+                process_width, process_height,  # Processing frame dimensions (may be resized)
+                original_width, original_height  # Original video dimensions
+            )
+        
+        # Apply occluded landmark estimation if enabled
+        if pose_config.get("estimate_occluded", False):
+            landmarks = estimate_occluded_landmarks(landmarks, list(landmarks_history))
+        
+        return landmarks
+    else:
+        # No pose detected
+        return None
+
+
 def process_video(video_path, output_dir, pose_config):
     """
     Process a video file using MediaPipe Pose estimation with optional video resize.
     """
+    # #region agent log
+    try:
+        import mediapipe as mp_test
+        _debug_log("E", "process_video:2475", "Function entry", {"video_path":str(video_path),"output_dir":str(output_dir),"has_mp_solutions":hasattr(mp_test,"solutions"),"mp_test_type":str(type(mp_test))})
+    except Exception as log_e:
+        # Log function itself may fail, but continue
+        pass
+    # #endregion
     print("\n=== Parameters being used for this video ===")
     for k, v in pose_config.items():
         print(f"{k}: {v}")
@@ -2089,6 +2677,15 @@ def process_video(video_path, output_dir, pose_config):
     # Check if resize is enabled
     enable_resize = pose_config.get("enable_resize", False)
     resize_scale = pose_config.get("resize_scale", 2)
+
+    # Get original video dimensions (before any resizing)
+    orig_cap = cv2.VideoCapture(str(video_path))
+    if not orig_cap.isOpened():
+        print(f"Failed to open original video: {video_path}")
+        return
+    original_width = int(orig_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    original_height = int(orig_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    orig_cap.release()
 
     # Prepare directories and output files
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -2136,16 +2733,35 @@ def process_video(video_path, output_dir, pose_config):
     output_file_path = output_dir / f"{video_path.stem}_mp_norm.csv"
     output_pixel_file_path = output_dir / f"{video_path.stem}_mp_pixel.csv"
 
-    # Initialize MediaPipe
-    pose = mp.solutions.pose.Pose(
-        static_image_mode=pose_config["static_image_mode"],
-        min_detection_confidence=pose_config["min_detection_confidence"],
-        min_tracking_confidence=pose_config["min_tracking_confidence"],
-        model_complexity=pose_config["model_complexity"],
-        enable_segmentation=pose_config["enable_segmentation"],
-        smooth_segmentation=pose_config["smooth_segmentation"],
-        smooth_landmarks=True,
+    # Initialize MediaPipe Tasks API
+    # #region agent log
+    try:
+        _debug_log("A", "process_video:2610", "Initializing MediaPipe Tasks API", {})
+    except: pass
+    # #endregion
+    
+    model_path = get_model_path(pose_config["model_complexity"])
+    
+    BaseOptions = mp.tasks.BaseOptions
+    PoseLandmarker = mp.tasks.vision.PoseLandmarker
+    PoseLandmarkerOptions = mp.tasks.vision.PoseLandmarkerOptions
+    VisionRunningMode = mp.tasks.vision.RunningMode
+
+    # Create options
+    options = PoseLandmarkerOptions(
+        base_options=BaseOptions(model_asset_path=model_path),
+        running_mode=VisionRunningMode.VIDEO,
+        num_poses=1,
+        min_pose_detection_confidence=pose_config["min_detection_confidence"],
+        min_pose_presence_confidence=pose_config["min_tracking_confidence"],
+        output_segmentation_masks=pose_config["enable_segmentation"]
     )
+    
+    # #region agent log
+    try:
+        _debug_log("B", "process_video:2625", "MediaPipe Tasks API options created", {"model_path": model_path})
+    except: pass
+    # #endregion
 
     # Prepare headers for CSV
     headers = ["frame_index"]
@@ -2161,6 +2777,11 @@ def process_video(video_path, output_dir, pose_config):
     step_text = "Step 2/3" if enable_resize else "Step 1/2"
     print(f"\n{step_text}: Processing landmarks (total frames: {total_frames})")
 
+    # Get FPS for timestamp calculation
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    if fps <= 0 or np.isnan(fps):
+        fps = 30.0  # Default FPS
+
     # --- Frame padding for MediaPipe stabilization ---
     # Reset video to beginning
     cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
@@ -2168,7 +2789,6 @@ def process_video(video_path, output_dir, pose_config):
     if not ret:
         print("Could not read first frame for padding.")
         cap.release()
-        pose.close()
         return
 
     enable_padding = pose_config.get("enable_padding", ENABLE_PADDING_DEFAULT)
@@ -2180,6 +2800,43 @@ def process_video(video_path, output_dir, pose_config):
 
     # Store first frame for padding (only one copy, we'll reuse it)
     padding_frame = first_frame.copy() if enable_padding and pad_start_frames > 0 else None
+
+    # Extract bounding box config
+    enable_crop = pose_config.get("enable_crop", False)
+    # IMPORTANT: If video was resized, scale bbox coordinates to match resized video dimensions
+    if enable_resize and resize_metadata:
+        resize_scale = resize_metadata["scale_factor"]
+        bbox_x_min_orig = pose_config.get("bbox_x_min", 0)
+        bbox_y_min_orig = pose_config.get("bbox_y_min", 0)
+        bbox_x_max_orig = pose_config.get("bbox_x_max", original_width)
+        bbox_y_max_orig = pose_config.get("bbox_y_max", original_height)
+        # Scale bbox coordinates to resized video
+        bbox_x_min_scaled = int(bbox_x_min_orig * resize_scale)
+        bbox_y_min_scaled = int(bbox_y_min_orig * resize_scale)
+        bbox_x_max_scaled = int(bbox_x_max_orig * resize_scale)
+        bbox_y_max_scaled = int(bbox_y_max_orig * resize_scale)
+        print(f"Bbox scaled for resized video: ({bbox_x_min_scaled}, {bbox_y_min_scaled}) to ({bbox_x_max_scaled}, {bbox_y_max_scaled})")
+    else:
+        bbox_x_min_scaled = pose_config.get("bbox_x_min", 0)
+        bbox_y_min_scaled = pose_config.get("bbox_y_min", 0)
+        bbox_x_max_scaled = pose_config.get("bbox_x_max", width)
+        bbox_y_max_scaled = pose_config.get("bbox_y_max", height)
+    
+    bbox_config = {
+        "enable_resize_crop": pose_config.get("enable_resize_crop", False),
+        "resize_crop_scale": pose_config.get("resize_crop_scale", 2),
+        "bbox_x_min": bbox_x_min_scaled,  # Use scaled coordinates for processing
+        "bbox_y_min": bbox_y_min_scaled,
+        "bbox_x_max": bbox_x_max_scaled,
+        "bbox_y_max": bbox_y_max_scaled,
+        # Store original coordinates for mapping back
+        "bbox_x_min_orig": pose_config.get("bbox_x_min", 0),
+        "bbox_y_min_orig": pose_config.get("bbox_y_min", 0),
+        "bbox_x_max_orig": pose_config.get("bbox_x_max", original_width),
+        "bbox_y_max_orig": pose_config.get("bbox_y_max", original_height),
+        "video_resized": enable_resize and resize_metadata is not None,
+        "resize_scale": resize_metadata["scale_factor"] if (enable_resize and resize_metadata) else 1.0,
+    }
 
     # Check if batch processing should be used
     use_batch_processing = should_use_batch_processing(video_path, pose_config)
@@ -2197,155 +2854,199 @@ def process_video(video_path, output_dir, pose_config):
         )
         batch_size = calculate_batch_size(video_path, pose_config)
 
-        # Reset video to beginning
-        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+        # Process with Tasks API
+        with PoseLandmarker.create_from_options(options) as landmarker:
+            # Reset video to beginning
+            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
-        # Process padding frames first if enabled
-        if enable_padding and pad_start_frames > 0 and padding_frame is not None:
-            print(f"Processing {pad_start_frames} padding frames...")
-            for pad_idx in range(pad_start_frames):
-                if should_throttle_cpu(frame_count):
-                    apply_cpu_throttling()
+            # Process padding frames first if enabled
+            if enable_padding and pad_start_frames > 0 and padding_frame is not None:
+                print(f"Processing {pad_start_frames} padding frames...")
+                for pad_idx in range(pad_start_frames):
+                    if should_throttle_cpu(frame_count):
+                        apply_cpu_throttling()
 
-                results = pose.process(cv2.cvtColor(padding_frame, cv2.COLOR_BGR2RGB))
-                if results.pose_landmarks:
-                    landmarks = [
-                        [landmark.x, landmark.y, landmark.z]
-                        for landmark in results.pose_landmarks.landmark
-                    ]
-                    if pose_config.get("estimate_occluded", False):
-                        landmarks = estimate_occluded_landmarks(landmarks)
-                    landmarks_history.append(landmarks)
-                    normalized_landmarks_list.append(landmarks)
-                    pixel_landmarks = [
-                        [
-                            int(landmark[0] * width),
-                            int(landmark[1] * height),
-                            landmark[2],
-                        ]
-                        for landmark in landmarks
-                    ]
-                    pixel_landmarks_list.append(pixel_landmarks)
-                else:
-                    num_landmarks = len(landmark_names)
-                    nan_landmarks = [[np.nan, np.nan, np.nan] for _ in range(num_landmarks)]
-                    normalized_landmarks_list.append(nan_landmarks)
-                    pixel_landmarks_list.append(nan_landmarks)
-                    frames_with_missing_data.append(frame_count)
-
-                frame_count += 1
-                time.sleep(FRAME_SLEEP_TIME)
-
-        # Process video frames in batches (read frame-by-frame, process in batches)
-        batch_frames = []
-        batch_start_idx = frame_count
-        current_batch = 0
-        total_batches = (total_frames + batch_size - 1) // batch_size
-
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                # Process remaining frames in batch
-                if batch_frames:
-                    print(
-                        f"Processing final batch {current_batch + 1}/{total_batches} ({len(batch_frames)} frames)"
+                    timestamp_ms = int((frame_count * 1000) / fps) if fps > 0 else frame_count * 33
+                    landmarks = process_frame_with_tasks_api(
+                        padding_frame, landmarker, timestamp_ms, enable_crop, bbox_config,
+                        width, height, original_width, original_height, pose_config, landmarks_history
                     )
+
+                    if landmarks:
+                        landmarks_history.append(landmarks)
+                        normalized_landmarks_list.append(landmarks)
+                        pixel_landmarks = [
+                            [int(lm[0] * original_width), int(lm[1] * original_height), lm[2]]
+                            for lm in landmarks
+                        ]
+                        pixel_landmarks_list.append(pixel_landmarks)
+                    else:
+                        num_landmarks = len(landmark_names)
+                        nan_landmarks = [[np.nan, np.nan, np.nan] for _ in range(num_landmarks)]
+                        normalized_landmarks_list.append(nan_landmarks)
+                        pixel_landmarks_list.append(nan_landmarks)
+                        frames_with_missing_data.append(frame_count)
+
+                    frame_count += 1
+                    time.sleep(FRAME_SLEEP_TIME)
+
+            # Process video frames in batches (read frame-by-frame, process in batches)
+            batch_frames = []
+            batch_start_idx = frame_count
+            current_batch = 0
+            total_batches = (total_frames + batch_size - 1) // batch_size
+
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    # Process remaining frames in batch
+                    if batch_frames:
+                        print(
+                            f"Processing final batch {current_batch + 1}/{total_batches} ({len(batch_frames)} frames)"
+                        )
+                        batch_norm, batch_pixel = process_video_batch(
+                            batch_frames,
+                            landmarker,
+                            pose_config,
+                            width,
+                            height,
+                            full_width=original_width,
+                            full_height=original_height,
+                            progress_callback=lambda msg: print(f"    {msg}"),
+                            batch_index=current_batch,
+                            fps=fps,
+                            start_frame_idx=batch_start_idx,
+                        )
+                        normalized_landmarks_list.extend(batch_norm)
+                        pixel_landmarks_list.extend(batch_pixel)
+                        for i, landmarks in enumerate(batch_norm):
+                            if all(np.isnan(lm[0]) for lm in landmarks):
+                                frames_with_missing_data.append(batch_start_idx + i)
+                        batch_frames = []
+                        cleanup_memory()
+                    break
+
+                batch_frames.append(frame.copy())  # Copy frame to avoid reference issues
+
+                # When batch is full, process it
+                if len(batch_frames) >= batch_size:
+                    print(
+                        f"Processing batch {current_batch + 1}/{total_batches} (frames {batch_start_idx}-{batch_start_idx + len(batch_frames) - 1})"
+                    )
+
                     batch_norm, batch_pixel = process_video_batch(
                         batch_frames,
-                        pose,
+                        landmarker,
                         pose_config,
                         width,
                         height,
-                        lambda msg: print(f"    {msg}"),
+                        full_width=original_width,
+                        full_height=original_height,
+                        progress_callback=lambda msg: print(f"    {msg}"),
                         batch_index=current_batch,
+                        fps=fps,
+                        start_frame_idx=batch_start_idx,
                     )
+
                     normalized_landmarks_list.extend(batch_norm)
                     pixel_landmarks_list.extend(batch_pixel)
+
                     for i, landmarks in enumerate(batch_norm):
                         if all(np.isnan(lm[0]) for lm in landmarks):
                             frames_with_missing_data.append(batch_start_idx + i)
+
+                    # Clear batch and free memory immediately
+                    del batch_frames
                     batch_frames = []
                     cleanup_memory()
-                break
+                    print(f"Batch {current_batch + 1} completed, memory cleaned")
 
-            batch_frames.append(frame.copy())  # Copy frame to avoid reference issues
-
-            # When batch is full, process it
-            if len(batch_frames) >= batch_size:
-                print(
-                    f"Processing batch {current_batch + 1}/{total_batches} (frames {batch_start_idx}-{batch_start_idx + len(batch_frames) - 1})"
-                )
-
-                batch_norm, batch_pixel = process_video_batch(
-                    batch_frames,
-                    pose,
-                    pose_config,
-                    width,
-                    height,
-                    lambda msg: print(f"    {msg}"),
-                    batch_index=current_batch,
-                )
-
-                normalized_landmarks_list.extend(batch_norm)
-                pixel_landmarks_list.extend(batch_pixel)
-
-                for i, landmarks in enumerate(batch_norm):
-                    if all(np.isnan(lm[0]) for lm in landmarks):
-                        frames_with_missing_data.append(batch_start_idx + i)
-
-                # Clear batch and free memory immediately
-                del batch_frames
-                batch_frames = []
-                cleanup_memory()
-                print(f"Batch {current_batch + 1} completed, memory cleaned")
-
-                batch_start_idx += len(batch_norm)
-                current_batch += 1
-                time.sleep(0.1)
+                    batch_start_idx += len(batch_norm)
+                    current_batch += 1
+                    time.sleep(0.1)
 
         # Set frame_count for batch processing
         frame_count = len(normalized_landmarks_list)
         cap.release()
-        pose.close()
         cv2.destroyAllWindows()
 
     else:
-        # Standard processing for normal resolution videos (frame-by-frame)
+        # Standard processing for normal resolution videos (frame-by-frame) using Tasks API
         print("Using standard processing (frame-by-frame to avoid memory out)")
 
-        # Process padding frames first if enabled
-        if enable_padding and pad_start_frames > 0 and padding_frame is not None:
-            print(f"Processing {pad_start_frames} padding frames...")
-            for pad_idx in range(pad_start_frames):
+        # Process with Tasks API
+        with PoseLandmarker.create_from_options(options) as landmarker:
+            # Process padding frames first if enabled
+            if enable_padding and pad_start_frames > 0 and padding_frame is not None:
+                print(f"Processing {pad_start_frames} padding frames...")
+                for pad_idx in range(pad_start_frames):
+                    if should_throttle_cpu(frame_count):
+                        apply_cpu_throttling()
+
+                    timestamp_ms = int((frame_count * 1000) / fps) if fps > 0 else frame_count * 33
+                    landmarks = process_frame_with_tasks_api(
+                        padding_frame, landmarker, timestamp_ms, enable_crop, bbox_config,
+                        width, height, original_width, original_height, pose_config, landmarks_history
+                    )
+
+                    if landmarks:
+                        if VERBOSE_FRAMES:
+                            print(f"Padding frame {pad_idx}: pose detected!")
+                        landmarks_history.append(landmarks)
+                        if pose_config.get("apply_filtering", False) and len(landmarks_history) > 3:
+                            landmarks = apply_temporal_filter(list(landmarks_history))
+                        normalized_landmarks_list.append(landmarks)
+                        pixel_landmarks = [
+                            [int(lm[0] * original_width), int(lm[1] * original_height), lm[2]]
+                            for lm in landmarks
+                        ]
+                        pixel_landmarks_list.append(pixel_landmarks)
+                    else:
+                        if VERBOSE_FRAMES:
+                            print(f"Padding frame {pad_idx}: NO pose detected")
+                        num_landmarks = len(landmark_names)
+                        nan_landmarks = [[np.nan, np.nan, np.nan] for _ in range(num_landmarks)]
+                        normalized_landmarks_list.append(nan_landmarks)
+                        pixel_landmarks_list.append(nan_landmarks)
+                        frames_with_missing_data.append(frame_count)
+
+                    frame_count += 1
+                    time.sleep(FRAME_SLEEP_TIME)
+
+            # Reset video to beginning and process real frames
+            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+
+            # Process all frames frame-by-frame (no memory accumulation)
+            while cap.isOpened():
+                ret, frame = cap.read()
+                if not ret:
+                    break
+
+                # CPU throttling check for standard processing
                 if should_throttle_cpu(frame_count):
                     apply_cpu_throttling()
 
-                results = pose.process(cv2.cvtColor(padding_frame, cv2.COLOR_BGR2RGB))
-                if results.pose_landmarks:
+                timestamp_ms = int((frame_count * 1000) / fps) if fps > 0 else frame_count * 33
+                landmarks = process_frame_with_tasks_api(
+                    frame, landmarker, timestamp_ms, enable_crop, bbox_config,
+                    width, height, original_width, original_height, pose_config, landmarks_history
+                )
+
+                if landmarks:
                     if VERBOSE_FRAMES:
-                        print(f"Padding frame {pad_idx}: pose detected!")
-                    landmarks = [
-                        [landmark.x, landmark.y, landmark.z]
-                        for landmark in results.pose_landmarks.landmark
-                    ]
-                    if pose_config.get("estimate_occluded", False):
-                        landmarks = estimate_occluded_landmarks(landmarks, list(landmarks_history))
+                        print(f"Frame {frame_count}: pose detected!")
                     landmarks_history.append(landmarks)
                     if pose_config.get("apply_filtering", False) and len(landmarks_history) > 3:
                         landmarks = apply_temporal_filter(list(landmarks_history))
                     normalized_landmarks_list.append(landmarks)
                     pixel_landmarks = [
-                        [
-                            int(landmark[0] * width),
-                            int(landmark[1] * height),
-                            landmark[2],
-                        ]
-                        for landmark in landmarks
+                        [int(lm[0] * original_width), int(lm[1] * original_height), lm[2]]
+                        for lm in landmarks
                     ]
                     pixel_landmarks_list.append(pixel_landmarks)
                 else:
                     if VERBOSE_FRAMES:
-                        print(f"Padding frame {pad_idx}: NO pose detected")
+                        print(f"Frame {frame_count}: NO pose detected")
                     num_landmarks = len(landmark_names)
                     nan_landmarks = [[np.nan, np.nan, np.nan] for _ in range(num_landmarks)]
                     normalized_landmarks_list.append(nan_landmarks)
@@ -2353,64 +3054,17 @@ def process_video(video_path, output_dir, pose_config):
                     frames_with_missing_data.append(frame_count)
 
                 frame_count += 1
+
+                # Small sleep between frames to prevent CPU overload
                 time.sleep(FRAME_SLEEP_TIME)
 
-        # Reset video to beginning and process real frames
-        # Note: We already processed the first frame for padding, so we'll process it again
-        # as part of the video (this is intentional for consistency)
-        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-
-        # Process all frames frame-by-frame (no memory accumulation)
-        while cap.isOpened():
-            ret, frame = cap.read()
-            if not ret:
-                break
-
-            # CPU throttling check for standard processing
-            if should_throttle_cpu(frame_count):
-                apply_cpu_throttling()
-
-            results = pose.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-            if results.pose_landmarks:
-                if VERBOSE_FRAMES:
-                    print(f"Frame {frame_count}: pose detected!")
-                landmarks = [
-                    [landmark.x, landmark.y, landmark.z]
-                    for landmark in results.pose_landmarks.landmark
-                ]
-                if pose_config.get("estimate_occluded", False):
-                    landmarks = estimate_occluded_landmarks(landmarks, list(landmarks_history))
-                landmarks_history.append(landmarks)
-                if pose_config.get("apply_filtering", False) and len(landmarks_history) > 3:
-                    landmarks = apply_temporal_filter(list(landmarks_history))
-                normalized_landmarks_list.append(landmarks)
-                pixel_landmarks = [
-                    [int(landmark[0] * width), int(landmark[1] * height), landmark[2]]
-                    for landmark in landmarks
-                ]
-                pixel_landmarks_list.append(pixel_landmarks)
-            else:
-                if VERBOSE_FRAMES:
-                    print(f"Frame {frame_count}: NO pose detected")
-                num_landmarks = len(landmark_names)
-                nan_landmarks = [[np.nan, np.nan, np.nan] for _ in range(num_landmarks)]
-                normalized_landmarks_list.append(nan_landmarks)
-                pixel_landmarks_list.append(nan_landmarks)
-                frames_with_missing_data.append(frame_count)
-
-            frame_count += 1
-
-            # Small sleep between frames to prevent CPU overload
-            time.sleep(FRAME_SLEEP_TIME)
-
-            # Progress info every 100 frames
-            if frame_count % 100 == 0:
-                print(
-                    f"  Processed {frame_count}/{total_frames + (pad_start_frames if enable_padding else 0)} frames"
-                )
+                # Progress info every 100 frames
+                if frame_count % 100 == 0:
+                    print(
+                        f"  Processed {frame_count}/{total_frames + (pad_start_frames if enable_padding else 0)} frames"
+                    )
 
         cap.release()
-        pose.close()
         cv2.destroyAllWindows()
 
     # --- Remove padding frames from results ---
@@ -2592,11 +3246,8 @@ def process_video(video_path, output_dir, pose_config):
             (original_width, original_height),
         )
 
-    mp_drawing = mp.solutions.drawing_utils
-    mp_pose = mp.solutions.pose
-
-    drawing_spec = mp_drawing.DrawingSpec(color=(0, 255, 0), thickness=2, circle_radius=2)
-    connection_spec = mp_drawing.DrawingSpec(color=(255, 0, 0), thickness=2)
+    # Use manual drawing with OpenCV (Tasks API doesn't have drawing utilities)
+    # POSE_CONNECTIONS is defined at module level
 
     frame_idx = 0
     while cap.isOpened():
@@ -2640,26 +3291,37 @@ def process_video(video_path, output_dir, pose_config):
                     for lm in landmarks_px
                 ]
 
-            # Draw landmarks using processed data
-            if not all(np.isnan(lm[0]) for lm in landmarks_px):
-                # Create a PoseLandmarkList object for drawing
-                landmark_proto = landmark_pb2.NormalizedLandmarkList()
-
-                for i, lm in enumerate(landmarks_px):
-                    landmark = landmark_proto.landmark.add()
-                    landmark.x = lm[0] / original_width  # Normalize to 0-1
-                    landmark.y = lm[1] / original_height  # Normalize to 0-1
-                    landmark.z = lm[2] if not np.isnan(lm[2]) else 0
-                    landmark.visibility = 1.0  # Maximum visibility for all processed points
-
-                # Draw landmarks
-                mp_drawing.draw_landmarks(
+            # Draw bounding box rectangle if cropping is enabled
+            if pose_config.get("enable_crop", False):
+                bbox_x_min = pose_config.get("bbox_x_min", 0)
+                bbox_y_min = pose_config.get("bbox_y_min", 0)
+                bbox_x_max = pose_config.get("bbox_x_max", original_width)
+                bbox_y_max = pose_config.get("bbox_y_max", original_height)
+                # Draw rectangle in yellow (BGR format)
+                cv2.rectangle(
                     frame,
-                    landmark_proto,
-                    mp_pose.POSE_CONNECTIONS,
-                    landmark_drawing_spec=drawing_spec,
-                    connection_drawing_spec=connection_spec,
+                    (bbox_x_min, bbox_y_min),
+                    (bbox_x_max, bbox_y_max),
+                    (0, 255, 255),  # Yellow color
+                    2,  # Thickness
                 )
+
+            # Draw landmarks using processed data (manual drawing with OpenCV)
+            if not all(np.isnan(lm[0]) for lm in landmarks_px):
+                # Extract points
+                points = {}
+                for i, lm in enumerate(landmarks_px):
+                    if not np.isnan(lm[0]) and not np.isnan(lm[1]):
+                        x = int(lm[0])
+                        y = int(lm[1])
+                        points[i] = (x, y)
+                        # Draw point
+                        cv2.circle(frame, (x, y), 3, (0, 255, 0), -1)
+                
+                # Draw connections (using POSE_CONNECTIONS defined at module level)
+                for start_idx, end_idx in POSE_CONNECTIONS:
+                    if start_idx in points and end_idx in points:
+                        cv2.line(frame, points[start_idx], points[end_idx], (255, 0, 0), 2)
 
         out.write(frame)
         frame_idx += 1
@@ -2868,7 +3530,7 @@ def process_videos_in_directory(existing_root=None):
         return
 
     # Pose configuration (GUI or TOML via dialog)
-    pose_config = get_pose_config(root)
+    pose_config = get_pose_config(root, input_dir=input_dir)
     if not pose_config:
         return
 
