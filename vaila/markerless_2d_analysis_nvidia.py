@@ -2691,17 +2691,23 @@ def cleanup_memory():
 
 
 def get_model_path(complexity):
-    """Baixa o modelo correto baseado na complexidade (0=Lite, 1=Full, 2=Heavy)"""
+    """Download the correct model based on complexity (0=Lite, 1=Full, 2=Heavy)"""
+    # Use vaila/models directory for storing models
+    models_dir = Path(__file__).parent / "models"
+    models_dir.mkdir(exist_ok=True)
+    
     models = {
         0: "pose_landmarker_lite.task",
         1: "pose_landmarker_full.task",
         2: "pose_landmarker_heavy.task"
     }
     model_name = models.get(complexity, "pose_landmarker_full.task")
+    model_path = models_dir / model_name
     
-    if not os.path.exists(model_name):
-        print(f"Baixando modelo MediaPipe Tasks ({model_name})... aguarde.")
-        # URLs corretas para os modelos
+    if not model_path.exists():
+        print(f"Downloading MediaPipe Tasks model ({model_name})... please wait.")
+        print(f"Download location: {model_path}")
+        # Correct URLs for the models
         model_urls = {
             0: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
             1: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task",
@@ -2709,12 +2715,12 @@ def get_model_path(complexity):
         }
         url = model_urls.get(complexity, model_urls[1])
         try:
-            urllib.request.urlretrieve(url, model_name)
-            print("Download concluído!")
+            urllib.request.urlretrieve(url, str(model_path))
+            print("Download completed!")
         except Exception as e:
-            print(f"Erro ao baixar modelo: {e}")
-            raise RuntimeError("Falha ao baixar modelo do MediaPipe.")  
-    return os.path.abspath(model_name)
+            print(f"Error downloading model: {e}")
+            raise RuntimeError("Failed to download MediaPipe model.")  
+    return str(model_path.resolve())
 
 
 def process_frame_with_tasks_api(frame, landmarker, timestamp_ms, enable_crop, bbox_config, process_width, process_height, original_width, original_height, pose_config, landmarks_history):
@@ -3425,21 +3431,6 @@ def process_video(video_path, output_dir, pose_config, use_gpu=True):
                     ]
                     for lm in landmarks_px
                 ]
-
-            # Draw bounding box rectangle if cropping is enabled
-            if pose_config.get("enable_crop", False):
-                bbox_x_min = pose_config.get("bbox_x_min", 0)
-                bbox_y_min = pose_config.get("bbox_y_min", 0)
-                bbox_x_max = pose_config.get("bbox_x_max", original_width)
-                bbox_y_max = pose_config.get("bbox_y_max", original_height)
-                # Draw rectangle in yellow (BGR format)
-                cv2.rectangle(
-                    frame,
-                    (bbox_x_min, bbox_y_min),
-                    (bbox_x_max, bbox_y_max),
-                    (0, 255, 255),  # Yellow color
-                    2,  # Thickness
-                )
 
             # Draw landmarks using processed data (manual drawing with OpenCV)
             if not all(np.isnan(lm[0]) for lm in landmarks_px):
