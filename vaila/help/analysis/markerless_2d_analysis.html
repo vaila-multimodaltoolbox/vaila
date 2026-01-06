@@ -38,9 +38,9 @@
             <h3>📋 Module Information</h3>
             <p><strong>Category:</strong> Analysis</p>
             <p><strong>File:</strong> vaila\markerless_2d_analysis.py</p>
-            <p><strong>Lines:</strong> 3171</p>
-            <p><strong>Size:</strong> 126209 characters</p>
-            <p><strong>Version:</strong> 0.6.0</p>
+            <p><strong>Lines:</strong> 3659</p>
+            <p><strong>Size:</strong> ~140000 characters</p>
+            <p><strong>Version:</strong> 0.7.1</p>
             <p><strong>Author:</strong> Paulo Roberto Pereira Santiago</p>
             <p><strong>GUI Interface:</strong> ✅ Yes</p>
         </div>
@@ -57,20 +57,24 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 10 August 2025
-Version: 0.6.0
+Update Date: 06 January 2026
+Version: 0.7.1
 
 Description:
 This script performs batch processing of videos for 2D pose estimation using
-MediaPipe's Pose model. It processes videos from a specified input directory,
+MediaPipe's Pose model (Tasks API 0.10.31+). It processes videos from a specified input directory,
 overlays pose landmarks on each video frame, and exports both normalized and
 pixel-based landmark coordinates to CSV files. The script also generates a
 video with the landmarks overlaid on the original frames.
 
-NEW: Integrated video resize functionality to improve pose detection for:
-- Small/distant subjects in videos
-- Low resolution videos
-- Better landmark accuracy through upscaling
+NEW FEATURES (v0.7.1):
+- MediaPipe Tasks API (0.10.31+) migration
+- Bounding box (ROI) selection for small subjects or multi-person scenarios
+- Optional resize of cropped region for improved detection
+- TOML configuration with GUI auto-population
+- Portable debug logging system
+- Video resize functionality (2x-8x upscaling)
+- Advanced filtering algorithms
 
 The user can configure key MediaPipe parameters via a graphical interface,
 including detection confidence, tracking confidence, model...</pre>

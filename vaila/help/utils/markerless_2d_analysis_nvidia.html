@@ -38,10 +38,10 @@
             <h3>📋 Module Information</h3>
             <p><strong>Category:</strong> Utils</p>
             <p><strong>File:</strong> vaila\markerless_2d_analysis_nvidia.py</p>
-            <p><strong>Lines:</strong> 594</p>
-            <p><strong>Size:</strong> 22338 characters</p>
-            <p><strong>Version:</strong> 0.3.0</p>
-            <p><strong>Author:</strong> Prof. Dr. Paulo Santiago</p>
+            <p><strong>Lines:</strong> 3902</p>
+            <p><strong>Size:</strong> ~150000 characters</p>
+            <p><strong>Version:</strong> 0.7.1 (NVIDIA GPU Optimized)</p>
+            <p><strong>Author:</strong> Paulo Roberto Pereira Santiago</p>
             <p><strong>GUI Interface:</strong> ✅ Yes</p>
         </div>
 
@@ -50,36 +50,54 @@
         <div class="docstring">
             <h3>📖 Description</h3>
             <pre>
+Project: vailá Multimodal Toolbox
 Script: markerless_2d_analysis_nvidia.py
-Author: Prof. Dr. Paulo Santiago
-Version: 0.3.0
-Last Updated: 25 April 2025
+Author: Paulo Roberto Pereira Santiago
+Version: 0.7.1 (NVIDIA GPU Optimized)
+Last Updated: 06 January 2026
 
 Description:
 This script performs batch processing of videos for 2D pose estimation using
-MediaPipe's Pose model. It processes videos from a specified input directory,
-overlays pose landmarks on each video frame, and exports both normalized and
-pixel-based landmark coordinates to CSV files.
+MediaPipe's Pose model with NVIDIA GPU acceleration (Tasks API 0.10.31+). It processes 
+videos from a specified input directory, overlays pose landmarks on each video frame, 
+and exports both normalized and pixel-based landmark coordinates to CSV files.
+
+This script is identical to markerless_2d_analysis.py but optimized for NVIDIA GPUs 
+using MediaPipe GPU delegate, providing 2-5x performance improvement over CPU processing.
 
 The user can configure key MediaPipe parameters via a graphical interface,
 including detection confidence, tracking confidence, model complexity, and
-whether to enable segmentation and smooth segmentation. The default settings
-prioritize the highest detection accuracy and tracking precision, which may
-increase computational cost.
+whether to enable segmentation and smooth segmentation.
 
-New Features:
-- Run in NVIDIA GPU in Linux
-- Configure NVIDIA CUDA and cuDNN in Linux first
-- Default values for MediaPipe parameters are set to maximize detection and
-  tracking accuracy:
-    - `min_detection_confidence=1.0`
-    - `min_tracking_confidenc...</pre>
+NEW FEATURES (v0.7.1):
+- NVIDIA GPU acceleration via MediaPipe GPU delegate
+- Automatic GPU detection using nvidia-smi
+- MediaPipe GPU delegate testing before use
+- Device selection dialog (CPU/GPU choice at startup)
+- GPU information display (name, driver, memory, test status)
+- Automatic fallback to CPU if GPU unavailable
+- MediaPipe Tasks API (0.10.31+) migration
+- Bounding box (ROI) selection for small subjects
+- Optional resize of cropped region
+- TOML configuration with GUI auto-population
+- Portable debug logging system</pre>
         </div>
 
         <div class="functions">
             <h3>🔧 Main Functions</h3>
-            <p><strong>Total functions found:</strong> 7</p>
-            <ul><li><code>get_pose_config</code></li><li><code>apply_temporal_filter</code></li><li><code>estimate_occluded_landmarks</code></li><li><code>process_video</code></li><li><code>process_videos_in_directory</code></li><li><code>body</code></li><li><code>apply</code></li></ul>
+            <p><strong>Total functions found:</strong> 30+</p>
+            <p><strong>Key Functions:</strong></p>
+            <ul>
+                <li><code>detect_nvidia_gpu()</code> - Detect NVIDIA GPU availability</li>
+                <li><code>test_mediapipe_gpu()</code> - Test MediaPipe GPU delegate</li>
+                <li><code>DeviceSelectionDialog</code> - GUI dialog for CPU/GPU selection</li>
+                <li><code>process_video()</code> - Main video processing (with GPU support)</li>
+                <li><code>process_videos_in_directory()</code> - Batch processing entry point</li>
+                <li><code>process_frame_with_tasks_api()</code> - Frame processing with Tasks API</li>
+                <li><code>get_pose_config()</code> - Get configuration from GUI or TOML</li>
+                <li><code>map_landmarks_to_full_frame()</code> - Map landmarks from crop to full frame</li>
+                <li>And all functions from CPU version...</li>
+            </ul>
         </div>
 
         <div class="footer">
