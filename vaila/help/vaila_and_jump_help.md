@@ -28,21 +28,31 @@ This guide explains how to use the Vertical Jump Analysis tool in vailá. It cov
 3) Select the data type: (1) Time of Flight, (2) Jump Height, or (3) MediaPipe
 4) MediaPipe mode requires subject constants (asked once per batch):
    - Mass (kg), Video FPS, Shank length (m)
+     - **Note**: FPS can be a decimal (float) for high-speed cameras.
    - To avoid prompts, create `vaila_and_jump_config.toml` in `vaila/` or `vaila/models/`:
      ```toml
      [jump_context]
      mass_kg = 75.0
-     fps = 240
+     fps = 240.0
      shank_length_m = 0.40
      ```
 5) Review outputs in the generated timestamped folder
+
+### Kinematic Analysis (Valgus/FPPA)
+- **Valgus Ratio**: Knee Separation / Hip Separation. (< 0.8 indicates risk)
+- **FPPA**: Frontal Plane Projection Angle (2D). (> 10° indicates risk)
+- **Phases Analyzed**: Squat (Propulsion Start) and Landing Sequences.
+- **Robustness**: Uses neighbor-frame search to handle occlusion during deep squat.
 
 ### Outputs
 - CSV: `<name>_jump_metrics_<timestamp>.csv` — summary metrics
 - CSV: `<name>_calibrated_<timestamp>.csv` — calibrated (meters) and normalized series
 - CSV: `<name>_jump_database_<timestamp>.csv` — one-row database with all metrics
-- PNG: diagnostic and phase plots (CG and feet) and stick-figure visualizations
-- HTML: `<name>_report_<timestamp>.html` — comprehensive report
+- PNG: 
+  - Normalized diagnostic plots
+  - Stick-figure phases (with Time and Jump Height annotation)
+  - Valgus event analysis (with risk metrics text outside plot area)
+- HTML: `<name>_report_<timestamp>.html` — comprehensive report with risk screening table
 
 ### Equations
 - Height from time of flight: \( h = \frac{g\, t^2}{8} \)
