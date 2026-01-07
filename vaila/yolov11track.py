@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 18 February 2025
-Update Date: 29 October 2025
-Version: 0.0.3
+Update Date: 07 January 2026
+Version: 0.0.4
 
 Description:
     This script performs object detection and tracking on video files using the YOLO model v11.
@@ -63,7 +63,7 @@ import numpy as np
 import pandas as pd
 import pkg_resources
 import torch
-from boxmot import BotSort
+import yaml
 from rich import print
 from ultralytics import YOLO
 
@@ -792,44 +792,6 @@ def standardize_filename(filename: str) -> str:
     return new_name
 
 
-def process_video(input_file: str):
-    # Normalize the file path (resolves slashes and separators appropriately)
-    input_file = os.path.normpath(input_file)
-
-    # Check if the file actually exists
-    if not os.path.exists(input_file):
-        raise FileNotFoundError(f"File not found: {input_file}")
-
-    # Separate directory and base file name, and standardize the base name if necessary
-    dir_name = os.path.dirname(input_file)
-    base_name = os.path.basename(input_file)
-    standardized_name = standardize_filename(base_name)
-
-    # If the name has been altered, rename the file temporarily
-    if base_name != standardized_name:
-        new_file_path = os.path.join(dir_name, standardized_name)
-        os.rename(input_file, new_file_path)
-        input_file = new_file_path
-        print(f"Standardized file name: {input_file}")
-
-    # On Windows, ffmpeg may misinterpret backslashes. Replace them with forward slashes.
-    ffmpeg_input = input_file.replace("\\", "/")
-
-    # Build the command as a list of arguments so that spaces don't break the command.
-    cmd = [
-        "ffmpeg",
-        "-i",
-        ffmpeg_input,
-        "-filter_complex",
-        "your_filter_here",
-        "output.mp4",
-    ]
-
-    print("Executing command:", " ".join(cmd))
-    # Run the command without using the shell
-    subprocess.run(cmd)
-
-
 def get_color_for_id_improved(tracker_id):
     """Generate a distinct color for each tracker ID using HSV color space."""
     # Use different prime numbers to create greater variation in hue
@@ -1207,42 +1169,6 @@ def run_yolov11track():
 
     target_classes = class_dialog.result
 
-    # Before initializing BotSort
-    print("Checking if we are ready to initialize BotSort...")
-
-    # Initialize BotSort
-    print("Initializing BotSort")
-
-    # Try create reid_weights if osnet_x0_25_msmt17.pt does not exist, download it from the internet https://huggingface.co/paulosantiago/osnet_x0_25_msmt17/resolve/main/osnet_x0_25_msmt17.pt
-    models_dir = os.path.join(os.path.dirname(__file__), "models")
-    reid_weights_path = os.path.join(models_dir, "osnet_x0_25_msmt17.pt")
-    if not os.path.exists(reid_weights_path):
-        print("Downloading ReID model...")
-        try:
-            import requests
-
-            url = "https://huggingface.co/paulosantiago/osnet_x0_25_msmt17/resolve/main/osnet_x0_25_msmt17.pt"
-            response = requests.get(url)
-            with open(reid_weights_path, "wb") as f:
-                f.write(response.content)
-            print(f"ReID model downloaded successfully to {reid_weights_path}")
-        except Exception as e:
-            print(f"Failed to download ReID model: {str(e)}")
-            messagebox.showerror("Error", f"Failed to download ReID model: {str(e)}")
-            return
-
-    reid_weights = Path(models_dir) / "osnet_x0_25_msmt17.pt"
-
-    device = "cuda" if torch.cuda.is_available() else "cpu"  # Use GPU if available
-    half = True  # Use reduced precision
-    if not reid_weights.exists():
-        print(f"ReID model not found at: {reid_weights}")
-    try:
-        BotSort(reid_weights=reid_weights, device=device, half=half)
-        print("BotSort initialized successfully.")
-    except Exception as e:
-        print(f"Error initializing BotSort: {e}")
-
     # Process each video in the directory
     for video_file in os.listdir(video_dir):
         if video_file.endswith((".mp4", ".avi", ".mov", ".mkv", ".MP4", ".AVI", ".MOV", ".MKV")):
@@ -1257,20 +1183,32 @@ def run_yolov11track():
             cap = cv2.VideoCapture(video_path)
             width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            fps = int(cap.get(cv2.CAP_PROP_FPS))
+            fps_raw = cap.get(cv2.CAP_PROP_FPS)
+            # Handle fractional FPS (common in some video formats)
+            fps = float(fps_raw) if fps_raw > 0 else 30.0
             total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             cap.release()
 
-            # Specify the output path for the processed video
+            # Specify temporary AVI path (MJPG codec is very reliable)
+            temp_avi_path = os.path.join(output_dir, f"processed_{video_name}_temp.avi")
+            # Final MP4 path
             out_video_path = os.path.join(output_dir, f"processed_{video_name}.mp4")
 
-            # Use the 'mp4v' codec which is more stable
+            # Use MJPG codec for AVI (highly compatible and reliable)
+            # This ensures the video is written correctly without corruption
             writer = cv2.VideoWriter(
-                out_video_path, cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height)
+                temp_avi_path, cv2.VideoWriter_fourcc(*"MJPG"), fps, (width, height)
             )
             if not writer.isOpened():
-                print(f"Error creating video file: {out_video_path}")
-                continue
+                print(f"Error creating video file: {temp_avi_path}")
+                print("Trying alternative codec...")
+                # Fallback to XVID if MJPG fails
+                writer = cv2.VideoWriter(
+                    temp_avi_path, cv2.VideoWriter_fourcc(*"XVID"), fps, (width, height)
+                )
+                if not writer.isOpened():
+                    print(f"Error: Could not create video writer with any codec")
+                    continue
 
             # Process the frames
             cap = cv2.VideoCapture(video_path)
@@ -1278,37 +1216,78 @@ def run_yolov11track():
 
             print(f"Tracking with {tracker_name} (YOLO built-in tracker)")
 
-            # Find the tracker config file
+            # Try to use the default Ultralytics tracker config first, then customize
             tracker_config = None
+            try:
+                # Option 1: Try to load default tracker config from Ultralytics
+                ultralytics_path = pkg_resources.resource_filename("ultralytics", "cfg/trackers")
+                tracker_yaml = f"{tracker_name}.yaml"
+                yaml_path = os.path.join(ultralytics_path, tracker_yaml)
+                
+                if os.path.exists(yaml_path):
+                    # Read the default config
+                    with open(yaml_path, "r") as f:
+                        tracker_cfg = yaml.safe_load(f)
+                    
+                    # Apply optimizations
+                    tracker_cfg["track_buffer"] = 60  # Increased for better occlusion handling
+                    
+                    # BoT-SORT specific optimizations
+                    if tracker_name == "botsort":
+                        tracker_cfg["gmc_method"] = "sparseOptFlow"
+                        tracker_cfg["with_reid"] = True
+                        tracker_cfg["proximity_thresh"] = 0.5
+                        tracker_cfg["appearance_thresh"] = 0.25
+                        print("BoT-SORT configured with GMC and ReID for maximum robustness")
+                    
+                    # Save customized config
+                    trackers_dir = os.path.join(models_dir, "trackers")
+                    os.makedirs(trackers_dir, exist_ok=True)
+                    custom_yaml = os.path.join(trackers_dir, f"{tracker_name}_custom.yaml")
+                    
+                    with open(custom_yaml, "w") as f:
+                        yaml.dump(tracker_cfg, f, default_flow_style=False, sort_keys=False)
+                    
+                    tracker_config = custom_yaml
+                    print(f"Using optimized tracker config based on Ultralytics default: {tracker_config}")
+                else:
+                    # Option 2: Create config from scratch with all required fields
+                    trackers_dir = os.path.join(models_dir, "trackers")
+                    os.makedirs(trackers_dir, exist_ok=True)
+                    custom_yaml = os.path.join(trackers_dir, f"{tracker_name}_custom.yaml")
+                    
+                    # Create complete tracker config with all required fields
+                    tracker_cfg = {
+                        "tracker_type": tracker_name,
+                        "track_high_thresh": 0.5,
+                        "track_low_thresh": 0.1,
+                        "new_track_thresh": 0.6,
+                        "track_buffer": 60,
+                        "match_thresh": 0.8,
+                        "fuse_score": True,  # Required field that was missing
+                    }
+                    
+                    # BoT-SORT specific settings
+                    if tracker_name == "botsort":
+                        tracker_cfg["gmc_method"] = "sparseOptFlow"
+                        tracker_cfg["with_reid"] = True
+                        tracker_cfg["proximity_thresh"] = 0.5
+                        tracker_cfg["appearance_thresh"] = 0.25
+                        print("BoT-SORT configured with GMC and ReID for maximum robustness")
+                    
+                    with open(custom_yaml, "w") as f:
+                        yaml.dump(tracker_cfg, f, default_flow_style=False, sort_keys=False)
+                    
+                    tracker_config = custom_yaml
+                    print(f"Using custom tracker config: {tracker_config}")
+                    
+            except Exception as e:
+                print(f"Warning: Could not load default tracker config: {e}")
+                print("Falling back to using tracker name directly")
+                # Fallback: use tracker name directly (Ultralytics will use defaults)
+                tracker_config = tracker_name
 
-            # Option 1: Look for the tracker config in the Ultralytics package
-            ultralytics_path = pkg_resources.resource_filename("ultralytics", "cfg/trackers")
-            tracker_yaml = f"{tracker_name}.yaml"
-            yaml_path = os.path.join(ultralytics_path, tracker_yaml)
-
-            if os.path.exists(yaml_path):
-                tracker_config = yaml_path
-            else:
-                # Option 2: Create local copy of tracker config in our models directory
-                trackers_dir = os.path.join(models_dir, "trackers")
-                os.makedirs(trackers_dir, exist_ok=True)
-                local_yaml = os.path.join(trackers_dir, tracker_yaml)
-
-                # Create basic tracker config file if it doesn't exist
-                if not os.path.exists(local_yaml):
-                    with open(local_yaml, "w") as f:
-                        f.write(f"tracker_type: {tracker_name}\n")
-                        f.write("track_high_thresh: 0.5\n")
-                        f.write("track_low_thresh: 0.1\n")
-                        f.write("new_track_thresh: 0.6\n")
-                        f.write("track_buffer: 30\n")
-                        f.write("match_thresh: 0.8\n")
-
-                tracker_config = local_yaml
-
-            print(f"Using tracker config: {tracker_config}")
-
-            # Use YOLO's tracker with the config file
+            # Use YOLO's tracker with the optimized config file
             results = model.track(
                 source=video_path,
                 conf=config["conf"],
@@ -1318,8 +1297,9 @@ def run_yolov11track():
                 save=False,
                 stream=True,
                 persist=True,
-                tracker=tracker_config,  # Use the config file path
-                classes=target_classes,  # Usa as classes selecionadas pelo usuário
+                tracker=tracker_config,  # Use the optimized config file path
+                classes=target_classes,  # Use selected classes from user
+                verbose=False,  # Reduce terminal spam
             )
 
             tracker_csv_files = {}
@@ -1404,17 +1384,74 @@ def run_yolov11track():
             # Release resources
             cap.release()
             writer.release()
+            
+            # Verify the AVI file was written successfully
+            if not os.path.exists(temp_avi_path) or os.path.getsize(temp_avi_path) == 0:
+                print(f"Error: Video file {temp_avi_path} was not created or is empty")
+                continue
 
-            # Convert the video to a more compatible format using ffmpeg
+            # Convert AVI to MP4 using FFmpeg with robust settings for VLC compatibility
+            print(f"Converting video to MP4 format for maximum compatibility...")
             try:
-                temp_path = out_video_path.replace(".mp4", "_temp.mp4")
-                os.rename(out_video_path, temp_path)
-                os.system(
-                    f"ffmpeg -i {temp_path} -c:v libx264 -preset medium -crf 23 {out_video_path}"
+                # Use subprocess for better security and error handling
+                # These FFmpeg parameters ensure VLC and other players can read the file
+                ffmpeg_cmd = [
+                    "ffmpeg",
+                    "-y",  # Overwrite output file if it exists
+                    "-i", temp_avi_path,
+                    "-c:v", "libx264",  # H.264 codec (universal compatibility)
+                    "-preset", "medium",  # Balance between speed and compression
+                    "-crf", "23",  # Quality (lower = better, 23 is good default)
+                    "-pix_fmt", "yuv420p",  # Pixel format (required for compatibility)
+                    "-movflags", "+faststart",  # Enable fast start for web playback
+                    "-c:a", "aac",  # Audio codec (if audio exists)
+                    "-b:a", "128k",  # Audio bitrate
+                    "-strict", "-2",  # Allow experimental codecs if needed
+                    out_video_path
+                ]
+                
+                result = subprocess.run(
+                    ffmpeg_cmd,
+                    capture_output=True,
+                    text=True,
+                    check=False
                 )
-                os.remove(temp_path)
+                
+                if result.returncode == 0:
+                    # Verify output file exists and has content
+                    if os.path.exists(out_video_path) and os.path.getsize(out_video_path) > 0:
+                        os.remove(temp_avi_path)
+                        print(f"✓ Video converted successfully: {out_video_path}")
+                        print(f"  File size: {os.path.getsize(out_video_path) / (1024*1024):.2f} MB")
+                    else:
+                        print(f"Warning: FFmpeg completed but output file is missing or empty")
+                        if os.path.exists(temp_avi_path):
+                            print(f"Keeping temporary AVI file: {temp_avi_path}")
+                else:
+                    print(f"FFmpeg conversion error (return code {result.returncode}):")
+                    if result.stderr:
+                        print(f"  {result.stderr[:500]}")  # Print first 500 chars of error
+                    # Keep temp AVI file if conversion fails
+                    if os.path.exists(temp_avi_path):
+                        print(f"Keeping temporary AVI file: {temp_avi_path}")
+                        # Optionally rename AVI to final name
+                        avi_final = out_video_path.replace(".mp4", ".avi")
+                        try:
+                            os.rename(temp_avi_path, avi_final)
+                            print(f"Saved as AVI instead: {avi_final}")
+                        except Exception:
+                            pass
+                        
+            except FileNotFoundError:
+                print(f"Error: FFmpeg not found. Please install FFmpeg.")
+                print(f"Keeping temporary AVI file: {temp_avi_path}")
             except Exception as e:
                 print(f"Error in video conversion: {str(e)}")
+                import traceback
+                traceback.print_exc()
+                # Keep temp AVI file if conversion fails
+                if os.path.exists(temp_avi_path):
+                    print(f"Keeping temporary AVI file: {temp_avi_path}")
 
             print(f"Processing completed for {video_file}. Results saved in '{output_dir}'.")
 
@@ -1431,13 +1468,14 @@ def run_yolov11track():
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python yolov11track.py [video_file]")
-        sys.exit(1)
-
-    video_file = sys.argv[1]
+    # Launch GUI-based tracker application
     try:
-        process_video(video_file)
+        run_yolov11track()
+    except KeyboardInterrupt:
+        print("\n\nTracking interrupted by user.")
+        sys.exit(0)
     except Exception as e:
-        print(f"An error occurred: {e}")
+        print(f"\n\nAn error occurred: {e}")
+        import traceback
+        traceback.print_exc()
         sys.exit(1)

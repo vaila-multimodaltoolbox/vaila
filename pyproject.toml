@@ -57,6 +57,7 @@ dependencies = [
     "sqlalchemy",
     "ezc3d",
     "toml",
+    "pyyaml",
     # Computer vision and image processing
     "opencv-contrib-python",
     "imageio",
@@ -67,6 +68,11 @@ dependencies = [
     "jaxlib",
     "xgboost",
     "mediapipe==0.10.31",
+    "torch",
+    "torchvision",
+    "ultralytics",
+    "boxmot",
+    "requests",
     # 3D processing
     "open3d",
     "glfw",

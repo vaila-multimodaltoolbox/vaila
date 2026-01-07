@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -12,7 +12,7 @@
             background-color: #f5f5f5;
         }
         .container {
-            max-width: 800px;
+            max-width: 900px;
             margin: 0 auto;
             background: white;
             padding: 30px;
@@ -20,66 +20,323 @@
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
         h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
-        h2 { color: #34495e; margin-top: 30px; }
+        h2 { color: #34495e; margin-top: 30px; border-bottom: 2px solid #ecf0f1; padding-bottom: 5px; }
+        h3 { color: #7f8c8d; margin-top: 20px; }
         .module-info { background: #ecf0f1; padding: 15px; border-radius: 5px; margin: 20px 0; }
         .functions { background: #f8f9fa; padding: 15px; border-left: 4px solid #28a745; margin: 15px 0; }
         .docstring { background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 15px 0; }
-        .errorr { background: #f8d7da; padding: 15px; border-left: 4px solid #dc3545; margin: 15px 0; }
-        code { background: #e9ecef; padding: 2px 6px; border-radius: 3px; }
-        pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; }
+        .feature-box { background: #e8f5e9; padding: 15px; border-left: 4px solid #4caf50; margin: 15px 0; }
+        .code-block { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; border-left: 4px solid #2196f3; }
+        code { background: #e9ecef; padding: 2px 6px; border-radius: 3px; font-family: 'Courier New', monospace; }
+        pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; white-space: pre-wrap; }
         .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #6c757d; font-size: 0.9em; }
+        ul, ol { margin: 10px 0; padding-left: 30px; }
+        li { margin: 5px 0; }
+        table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+        th, td { padding: 8px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background-color: #f2f2f2; font-weight: bold; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>vailá - numberframes</h1>
+        <h1>vailá - numberframes.py</h1>
 
         <div class="module-info">
             <h3>📋 Module Information</h3>
             <p><strong>Category:</strong> Tools</p>
-            <p><strong>File:</strong> vaila\numberframes.py</p>
-            <p><strong>Lines:</strong> 409</p>
-            <p><strong>Size:</strong> 15222 characters</p>
-            <p><strong>Version:</strong> 0.1.2</p>
+            <p><strong>File:</strong> vaila/numberframes.py</p>
+            <p><strong>Version:</strong> 0.1.3</p>
             <p><strong>Author:</strong> Paulo R. P. Santiago</p>
+            <p><strong>Email:</strong> paulosantiago@usp.br</p>
+            <p><strong>GitHub:</strong> <a href="https://github.com/vaila-multimodaltoolbox/vaila">vaila-multimodaltoolbox/vaila</a></p>
             <p><strong>GUI Interface:</strong> ✅ Yes</p>
+            <p><strong>License:</strong> GNU Lesser General Public License v3.0</p>
         </div>
 
-        
-
         <div class="docstring">
-            <h3>📖 Description</h3>
-            <pre>
-numberframes.py
-===============================================================================
-Author: Paulo R. P. Santiago
-Email: paulosantiago@usp.br
-GitHub: https://github.com/vaila-multimodaltoolbox/vaila
-Creation Date: 10 October 2024
-Update Date: 13 August 2025
-Version: 0.1.2
-Python Version: 3.12.11
+            <h2>📖 Description</h2>
+            <p>This script provides <strong>scientific-grade video metadata extraction</strong> with high precision for research applications. It analyzes video files within a selected directory and extracts comprehensive metadata including frame count, frame rates (display and capture), resolution, codec information, and duration. The script generates both a user-friendly summary and detailed JSON metadata files with precision suitable for scientific research.</p>
+        </div>
 
-Description:
-------------
-This script allows users to analyze video files within a selected directory and extract metadata such as frame count, frame rate (FPS), resolution, codec, and duration. The script generates a summary of this information, displays it in a user-friendly graphical interface, and saves the metadata to text files. The "basic" file contains essential metadata, while the "full" file includes all possible metadata extracted using `ffprobe`.
-
-Key Features:
--------------
-1. Fast metadata extraction using a single ffprobe JSON call.
-2. Detection of capture FPS via Android tag com.android.capture.fps when present.
-3. Parallel processing of multiple videos for faster a...</pre>
+        <div class="feature-box">
+            <h2>✨ Key Features</h2>
+            <ul>
+                <li><strong>Scientific Precision</strong>: Frame rates and durations with 9 decimal places for research accuracy</li>
+                <li><strong>Fast Extraction</strong>: Single <code>ffprobe</code> JSON call for efficient metadata extraction</li>
+                <li><strong>Capture FPS Detection</strong>: Automatically detects Android slow-motion capture FPS tags</li>
+                <li><strong>Parallel Processing</strong>: Processes multiple videos concurrently for faster analysis</li>
+                <li><strong>Dual Output</strong>: Basic summary file and full JSON metadata files</li>
+                <li><strong>GUI Display</strong>: User-friendly table view of all video metadata</li>
+                <li><strong>Research Ready</strong>: High-precision values suitable for scientific analysis</li>
+            </ul>
         </div>
 
         <div class="functions">
-            <h3>🔧 Main Functions</h3>
-            <p><strong>Total functions found:</strong> 7</p>
-            <ul><li><code>get_video_info</code></li><li><code>display_video_info</code></li><li><code>save_basic_metadata_to_file</code></li><li><code>save_full_metadata_to_file</code></li><li><code>show_save_success_message</code></li><li><code>count_frames_in_videos</code></li><li><code>on_closing</code></li></ul>
+            <h2>🔧 Main Functions</h2>
+            <p><strong>Total functions found:</strong> 10+</p>
+            
+            <h3>Core Functions</h3>
+            <ul>
+                <li><code>get_video_info()</code> - Extract comprehensive video metadata using ffprobe</li>
+                <li><code>_ffprobe_json()</code> - Single fast ffprobe call returning complete JSON</li>
+                <li><code>_to_float_fps()</code> - Convert fraction strings to precise float values</li>
+                <li><code>_extract_capture_fps()</code> - Detect Android capture FPS from metadata tags</li>
+            </ul>
+
+            <h3>Display and Output Functions</h3>
+            <ul>
+                <li><code>display_video_info()</code> - GUI table displaying all video metadata</li>
+                <li><code>save_basic_metadata_to_file()</code> - Save human-readable summary (9 decimal precision)</li>
+                <li><code>save_full_metadata_to_file()</code> - Save complete JSON metadata for each video</li>
+                <li><code>show_save_success_message()</code> - Confirmation dialog</li>
+            </ul>
+
+            <h3>Main Entry Point</h3>
+            <ul>
+                <li><code>count_frames_in_videos()</code> - Main function with directory selection and processing</li>
+            </ul>
+        </div>
+
+        <div class="feature-box">
+            <h2>📊 Metadata Extracted</h2>
+            
+            <h3>Frame Information</h3>
+            <ul>
+                <li><strong>Frame Count</strong>: Exact number of frames (from <code>nb_frames</code> or calculated)</li>
+                <li><strong>Display FPS</strong>: Frame rate for display (r_frame_rate) - 9 decimal precision</li>
+                <li><strong>Average FPS</strong>: Average frame rate (avg_frame_rate) - 9 decimal precision</li>
+                <li><strong>Capture FPS</strong>: Real capture rate for slow-motion videos (Android tags) - 9 decimal precision</li>
+                <li><strong>Recommended Sampling Hz</strong>: Best sampling rate for data analysis</li>
+            </ul>
+
+            <h3>Video Properties</h3>
+            <ul>
+                <li><strong>Resolution</strong>: Width x Height in pixels</li>
+                <li><strong>Duration</strong>: Video length in seconds (9 decimal precision)</li>
+                <li><strong>Codec</strong>: Video codec name and long name</li>
+                <li><strong>Container</strong>: Container format name and long name</li>
+            </ul>
+
+            <h3>Slow-Motion Detection</h3>
+            <ul>
+                <li>Automatically detects <code>com.android.capture.fps</code> tags</li>
+                <li>Calculates slow-motion factor (capture_fps / display_fps)</li>
+                <li>Provides recommended sampling rate for analysis</li>
+            </ul>
+        </div>
+
+        <div class="docstring">
+            <h2>🔬 Scientific Precision</h2>
+            
+            <h3>High-Precision Values</h3>
+            <p>All frame rates and durations are stored and displayed with <strong>9 decimal places</strong> for scientific accuracy:</p>
+            <ul>
+                <li><strong>Display FPS</strong>: <code>59.940059940</code> (instead of rounded <code>59.940</code>)</li>
+                <li><strong>Duration</strong>: <code>253.620000000</code> seconds (instead of <code>253.62</code>)</li>
+                <li><strong>Capture FPS</strong>: <code>240.000000000</code> for slow-motion videos</li>
+            </ul>
+
+            <h3>Fraction-to-Float Conversion</h3>
+            <p>The script converts frame rate fractions (e.g., "30000/1001") to precise float values:</p>
+            <pre><code># Example: 30000/1001 = 29.97002997002997 fps
+# Preserved exactly, not rounded to 29.97</code></pre>
+
+            <h3>Frame Count Calculation</h3>
+            <ol>
+                <li><strong>Primary</strong>: Uses <code>nb_frames</code> from video stream if available</li>
+                <li><strong>Secondary</strong>: Calculates from <code>duration × avg_frame_rate</code> if <code>nb_frames</code> missing</li>
+                <li><strong>Fallback</strong>: Uses OpenCV frame count if ffprobe unavailable</li>
+            </ol>
+        </div>
+
+        <div class="feature-box">
+            <h2>📁 Output Files</h2>
+            
+            <h3>Basic Metadata File</h3>
+            <p><strong>File</strong>: <code>video_metadata_basic_TIMESTAMP.txt</code></p>
+            <p>Contains human-readable summary with high precision:</p>
+            <pre><code>File: video.mp4
+Frames: 15202
+Display_FPS: 59.940059940
+Avg_FPS: 59.940059940
+Capture_FPS: 240.000000000
+Recommended_Sampling_Hz: 240.000000000
+SlowMo_Factor: 4.003996004
+Codec: hevc - H.265 / HEVC (High Efficiency Video Coding)
+Container: mov,mp4,m4a,3gp,3g2,mj2 - QuickTime / MOV
+Resolution: 1920x1080
+Duration (s): 253.620000000</code></pre>
+
+            <h3>Full Metadata Files</h3>
+            <p><strong>Directory</strong>: <code>metadata_full_TIMESTAMP/</code></p>
+            <p>Contains complete JSON metadata for each video:</p>
+            <ul>
+                <li><code>video_name.json</code> - Full ffprobe output with all streams, format, chapters, etc.</li>
+                <li>Suitable for programmatic analysis</li>
+                <li>Includes all technical details</li>
+            </ul>
+        </div>
+
+        <div class="code-block">
+            <h2>🚀 Usage</h2>
+            
+            <h3>GUI Mode (Recommended)</h3>
+            <pre><code>from vaila.numberframes import count_frames_in_videos
+
+# Launch GUI for directory selection and analysis
+count_frames_in_videos()</code></pre>
+
+            <h3>Programmatic Usage</h3>
+            <pre><code>from vaila.numberframes import get_video_info
+from pathlib import Path
+
+# Get precise metadata for a single video
+video_path = Path("video.mp4")
+info = get_video_info(str(video_path))
+
+# Access high-precision values
+print(f"Display FPS: {info['display_fps']:.9f}")
+print(f"Capture FPS: {info['capture_fps']:.9f}" if info['capture_fps'] else "N/A")
+print(f"Duration: {info['duration']:.9f} seconds")
+print(f"Frames: {info['frame_count']}")
+print(f"Resolution: {info['resolution']}")</code></pre>
+        </div>
+
+        <div class="docstring">
+            <h2>💻 Requirements</h2>
+            <ul>
+                <li><strong>Python</strong>: 3.12.11+</li>
+                <li><strong>ffprobe</strong>: Required for metadata extraction (part of ffmpeg)</li>
+                <li><strong>Tkinter</strong>: For GUI interface (usually included with Python)</li>
+                <li><strong>rich</strong>: For enhanced console output</li>
+            </ul>
+
+            <h3>Installing ffmpeg/ffprobe</h3>
+            <ul>
+                <li><strong>Windows</strong>: Download from <a href="https://ffmpeg.org/download.html">https://ffmpeg.org/download.html</a></li>
+                <li><strong>macOS</strong>: <code>brew install ffmpeg</code></li>
+                <li><strong>Linux</strong>: <code>sudo apt-get install ffmpeg</code> (Ubuntu/Debian)</li>
+            </ul>
+        </div>
+
+        <div class="feature-box">
+            <h2>⚙️ Technical Details</h2>
+            
+            <h3>Parallel Processing</h3>
+            <ul>
+                <li>Uses <code>ThreadPoolExecutor</code> for concurrent video analysis</li>
+                <li>Default workers: <code>max(2, cpu_count())</code></li>
+                <li>Processes videos in parallel for faster batch analysis</li>
+            </ul>
+
+            <h3>Frame Rate Extraction</h3>
+            <ol>
+                <li>Extracts <code>r_frame_rate</code> (rational frame rate) as fraction string</li>
+                <li>Extracts <code>avg_frame_rate</code> (average frame rate) as fraction string</li>
+                <li>Converts fractions to float with full precision</li>
+                <li>Prefers <code>avg_frame_rate</code> if available, falls back to <code>r_frame_rate</code></li>
+            </ol>
+
+            <h3>Capture FPS Detection</h3>
+            <p>Searches for Android slow-motion tags in:</p>
+            <ul>
+                <li>Format tags: <code>com.android.capture.fps</code></li>
+                <li>Stream tags: <code>com.android.capture.fps</code></li>
+                <li>Alternative tags: <code>com.android.capturer.fps</code>, <code>com.android.slowMotion.capture.fps</code></li>
+            </ul>
+
+            <h3>Error Handling</h3>
+            <ul>
+                <li>Graceful fallback if ffprobe fails</li>
+                <li>Continues processing other videos if one fails</li>
+                <li>Detailed error messages in output files</li>
+            </ul>
+        </div>
+
+        <div class="docstring">
+            <h2>🔬 Scientific Research Applications</h2>
+            <p>This tool is essential for research requiring precise video metadata:</p>
+            <ul>
+                <li><strong>Biomechanics</strong>: Accurate frame rates for temporal analysis</li>
+                <li><strong>Motion Capture</strong>: Frame-accurate synchronization</li>
+                <li><strong>Video Analysis</strong>: Precise duration and frame count for calculations</li>
+                <li><strong>Data Validation</strong>: Verify video properties before processing</li>
+                <li><strong>Slow-Motion Analysis</strong>: Detect and account for slow-motion capture rates</li>
+            </ul>
+        </div>
+
+        <div class="feature-box">
+            <h2>📊 Example Output</h2>
+            
+            <h3>Console Output</h3>
+            <pre><code>Video info: 1920x1080, codec=hevc, container=mov,mp4,m4a,3gp,3g2,mj2, 
+display≈59.940059940 fps, avg≈59.940059940 fps, cap=240.000000000 Hz, 
+dur=253.620000000s, frames=15202</code></pre>
+
+            <h3>GUI Display</h3>
+            <p>Shows table with:</p>
+            <ul>
+                <li>Video file names</li>
+                <li>Frame counts</li>
+                <li>Display FPS (6 decimals for readability)</li>
+                <li>Capture FPS (6 decimals)</li>
+                <li>Codec and container</li>
+                <li>Resolution</li>
+                <li>Duration (6 decimals)</li>
+            </ul>
+
+            <h3>File Output</h3>
+            <p>All values saved with <strong>9 decimal precision</strong> for maximum accuracy.</p>
+        </div>
+
+        <div class="docstring">
+            <h2>📝 Notes</h2>
+            <ul>
+                <li><strong>Precision</strong>: All FPS and duration values use 9 decimal places in files</li>
+                <li><strong>GUI Display</strong>: Shows 6 decimal places for readability (full precision in files)</li>
+                <li><strong>Frame Count</strong>: Uses <code>nb_frames</code> when available, otherwise calculated</li>
+                <li><strong>Slow-Motion</strong>: Automatically detects and reports slow-motion factors</li>
+                <li><strong>Batch Processing</strong>: Processes all videos in selected directory</li>
+            </ul>
+        </div>
+
+        <div class="feature-box">
+            <h2>🐛 Troubleshooting</h2>
+            
+            <h3>ffprobe Not Found</h3>
+            <ul>
+                <li>Install ffmpeg package (includes ffprobe)</li>
+                <li>Ensure ffprobe is in system PATH</li>
+                <li>Script will show error but continue with other videos</li>
+            </ul>
+
+            <h3>Missing Frame Count</h3>
+            <ul>
+                <li>Some video formats don't include <code>nb_frames</code></li>
+                <li>Script calculates from duration × FPS</li>
+                <li>Result may differ slightly from actual frame count</li>
+            </ul>
+
+            <h3>Slow-Motion Not Detected</h3>
+            <ul>
+                <li>Only detects Android-specific tags</li>
+                <li>Other slow-motion formats may not be detected</li>
+                <li>Check full JSON metadata for other tags</li>
+            </ul>
+        </div>
+
+        <div class="docstring">
+            <h2>📚 Related Tools</h2>
+            <ul>
+                <li><strong>cutvideo.py</strong>: Cut videos with scientific precision</li>
+                <li><strong>syncvid.py</strong>: Synchronize multiple videos</li>
+                <li><strong>resize_video.py</strong>: Resize videos while preserving metadata</li>
+            </ul>
         </div>
 
         <div class="footer">
-            <p>📅 Generated automatically on: 15/10/2025 08:04:44</p>
-            <p>🔗 Part of vailá - Multimodal Toolbox</p>
+            <p>📅 <strong>Last Updated:</strong> January 2025</p>
+            <p>🔗 <strong>Part of vailá - Multimodal Toolbox</strong></p>
             <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
         </div>
     </div>
