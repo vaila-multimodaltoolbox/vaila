@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -12,7 +12,7 @@
             background-color: #f5f5f5;
         }
         .container {
-            max-width: 800px;
+            max-width: 900px;
             margin: 0 auto;
             background: white;
             padding: 30px;
@@ -20,78 +20,319 @@
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
         h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
-        h2 { color: #34495e; margin-top: 30px; }
+        h2 { color: #34495e; margin-top: 30px; border-bottom: 2px solid #ecf0f1; padding-bottom: 5px; }
+        h3 { color: #7f8c8d; margin-top: 20px; }
         .module-info { background: #ecf0f1; padding: 15px; border-radius: 5px; margin: 20px 0; }
         .functions { background: #f8f9fa; padding: 15px; border-left: 4px solid #28a745; margin: 15px 0; }
         .docstring { background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 15px 0; }
-        .errorr { background: #f8d7da; padding: 15px; border-left: 4px solid #dc3545; margin: 15px 0; }
-        code { background: #e9ecef; padding: 2px 6px; border-radius: 3px; }
-        pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; }
+        .feature-box { background: #e8f5e9; padding: 15px; border-left: 4px solid #4caf50; margin: 15px 0; }
+        .code-block { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; border-left: 4px solid #2196f3; }
+        code { background: #e9ecef; padding: 2px 6px; border-radius: 3px; font-family: 'Courier New', monospace; }
+        pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; white-space: pre-wrap; }
         .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #6c757d; font-size: 0.9em; }
+        ul, ol { margin: 10px 0; padding-left: 30px; }
+        li { margin: 5px 0; }
+        table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+        th, td { padding: 8px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background-color: #f2f2f2; font-weight: bold; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>vailá - cutvideo</h1>
+        <h1>vailá - cutvideo.py</h1>
 
         <div class="module-info">
             <h3>📋 Module Information</h3>
             <p><strong>Category:</strong> Tools</p>
-            <p><strong>File:</strong> vaila\cutvideo.py</p>
-            <p><strong>Lines:</strong> 925</p>
-            <p><strong>Size:</strong> 33593 characters</p>
-            <p><strong>Version:</strong> 0.0.8</p>
+            <p><strong>File:</strong> vaila/cutvideo.py</p>
+            <p><strong>Version:</strong> 0.0.9</p>
             <p><strong>Author:</strong> Paulo Roberto Pereira Santiago</p>
+            <p><strong>Email:</strong> paulosantiago@usp.br</p>
+            <p><strong>GitHub:</strong> <a href="https://github.com/vaila-multimodaltoolbox/vaila">vaila-multimodaltoolbox/vaila</a></p>
             <p><strong>GUI Interface:</strong> ✅ Yes</p>
+            <p><strong>License:</strong> GNU General Public License v3.0</p>
         </div>
 
-        
-
         <div class="docstring">
-            <h3>📖 Description</h3>
-            <pre>
-Project: vailá Multimodal Toolbox
-Script: cutvideo.py - Cut Video
+            <h2>📖 Description</h2>
+            <p>This script provides an interactive video cutting tool with <strong>scientific precision</strong> for research applications. It allows users to visually mark cut points in videos, save cut information, and generate precisely cut video segments while preserving original metadata with high accuracy.</p>
+        </div>
 
-Author: Paulo Roberto Pereira Santiago
-Email: paulosantiago@usp.br
-GitHub: https://github.com/vaila-multimodaltoolbox/vaila
-Creation Date: 29 July 2024
-Update Date: 28 July 2025
-Version: 0.0.8
-
-Description:
-This script performs batch processing of videos for cutting videos.
-
-
-Features:
-- Added support for multiple videos.
-- Added support for multiple output directories.
-- Added support for sync files.
-
-Usage:
-- Run the script to open a graphical interface for selecting the input directory
-  containing video files (.mp4, .avi, .mov), the output directory, and for
-  specifying the MediaPipe configuration parameters.
-- Choose whether to enable video resize for better pose detection.
-- The script processes each video, generating an output video with overlaid pose
-  landmarks, and CSV files containing both normalized and pixel-based landmark
-  coordinates in original video dimensions.
-
-Requirements:
-- Python 3.12.11
-- OpenC...</pre>
+        <div class="feature-box">
+            <h2>✨ Key Features</h2>
+            <ul>
+                <li><strong>Scientific Precision</strong>: Uses <code>ffmpeg</code> to preserve exact frame rates (e.g., 59.94005994005994 fps) without rounding</li>
+                <li><strong>Metadata Preservation</strong>: Maintains original codec, frame rate, and video properties</li>
+                <li><strong>Interactive Video Player</strong>: Pygame-based player with frame-accurate navigation</li>
+                <li><strong>Visual Cut Marking</strong>: Mark start and end frames visually while playing video</li>
+                <li><strong>Sync File Support</strong>: Load cuts from synchronization files generated by <code>syncvid.py</code></li>
+                <li><strong>Batch Processing</strong>: Apply same cuts to multiple videos in a directory</li>
+                <li><strong>Cut Management</strong>: Save, load, list, and remove cuts</li>
+                <li><strong>Resizable Window</strong>: Adjustable window size for different video resolutions</li>
+            </ul>
         </div>
 
         <div class="functions">
-            <h3>🔧 Main Functions</h3>
-            <p><strong>Total functions found:</strong> 16</p>
-            <ul><li><code>save_cuts_to_txt</code></li><li><code>load_sync_file</code></li><li><code>load_cuts_from_txt</code></li><li><code>load_cuts_or_sync</code></li><li><code>load_sync_file_from_dialog</code></li><li><code>batch_process_sync_videos</code></li><li><code>play_video_with_cuts</code></li><li><code>get_video_path</code></li><li><code>cleanup_resources</code></li><li><code>run_cutvideo</code></li><li><code>draw_controls</code></li><li><code>show_help_dialog</code></li><li><code>save_and_generate_videos</code></li><li><code>batch_process_videos</code></li><li><code>save_cuts</code></li><li><code>process_next_video</code></li></ul>
+            <h2>🔧 Main Functions</h2>
+            <p><strong>Total functions found:</strong> 18+</p>
+            
+            <h3>Core Functions</h3>
+            <ul>
+                <li><code>play_video_with_cuts()</code> - Main interactive video player with cut marking</li>
+                <li><code>cut_video_with_ffmpeg()</code> - Precise video cutting using ffmpeg (preserves metadata)</li>
+                <li><code>cut_video_with_opencv()</code> - Fallback cutting method using OpenCV</li>
+                <li><code>get_precise_video_metadata()</code> - Extract precise video metadata using ffprobe</li>
+                <li><code>save_cuts()</code> - Generate cut video files</li>
+                <li><code>save_cuts_to_txt()</code> - Save cut information to text file</li>
+            </ul>
+
+            <h3>File Management Functions</h3>
+            <ul>
+                <li><code>load_cuts_from_txt()</code> - Load existing cuts from text file</li>
+                <li><code>load_sync_file()</code> - Load cuts from sync file in directory</li>
+                <li><code>load_sync_file_from_dialog()</code> - Load sync file via dialog</li>
+                <li><code>load_cuts_or_sync()</code> - Auto-detect and load cuts or sync file</li>
+            </ul>
+
+            <h3>Batch Processing Functions</h3>
+            <ul>
+                <li><code>batch_process_sync_videos()</code> - Process all videos according to sync file</li>
+                <li><code>batch_process_videos()</code> - Apply same cuts to multiple videos</li>
+            </ul>
+
+            <h3>Utility Functions</h3>
+            <ul>
+                <li><code>get_video_path()</code> - File dialog for video selection</li>
+                <li><code>cleanup_resources()</code> - Resource cleanup</li>
+                <li><code>run_cutvideo()</code> - Main entry point</li>
+            </ul>
+        </div>
+
+        <div class="feature-box">
+            <h2>🎮 Interactive Controls</h2>
+            
+            <h3>Navigation</h3>
+            <ul>
+                <li><strong>Space</strong>: Play/Pause video</li>
+                <li><strong>Right Arrow</strong>: Next frame (when paused)</li>
+                <li><strong>Left Arrow</strong>: Previous frame (when paused)</li>
+                <li><strong>Up Arrow</strong>: Fast forward 60 frames</li>
+                <li><strong>Down Arrow</strong>: Rewind 60 frames</li>
+                <li><strong>Mouse Click on Slider</strong>: Jump to specific frame</li>
+            </ul>
+
+            <h3>Cutting Operations</h3>
+            <ul>
+                <li><strong>S</strong>: Mark start frame of current cut</li>
+                <li><strong>E</strong>: Mark end frame of current cut (must be after start)</li>
+                <li><strong>R</strong>: Reset current cut (clear start marker)</li>
+                <li><strong>DELETE</strong>: Remove last cut from list</li>
+                <li><strong>L</strong>: List all marked cuts</li>
+            </ul>
+
+            <h3>File Operations</h3>
+            <ul>
+                <li><strong>F</strong>: Load sync file (from Make Sync File tool)</li>
+                <li><strong>ESC</strong>: Save cuts to file and optionally generate videos</li>
+            </ul>
+
+            <h3>Window Controls</h3>
+            <ul>
+                <li><strong>Resize Window</strong>: Drag window edges to resize</li>
+                <li><strong>Help Button</strong>: Click "Help" button for full control list</li>
+            </ul>
+        </div>
+
+        <div class="feature-box">
+            <h2>📊 Scientific Precision Features</h2>
+            
+            <h3>Precise Frame Rate Preservation</h3>
+            <ul>
+                <li>Uses <code>ffprobe</code> to extract exact frame rates as fractions (e.g., 1001/1000 = 1.001 fps)</li>
+                <li>Converts fractions to high-precision floats (9 decimal places)</li>
+                <li>Preserves non-integer frame rates like 59.94005994005994 fps</li>
+            </ul>
+
+            <h3>Metadata Preservation</h3>
+            <ul>
+                <li><strong>Codec Preservation</strong>: Attempts to copy original codec without re-encoding</li>
+                <li><strong>Frame Rate</strong>: Maintains exact frame rate from source video</li>
+                <li><strong>Resolution</strong>: Preserves original video dimensions</li>
+                <li><strong>Quality</strong>: Uses <code>-c copy</code> when possible to avoid quality loss</li>
+            </ul>
+
+            <h3>Fallback Mechanisms</h3>
+            <ol>
+                <li><strong>Primary</strong>: <code>ffmpeg</code> with <code>-c copy</code> (no re-encoding, fastest, preserves all metadata)</li>
+                <li><strong>Secondary</strong>: <code>ffmpeg</code> with re-encoding (if copy fails, preserves frame rate)</li>
+                <li><strong>Tertiary</strong>: OpenCV fallback (if ffmpeg unavailable, uses float FPS)</li>
+            </ol>
+        </div>
+
+        <div class="docstring">
+            <h2>📁 Input/Output Files</h2>
+            
+            <h3>Input Files</h3>
+            <ul>
+                <li><strong>Video Files</strong>: <code>.mp4</code>, <code>.avi</code>, <code>.mov</code>, <code>.mkv</code> (any format supported by OpenCV/ffmpeg)</li>
+                <li><strong>Cut Files</strong>: <code>*_cuts.txt</code> - Text file with cut information</li>
+                <li><strong>Sync Files</strong>: <code>*.txt</code> - Synchronization files from <code>syncvid.py</code></li>
+            </ul>
+
+            <h3>Output Files</h3>
+            <ol>
+                <li><strong>Cut Information</strong> (<code>*_cuts.txt</code>)
+                    <ul>
+                        <li>Text file listing all cuts</li>
+                        <li>Format: <code>Cut N: Frame X to Frame Y</code></li>
+                        <li>Created automatically when cuts are saved</li>
+                    </ul>
+                </li>
+                <li><strong>Cut Videos</strong> (<code>*_frame_X_to_Y.mp4</code>)
+                    <ul>
+                        <li>Individual video files for each cut</li>
+                        <li>Preserves original codec and metadata when possible</li>
+                        <li>Named with frame numbers for easy identification</li>
+                    </ul>
+                </li>
+                <li><strong>Batch Output Directory</strong>
+                    <ul>
+                        <li><code>vailacut_batch_TIMESTAMP/</code> - Regular batch processing</li>
+                        <li><code>vailacut_sync_TIMESTAMP/</code> - Sync file batch processing</li>
+                        <li>Contains all cut videos from batch operation</li>
+                    </ul>
+                </li>
+            </ol>
+        </div>
+
+        <div class="code-block">
+            <h2>🚀 Usage</h2>
+            
+            <h3>Basic Usage</h3>
+            <pre><code>from vaila.cutvideo import run_cutvideo
+
+# Launch interactive video cutting interface
+run_cutvideo()</code></pre>
+
+            <h3>Programmatic Usage</h3>
+            <pre><code>from vaila.cutvideo import (
+    get_precise_video_metadata,
+    cut_video_with_ffmpeg,
+    save_cuts_to_txt
+)
+from pathlib import Path
+
+# Get precise metadata
+video_path = Path("video.mp4")
+metadata = get_precise_video_metadata(video_path)
+print(f"FPS: {metadata['fps']:.9f}")  # High precision
+
+# Cut video (frames 100 to 500)
+output_path = Path("output_cut.mp4")
+cut_video_with_ffmpeg(
+    video_path,
+    output_path,
+    start_frame=100,
+    end_frame=500,
+    metadata=metadata
+)
+
+# Save cuts to file
+cuts = [(100, 500), (1000, 1500)]
+save_cuts_to_txt(video_path, cuts)</code></pre>
+        </div>
+
+        <div class="docstring">
+            <h2>💻 Requirements</h2>
+            <ul>
+                <li><strong>Python</strong>: 3.12.11+</li>
+                <li><strong>OpenCV</strong>: <code>opencv-python</code> or <code>opencv-contrib-python</code></li>
+                <li><strong>Pygame</strong>: For interactive video player</li>
+                <li><strong>ffmpeg/ffprobe</strong>: Recommended for precise cutting (automatically detected)</li>
+                <li><strong>Tkinter</strong>: Usually included with Python</li>
+            </ul>
+        </div>
+
+        <div class="feature-box">
+            <h2>⚙️ Technical Details</h2>
+            
+            <h3>Frame Rate Precision</h3>
+            <p>The script uses <code>ffprobe</code> to extract frame rates as fraction strings (e.g., "30000/1001") and converts them to high-precision floats. This ensures that videos with non-standard frame rates (like 29.97002997002997 fps or 59.94005994005994 fps) maintain their exact frame rate in cut videos.</p>
+
+            <h3>Cutting Method</h3>
+            <ol>
+                <li><strong>Input Seeking</strong>: Uses <code>-ss</code> before <code>-i</code> for faster seeking</li>
+                <li><strong>Frame Accuracy</strong>: Calculates start time and duration with 6 decimal places</li>
+                <li><strong>Codec Copy</strong>: Attempts <code>-c copy</code> first to avoid re-encoding</li>
+                <li><strong>Re-encoding Fallback</strong>: If copy fails, re-encodes with high quality settings</li>
+            </ol>
+
+            <h3>Sync File Format</h3>
+            <p>Sync files contain one line per video:</p>
+            <pre><code>video_file.mp4 new_name.mp4 initial_frame final_frame</code></pre>
+            <p>Example:</p>
+            <pre><code>test_video.mp4 cut1.mp4 100 500
+test_video.mp4 cut2.mp4 1000 1500</code></pre>
+        </div>
+
+        <div class="docstring">
+            <h2>🔬 Scientific Research Applications</h2>
+            <p>This tool is designed for scientific research where precision is critical:</p>
+            <ul>
+                <li><strong>Biomechanics</strong>: Frame-accurate video cutting for movement analysis</li>
+                <li><strong>Motion Capture</strong>: Precise synchronization with other data sources</li>
+                <li><strong>Video Analysis</strong>: Maintain exact frame rates for temporal analysis</li>
+                <li><strong>Data Integrity</strong>: Preserve all original video metadata</li>
+            </ul>
+        </div>
+
+        <div class="feature-box">
+            <h2>📝 Notes</h2>
+            <ul>
+                <li><strong>Frame Numbers</strong>: All frame numbers are 0-indexed internally but displayed as 1-indexed to users</li>
+                <li><strong>Cut Validation</strong>: End frame must be after start frame</li>
+                <li><strong>Video Formats</strong>: Supports all formats readable by OpenCV/ffmpeg</li>
+                <li><strong>Memory Usage</strong>: Processes videos frame-by-frame to minimize memory usage</li>
+                <li><strong>Platform Support</strong>: Works on Windows, macOS, and Linux</li>
+            </ul>
+        </div>
+
+        <div class="docstring">
+            <h2>🐛 Troubleshooting</h2>
+            
+            <h3>ffmpeg Not Found</h3>
+            <ul>
+                <li>Script will automatically fall back to OpenCV</li>
+                <li>Install ffmpeg for best results: <a href="https://ffmpeg.org/download.html">https://ffmpeg.org/download.html</a></li>
+            </ul>
+
+            <h3>Video Won't Play</h3>
+            <ul>
+                <li>Check video codec compatibility</li>
+                <li>Try converting video to H.264 first</li>
+                <li>On Linux, may need: <code>export LIBGL_ALWAYS_SOFTWARE=1</code></li>
+            </ul>
+
+            <h3>Cuts Not Accurate</h3>
+            <ul>
+                <li>Ensure ffmpeg is installed for frame-accurate cutting</li>
+                <li>Check that frame rate is correctly detected (see metadata output)</li>
+                <li>Use frame-by-frame navigation (arrow keys) for precise marking</li>
+            </ul>
+        </div>
+
+        <div class="feature-box">
+            <h2>📚 Related Tools</h2>
+            <ul>
+                <li><strong>syncvid.py</strong>: Create synchronization files for multiple videos</li>
+                <li><strong>numberframes.py</strong>: Analyze video metadata with scientific precision</li>
+                <li><strong>resize_video.py</strong>: Resize videos while preserving metadata</li>
+            </ul>
         </div>
 
         <div class="footer">
-            <p>📅 Generated automatically on: 15/10/2025 08:04:44</p>
-            <p>🔗 Part of vailá - Multimodal Toolbox</p>
+            <p>📅 <strong>Last Updated:</strong> January 2025</p>
+            <p>🔗 <strong>Part of vailá - Multimodal Toolbox</strong></p>
             <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
         </div>
     </div>

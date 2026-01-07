@@ -6,8 +6,8 @@ vailá - Multimodal Toolbox
 Author: Prof. Dr. Paulo R. P. Santiago
 https://github.com/paulopreto/vaila-multimodaltoolbox
 Date: 22 July 2025
-Update: 05 January 2026
-Version: 0.3.0
+Update: 07 January 2026
+Version: 0.3.2
 Python Version: 3.12.12
 
 Description:
@@ -17,10 +17,11 @@ zoom functionality for precise annotations. The window can now be resized dynami
 and all UI elements adjust accordingly. Users can navigate the video frames, mark
 points, and save results in CSV format.
 
-New Features in This Version 0.3.0:
+New Features in This Version 0.3.2:
 ------------------------------
-Button "Labeling" to label images in video frames for Machine Learning training.
-Labeling images in video frames for Machine Learning training.
+1. Button "Labeling" to label images in video frames for Machine Learning training.
+2. YOLO dataset directory support.
+3. YOLO tracking CSV visualization (all_id_detection.csv format) with bounding boxes overlay.
 
 How to use:
 ------------
@@ -57,6 +58,7 @@ Options:
 import json
 import io
 import os
+import re
 
 
 # Configure SDL environment variables BEFORE importing pygame
@@ -564,6 +566,273 @@ def play_video_with_controls(video_path, coordinates=None):
     current_box_rect = None  # pygame.Rect for preview
     current_label = "object"  # Default class label
 
+    # YOLO tracking visualization variables
+    tracking_data = {}  # Structure: {frame_index: [{'x1': int, 'y1': int, 'x2': int, 'y2': int, 'label': str, 'conf': float, 'color': (r, g, b)}, ...]}
+    show_tracking = True  # Toggle to show/hide tracking boxes
+    csv_loaded = False  # Flag to indicate if tracking CSV was loaded
+
+    def load_tracking_csv():
+        """Load YOLO tracking CSV file (all_id_detection.csv format)"""
+        nonlocal tracking_data, csv_loaded, save_message_text, showing_save_message, save_message_timer
+        
+        # Use Tkinter file dialog (works on all platforms)
+        try:
+            import tkinter as tk
+            from tkinter import filedialog
+            
+            # Block Pygame events while dialog is open
+            pygame.event.set_blocked([
+                pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP, pygame.MOUSEMOTION,
+                pygame.KEYDOWN, pygame.KEYUP
+            ])
+            pygame.event.clear()
+            
+            root = tk.Tk()
+            root.withdraw()
+            root.attributes("-topmost", True)
+            root.update_idletasks()
+            
+            csv_path = filedialog.askopenfilename(
+                title="Select Tracking CSV File",
+                filetypes=[("CSV Files", "*.csv"), ("All Files", "*.*")],
+                initialdir=os.path.dirname(video_path) if video_path else os.path.expanduser("~")
+            )
+            
+            root.destroy()
+            
+            # Re-enable Pygame events
+            pygame.event.set_allowed([
+                pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP, pygame.MOUSEMOTION,
+                pygame.KEYDOWN, pygame.KEYUP
+            ])
+            pygame.event.clear()
+            
+            if not csv_path:
+                return
+            
+        except Exception as e:
+            print(f"Error opening file dialog: {e}")
+            save_message_text = f"Error: {e}"
+            showing_save_message = True
+            save_message_timer = 60
+            return
+        
+        try:
+            print(f"Loading tracking CSV: {csv_path}")
+            df = pd.read_csv(csv_path)
+            
+            # Debug: Print CSV info
+            print(f"CSV shape: {df.shape}")
+            print(f"CSV columns: {list(df.columns)}")
+            print(f"First few rows:\n{df.head()}")
+            
+            # Clear old tracking data
+            tracking_data = {}
+            
+            # Check if CSV has the expected format
+            if "Frame" not in df.columns:
+                save_message_text = "CSV missing 'Frame' column"
+                showing_save_message = True
+                save_message_timer = 90
+                print(f"ERROR: Missing 'Frame' column. Available columns: {list(df.columns)}")
+                return
+            
+            # Identify object IDs from column suffixes
+            # Format options:
+            # 1. Multi-object (all_id_detection.csv): X_min_{label}_id_{id}, Y_min_{label}_id_{id}, etc.
+            # 2. Individual file (person_id_01.csv): X_min, Y_min, X_max, Y_max (no suffix)
+            object_suffixes = set()
+            
+            # First, check for individual file format (person_id_01.csv)
+            # This format has simple column names without suffixes
+            # Check exact column names (case-sensitive)
+            has_individual_format = (
+                "X_min" in df.columns and 
+                "Y_min" in df.columns and 
+                "X_max" in df.columns and 
+                "Y_max" in df.columns
+            )
+            
+            if has_individual_format:
+                # Individual file format detected
+                print("✓ Detected individual tracking CSV format (person_id_01.csv style)")
+                print(f"  Columns found: X_min={'X_min' in df.columns}, Y_min={'Y_min' in df.columns}, X_max={'X_max' in df.columns}, Y_max={'Y_max' in df.columns}")
+                object_suffixes.add("")  # Empty suffix for single object
+            else:
+                # Try to detect multi-object format with suffixes
+                print("Checking for multi-object format...")
+                for col in df.columns:
+                    # Pattern 1: X_min_{label}_id_{id}
+                    match = re.search(r'X_min_(.+)$', col)
+                    if match:
+                        suffix = match.group(1)
+                        object_suffixes.add(suffix)
+                        print(f"  Found multi-object suffix: {suffix}")
+                    # Pattern 2: X_min_person_id_01 (simpler)
+                    elif col.startswith("X_min_") and col != "X_min":
+                        suffix = col.replace("X_min_", "")
+                        object_suffixes.add(suffix)
+                        print(f"  Found multi-object suffix (pattern 2): {suffix}")
+            
+            if not object_suffixes:
+                save_message_text = f"Could not detect tracking format. Columns: {list(df.columns)}"
+                showing_save_message = True
+                save_message_timer = 120
+                print(f"ERROR: Could not detect format. Available columns: {list(df.columns)}")
+                print(f"  Looking for: X_min, Y_min, X_max, Y_max")
+                return
+            
+            print(f"✓ Found {len(object_suffixes)} object(s) in CSV")
+            
+            # Process each row to build tracking_data dictionary
+            rows_processed = 0
+            boxes_loaded = 0
+            skipped_frames = 0
+            for idx, row in df.iterrows():
+                try:
+                    frame_idx = int(row['Frame'])
+                    if frame_idx not in tracking_data:
+                        tracking_data[frame_idx] = []
+                    
+                    # Process each object suffix
+                    for suffix in object_suffixes:
+                        if suffix == "":
+                            # Single object format (individual CSV file)
+                            x_min_col = "X_min"
+                            y_min_col = "Y_min"
+                            x_max_col = "X_max"
+                            y_max_col = "Y_max"
+                            conf_col = "Confidence"
+                            label_col = "Label"
+                            color_r_col = "Color_R"
+                            color_g_col = "Color_G"
+                            color_b_col = "Color_B"
+                        else:
+                            # Multi-object format with suffix
+                            x_min_col = f"X_min_{suffix}"
+                            y_min_col = f"Y_min_{suffix}"
+                            x_max_col = f"X_max_{suffix}"
+                            y_max_col = f"Y_max_{suffix}"
+                            conf_col = f"Confidence_{suffix}"
+                            label_col = f"Label_{suffix}"
+                            color_r_col = f"Color_R_{suffix}"
+                            color_g_col = f"Color_G_{suffix}"
+                            color_b_col = f"Color_B_{suffix}"
+                        
+                        # Check if this object has valid data for this frame
+                        # For individual format, check all required columns exist
+                        if suffix == "":
+                            # Individual format: require X_min, Y_min, X_max, Y_max
+                            # Check if columns exist
+                            cols_exist = (x_min_col in df.columns and y_min_col in df.columns and 
+                                         x_max_col in df.columns and y_max_col in df.columns)
+                            
+                            if cols_exist:
+                                # Check if values are not NaN
+                                x_min_val = row.get(x_min_col)
+                                y_min_val = row.get(y_min_col)
+                                x_max_val = row.get(x_max_col)
+                                y_max_val = row.get(y_max_col)
+                                
+                                has_valid_data = (pd.notna(x_min_val) and pd.notna(y_min_val) and 
+                                                 pd.notna(x_max_val) and pd.notna(y_max_val))
+                                
+                                if has_valid_data:
+                                    try:
+                                        box = {
+                                            'x1': int(float(x_min_val)),
+                                            'y1': int(float(y_min_val)),
+                                            'x2': int(float(x_max_val)),
+                                            'y2': int(float(y_max_val)),
+                                            'conf': float(row[conf_col]) if conf_col in df.columns and pd.notna(row.get(conf_col)) else 0.0,
+                                            'label': str(row[label_col]) if label_col in df.columns and pd.notna(row.get(label_col)) else "object",
+                                            'color': (
+                                                int(row[color_r_col]) if color_r_col in df.columns and pd.notna(row.get(color_r_col)) else 0,
+                                                int(row[color_g_col]) if color_g_col in df.columns and pd.notna(row.get(color_g_col)) else 255,
+                                                int(row[color_b_col]) if color_b_col in df.columns and pd.notna(row.get(color_b_col)) else 0
+                                            )
+                                        }
+                                        
+                                        # Validate box coordinates
+                                        if box['x2'] > box['x1'] and box['y2'] > box['y1']:
+                                            tracking_data[frame_idx].append(box)
+                                            boxes_loaded += 1
+                                            if boxes_loaded <= 3:  # Print first 3 boxes for debugging
+                                                print(f"  Loaded box at frame {frame_idx}: x1={box['x1']}, y1={box['y1']}, x2={box['x2']}, y2={box['y2']}, label={box['label']}")
+                                        else:
+                                            print(f"Warning: Invalid box coordinates at frame {frame_idx}: x1={box['x1']}, y1={box['y1']}, x2={box['x2']}, y2={box['y2']}")
+                                    except (ValueError, KeyError, TypeError) as e:
+                                        # Skip invalid box data
+                                        print(f"Warning: Skipping invalid box at frame {frame_idx}: {e}")
+                                        print(f"  Row data: x_min={x_min_val}, y_min={y_min_val}, x_max={x_max_val}, y_max={y_max_val}")
+                                else:
+                                    # Frame has no detection data (NaN values) - this is normal
+                                    skipped_frames += 1
+                                    if skipped_frames <= 3:
+                                        print(f"  Frame {frame_idx}: No detection data (NaN values)")
+                            else:
+                                print(f"ERROR: Required columns missing. Expected: X_min, Y_min, X_max, Y_max")
+                                print(f"  Found columns: {list(df.columns)}")
+                                return
+                        else:
+                            # Multi-object format: check if x_min_col exists and has data
+                            if x_min_col in df.columns and pd.notna(row.get(x_min_col)):
+                                try:
+                                    box = {
+                                        'x1': int(float(row[x_min_col])),
+                                        'y1': int(float(row[y_min_col])) if y_min_col in df.columns and pd.notna(row.get(y_min_col)) else 0,
+                                        'x2': int(float(row[x_max_col])) if x_max_col in df.columns and pd.notna(row.get(x_max_col)) else int(float(row[x_min_col])),
+                                        'y2': int(float(row[y_max_col])) if y_max_col in df.columns and pd.notna(row.get(y_max_col)) else 0,
+                                        'conf': float(row[conf_col]) if conf_col in df.columns and pd.notna(row.get(conf_col)) else 0.0,
+                                        'label': str(row[label_col]) if label_col in df.columns and pd.notna(row.get(label_col)) else suffix,
+                                        'color': (
+                                            int(row[color_r_col]) if color_r_col in df.columns and pd.notna(row.get(color_r_col)) else 0,
+                                            int(row[color_g_col]) if color_g_col in df.columns and pd.notna(row.get(color_g_col)) else 255,
+                                            int(row[color_b_col]) if color_b_col in df.columns and pd.notna(row.get(color_b_col)) else 0
+                                        )
+                                    }
+                                    
+                                    # Validate box coordinates
+                                    if box['x2'] > box['x1'] and box['y2'] > box['y1']:
+                                        tracking_data[frame_idx].append(box)
+                                        boxes_loaded += 1
+                                except (ValueError, KeyError, TypeError) as e:
+                                    # Skip invalid box data
+                                    pass
+                
+                except (ValueError, KeyError) as e:
+                    # Skip rows with invalid frame numbers or missing required columns
+                    print(f"Warning: Skipping row {idx} due to error: {e}")
+                
+                rows_processed += 1
+            
+            csv_loaded = True
+            total_boxes = sum(len(boxes) for boxes in tracking_data.values())
+            frame_range = f"{min(tracking_data.keys())}-{max(tracking_data.keys())}" if tracking_data else "none"
+            save_message_text = f"Tracking loaded: {len(tracking_data)} frames, {total_boxes} boxes"
+            showing_save_message = True
+            save_message_timer = 120
+            print(f"✓ Successfully loaded tracking data:")
+            print(f"  - Frames with data: {len(tracking_data)}")
+            print(f"  - Total boxes: {total_boxes}")
+            print(f"  - Frame range: {frame_range}")
+            print(f"  - Rows processed: {rows_processed}")
+            if tracking_data:
+                sample_frame = list(tracking_data.keys())[0]
+                sample_box = tracking_data[sample_frame][0] if tracking_data[sample_frame] else None
+                if sample_box:
+                    print(f"  - Sample box at frame {sample_frame}: x1={sample_box['x1']}, y1={sample_box['y1']}, x2={sample_box['x2']}, y2={sample_box['y2']}, label={sample_box['label']}, color={sample_box['color']}")
+            else:
+                print(f"  WARNING: No tracking data loaded! Check CSV format.")
+            
+        except Exception as e:
+            save_message_text = f"Error loading CSV: {str(e)}"
+            showing_save_message = True
+            save_message_timer = 120
+            print(f"Error loading tracking CSV: {e}")
+            import traceback
+            traceback.print_exc()
+
     def draw_controls():
         """
         Draw the control area on a separate surface.
@@ -751,10 +1020,45 @@ def play_video_with_controls(video_path, coordinates=None):
             labeling_text, labeling_text.get_rect(center=labeling_button_rect.center)
         )
 
+        # Add Load Tracking CSV button (below the main button cluster)
+        tracking_csv_button_width = 120
+        tracking_csv_button_rect = pygame.Rect(
+            cluster_x,
+            cluster_y + button_height + button_gap,
+            tracking_csv_button_width,
+            button_height,
+        )
+        tracking_csv_color = (100, 150, 200) if csv_loaded else (100, 100, 100)
+        pygame.draw.rect(control_surface, tracking_csv_color, tracking_csv_button_rect)
+        tracking_csv_text = font.render("Load Track CSV", True, (255, 255, 255))
+        control_surface.blit(
+            tracking_csv_text, tracking_csv_text.get_rect(center=tracking_csv_button_rect.center)
+        )
+
+        # Add Show Tracking checkbox indicator (small square next to button)
+        show_tracking_indicator_size = 12
+        show_tracking_indicator_rect = pygame.Rect(
+            tracking_csv_button_rect.right + 5,
+            tracking_csv_button_rect.centery - show_tracking_indicator_size // 2,
+            show_tracking_indicator_size,
+            show_tracking_indicator_size,
+        )
+        if show_tracking and csv_loaded:
+            pygame.draw.rect(control_surface, (0, 255, 0), show_tracking_indicator_rect)
+            pygame.draw.rect(control_surface, (255, 255, 255), show_tracking_indicator_rect, 1)
+        else:
+            pygame.draw.rect(control_surface, (60, 60, 60), show_tracking_indicator_rect)
+            pygame.draw.rect(control_surface, (150, 150, 150), show_tracking_indicator_rect, 1)
+
         # Display current class label when in labeling mode
         if labeling_mode:
             class_info = font.render(f"Class: {current_label}", True, (255, 255, 0))
             control_surface.blit(class_info, (slider_margin_left + 400, slider_y - 25))
+
+        # Display tracking info when CSV is loaded
+        if csv_loaded:
+            tracking_info = font.render(f"Tracking: {len(tracking_data)} frames", True, (150, 255, 150))
+            control_surface.blit(tracking_info, (slider_margin_left + 200, slider_y - 45))
 
         screen.blit(control_surface, (0, window_height))
         return (
@@ -766,6 +1070,8 @@ def play_video_with_controls(video_path, coordinates=None):
             seq_button_rect,  # Add sequential button to return
             auto_button_rect,  # Add auto button to return
             labeling_button_rect,  # Add labeling button to return
+            tracking_csv_button_rect,  # Add tracking CSV button to return
+            show_tracking_indicator_rect,  # Add tracking indicator to return
             slider_margin_left,
             slider_y,
             slider_width,
@@ -1394,9 +1700,9 @@ def play_video_with_controls(video_path, coordinates=None):
 
     def show_file_path_dialog():
         """
-        Select a CSV file.
+        Select a CSV file or YOLO dataset directory.
         On Linux: Uses Pygame-native dialog to avoid conflicts/freezes.
-        On others: Uses Tkinter dialog.
+        On others: Uses Tkinter dialog with option to select file or directory.
         """
         import platform
 
@@ -1404,19 +1710,19 @@ def play_video_with_controls(video_path, coordinates=None):
         initial_dir = os.path.dirname(video_path) if video_path else os.path.expanduser("~")
 
         if platform.system() == "Linux":
-            # Use the Pygame native dialog
+            # Use the Pygame native dialog (CSV files only for now)
+            # User can manually type directory path if needed
             return pygame_file_dialog(
                 initial_dir=initial_dir,
                 file_extensions=[".csv"],
                 restore_size=(window_width, window_height + 80),
             )
         else:
-            # Use Tkinter for Windows/Mac
-            from tkinter import Tk
-            from tkinter.filedialog import askopenfilename
+            # Use Tkinter for Windows/Mac with option to select file or directory
+            from tkinter import Tk, messagebox
+            from tkinter.filedialog import askopenfilename, askdirectory
 
             # Block Pygame from processing mouse and keyboard events while Tkinter is open
-            # This prevents Pygame from capturing events that should go to Tkinter
             pygame.event.set_blocked(
                 [
                     pygame.MOUSEBUTTONDOWN,
@@ -1437,14 +1743,34 @@ def play_video_with_controls(video_path, coordinates=None):
                 root.attributes("-topmost", True)  # Bring to front
                 root.update_idletasks()  # Ensure window is ready
 
-                # Show file dialog (this will block until user selects or cancels)
-                filename = askopenfilename(
-                    title="Select CSV File",
-                    initialdir=initial_dir,
-                    filetypes=[("CSV Files", "*.csv"), ("All Files", "*.*")],
+                # Ask user what they want to load
+                choice = messagebox.askyesnocancel(
+                    "Select Input Type",
+                    "What do you want to load?\n\n"
+                    "Yes = CSV file\n"
+                    "No = YOLO dataset folder\n"
+                    "Cancel = Cancel"
                 )
 
-                result = filename if filename else None
+                if choice is True:
+                    # CSV file
+                    filename = askopenfilename(
+                        title="Select CSV File",
+                        initialdir=initial_dir,
+                        filetypes=[("CSV Files", "*.csv"), ("All Files", "*.*")],
+                    )
+                    result = filename if filename else None
+                elif choice is False:
+                    # YOLO dataset folder
+                    directory = askdirectory(
+                        title="Select YOLO Dataset Folder",
+                        initialdir=initial_dir
+                    )
+                    result = directory if directory else None
+                else:
+                    # Cancelled
+                    result = None
+
             except Exception as e:
                 print(f"Error in file dialog: {e}")
                 result = None
@@ -1472,7 +1798,7 @@ def play_video_with_controls(video_path, coordinates=None):
             return result
 
     def reload_coordinates():
-        """Load a new coordinates file during execution"""
+        """Load a new coordinates file or YOLO dataset during execution"""
         nonlocal \
             coordinates, \
             one_line_markers, \
@@ -1487,16 +1813,115 @@ def play_video_with_controls(video_path, coordinates=None):
         # Make backup of the current before loading a new one
         make_backup()
 
-        # Use simple pygame dialog to enter file path
-        input_file = show_file_path_dialog()
+        # Use simple pygame dialog to enter file/folder path
+        # First, try to detect if user wants to select a folder (YOLO dataset)
+        # We'll use a simple approach: check if the selected path is a directory
+        
+        # For now, use file dialog but allow directory selection
+        # On Linux, use pygame dialog; on Windows/Mac, use tkinter with directory option
+        import platform
+        
+        input_path = None
+        
+        if platform.system() == "Linux":
+            # Use pygame dialog - user can type path manually
+            # Show a simple input dialog
+            input_path = show_input_dialog("Enter CSV file path or YOLO dataset folder path:", "")
+        else:
+            # Use tkinter with both file and directory options
+            from tkinter import Tk, filedialog
+            
+            pygame.event.set_blocked([
+                pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP, pygame.MOUSEMOTION,
+                pygame.KEYDOWN, pygame.KEYUP
+            ])
+            pygame.event.clear()
+            
+            try:
+                root = Tk()
+                root.withdraw()
+                root.attributes("-topmost", True)
+                root.update_idletasks()
+                
+                # Ask user what they want to load
+                import tkinter.messagebox as msgbox
+                choice = msgbox.askyesnocancel(
+                    "Select Input Type",
+                    "What do you want to load?\n\n"
+                    "Yes = CSV file\n"
+                    "No = YOLO dataset folder\n"
+                    "Cancel = Cancel"
+                )
+                
+                if choice is True:
+                    # CSV file
+                    input_path = filedialog.askopenfilename(
+                        title="Select CSV File",
+                        filetypes=[("CSV Files", "*.csv"), ("All Files", "*.*")],
+                        initialdir=os.path.dirname(video_path) if video_path else os.path.expanduser("~")
+                    )
+                elif choice is False:
+                    # YOLO dataset folder
+                    input_path = filedialog.askdirectory(
+                        title="Select YOLO Dataset Folder",
+                        initialdir=os.path.dirname(video_path) if video_path else os.path.expanduser("~")
+                    )
+                else:
+                    # Cancelled
+                    input_path = None
+                
+                root.destroy()
+            except Exception as e:
+                print(f"Error in file dialog: {e}")
+                input_path = None
+            finally:
+                pygame.event.set_allowed([
+                    pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP, pygame.MOUSEMOTION,
+                    pygame.KEYDOWN, pygame.KEYUP
+                ])
+                pygame.event.clear()
 
         # If user cancelled or error occurred, show message
-        if not input_file:
-            save_message_text = "File selection cancelled."
+        if not input_path:
+            save_message_text = "File/folder selection cancelled."
             showing_save_message = True
             save_message_timer = 60
             return
 
+        # Check if it's a YOLO dataset directory
+        is_yolo, images_dir, labels_dir, classes_file = is_yolo_dataset(input_path)
+        
+        if is_yolo:
+            try:
+                print(f"Loading YOLO dataset from: {input_path}")
+                loaded_coords = load_yolo_dataset(
+                    input_path, video_path, total_frames, original_width, original_height
+                )
+                
+                if loaded_coords:
+                    coordinates = loaded_coords
+                    deleted_positions = {i: set() for i in range(total_frames)}
+                    one_line_mode = False
+                    selected_marker_idx = 0
+                    
+                    total_loaded = sum(len(coords) for coords in coordinates.values())
+                    save_message_text = f"Loaded YOLO dataset: {total_loaded} annotations"
+                    showing_save_message = True
+                    save_message_timer = 90
+                else:
+                    save_message_text = "Failed to load YOLO dataset"
+                    showing_save_message = True
+                    save_message_timer = 90
+                return
+            except Exception as e:
+                save_message_text = f"Error loading YOLO dataset: {e}"
+                showing_save_message = True
+                save_message_timer = 90
+                return
+
+        # Otherwise, treat as CSV file
+        input_file = input_path
+        
         try:
             # Check if it's a 1 line or normal file
             df = pd.read_csv(input_file)
@@ -1766,6 +2191,50 @@ def play_video_with_controls(video_path, coordinates=None):
                 text_surface = font.render(str(i + 1), True, (255, 255, 255))
                 screen.blit(text_surface, (screen_x + 5, screen_y - 15))
 
+        # Draw YOLO tracking bounding boxes
+        if show_tracking and csv_loaded:
+            # Check if current frame has tracking data
+            if frame_count in tracking_data:
+                boxes = tracking_data[frame_count]
+                for box in boxes:
+                    # Convert video coordinates to screen coordinates (account for zoom/offset)
+                    screen_x1 = int((box['x1'] * zoom_level) - crop_x)
+                    screen_y1 = int((box['y1'] * zoom_level) - crop_y)
+                    screen_x2 = int((box['x2'] * zoom_level) - crop_x)
+                    screen_y2 = int((box['y2'] * zoom_level) - crop_y)
+                    
+                    # Only draw if box is visible on screen
+                    if (screen_x2 > 0 and screen_x1 < window_width and 
+                        screen_y2 > 0 and screen_y1 < window_height):
+                        
+                        # Get color from box (RGB tuple)
+                        box_color = box.get('color', (0, 255, 0))
+                        
+                        # Draw rectangle outline with tracking color
+                        pygame.draw.rect(screen, box_color, 
+                                       (screen_x1, screen_y1, screen_x2 - screen_x1, screen_y2 - screen_y1), 2)
+                        
+                        # Draw label text above the box
+                        label_text = box.get('label', '')
+                        if label_text:
+                            # Create text surface with background for readability
+                            text_surface = font.render(label_text, True, (255, 255, 255))
+                            text_bg = pygame.Surface((text_surface.get_width() + 4, text_surface.get_height() + 2))
+                            text_bg.fill(box_color)
+                            text_bg.set_alpha(200)
+                            screen.blit(text_bg, (screen_x1, screen_y1 - text_surface.get_height() - 2))
+                            screen.blit(text_surface, (screen_x1 + 2, screen_y1 - text_surface.get_height() - 1))
+                        
+                        # Draw confidence if available
+                        conf = box.get('conf', 0)
+                        if conf > 0:
+                            conf_text = font.render(f"{conf:.2f}", True, (255, 255, 255))
+                            conf_bg = pygame.Surface((conf_text.get_width() + 4, conf_text.get_height() + 2))
+                            conf_bg.fill((0, 0, 0))
+                            conf_bg.set_alpha(180)
+                            screen.blit(conf_bg, (screen_x2 - conf_text.get_width() - 4, screen_y1))
+                            screen.blit(conf_text, (screen_x2 - conf_text.get_width() - 2, screen_y1 + 1))
+
         # Draw bounding boxes when in labeling mode
         if labeling_mode:
             # Draw existing boxes for current frame
@@ -1792,6 +2261,8 @@ def play_video_with_controls(video_path, coordinates=None):
             seq_button_rect,  # Add sequential button to return
             auto_button_rect,  # Add auto button to return
             labeling_button_rect,  # Add labeling button to return
+            tracking_csv_button_rect,  # Add tracking CSV button to return
+            show_tracking_indicator_rect,  # Add tracking indicator to return
             slider_x,
             slider_y,
             slider_width,
@@ -2261,6 +2732,15 @@ def play_video_with_controls(video_path, coordinates=None):
                             save_message_text = "Labeling mode disabled"
                         showing_save_message = True
                         save_message_timer = 90
+                    elif tracking_csv_button_rect.collidepoint(x, rel_y):
+                        # Load tracking CSV
+                        load_tracking_csv()
+                    elif show_tracking_indicator_rect.collidepoint(x, rel_y):
+                        # Toggle show tracking
+                        show_tracking = not show_tracking
+                        save_message_text = f"Tracking display {'enabled' if show_tracking else 'disabled'}"
+                        showing_save_message = True
+                        save_message_timer = 60
                     elif slider_y <= rel_y <= slider_y + slider_height:
                         dragging_slider = True
                         rel_x = x - slider_x
@@ -2452,34 +2932,456 @@ def play_video_with_controls(video_path, coordinates=None):
         print("Coordinates were not saved.")
 
 
+def is_yolo_dataset(path):
+    """
+    Check if a path is a YOLO dataset directory (AnyLabeling format).
+    
+    Expected structure:
+    - images/ (or train/images/, val/images/, test/images/)
+    - labels/ (or train/labels/, val/labels/, test/labels/)
+    - classes.txt (optional)
+    
+    Args:
+        path: Path to check
+        
+    Returns:
+        tuple: (is_yolo_dataset, images_dir, labels_dir, classes_file) or (False, None, None, None)
+    """
+    if not os.path.isdir(path):
+        return False, None, None, None
+    
+    # Check for standard YOLO structure
+    images_dir = None
+    labels_dir = None
+    classes_file = None
+    
+    # Check for root-level images/labels
+    if os.path.isdir(os.path.join(path, "images")) and os.path.isdir(os.path.join(path, "labels")):
+        images_dir = os.path.join(path, "images")
+        labels_dir = os.path.join(path, "labels")
+    # Check for train/val/test structure
+    elif os.path.isdir(os.path.join(path, "train", "images")) and os.path.isdir(os.path.join(path, "train", "labels")):
+        # Use train set by default
+        images_dir = os.path.join(path, "train", "images")
+        labels_dir = os.path.join(path, "train", "labels")
+    
+    if images_dir and labels_dir:
+        # Check for classes.txt
+        classes_file = os.path.join(path, "classes.txt")
+        if not os.path.exists(classes_file):
+            classes_file = None
+        return True, images_dir, labels_dir, classes_file
+    
+    return False, None, None, None
+
+
+def load_yolo_dataset(dataset_path, video_path, total_frames, video_width, video_height):
+    """
+    Load YOLO dataset labels and convert bounding boxes to point coordinates.
+    
+    YOLO format: class_id center_x center_y width height (all normalized 0-1)
+    Converts to: center points of bounding boxes as markers
+    
+    Args:
+        dataset_path: Path to YOLO dataset directory
+        video_path: Path to video file (to match frame names)
+        total_frames: Total number of frames in video
+        video_width: Video width in pixels
+        video_height: Video height in pixels
+        
+    Returns:
+        dict: Coordinates dictionary {frame_index: [(x, y), ...]}
+    """
+    is_yolo, images_dir, labels_dir, classes_file = is_yolo_dataset(dataset_path)
+    
+    if not is_yolo:
+        return None
+    
+    print(f"Detected YOLO dataset structure:")
+    print(f"  Images directory: {images_dir}")
+    print(f"  Labels directory: {labels_dir}")
+    if classes_file:
+        print(f"  Classes file: {classes_file}")
+    
+    # Load class names if available
+    class_names = []
+    if classes_file and os.path.exists(classes_file):
+        try:
+            with open(classes_file, 'r', encoding='utf-8') as f:
+                class_names = [line.strip() for line in f if line.strip()]
+            print(f"  Found {len(class_names)} classes: {class_names}")
+        except Exception as e:
+            print(f"  Warning: Could not read classes.txt: {e}")
+    
+    # Get video base name to match with label files
+    video_basename = os.path.splitext(os.path.basename(video_path))[0]
+    
+    # Initialize coordinates dictionary
+    coordinates = {i: [] for i in range(total_frames)}
+    
+    # Get list of label files
+    label_files = [f for f in os.listdir(labels_dir) if f.endswith('.txt')]
+    
+    if not label_files:
+        print(f"  Warning: No .txt label files found in {labels_dir}")
+        return coordinates
+    
+    print(f"  Found {len(label_files)} label files")
+    
+    # Process each label file
+    matched_frames = 0
+    for label_file in label_files:
+        label_path = os.path.join(labels_dir, label_file)
+        
+        # Try to match label file with video frame
+        # Label files might be named: frame_000001.txt, image001.txt, etc.
+        frame_num = None
+        
+        # Try to extract frame number from filename
+        # Remove extension and try different patterns
+        base_name = os.path.splitext(label_file)[0]
+        
+        # Pattern 1: frame_XXXXXX or frame_XXX
+        if 'frame_' in base_name.lower():
+            try:
+                frame_str = base_name.lower().split('frame_')[-1]
+                frame_num = int(frame_str)
+            except ValueError:
+                pass
+        
+        # Pattern 2: imageXXX or imgXXX
+        if frame_num is None:
+            numbers = re.findall(r'\d+', base_name)
+            if numbers:
+                try:
+                    # Use the last number found (usually the frame number)
+                    frame_num = int(numbers[-1])
+                except ValueError:
+                    pass
+        
+        # Pattern 3: Just a number
+        if frame_num is None:
+            try:
+                frame_num = int(base_name)
+            except ValueError:
+                pass
+        
+        # If still no match, try to match by image filename
+        if frame_num is None:
+            # Check if corresponding image exists
+            image_extensions = ['.jpg', '.jpeg', '.png', '.bmp']
+            for ext in image_extensions:
+                image_file = base_name + ext
+                image_path = os.path.join(images_dir, image_file)
+                if os.path.exists(image_path):
+                    # Try to extract frame number from image filename
+                    img_base = os.path.splitext(image_file)[0]
+                    numbers = re.findall(r'\d+', img_base)
+                    if numbers:
+                        try:
+                            frame_num = int(numbers[-1])
+                            break
+                        except ValueError:
+                            pass
+        
+        if frame_num is None or frame_num < 0 or frame_num >= total_frames:
+            # Skip if we can't determine frame number or it's out of range
+            continue
+        
+        # Read YOLO label file
+        try:
+            with open(label_path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+            
+            frame_points = []
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                
+                parts = line.split()
+                if len(parts) < 5:
+                    continue
+                
+                try:
+                    class_id = int(parts[0])
+                    center_x_norm = float(parts[1])  # Normalized 0-1
+                    center_y_norm = float(parts[2])  # Normalized 0-1
+                    width_norm = float(parts[3])  # Normalized 0-1
+                    height_norm = float(parts[4])  # Normalized 0-1
+                    
+                    # Convert normalized coordinates to pixel coordinates
+                    center_x = center_x_norm * video_width
+                    center_y = center_y_norm * video_height
+                    
+                    # Add center point as marker
+                    frame_points.append((center_x, center_y))
+                    
+                except (ValueError, IndexError) as e:
+                    print(f"  Warning: Skipping invalid line in {label_file}: {line} ({e})")
+                    continue
+            
+            if frame_points:
+                coordinates[frame_num] = frame_points
+                matched_frames += 1
+                
+        except Exception as e:
+            print(f"  Warning: Error reading {label_file}: {e}")
+            continue
+    
+    print(f"  Successfully loaded {matched_frames} frames with annotations")
+    total_annotations = sum(len(coords) for coords in coordinates.values())
+    print(f"  Total bounding boxes converted: {total_annotations}")
+    
+    return coordinates
+
+
+def is_yolo_dataset(path):
+    """
+    Check if a path is a YOLO dataset directory (AnyLabeling format).
+    
+    Expected structure:
+    - images/ (or train/images/, val/images/, test/images/)
+    - labels/ (or train/labels/, val/labels/, test/labels/)
+    - classes.txt (optional)
+    
+    Args:
+        path: Path to check
+        
+    Returns:
+        tuple: (is_yolo_dataset, images_dir, labels_dir, classes_file) or (False, None, None, None)
+    """
+    if not os.path.isdir(path):
+        return False, None, None, None
+    
+    # Check for standard YOLO structure
+    images_dir = None
+    labels_dir = None
+    classes_file = None
+    
+    # Check for root-level images/labels
+    if os.path.isdir(os.path.join(path, "images")) and os.path.isdir(os.path.join(path, "labels")):
+        images_dir = os.path.join(path, "images")
+        labels_dir = os.path.join(path, "labels")
+    # Check for train/val/test structure
+    elif os.path.isdir(os.path.join(path, "train", "images")) and os.path.isdir(os.path.join(path, "train", "labels")):
+        # Use train set by default
+        images_dir = os.path.join(path, "train", "images")
+        labels_dir = os.path.join(path, "train", "labels")
+    
+    if images_dir and labels_dir:
+        # Check for classes.txt
+        classes_file = os.path.join(path, "classes.txt")
+        if not os.path.exists(classes_file):
+            classes_file = None
+        return True, images_dir, labels_dir, classes_file
+    
+    return False, None, None, None
+
+
+def load_yolo_dataset(dataset_path, video_path, total_frames, video_width, video_height):
+    """
+    Load YOLO dataset labels and convert bounding boxes to point coordinates.
+    
+    YOLO format: class_id center_x center_y width height (all normalized 0-1)
+    Converts to: center points of bounding boxes as markers
+    
+    Args:
+        dataset_path: Path to YOLO dataset directory
+        video_path: Path to video file (to match frame names)
+        total_frames: Total number of frames in video
+        video_width: Video width in pixels
+        video_height: Video height in pixels
+        
+    Returns:
+        dict: Coordinates dictionary {frame_index: [(x, y), ...]}
+    """
+    is_yolo, images_dir, labels_dir, classes_file = is_yolo_dataset(dataset_path)
+    
+    if not is_yolo:
+        return None
+    
+    print(f"Detected YOLO dataset structure:")
+    print(f"  Images directory: {images_dir}")
+    print(f"  Labels directory: {labels_dir}")
+    if classes_file:
+        print(f"  Classes file: {classes_file}")
+    
+    # Load class names if available
+    class_names = []
+    if classes_file and os.path.exists(classes_file):
+        try:
+            with open(classes_file, 'r', encoding='utf-8') as f:
+                class_names = [line.strip() for line in f if line.strip()]
+            print(f"  Found {len(class_names)} classes: {class_names}")
+        except Exception as e:
+            print(f"  Warning: Could not read classes.txt: {e}")
+    
+    # Get video base name to match with label files
+    video_basename = os.path.splitext(os.path.basename(video_path))[0]
+    
+    # Initialize coordinates dictionary
+    coordinates = {i: [] for i in range(total_frames)}
+    
+    # Get list of label files
+    label_files = [f for f in os.listdir(labels_dir) if f.endswith('.txt')]
+    
+    if not label_files:
+        print(f"  Warning: No .txt label files found in {labels_dir}")
+        return coordinates
+    
+    print(f"  Found {len(label_files)} label files")
+    
+    # Process each label file
+    matched_frames = 0
+    for label_file in label_files:
+        label_path = os.path.join(labels_dir, label_file)
+        
+        # Try to match label file with video frame
+        # Label files might be named: frame_000001.txt, image001.txt, etc.
+        frame_num = None
+        
+        # Try to extract frame number from filename
+        # Remove extension and try different patterns
+        base_name = os.path.splitext(label_file)[0]
+        
+        # Pattern 1: frame_XXXXXX or frame_XXX
+        if 'frame_' in base_name.lower():
+            try:
+                frame_str = base_name.lower().split('frame_')[-1]
+                frame_num = int(frame_str)
+            except ValueError:
+                pass
+        
+        # Pattern 2: imageXXX or imgXXX
+        if frame_num is None:
+            numbers = re.findall(r'\d+', base_name)
+            if numbers:
+                try:
+                    # Use the last number found (usually the frame number)
+                    frame_num = int(numbers[-1])
+                except ValueError:
+                    pass
+        
+        # Pattern 3: Just a number
+        if frame_num is None:
+            try:
+                frame_num = int(base_name)
+            except ValueError:
+                pass
+        
+        # If still no match, try to match by image filename
+        if frame_num is None:
+            # Check if corresponding image exists
+            image_extensions = ['.jpg', '.jpeg', '.png', '.bmp']
+            for ext in image_extensions:
+                image_file = base_name + ext
+                image_path = os.path.join(images_dir, image_file)
+                if os.path.exists(image_path):
+                    # Try to extract frame number from image filename
+                    img_base = os.path.splitext(image_file)[0]
+                    numbers = re.findall(r'\d+', img_base)
+                    if numbers:
+                        try:
+                            frame_num = int(numbers[-1])
+                            break
+                        except ValueError:
+                            pass
+        
+        if frame_num is None or frame_num < 0 or frame_num >= total_frames:
+            # Skip if we can't determine frame number or it's out of range
+            continue
+        
+        # Read YOLO label file
+        try:
+            with open(label_path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+            
+            frame_points = []
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                
+                parts = line.split()
+                if len(parts) < 5:
+                    continue
+                
+                try:
+                    class_id = int(parts[0])
+                    center_x_norm = float(parts[1])  # Normalized 0-1
+                    center_y_norm = float(parts[2])  # Normalized 0-1
+                    width_norm = float(parts[3])  # Normalized 0-1
+                    height_norm = float(parts[4])  # Normalized 0-1
+                    
+                    # Convert normalized coordinates to pixel coordinates
+                    center_x = center_x_norm * video_width
+                    center_y = center_y_norm * video_height
+                    
+                    # Add center point as marker
+                    frame_points.append((center_x, center_y))
+                    
+                except (ValueError, IndexError) as e:
+                    print(f"  Warning: Skipping invalid line in {label_file}: {line} ({e})")
+                    continue
+            
+            if frame_points:
+                coordinates[frame_num] = frame_points
+                matched_frames += 1
+                
+        except Exception as e:
+            print(f"  Warning: Error reading {label_file}: {e}")
+            continue
+    
+    print(f"  Successfully loaded {matched_frames} frames with annotations")
+    total_annotations = sum(len(coords) for coords in coordinates.values())
+    print(f"  Total bounding boxes converted: {total_annotations}")
+    
+    return coordinates
+
+
 def load_coordinates_from_file(total_frames, video_width=None, video_height=None):
     # Use CLI input for file path to avoid Tkinter issues on Linux
     # This is also more robust for remote execution or when GUI is busy
     
-    print("\n--- Select Keypoint File ---")
-    print("Enter the full path to the .csv file you want to load.")
-    print("You can drag and drop the file into this terminal.")
+    print("\n--- Select Keypoint File or YOLO Dataset ---")
+    print("Enter the full path to:")
+    print("  - A .csv file with keypoints, OR")
+    print("  - A YOLO dataset directory (with images/ and labels/ folders)")
+    print("You can drag and drop the file/folder into this terminal.")
     
     # Try to offer a default if we are in a likely directory
     default_hint = "(Press Enter to skip/cancel)"
     
-    input_file = input(f"File path {default_hint}: ").strip()
+    input_path = input(f"File/Folder path {default_hint}: ").strip()
     
     # Remove quotes if user dragged and dropped 'filename'
-    if input_file.startswith("'") and input_file.endswith("'"):
-        input_file = input_file[1:-1]
-    elif input_file.startswith('"') and input_file.endswith('"'):
-        input_file = input_file[1:-1]
+    if input_path.startswith("'") and input_path.endswith("'"):
+        input_path = input_path[1:-1]
+    elif input_path.startswith('"') and input_path.endswith('"'):
+        input_path = input_path[1:-1]
         
-    input_file = input_file.strip()
+    input_path = input_path.strip()
     
-    if not input_file:
+    if not input_path:
         # User cancelled or empty input
-        input_file = None
+        input_path = None
 
-    if not input_file:
-        print("No keypoint file selected. Starting fresh.")
+    if not input_path:
+        print("No file/folder selected. Starting fresh.")
         return {i: [] for i in range(total_frames)}
+    
+    # Check if it's a YOLO dataset directory
+    is_yolo, images_dir, labels_dir, classes_file = is_yolo_dataset(input_path)
+    if is_yolo:
+        print(f"\nDetected YOLO dataset directory: {input_path}")
+        # Note: We need video_path, video_width, video_height for YOLO loading
+        # These will be passed from the calling function
+        # For now, return a special marker that indicates YOLO dataset
+        return {"_yolo_dataset": input_path}
+    
+    # Otherwise, treat as CSV file
+    input_file = input_path
 
     try:
         print(f"Attempting to load coordinates from: {input_file}")
@@ -2734,6 +3636,7 @@ def load_coordinates_from_file(total_frames, video_width=None, video_height=None
     print("  1. vailá format: 'frame', 'p1_x', 'p1_y', 'p2_x', 'p2_y', ...")
     print("  2. MediaPipe format: 'frame_index', 'landmark_x', 'landmark_y', 'landmark_z', ...")
     print("  3. Generic CSV with coordinate columns")
+    print("  4. YOLO dataset directory (with images/ and labels/ folders)")
     return {i: [] for i in range(total_frames)}
 
 
@@ -2900,34 +3803,8 @@ def get_video_path():
     return video_path
 
 
-def load_coordinates_from_file(total_frames, video_width, video_height):
-    """
-    Loads coordinates from a CSV file specified by the user via CLI input.
-    """
-    print("\nEnter the path to the keypoints CSV file:")
-    file_path = input("File path: ").strip()
-
-    if not file_path:
-        print("No file path entered. Not loading keypoints.")
-        return None
-    if not os.path.exists(file_path):
-        print(f"Error: File not found at '{file_path}'. Not loading keypoints.")
-        return None
-
-    print(f"Attempting to load keypoints from: {file_path}")
-    try:
-        # Assuming _load_coordinates is a function that can handle the loading
-        # This function is not provided in the original snippet, so we'll call a placeholder
-        # or assume it's defined elsewhere in the full context.
-        # For this exercise, we'll call the existing _load_coordinates from the original document.
-        # It needs `input_file`, `total_frames`, `video_width`, `video_height`.
-        # The `input_file` here is `file_path`.
-        return _load_coordinates(file_path, total_frames, video_width, video_height)
-    except Exception as e:
-        print(f"Error loading coordinates from '{file_path}': {e}")
-        import traceback
-        traceback.print_exc()
-        return None
+# This function is a duplicate/legacy version - keeping for compatibility
+# The main load_coordinates_from_file function is defined above
 
 
 def run_getpixelvideo():
@@ -2942,17 +3819,7 @@ def run_getpixelvideo():
         print("No video selected. Exiting.")
         return
 
-    # Print the script version and directory
-    print(f"Running script: {Path(__file__).name}")
-    print(f"Script directory: {Path(__file__).parent}")
 
-    print("Starting GetPixelVideo...")
-    print("-" * 80)
-
-    video_path = get_video_path()
-    if not video_path:
-        print("No video selected. Exiting.")
-        return
 
     # User requested to remove the startup prompt since there is a Load button in the GUI.
     # defaulting to False (starting fresh)
@@ -2973,7 +3840,19 @@ def run_getpixelvideo():
     cap.release()
 
     if load_existing:
-        coordinates = load_coordinates_from_file(total_frames, vw, vh)
+        loaded_data = load_coordinates_from_file(total_frames, vw, vh)
+        
+        # Check if it's a YOLO dataset marker
+        if isinstance(loaded_data, dict) and "_yolo_dataset" in loaded_data:
+            # User selected a YOLO dataset, load it now
+            dataset_path = loaded_data["_yolo_dataset"]
+            print(f"\nLoading YOLO dataset from: {dataset_path}")
+            coordinates = load_yolo_dataset(dataset_path, video_path, total_frames, vw, vh)
+            if not coordinates:
+                print("Failed to load YOLO dataset. Starting fresh.")
+                coordinates = None
+        else:
+            coordinates = loaded_data
     else:
         coordinates = None
 
