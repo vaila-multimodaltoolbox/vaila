@@ -2150,7 +2150,7 @@ def run_markerless2d_mpyolo():
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
 
     # Update model path
-    model_name = "yolo12x.pt"
+    model_name = "yolo11x.pt"
 
     # Correct path to vaila/vaila/models
     script_dir = os.path.dirname(os.path.abspath(__file__))

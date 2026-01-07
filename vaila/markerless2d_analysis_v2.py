@@ -344,8 +344,6 @@ def download_yolo_model(model_name):
         # Ultralytics models are available at: https://github.com/ultralytics/assets/releases
         if "yolo11" in model_name.lower() or "yolov11" in model_name.lower():
             version_tag = "v11.0.0"
-        elif "yolo12" in model_name.lower() or "yolov12" in model_name.lower():
-            version_tag = "v12.0.0"
         elif "yolo8" in model_name.lower() or "yolov8" in model_name.lower():
             version_tag = "v8.0.0"
         else:

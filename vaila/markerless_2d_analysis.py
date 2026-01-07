@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 06 January 2026
-Version: 0.7.1
+Update Date: 07 January 2026
+Version: 0.7.2
 
 Example of usage:
 First activate the vaila environment:
@@ -28,12 +28,8 @@ whether to enable segmentation and smooth segmentation. The default settings
 prioritize the highest detection accuracy and tracking precision, which may
 increase computational cost.
 
-New Features (v0.7.1):
-- MediaPipe Tasks API (0.10.31+) migration
-- Bounding box (ROI) selection for small subjects or multi-person scenarios
-- Optional resize of cropped region for improved detection
-- TOML configuration with GUI auto-population
-- Portable debug logging system
+New Features (v0.7.2):
+- Bounding box (ROI) selection for small subjects or multi-person scenarios with zoom and window resize capabilities
 
 Usage:
 - Run the script to open a graphical interface for selecting the input directory
@@ -1709,17 +1705,50 @@ For more information, visit: https://github.com/vaila-multimodaltoolbox/vaila
             return
 
         # Read first frame
-        ret, frame = cap.read()
+        ret, original_frame = cap.read()
         cap.release()
 
         if not ret:
             messagebox.showerror("Error", "Could not read first frame from video.")
             return
 
-        # Let user select ROI
+        # Get original dimensions
+        orig_height, orig_width = original_frame.shape[:2]
+        
+        # Calculate maximum display size (fit to screen)
+        max_display_width = 1920
+        max_display_height = 1080
+        
+        # Check if frame needs to be resized to fit screen
+        display_frame = original_frame.copy()
+        scale_factor = 1.0
+        
+        if orig_width > max_display_width or orig_height > max_display_height:
+            # Calculate scale to fit screen while maintaining aspect ratio
+            scale_w = max_display_width / orig_width
+            scale_h = max_display_height / orig_height
+            scale_factor = min(scale_w, scale_h)
+            
+            # Resize frame for display
+            display_width = int(orig_width * scale_factor)
+            display_height = int(orig_height * scale_factor)
+            display_frame = cv2.resize(original_frame, (display_width, display_height), interpolation=cv2.INTER_LINEAR)
+            print(f"Frame resized for display: {orig_width}x{orig_height} -> {display_width}x{display_height} (scale: {scale_factor:.2f})")
+        else:
+            display_width = orig_width
+            display_height = orig_height
+
+        # Let user select ROI on display frame
         print(f"Select ROI from first frame of: {first_video.name}")
         print("Instructions: Drag to select region, press SPACE or ENTER to confirm, ESC to cancel")
-        roi = cv2.selectROI("Select ROI - Press SPACE/ENTER to confirm, ESC to cancel", frame, False)
+        print("Note: Window is resizable - you can resize it to see the full frame")
+        
+        # Create resizable window before selectROI
+        window_name = "Select ROI - Press SPACE/ENTER to confirm, ESC to cancel"
+        cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+        cv2.resizeWindow(window_name, display_width, display_height)
+        
+        roi = cv2.selectROI(window_name, display_frame, False)
 
         # Check if user cancelled (roi is all zeros)
         if roi[2] == 0 or roi[3] == 0:
@@ -1727,12 +1756,26 @@ For more information, visit: https://github.com/vaila-multimodaltoolbox/vaila
             cv2.destroyAllWindows()
             return
 
-        # roi format: (x, y, width, height)
-        x, y, w, h = roi
-        x_min = x
-        y_min = y
-        x_max = x + w
-        y_max = y + h
+        # roi format: (x, y, width, height) - these are in display_frame coordinates
+        x_display, y_display, w_display, h_display = roi
+        
+        # Convert ROI coordinates from display frame back to original video dimensions
+        if scale_factor != 1.0:
+            x_min = int(x_display / scale_factor)
+            y_min = int(y_display / scale_factor)
+            x_max = int((x_display + w_display) / scale_factor)
+            y_max = int((y_display + h_display) / scale_factor)
+        else:
+            x_min = x_display
+            y_min = y_display
+            x_max = x_display + w_display
+            y_max = y_display + h_display
+        
+        # Clamp to original frame dimensions
+        x_min = max(0, min(x_min, orig_width - 1))
+        y_min = max(0, min(y_min, orig_height - 1))
+        x_max = max(x_min + 1, min(x_max, orig_width))
+        y_max = max(y_min + 1, min(y_max, orig_height))
 
         # Update entry fields
         self.bbox_x_min_entry.delete(0, tk.END)
