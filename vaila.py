@@ -4,8 +4,8 @@ vaila.py
 ===============================================================================
 Author: Prof. Paulo R. P. Santiago
 Date: 07 October 2024
-Update: 06 January 2026
-Version updated: 0.3.5
+Update: 07 January 2026
+Version updated: 0.3.6
 Python Version: 3.12.12
 
 Example of usage:
@@ -123,7 +123,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 06.January.2026 v0.3.5 (Python 3.12.12)
+vailá - 07.January.2026 v0.3.6 (Python 3.12.12)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -226,7 +226,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 06.January.2026 v0.3.5 (Python 3.12.12)")
+        self.title("vailá - 07.January.2026 v0.3.6 (Python 3.12.12)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -1427,7 +1427,7 @@ class Vaila(tk.Tk):
         # Create a dialog window for version selection
         dialog = Toplevel(self)
         dialog.title("Markerless 2D Analysis - Select Version")
-        dialog.geometry("500x300")
+        dialog.geometry("600x400")
         dialog.transient(self)
         dialog.grab_set()
         
@@ -1520,12 +1520,31 @@ class Vaila(tk.Tk):
             try:
                 # Launch in separate process (recommended - no Tkinter conflicts)
                 if version_choice == "1":
+                    print("\n" + "=" * 60)
+                    print("Markerless 2D Analysis - Version Selected: Standard CPU")
+                    print("=" * 60)
+                    print("Launching: vaila.markerless_2d_analysis")
+                    print("Features: MediaPipe only, single-person, CPU processing")
+                    print("=" * 60 + "\n")
                     run_vaila_module("vaila.markerless_2d_analysis")
                 elif version_choice == "1gpu":
+                    print("\n" + "=" * 60)
+                    print("Markerless 2D Analysis - Version Selected: Standard GPU (NVIDIA)")
+                    print("=" * 60)
+                    print("Launching: vaila.markerless_2d_analysis_nvidia")
+                    print("Features: MediaPipe only, single-person, GPU accelerated (2-5x faster)")
+                    print("=" * 60 + "\n")
                     run_vaila_module("vaila.markerless_2d_analysis_nvidia")
                 elif version_choice == "2":
+                    print("\n" + "=" * 60)
+                    print("Markerless 2D Analysis - Version Selected: Advanced (YOLO + MediaPipe)")
+                    print("=" * 60)
+                    print("Launching: vaila.markerless2d_analysis_v2")
+                    print("Features: Multi-person detection with YOLOv11, slower but more accurate")
+                    print("=" * 60 + "\n")
                     run_vaila_module("vaila.markerless2d_analysis_v2")
             except Exception as e:
+                print(f"\nERROR: Failed to launch markerless analysis: {e}\n")
                 messagebox.showerror("Error", f"Failed to launch markerless analysis: {e}")
 
         def cancel():
@@ -1765,25 +1784,6 @@ class Vaila(tk.Tk):
 
         tk.Label(dialog, text="Select YOLO tracker version to use:", pady=15).pack()
 
-        def use_yolov12():
-            dialog.destroy()
-            try:
-                # Import inside function to avoid early loading
-                import sys
-
-                # Add the site-packages path first to ensure proper numpy loading
-                site_packages = os.path.join(
-                    os.path.dirname(sys.executable), "Lib", "site-packages"
-                )
-                if site_packages not in sys.path:
-                    sys.path.insert(0, site_packages)
-
-                from vaila import yolov12track
-
-                yolov12track.run_yolov12track()
-            except Exception as e:
-                messagebox.showerror("Error Running YOLOv12", f"Error: {str(e)}")
-
         def use_yolov11():
             dialog.destroy()
             try:
@@ -1815,7 +1815,6 @@ class Vaila(tk.Tk):
             except Exception as e:
                 messagebox.showerror("Error in YOLO Training", f"Error: {str(e)}")
 
-        tk.Button(dialog, text="YOLOv12 Tracker", command=use_yolov12, width=20).pack(pady=10)
         tk.Button(dialog, text="YOLOv11 Tracker", command=use_yolov11, width=20).pack(pady=10)
         tk.Button(dialog, text="Train YOLO", command=use_train_yolov11, width=20).pack(pady=10)
         tk.Button(dialog, text="Cancel", command=dialog.destroy, width=10).pack(pady=10)

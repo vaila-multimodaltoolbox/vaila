@@ -211,7 +211,7 @@ def get_pose_config(existing_root=None):
 
 def download_or_load_yolo_model():
     """Download or load the YOLO model"""
-    model_name = "yolo12x.pt"
+    model_name = "yolo11x.pt"
 
     # Verificar se o modelo já existe localmente
     script_dir = Path(__file__).parent.resolve()
