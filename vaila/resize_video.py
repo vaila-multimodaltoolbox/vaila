@@ -300,7 +300,7 @@ def convert_coordinates_by_format(df, metadata, format_type, progress_callback=N
 
     elif format_type == "yolo":
         if progress_callback:
-            progress_callback("Processing using YOLOv12 format...")
+            progress_callback("Processing using YOLO format...")
 
         person_ids = [col.split("_")[1] for col in df.columns if col.startswith("ID_")]
         if progress_callback:
@@ -772,7 +772,7 @@ converting MediaPipe coordinates back to the original video dimensions."""
         format_description = """
         Select the format of your coordinate file by clicking one of the buttons below:
         • MediaPipe Format: for landmarks with _x and _y columns
-        • YOLOv12 Format: for ID_n, X_n, Y_n, RGB_n columns
+        • YOLO Format: for ID_n, X_n, Y_n, RGB_n columns
         • vailá Format: for simple x, y columns
         """
         Label(format_label_frame, text=format_description, justify=tk.LEFT).pack(
@@ -798,7 +798,7 @@ converting MediaPipe coordinates back to the original video dimensions."""
 
         Button(
             format_buttons_frame,
-            text="YOLOv12 Format",
+            text="YOLO Format",
             command=lambda: set_format_and_highlight(1, "yolo"),
             width=20,
         ).pack(side=tk.LEFT, padx=5)
