@@ -51,12 +51,213 @@ License:
 
 import datetime
 import os
+import subprocess
+import json
 from pathlib import Path
 from tkinter import Tk, filedialog, messagebox
+from fractions import Fraction
 
 import cv2
 import pygame
 from rich import print
+
+
+def get_precise_video_metadata(video_path):
+    """
+    Get precise video metadata using ffprobe to avoid rounding errors.
+    Returns dict with fps (float), width, height, codec, etc.
+    """
+    try:
+        cmd = [
+            "ffprobe",
+            "-v", "error",
+            "-print_format", "json",
+            "-show_format",
+            "-show_streams",
+            str(video_path),
+        ]
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+        data = json.loads(result.stdout)
+        
+        # Find video stream
+        video_stream = None
+        for stream in data.get("streams", []):
+            if stream.get("codec_type") == "video":
+                video_stream = stream
+                break
+        
+        if not video_stream:
+            # Fallback to OpenCV if ffprobe fails
+            cap = cv2.VideoCapture(str(video_path))
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            cap.release()
+            return {
+                "fps": fps,
+                "width": width,
+                "height": height,
+                "codec": "unknown",
+                "r_frame_rate": None,
+                "avg_frame_rate": None,
+            }
+        
+        # Get precise FPS from r_frame_rate or avg_frame_rate
+        r_frame_rate_str = video_stream.get("r_frame_rate", "0/0")
+        avg_frame_rate_str = video_stream.get("avg_frame_rate", "0/0")
+        
+        # Convert fraction strings to float
+        def fraction_to_float(frac_str):
+            try:
+                if "/" in frac_str:
+                    num, den = map(int, frac_str.split("/"))
+                    return float(num) / den if den != 0 else 0.0
+                return float(frac_str)
+            except (ValueError, ZeroDivisionError):
+                return None
+        
+        r_fps = fraction_to_float(r_frame_rate_str)
+        avg_fps = fraction_to_float(avg_frame_rate_str)
+        
+        # Use avg_frame_rate if available, otherwise r_frame_rate
+        fps = avg_fps if avg_fps and avg_fps > 0 else (r_fps if r_fps and r_fps > 0 else 30.0)
+        
+        # Get frame count if available
+        nb_frames = None
+        try:
+            if "nb_frames" in video_stream and video_stream["nb_frames"] not in (None, "N/A", ""):
+                nb_frames = int(video_stream["nb_frames"])
+        except (ValueError, TypeError):
+            nb_frames = None
+        
+        # Calculate frame count from duration and FPS if nb_frames not available
+        duration = float(data.get("format", {}).get("duration", 0))
+        if nb_frames is None and duration > 0 and fps > 0:
+            nb_frames = int(round(duration * fps))
+        
+        return {
+            "fps": fps,
+            "width": video_stream.get("width"),
+            "height": video_stream.get("height"),
+            "codec": video_stream.get("codec_name", "unknown"),
+            "r_frame_rate": r_frame_rate_str,
+            "avg_frame_rate": avg_frame_rate_str,
+            "duration": duration if duration > 0 else None,
+            "nb_frames": nb_frames,
+        }
+    except (subprocess.CalledProcessError, json.JSONDecodeError, FileNotFoundError) as e:
+        # Fallback to OpenCV if ffprobe is not available
+        print(f"Warning: ffprobe not available or failed, using OpenCV fallback: {e}")
+        cap = cv2.VideoCapture(str(video_path))
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        cap.release()
+        return {
+            "fps": fps,
+            "width": width,
+            "height": height,
+            "codec": "unknown",
+            "r_frame_rate": None,
+            "avg_frame_rate": None,
+        }
+
+
+def cut_video_with_ffmpeg(video_path, output_path, start_frame, end_frame, metadata):
+    """
+    Cut video using ffmpeg to preserve precise metadata.
+    Uses frame-accurate cutting with copy codec when possible.
+    """
+    try:
+        # Check if ffmpeg is available
+        subprocess.run(["ffmpeg", "-version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        # Fallback to OpenCV if ffmpeg not available
+        return cut_video_with_opencv(video_path, output_path, start_frame, end_frame, metadata)
+    
+    fps = metadata["fps"]
+    
+    # Calculate start and end times in seconds
+    start_time = start_frame / fps if fps > 0 else 0.0
+    duration = (end_frame - start_frame + 1) / fps if fps > 0 else 0.0
+    
+    # Use frame-accurate cutting with ffmpeg
+    # -ss before -i for faster seeking (input seeking)
+    # -t for duration
+    # -c copy to preserve codec and metadata when possible
+    cmd = [
+        "ffmpeg",
+        "-y",  # Overwrite output file
+        "-ss", f"{start_time:.6f}",  # Start time with high precision
+        "-i", str(video_path),
+        "-t", f"{duration:.6f}",  # Duration with high precision
+        "-c", "copy",  # Copy codec (no re-encoding, preserves quality and metadata)
+        "-avoid_negative_ts", "make_zero",  # Handle timestamp issues
+        str(output_path),
+    ]
+    
+    try:
+        result = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=True,
+        )
+        return True
+    except subprocess.CalledProcessError as e:
+        # If copy codec fails (e.g., can't cut at exact frame), try with re-encoding
+        print(f"Warning: Copy codec failed, trying with re-encoding: {e.stderr}")
+        cmd_reencode = [
+            "ffmpeg",
+            "-y",
+            "-ss", f"{start_time:.6f}",
+            "-i", str(video_path),
+            "-t", f"{duration:.6f}",
+            "-c:v", "libx264",  # Re-encode video
+            "-preset", "medium",
+            "-crf", "18",  # High quality
+            "-c:a", "aac",  # Re-encode audio if present
+            "-b:a", "192k",
+            "-r", f"{fps:.6f}",  # Preserve exact frame rate
+            "-avoid_negative_ts", "make_zero",
+            str(output_path),
+        ]
+        try:
+            subprocess.run(cmd_reencode, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+            return True
+        except subprocess.CalledProcessError as e2:
+            print(f"Error with ffmpeg re-encoding: {e2.stderr}")
+            # Final fallback to OpenCV
+            return cut_video_with_opencv(video_path, output_path, start_frame, end_frame, metadata)
+
+
+def cut_video_with_opencv(video_path, output_path, start_frame, end_frame, metadata):
+    """
+    Fallback function to cut video using OpenCV (less precise but always available).
+    """
+    cap = cv2.VideoCapture(str(video_path))
+    if not cap.isOpened():
+        return False
+    
+    fps = metadata["fps"]
+    width = metadata["width"]
+    height = metadata["height"]
+    
+    # Use float FPS, not int
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    out = cv2.VideoWriter(str(output_path), fourcc, fps, (width, height))
+    
+    cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+    for _ in range(end_frame - start_frame + 1):
+        ret, frame = cap.read()
+        if not ret:
+            break
+        out.write(frame)
+    
+    out.release()
+    cap.release()
+    return True
 
 
 def save_cuts_to_txt(video_path, cuts):
@@ -226,16 +427,9 @@ def batch_process_sync_videos(video_path, sync_data):
             continue
 
         try:
-            # Get video properties
-            cap = cv2.VideoCapture(str(video_path_full))
-            if not cap.isOpened():
-                print(f"Error opening: {video_file}")
-                continue
-
-            fps = int(cap.get(cv2.CAP_PROP_FPS))
-            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            # Get precise video metadata
+            metadata = get_precise_video_metadata(video_path_full)
+            total_frames = metadata.get("nb_frames") or (int(metadata.get("duration", 0) * metadata["fps"]) if metadata.get("duration") else int(cv2.VideoCapture(str(video_path_full)).get(cv2.CAP_PROP_FRAME_COUNT)))
 
             # Process the cut
             start_frame = sync_info["initial_frame"]
@@ -250,24 +444,15 @@ def batch_process_sync_videos(video_path, sync_data):
             actual_end_frame = min(end_frame, total_frames - 1)
 
             output_path = output_dir / sync_info["new_name"]
-            out = cv2.VideoWriter(
-                str(output_path),
-                cv2.VideoWriter.fourcc(*"mp4v"),
-                fps,
-                (width, height),
-            )
-
-            cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
-            for _ in range(actual_end_frame - start_frame + 1):
-                ret, frame = cap.read()
-                if not ret:
-                    break
-                out.write(frame)
-
-            out.release()
-            cap.release()
-            processed_count += 1
-            print(f"Processed: {video_file} -> {sync_info['new_name']}")
+            
+            # Use ffmpeg for precise cutting
+            success = cut_video_with_ffmpeg(video_path_full, output_path, start_frame, actual_end_frame, metadata)
+            
+            if success:
+                processed_count += 1
+                print(f"Processed: {video_file} -> {sync_info['new_name']} (FPS: {metadata['fps']:.6f})")
+            else:
+                print(f"Error processing: {video_file}")
 
         except Exception as e:
             print(f"Error processing {video_file}: {str(e)}")
@@ -288,11 +473,21 @@ def play_video_with_cuts(video_path):
         print("Error opening video file")
         return
 
-    # Get video properties
-    fps = int(cap.get(cv2.CAP_PROP_FPS))
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    original_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    original_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    # Get precise video metadata using ffprobe
+    metadata = get_precise_video_metadata(video_path)
+    fps = metadata["fps"]  # Use precise float FPS
+    original_width = metadata["width"]
+    original_height = metadata["height"]
+    
+    # Calculate total frames from metadata if available, otherwise use OpenCV
+    total_frames = metadata.get("nb_frames")
+    if total_frames is None:
+        if metadata.get("duration") and fps > 0:
+            total_frames = int(round(metadata["duration"] * fps))
+        else:
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    
+    print(f"Video metadata: {original_width}x{original_height}, FPS: {fps:.6f}, Frames: {total_frames}")
 
     # Initialize window with adjusted size
     screen_info = pygame.display.Info()
@@ -559,19 +754,9 @@ def play_video_with_cuts(video_path):
                 status_label.config(text=f"Processing: {video_name}")
 
                 try:
-                    # Get video properties
-                    cap = cv2.VideoCapture(video_path)
-                    if not cap.isOpened():
-                        status_label.config(text=f"Error opening: {video_name}")
-                        root.after(100, process_next_video)
-                        processed_count += 1
-                        progress["value"] = processed_count
-                        return
-
-                    fps = int(cap.get(cv2.CAP_PROP_FPS))
-                    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                    # Get precise video metadata
+                    metadata = get_precise_video_metadata(video_path)
+                    total_frames = metadata.get("nb_frames") or (int(metadata.get("duration", 0) * metadata["fps"]) if metadata.get("duration") else int(cv2.VideoCapture(video_path).get(cv2.CAP_PROP_FRAME_COUNT)))
 
                     # Process each cut
                     for i, (start_frame, end_frame) in enumerate(cuts):
@@ -586,23 +771,11 @@ def play_video_with_cuts(video_path):
                             output_dir
                             / f"{video_name}_frame_{start_frame}_to_{actual_end_frame}.mp4"
                         )
-                        out = cv2.VideoWriter(
-                            str(output_path),
-                            cv2.VideoWriter.fourcc(*"mp4v"),
-                            fps,
-                            (width, height),
-                        )
-
-                        cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
-                        for _ in range(actual_end_frame - start_frame + 1):
-                            ret, frame = cap.read()
-                            if not ret:
-                                break
-                            out.write(frame)
-
-                        out.release()
-
-                    cap.release()
+                        
+                        # Use ffmpeg for precise cutting
+                        success = cut_video_with_ffmpeg(video_path, output_path, start_frame, actual_end_frame, metadata)
+                        if not success:
+                            status_label.config(text=f"Warning: Cut {i+1} failed for {video_name}")
 
                 except Exception as e:
                     status_label.config(text=f"Error processing {video_name}: {str(e)}")
@@ -636,31 +809,18 @@ def play_video_with_cuts(video_path):
             output_dir = Path(video_path).parent / f"vailacut_{prefix}{timestamp}"
             output_dir.mkdir(exist_ok=True)
 
-            # Get video properties
-            cap = cv2.VideoCapture(video_path)
-            fps = int(cap.get(cv2.CAP_PROP_FPS))
-            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-
+            # Get precise video metadata
+            metadata = get_precise_video_metadata(video_path)
+            
             # Process each cut
             for i, (start_frame, end_frame) in enumerate(cuts):
                 output_path = output_dir / f"{video_name}_frame_{start_frame}_to_{end_frame}.mp4"
-                out = cv2.VideoWriter(
-                    str(output_path),
-                    cv2.VideoWriter.fourcc(*"mp4v"),
-                    fps,
-                    (width, height),
-                )
+                
+                # Use ffmpeg for precise cutting
+                success = cut_video_with_ffmpeg(video_path, output_path, start_frame, end_frame, metadata)
+                if not success:
+                    print(f"Warning: Failed to create cut {i+1} for {video_name}")
 
-                cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
-                for _ in range(end_frame - start_frame + 1):
-                    ret, frame = cap.read()
-                    if ret:
-                        out.write(frame)
-
-                out.release()
-
-            cap.release()
             return True
         finally:
             # Garantir que os recursos sejam liberados mesmo em caso de erro

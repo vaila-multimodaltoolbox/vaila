@@ -172,10 +172,16 @@ def get_video_info(video_path):
         else:
             recommended_sampling_hz = display_fps
 
+        # Format FPS values for printing (handle None)
+        disp_str = f"{display_fps:.9f}" if display_fps else "N/A"
+        avg_str = f"{avg_fps:.9f}" if avg_fps else "N/A"
+        cap_str = f"{capture_fps:.9f}" if capture_fps else "N/A"
+        dur_str = f"{duration:.9f}" if duration else "N/A"
+        
         print(
             f"Video info: {width}x{height}, codec={codec_name}, container={container_format}, "
-            f"display≈{display_fps} fps, avg≈{avg_fps} fps, cap={capture_fps} Hz, "
-            f"dur={duration:.2f}s, frames={nb_frames}"
+            f"display≈{disp_str} fps, avg≈{avg_str} fps, cap={cap_str} Hz, "
+            f"dur={dur_str}s, frames={nb_frames}"
         )
 
         return {
@@ -256,12 +262,13 @@ def display_video_info(video_infos, output_file):
             ttk.Label(scrollable_frame, text=info["frame_count"]).grid(
                 row=i, column=1, sticky=tk.W, padx=10
             )
-            ttk.Label(scrollable_frame, text=f"{(info.get('display_fps') or 0):.3f}").grid(
+            # Display with high precision in GUI (6 decimal places for readability)
+            ttk.Label(scrollable_frame, text=f"{(info.get('display_fps') or 0):.6f}").grid(
                 row=i, column=2, sticky=tk.W, padx=10
             )
             ttk.Label(
                 scrollable_frame,
-                text=(f"{info.get('capture_fps'):.3f}" if info.get("capture_fps") else "N/A"),
+                text=(f"{info.get('capture_fps'):.6f}" if info.get("capture_fps") else "N/A"),
             ).grid(row=i, column=3, sticky=tk.W, padx=10)
             ttk.Label(scrollable_frame, text=(info.get("codec_name") or "N/A")).grid(
                 row=i, column=4, sticky=tk.W, padx=10
@@ -272,7 +279,8 @@ def display_video_info(video_infos, output_file):
             ttk.Label(scrollable_frame, text=info["resolution"]).grid(
                 row=i, column=6, sticky=tk.W, padx=10
             )
-            ttk.Label(scrollable_frame, text=f"{info['duration']:.2f}").grid(
+            # Display duration with high precision (6 decimal places for readability)
+            ttk.Label(scrollable_frame, text=f"{info['duration']:.6f}").grid(
                 row=i, column=7, sticky=tk.W, padx=10
             )
 
@@ -295,18 +303,19 @@ def save_basic_metadata_to_file(video_infos, directory_path):
                 avg = info.get("avg_fps")
                 cap = info.get("capture_fps")
                 rec = info.get("recommended_sampling_hz")
-                f.write(f"Display_FPS: {disp:.3f}\n" if disp else "Display_FPS: N/A\n")
-                f.write(f"Avg_FPS: {avg:.3f}\n" if avg else "Avg_FPS: N/A\n")
-                f.write(f"Capture_FPS: {cap:.3f}\n" if cap else "Capture_FPS: N/A\n")
+                # Use high precision for scientific accuracy (9 decimal places)
+                f.write(f"Display_FPS: {disp:.9f}\n" if disp else "Display_FPS: N/A\n")
+                f.write(f"Avg_FPS: {avg:.9f}\n" if avg else "Avg_FPS: N/A\n")
+                f.write(f"Capture_FPS: {cap:.9f}\n" if cap else "Capture_FPS: N/A\n")
                 f.write(
-                    f"Recommended_Sampling_Hz: {rec:.3f}\n"
+                    f"Recommended_Sampling_Hz: {rec:.9f}\n"
                     if rec
                     else "Recommended_Sampling_Hz: N/A\n"
                 )
                 if cap and disp:
                     try:
                         slowmo = cap / disp
-                        f.write(f"SlowMo_Factor: {slowmo:.3f}\n")
+                        f.write(f"SlowMo_Factor: {slowmo:.9f}\n")
                     except Exception:
                         pass
                 # Codec/Container
@@ -319,7 +328,8 @@ def save_basic_metadata_to_file(video_infos, directory_path):
                     f"Container: {container}{(' - ' + container_long) if container_long else ''}\n"
                 )
                 f.write(f"Resolution: {info['resolution']}\n")
-                f.write(f"Duration (s): {info['duration']:.2f}\n\n")
+                # Use high precision for duration (9 decimal places for scientific accuracy)
+                f.write(f"Duration (s): {info['duration']:.9f}\n\n")
 
     return output_file
 

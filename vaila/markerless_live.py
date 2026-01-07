@@ -848,7 +848,7 @@ class MovementAnalyzer:
                         )
 
                     # Define skeleton connections (pairs of keypoint indices)
-                    # Adapt to YOLO12n keypoint format
+                    # Adapt to YOLO11n keypoint format
                     skeleton = [
                         # Upper body
                         (5, 7),
