@@ -87,12 +87,6 @@ class YOLOTrainApp(tk.Tk):
             "yolo11m.pt",  # YOLO11 Medium (Recommended default)
             "yolo11s.pt",  # YOLO11 Small
             "yolo11n.pt",  # YOLO11 Nano
-            # YOLO12 Models (Latest)
-            "yolo12x.pt",  # YOLO12 Extra Large
-            "yolo12l.pt",  # YOLO12 Large
-            "yolo12m.pt",  # YOLO12 Medium
-            "yolo12s.pt",  # YOLO12 Small
-            "yolo12n.pt",  # YOLO12 Nano
             # YOLOv8 Models (Stable)
             "yolov8x.pt",  # YOLOv8 Extra Large
             "yolov8l.pt",  # YOLOv8 Large
@@ -209,8 +203,6 @@ class YOLOTrainApp(tk.Tk):
         # Filter models by category
         if category == "YOLO11":
             models = [m for m in self.available_models if m.startswith("yolo11")]
-        elif category == "YOLO12":
-            models = [m for m in self.available_models if m.startswith("yolo12")]
         elif category == "YOLOv8":
             models = [m for m in self.available_models if m.startswith("yolov8")]
         elif category == "YOLOv9":
@@ -225,8 +217,6 @@ class YOLOTrainApp(tk.Tk):
         if models:
             if category == "YOLO11":
                 self.base_model.set("yolo11m.pt")
-            elif category == "YOLO12":
-                self.base_model.set("yolo12m.pt")
             elif category == "YOLOv8":
                 self.base_model.set("yolov8m.pt")
             elif category == "YOLOv9":
@@ -242,7 +232,6 @@ YOLO MODEL SELECTION GUIDE
 
 MODEL CATEGORIES:
 • YOLO11: Latest version (2024) - Best performance
-• YOLO12: Latest version (2024) - Newest features  
 • YOLOv8: Stable version - Well tested
 • YOLOv9: Latest version - Advanced features
 
@@ -254,7 +243,7 @@ MODEL SIZES (n → s → m → l → x):
 • x (Extra Large): ~300MB - Slowest, highest accuracy
 
 RECOMMENDATIONS:
-• For beginners: Use YOLO11m or YOLO12m
+• For beginners: Use YOLO11m
 • For real-time: Use nano (n) models
 • For best accuracy: Use large (l) or extra large (x) models
 • For mobile/edge: Use nano (n) or small (s) models
@@ -937,36 +926,6 @@ names: {names_str}  # class names
                 "use": "High accuracy needed",
             },
             "yolo11x.pt": {
-                "size": "~300MB",
-                "speed": "Slowest",
-                "accuracy": "Highest",
-                "use": "Best accuracy",
-            },
-            "yolo12n.pt": {
-                "size": "~6MB",
-                "speed": "Fastest",
-                "accuracy": "Lower",
-                "use": "Edge devices, real-time",
-            },
-            "yolo12s.pt": {
-                "size": "~20MB",
-                "speed": "Fast",
-                "accuracy": "Low",
-                "use": "Mobile, embedded",
-            },
-            "yolo12m.pt": {
-                "size": "~50MB",
-                "speed": "Medium",
-                "accuracy": "Good",
-                "use": "General purpose",
-            },
-            "yolo12l.pt": {
-                "size": "~150MB",
-                "speed": "Slow",
-                "accuracy": "High",
-                "use": "High accuracy needed",
-            },
-            "yolo12x.pt": {
                 "size": "~300MB",
                 "speed": "Slowest",
                 "accuracy": "Highest",
