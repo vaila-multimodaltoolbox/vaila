@@ -6,47 +6,44 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 28 July 2025
-Version: 0.0.8
+Update Date: 08 January 2026
+Version: 0.1.0
 
 Description:
 This script performs batch processing of videos for cutting videos.
 
 
 Features:
-- Added support for multiple videos.
-- Added support for multiple output directories.
-- Added support for sync files.
+- Added support for TOML files.
 
 Usage:
 - Run the script to open a graphical interface for selecting the input directory
   containing video files (.mp4, .avi, .mov), the output directory, and for
-  specifying the MediaPipe configuration parameters.
-- Choose whether to enable video resize for better pose detection.
-- The script processes each video, generating an output video with overlaid pose
-  landmarks, and CSV files containing both normalized and pixel-based landmark
-  coordinates in original video dimensions.
+  specifying the cuts.
 
 Requirements:
-- Python 3.12.11
+- Python 3.12.12
 - OpenCV (`pip install opencv-python`)
 - Tkinter (usually included with Python installations)
+- tomllib (`pip install tomllib`)
 
 Output:
 The following files are generated for each processed video:
-1. Processed Video (`*_cuts.mp4`):
-   The video with the cuts applied.
+1. Cut Information (`*_cuts.toml`):
+   The cut information saved in TOML format.
+2. Cut Videos (`*_frame_X_to_Y.mp4`):
+   The videos with the cuts applied.
 
 Example:
 - Video: 1.mp4
-- Cuts: 1_cuts.txt
-- Output: 1_cuts.mp4
+- Cuts: 1_cuts.toml
+- Output: 1_frame_100_to_200.mp4
 
 How to run:
 python cutvideo.py
 
 License:
-    This project is licensed under the terms of GNU General Public License v3.0.
+    This project is licensed under the terms of AGPLv3.
 """
 
 import datetime
@@ -54,8 +51,9 @@ import os
 import subprocess
 import json
 from pathlib import Path
-from tkinter import Tk, filedialog, messagebox
+from tkinter import Tk, filedialog, messagebox, simpledialog
 from fractions import Fraction
+import tomllib
 
 import cv2
 import pygame
@@ -176,60 +174,50 @@ def cut_video_with_ffmpeg(video_path, output_path, start_frame, end_frame, metad
         return cut_video_with_opencv(video_path, output_path, start_frame, end_frame, metadata)
     
     fps = metadata["fps"]
-    
-    # Calculate start and end times in seconds
+
+    # Calculate precise frame count (inclusive) and start time
+    frame_count = end_frame - start_frame + 1
     start_time = start_frame / fps if fps > 0 else 0.0
-    duration = (end_frame - start_frame + 1) / fps if fps > 0 else 0.0
-    
-    # Use frame-accurate cutting with ffmpeg
-    # -ss before -i for faster seeking (input seeking)
-    # -t for duration
-    # -c copy to preserve codec and metadata when possible
-    cmd = [
+
+    # Frame-accurate cutting using ffmpeg with re-encoding and explicit frame count
+    cmd_reencode = [
         "ffmpeg",
-        "-y",  # Overwrite output file
-        "-ss", f"{start_time:.6f}",  # Start time with high precision
-        "-i", str(video_path),
-        "-t", f"{duration:.6f}",  # Duration with high precision
-        "-c", "copy",  # Copy codec (no re-encoding, preserves quality and metadata)
-        "-avoid_negative_ts", "make_zero",  # Handle timestamp issues
+        "-y",
+        "-ss",
+        f"{start_time:.6f}",
+        "-i",
+        str(video_path),
+        "-frames:v",
+        str(frame_count),
+        "-c:v",
+        "libx264",  # Re-encode for accuracy
+        "-preset",
+        "medium",
+        "-crf",
+        "18",  # High quality
+        "-c:a",
+        "aac",
+        "-b:a",
+        "192k",
+        "-r",
+        f"{fps:.6f}",  # Preserve fps
+        "-avoid_negative_ts",
+        "make_zero",
         str(output_path),
     ]
-    
     try:
-        result = subprocess.run(
-            cmd,
+        subprocess.run(
+            cmd_reencode,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
             check=True,
         )
         return True
-    except subprocess.CalledProcessError as e:
-        # If copy codec fails (e.g., can't cut at exact frame), try with re-encoding
-        print(f"Warning: Copy codec failed, trying with re-encoding: {e.stderr}")
-        cmd_reencode = [
-            "ffmpeg",
-            "-y",
-            "-ss", f"{start_time:.6f}",
-            "-i", str(video_path),
-            "-t", f"{duration:.6f}",
-            "-c:v", "libx264",  # Re-encode video
-            "-preset", "medium",
-            "-crf", "18",  # High quality
-            "-c:a", "aac",  # Re-encode audio if present
-            "-b:a", "192k",
-            "-r", f"{fps:.6f}",  # Preserve exact frame rate
-            "-avoid_negative_ts", "make_zero",
-            str(output_path),
-        ]
-        try:
-            subprocess.run(cmd_reencode, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
-            return True
-        except subprocess.CalledProcessError as e2:
-            print(f"Error with ffmpeg re-encoding: {e2.stderr}")
-            # Final fallback to OpenCV
-            return cut_video_with_opencv(video_path, output_path, start_frame, end_frame, metadata)
+    except subprocess.CalledProcessError as e2:
+        print(f"Error with ffmpeg re-encoding: {e2.stderr}")
+        # Final fallback to OpenCV
+        return cut_video_with_opencv(video_path, output_path, start_frame, end_frame, metadata)
 
 
 def cut_video_with_opencv(video_path, output_path, start_frame, end_frame, metadata):
@@ -260,33 +248,117 @@ def cut_video_with_opencv(video_path, output_path, start_frame, end_frame, metad
     return True
 
 
-def save_cuts_to_txt(video_path, cuts):
-    """Save cuts information to a text file."""
+def save_cuts_to_toml(video_path, cuts, fps=None):
+    """Save cuts information to a TOML file."""
     try:
         video_name = Path(video_path).stem
-        txt_path = Path(video_path).parent / f"{video_name}_cuts.txt"
+        # Convert path to POSIX format (forward slashes) for universal compatibility
+        # This works on Windows, Linux, and macOS
+        video_path_posix = Path(video_path).absolute().as_posix()
+        # Escape only quotes for TOML string (forward slashes don't need escaping)
+        escaped_video_path = video_path_posix.replace('"', '\\"')
+        toml_path = Path(video_path).parent / f"{video_name}_cuts.toml"
+        
+        # Current timestamp
+        created_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        # Build TOML content manually (no external library needed for writing)
+        toml_content = "# Video metadata\n"
+        toml_content += f'video_name = "{video_name}"\n'
+        if fps is not None:
+            toml_content += f"fps = {fps:.6f}\n"
+        toml_content += f'created = "{created_time}"\n'
+        toml_content += f'source_file = "{escaped_video_path}"\n'
+        toml_content += "\n# List of cuts\n"
+        
+        for i, (start, end) in enumerate(cuts, 1):
+            # Calculate frame_count and times
+            # Note: start and end are 0-based internally, convert to 1-based for TOML (as shown in UI)
+            start_frame_1based = start + 1
+            end_frame_1based = end + 1
+            # frame_count = end - start + 1 (inclusive count)
+            frame_count = end - start + 1
+            if fps is not None and fps > 0:
+                # Use frame-count-based duration to avoid losing the last frame in timing
+                start_time = start_frame_1based / fps
+                duration = frame_count / fps
+                end_time = start_time + duration
+            else:
+                start_time = None
+                end_time = None
+                duration = None
+            
+            toml_content += "[[cuts]]\n"
+            toml_content += f"index = {i}\n"
+            toml_content += f"start_frame = {start_frame_1based}\n"
+            toml_content += f"end_frame = {end_frame_1based}\n"
+            toml_content += f"frame_count = {frame_count}\n"
+            if start_time is not None:
+                toml_content += f"start_time = {start_time:.6f}\n"
+                toml_content += f"end_time = {end_time:.6f}\n"
+                toml_content += f"duration = {duration:.6f}\n"
+            toml_content += "\n"
 
-        with open(str(txt_path), "w", encoding="utf-8", errors="replace") as f:
-            f.write(f"Cuts for video: {video_name}\n")
-            f.write(f"Created: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-            f.write("-" * 50 + "\n")
-            for i, (start, end) in enumerate(cuts, 1):
-                f.write(f"Cut {i}: Frame {start + 1} to {end + 1}\n")
+        with open(str(toml_path), "w", encoding="utf-8", errors="replace") as f:
+            f.write(toml_content)
 
-        return txt_path
-    except UnicodeEncodeError:
+        return toml_path
+    except Exception as e:
+        print(f"Error saving TOML file: {e}")
         # Fallback para nomes com caracteres especiais
-        safe_name = "".join(c if c.isalnum() or c in "._- " else "_" for c in video_name)
-        txt_path = Path(video_path).parent / f"{safe_name}_cuts.txt"
-
-        with open(str(txt_path), "w", encoding="utf-8", errors="replace") as f:
-            f.write(f"Cuts for video: {video_name}\n")
-            f.write(f"Created: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-            f.write("-" * 50 + "\n")
+        try:
+            safe_name = "".join(c if c.isalnum() or c in "._- " else "_" for c in video_name)
+            toml_path = Path(video_path).parent / f"{safe_name}_cuts.toml"
+            
+            created_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            # Convert path to POSIX format (forward slashes) for universal compatibility
+            # This works on Windows, Linux, and macOS
+            video_path_posix = Path(video_path).absolute().as_posix()
+            # Escape only quotes for TOML string (forward slashes don't need escaping)
+            escaped_video_path = video_path_posix.replace('"', '\\"')
+            
+            toml_content = "# Video metadata\n"
+            toml_content += f'video_name = "{video_name}"\n'
+            if fps is not None:
+                toml_content += f"fps = {fps:.6f}\n"
+            toml_content += f'created = "{created_time}"\n'
+            toml_content += f'source_file = "{escaped_video_path}"\n'
+            toml_content += "\n# List of cuts\n"
+            
             for i, (start, end) in enumerate(cuts, 1):
-                f.write(f"Cut {i}: Frame {start + 1} to {end + 1}\n")
+                # Note: start and end are 0-based internally, convert to 1-based for TOML (as shown in UI)
+                start_frame_1based = start + 1
+                end_frame_1based = end + 1
+                # frame_count = end - start + 1 (inclusive)
+                frame_count = end - start + 1
+                if fps is not None and fps > 0:
+                    # Use frame-count-based duration to avoid losing the last frame in timing
+                    start_time = start_frame_1based / fps
+                    duration = frame_count / fps
+                    end_time = start_time + duration
+                else:
+                    start_time = None
+                    end_time = None
+                    duration = None
+                
+                toml_content += "[[cuts]]\n"
+                toml_content += f"index = {i}\n"
+                toml_content += f"start_frame = {start_frame_1based}\n"
+                toml_content += f"end_frame = {end_frame_1based}\n"
+                toml_content += f"frame_count = {frame_count}\n"
+                if start_time is not None:
+                    toml_content += f"start_time = {start_time:.6f}\n"
+                    toml_content += f"end_time = {end_time:.6f}\n"
+                    toml_content += f"duration = {duration:.6f}\n"
+                toml_content += "\n"
 
-        return txt_path
+            with open(str(toml_path), "w", encoding="utf-8", errors="replace") as f:
+                f.write(toml_content)
+
+            return toml_path
+        except Exception as e2:
+            print(f"Error in fallback save: {e2}")
+            return None
 
 
 def load_sync_file(video_path):
@@ -320,23 +392,78 @@ def load_sync_file(video_path):
     return []
 
 
-def load_cuts_from_txt(video_path):
-    """Load existing cuts from a text file if it exists."""
+def load_cuts_from_toml(video_path):
+    """Load existing cuts from a TOML file if it exists. Falls back to old TXT format if needed."""
     video_name = Path(video_path).stem
+    toml_path = Path(video_path).parent / f"{video_name}_cuts.toml"
     txt_path = Path(video_path).parent / f"{video_name}_cuts.txt"
 
     cuts = []
+    
+    # Try to load from TOML file first
+    if toml_path.exists():
+        try:
+            # Convert Path to string explicitly to avoid any issues
+            toml_file_str = str(toml_path)
+            with open(toml_file_str, "rb") as f:
+                # Use tomllib.load() which accepts a file-like object in binary mode
+                toml_data = tomllib.load(f)
+            
+            # Extract cuts from TOML data
+            if "cuts" in toml_data and toml_data["cuts"]:
+                for cut in toml_data["cuts"]:
+                    start_frame = cut.get("start_frame")
+                    end_frame = cut.get("end_frame")
+                    if start_frame is not None and end_frame is not None:
+                        # TOML stores 1-based frames (as shown in UI), convert to 0-based for internal use
+                        start_frame_0based = int(start_frame) - 1
+                        end_frame_0based = int(end_frame) - 1
+                        cuts.append((start_frame_0based, end_frame_0based))
+            
+            # Return cuts (even if empty list) - TOML file exists and was parsed successfully
+            if cuts:
+                return cuts
+            # If TOML file exists but has no cuts, return empty list (don't fall through to TXT)
+            return []
+        except Exception as e:
+            print(f"Error loading TOML file: {e}")
+            import traceback
+            traceback.print_exc()
+            # Fall through to try TXT file
+    
+    # Fallback: Try to load from old TXT format for backward compatibility
     if txt_path.exists():
-        with open(txt_path, encoding="utf-8") as f:
-            lines = f.readlines()[3:]  # Skip header lines
+        try:
+            with open(txt_path, encoding="utf-8") as f:
+                lines = f.readlines()
+            
+            # Parse each line looking for cut information
             for line in lines:
-                if line.strip():
-                    # Extract start and end frames from line
-                    parts = line.split("Frame ")[1].split(" to ")
-                    start = int(parts[0])
-                    end = int(parts[1])
-                    cuts.append((start, end))
-
+                line = line.strip()
+                if not line:
+                    continue
+                
+                # Check if this is a cut line (format: "Cut N: Frame X to Y" or "Cut N: Frame X to Y (Time: ...)")
+                if line.startswith("Cut ") and "Frame" in line:
+                    # Extract frame numbers
+                    # Format: "Cut N: Frame X to Y" or "Cut N: Frame X to Y (Time: ...)"
+                    try:
+                        # Find "Frame " and extract numbers
+                        frame_part = line.split("Frame ")[1].split(" (")[0]  # Remove time part if present
+                        parts = frame_part.split(" to ")
+                        # Note: TXT format uses 1-based frames, TOML uses 0-based
+                        # So we convert: subtract 1 from each number
+                        start = int(parts[0]) - 1
+                        end = int(parts[1]) - 1
+                        cuts.append((start, end))
+                    except (ValueError, IndexError) as e:
+                        print(f"Error parsing line: {line}, error: {e}")
+                        continue
+            
+            return cuts
+        except Exception as e:
+            print(f"Error loading TXT file: {e}")
+    
     return cuts
 
 
@@ -347,33 +474,89 @@ def load_cuts_or_sync(video_path):
     if sync_cuts:
         return sync_cuts, True  # True indicates sync file was used
 
-    # If no sync file, try regular cuts file
-    regular_cuts = load_cuts_from_txt(video_path)
+    # If no sync file, try regular cuts file (TOML or TXT fallback)
+    regular_cuts = load_cuts_from_toml(video_path)
     return regular_cuts, False  # False indicates regular cuts file was used
 
 
+def load_cuts_from_toml_file(toml_file_path):
+    """Load cuts from a specific TOML file path.
+    
+    TOML file stores frames as 1-based (as shown in UI), 
+    converts to 0-based for internal use.
+    """
+    cuts = []
+    try:
+        # Ensure path is converted to string if it's a Path object
+        toml_file_str = str(toml_file_path)
+        with open(toml_file_str, "rb") as f:
+            # Use tomllib.load() which accepts a file-like object in binary mode
+            toml_data = tomllib.load(f)
+        
+        # Extract cuts from TOML data
+        if "cuts" in toml_data and toml_data["cuts"]:
+            for cut in toml_data["cuts"]:
+                start_frame = cut.get("start_frame")
+                end_frame = cut.get("end_frame")
+                if start_frame is not None and end_frame is not None:
+                    # TOML stores 1-based frames (as shown in UI), convert to 0-based for internal use
+                    start_frame_0based = int(start_frame) - 1
+                    end_frame_0based = int(end_frame) - 1
+                    cuts.append((start_frame_0based, end_frame_0based))
+        else:
+            print(f"Warning: TOML file {toml_file_str} does not contain 'cuts' section or it is empty")
+        
+        return cuts
+    except Exception as e:
+        print(f"Error loading TOML file {toml_file_path}: {e}")
+        import traceback
+        traceback.print_exc()
+        return []
+
+
 def load_sync_file_from_dialog(video_path):
-    """Open dialog to select sync file and load cuts from it."""
+    """Open dialog to select sync file or TOML cuts file and load cuts from it."""
     from tkinter import Tk, filedialog
 
     root = Tk()
     root.withdraw()
 
-    sync_file = filedialog.askopenfilename(
-        title="Select Sync File",
-        filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
+    selected_file = filedialog.askopenfilename(
+        title="Select Sync File or Cuts TOML File",
+        filetypes=[
+            ("TOML cuts files", "*.toml"),
+            ("Text files (sync)", "*.txt"),
+            ("All files", "*.*")
+        ],
         initialdir=Path(video_path).parent,
     )
 
-    if not sync_file:
+    if not selected_file:
         return [], False, None
 
+    file_path = Path(selected_file)
+    
+    # Check if it's a TOML file (cuts file)
+    if file_path.suffix.lower() == ".toml":
+        try:
+            cuts = load_cuts_from_toml_file(selected_file)
+            if cuts:
+                print(f"Loaded {len(cuts)} cuts from TOML file")
+                return cuts, False, None  # False = not a sync file, just cuts
+            else:
+                messagebox.showwarning("No Cuts Found", "The selected TOML file does not contain any cuts.")
+                return [], False, None
+        except Exception as e:
+            messagebox.showerror("Error", f"Error loading TOML file: {e}")
+            return [], False, None
+    
+    # Otherwise, treat as sync file (TXT format)
     video_name = Path(video_path).name
     cuts = []
     sync_data = {}  # Store all sync data for batch processing
 
     try:
-        with open(sync_file, encoding="utf-8") as f:
+        with open(selected_file, encoding="utf-8") as f:
             lines = f.readlines()
 
         for line in lines:
@@ -404,6 +587,7 @@ def load_sync_file_from_dialog(video_path):
         return cuts, True, sync_data
     except Exception as e:
         print(f"Error loading sync file: {e}")
+        messagebox.showerror("Error", f"Error loading sync file: {e}")
         return [], False, None
 
 
@@ -413,8 +597,9 @@ def batch_process_sync_videos(video_path, sync_data):
         return False
 
     video_dir = Path(video_path).parent
+    video_name = Path(video_path).stem
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_dir = video_dir / f"vailacut_sync_{timestamp}"
+    output_dir = video_dir / f"vailacut_sync_{video_name}_{timestamp}"
     output_dir.mkdir(exist_ok=True)
 
     processed_count = 0
@@ -507,10 +692,13 @@ def play_video_with_cuts(video_path):
     window_width = max(640, min(window_width, max_width))
     window_height = max(480, min(window_height, max_height))
 
+    # Get video filename for window title
+    video_filename = Path(video_path).name
+    
     # Initialize window
     screen = pygame.display.set_mode((window_width, window_height + 80), pygame.RESIZABLE)
     pygame.display.set_caption(
-        "Space:Play/Pause | ←→:Frame | S:Start | E:End | R:Reset | DEL:Remove | L:List | F:Load Sync | Home/End:Jump Cut | PgUp/PgDn:Next Cut | ESC:Save"
+        f"{video_filename} (FPS: {fps:.2f}) | Space:Play/Pause | ←→:Frame | S:Start | E:End | R:Reset | DEL:Remove | L:List | F:Load Sync | Home/End:Jump Cut | PgUp/PgDn:Next Cut | G:Frame | T:Time | I:FPS | H:Help | ESC:Save"
     )
 
     # Initialize variables
@@ -523,7 +711,7 @@ def play_video_with_cuts(video_path):
     sync_data = None  # Store sync data for batch processing
 
     # Load existing cuts if available
-    cuts = load_cuts_from_txt(video_path)
+    cuts = load_cuts_from_toml(video_path)
     if len(cuts) > 0:
         print(f"Loaded {len(cuts)} cuts from cuts file")
 
@@ -553,7 +741,13 @@ def play_video_with_cuts(video_path):
 
         # Draw frame information and cut markers
         font = pygame.font.Font(None, 24)
-        frame_text = font.render(f"Frame: {frame_count + 1}/{total_frames}", True, (255, 255, 255))
+        # Calculate time in seconds
+        time_seconds = frame_count / fps if fps > 0 else 0.0
+        time_total = total_frames / fps if fps > 0 else 0.0
+        frame_text = font.render(
+            f"Frame: {frame_count + 1}/{total_frames} ({time_seconds:.2f}s/{time_total:.2f}s)", 
+            True, (255, 255, 255)
+        )
         slider_surface.blit(frame_text, (10, 10))
 
         # Draw current cut information
@@ -575,6 +769,32 @@ def play_video_with_cuts(video_path):
 
         screen.blit(slider_surface, (0, window_height))
         return slider_x, slider_width, slider_y, slider_height, help_button_rect
+
+    def get_all_cut_markers():
+        """Get a sorted flat list of all cut markers (start and end frames)."""
+        markers = []
+        for start, end in cuts:
+            markers.append(start)
+            markers.append(end)
+        # Remove duplicates and sort
+        markers = sorted(list(set(markers)))
+        return markers
+
+    def find_next_marker(frame_pos):
+        """Find the next marker after the current frame position."""
+        markers = get_all_cut_markers()
+        for marker in markers:
+            if marker > frame_pos:
+                return marker
+        return None
+
+    def find_previous_marker(frame_pos):
+        """Find the previous marker before the current frame position."""
+        markers = get_all_cut_markers()
+        for marker in reversed(markers):
+            if marker < frame_pos:
+                return marker
+        return None
 
     def find_current_cut(frame_pos):
         """Find which cut contains the current frame, or return None."""
@@ -599,7 +819,7 @@ def play_video_with_cuts(video_path):
         return None, None, None
 
     def show_help_dialog():
-        """Display help information directly in pygame window."""
+        """Display help information directly in pygame window with scroll support."""
         help_lines = [
             "Video Cutting Controls:",
             "",
@@ -609,6 +829,8 @@ def play_video_with_cuts(video_path):
             "- Left Arrow: Previous Frame (when paused)",
             "- Up Arrow: Fast Forward (60 frames)",
             "- Down Arrow: Rewind (60 frames)",
+            "- G: Go to Frame Number (enter frame number as int)",
+            "- T: Go to Time (enter time in seconds as float)",
             "",
             "Cutting Operations:",
             "- S: Mark Start Frame",
@@ -620,19 +842,25 @@ def play_video_with_cuts(video_path):
             "Cut Navigation:",
             "- Home: Jump to Start of Current Cut",
             "- End: Jump to End of Current Cut",
-            "- Page Up: Jump to Start of Previous Cut",
-            "- Page Down: Jump to Start of Next Cut",
+            "- Page Up: Jump to Previous Marker",
+            "- Page Down: Jump to Next Marker",
             "",
             "File Operations:",
-            "- F: Load Sync File (from Make Sync File)",
+            "- F: Load Sync File or Cuts TOML File",
+            "- I: Input Manual FPS",
             "- ESC: Save cuts to file and optionally generate videos",
+            "",
+            "Help:",
+            "- H: Show this help dialog",
             "",
             "Mouse Controls:",
             "- Click on slider: Jump to frame",
             "- Click 'Help': Show this dialog",
+            "- Mouse Wheel: Scroll help text",
+            "- Arrow Up/Down: Scroll help text",
             "- Drag window edges: Resize window",
             "",
-            "Press any key to close this help",
+            "Press ESC or click to close this help",
         ]
 
         # Create semi-transparent overlay
@@ -643,34 +871,78 @@ def play_video_with_cuts(video_path):
         # Render help text
         font = pygame.font.Font(None, 24)
         line_height = 28
-
-        for i, line in enumerate(help_lines):
-            text_surface = font.render(line, True, (255, 255, 255))
-            overlay.blit(text_surface, (20, 20 + i * line_height))
-
-        # Display help and wait for key/click
-        screen.blit(overlay, (0, 0))
-        pygame.display.flip()
+        
+        # Calculate total height needed
+        total_height = len(help_lines) * line_height + 40
+        visible_height = window_height + 80 - 40  # Leave 20px margin top and bottom
+        scroll_offset = 0
+        max_scroll = max(0, total_height - visible_height)
 
         waiting_for_input = True
         while waiting_for_input:
+            # Clear overlay
+            overlay.fill((0, 0, 0))
+            
+            # Render visible portion of help text
+            start_line = max(0, scroll_offset // line_height)
+            end_line = min(len(help_lines), start_line + (visible_height // line_height) + 1)
+            y_offset = 20 - (scroll_offset % line_height)
+            
+            for i in range(start_line, end_line):
+                line = help_lines[i]
+                text_surface = font.render(line, True, (255, 255, 255))
+                y_pos = y_offset + (i - start_line) * line_height
+                if 0 <= y_pos <= visible_height:
+                    overlay.blit(text_surface, (20, y_pos))
+            
+            # Display scroll indicator if needed
+            if max_scroll > 0:
+                scroll_bar_height = int(visible_height * (visible_height / total_height))
+                scroll_bar_y = 20 + int((scroll_offset / max_scroll) * (visible_height - scroll_bar_height))
+                pygame.draw.rect(overlay, (100, 100, 100), (window_width - 20, scroll_bar_y, 10, scroll_bar_height))
+                
+                # Show scroll hint
+                hint_font = pygame.font.Font(None, 20)
+                hint_text = hint_font.render("Use mouse wheel or arrows to scroll", True, (200, 200, 200))
+                overlay.blit(hint_text, (window_width - 280, window_height + 80 - 25))
+
+            # Display help and wait for key/click
+            screen.blit(overlay, (0, 0))
+            pygame.display.flip()
+
             for event in pygame.event.get():
-                if event.type in (pygame.KEYDOWN, pygame.MOUSEBUTTONDOWN):
-                    waiting_for_input = False
-                if event.type == pygame.QUIT:
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        waiting_for_input = False
+                    elif event.key == pygame.K_UP:
+                        scroll_offset = max(0, scroll_offset - line_height * 3)
+                    elif event.key == pygame.K_DOWN:
+                        scroll_offset = min(max_scroll, scroll_offset + line_height * 3)
+                    else:
+                        waiting_for_input = False
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    if event.button == 4:  # Scroll up
+                        scroll_offset = max(0, scroll_offset - line_height * 3)
+                    elif event.button == 5:  # Scroll down
+                        scroll_offset = min(max_scroll, scroll_offset + line_height * 3)
+                    else:
+                        waiting_for_input = False
+                elif event.type == pygame.MOUSEWHEEL:
+                    scroll_offset = max(0, min(max_scroll, scroll_offset - event.y * line_height * 3))
+                elif event.type == pygame.QUIT:
                     waiting_for_input = False
                     global running
                     running = False
 
     def save_and_generate_videos():
-        nonlocal cuts, video_path, using_sync_file, sync_data
+        nonlocal cuts, video_path, using_sync_file, sync_data, fps
 
         if not cuts:
             messagebox.showinfo("Info", "No cuts were marked!")
             return False
 
-        # First save cuts to text file
-        save_cuts_to_txt(video_path, cuts)
+        # First save cuts to TOML file with FPS information
+        save_cuts_to_toml(video_path, cuts, fps)
 
         # Close pygame temporarily instead of fully quitting it
         pygame.display.quit()
@@ -757,10 +1029,11 @@ def play_video_with_cuts(video_path):
         status_label = ttk.Label(root, text="")
         status_label.pack(pady=5)
 
-        # Create output directory with improved naming
+        # Create output directory with improved naming including source video basename
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        source_name = Path(source_video_path).stem
         prefix = "sync_" if from_sync_file else ""
-        output_dir = source_dir / f"vailacut_{prefix}batch_{timestamp}"
+        output_dir = source_dir / f"vailacut_{prefix}{source_name}_batch_{timestamp}"
         output_dir.mkdir(exist_ok=True)
 
         processed_count = 0
@@ -772,8 +1045,15 @@ def play_video_with_cuts(video_path):
                 video_path = str(video_files[processed_count])
                 video_name = Path(video_path).stem
 
-                # Salvar informações de corte para cada vídeo processado
-                save_cuts_to_txt(video_path, cuts)
+                # Get metadata to get FPS for save_cuts_to_toml
+                try:
+                    metadata = get_precise_video_metadata(video_path)
+                    video_fps = metadata.get("fps", None)
+                except Exception:
+                    video_fps = None
+
+                # Salvar informações de corte para cada vídeo processado em TOML
+                save_cuts_to_toml(video_path, cuts, video_fps)
 
                 status_label.config(text=f"Processing: {video_name}")
 
@@ -825,11 +1105,16 @@ def play_video_with_cuts(video_path):
             messagebox.showinfo("Info", "No cuts were marked!")
             return False
 
-        # Create output directory with improved naming
+        # Create output directory with improved naming including video basename
+        # Format: {video_name}_vailacut_{timestamp} (not batch processing)
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         video_name = Path(video_path).stem
-        prefix = "sync_" if from_sync_file else ""
-        output_dir = Path(video_path).parent / f"vailacut_{prefix}{timestamp}"
+        if from_sync_file:
+            # For sync files, keep the sync prefix before vailacut
+            output_dir = Path(video_path).parent / f"{video_name}_sync_vailacut_{timestamp}"
+        else:
+            # For regular processing: basename before vailacut
+            output_dir = Path(video_path).parent / f"{video_name}_vailacut_{timestamp}"
         output_dir.mkdir(exist_ok=True)
 
         # Get precise video metadata
@@ -837,7 +1122,8 @@ def play_video_with_cuts(video_path):
         
         # Process each cut
         for i, (start_frame, end_frame) in enumerate(cuts):
-            output_path = output_dir / f"{video_name}_frame_{start_frame}_to_{end_frame}.mp4"
+            # Use 1-based numbering in filenames to match TOML/UI and avoid off-by-one confusion
+            output_path = output_dir / f"{video_name}_frame_{start_frame + 1}_to_{end_frame + 1}.mp4"
             
             # Use ffmpeg for precise cutting
             success = cut_video_with_ffmpeg(video_path, output_path, start_frame, end_frame, metadata)
@@ -953,6 +1239,10 @@ def play_video_with_cuts(video_path):
                     if cuts:
                         cuts.pop()
                         print("Last cut removed")
+                elif event.key == pygame.K_d:  # Also support D key for delete (common expectation)
+                    if cuts:
+                        cuts.pop()
+                        print("Last cut removed (D key)")
                 elif event.key == pygame.K_l:  # List all cuts
                     if cuts:
                         cuts_info = "\n".join(
@@ -964,19 +1254,26 @@ def play_video_with_cuts(video_path):
                         messagebox.showinfo("Cuts List", cuts_info)
                     else:
                         messagebox.showinfo("Cuts List", "No cuts marked yet")
-                elif event.key == pygame.K_f:  # Load sync file
+                elif event.key == pygame.K_f:  # Load sync file or TOML cuts file
                     new_cuts, is_sync, new_sync_data = load_sync_file_from_dialog(video_path)
                     if new_cuts:
                         cuts = new_cuts
                         using_sync_file = is_sync
                         sync_data = new_sync_data
-                        print(f"Loaded {len(cuts)} cuts from sync file")
-                        messagebox.showinfo(
-                            "Sync File Loaded",
-                            f"Loaded {len(cuts)} cuts from sync file",
-                        )
+                        if is_sync:
+                            print(f"Loaded {len(cuts)} cuts from sync file")
+                            messagebox.showinfo(
+                                "Sync File Loaded",
+                                f"Loaded {len(cuts)} cuts from sync file",
+                            )
+                        else:
+                            print(f"Loaded {len(cuts)} cuts from TOML file")
+                            messagebox.showinfo(
+                                "Cuts File Loaded",
+                                f"Loaded {len(cuts)} cuts from TOML file",
+                            )
                     else:
-                        print("No sync file selected or error loading sync file")
+                        print("No file selected or error loading file")
                 elif event.key == pygame.K_HOME and paused:  # Jump to start of current cut
                     cut_idx, start, end = find_current_cut(frame_count)
                     if cut_idx is not None:
@@ -999,28 +1296,113 @@ def play_video_with_cuts(video_path):
                         print(f"Jumped to end of last cut: Frame {cuts[-1][1] + 1}")
                     else:
                         print("No cuts available")
-                elif event.key == pygame.K_PAGEUP and paused:  # Jump to previous cut
-                    cut_idx, start, end = find_previous_cut(frame_count)
-                    if cut_idx is not None:
-                        frame_count = start
-                        print(f"Jumped to previous cut {cut_idx + 1}: Frame {start + 1}")
-                    elif cuts:
-                        # If at or before first cut, jump to start of first cut
-                        frame_count = cuts[0][0]
-                        print(f"Jumped to first cut: Frame {cuts[0][0] + 1}")
+                elif event.key == pygame.K_PAGEUP and paused:  # Jump to previous marker
+                    prev_marker = find_previous_marker(frame_count)
+                    if prev_marker is not None:
+                        frame_count = prev_marker
+                        print(f"Jumped to previous marker: Frame {prev_marker + 1}")
                     else:
-                        print("No cuts available")
-                elif event.key == pygame.K_PAGEDOWN and paused:  # Jump to next cut
-                    cut_idx, start, end = find_next_cut(frame_count)
-                    if cut_idx is not None:
-                        frame_count = start
-                        print(f"Jumped to next cut {cut_idx + 1}: Frame {start + 1}")
-                    elif cuts:
-                        # If at or after last cut, jump to start of last cut
-                        frame_count = cuts[-1][0]
-                        print(f"Jumped to last cut: Frame {cuts[-1][0] + 1}")
+                        markers = get_all_cut_markers()
+                        if markers:
+                            frame_count = markers[0]
+                            print(f"Jumped to first marker: Frame {markers[0] + 1}")
+                        else:
+                            print("No markers available")
+                elif event.key == pygame.K_PAGEDOWN and paused:  # Jump to next marker
+                    next_marker = find_next_marker(frame_count)
+                    if next_marker is not None:
+                        frame_count = next_marker
+                        print(f"Jumped to next marker: Frame {next_marker + 1}")
                     else:
-                        print("No cuts available")
+                        markers = get_all_cut_markers()
+                        if markers:
+                            frame_count = markers[-1]
+                            print(f"Jumped to last marker: Frame {markers[-1] + 1}")
+                        else:
+                            print("No markers available")
+                elif event.key == pygame.K_i or event.key == pygame.K_p:  # Input manual FPS
+                    # Temporarily close pygame display to show tkinter dialog
+                    pygame.display.quit()
+                    root_fps = Tk()
+                    root_fps.withdraw()
+                    new_fps = simpledialog.askfloat(
+                        "Input FPS",
+                        f"Enter new FPS value (current: {fps:.6f}):",
+                        initialvalue=fps,
+                        minvalue=0.1,
+                        maxvalue=1000.0
+                    )
+                    root_fps.destroy()
+                    # Reinitialize pygame display
+                    screen = pygame.display.set_mode((window_width, window_height + 80), pygame.RESIZABLE)
+                    if new_fps is not None and new_fps > 0:
+                        fps = float(new_fps)
+                        print(f"FPS updated to: {fps:.6f}")
+                        # Update window title with new FPS
+                        pygame.display.set_caption(
+                            f"{video_filename} (FPS: {fps:.2f}) | Space:Play/Pause | ←→:Frame | S:Start | E:End | R:Reset | DEL:Remove | L:List | F:Load Sync | Home/End:Jump Cut | PgUp/PgDn:Next Cut | G:Frame | T:Time | I:FPS | H:Help | ESC:Save"
+                        )
+                        messagebox.showinfo("FPS Updated", f"FPS set to {fps:.6f}")
+                    else:
+                        # Keep original caption if FPS was not updated
+                        pygame.display.set_caption(
+                            f"{video_filename} (FPS: {fps:.2f}) | Space:Play/Pause | ←→:Frame | S:Start | E:End | R:Reset | DEL:Remove | L:List | F:Load Sync | Home/End:Jump Cut | PgUp/PgDn:Next Cut | G:Frame | T:Time | I:FPS | H:Help | ESC:Save"
+                        )
+                    pygame.display.flip()
+                elif event.key == pygame.K_h:  # Show help dialog
+                    show_help_dialog()
+                elif event.key == pygame.K_g and paused:  # Go to frame number
+                    # Temporarily close pygame display to show tkinter dialog
+                    pygame.display.quit()
+                    root_frame = Tk()
+                    root_frame.withdraw()
+                    target_frame = simpledialog.askinteger(
+                        "Go to Frame",
+                        f"Enter frame number (current: {frame_count + 1}, max: {total_frames}):",
+                        initialvalue=frame_count + 1,
+                        minvalue=1,
+                        maxvalue=total_frames
+                    )
+                    root_frame.destroy()
+                    # Reinitialize pygame display
+                    screen = pygame.display.set_mode((window_width, window_height + 80), pygame.RESIZABLE)
+                    pygame.display.set_caption(
+                        f"{video_filename} (FPS: {fps:.2f}) | Space:Play/Pause | ←→:Frame | S:Start | E:End | R:Reset | DEL:Remove | L:List | F:Load Sync | Home/End:Jump Cut | PgUp/PgDn:Next Cut | G:Frame | T:Time | I:FPS | H:Help | ESC:Save"
+                    )
+                    if target_frame is not None:
+                        # Convert to 0-based frame index
+                        frame_count = min(max(0, target_frame - 1), total_frames - 1)
+                        print(f"Jumped to frame: {frame_count + 1}")
+                        paused = True  # Pause when jumping to frame
+                    pygame.display.flip()
+                elif event.key == pygame.K_t and paused:  # Go to time
+                    # Temporarily close pygame display to show tkinter dialog
+                    pygame.display.quit()
+                    root_time = Tk()
+                    root_time.withdraw()
+                    current_time = frame_count / fps if fps > 0 else 0.0
+                    max_time = total_frames / fps if fps > 0 else 0.0
+                    target_time = simpledialog.askfloat(
+                        "Go to Time",
+                        f"Enter time in seconds (current: {current_time:.2f}s, max: {max_time:.2f}s):",
+                        initialvalue=current_time,
+                        minvalue=0.0,
+                        maxvalue=max_time
+                    )
+                    root_time.destroy()
+                    # Reinitialize pygame display
+                    screen = pygame.display.set_mode((window_width, window_height + 80), pygame.RESIZABLE)
+                    pygame.display.set_caption(
+                        f"{video_filename} (FPS: {fps:.2f}) | Space:Play/Pause | ←→:Frame | S:Start | E:End | R:Reset | DEL:Remove | L:List | F:Load Sync | Home/End:Jump Cut | PgUp/PgDn:Next Cut | G:Frame | T:Time | I:FPS | H:Help | ESC:Save"
+                    )
+                    if target_time is not None and fps > 0:
+                        # Convert time to frame (0-based)
+                        target_frame_float = target_time * fps
+                        frame_count = min(max(0, int(round(target_frame_float))), total_frames - 1)
+                        actual_time = frame_count / fps
+                        print(f"Jumped to time: {actual_time:.2f}s (frame: {frame_count + 1})")
+                        paused = True  # Pause when jumping to time
+                    pygame.display.flip()
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 x, y = event.pos
                 if help_button_rect.collidepoint(x, y - window_height):
