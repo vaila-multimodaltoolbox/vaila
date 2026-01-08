@@ -108,9 +108,50 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
+# IDEs and Editors
+# Cursor
+.cursor/
+
 # VSCode
 .vscode/
 *.code-workspace
+
+# Windsurf
+.windsurf/
+
+# JetBrains IDEs (PyCharm, IntelliJ, WebStorm, etc.)
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+.idea_modules/
+
+# Antigravity
+.antigravity/
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Atom
+.atom/
+
+# Vim
+*.swp
+*.swo
+*~
+.vim/
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
 
 # Temporary files created by editors
 *~
