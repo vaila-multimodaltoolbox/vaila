@@ -4,7 +4,7 @@ vaila.py
 ===============================================================================
 Author: Prof. Paulo R. P. Santiago
 Date: 07 October 2024
-Update: 07 January 2026
+Update: 08 January 2026
 Version updated: 0.3.6
 Python Version: 3.12.12
 
@@ -123,7 +123,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 07.January.2026 v0.3.6 (Python 3.12.12)
+vailá - 08.January.2026 v0.3.6 (Python 3.12.12)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -158,11 +158,14 @@ B2_r2_c4 - GNSS/GPS       B2_r2_c5 - MEG/EEG
 B3_r3_c1 - HR/ECG         B3_r3_c2 - MP_Yolo         B3_r3_c3 - vailá_and_jump
 B3_r3_c4 - Cube2D         B3_r3_c5 - Animal Open Field
 
-B3_r4_c1 - Tracker        B3_r4_c2 - ML Walkway      B3_r4_c3 - Markerless Hands
-B3_r4_c4 - MP Angles      B3_r4_c5 - Markerless Live
+B4_r4_c1 - Tracker        B4_r4_c2 - ML Walkway      B4_r4_c3 - Markerless Hands
+B4_r4_c4 - MP Angles      B4_r4_c5 - Markerless Live
 
-B3_r5_c1 - Ultrasound     B3_r5_c2 - Brainstorm      B3_r5_c3 - Scout
-B3_r5_c4 - StartBlock     B3_r5_c5 - Pynalty
+B4_r5_c1 - Ultrasound     B4_r5_c2 - Brainstorm      B4_r5_c3 - Scout
+B4_r5_c4 - StartBlock     B4_r5_c5 - Pynalty
+
+B5_r6_c1 - Sprint         B5_r6_c2 - vailá           B5_r6_c3 - vailá
+B5_r6_c4 - vailá          B5_r6_c5 - vailá
 
 ============================== Tools Available (Frame C) ===================
 -> C_A: Data Files
@@ -226,7 +229,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 07.January.2026 v0.3.6 (Python 3.12.12)")
+        self.title("vailá - 08.January.2026 v0.3.6 (Python 3.12.12)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -815,20 +818,63 @@ class Vaila(tk.Tk):
             command=self.pynalty,
         )
 
-        # B5_r5_c6 - Pynalty
-        pynalty_btn = tk.Button(
-            row5_frame,
-            text="Pynalty",
-            width=button_width,
-            command=self.pynalty,
-        )
-
         # Pack row5 buttons
         ultrasound_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         brainstorm_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         scout_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         startblock_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         pynalty_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+
+        # B6 - Sixth row of buttons (Sprint, vailá, vailá, vailá, vailá)
+        row6_frame = tk.Frame(analysis_frame)
+        row6_frame.pack(fill="x")
+
+        # B5_r6_c1 - Sprint
+        sprint_btn = tk.Button(
+            row6_frame,
+            text="Sprint",
+            width=button_width,
+            command=self.sprint,
+        )
+
+        # B5_r6_c2 - vailá
+        vaila_btn_sprint1 = tk.Button(
+            row6_frame,
+            text="vailá",
+            command=self.show_vaila_message,
+            width=button_width,
+        )
+
+        # B5_r6_c3 - vailá
+        vaila_btn_sprint2 = tk.Button(
+            row6_frame,
+            text="vailá",
+            command=self.show_vaila_message,
+            width=button_width,
+        )
+
+        # B5_r6_c4 - vailá
+        vaila_btn_sprint3 = tk.Button(
+            row6_frame,
+            text="vailá",
+            command=self.show_vaila_message,
+            width=button_width,
+        )
+
+        # B5_r6_c5 - vailá
+        vaila_btn_sprint4 = tk.Button(
+            row6_frame,
+            text="vailá",
+            command=self.show_vaila_message,
+            width=button_width,
+        )
+
+        # Pack row6 buttons
+        sprint_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        vaila_btn_sprint1.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        vaila_btn_sprint2.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        vaila_btn_sprint3.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        vaila_btn_sprint4.pack(side="left", expand=True, fill="x", padx=2, pady=2)
 
         ## VVVVVVVVVVVVVVV TOOLS BUTTONS VVVVVVVVVVVVVVVV
         # Tools Frame
@@ -2609,6 +2655,11 @@ class Vaila(tk.Tk):
     def pynalty(self):
         """Runs the Pynalty analysis tool."""
         run_vaila_module("vaila.pynalty", "vaila/pynalty.py")
+
+    # B5_r6_c1 - Sprint
+    def sprint(self):
+        """Runs the Sprint analysis tool."""
+        run_vaila_module("vaila.vailasprint", "vaila/vailasprint.py")
 
 
 if __name__ == "__main__":
