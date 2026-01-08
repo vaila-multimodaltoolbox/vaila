@@ -456,10 +456,6 @@ def batch_process_sync_videos(video_path, sync_data):
 
         except Exception as e:
             print(f"Error processing {video_file}: {str(e)}")
-            if "cap" in locals():
-                cap.release()
-            if "out" in locals():
-                out.release()
 
     return processed_count > 0
 
@@ -514,7 +510,7 @@ def play_video_with_cuts(video_path):
     # Initialize window
     screen = pygame.display.set_mode((window_width, window_height + 80), pygame.RESIZABLE)
     pygame.display.set_caption(
-        "Space:Play/Pause | ←→:Frame | S:Start | E:End | R:Reset | DEL:Remove | L:List | F:Load Sync | ESC:Save"
+        "Space:Play/Pause | ←→:Frame | S:Start | E:End | R:Reset | DEL:Remove | L:List | F:Load Sync | Home/End:Jump Cut | PgUp/PgDn:Next Cut | ESC:Save"
     )
 
     # Initialize variables
@@ -580,6 +576,28 @@ def play_video_with_cuts(video_path):
         screen.blit(slider_surface, (0, window_height))
         return slider_x, slider_width, slider_y, slider_height, help_button_rect
 
+    def find_current_cut(frame_pos):
+        """Find which cut contains the current frame, or return None."""
+        for i, (start, end) in enumerate(cuts):
+            if start <= frame_pos <= end:
+                return i, start, end
+        return None, None, None
+
+    def find_next_cut(frame_pos):
+        """Find the next cut after the current frame position."""
+        for i, (start, end) in enumerate(cuts):
+            if start > frame_pos:
+                return i, start, end
+        return None, None, None
+
+    def find_previous_cut(frame_pos):
+        """Find the previous cut before the current frame position."""
+        for i in range(len(cuts) - 1, -1, -1):
+            start, end = cuts[i]
+            if end < frame_pos:
+                return i, start, end
+        return None, None, None
+
     def show_help_dialog():
         """Display help information directly in pygame window."""
         help_lines = [
@@ -598,6 +616,12 @@ def play_video_with_cuts(video_path):
             "- R: Reset Current Cut",
             "- DELETE: Remove Last Cut",
             "- L: List All Cuts",
+            "",
+            "Cut Navigation:",
+            "- Home: Jump to Start of Current Cut",
+            "- End: Jump to End of Current Cut",
+            "- Page Up: Jump to Start of Previous Cut",
+            "- Page Down: Jump to Start of Next Cut",
             "",
             "File Operations:",
             "- F: Load Sync File (from Make Sync File)",
@@ -797,37 +821,30 @@ def play_video_with_cuts(video_path):
         )
 
     def save_cuts(video_path, cuts, from_sync_file=False):
-        try:
-            if not cuts:
-                messagebox.showinfo("Info", "No cuts were marked!")
-                return False
+        if not cuts:
+            messagebox.showinfo("Info", "No cuts were marked!")
+            return False
 
-            # Create output directory with improved naming
-            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            video_name = Path(video_path).stem
-            prefix = "sync_" if from_sync_file else ""
-            output_dir = Path(video_path).parent / f"vailacut_{prefix}{timestamp}"
-            output_dir.mkdir(exist_ok=True)
+        # Create output directory with improved naming
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        video_name = Path(video_path).stem
+        prefix = "sync_" if from_sync_file else ""
+        output_dir = Path(video_path).parent / f"vailacut_{prefix}{timestamp}"
+        output_dir.mkdir(exist_ok=True)
 
-            # Get precise video metadata
-            metadata = get_precise_video_metadata(video_path)
+        # Get precise video metadata
+        metadata = get_precise_video_metadata(video_path)
+        
+        # Process each cut
+        for i, (start_frame, end_frame) in enumerate(cuts):
+            output_path = output_dir / f"{video_name}_frame_{start_frame}_to_{end_frame}.mp4"
             
-            # Process each cut
-            for i, (start_frame, end_frame) in enumerate(cuts):
-                output_path = output_dir / f"{video_name}_frame_{start_frame}_to_{end_frame}.mp4"
-                
-                # Use ffmpeg for precise cutting
-                success = cut_video_with_ffmpeg(video_path, output_path, start_frame, end_frame, metadata)
-                if not success:
-                    print(f"Warning: Failed to create cut {i+1} for {video_name}")
+            # Use ffmpeg for precise cutting
+            success = cut_video_with_ffmpeg(video_path, output_path, start_frame, end_frame, metadata)
+            if not success:
+                print(f"Warning: Failed to create cut {i+1} for {video_name}")
 
-            return True
-        finally:
-            # Garantir que os recursos sejam liberados mesmo em caso de erro
-            if "cap" in locals() and cap:
-                cap.release()
-            if "out" in locals() and out:
-                out.release()
+        return True
 
     running = True
     while running:
@@ -960,6 +977,50 @@ def play_video_with_cuts(video_path):
                         )
                     else:
                         print("No sync file selected or error loading sync file")
+                elif event.key == pygame.K_HOME and paused:  # Jump to start of current cut
+                    cut_idx, start, end = find_current_cut(frame_count)
+                    if cut_idx is not None:
+                        frame_count = start
+                        print(f"Jumped to start of cut {cut_idx + 1}: Frame {start + 1}")
+                    elif cuts:
+                        # If not in a cut, jump to start of first cut
+                        frame_count = cuts[0][0]
+                        print(f"Jumped to start of first cut: Frame {cuts[0][0] + 1}")
+                    else:
+                        print("No cuts available")
+                elif event.key == pygame.K_END and paused:  # Jump to end of current cut
+                    cut_idx, start, end = find_current_cut(frame_count)
+                    if cut_idx is not None:
+                        frame_count = end
+                        print(f"Jumped to end of cut {cut_idx + 1}: Frame {end + 1}")
+                    elif cuts:
+                        # If not in a cut, jump to end of last cut
+                        frame_count = cuts[-1][1]
+                        print(f"Jumped to end of last cut: Frame {cuts[-1][1] + 1}")
+                    else:
+                        print("No cuts available")
+                elif event.key == pygame.K_PAGEUP and paused:  # Jump to previous cut
+                    cut_idx, start, end = find_previous_cut(frame_count)
+                    if cut_idx is not None:
+                        frame_count = start
+                        print(f"Jumped to previous cut {cut_idx + 1}: Frame {start + 1}")
+                    elif cuts:
+                        # If at or before first cut, jump to start of first cut
+                        frame_count = cuts[0][0]
+                        print(f"Jumped to first cut: Frame {cuts[0][0] + 1}")
+                    else:
+                        print("No cuts available")
+                elif event.key == pygame.K_PAGEDOWN and paused:  # Jump to next cut
+                    cut_idx, start, end = find_next_cut(frame_count)
+                    if cut_idx is not None:
+                        frame_count = start
+                        print(f"Jumped to next cut {cut_idx + 1}: Frame {start + 1}")
+                    elif cuts:
+                        # If at or after last cut, jump to start of last cut
+                        frame_count = cuts[-1][0]
+                        print(f"Jumped to last cut: Frame {cuts[-1][0] + 1}")
+                    else:
+                        print("No cuts available")
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 x, y = event.pos
                 if help_button_rect.collidepoint(x, y - window_height):
