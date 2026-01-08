@@ -96,10 +96,12 @@ This script is distributed under the GPL3 License
 import fnmatch
 import os
 import platform  # Add this import at the top with other imports
+import re
 import shutil
 import subprocess
 import time
 import tkinter as tk
+import unicodedata
 from tkinter import filedialog, messagebox, simpledialog
 
 
@@ -562,6 +564,130 @@ def rename_files():
     except Exception as e:
         # Show an error message if something goes wrong
         messagebox.showerror("Error", f"Error renaming files: {e}")
+
+
+def _clean_text(text):
+    """
+    Auxiliary function to normalize strings:
+    - Remove accents
+    - Lowercase
+    - Replace ç with c
+    - Replace spaces and hyphens with _
+    - Remove special characters
+    """
+    # 1. Convert to string and lowercase
+    text = str(text).lower()
+    
+    # 2. Manual substitutions
+    text = text.replace("ç", "c")
+    
+    # 3. Unicode normalization (remove accents)
+    nfkd_form = unicodedata.normalize('NFKD', text)
+    text = "".join([c for c in nfkd_form if not unicodedata.combining(c)])
+    
+    # 4. Replace spaces and hyphens with underscore
+    text = text.replace(" ", "_").replace("-", "_")
+    
+    # 5. Remove non-alphanumeric characters (keep only letters, numbers, _ and .)
+    # This preserves file extensions (e.g., .mp4)
+    text = re.sub(r'[^a-z0-9_.]', '', text)
+    
+    # 6. Remove duplicate underscores
+    text = re.sub(r'_+', '_', text)
+    
+    # 7. Remove underscore at edges (aesthetic)
+    text = text.strip('_')
+    
+    return text
+
+
+def normalize_names():
+    """
+    Normalize file and folder names in a directory.
+    
+    This function will:
+    - Convert to lowercase
+    - Remove accents
+    - Replace spaces and hyphens with underscores
+    - Remove special characters
+    - Preserve file extensions
+    
+    WARNING: This action is irreversible!
+    """
+    # Print header info consistent with other functions
+    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+
+    # Prompt user for directory
+    directory = filedialog.askdirectory(title="Select Directory to Normalize (Files & Folders)")
+    
+    if not directory:
+        messagebox.showerror("Error", "No directory selected.")
+        return
+
+    # Warning Dialog
+    confirm = messagebox.askyesno(
+        "WARNING: Irreversible Action", 
+        f"This will rename ALL files and folders inside:\n{directory}\n\n"
+        "Changes applied:\n"
+        "- Lowercase\n- Remove accents\n- Spaces to underscores\n- Remove special chars\n\n"
+        "Do you want to proceed?"
+    )
+    
+    if not confirm:
+        return
+
+    count_files = 0
+    count_dirs = 0
+    errors = []
+
+    # topdown=False is crucial: rename children before parents
+    for root, dirs, files in os.walk(directory, topdown=False):
+        
+        # 1. Normalize Files
+        for filename in files:
+            original_path = os.path.join(root, filename)
+            new_filename = _clean_text(filename)
+            new_path = os.path.join(root, new_filename)
+            
+            if original_path != new_path:
+                # Check for collision
+                if os.path.exists(new_path):
+                    print(f"Skipped (exists): {filename} -> {new_filename}")
+                    continue
+                
+                try:
+                    os.rename(original_path, new_path)
+                    print(f"File Renamed: {filename} -> {new_filename}")
+                    count_files += 1
+                except Exception as e:
+                    errors.append(f"File {filename}: {str(e)}")
+
+        # 2. Normalize Directories
+        for dirname in dirs:
+            original_path = os.path.join(root, dirname)
+            new_dirname = _clean_text(dirname)
+            new_path = os.path.join(root, new_dirname)
+            
+            if original_path != new_path:
+                # Check for collision
+                if os.path.exists(new_path):
+                    print(f"Skipped (exists): {dirname} -> {new_dirname}")
+                    continue
+                
+                try:
+                    os.rename(original_path, new_path)
+                    print(f"Folder Renamed: {dirname} -> {new_dirname}")
+                    count_dirs += 1
+                except Exception as e:
+                    errors.append(f"Dir {dirname}: {str(e)}")
+
+    # Final Report
+    msg = f"Normalization Complete!\n\nFiles renamed: {count_files}\nFolders renamed: {count_dirs}"
+    if errors:
+        msg += f"\n\nErrors encountered: {len(errors)}\n(Check console for details)"
+    
+    messagebox.showinfo("Success", msg)
 
 
 def tree_file():
