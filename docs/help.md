@@ -131,6 +131,7 @@ The graphical interface allows you to select the desired module. For example, wh
 ### Video Processing Tools
 
 - **[DrawBoxe](../vaila/help/tools/drawboxe.html)** - Draw boxes and polygons on videos with frame interval support
+- **cutvideo (interactive cutting):** [HTML](../vaila/help/tools/cutvideo.html) | [MD](../vaila/help/tools/cutvideo.md)
 
 ## Contributing
 
