@@ -1272,15 +1272,18 @@ class Vaila(tk.Tk):
     # A First FRAME Block
     # A_r1_c1
     def rename_files(self):
-        """Rename files in a directory by replacing a string with another string.
+        """Normalize file and folder names in a directory.
 
-        This function will prompt the user to select a directory containing the files
-        to rename and will ask for the text to replace and the replacement text.
+        This function will normalize all file and folder names by:
+        - Converting to lowercase
+        - Removing accents
+        - Replacing spaces and hyphens with underscores
+        - Removing special characters
 
         """
-        from vaila.filemanager import rename_files
+        from vaila.filemanager import normalize_names
 
-        rename_files()
+        normalize_names()
 
     # A_r1_c2
     def import_file(self):
