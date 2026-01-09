@@ -41,7 +41,7 @@
     <div class="card">
         <h2>Key Updates</h2>
         <ul>
-            <li><strong>TOML cuts</strong>: Saves/loads <code>{basename}_cuts.toml</code> with 1-based frames, .6f precision, and <code>frame_count = end - start + 1</code> (duration = frame_count / fps). Paths stored as POSIX to avoid escaping.</li>
+            <li><strong>TOML cuts</strong>: Saves/loads <code>{basename}_cuts.toml</code> with 1-based frames, .6f precision, <code>frame_count = end - start + 1</code> (duration = frame_count / fps), plus <code>output_dir</code> and per-cut <code>output_file</code>. Paths stored as POSIX to avoid escaping.</li>
             <li><strong>Audio waveform visualization</strong>: VirtualDub-style audio panel with orange waveform line, synchronized playback, and mute/unmute control (hotkey <code>A</code> for panel, <code>M</code> for mute).</li>
             <li><strong>Audio playback</strong>: Synchronized audio playback with video; automatically loops when loop mode is enabled.</li>
             <li><strong>Loop control</strong>: Loop button (column layout above Help) to enable/disable video and audio looping.</li>
@@ -87,8 +87,8 @@
             <li><strong>Input videos:</strong> .mp4, .avi, .mov, .mkv (ffmpeg/OpenCV-readable).</li>
             <li><strong>Cuts file:</strong> <code>{basename}_cuts.toml</code>
                 <ul>
-                    <li>Metadata: <code>video_name</code>, <code>fps</code> (.6f), <code>created</code>, <code>source_file</code> (POSIX path).</li>
-                    <li>Per cut (1-based): <code>index</code>, <code>start_frame</code>, <code>end_frame</code>, <code>frame_count</code>, <code>start_time</code>, <code>end_time</code>, <code>duration</code> (= frame_count / fps).</li>
+                    <li>Metadata: <code>video_name</code>, <code>fps</code> (.6f), <code>created</code>, <code>source_file</code> (POSIX path), <code>output_dir</code> (POSIX).</li>
+                    <li>Per cut (1-based): <code>index</code>, <code>start_frame</code>, <code>end_frame</code>, <code>frame_count</code>, <code>start_time</code>, <code>end_time</code>, <code>duration</code> (= frame_count / fps), <code>output_file</code>, <code>output_dir</code> (POSIX).</li>
                 </ul>
             </li>
             <li><strong>Sync TXT:</strong> <code>video_file new_name initial_frame final_frame</code> (integers).</li>
