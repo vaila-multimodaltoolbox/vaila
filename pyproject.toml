@@ -70,7 +70,7 @@ dependencies = [
     "mediapipe==0.10.31",
     "torch",
     "torchvision",
-    "ultralytics",
+    "ultralytics==8.3.250",
     "boxmot",
     "requests",
     # 3D processing

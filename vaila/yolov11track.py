@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 18 February 2025
-Update Date: 07 January 2026
-Version: 0.0.4
+Update Date: 09 January 2026
+Version: 0.0.5
 
 Description:
     This script performs object detection and tracking on video files using the YOLO model v11.
@@ -55,6 +55,7 @@ import os
 import subprocess
 import sys
 import tkinter as tk
+from collections import deque
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
@@ -63,14 +64,27 @@ import numpy as np
 import pandas as pd
 import pkg_resources
 import torch
+import ultralytics
 import yaml
 from rich import print
 from ultralytics import YOLO
+
+# Import TOML for ROI configuration
+try:
+    import toml
+except ImportError:
+    print("Warning: toml not found. Installing...")
+    import subprocess
+    import sys
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "toml"])
+    import toml
 
 # Print the script version and directory
 print(f"Running script: {Path(__file__).name}")
 print(f"Script directory: {Path(__file__).parent}")
 print("Starting YOLOv11Track...")
+print("-" * 80)
+print(f"Ultralytics version: {ultralytics.__version__}")
 print("-" * 80)
 
 # Ensure BoxMOT can be found
@@ -225,6 +239,200 @@ def validate_device_choice(user_device):
         return False, f"Invalid device: {user_device}. Using CPU instead."
 
 
+def save_roi_to_toml(video_path, roi_poly):
+    """
+    Save ROI polygon to a TOML file.
+    Returns the path to the saved file, or None on error.
+    """
+    try:
+        
+        # Create ROI directory in the same location as the video
+        video_dir = os.path.dirname(os.path.abspath(video_path))
+        video_name = os.path.splitext(os.path.basename(video_path))[0]
+        roi_dir = os.path.join(video_dir, "roi_configs")
+        os.makedirs(roi_dir, exist_ok=True)
+        
+        # Generate filename with timestamp
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        roi_file = os.path.join(roi_dir, f"{video_name}_roi_{timestamp}.toml")
+        
+        # Convert ROI points to list of [x, y] pairs
+        roi_points = [[int(pt[0]), int(pt[1])] for pt in roi_poly]
+        
+        # Get video dimensions for reference
+        cap = cv2.VideoCapture(video_path)
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        cap.release()
+        
+        # Create TOML content
+        roi_data = {
+            "roi_info": {
+                "video_path": str(Path(video_path).as_posix()),
+                "video_name": video_name,
+                "video_width": width,
+                "video_height": height,
+                "created": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "num_points": len(roi_points),
+            },
+            "roi_polygon": {
+                "points": roi_points
+            }
+        }
+        
+        # Write to TOML file
+        with open(roi_file, "w") as f:
+            toml.dump(roi_data, f)
+        
+        print(f"ROI saved to: {roi_file}")
+        return roi_file
+        
+    except Exception as e:
+        print(f"Error saving ROI to TOML: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+
+def load_roi_from_toml(roi_file_path):
+    """
+    Load ROI polygon from a TOML file.
+    Returns a numpy array of int32 points, or None on error.
+    """
+    try:
+        
+        if not os.path.exists(roi_file_path):
+            print(f"ROI file not found: {roi_file_path}")
+            return None
+        
+        with open(roi_file_path, "r") as f:
+            roi_data = toml.load(f)
+        
+        if "roi_polygon" not in roi_data or "points" not in roi_data["roi_polygon"]:
+            print("Invalid ROI file format: missing polygon points")
+            return None
+        
+        points = roi_data["roi_polygon"]["points"]
+        if len(points) < 3:
+            print(f"Invalid ROI: need at least 3 points, got {len(points)}")
+            return None
+        
+        # Convert to numpy array
+        roi_poly = np.array(points, dtype=np.int32)
+        
+        print(f"ROI loaded from: {roi_file_path}")
+        print(f"  Points: {len(points)}")
+        if "roi_info" in roi_data:
+            info = roi_data["roi_info"]
+            print(f"  Original video: {info.get('video_name', 'unknown')}")
+            print(f"  Video dimensions: {info.get('video_width', '?')}x{info.get('video_height', '?')}")
+        
+        return roi_poly
+        
+    except Exception as e:
+        print(f"Error loading ROI from TOML: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+
+def select_free_polygon_roi(video_path):
+    """
+    Let the user draw a free polygon ROI on the first frame of the video.
+    Left click adds points, right click removes the last point, Enter confirms,
+    Esc skips, and 'r' resets. Returns a numpy array of int32 points or None.
+    """
+    cap = None
+    window_name = None
+    try:
+        # Extract first frame from video
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            print(f"Error: Could not open video file: {video_path}")
+            return None
+        
+        # Read first frame
+        ret, frame = cap.read()
+        cap.release()
+        cap = None
+
+        if not ret or frame is None:
+            print("Error: Could not read first frame from video for ROI selection.")
+            return None
+
+        # Optional downscale for large frames to fit on screen
+        scale = 1.0
+        h, w = frame.shape[:2]
+        max_h = 900
+        if h > max_h:
+            scale = max_h / h
+            frame = cv2.resize(frame, (int(w * scale), int(h * scale)))
+
+        roi_points = []
+
+        def mouse_callback(event, x, y, flags, param):
+            if event == cv2.EVENT_LBUTTONDOWN:
+                roi_points.append((x, y))
+            elif event == cv2.EVENT_RBUTTONDOWN and roi_points:
+                roi_points.pop()
+
+        window_name = (
+            "Select ROI (Left: add, Right: undo, Enter: confirm, Esc: skip, r: reset)"
+        )
+        cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+        cv2.setMouseCallback(window_name, mouse_callback)
+
+        while True:
+            display_img = frame.copy()
+
+            if roi_points:
+                pts = np.array(roi_points, np.int32).reshape((-1, 1, 2))
+                cv2.polylines(display_img, [pts], False, (0, 255, 0), 2)
+                for pt in roi_points:
+                    cv2.circle(display_img, pt, 3, (0, 0, 255), -1)
+                if len(roi_points) > 1:
+                    cv2.line(display_img, roi_points[-1], roi_points[0], (0, 255, 255), 1)
+
+            cv2.imshow(window_name, display_img)
+            key = cv2.waitKey(20) & 0xFF
+
+            if key == 13:  # Enter
+                break
+            if key == 27:  # Esc
+                roi_points = []
+                break
+            if key == ord("r"):
+                roi_points = []
+
+        if window_name:
+            cv2.destroyWindow(window_name)
+            cv2.waitKey(1)  # Ensure window is destroyed
+
+        if len(roi_points) < 3:
+            print("ROI selection requires at least 3 points.")
+            return None
+
+        # Scale points back to original resolution
+        final_points = (np.array(roi_points, dtype=np.float32) / scale).astype(np.int32)
+        return final_points
+        
+    except Exception as e:
+        print(f"Error in ROI selection: {e}")
+        import traceback
+        traceback.print_exc()
+        # Clean up resources
+        if cap is not None:
+            cap.release()
+        if window_name:
+            try:
+                cv2.destroyWindow(window_name)
+                cv2.waitKey(1)
+            except:
+                pass
+        cv2.destroyAllWindows()
+        return None
+
+
 class TrackerConfigDialog(tk.simpledialog.Dialog):
     def __init__(self, parent, title=None):
         self.tooltip = None
@@ -350,6 +558,50 @@ class TrackerConfigDialog(tk.simpledialog.Dialog):
         help_text.bind("<Enter>", lambda e: self.show_help(e, stride_tooltip))
         help_text.bind("<Leave>", self.hide_help)
 
+        # ROI selection section
+        tk.Label(master, text="Region of Interest (ROI):").grid(
+            row=5, column=0, padx=5, pady=5
+        )
+        self.roi_file_path = None
+        self.roi_status_label = tk.Label(master, text="No ROI selected", fg="gray")
+        self.roi_status_label.grid(row=5, column=1, padx=5, pady=5, sticky="w")
+        
+        # Frame for ROI buttons
+        roi_buttons_frame = tk.Frame(master)
+        roi_buttons_frame.grid(row=6, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
+        
+        btn_create_roi = tk.Button(
+            roi_buttons_frame, 
+            text="Create New ROI", 
+            command=self.select_roi_from_video,
+            bg="#4CAF50",
+            fg="white",
+            width=15
+        )
+        btn_create_roi.pack(side="left", padx=5)
+        
+        btn_load_roi = tk.Button(
+            roi_buttons_frame, 
+            text="Load Existing ROI", 
+            command=self.load_existing_roi,
+            bg="#2196F3",
+            fg="white",
+            width=15
+        )
+        btn_load_roi.pack(side="left", padx=5)
+
+        help_text = tk.Label(master, text="?", cursor="hand2", fg="blue")
+        help_text.grid(row=5, column=2, padx=5, pady=5)
+        roi_tooltip = (
+            "ROI Options:\n"
+            "'Create New ROI' - Draw a new polygon on a video frame\n"
+            "'Load Existing ROI' - Load a previously saved ROI from file\n\n"
+            "The ROI will be applied to all videos in the batch.\n"
+            "Tracking and detection will only run inside the selected polygon."
+        )
+        help_text.bind("<Enter>", lambda e: self.show_help(e, roi_tooltip))
+        help_text.bind("<Leave>", self.hide_help)
+
         return self.conf
 
     def show_help(self, event, text):
@@ -375,10 +627,96 @@ class TrackerConfigDialog(tk.simpledialog.Dialog):
         )
         label.pack()
 
-    def hide_help(self):
+    def hide_help(self, event=None):
         if self.tooltip is not None:
             self.tooltip.destroy()
             self.tooltip = None
+
+    def select_roi_from_video(self):
+        """Open file dialog to select a video, then open ROI selection window"""
+        # Ask user to select a video file for ROI selection
+        video_path = filedialog.askopenfilename(
+            title="Select a video file for ROI selection",
+            filetypes=[
+                ("Video files", "*.mp4 *.avi *.mov *.mkv"),
+                ("MP4 files", "*.mp4"),
+                ("AVI files", "*.avi"),
+                ("MOV files", "*.mov"),
+                ("MKV files", "*.mkv"),
+                ("All files", "*.*"),
+            ],
+        )
+        
+        if not video_path:
+            return
+        
+        try:
+            # Open ROI selection window
+            roi_poly = select_free_polygon_roi(video_path)
+            
+            if roi_poly is not None and len(roi_poly) >= 3:
+                # Save ROI to TOML file
+                roi_file = save_roi_to_toml(video_path, roi_poly)
+                if roi_file:
+                    self.roi_file_path = roi_file
+                    self.roi_status_label.config(
+                        text=f"ROI saved: {os.path.basename(roi_file)}", 
+                        fg="green"
+                    )
+                    messagebox.showinfo(
+                        "ROI Saved",
+                        f"ROI polygon saved successfully!\n\n"
+                        f"File: {os.path.basename(roi_file)}\n"
+                        f"Points: {len(roi_poly)}\n\n"
+                        f"This ROI will be applied to all videos in the batch."
+                    )
+                else:
+                    self.roi_status_label.config(text="Error saving ROI", fg="red")
+            else:
+                self.roi_status_label.config(text="ROI selection cancelled", fg="gray")
+        except Exception as e:
+            messagebox.showerror("Error", f"Error selecting ROI: {str(e)}")
+            self.roi_status_label.config(text="Error selecting ROI", fg="red")
+
+    def load_existing_roi(self):
+        """Open file dialog to load an existing ROI from TOML file"""
+        roi_file_path = filedialog.askopenfilename(
+            title="Select ROI configuration file",
+            filetypes=[
+                ("TOML files", "*.toml"),
+                ("All files", "*.*"),
+            ],
+        )
+        
+        if not roi_file_path:
+            return
+        
+        try:
+            # Load ROI from TOML file
+            roi_poly = load_roi_from_toml(roi_file_path)
+            
+            if roi_poly is not None and len(roi_poly) >= 3:
+                self.roi_file_path = roi_file_path
+                self.roi_status_label.config(
+                    text=f"ROI loaded: {os.path.basename(roi_file_path)}", 
+                    fg="green"
+                )
+                messagebox.showinfo(
+                    "ROI Loaded",
+                    f"ROI polygon loaded successfully!\n\n"
+                    f"File: {os.path.basename(roi_file_path)}\n"
+                    f"Points: {len(roi_poly)}\n\n"
+                    f"This ROI will be applied to all videos in the batch."
+                )
+            else:
+                self.roi_status_label.config(text="Invalid ROI file", fg="red")
+                messagebox.showerror(
+                    "Error", 
+                    "The selected ROI file is invalid or contains less than 3 points."
+                )
+        except Exception as e:
+            messagebox.showerror("Error", f"Error loading ROI: {str(e)}")
+            self.roi_status_label.config(text="Error loading ROI", fg="red")
 
     def validate(self):
         try:
@@ -395,6 +733,7 @@ class TrackerConfigDialog(tk.simpledialog.Dialog):
                 "iou": float(self.iou.get()),
                 "device": device,
                 "vid_stride": int(self.vid_stride.get()),
+                "roi_file": self.roi_file_path,  # Path to saved ROI TOML file
                 "half": True,
                 "persist": True,
                 "verbose": False,
@@ -1169,9 +1508,14 @@ def run_yolov11track():
 
     target_classes = class_dialog.result
 
+    # Count videos to process
+    video_count = 0
+    processed_count = 0
+
     # Process each video in the directory
     for video_file in os.listdir(video_dir):
         if video_file.endswith((".mp4", ".avi", ".mov", ".mkv", ".MP4", ".AVI", ".MOV", ".MKV")):
+            video_count += 1
             video_path = os.path.join(video_dir, video_file)
             video_name = os.path.splitext(os.path.basename(video_path))[0]
 
@@ -1210,11 +1554,33 @@ def run_yolov11track():
                     print(f"Error: Could not create video writer with any codec")
                     continue
 
-            # Process the frames
-            cap = cv2.VideoCapture(video_path)
-            frame_idx = 0
+            # Load ROI from saved TOML file if available
+            roi_poly = None
+            roi_file_path = config.get("roi_file")
+            if roi_file_path and os.path.exists(roi_file_path):
+                print(f"Loading ROI from file: {os.path.basename(roi_file_path)}")
+                try:
+                    roi_poly = load_roi_from_toml(roi_file_path)
+                    if roi_poly is not None and len(roi_poly) >= 3:
+                        print("ROI loaded successfully. Detection limited to the polygon area.")
+                    else:
+                        print("ROI file invalid or empty. Using full frame.")
+                        roi_poly = None
+                except Exception as e:
+                    print(f"Error loading ROI from file: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    print("Continuing with full frame processing...")
+                    roi_poly = None
+            elif roi_file_path:
+                print(f"ROI file not found: {roi_file_path}")
+                print("Continuing with full frame processing...")
 
-            print(f"Tracking with {tracker_name} (YOLO built-in tracker)")
+            # Prepare ROI mask if loaded
+            mask_img = None
+            if roi_poly is not None:
+                mask_img = np.zeros((height, width), dtype=np.uint8)
+                cv2.fillPoly(mask_img, [roi_poly], 255)
 
             # Try to use the default Ultralytics tracker config first, then customize
             tracker_config = None
@@ -1287,7 +1653,13 @@ def run_yolov11track():
                 # Fallback: use tracker name directly (Ultralytics will use defaults)
                 tracker_config = tracker_name
 
-            # Use YOLO's tracker with the optimized config file
+            print(f"Tracking with {tracker_name} (YOLO built-in tracker)")
+
+            tracker_csv_files = {}
+            # Map raw tracker IDs (from YOLO) to sequential per-label IDs starting at 1
+            label_to_raw2seq = {}
+            label_to_next = {}
+
             results = model.track(
                 source=video_path,
                 conf=config["conf"],
@@ -1297,42 +1669,44 @@ def run_yolov11track():
                 save=False,
                 stream=True,
                 persist=True,
-                tracker=tracker_config,  # Use the optimized config file path
-                classes=target_classes,  # Use selected classes from user
-                verbose=False,  # Reduce terminal spam
+                tracker=tracker_config,
+                classes=target_classes,
+                verbose=False,
             )
 
-            tracker_csv_files = {}
-            # Map raw tracker IDs (from YOLO) to sequential per-label IDs starting at 1
-            label_to_raw2seq = {}
-            label_to_next = {}
-
+            frame_idx = 0
             for result in results:
                 frame = result.orig_img
 
-                # For OBB models result.boxes might be None.
-                # Try to use result.obbs if available:
+                # Overlay ROI outline for reference
+                if roi_poly is not None:
+                    cv2.polylines(frame, [roi_poly], True, (255, 255, 0), 2)
+
                 boxes = result.boxes if result.boxes is not None else getattr(result, "obbs", None)
 
                 if boxes is None:
-                    print("No bounding boxes found in this frame.")
                     writer.write(frame)
                     frame_idx += 1
                     continue
 
                 for box in boxes:
-                    # Extract coordinates (this assumes the obb objects have a similar `xyxy` property)
                     x_min, y_min, x_max, y_max = map(int, box.xyxy[0].tolist())
                     conf = box.conf[0].item()
                     raw_id = int(box.id[0]) if box.id is not None else -1
                     class_id = int(box.cls[0].item()) if box.cls is not None else -1
                     label = model.names[class_id] if class_id in model.names else "unknown"
 
-                    # Skip invalid IDs
                     if raw_id < 0:
                         continue
 
-                    # Map raw ID to sequential per-label ID
+                    # If ROI is defined, skip detections whose center is outside the polygon
+                    if mask_img is not None:
+                        cx = (x_min + x_max) // 2
+                        cy = (y_min + y_max) // 2
+                        inside = cv2.pointPolygonTest(roi_poly, (cx, cy), False)
+                        if inside < 0:
+                            continue
+
                     if label not in label_to_raw2seq:
                         label_to_raw2seq[label] = {}
                         label_to_next[label] = 1
@@ -1341,14 +1715,12 @@ def run_yolov11track():
                         label_to_next[label] += 1
                     tracker_id = label_to_raw2seq[label][raw_id]
 
-                    # Get a unique color for this tracker ID
                     color = get_color_for_id(tracker_id)
 
-                    label_text = f"{label}_id{tracker_id}, Conf: {conf:.2f}"
                     cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), color, 2)
                     cv2.putText(
                         frame,
-                        label_text,
+                        f"id{tracker_id}",
                         (x_min, y_min - 10),
                         cv2.FONT_HERSHEY_SIMPLEX,
                         0.5,
@@ -1356,7 +1728,6 @@ def run_yolov11track():
                         2,
                     )
 
-                    # Initialize and update the CSV for each tracker id
                     key = (tracker_id, label)
                     if key not in tracker_csv_files:
                         tracker_csv_files[key] = initialize_csv(
@@ -1377,13 +1748,15 @@ def run_yolov11track():
                         conf,
                     )
 
-                # Write the processed frame to the output video
                 writer.write(frame)
+
+                if frame_idx % 20 == 0:
+                    print(f"Processing frame {frame_idx}/{total_frames}", end="\r")
+
                 frame_idx += 1
 
-            # Release resources
-            cap.release()
             writer.release()
+            print("")  # newline after progress
             
             # Verify the AVI file was written successfully
             if not os.path.exists(temp_avi_path) or os.path.getsize(temp_avi_path) == 0:
@@ -1421,7 +1794,7 @@ def run_yolov11track():
                     # Verify output file exists and has content
                     if os.path.exists(out_video_path) and os.path.getsize(out_video_path) > 0:
                         os.remove(temp_avi_path)
-                        print(f"✓ Video converted successfully: {out_video_path}")
+                        print(f"OK - Video converted successfully: {out_video_path}")
                         print(f"  File size: {os.path.getsize(out_video_path) / (1024*1024):.2f} MB")
                     else:
                         print(f"Warning: FFmpeg completed but output file is missing or empty")
@@ -1464,6 +1837,34 @@ def run_yolov11track():
             if merged_csv:
                 print(f"Merged detection tracking file created: {merged_csv}")
 
+            processed_count += 1
+
+    # Show completion message
+    if video_count == 0:
+        print("\n" + "=" * 80)
+        print("WARNING: No video files found in the input directory!")
+        print("=" * 80 + "\n")
+        messagebox.showwarning(
+            "No Videos Found",
+            "No video files (.mp4, .avi, .mov, .mkv) were found in the input directory.\n\n"
+            f"Input directory: {video_dir}"
+        )
+    else:
+        print("\n" + "=" * 80)
+        print("PROCESSING COMPLETED SUCCESSFULLY!")
+        print("=" * 80)
+        print(f"Videos processed: {processed_count} / {video_count}")
+        print(f"All results saved in: {main_output_dir}")
+        print("=" * 80 + "\n")
+        
+        messagebox.showinfo(
+            "Processing Completed",
+            f"All videos have been processed successfully!\n\n"
+            f"Videos processed: {processed_count} / {video_count}\n\n"
+            f"Results saved in:\n{main_output_dir}\n\n"
+            f"Check the output directory for processed videos and CSV files."
+        )
+    
     root.destroy()
 
 
