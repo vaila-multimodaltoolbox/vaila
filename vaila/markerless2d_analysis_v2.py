@@ -1509,16 +1509,31 @@ def process_videos_in_directory(existing_root=None):
             root.focus_force()
             root.geometry("1x1+100+100")
             root.update_idletasks()
-            if platform.system() == "Darwin":  # macOS
-                # Additional macOS-specific handling
-                pass
+            
+            # On Windows, ensure root stays visible and active
+            if platform.system() == "Windows":
+                try:
+                    root.attributes("-topmost", True)
+                    root.after(100, lambda: root.attributes("-topmost", False))
+                except Exception:
+                    pass
+            
+            root.update()
         except Exception as e:
             print(f"Warning: Could not prepare root for dialog: {e}")
 
     # Select input directory
     print("\nPlease select the input directory containing videos...")
     prepare_root_for_dialog()
+    
     try:
+        # Ensure root is active and ready for dialog (especially on Windows)
+        root.update_idletasks()
+        root.update()
+        # Small delay to ensure window is ready (especially on Windows)
+        root.after(50, lambda: None)
+        root.update()
+        
         input_dir = filedialog.askdirectory(
             parent=root, title="Select the input directory containing videos"
         )
@@ -1528,16 +1543,31 @@ def process_videos_in_directory(existing_root=None):
         print(f"Error opening directory dialog: {e}")
         import traceback
         traceback.print_exc()
-        messagebox.showerror("Error", f"Failed to open directory dialog: {e}")
+        try:
+            messagebox.showerror("Error", f"Failed to open directory dialog: {e}")
+        except Exception:
+            pass
         return
     finally:
         # Only hide root on macOS after dialog closes
+        # On Windows, keep root visible for subsequent dialogs
         if platform.system() == "Darwin" and existing_root is None:
             root.withdraw()
+        elif platform.system() == "Windows":
+            # On Windows, keep root visible but bring it to front
+            try:
+                root.lift()
+                root.focus_force()
+                root.update()
+            except Exception:
+                pass
     
     if not input_dir:
         print("No input directory selected.")
-        messagebox.showerror("Error", "No input directory selected.")
+        try:
+            messagebox.showerror("Error", "No input directory selected.")
+        except Exception:
+            pass
         return
     
     print(f"Input directory selected: {input_dir}")
@@ -1545,7 +1575,15 @@ def process_videos_in_directory(existing_root=None):
     # Select output base directory
     print("\nPlease select the base output directory...")
     prepare_root_for_dialog()
+    
     try:
+        # Ensure root is active and ready for dialog (especially on Windows)
+        root.update_idletasks()
+        root.update()
+        # Small delay to ensure window is ready (especially on Windows)
+        root.after(50, lambda: None)
+        root.update()
+        
         output_base = filedialog.askdirectory(parent=root, title="Select the base output directory")
         root.update_idletasks()
         root.update()
@@ -1553,16 +1591,31 @@ def process_videos_in_directory(existing_root=None):
         print(f"Error opening output directory dialog: {e}")
         import traceback
         traceback.print_exc()
-        messagebox.showerror("Error", f"Failed to open output directory dialog: {e}")
+        try:
+            messagebox.showerror("Error", f"Failed to open output directory dialog: {e}")
+        except Exception:
+            pass
         return
     finally:
         # Only hide root on macOS after dialog closes
+        # On Windows, keep root visible for subsequent dialogs
         if platform.system() == "Darwin" and existing_root is None:
             root.withdraw()
+        elif platform.system() == "Windows":
+            # On Windows, keep root visible but bring it to front
+            try:
+                root.lift()
+                root.focus_force()
+                root.update()
+            except Exception:
+                pass
         
     if not output_base:
         print("No output directory selected.")
-        messagebox.showerror("Error", "No output directory selected.")
+        try:
+            messagebox.showerror("Error", "No output directory selected.")
+        except Exception:
+            pass
         return
     
     print(f"Output directory selected: {output_base}")
