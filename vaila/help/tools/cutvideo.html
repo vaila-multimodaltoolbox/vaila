@@ -25,7 +25,7 @@
         <h3>📋 Module Information</h3>
         <p><strong>Category:</strong> Tools</p>
         <p><strong>File:</strong> vaila/cutvideo.py</p>
-        <p><strong>Version:</strong> 0.1.0</p>
+        <p><strong>Version:</strong> 0.2.0</p>
         <p><strong>Author:</strong> Paulo Roberto Pereira Santiago</p>
         <p><strong>Email:</strong> paulosantiago@usp.br</p>
         <p><strong>GitHub:</strong> <a href="https://github.com/vaila-multimodaltoolbox/vaila">vaila-multimodaltoolbox/vaila</a></p>
@@ -42,11 +42,15 @@
         <h2>Key Updates</h2>
         <ul>
             <li><strong>TOML cuts</strong>: Saves/loads <code>{basename}_cuts.toml</code> with 1-based frames, .6f precision, and <code>frame_count = end - start + 1</code> (duration = frame_count / fps). Paths stored as POSIX to avoid escaping.</li>
+            <li><strong>Audio waveform visualization</strong>: VirtualDub-style audio panel with orange waveform line, synchronized playback, and mute/unmute control (hotkey <code>A</code> for panel, <code>M</code> for mute).</li>
+            <li><strong>Audio playback</strong>: Synchronized audio playback with video; automatically loops when loop mode is enabled.</li>
+            <li><strong>Loop control</strong>: Loop button (column layout above Help) to enable/disable video and audio looping.</li>
+            <li><strong>Auto-fit window</strong>: Hotkey <code>0</code> automatically adjusts window to maximize screen space usage while maintaining aspect ratio.</li>
             <li><strong>Marker navigation</strong>: PageUp/PageDown cycle through every start/end marker; Home/End jump to current/last cut bounds.</li>
             <li><strong>Manual FPS</strong>: Hotkey <code>I</code>/<code>P</code> overrides FPS via Tk dialog and refreshes the UI.</li>
             <li><strong>Scrollable help</strong>: Help overlay scrolls with mouse wheel or arrow keys.</li>
             <li><strong>Output naming</strong>: Single → <code>{video}_vailacut_{timestamp}</code>; batch → <code>vailacut_{prefix}{source}_batch_{timestamp}</code>; sync batch → <code>vailacut_sync_{video}_{timestamp}</code>; files use 1-based frame ranges.</li>
-            <li><strong>Time display</strong>: Caption shows filename + FPS; slider shows frame and time (<code>Frame: X/Y (t/T)</code>).</li>
+            <li><strong>Time display</strong>: Caption shows filename + FPS; slider shows frame and time with .6f precision (<code>Frame: X/Y (t.TTTTTT/T.TTTTTT)</code>).</li>
         </ul>
     </div>
 
@@ -67,11 +71,13 @@
         <h2>🎮 Controls (UI)</h2>
         <ul>
             <li><strong>Playback/Navigation:</strong> Space (play/pause), →/← (frame step), ↑/↓ (±60 frames), slider click (jump).</li>
+            <li><strong>Audio Controls:</strong> <code>A</code> (toggle audio waveform panel), <code>M</code> (mute/unmute audio), Loop button (enable/disable looping).</li>
+            <li><strong>Window Controls:</strong> <code>0</code> (auto-fit window to screen), drag window edges (manual resize).</li>
             <li><strong>Markers/Cuts:</strong> S (start), E (end), R (reset start), D or Delete (remove last cut), L (list cuts).</li>
             <li><strong>Marker navigation:</strong> PageUp/PageDown (prev/next marker), Home/End (start/end of current or first/last cut).</li>
             <li><strong>Jump inputs:</strong> G (frame), T (time), I or P (manual FPS input).</li>
             <li><strong>File ops:</strong> F (load cuts TOML or sync TXT), ESC (save TOML, optionally render cuts; batch prompt).</li>
-            <li><strong>Help:</strong> H or click “Help” (scrollable overlay).</li>
+            <li><strong>Help:</strong> H or click "Help" button (scrollable overlay with mouse wheel or arrow keys).</li>
         </ul>
     </div>
 
@@ -100,22 +106,26 @@
         <h2>🔬 Precision Notes</h2>
         <ul>
             <li>FPS stored/written with .6f; duration uses frame counts to include the last frame.</li>
+            <li>All time displays use .6f precision (6 decimal places) for scientific accuracy in biomechanics.</li>
             <li>UI displays frames as 1-based; internal math is 0-based.</li>
             <li>PageUp/PageDown iterate over every start and end marker (sorted, deduped).</li>
+            <li>Audio waveform displays synchronized audio data with orange line visualization; playback matches video frame position.</li>
         </ul>
     </div>
 
     <div class="card">
         <h2>🐛 Troubleshooting Quick Hits</h2>
         <ul>
-            <li><strong>No ffmpeg:</strong> Falls back to OpenCV; install ffmpeg for frame-accurate cuts.</li>
+            <li><strong>No ffmpeg:</strong> Falls back to OpenCV; install ffmpeg for frame-accurate cuts and audio extraction.</li>
             <li><strong>Windows paths in TOML:</strong> Stored with <code>/</code> to avoid escape issues.</li>
             <li><strong>Cannot load cuts:</strong> Ensure file is <code>.toml</code> with <code>[[cuts]]</code>; legacy <code>.txt</code> still loads but is deprecated.</li>
+            <li><strong>No audio playback:</strong> Check if video file contains audio track; audio panel (A key) shows "No Audio Data" if unavailable.</li>
+            <li><strong>Audio not syncing:</strong> Ensure audio is loaded (A key) and not muted (M key); audio syncs on play/pause and frame navigation.</li>
         </ul>
     </div>
 
     <div class="footer">
-        <p>📅 Last Updated: January 2026</p>
+        <p>📅 Last Updated: January 2026 (v0.2.0 - Audio waveform, loop control, auto-fit)</p>
         <p>🔗 Part of vailá - Multimodal Toolbox | <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub</a></p>
     </div>
 </div>
