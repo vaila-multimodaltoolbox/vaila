@@ -71,5 +71,5 @@ Interactive video cutting with frame-accurate navigation, TOML-based cut storage
 - **Audio not syncing:** Ensure audio is loaded (A key) and not muted (M key); audio syncs on play/pause and frame navigation.  
 
 ---
-📅 **Last Updated:** January 2026 (v0.2.0 - Audio waveform, loop control, auto-fit)  
+📅 **Last Updated:** January 2026 (v0.1.1 - Audio waveform, loop control, auto-fit, marker navigation)  
 🔗 **Part of vailá - Multimodal Toolbox**  
