@@ -4,8 +4,8 @@ vaila.py
 ===============================================================================
 Author: Prof. Paulo R. P. Santiago
 Date: 07 October 2024
-Update: 08 January 2026
-Version updated: 0.3.6
+Update: 09 January 2026
+Version updated: 0.3.7
 Python Version: 3.12.12
 
 Example of usage:
@@ -83,8 +83,31 @@ def run_vaila_module(module_name, script_path=None):
         module_name (str): The module name to run (e.g., "vaila.markerless_2d_analysis")
         script_path (str, optional): Alternative script path if module import fails
     """
+    # If script_path is provided, try to run it directly first (avoids __init__.py import issues)
+    if script_path:
+        try:
+            full_script_path = os.path.join(vaila_dir, "vaila", script_path)
+            if not os.path.exists(full_script_path):
+                # Try without vaila prefix
+                full_script_path = os.path.join(vaila_dir, script_path)
+            
+            if os.path.exists(full_script_path):
+                print(f"Running script directly: {full_script_path}")
+                subprocess.Popen(
+                    [sys.executable, full_script_path],
+                    cwd=vaila_dir,
+                    env={**os.environ, "PYTHONPATH": vaila_dir},
+                )
+                return
+            else:
+                print(f"Warning: Script path not found: {full_script_path}")
+        except Exception as e:
+            print(f"Error running script directly: {e}")
+            # Fall through to try module import
+    
     try:
-        # Try to run the module directly
+        # Try to run the module directly (will import __init__.py)
+        print(f"Running module: {module_name}")
         subprocess.Popen(
             [sys.executable, "-m", module_name],
             cwd=vaila_dir,
@@ -95,7 +118,9 @@ def run_vaila_module(module_name, script_path=None):
         if script_path:
             # Fallback: try to run the script file directly
             try:
-                full_script_path = os.path.join(vaila_dir, script_path)
+                full_script_path = os.path.join(vaila_dir, "vaila", script_path)
+                if not os.path.exists(full_script_path):
+                    full_script_path = os.path.join(vaila_dir, script_path)
                 subprocess.Popen(
                     [sys.executable, full_script_path],
                     cwd=vaila_dir,
@@ -103,8 +128,12 @@ def run_vaila_module(module_name, script_path=None):
                 )
             except Exception as e2:
                 print(f"Fallback also failed: {e2}")
+                import traceback
+                traceback.print_exc()
                 messagebox.showerror("Error", f"Could not launch {module_name}:\n{e}\n\n{e2}")
         else:
+            import traceback
+            traceback.print_exc()
             messagebox.showerror("Error", f"Could not launch {module_name}: {e}")
 
 
@@ -123,7 +152,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 08.January.2026 v0.3.6 (Python 3.12.12)
+vailá - 09.January.2026 v0.3.7 (Python 3.12.12)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -229,7 +258,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 08.January.2026 v0.3.6 (Python 3.12.12)")
+        self.title("vailá - 09.January.2026 v0.3.7 (Python 3.12.12)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -727,12 +756,12 @@ class Vaila(tk.Tk):
         row4_frame = tk.Frame(analysis_frame)
         row4_frame.pack(fill="x")
 
-        # B4_r4_c1 - Tracker
-        tracker_btn = tk.Button(
+        # B4_r4_c1 - YOLO Tracker-Pose
+        yolotrackerpose_btn = tk.Button(
             row4_frame,
-            text="Tracker",
+            text="YOLO Tracker-Pose",
             width=button_width,
-            command=self.tracker,
+            command=self.yolotrackerpose,
         )
 
         # B4_r4_c2 - ML Walkway
@@ -768,7 +797,7 @@ class Vaila(tk.Tk):
         )
 
         # Pack row4 buttons
-        tracker_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        yolotrackerpose_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         mlwalkway_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         mphands_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         mpangles_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
@@ -1591,7 +1620,7 @@ class Vaila(tk.Tk):
                     print("Launching: vaila.markerless2d_analysis_v2")
                     print("Features: Multi-person detection with YOLOv11, slower but more accurate")
                     print("=" * 60 + "\n")
-                    run_vaila_module("vaila.markerless2d_analysis_v2")
+                    run_vaila_module("vaila.markerless2d_analysis_v2", script_path="markerless2d_analysis_v2.py")
             except Exception as e:
                 print(f"\nERROR: Failed to launch markerless analysis: {e}\n")
                 messagebox.showerror("Error", f"Failed to launch markerless analysis: {e}")
@@ -1815,7 +1844,7 @@ class Vaila(tk.Tk):
         animal_open_field.run_animal_open_field()
 
     # B_r4_c1
-    def tracker(self):
+    def yolotrackerpose(self):
         """Runs the specified YOLO tracking analysis."""
         print(f"Running tracker analysis {os.path.dirname(os.path.abspath(__file__))}")
         print(f"Running tracker analysis {os.path.basename(__file__)}")
@@ -1864,8 +1893,21 @@ class Vaila(tk.Tk):
             except Exception as e:
                 messagebox.showerror("Error in YOLO Training", f"Error: {str(e)}")
 
+        def use_yolo_pose():
+            dialog.destroy()
+            try:
+                from vaila import yolov11track
+
+                yolov11track.select_id_and_run_pose()
+            except Exception as e:
+                messagebox.showerror(
+                    "Error Running YOLO Pose",
+                    f"Error: {str(e)}",
+                )
+
         tk.Button(dialog, text="YOLOv11 Tracker", command=use_yolov11, width=20).pack(pady=10)
         tk.Button(dialog, text="Train YOLO", command=use_train_yolov11, width=20).pack(pady=10)
+        tk.Button(dialog, text="YOLO Pose", command=use_yolo_pose, width=20).pack(pady=10)
         tk.Button(dialog, text="Cancel", command=dialog.destroy, width=10).pack(pady=10)
 
         # Wait for the dialog to be closed
