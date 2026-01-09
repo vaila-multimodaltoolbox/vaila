@@ -15,7 +15,7 @@
 Interactive video cutting with frame-accurate navigation, TOML-based cut storage, and batch/sync workflows. Designed for biomechanics-grade precision with inclusive frame counts and high-resolution timestamps (.6f).
 
 ### Key Updates
-- **TOML cuts**: Saves/loads `*_cuts.toml` with 1-based frames, `.6f` precision, and `frame_count = end - start + 1` (duration = `frame_count / fps`). Windows paths stored as POSIX to avoid escaping issues.
+- **TOML cuts**: Saves/loads `*_cuts.toml` with 1-based frames, `.6f` precision, `frame_count = end - start + 1` (duration = `frame_count / fps`), plus `output_dir` and per-cut `output_file` entries. Windows paths stored as POSIX to avoid escaping issues.
 - **Audio waveform visualization**: VirtualDub-style audio panel with orange waveform line, synchronized playback, and mute/unmute control (hotkey `A` for panel, `M` for mute).
 - **Audio playback**: Synchronized audio playback with video; automatically loops when loop mode is enabled.
 - **Loop control**: Loop button (column layout above Help) to enable/disable video and audio looping.
@@ -48,8 +48,8 @@ Interactive video cutting with frame-accurate navigation, TOML-based cut storage
 ## 📁 Formats
 - **Input videos:** `.mp4`, `.avi`, `.mov`, `.mkv` (anything ffmpeg/OpenCV can read).  
 - **Cuts file:** `{basename}_cuts.toml`  
-  - Metadata: `video_name`, `fps` (.6f), `created`, `source_file` (POSIX path).  
-  - Cuts (1-based): `index`, `start_frame`, `end_frame`, `frame_count`, `start_time`, `end_time`, `duration` (= `frame_count/fps`).  
+  - Metadata: `video_name`, `fps` (.6f), `created`, `source_file` (POSIX), `output_dir` (POSIX).  
+  - Cuts (1-based): `index`, `start_frame`, `end_frame`, `frame_count`, `start_time`, `end_time`, `duration` (= `frame_count/fps`), `output_file`, `output_dir` (POSIX).  
 - **Sync file (TXT):** `video_file new_name initial_frame final_frame` (integers).  
 - **Outputs:**  
   - Folder (single): `{video}_vailacut_{timestamp}` (or `{video}_sync_vailacut_{timestamp}` when using sync).  

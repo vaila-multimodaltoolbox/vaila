@@ -16,6 +16,8 @@ All buttons in the vailá GUI (`vaila.py`) are documented in **[vaila_buttons/](
 
 - **[Markerless 2D Analysis](vaila_buttons/markerless-2d-button.md)** (B1_r1_c4) - Advanced pose estimation with MediaPipe and YOLOv11
 - **[All Button Documentation](vaila_buttons/README.md)** - Complete list of all GUI buttons
+- **filemanager (GUI file ops):** [HTML](../vaila/help/tools/filemanager.html) | [MD](../vaila/help/tools/filemanager.md)
+- **cutvideo (interactive cutting):** [HTML](../vaila/help/tools/cutvideo.html) | [MD](../vaila/help/tools/cutvideo.md)
 
 ## Key Features
 
