@@ -782,11 +782,37 @@ def play_video_with_cuts(video_path):
 
     def update_caption():
         pygame.display.set_caption(
-            f"{video_filename} (FPS: {fps:.2f}) | A:Audio | Space:Play/Pause | ←→:Frame | S:Start | E:End | R:Reset | DEL:Remove | L:List | F:Load Sync | Home/End:Jump Cut | PgUp/PgDn:Next Cut | G:Frame | T:Time | I:FPS | H:Help | ESC:Save"
+            f"{video_filename} (FPS: {fps:.2f}) | A:Audio M:Mute 0:AutoFit | Space:Play/Pause | ←→:Frame | S:Start E:End R:Reset DEL/D:Remove | L:List | F:Load TOML | Home/End:Jump Cut | PgUp/PgDn:Next Marker | G:Frame T:Time I/P:FPS | H:Help ESC:Save"
         )
 
+    def auto_fit_window():
+        """Auto-fit window to current display while respecting margins and aspect ratio."""
+        nonlocal window_width, window_height
+        screen_info = pygame.display.Info()
+        # Margins to avoid covering taskbar/title; keep similar to previous 100px margin
+        max_w = max(640, screen_info.current_w - 100)
+        max_h = max(480, screen_info.current_h - 140)  # allow for title bar and taskbar
+
+        # Available height for video after controls/audio
+        avail_h = max_h - control_height - (audio_height if show_audio else 0)
+        avail_h = max(240, avail_h)
+
+        # Fit by aspect ratio
+        if original_width / max_w > original_height / avail_h:
+            window_width = max_w
+            window_height = int(window_width / aspect_ratio)
+        else:
+            window_height = avail_h
+            window_width = int(window_height * aspect_ratio)
+
+        # Clamp to bounds
+        window_width = max(640, min(window_width, max_w))
+        window_height = max(480, min(window_height, avail_h))
+
+        return set_display_mode()
+
     # Initialize window
-    screen = set_display_mode()
+    screen = auto_fit_window()
     update_caption()
 
     # Initialize variables
@@ -1038,12 +1064,18 @@ def play_video_with_cuts(video_path):
             "- Down Arrow: Rewind (60 frames)",
             "- G: Go to Frame Number (enter frame number as int)",
             "- T: Go to Time (enter time in seconds as float)",
+            "- 0: Auto-fit window to screen",
+            "",
+            "Audio Controls:",
+            "- A: Toggle Audio Waveform Panel",
+            "- M: Mute/Unmute Audio",
+            "- Loop Button: Enable/Disable video/audio looping",
             "",
             "Cutting Operations:",
             "- S: Mark Start Frame",
             "- E: Mark End Frame",
             "- R: Reset Current Cut",
-            "- DELETE: Remove Last Cut",
+            "- DELETE or D: Remove Last Cut",
             "- L: List All Cuts",
             "",
             "Cut Navigation:",
@@ -1054,18 +1086,24 @@ def play_video_with_cuts(video_path):
             "",
             "File Operations:",
             "- F: Load Sync File or Cuts TOML File",
-            "- I: Input Manual FPS",
-            "- ESC: Save cuts to file and optionally generate videos",
+            "- I or P: Input Manual FPS",
+            "- ESC: Save cuts to TOML file and optionally generate videos",
             "",
             "Help:",
             "- H: Show this help dialog",
             "",
             "Mouse Controls:",
             "- Click on slider: Jump to frame",
-            "- Click 'Help': Show this dialog",
+            "- Click 'Loop' button: Toggle looping",
+            "- Click 'Help' button: Show this dialog",
             "- Mouse Wheel: Scroll help text",
             "- Arrow Up/Down: Scroll help text",
             "- Drag window edges: Resize window",
+            "",
+            "Display Features:",
+            "- Audio waveform shows synchronized audio with orange line",
+            "- Time precision: 6 decimal places (.6f) for scientific accuracy",
+            "- Auto-fit adjusts window to maximize use of screen space",
             "",
             "Press ESC or click to close this help",
         ]
@@ -1458,7 +1496,7 @@ def play_video_with_cuts(video_path):
                         else:
                             print("Failed to load audio or no audio track.")
 
-                    screen = set_display_mode()
+                    screen = auto_fit_window()
                     update_caption()
                 elif event.key == pygame.K_m:
                     audio_muted = not audio_muted
@@ -1468,6 +1506,9 @@ def play_video_with_cuts(video_path):
                         if audio_loaded and ensure_audio_player() and ensure_music_loaded() and not paused:
                             sync_audio_to_frame(frame_count)
                             pygame.mixer.music.unpause() if pygame.mixer.music.get_busy() else start_audio_playback(frame_count)
+                    update_caption()
+                elif event.key == pygame.K_0:
+                    screen = auto_fit_window()
                     update_caption()
                 elif event.key == pygame.K_SPACE:
                     paused = not paused
