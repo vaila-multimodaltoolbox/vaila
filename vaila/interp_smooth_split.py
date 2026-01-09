@@ -3435,7 +3435,8 @@ def run_fill_split_dialog(parent=None):
     # Additional visibility commands
     config_dialog.window.state("normal")
     config_dialog.window.wm_attributes("-alpha", 1.0)
-    config_dialog.window.wm_attributes("-disabled", False)
+    # Note: "-disabled" is not a valid wm_attributes option in Tkinter
+    # The window is enabled by default, so this line is not needed
     config_dialog.window.attributes("-topmost", True)
     config_dialog.window.attributes("-topmost", False)
 
