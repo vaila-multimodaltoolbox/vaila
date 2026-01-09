@@ -6,8 +6,8 @@ vailá - Multimodal Toolbox
 Author: Prof. Dr. Paulo R. P. Santiago
 https://github.com/paulopreto/vaila-multimodaltoolbox
 Date: 22 July 2025
-Update: 07 January 2026
-Version: 0.3.2
+Update: 09 January 2026
+Version: 0.3.3
 Python Version: 3.12.12
 
 Description:
@@ -16,6 +16,9 @@ This tool enables marking and saving pixel coordinates in video frames, with
 zoom functionality for precise annotations. The window can now be resized dynamically,
 and all UI elements adjust accordingly. Users can navigate the video frames, mark
 points, and save results in CSV format.
+
+New Features in This Version 0.3.3:
+GUI Pygame in Linux to avoid conflicts with Tkinter.
 
 New Features in This Version 0.3.2:
 ------------------------------
@@ -202,6 +205,9 @@ def pygame_file_dialog(
     running = True
     text_input = ""
     input_active = False
+    last_click_time = 0
+    last_click_index = -1
+    double_click_delay = 500  # milliseconds
 
     while running:
         # Filter visible items based on scroll
@@ -414,9 +420,16 @@ def pygame_file_dialog(
                         if 0 <= clicked_index < len(visible_items):
                             item, is_dir = visible_items[clicked_index]
                             clicked_absolute_index = scroll_offset + clicked_index
-
-                            # If clicking on already selected item, treat as double-click/open
-                            if selected_index == clicked_absolute_index:
+                            
+                            # Check for double-click
+                            current_time = pygame.time.get_ticks()
+                            is_double_click = (
+                                clicked_absolute_index == last_click_index and
+                                current_time - last_click_time < double_click_delay
+                            )
+                            
+                            if is_double_click:
+                                # Double-click: open file or enter directory
                                 if is_dir:
                                     # Enter directory
                                     if item == "..":
@@ -428,15 +441,16 @@ def pygame_file_dialog(
                                     scroll_offset = 0
                                     text_input = ""
                                 else:
-                                    # Select file
+                                    # Open file on double-click
                                     selected_file = os.path.join(current_dir, item)
                                     running = False
                             else:
-                                # Just select the item
+                                # Single click: select item
                                 selected_index = clicked_absolute_index
-                                # If it's a directory and user clicks, enter it immediately (optional style)
-                                # But standard behavior is usually double click.
-                                # However, existing code had immediate entry logic, let's keep it consistent
+                                last_click_time = current_time
+                                last_click_index = clicked_absolute_index
+                                
+                                # For directories, enter on single click (user-friendly)
                                 if is_dir:
                                     if item == "..":
                                         current_dir = os.path.dirname(current_dir)
@@ -446,6 +460,7 @@ def pygame_file_dialog(
                                     selected_index = 0
                                     scroll_offset = 0
                                     text_input = ""
+                                    last_click_index = -1  # Reset for directory navigation
 
                     # Check buttons
                     elif up_button.collidepoint(x, y):
@@ -571,50 +586,351 @@ def play_video_with_controls(video_path, coordinates=None):
     show_tracking = True  # Toggle to show/hide tracking boxes
     csv_loaded = False  # Flag to indicate if tracking CSV was loaded
 
+    def export_video_with_annotations():
+        """Export video with all annotations (markers, tracking boxes, labeling boxes) preserving audio"""
+        nonlocal save_message_text, showing_save_message, save_message_timer
+        import subprocess
+        import tempfile
+        
+        # Determine output filename
+        base_name = os.path.splitext(os.path.basename(video_path))[0]
+        video_dir = os.path.dirname(video_path)
+        output_path = os.path.join(video_dir, f"{base_name}_annotated.mp4")
+        
+        # Create temporary file for video without audio
+        temp_video = None
+        try:
+            # Create temporary file
+            temp_fd, temp_video = tempfile.mkstemp(suffix='.mp4', dir=video_dir)
+            os.close(temp_fd)
+            
+            # Open video
+            cap = cv2.VideoCapture(video_path)
+            if not cap.isOpened():
+                save_message_text = "Error: Could not open video"
+                showing_save_message = True
+                save_message_timer = 90
+                return
+            
+            # Get video properties
+            fps = int(cap.get(cv2.CAP_PROP_FPS))
+            if fps == 0:
+                fps = 30  # Default FPS if not available
+            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            total_frames_video = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            
+            # Create video writer (temporary file without audio)
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            out = cv2.VideoWriter(temp_video, fourcc, fps, (width, height))
+            
+            if not out.isOpened():
+                save_message_text = "Error: Could not create output video"
+                showing_save_message = True
+                save_message_timer = 90
+                cap.release()
+                return
+            
+            # Process each frame - use frame-by-frame reading to ensure all frames are processed
+            progress_update_interval = max(1, total_frames_video // 20)  # Update every 5%
+            frames_written = 0
+            
+            # Process all frames explicitly by index
+            for frame_idx in range(total_frames_video):
+                # Set frame position explicitly to ensure we read the correct frame
+                cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+                ret, frame = cap.read()
+                
+                if not ret:
+                    print(f"Warning: Could not read frame {frame_idx}/{total_frames_video}")
+                    # Try reading sequentially as fallback
+                    ret, frame = cap.read()
+                    if not ret:
+                        print(f"Error: Could not read frame {frame_idx} even with sequential read")
+                        # Create a black frame as last resort to maintain frame count
+                        frame = np.zeros((height, width, 3), dtype=np.uint8)
+                
+                # Verify frame dimensions
+                if frame.shape[0] != height or frame.shape[1] != width:
+                    print(f"Warning: Frame {frame_idx} has wrong dimensions, resizing...")
+                    frame = cv2.resize(frame, (width, height))
+                
+                # OpenCV uses BGR natively, so we work directly with the frame
+                
+                # Draw markers (coordinates)
+                if one_line_mode:
+                    for idx, (f_num, x, y) in enumerate(one_line_markers):
+                        if f_num == frame_idx and x is not None and y is not None:
+                            # Draw marker circle (green in BGR)
+                            cv2.circle(frame, (int(x), int(y)), 5, (0, 255, 0), -1)
+                            # Draw marker number
+                            cv2.putText(frame, str(idx + 1), (int(x) + 8, int(y) - 8),
+                                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                else:
+                    if frame_idx in coordinates:
+                        for i, (x, y) in enumerate(coordinates[frame_idx]):
+                            if i not in deleted_positions.get(frame_idx, set()):
+                                if x is not None and y is not None:
+                                    # Draw marker circle (green in BGR)
+                                    cv2.circle(frame, (int(x), int(y)), 5, (0, 255, 0), -1)
+                                    # Draw marker number
+                                    cv2.putText(frame, str(i + 1), (int(x) + 8, int(y) - 8),
+                                               cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                
+                # Draw YOLO tracking boxes
+                if csv_loaded and frame_idx in tracking_data:
+                    for box in tracking_data[frame_idx]:
+                        x1, y1 = int(box['x1']), int(box['y1'])
+                        x2, y2 = int(box['x2']), int(box['y2'])
+                        box_color = box.get('color', (0, 255, 0))
+                        # Convert RGB to BGR for OpenCV (box_color is RGB tuple)
+                        box_color_bgr = (box_color[2], box_color[1], box_color[0])
+                        
+                        # Draw rectangle
+                        cv2.rectangle(frame, (x1, y1), (x2, y2), box_color_bgr, 2)
+                        
+                        # Build label text
+                        label = box.get('label', 'object')
+                        tracker_id = box.get('id')
+                        conf = box.get('conf', 0)
+                        
+                        label_parts = [f"Label:{label}"]
+                        if tracker_id is not None:
+                            label_parts.append(f"id:{tracker_id}")
+                        if conf > 0:
+                            label_parts.append(f"conf:{conf:.2f}")
+                        
+                        label_text = " ".join(label_parts)
+                        
+                        # Draw text above box
+                        if label_text:
+                            # Get text size
+                            (text_width, text_height), baseline = cv2.getTextSize(
+                                label_text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1
+                            )
+                            # Draw background rectangle
+                            cv2.rectangle(frame, 
+                                         (x1, y1 - text_height - baseline - 4),
+                                         (x1 + text_width + 4, y1),
+                                         box_color_bgr, -1)
+                            # Draw text
+                            cv2.putText(frame, label_text, (x1 + 2, y1 - baseline - 2),
+                                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                
+                # Draw labeling bounding boxes
+                if frame_idx in bboxes:
+                    for bbox in bboxes[frame_idx]:
+                        x = int(bbox['x'])
+                        y = int(bbox['y'])
+                        w = int(bbox['w'])
+                        h = int(bbox['h'])
+                        # Draw red rectangle (BGR: blue=0, green=0, red=255)
+                        cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 0, 255), 2)
+                        # Draw label if available
+                        label = bbox.get('label', 'object')
+                        cv2.putText(frame, label, (x, y - 5),
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
+                
+                # Write frame directly (already in BGR format)
+                out.write(frame)
+                frames_written += 1
+                
+                # Update progress message
+                if (frame_idx + 1) % progress_update_interval == 0:
+                    progress = int(((frame_idx + 1) / total_frames_video) * 100)
+                    save_message_text = f"Exporting video... {progress}% ({frame_idx + 1}/{total_frames_video} frames)"
+                    showing_save_message = True
+                    save_message_timer = 1  # Keep updating
+                    pygame.event.pump()  # Keep UI responsive
+            
+            # Verify all frames were written
+            print(f"✓ Processed {frames_written} frames (expected {total_frames_video})")
+            if frames_written != total_frames_video:
+                print(f"⚠ Warning: Frame count mismatch! Written: {frames_written}, Expected: {total_frames_video}")
+            
+            # Clean up video writers
+            cap.release()
+            out.release()
+            
+            # Now use ffmpeg to combine video with audio from original
+            save_message_text = "Adding audio to video..."
+            showing_save_message = True
+            save_message_timer = 1
+            pygame.event.pump()
+            
+            # Check if ffmpeg is available
+            try:
+                subprocess.run(['ffmpeg', '-version'], 
+                             capture_output=True, check=True, timeout=5)
+            except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+                # ffmpeg not available, just copy the temp file
+                import shutil
+                shutil.move(temp_video, output_path)
+                save_message_text = f"Video exported (no audio): {os.path.basename(output_path)}"
+                showing_save_message = True
+                save_message_timer = 120
+                print(f"⚠ ffmpeg not found. Video exported without audio: {output_path}")
+                return
+            
+            # Use ffmpeg to combine video with audio
+            # Command: ffmpeg -i temp_video -i original_video -c:v copy -c:a copy -map 0:v:0 -map 1:a:0? output
+            # Note: We use -map 1:a:0? to optionally use audio
+            # We DON'T use -shortest to ensure all video frames are preserved
+            # The video length will determine the output length, audio will be trimmed if longer
+            ffmpeg_cmd = [
+                'ffmpeg',
+                '-y',  # Overwrite output file
+                '-i', temp_video,  # Video input (annotated, no audio) - this has all frames
+                '-i', video_path,  # Original video (for audio)
+                '-c:v', 'copy',  # Copy video codec (no re-encoding) - preserves all frames
+                '-c:a', 'aac',  # Use AAC for audio (better compatibility)
+                '-map', '0:v:0',  # Use video from first input (all frames - this is the master)
+                '-map', '1:a:0?',  # Use audio from second input (if available)
+                # Don't use -shortest - let video determine length (preserves all video frames)
+                # Audio will be trimmed to match video length if needed
+                output_path
+            ]
+            
+            # First, verify the temp video has the correct number of frames
+            # Check frame count of temp video
+            try:
+                check_cmd = [
+                    'ffprobe',
+                    '-v', 'error',
+                    '-select_streams', 'v:0',
+                    '-count_packets',
+                    '-show_entries', 'stream=nb_read_packets',
+                    '-of', 'csv=p=0',
+                    temp_video
+                ]
+                result = subprocess.run(check_cmd, capture_output=True, text=True, timeout=10)
+                if result.returncode == 0:
+                    temp_frame_count = int(result.stdout.strip())
+                    print(f"Temp video has {temp_frame_count} frames (expected {total_frames_video})")
+                    if temp_frame_count != total_frames_video:
+                        print(f"⚠ Warning: Temp video frame count mismatch!")
+            except:
+                pass  # ffprobe not available or failed, continue anyway
+            
+            try:
+                result = subprocess.run(
+                    ffmpeg_cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=300  # 5 minute timeout
+                )
+                
+                if result.returncode == 0:
+                    # Success - remove temp file
+                    try:
+                        os.remove(temp_video)
+                    except:
+                        pass
+                    save_message_text = f"Video exported: {os.path.basename(output_path)}"
+                    showing_save_message = True
+                    save_message_timer = 120
+                    print(f"✓ Video exported successfully with audio to: {output_path}")
+                else:
+                    # ffmpeg failed, but video was created - try without audio
+                    import shutil
+                    if os.path.exists(temp_video):
+                        shutil.move(temp_video, output_path)
+                    save_message_text = f"Video exported (audio copy failed): {os.path.basename(output_path)}"
+                    showing_save_message = True
+                    save_message_timer = 120
+                    print(f"⚠ ffmpeg audio copy failed. Video exported without audio: {output_path}")
+                    print(f"ffmpeg error: {result.stderr}")
+            except subprocess.TimeoutExpired:
+                # Timeout - copy temp file
+                import shutil
+                if os.path.exists(temp_video):
+                    shutil.move(temp_video, output_path)
+                save_message_text = f"Video exported (timeout): {os.path.basename(output_path)}"
+                showing_save_message = True
+                save_message_timer = 120
+                print(f"⚠ ffmpeg timeout. Video exported without audio: {output_path}")
+            except Exception as e:
+                # Error - copy temp file
+                import shutil
+                if os.path.exists(temp_video):
+                    shutil.move(temp_video, output_path)
+                save_message_text = f"Video exported (error): {os.path.basename(output_path)}"
+                showing_save_message = True
+                save_message_timer = 120
+                print(f"⚠ Error adding audio: {e}. Video exported without audio: {output_path}")
+            
+        except Exception as e:
+            save_message_text = f"Error exporting video: {str(e)}"
+            showing_save_message = True
+            save_message_timer = 120
+            print(f"Error exporting video: {e}")
+            import traceback
+            traceback.print_exc()
+        finally:
+            # Clean up temp file if it still exists
+            if temp_video and os.path.exists(temp_video):
+                try:
+                    os.remove(temp_video)
+                except:
+                    pass
+
     def load_tracking_csv():
         """Load YOLO tracking CSV file (all_id_detection.csv format)"""
         nonlocal tracking_data, csv_loaded, save_message_text, showing_save_message, save_message_timer
         
-        # Use Tkinter file dialog (works on all platforms)
-        try:
-            import tkinter as tk
-            from tkinter import filedialog
-            
-            # Block Pygame events while dialog is open
-            pygame.event.set_blocked([
-                pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP, pygame.MOUSEMOTION,
-                pygame.KEYDOWN, pygame.KEYUP
-            ])
-            pygame.event.clear()
-            
-            root = tk.Tk()
-            root.withdraw()
-            root.attributes("-topmost", True)
-            root.update_idletasks()
-            
-            csv_path = filedialog.askopenfilename(
-                title="Select Tracking CSV File",
-                filetypes=[("CSV Files", "*.csv"), ("All Files", "*.*")],
-                initialdir=os.path.dirname(video_path) if video_path else os.path.expanduser("~")
+        # Use platform-specific file dialog to avoid pygame/tkinter conflicts
+        import platform
+        
+        initial_dir = os.path.dirname(video_path) if video_path else os.path.expanduser("~")
+        
+        if platform.system() == "Linux":
+            # Use pygame native dialog on Linux to avoid conflicts
+            csv_path = pygame_file_dialog(
+                initial_dir=initial_dir,
+                file_extensions=[".csv"],
+                restore_size=(window_width, window_height + 80),
             )
-            
-            root.destroy()
-            
-            # Re-enable Pygame events
-            pygame.event.set_allowed([
-                pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP, pygame.MOUSEMOTION,
-                pygame.KEYDOWN, pygame.KEYUP
-            ])
-            pygame.event.clear()
-            
-            if not csv_path:
+        else:
+            # Use Tkinter on Windows/Mac
+            try:
+                import tkinter as tk
+                from tkinter import filedialog
+                
+                # Block Pygame events while dialog is open
+                pygame.event.set_blocked([
+                    pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP, pygame.MOUSEMOTION,
+                    pygame.KEYDOWN, pygame.KEYUP
+                ])
+                pygame.event.clear()
+                
+                root = tk.Tk()
+                root.withdraw()
+                root.attributes("-topmost", True)
+                root.update_idletasks()
+                
+                csv_path = filedialog.askopenfilename(
+                    title="Select Tracking CSV File",
+                    filetypes=[("CSV Files", "*.csv"), ("All Files", "*.*")],
+                    initialdir=initial_dir
+                )
+                
+                root.destroy()
+                
+                # Re-enable Pygame events
+                pygame.event.set_allowed([
+                    pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP, pygame.MOUSEMOTION,
+                    pygame.KEYDOWN, pygame.KEYUP
+                ])
+                pygame.event.clear()
+                
+            except Exception as e:
+                print(f"Error opening file dialog: {e}")
+                save_message_text = f"Error: {e}"
+                showing_save_message = True
+                save_message_timer = 60
                 return
-            
-        except Exception as e:
-            print(f"Error opening file dialog: {e}")
-            save_message_text = f"Error: {e}"
-            showing_save_message = True
-            save_message_timer = 60
+        
+        if not csv_path:
             return
         
         try:
@@ -704,6 +1020,16 @@ def play_video_with_controls(video_path, coordinates=None):
                             y_max_col = "Y_max"
                             conf_col = "Confidence"
                             label_col = "Label"
+                            id_col = "ID"  # Try common ID column names
+                            if "ID" not in df.columns:
+                                if "Tracker_ID" in df.columns:
+                                    id_col = "Tracker_ID"
+                                elif "id" in df.columns:
+                                    id_col = "id"
+                                elif "tracker_id" in df.columns:
+                                    id_col = "tracker_id"
+                                else:
+                                    id_col = None
                             color_r_col = "Color_R"
                             color_g_col = "Color_G"
                             color_b_col = "Color_B"
@@ -715,6 +1041,20 @@ def play_video_with_controls(video_path, coordinates=None):
                             y_max_col = f"Y_max_{suffix}"
                             conf_col = f"Confidence_{suffix}"
                             label_col = f"Label_{suffix}"
+                            # Try to find ID column with suffix
+                            id_col = f"ID_{suffix}"
+                            if id_col not in df.columns:
+                                if f"Tracker_ID_{suffix}" in df.columns:
+                                    id_col = f"Tracker_ID_{suffix}"
+                                elif f"id_{suffix}" in df.columns:
+                                    id_col = f"id_{suffix}"
+                                else:
+                                    # Try to extract ID from suffix itself (e.g., "person_id_01" -> "01")
+                                    id_match = re.search(r'id[_\s]*(\d+)', suffix, re.IGNORECASE)
+                                    if id_match:
+                                        id_col = f"ID_{id_match.group(1)}"  # Use extracted ID
+                                    else:
+                                        id_col = None
                             color_r_col = f"Color_R_{suffix}"
                             color_g_col = f"Color_G_{suffix}"
                             color_b_col = f"Color_B_{suffix}"
@@ -739,6 +1079,23 @@ def play_video_with_controls(video_path, coordinates=None):
                                 
                                 if has_valid_data:
                                     try:
+                                        # Extract ID from column or suffix
+                                        tracker_id = None
+                                        if id_col and id_col in df.columns and pd.notna(row.get(id_col)):
+                                            try:
+                                                tracker_id = int(float(row[id_col]))
+                                            except (ValueError, TypeError):
+                                                pass
+                                        
+                                        # If ID not found in column, try to extract from suffix
+                                        if tracker_id is None and suffix:
+                                            id_match = re.search(r'id[_\s]*(\d+)', suffix, re.IGNORECASE)
+                                            if id_match:
+                                                try:
+                                                    tracker_id = int(id_match.group(1))
+                                                except (ValueError, TypeError):
+                                                    pass
+                                        
                                         box = {
                                             'x1': int(float(x_min_val)),
                                             'y1': int(float(y_min_val)),
@@ -746,6 +1103,7 @@ def play_video_with_controls(video_path, coordinates=None):
                                             'y2': int(float(y_max_val)),
                                             'conf': float(row[conf_col]) if conf_col in df.columns and pd.notna(row.get(conf_col)) else 0.0,
                                             'label': str(row[label_col]) if label_col in df.columns and pd.notna(row.get(label_col)) else "object",
+                                            'id': tracker_id,  # Add tracker ID
                                             'color': (
                                                 int(row[color_r_col]) if color_r_col in df.columns and pd.notna(row.get(color_r_col)) else 0,
                                                 int(row[color_g_col]) if color_g_col in df.columns and pd.notna(row.get(color_g_col)) else 255,
@@ -778,6 +1136,23 @@ def play_video_with_controls(video_path, coordinates=None):
                             # Multi-object format: check if x_min_col exists and has data
                             if x_min_col in df.columns and pd.notna(row.get(x_min_col)):
                                 try:
+                                    # Extract ID from column or suffix
+                                    tracker_id = None
+                                    if id_col and id_col in df.columns and pd.notna(row.get(id_col)):
+                                        try:
+                                            tracker_id = int(float(row[id_col]))
+                                        except (ValueError, TypeError):
+                                            pass
+                                    
+                                    # If ID not found in column, try to extract from suffix
+                                    if tracker_id is None and suffix:
+                                        id_match = re.search(r'id[_\s]*(\d+)', suffix, re.IGNORECASE)
+                                        if id_match:
+                                            try:
+                                                tracker_id = int(id_match.group(1))
+                                            except (ValueError, TypeError):
+                                                pass
+                                    
                                     box = {
                                         'x1': int(float(row[x_min_col])),
                                         'y1': int(float(row[y_min_col])) if y_min_col in df.columns and pd.notna(row.get(y_min_col)) else 0,
@@ -785,6 +1160,7 @@ def play_video_with_controls(video_path, coordinates=None):
                                         'y2': int(float(row[y_max_col])) if y_max_col in df.columns and pd.notna(row.get(y_max_col)) else 0,
                                         'conf': float(row[conf_col]) if conf_col in df.columns and pd.notna(row.get(conf_col)) else 0.0,
                                         'label': str(row[label_col]) if label_col in df.columns and pd.notna(row.get(label_col)) else suffix,
+                                        'id': tracker_id,  # Add tracker ID
                                         'color': (
                                             int(row[color_r_col]) if color_r_col in df.columns and pd.notna(row.get(color_r_col)) else 0,
                                             int(row[color_g_col]) if color_g_col in df.columns and pd.notna(row.get(color_g_col)) else 255,
@@ -904,13 +1280,17 @@ def play_video_with_controls(video_path, coordinates=None):
         seq_button_width = 70
         auto_button_width = 70
         labeling_button_width = 70
+        tracking_csv_button_width = 120
+        export_video_button_width = 100
         total_buttons_width = (
             (button_width * 3)
             + persist_button_width
             + seq_button_width
             + auto_button_width
             + labeling_button_width
-            + (button_gap * 6)
+            + tracking_csv_button_width
+            + export_video_button_width
+            + (button_gap * 8)
         )
         cluster_x = (window_width - total_buttons_width) // 2
         cluster_y = slider_y - button_height - 5
@@ -1020,11 +1400,11 @@ def play_video_with_controls(video_path, coordinates=None):
             labeling_text, labeling_text.get_rect(center=labeling_button_rect.center)
         )
 
-        # Add Load Tracking CSV button (below the main button cluster)
+        # Add Load Tracking CSV button (to the right of Labeling button)
         tracking_csv_button_width = 120
         tracking_csv_button_rect = pygame.Rect(
-            cluster_x,
-            cluster_y + button_height + button_gap,
+            labeling_button_rect.right + button_gap,
+            cluster_y,
             tracking_csv_button_width,
             button_height,
         )
@@ -1050,6 +1430,20 @@ def play_video_with_controls(video_path, coordinates=None):
             pygame.draw.rect(control_surface, (60, 60, 60), show_tracking_indicator_rect)
             pygame.draw.rect(control_surface, (150, 150, 150), show_tracking_indicator_rect, 1)
 
+        # Add Export Video button (to the right of tracking indicator)
+        export_video_button_rect = pygame.Rect(
+            show_tracking_indicator_rect.right + button_gap + 5,
+            cluster_y,
+            export_video_button_width,
+            button_height,
+        )
+        export_video_color = (200, 100, 50)  # Orange color
+        pygame.draw.rect(control_surface, export_video_color, export_video_button_rect)
+        export_video_text = font.render("Export Video", True, (255, 255, 255))
+        control_surface.blit(
+            export_video_text, export_video_text.get_rect(center=export_video_button_rect.center)
+        )
+
         # Display current class label when in labeling mode
         if labeling_mode:
             class_info = font.render(f"Class: {current_label}", True, (255, 255, 0))
@@ -1072,6 +1466,7 @@ def play_video_with_controls(video_path, coordinates=None):
             labeling_button_rect,  # Add labeling button to return
             tracking_csv_button_rect,  # Add tracking CSV button to return
             show_tracking_indicator_rect,  # Add tracking indicator to return
+            export_video_button_rect,  # Add export video button to return
             slider_margin_left,
             slider_y,
             slider_width,
@@ -1821,14 +2216,25 @@ def play_video_with_controls(video_path, coordinates=None):
         # On Linux, use pygame dialog; on Windows/Mac, use tkinter with directory option
         import platform
         
+        initial_dir = os.path.dirname(video_path) if video_path else os.path.expanduser("~")
         input_path = None
         
         if platform.system() == "Linux":
-            # Use pygame dialog - user can type path manually
-            # Show a simple input dialog
-            input_path = show_input_dialog("Enter CSV file path or YOLO dataset folder path:", "")
+            # Use pygame dialog on Linux - first try CSV file dialog, then allow manual path entry
+            # Try CSV file dialog first
+            csv_path = pygame_file_dialog(
+                initial_dir=initial_dir,
+                file_extensions=[".csv"],
+                restore_size=(window_width, window_height + 80),
+            )
+            
+            if csv_path:
+                input_path = csv_path
+            else:
+                # If cancelled, try input dialog for directory path
+                input_path = show_input_dialog("Enter CSV file path or YOLO dataset folder path:", "")
         else:
-            # Use tkinter with both file and directory options
+            # Use tkinter with both file and directory options on Windows/Mac
             from tkinter import Tk, filedialog
             
             pygame.event.set_blocked([
@@ -1858,13 +2264,13 @@ def play_video_with_controls(video_path, coordinates=None):
                     input_path = filedialog.askopenfilename(
                         title="Select CSV File",
                         filetypes=[("CSV Files", "*.csv"), ("All Files", "*.*")],
-                        initialdir=os.path.dirname(video_path) if video_path else os.path.expanduser("~")
+                        initialdir=initial_dir
                     )
                 elif choice is False:
                     # YOLO dataset folder
                     input_path = filedialog.askdirectory(
                         title="Select YOLO Dataset Folder",
-                        initialdir=os.path.dirname(video_path) if video_path else os.path.expanduser("~")
+                        initialdir=initial_dir
                     )
                 else:
                     # Cancelled
@@ -2214,26 +2620,31 @@ def play_video_with_controls(video_path, coordinates=None):
                         pygame.draw.rect(screen, box_color, 
                                        (screen_x1, screen_y1, screen_x2 - screen_x1, screen_y2 - screen_y1), 2)
                         
-                        # Draw label text above the box
-                        label_text = box.get('label', '')
+                        # Build complete label text: "Label:person id:1 conf:0.85"
+                        label = box.get('label', 'object')
+                        tracker_id = box.get('id')
+                        conf = box.get('conf', 0)
+                        
+                        # Build text string
+                        label_parts = [f"Label:{label}"]
+                        if tracker_id is not None:
+                            label_parts.append(f"id:{tracker_id}")
+                        if conf > 0:
+                            label_parts.append(f"conf:{conf:.2f}")
+                        
+                        label_text = " ".join(label_parts)
+                        
+                        # Draw complete label text above the box
                         if label_text:
                             # Create text surface with background for readability
                             text_surface = font.render(label_text, True, (255, 255, 255))
                             text_bg = pygame.Surface((text_surface.get_width() + 4, text_surface.get_height() + 2))
                             text_bg.fill(box_color)
                             text_bg.set_alpha(200)
-                            screen.blit(text_bg, (screen_x1, screen_y1 - text_surface.get_height() - 2))
-                            screen.blit(text_surface, (screen_x1 + 2, screen_y1 - text_surface.get_height() - 1))
-                        
-                        # Draw confidence if available
-                        conf = box.get('conf', 0)
-                        if conf > 0:
-                            conf_text = font.render(f"{conf:.2f}", True, (255, 255, 255))
-                            conf_bg = pygame.Surface((conf_text.get_width() + 4, conf_text.get_height() + 2))
-                            conf_bg.fill((0, 0, 0))
-                            conf_bg.set_alpha(180)
-                            screen.blit(conf_bg, (screen_x2 - conf_text.get_width() - 4, screen_y1))
-                            screen.blit(conf_text, (screen_x2 - conf_text.get_width() - 2, screen_y1 + 1))
+                            # Position above the box
+                            text_y = screen_y1 - text_surface.get_height() - 2
+                            screen.blit(text_bg, (screen_x1, text_y))
+                            screen.blit(text_surface, (screen_x1 + 2, text_y + 1))
 
         # Draw bounding boxes when in labeling mode
         if labeling_mode:
@@ -2263,6 +2674,7 @@ def play_video_with_controls(video_path, coordinates=None):
             labeling_button_rect,  # Add labeling button to return
             tracking_csv_button_rect,  # Add tracking CSV button to return
             show_tracking_indicator_rect,  # Add tracking indicator to return
+            export_video_button_rect,  # Add export video button to return
             slider_x,
             slider_y,
             slider_width,
@@ -2741,6 +3153,9 @@ def play_video_with_controls(video_path, coordinates=None):
                         save_message_text = f"Tracking display {'enabled' if show_tracking else 'disabled'}"
                         showing_save_message = True
                         save_message_timer = 60
+                    elif export_video_button_rect.collidepoint(x, rel_y):
+                        # Export video with annotations
+                        export_video_with_annotations()
                     elif slider_y <= rel_y <= slider_y + slider_height:
                         dragging_slider = True
                         rel_x = x - slider_x
