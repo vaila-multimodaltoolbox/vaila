@@ -1,24 +1,17 @@
 """
 ================================================================================
-File Manager - Comprehensive File and Directory Management Tool
+Project: vailá Multimodal Toolbox
+Script: filemanager.py - File Manager
 ================================================================================
-Author: Prof. Dr. Paulo R. P. Santiago
-Date: 2024-08-29
-Version: 1.3
+Author: Paulo Roberto Pereira Santiago
+Email: paulosantiago@usp.br
+GitHub: https://github.com/vaila-multimodaltoolbox/vaila
+Creation Date: 29 July 2024
+Update Date: 08 January 2026
+Version: 0.1.1
 
-verview:
-
-This Python script is designed to manage files and directories through a graphical user interface (GUI) using Tkinter. It supports various operations such as copying, moving, removing, and converting files, along with advanced features like pattern matching and batch processing. The tool is particularly useful for organizing large datasets and automating repetitive file operations.
-Main Features:
-
-    File Import:
-        Imports specific file types from selected directories into a predefined structure.
-        Supports multiple file types like .csv, .mat, .tsv, .html, .xml, .xlsx, etc.
-        Helps standardize file organization by importing various data formats.
-
-    File Conversion:
-        Converts files from diverse formats (e.g., .c3d, .yaml, .xml, .html, .h5) into the CSV format.
-        Useful for preprocessing data from different sources for uniform analysis.
+Description:
+This script is designed to manage files and directories through a graphical user interface (GUI) using Tkinter. It supports various operations such as copying, moving, removing, and converting files, along with advanced features like pattern matching and batch processing. The tool is particularly useful for organizing large datasets and automating repetitive file operations.
 
     File Export:
         Exports files to formats such as CSV, FBX, and TRC.
@@ -32,64 +25,28 @@ Main Features:
         Removes files matching specific extensions or directories.
         Safeguards critical system files from accidental deletion by recognizing forbidden patterns and offering multiple user confirmations.
 
-    File Search:
-        Searches for files or directories based on user-defined patterns.
-        Tracks and counts files matching specific extensions, ensuring efficient file retrieval.
+Changelog for Version 0.1.1:
 
-    Batch Processing:
-        Automates batch processing of files, such as splitting CSV files by device using a VICON Nexus module.
-        Significantly reduces manual intervention when processing multiple files.
+    Added support for file export to CSV, FBX, and TRC formats.
+    Added support for file copy/move based on file extensions and pattern matching.
+    Added support for file removal based on file extensions or directory names.
+    Added support for file tree generation.
+    Added support for file find based on file name pattern and extension.
+    Added support for file transfer using SSH.
+    Added support for file import from CSV, FBX, and TRC formats.
+    Added support for file rename based on file name pattern.
+    Added support for file tree generation.
+    Added support for file find based on file name pattern and extension.
+    Added support for file transfer using SSH.
+    Added support for file import from CSV, FBX, and TRC formats.
+    Added support for file rename based on file name pattern.
+    Added support for file tree generation.
+    Added support for file find based on file name pattern and extension.
 
-Functionality of Key Methods:
-
-    copy_file():
-    Prompts the user to select a source directory and file extension, then copies files that match the extension and user-defined patterns into a new directory (vaila_copy). It creates unique subdirectories based on patterns and timestamps to organize the copied files.
-
-    process_copy():
-    Handles the actual file copying process, walking through the source directory to find files matching both the extension and the patterns. Files are copied into subdirectories created in the destination directory.
-
-    export_file():
-    Facilitates the manual selection of a source file and destination directory. The selected file is copied to the destination, ensuring a simple export process for single files.
-
-    move_file():
-    Similar to copy_file(), but it moves files matching specific patterns from a source to a destination directory. The files are organized into subdirectories within vaila_move to keep track of moved files.
-
-    process_move():
-    Manages the movement of files based on patterns, ensuring files are moved to an organized structure in the destination directory. The function is useful for relocating large batches of files according to predefined criteria.
-
-    remove_file():
-    Deletes files or directories based on extension, directory name, or filename pattern. The function incorporates safeguards to avoid the accidental removal of critical system files by confirming patterns and offering multiple user confirmations.
-
-    import_file():
-    Provides a GUI for users to select the type of data import (e.g., .tsv, .mat, .csv). This method integrates various data import functions, allowing for seamless batch processing and data import from different biomechanical data formats.
-
-    rename_files():
-    Allows users to rename files in bulk by replacing specific text patterns in filenames. This method is especially useful when standardizing filenames across large datasets.
-
-    tree_file():
-    Generates a tree structure of files in the source directory, matching a specific file extension. This is helpful for generating reports or summaries of directory contents.
-
-    find_file():
-    Searches the source directory for files matching a pattern and extension. Results are saved to a text file, which includes the count and total size of matched files. This method is useful for quickly locating specific files in large datasets.
-
-    transfer_file():
-    Handles file transfer between a local machine and a remote server using SSH. Users can either upload or download files, making this method useful for syncing files across remote environments.
-
-Usage Notes:
-
-    The GUI simplifies file selection and management. Files can be easily imported, converted, and exported, reducing the need for command-line operations.
-    Several directories (e.g., vaila_export, vaila_copy, vaila_move, vaila_import) are created automatically to ensure organized file management.
-
-Changelog for Version 1.2:
-
-    Batch processing for VICON Nexus CSV files added.
-    Import options expanded to include .html, .xml, and .xlsx formats.
-    Improved file copy/move functionality using pattern matching.
-    File removal functionality updated with safeguards against critical file deletion.
+    Initial release of the filemanager.py script.
 
 License:
-
-This script is distributed under the GPL3 License
+This script is distributed under the AGPL3 License
 ================================================================================
 """
 
@@ -109,6 +66,7 @@ def copy_file():
     # Print the directory and name of the script being executed
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    print("[Action] Copy files")
 
     # Prompt the user to select the main path directory for recursive search
     src_directory = filedialog.askdirectory(title="Select Source Directory")
@@ -122,9 +80,9 @@ def copy_file():
     file_extension = simpledialog.askstring(
         "File Extension", "Enter the file extension to copy (e.g., .csv, .mp4):"
     )
+    # Allow blank to mean "all extensions"
     if not file_extension:
-        messagebox.showerror("Error", "No file extension provided.")
-        return
+        file_extension = None
 
     # Create a new window for pattern entry
     pattern_window = tk.Tk()
@@ -138,7 +96,7 @@ def copy_file():
     pattern_text.pack()
 
     def on_submit():
-        patterns = pattern_text.get("1.0", "end").strip().splitlines()
+        patterns = [p for p in pattern_text.get("1.0", "end").strip().splitlines() if p.strip() != ""]
         pattern_window.destroy()
         process_copy(src_directory, file_extension, patterns)
 
@@ -149,6 +107,15 @@ def copy_file():
 
 
 def process_copy(src_directory, file_extension, patterns):
+    print(f"[Action] Copy processing | src={src_directory} | ext={file_extension or 'ALL'} | patterns={patterns or ['ALL']}")
+
+    # If no patterns provided, match all
+    if not patterns:
+        patterns = [""]
+
+    # Allow copying all extensions when None
+    ext_filter = file_extension
+
     # Prompt the user to select the destination directory where the new directories will be created
     base_dest_directory = filedialog.askdirectory(title="Select Destination Directory")
     if not base_dest_directory:
@@ -159,33 +126,51 @@ def process_copy(src_directory, file_extension, patterns):
     base_dest_directory = os.path.join(base_dest_directory, "vaila_copy")
     os.makedirs(base_dest_directory, exist_ok=True)
 
+    def matches(file_name: str, pattern: str) -> bool:
+        if ext_filter and not file_name.endswith(ext_filter):
+            return False
+        if pattern and pattern not in file_name:
+            return False
+        return True
+
+    copied = 0
+    errors = []
     try:
         for file_pattern in patterns:
-            # Generate a timestamp to create a unique directory name for each pattern
+            pattern_label = file_pattern.strip("_") or "all"
             timestamp = time.strftime("%Y%m%d%H%M%S")
             copy_directory = os.path.join(
                 base_dest_directory,
-                f"vaila_copy_{file_pattern.strip('_')}_{timestamp}",
+                f"vaila_copy_{pattern_label}_{timestamp}",
             )
-            os.makedirs(copy_directory, exist_ok=True)  # Create the export directory
+            os.makedirs(copy_directory, exist_ok=True)
 
-            # Walk through the source directory and copy matching files to the new directory structure
             for root, dirs, files in os.walk(src_directory):
                 for file in files:
-                    # Check if the file matches the specified extension and pattern
-                    if file.endswith(file_extension) and file_pattern in file:
-                        # Copy the file to the appropriate subdirectory
+                    if matches(file, file_pattern):
                         src_path = os.path.join(root, file)
                         dest_path = os.path.join(copy_directory, file)
-                        shutil.copy2(src_path, dest_path)
 
-        # Show a success message after the operation is complete
-        messagebox.showinfo(
-            "Success",
-            f"Files matching the specified patterns and extension {file_extension} have been copy successfully.",
-        )
+                        # handle collisions by suffixing
+                        counter = 1
+                        base_name, ext = os.path.splitext(file)
+                        while os.path.exists(dest_path):
+                            dest_path = os.path.join(
+                                copy_directory, f"{base_name}_{counter}{ext}"
+                            )
+                            counter += 1
+                        try:
+                            shutil.copy2(src_path, dest_path)
+                            copied += 1
+                            print(f"[Copied] {src_path} -> {dest_path}")
+                        except Exception as e:
+                            errors.append(f"{src_path}: {e}")
+
+        msg = f"Copied files: {copied}"
+        if errors:
+            msg += f"\nErrors: {len(errors)} (see console)"
+        messagebox.showinfo("Success", msg)
     except Exception as e:
-        # Show an error message if something goes wrong
         messagebox.showerror("Error", f"Error copying files: {e}")
 
 
@@ -215,6 +200,7 @@ def move_file():
     # Print the directory and name of the script being executed
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    print("[Action] Move files")
 
     # Prompt the user to select the main path directory for recursive search
     src_directory = filedialog.askdirectory(title="Select Source Directory")
@@ -258,6 +244,7 @@ def process_move(src_directory, file_extension, patterns):
     # Print the directory and name of the script being executed
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    print(f"[Action] Move processing | src={src_directory} | ext={file_extension} | patterns={patterns}")
 
     # Prompt the user to select the destination directory where the new directories will be created
     base_dest_directory = filedialog.askdirectory(title="Select Destination Directory")
@@ -303,6 +290,7 @@ def remove_file():
     # Print the directory and name of the script being executed
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    print("[Action] Remove files")
 
     # List of dangerous patterns and system files to protect
     forbidden_patterns = ["*", ".", "/", "\\"]
@@ -411,6 +399,7 @@ def import_file():
     # Print the directory and name of the script being executed
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    print("[Action] Import/Export menu")
 
     """
     Create a GUI with multiple buttons, each calling an external script or function.
@@ -519,6 +508,7 @@ def rename_files():
     # Print the directory and name of the script being executed
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    print("[Action] Rename files")
 
     # Prompt the user to select the directory containing the files to rename
     directory = filedialog.askdirectory(title="Select Directory with Files to Rename")
@@ -617,6 +607,7 @@ def normalize_names():
     # Print header info consistent with other functions
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    print("[Action] Normalize names")
 
     # Prompt user for directory
     directory = filedialog.askdirectory(title="Select Directory to Normalize (Files & Folders)")
@@ -694,6 +685,7 @@ def tree_file():
     # Print the directory and name of the script being executed
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    print("[Action] Tree file")
 
     # Prompt the user to select the main path directory for recursive search
     src_directory = filedialog.askdirectory(title="Select Source Directory")
@@ -745,6 +737,7 @@ def find_file():
     # Print the directory and name of the script being executed
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    print("[Action] Find file")
 
     # Prompt the user to select the main path directory for recursive search
     src_directory = filedialog.askdirectory(title="Select Source Directory")
@@ -852,6 +845,7 @@ def transfer_file():
     print("Run def transfer_file")
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    print("[Action] Transfer file")
 
     try:
         # Get the directory where the current script is located

@@ -94,6 +94,7 @@ All buttons in the vailá GUI (`vaila.py`) are documented in **[docs/vaila_butto
 - **[Video Tools](modules/tools/video-tools.md)**: Video manipulation and processing
 - **[Video Compression](modules/tools/video-compression.md)**: Multi-format video compression
 - **cutvideo (interactive cutting):** [Help HTML](../vaila/help/tools/cutvideo.html) | [Help MD](../vaila/help/tools/cutvideo.md)
+- **filemanager (GUI file ops):** [Help HTML](../vaila/help/tools/filemanager.html) | [Help MD](../vaila/help/tools/filemanager.md)
 
 #### **Visualization Tools**
 
