@@ -126,6 +126,7 @@ All buttons in the vailá GUI (`vaila.py`) are documented in **[docs/vaila_butto
 ### 📖 Script Help Documentation
 
 - **[Script Help Index](../vaila/help/index.html)**: Complete documentation for all Python modules and scripts in vailá
+- **[Sprint Analysis Help](../vaila/help/vailasprint_help.md)**: User guide for 20m sprint performance analysis
 
 ---
 
