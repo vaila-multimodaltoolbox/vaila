@@ -1,25 +1,30 @@
 """
+Project: vaila Multimodal Toolbox
 Script: markerless_2D_analysis_v2.py
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation: 29 July 2024
-Update: 10 November 2025
-Version: 0.0.2
+Update: 09 January 2026
+Version: 0.1.0
 
 Description:
 This script performs batch processing of videos for 2D pose estimation using
-MediaPipe's Pose model. It processes videos from a specified input directory,
+MediaPipe's Pose model (Tasks API 0.10.31+) with optional YOLOv11 integration for
+enhanced person detection. It processes videos from a specified input directory,
 overlays pose landmarks on each video frame, and exports both normalized and
-pixel-based landmark coordinates to CSV files. The script also generates a
-video with the landmarks overlaid on the original frames.
+pixel-based landmark coordinates to CSV files.
 
-The user can configure key MediaPipe parameters via a graphical interface,
-including detection confidence, tracking confidence, model complexity, and
-whether to enable segmentation and smooth segmentation. The default settings
-prioritize the highest detection accuracy and tracking precision, which may
-increase computational cost.
+The user can configure key parameters via a graphical interface:
+- MediaPipe: detection/tracking confidence, model complexity, segmentation
+- YOLO: model selection (yolo11n to yolo11x), confidence threshold
+- Modes: YOLO-only, YOLO+MediaPipe, or MediaPipe-only
+
+New Features (v0.1.0):
+- Updated to use MediaPipe Tasks API (0.10.31+) instead of deprecated mp.solutions
+- Manual OpenCV drawing for landmarks (compatible with new MediaPipe version)
+- Automatic model download for both MediaPipe and YOLO models
 
 Usage example:
 First activate the vaila environment:
@@ -29,27 +34,24 @@ python markerless2d_analysis_v2.py
 
 Requirements:
 - Python 3.12.12
-- OpenCV (`pip install opencv-python`)
-- MediaPipe (`pip install mediapipe`)
-- Ultralytics (`pip install ultralytics`)
+- OpenCV (pip install opencv-python)
+- MediaPipe (pip install mediapipe>=0.10.31)
+- Ultralytics (pip install ultralytics)
 - Tkinter (usually included with Python installations)
-- Pillow (if using image manipulation: `pip install Pillow`)
-- Pandas (for coordinate conversion: `pip install pandas`)
-- psutil (pip install psutil) - for memory monitoring
+- PyTorch (for GPU acceleration)
 
 Output:
 The following files are generated for each processed video:
-1. Processed Video (`*_mp.mp4`):
+1. Processed Video (*_mp.mp4):
    The video with the 2D pose landmarks overlaid on the original frames.
-2. Normalized Landmark CSV (`*_mp_norm.csv`):
+2. Normalized Landmark CSV (*_mp_norm.csv):
    A CSV file containing the landmark coordinates normalized to a scale between 0 and 1
    for each frame. These coordinates represent the relative positions of landmarks in the video.
-3. Pixel Landmark CSV (`*_mp_pixel.csv`):
+3. Pixel Landmark CSV (*_mp_pixel.csv):
    A CSV file containing the landmark coordinates in pixel format. The x and y coordinates
    are scaled to the video's resolution, representing the exact pixel positions of the landmarks.
-4. Log File (`log_info.txt`):
-   A log file containing video metadata and processing information. This includes the hardware configuration,
-   video information, MediaPipe configuration, and any frames with missing data.
+4. Log File (log_info.txt):
+   A log file containing video metadata and processing information.
 
 License:
     This project is licensed under the terms of AGPLv3.0.
@@ -79,8 +81,21 @@ import cv2
 import mediapipe as mp
 import numpy as np
 import torch
-from mediapipe.framework.formats import landmark_pb2
+import urllib.request
 from ultralytics import YOLO
+
+# --- NEW IMPORTS FOR THE TASKS API (MediaPipe 0.10.31+) ---
+from mediapipe.tasks import python
+from mediapipe.tasks.python import vision
+
+# MANUAL DEFINITION OF THE BODY CONNECTIONS (since mp.solutions was removed)
+POSE_CONNECTIONS = frozenset([
+    (0, 1), (1, 2), (2, 3), (3, 7), (0, 4), (4, 5), (5, 6), (6, 8), (9, 10),
+    (11, 12), (11, 13), (13, 15), (15, 17), (15, 19), (15, 21), (17, 19),
+    (12, 14), (14, 16), (16, 18), (16, 20), (16, 22), (18, 20), (11, 23),
+    (12, 24), (23, 24), (23, 25), (24, 26), (25, 27), (26, 28), (27, 29),
+    (28, 30), (29, 31), (30, 32), (27, 31), (28, 32)
+])
 
 
 def get_hardware_info():
@@ -274,17 +289,86 @@ class ConfidenceInputDialog(simpledialog.Dialog):
 
 
 def get_pose_config(existing_root=None):
+    """Get pose configuration from user via dialog"""
     if existing_root is not None:
         root = existing_root
     else:
         root = tk.Tk()
         root.withdraw()
-    dialog = ConfidenceInputDialog(root, title="Pose Configuration")
-    if dialog.result:
-        return dialog.result
-    else:
-        messagebox.showerror("Error", "No values entered.")
+        try:
+            root.attributes("-topmost", True)
+        except Exception:
+            pass
+    
+    # Prepare root for dialog (for all platforms, but especially for Windows)
+    try:
+        # Ensure root is ready for dialogs on all platforms
+        root.deiconify()
+        root.update_idletasks()
+        root.lift()
+        root.focus_force()
+        root.geometry("1x1+100+100")
+        root.update_idletasks()
+        # Small delay to ensure window is ready (especially on Windows)
+        root.after(100, lambda: None)
+        root.update()
+        print("Root window prepared for dialog.")
+    except Exception as e:
+        print(f"Warning: Could not prepare root for dialog: {e}")
+    
+    try:
+        print("Creating pose configuration dialog...")
+        # Ensure root is active before creating dialog
+        root.update_idletasks()
+        root.update()
+        # Make sure root is on top and focused
+        try:
+            root.lift()
+            root.focus_force()
+            root.attributes("-topmost", True)
+            root.update()
+            # Remove topmost after a moment so dialog can be used
+            root.after(100, lambda: root.attributes("-topmost", False))
+        except Exception:
+            pass
+        
+        dialog = ConfidenceInputDialog(root, title="Pose Configuration")
+        print("Dialog created, checking result...")
+        
+        # Update root after dialog closes
+        root.update_idletasks()
+        root.update()
+        
+        if hasattr(dialog, 'result') and dialog.result:
+            print("Configuration accepted.")
+            return dialog.result
+        else:
+            print("Configuration cancelled or no values entered.")
+            if existing_root is None:
+                # Only show error if we're not part of a larger app
+                messagebox.showerror("Error", "Configuration cancelled or no values entered.")
+            return None
+    except KeyboardInterrupt:
+        print("\nConfiguration cancelled by user (Ctrl+C).")
         return None
+    except Exception as e:
+        print(f"Error in pose configuration dialog: {e}")
+        import traceback
+        traceback.print_exc()
+        if existing_root is None:
+            try:
+                messagebox.showerror("Error", f"Failed to open configuration dialog: {e}")
+            except Exception:
+                print(f"Could not show error dialog: {e}")
+        return None
+    finally:
+        # Clean up root if we created it (just hide, don't quit)
+        # On Windows, keep root visible for subsequent dialogs if needed
+        if existing_root is None and platform.system() != "Windows":
+            try:
+                root.withdraw()
+            except Exception:
+                pass
 
 
 def download_yolo_model(model_name):
@@ -430,6 +514,39 @@ def download_yolo_model(model_name):
         print(f"Could not find model {model_name} locally or download it.")
         print("Please manually download the model and place it in the models directory.")
         return None
+
+
+def get_mediapipe_model_path(complexity):
+    """Download the correct MediaPipe Tasks model based on complexity (0=Lite, 1=Full, 2=Heavy)"""
+    # Use vaila/models directory for storing models
+    models_dir = Path(__file__).parent / "models"
+    models_dir.mkdir(exist_ok=True)
+    
+    models = {
+        0: "pose_landmarker_lite.task",
+        1: "pose_landmarker_full.task",
+        2: "pose_landmarker_heavy.task"
+    }
+    model_name = models.get(complexity, "pose_landmarker_full.task")
+    model_path = models_dir / model_name
+    
+    if not model_path.exists():
+        print(f"Downloading MediaPipe Tasks model ({model_name})... please wait.")
+        print(f"Download location: {model_path}")
+        # Correct URLs for the models
+        model_urls = {
+            0: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
+            1: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task",
+            2: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_heavy/float16/1/pose_landmarker_heavy.task"
+        }
+        url = model_urls.get(complexity, model_urls[1])
+        try:
+            urllib.request.urlretrieve(url, str(model_path))
+            print("Download completed!")
+        except Exception as e:
+            print(f"Error downloading model: {e}")
+            raise RuntimeError("Failed to download MediaPipe model.")
+    return str(model_path.resolve())
 
 
 def download_or_load_yolo_model(model_name=None):
@@ -682,9 +799,22 @@ def process_frame_with_yolo_pose_only(frame, yolo_model, conf_threshold=0.5, fra
     return landmarks_norm, landmarks_px
 
 
-def process_frame_with_mediapipe(frame, pose, yolo_model=None, yolo_conf=0.4, use_yolo=True):
+def process_frame_with_mediapipe_tasks(frame, landmarker, timestamp_ms, yolo_model=None, yolo_conf=0.4, use_yolo=True):
     """
-    Processa um frame completo com MediaPipe, opcionalmente usando YOLO para melhorar a detecção
+    Process a frame with MediaPipe Tasks API, optionally using YOLO for better detection.
+    
+    Args:
+        frame: Input frame (BGR format)
+        landmarker: MediaPipe PoseLandmarker object
+        timestamp_ms: Timestamp in milliseconds for video mode
+        yolo_model: YOLO model for person detection
+        yolo_conf: YOLO confidence threshold
+        use_yolo: Whether to use YOLO for person detection
+    
+    Returns:
+        landmarks_norm: Normalized landmarks (0-1)
+        landmarks_px: Pixel landmarks
+        best_person_bbox: Bounding box if YOLO was used
     """
     height, width = frame.shape[:2]
 
@@ -704,12 +834,18 @@ def process_frame_with_mediapipe(frame, pose, yolo_model=None, yolo_conf=0.4, us
             )
             best_person_bbox = persons[0]["bbox"]
 
-    # Process with MediaPipe on the full frame
+    # Process with MediaPipe Tasks API
     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    results = pose.process(rgb_frame)
+    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
+    
+    # Detect pose using Tasks API
+    pose_landmarker_result = landmarker.detect_for_video(mp_image, timestamp_ms)
 
-    if not results.pose_landmarks:
+    if not pose_landmarker_result.pose_landmarks or len(pose_landmarker_result.pose_landmarks) == 0:
         return None, None, best_person_bbox
+
+    # Get the first pose detected
+    raw_landmarks = pose_landmarker_result.pose_landmarks[0]
 
     # If we have a YOLO bbox, check if the landmarks are inside it
     if best_person_bbox and use_yolo:
@@ -719,23 +855,23 @@ def process_frame_with_mediapipe(frame, pose, yolo_model=None, yolo_conf=0.4, us
         inside_count = 0
         total_visible = 0
 
-        for landmark in results.pose_landmarks.landmark:
-            if landmark.visibility > 0.5:
-                total_visible += 1
-                lm_x = landmark.x * width
-                lm_y = landmark.y * height
+        for landmark in raw_landmarks:
+            # Tasks API doesn't have visibility, use presence instead
+            total_visible += 1
+            lm_x = landmark.x * width
+            lm_y = landmark.y * height
 
-                # Add 10% margin to the bbox
-                margin = 0.1
-                bbox_w = x2 - x1
-                bbox_h = y2 - y1
-                x1_margin = x1 - bbox_w * margin
-                y1_margin = y1 - bbox_h * margin
-                x2_margin = x2 + bbox_w * margin
-                y2_margin = y2 + bbox_h * margin
+            # Add 10% margin to the bbox
+            margin = 0.1
+            bbox_w = x2 - x1
+            bbox_h = y2 - y1
+            x1_margin = x1 - bbox_w * margin
+            y1_margin = y1 - bbox_h * margin
+            x2_margin = x2 + bbox_w * margin
+            y2_margin = y2 + bbox_h * margin
 
-                if x1_margin <= lm_x <= x2_margin and y1_margin <= lm_y <= y2_margin:
-                    inside_count += 1
+            if x1_margin <= lm_x <= x2_margin and y1_margin <= lm_y <= y2_margin:
+                inside_count += 1
 
         # If less than 50% of the visible landmarks are inside the bbox, ignore
         if total_visible > 0 and inside_count / total_visible < 0.5:
@@ -745,8 +881,9 @@ def process_frame_with_mediapipe(frame, pose, yolo_model=None, yolo_conf=0.4, us
     landmarks_norm = []
     landmarks_px = []
 
-    for landmark in results.pose_landmarks.landmark:
-        visibility = landmark.visibility if hasattr(landmark, "visibility") else 1.0
+    for landmark in raw_landmarks:
+        # Tasks API landmarks have x, y, z but no visibility (use 1.0 as default)
+        visibility = 1.0
         landmarks_norm.append([landmark.x, landmark.y, landmark.z, visibility])
         landmarks_px.append(
             [int(landmark.x * width), int(landmark.y * height), landmark.z, visibility]
@@ -919,7 +1056,7 @@ def apply_savgol_filter(landmarks_history, current_landmarks, window_length=5):
 
 
 def process_video(video_path, output_dir, pose_config, yolo_model=None):
-    """Process a video file with optimized YOLO + MediaPipe pipeline"""
+    """Process a video file with optimized YOLO + MediaPipe Tasks API pipeline"""
     print(f"Processing video: {video_path}")
     start_time = time.time()
 
@@ -929,10 +1066,12 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
         print(f"Failed to open video: {video_path}")
         return
 
-    # Get
+    # Get video properties
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = cap.get(cv2.CAP_PROP_FPS)
+    if fps <= 0 or np.isnan(fps):
+        fps = 30.0  # Default FPS
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
     # Configure output paths
@@ -941,16 +1080,26 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
     output_file_path = output_dir / f"{video_path.stem}_mp_norm.csv"
     output_pixel_file_path = output_dir / f"{video_path.stem}_mp_pixel.csv"
 
-    # Initialize MediaPipe
-    pose = mp.solutions.pose.Pose(
-        static_image_mode=pose_config["static_image_mode"],
-        min_detection_confidence=pose_config["min_detection_confidence"],
-        min_tracking_confidence=pose_config["min_tracking_confidence"],
-        model_complexity=pose_config["model_complexity"],
-        enable_segmentation=pose_config["enable_segmentation"],
-        smooth_segmentation=pose_config["smooth_segmentation"],
-        smooth_landmarks=True,
+    # Initialize MediaPipe Tasks API
+    model_path = get_mediapipe_model_path(pose_config["model_complexity"])
+    
+    BaseOptions = mp.tasks.BaseOptions
+    PoseLandmarker = mp.tasks.vision.PoseLandmarker
+    PoseLandmarkerOptions = mp.tasks.vision.PoseLandmarkerOptions
+    VisionRunningMode = mp.tasks.vision.RunningMode
+
+    # Create options for PoseLandmarker
+    options = PoseLandmarkerOptions(
+        base_options=BaseOptions(model_asset_path=model_path),
+        running_mode=VisionRunningMode.VIDEO,
+        num_poses=1,
+        min_pose_detection_confidence=pose_config["min_detection_confidence"],
+        min_pose_presence_confidence=pose_config["min_tracking_confidence"],
+        output_segmentation_masks=pose_config["enable_segmentation"]
     )
+    
+    # Create the PoseLandmarker
+    landmarker = PoseLandmarker.create_from_options(options)
 
     # History for temporal filtering
     landmarks_history = []
@@ -994,6 +1143,9 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
         if not success:
             break
 
+        # Calculate timestamp for Tasks API (must be monotonically increasing)
+        timestamp_ms = int((frame_count * 1000) / fps) if fps > 0 else frame_count * 33
+
         # Show progress every 10 frames with more detail
         if frame_count % 10 == 0:
             progress = (frame_count / total_frames) * 100
@@ -1033,10 +1185,11 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
                 landmarks_norm = None
                 landmarks_px = None
         else:
-            # Use MediaPipe (with or without YOLO for detection)
-            landmarks_norm, landmarks_px, bbox = process_frame_with_mediapipe(
+            # Use MediaPipe Tasks API (with or without YOLO for detection)
+            landmarks_norm, landmarks_px, bbox = process_frame_with_mediapipe_tasks(
                 frame,
-                pose,
+                landmarker,
+                timestamp_ms,
                 yolo_model,
                 pose_config["yolo_conf"],
                 pose_config["use_yolo"] and yolo_mode == "yolo_mediapipe",
@@ -1112,8 +1265,9 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
 
     # Close capture
     cap.release()
-    if pose is not None:
-        pose.close()
+    # Close the landmarker
+    if landmarker is not None:
+        landmarker.close()
 
     print(f"\n{'=' * 60}")
     print("SALVANDO ARQUIVOS CSV...")
@@ -1169,18 +1323,11 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
     print("Creating video with visualization...")
     print(f"{'=' * 60}")
 
-    # Create video with visualization
+    # Create video with visualization using manual OpenCV drawing
     cap = cv2.VideoCapture(str(video_path))
     codec = "mp4v"
     fourcc = cv2.VideoWriter_fourcc(*codec)
     out = cv2.VideoWriter(str(output_video_path), fourcc, fps, (width, height))
-
-    mp_drawing = mp.solutions.drawing_utils
-    mp_pose = mp.solutions.pose
-
-    # Drawing styles
-    landmark_spec = mp_drawing.DrawingSpec(color=(0, 255, 0), thickness=2, circle_radius=3)
-    connection_spec = mp_drawing.DrawingSpec(color=(255, 0, 0), thickness=2)
 
     frame_idx = 0
     while cap.isOpened():
@@ -1216,65 +1363,20 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
                     # Use custom drawing for YOLO landmarks
                     frame = draw_yolo_landmarks(frame, landmarks_px, width, height)
                 else:
-                    # Use MediaPipe drawing for MediaPipe landmarks
-                    # Create landmark object for drawing - must have all 33 landmarks
-                    landmark_proto = landmark_pb2.NormalizedLandmarkList()
-
-                    # Add all 33 landmarks (MediaPipe format requires all landmarks)
-                    for i in range(33):  # Always create 33 landmarks
-                        if i < len(landmarks_px):
-                            lm = landmarks_px[i]
-                            landmark = landmark_proto.landmark.add()
-                            if not np.isnan(lm[0]) and not np.isnan(lm[1]):
-                                landmark.x = lm[0] / width
-                                landmark.y = lm[1] / height
-                                landmark.z = lm[2] if len(lm) > 2 and not np.isnan(lm[2]) else 0.0
-                                landmark.visibility = (
-                                    lm[3] if len(lm) > 3 and not np.isnan(lm[3]) else 0.0
-                                )
-                            else:
-                                # Set invalid landmarks to 0,0 with 0 visibility
-                                landmark.x = 0.0
-                                landmark.y = 0.0
-                                landmark.z = 0.0
-                                landmark.visibility = 0.0
-                        else:
-                            # Add missing landmarks with 0 visibility
-                            landmark = landmark_proto.landmark.add()
-                            landmark.x = 0.0
-                            landmark.y = 0.0
-                            landmark.z = 0.0
-                            landmark.visibility = 0.0
-
-                    # Draw landmarks
-                    try:
-                        mp_drawing.draw_landmarks(
-                            frame,
-                            landmark_proto,
-                            mp_pose.POSE_CONNECTIONS,
-                            landmark_drawing_spec=landmark_spec,
-                            connection_drawing_spec=connection_spec,
-                        )
-                    except (TypeError, AttributeError) as e:
-                        # Fallback: try without connection_drawing_spec if version doesn't support it
-                        print(f"\n  Warning: draw_landmarks error: {e}")
-                        print("  Trying alternative drawing method...")
-                        try:
-                            mp_drawing.draw_landmarks(
-                                frame,
-                                landmark_proto,
-                                mp_pose.POSE_CONNECTIONS,
-                                landmark_drawing_spec=landmark_spec,
-                            )
-                        except Exception as e2:
-                            print(f"  Alternative method also failed: {e2}")
-                            # Last resort: draw manually with OpenCV
-                            print("  Using manual OpenCV drawing...")
-                            for i, lm in enumerate(landmarks_px):
-                                if i < 33 and not np.isnan(lm[0]) and not np.isnan(lm[1]):
-                                    x, y = int(round(lm[0])), int(round(lm[1]))
-                                    if 0 <= x < width and 0 <= y < height:
-                                        cv2.circle(frame, (x, y), 3, (0, 255, 0), -1)
+                    # Use manual OpenCV drawing for MediaPipe landmarks
+                    # Draw landmarks (circles)
+                    points = {}
+                    for i, lm in enumerate(landmarks_px):
+                        if i < 33 and not np.isnan(lm[0]) and not np.isnan(lm[1]):
+                            x, y = int(round(lm[0])), int(round(lm[1]))
+                            if 0 <= x < width and 0 <= y < height:
+                                points[i] = (x, y)
+                                cv2.circle(frame, (x, y), 3, (0, 255, 0), -1)
+                    
+                    # Draw connections (using POSE_CONNECTIONS defined at module level)
+                    for start_idx, end_idx in POSE_CONNECTIONS:
+                        if start_idx in points and end_idx in points:
+                            cv2.line(frame, points[start_idx], points[end_idx], (255, 0, 0), 2)
 
         out.write(frame)
         frame_idx += 1
@@ -1371,44 +1473,127 @@ def process_videos_in_directory(existing_root=None):
     print(f"Running script: {Path(__file__).name}")
     print(f"Script directory: {Path(__file__).parent.resolve()}")
 
+    # Use existing root or create new one for dialogs
+    print("Initializing Tkinter root window...")
     if existing_root is not None:
         root = existing_root
+        print("Using existing root.")
     else:
-        root = tk.Tk()
-        root.withdraw()
+        try:
+            root = tk.Tk()
+            root.withdraw()
+            print("Tkinter root initialized and withdrawn.")
+            # Keep dialogs on top (as before)
+            try:
+                root.attributes("-topmost", True)
+                print("Root attributes set to topmost.")
+            except Exception as e:
+                print(f"Warning: Could not set topmost attribute: {e}")
+                pass
+        except Exception as e:
+            print(f"CRITICAL ERROR: Failed to initialize Tkinter: {e}")
+            print("This usually indicates an issue with the graphical environment.")
+            import traceback
+            traceback.print_exc()
+            return
 
-    # Helper function to prepare root window for dialogs on macOS
+    # Helper function to prepare root window for dialogs
     # Fixes issue where dialogs appear in wrong position (bottom corner) on macOS
+    # On Windows, root must be visible for dialogs to appear
     def prepare_root_for_dialog():
-        if platform.system() == "Darwin":  # macOS
+        try:
+            # Make root visible and prepare it for dialogs on all platforms
             root.deiconify()
             root.update_idletasks()
-            # Position window in a visible location (small window at top-left)
-            root.geometry("1x1+100+100")
             root.lift()
+            root.focus_force()
+            root.geometry("1x1+100+100")
             root.update_idletasks()
+            if platform.system() == "Darwin":  # macOS
+                # Additional macOS-specific handling
+                pass
+        except Exception as e:
+            print(f"Warning: Could not prepare root for dialog: {e}")
 
     # Select input directory
+    print("\nPlease select the input directory containing videos...")
     prepare_root_for_dialog()
-    input_dir = filedialog.askdirectory(title="Select the input directory containing videos")
-    if platform.system() == "Darwin" and existing_root is None:
-        root.withdraw()  # Hide root window again after dialog closes
+    try:
+        input_dir = filedialog.askdirectory(
+            parent=root, title="Select the input directory containing videos"
+        )
+        root.update_idletasks()
+        root.update()
+    except Exception as e:
+        print(f"Error opening directory dialog: {e}")
+        import traceback
+        traceback.print_exc()
+        messagebox.showerror("Error", f"Failed to open directory dialog: {e}")
+        return
+    finally:
+        # Only hide root on macOS after dialog closes
+        if platform.system() == "Darwin" and existing_root is None:
+            root.withdraw()
+    
     if not input_dir:
+        print("No input directory selected.")
         messagebox.showerror("Error", "No input directory selected.")
         return
+    
+    print(f"Input directory selected: {input_dir}")
 
     # Select output base directory
+    print("\nPlease select the base output directory...")
     prepare_root_for_dialog()
-    output_base = filedialog.askdirectory(title="Select the base output directory")
-    if platform.system() == "Darwin" and existing_root is None:
-        root.withdraw()  # Hide root window again after dialog closes
+    try:
+        output_base = filedialog.askdirectory(parent=root, title="Select the base output directory")
+        root.update_idletasks()
+        root.update()
+    except Exception as e:
+        print(f"Error opening output directory dialog: {e}")
+        import traceback
+        traceback.print_exc()
+        messagebox.showerror("Error", f"Failed to open output directory dialog: {e}")
+        return
+    finally:
+        # Only hide root on macOS after dialog closes
+        if platform.system() == "Darwin" and existing_root is None:
+            root.withdraw()
+        
     if not output_base:
+        print("No output directory selected.")
         messagebox.showerror("Error", "No output directory selected.")
         return
+    
+    print(f"Output directory selected: {output_base}")
 
+    # Get pose configuration
+    print("\nOpening pose configuration dialog...")
+    # Ensure root is visible for the configuration dialog (especially on Windows)
+    try:
+        root.deiconify()
+        root.update_idletasks()
+        root.lift()
+        root.focus_force()
+        root.update()
+    except Exception as e:
+        print(f"Warning: Could not prepare root for configuration dialog: {e}")
+    
     pose_config = get_pose_config(root)
+    
+    # Hide root again after configuration (only if we created it)
+    if existing_root is None and platform.system() != "Windows":
+        # On Windows, keep root visible for subsequent dialogs if needed
+        try:
+            root.withdraw()
+        except Exception:
+            pass
+    
     if not pose_config:
+        print("Pose configuration cancelled or failed.")
         return
+    
+    print("Pose configuration completed successfully.")
 
     # Load YOLO model if necessary
     yolo_model = None
