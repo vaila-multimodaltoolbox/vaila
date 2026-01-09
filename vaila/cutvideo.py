@@ -7,37 +7,58 @@ Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
 Update Date: 08 January 2026
-Version: 0.1.0
+Version: 0.1.1
 
 Description:
 This script performs batch processing of videos for cutting videos.
-
+verview:
+This script performs batch processing of videos for cutting videos.
+It allows users to visually mark cut points in videos, save cut information, and generate precisely cut video segments while preserving original metadata with high accuracy.
+It supports scientific precision for research applications.
+It uses ffmpeg to preserve exact frame rates (e.g., 59.94005994005994 fps) without rounding.
+It uses OpenCV to fallback to less precise but always available.
+It uses pygame to create a graphical interface for selecting the input directory containing video files (.mp4, .avi, .mov), the output directory, and for specifying the cuts.
+It uses tomllib to load the cuts from a TOML file.
+It uses ffmpeg to cut the videos.
 
 Features:
 - Added support for TOML files.
+- Added support for audio waveform visualization.
+- Added support for audio playback.
+- Added support for loop control.
+- Added support for auto-fit window.
+- Added support for marker navigation.
+- Added support for manual FPS input.
+- Added support for help dialog.
+- Added support for save and generate videos.
+- Added support for batch processing of videos.
 
 Usage:
 - Run the script to open a graphical interface for selecting the input directory
-  containing video files (.mp4, .avi, .mov), the output directory, and for
+  containing video files (.mp4, .avi, .mov, .mkv), the output directory, and for
   specifying the cuts.
 
 Requirements:
 - Python 3.12.12
 - OpenCV (`pip install opencv-python`)
+- pygame (`pip install pygame`)
 - Tkinter (usually included with Python installations)
 - tomllib (`pip install tomllib`)
+- rich (`pip install rich`)
+- numpy (`pip install numpy`)
+- scipy (`pip install scipy`)
+- matplotlib (`pip install matplotlib`)
+- pandas (`pip install pandas`)
+- seaborn (`pip install seaborn`)
+- plotly (`pip install plotly`)
+- plotly-express (`pip install plotly-express`)
+- plotly-orca (`pip install plotly-orca`)
 
 Output:
 The following files are generated for each processed video:
-1. Cut Information (`*_cuts.toml`):
-   The cut information saved in TOML format.
-2. Cut Videos (`*_frame_X_to_Y.mp4`):
-   The videos with the cuts applied.
-
-Example:
-- Video: 1.mp4
-- Cuts: 1_cuts.toml
-- Output: 1_frame_100_to_200.mp4
+- Cuts information saved in TOML format.
+- Cut videos with the cuts applied.
+- Batch output directory with all cut videos from batch operation.
 
 How to run:
 python cutvideo.py
@@ -251,8 +272,12 @@ def cut_video_with_opencv(video_path, output_path, start_frame, end_frame, metad
     return True
 
 
-def save_cuts_to_toml(video_path, cuts, fps=None):
-    """Save cuts information to a TOML file."""
+def save_cuts_to_toml(video_path, cuts, fps=None, output_dir=None, per_cut_outputs=None):
+    """Save cuts information to a TOML file.
+    
+    output_dir: optional Path/str for planned output directory.
+    per_cut_outputs: optional list of filenames (one per cut) to record planned outputs.
+    """
     try:
         video_name = Path(video_path).stem
         # Convert path to POSIX format (forward slashes) for universal compatibility
@@ -272,6 +297,9 @@ def save_cuts_to_toml(video_path, cuts, fps=None):
             toml_content += f"fps = {fps:.6f}\n"
         toml_content += f'created = "{created_time}"\n'
         toml_content += f'source_file = "{escaped_video_path}"\n'
+        if output_dir is not None:
+            output_dir_posix = Path(output_dir).absolute().as_posix()
+            toml_content += f'output_dir = "{output_dir_posix}"\n'
         toml_content += "\n# List of cuts\n"
         
         for i, (start, end) in enumerate(cuts, 1):
@@ -296,6 +324,10 @@ def save_cuts_to_toml(video_path, cuts, fps=None):
             toml_content += f"start_frame = {start_frame_1based}\n"
             toml_content += f"end_frame = {end_frame_1based}\n"
             toml_content += f"frame_count = {frame_count}\n"
+            if per_cut_outputs and i-1 < len(per_cut_outputs):
+                toml_content += f'output_file = "{per_cut_outputs[i-1]}"\n'
+            if output_dir is not None:
+                toml_content += f'output_dir = "{output_dir_posix}"\n'
             if start_time is not None:
                 toml_content += f"start_time = {start_time:.6f}\n"
                 toml_content += f"end_time = {end_time:.6f}\n"
@@ -1187,7 +1219,17 @@ def play_video_with_cuts(video_path):
             return False
 
         # First save cuts to TOML file with FPS information
-        save_cuts_to_toml(video_path, cuts, fps)
+        # Precompute timestamp and planned output dir for TOML/processing consistency
+        timestamp_now = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+        video_name = Path(video_path).stem
+        planned_dir_name = f"{video_name}_sync_vailacut_{timestamp_now}" if using_sync_file else f"{video_name}_vailacut_{timestamp_now}"
+        planned_output_dir = Path(video_path).parent / planned_dir_name
+        per_cut_files = [
+            f"{video_name}_frame_{start + 1}_to_{end + 1}.mp4"
+            for start, end in cuts
+        ]
+
+        save_cuts_to_toml(video_path, cuts, fps, output_dir=planned_output_dir, per_cut_outputs=per_cut_files)
 
         # Close pygame temporarily instead of fully quitting it
         pygame.display.quit()
@@ -1212,7 +1254,7 @@ def play_video_with_cuts(video_path):
                 "Generate Videos",
                 "Cuts saved to text file. Do you want to generate video files now?",
             ):
-                success = save_cuts(video_path, cuts, using_sync_file)
+                success = save_cuts(video_path, cuts, using_sync_file, fixed_timestamp=timestamp_now)
 
                 # Ask if user wants to apply the same cuts to all videos in the directory
                 if success and messagebox.askyesno(
@@ -1345,14 +1387,14 @@ def play_video_with_cuts(video_path):
             f"Processed {processed_count} videos. Output saved to {output_dir}",
         )
 
-    def save_cuts(video_path, cuts, from_sync_file=False):
+    def save_cuts(video_path, cuts, from_sync_file=False, fixed_timestamp=None):
         if not cuts:
             messagebox.showinfo("Info", "No cuts were marked!")
             return False
 
         # Create output directory with improved naming including video basename
         # Format: {video_name}_vailacut_{timestamp} (not batch processing)
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = fixed_timestamp or datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         video_name = Path(video_path).stem
         if from_sync_file:
             # For sync files, keep the sync prefix before vailacut
