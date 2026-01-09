@@ -50,6 +50,8 @@ import datetime
 import os
 import subprocess
 import json
+import tempfile
+import wave
 from pathlib import Path
 from tkinter import Tk, filedialog, messagebox, simpledialog
 from fractions import Fraction
@@ -57,6 +59,7 @@ import tomllib
 
 import cv2
 import pygame
+import numpy as np
 from rich import print
 
 
@@ -479,6 +482,71 @@ def load_cuts_or_sync(video_path):
     return regular_cuts, False  # False indicates regular cuts file was used
 
 
+def extract_audio_data(video_path, target_sr=44100):
+    """
+    Extract raw mono PCM audio from video using ffmpeg and return (audio_array, sample_rate).
+    If there is no audio stream or extraction fails, returns (None, None).
+    """
+    try:
+        probe_cmd = [
+            "ffprobe",
+            "-v", "error",
+            "-select_streams", "a:0",
+            "-show_entries", "stream=codec_type",
+            "-of", "csv=p=0",
+            str(video_path),
+        ]
+        has_audio = subprocess.run(probe_cmd, stdout=subprocess.PIPE, text=True).stdout.strip()
+        if not has_audio:
+            return None, None
+
+        cmd = [
+            "ffmpeg",
+            "-i", str(video_path),
+            "-f", "s16le",
+            "-ac", "1",
+            "-ar", str(target_sr),
+            "-acodec", "pcm_s16le",
+            "-vn",
+            "-",
+        ]
+
+        print(f"Loading audio waveform for {Path(video_path).name}...")
+        process = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            bufsize=10**8,
+        )
+        if process.returncode != 0:
+            print(f"FFmpeg audio extraction failed: {process.stderr}")
+            return None, None
+
+        audio_data = np.frombuffer(process.stdout, dtype=np.int16)
+        audio_data = audio_data.astype(np.float32) / 32768.0
+        return audio_data, target_sr
+    except Exception as e:
+        print(f"Error extracting audio: {e}")
+        return None, None
+
+
+def write_wav_from_pcm(audio_data: np.ndarray, sample_rate: int) -> str:
+    """
+    Write mono float32 PCM (-1..1) to a temp WAV file and return its path.
+    """
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
+    tmp_path = tmp.name
+    tmp.close()
+
+    pcm_int16 = np.clip(audio_data * 32767.0, -32768, 32767).astype(np.int16)
+    with wave.open(tmp_path, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)  # 16-bit
+        wf.setframerate(sample_rate)
+        wf.writeframes(pcm_int16.tobytes())
+    return tmp_path
+
+
 def load_cuts_from_toml_file(toml_file_path):
     """Load cuts from a specific TOML file path.
     
@@ -692,14 +760,60 @@ def play_video_with_cuts(video_path):
     window_width = max(640, min(window_width, max_width))
     window_height = max(480, min(window_height, max_height))
 
+    # UI layout constants
+    control_height = 80
+    audio_height = 150
+    show_audio = False
+    audio_data = None
+    audio_loaded = False
+    sample_rate = 44100
+    audio_wave_path = None
+    audio_muted = False
+    audio_ready = False
+    audio_music_loaded = False
+    loop_enabled = True
+
     # Get video filename for window title
     video_filename = Path(video_path).name
-    
+
+    def set_display_mode():
+        total_h = window_height + control_height + (audio_height if show_audio else 0)
+        return pygame.display.set_mode((window_width, total_h), pygame.RESIZABLE)
+
+    def update_caption():
+        pygame.display.set_caption(
+            f"{video_filename} (FPS: {fps:.2f}) | A:Audio M:Mute 0:AutoFit | Space:Play/Pause | ←→:Frame | S:Start E:End R:Reset DEL/D:Remove | L:List | F:Load TOML | Home/End:Jump Cut | PgUp/PgDn:Next Marker | G:Frame T:Time I/P:FPS | H:Help ESC:Save"
+        )
+
+    def auto_fit_window():
+        """Auto-fit window to current display while respecting margins and aspect ratio."""
+        nonlocal window_width, window_height
+        screen_info = pygame.display.Info()
+        # Margins to avoid covering taskbar/title; keep similar to previous 100px margin
+        max_w = max(640, screen_info.current_w - 100)
+        max_h = max(480, screen_info.current_h - 140)  # allow for title bar and taskbar
+
+        # Available height for video after controls/audio
+        avail_h = max_h - control_height - (audio_height if show_audio else 0)
+        avail_h = max(240, avail_h)
+
+        # Fit by aspect ratio
+        if original_width / max_w > original_height / avail_h:
+            window_width = max_w
+            window_height = int(window_width / aspect_ratio)
+        else:
+            window_height = avail_h
+            window_width = int(window_height * aspect_ratio)
+
+        # Clamp to bounds
+        window_width = max(640, min(window_width, max_w))
+        window_height = max(480, min(window_height, avail_h))
+
+        return set_display_mode()
+
     # Initialize window
-    screen = pygame.display.set_mode((window_width, window_height + 80), pygame.RESIZABLE)
-    pygame.display.set_caption(
-        f"{video_filename} (FPS: {fps:.2f}) | Space:Play/Pause | ←→:Frame | S:Start | E:End | R:Reset | DEL:Remove | L:List | F:Load Sync | Home/End:Jump Cut | PgUp/PgDn:Next Cut | G:Frame | T:Time | I:FPS | H:Help | ESC:Save"
-    )
+    screen = auto_fit_window()
+    update_caption()
 
     # Initialize variables
     clock = pygame.time.Clock()
@@ -715,8 +829,109 @@ def play_video_with_cuts(video_path):
     if len(cuts) > 0:
         print(f"Loaded {len(cuts)} cuts from cuts file")
 
+    def ensure_audio_player():
+        nonlocal audio_ready
+        if audio_ready:
+            return True
+        try:
+            pygame.mixer.pre_init(frequency=sample_rate, size=-16, channels=1)
+            pygame.mixer.init()
+            audio_ready = True
+            return True
+        except Exception as e:
+            print(f"Audio init failed: {e}")
+            return False
+
+    def sync_audio_to_frame(frame_idx: int):
+        """Seek audio playback to match current frame position."""
+        if not audio_ready or not audio_loaded or audio_muted:
+            return
+        try:
+            pos_seconds = (frame_idx / fps) if fps > 0 else 0.0
+            pygame.mixer.music.set_pos(pos_seconds)
+        except Exception as e:
+            print(f"Audio seek failed: {e}")
+
+    def start_audio_playback(frame_idx: int):
+        if not audio_ready or not audio_loaded or audio_muted:
+            return
+        try:
+            pos_seconds = (frame_idx / fps) if fps > 0 else 0.0
+            # start playback; looping once is enough for single video
+            pygame.mixer.music.play(loops=0, start=pos_seconds)
+        except Exception as e:
+            print(f"Audio play failed: {e}")
+
+    def stop_audio_playback():
+        if audio_ready:
+            try:
+                pygame.mixer.music.stop()
+            except Exception:
+                pass
+
+    def ensure_music_loaded():
+        nonlocal audio_music_loaded
+        if audio_music_loaded:
+            return True
+        if not (audio_ready and audio_loaded and audio_wave_path):
+            return False
+        try:
+            pygame.mixer.music.load(audio_wave_path)
+            audio_music_loaded = True
+            return True
+        except Exception as e:
+            print(f"Audio load failed: {e}")
+            return False
+
+    def draw_waveform(surface, current_f, fps_val, sr, data, x_start, y_start, w, h):
+        """Draw the audio waveform centered on the current frame."""
+        if data is None:
+            font = pygame.font.Font(None, 24)
+            text = font.render("No Audio Data (or Loading...)", True, (120, 120, 120))
+            surface.blit(text, (x_start + 10, y_start + h // 2))
+            return
+
+        pygame.draw.rect(surface, (0, 0, 20), (x_start, y_start, w, h))
+
+        # Center line (playhead)
+        center_x = w // 2
+        current_time = current_f / fps_val if fps_val > 0 else 0.0
+        center_sample_idx = int(current_time * sr)
+
+        # Display about 2 seconds of audio across the width
+        samples_per_pixel = max(1, int((sr * 2.0) / w))
+        half_w_samples = (w // 2) * samples_per_pixel
+        start_idx = max(0, center_sample_idx - half_w_samples)
+        end_idx = min(len(data), center_sample_idx + half_w_samples)
+        if end_idx <= start_idx:
+            return
+
+        chunk = data[start_idx:end_idx]
+        step = max(1, samples_per_pixel)
+        pixel_offset = (start_idx - (center_sample_idx - half_w_samples)) // samples_per_pixel
+        screen_x_start = x_start + pixel_offset
+
+        points = []
+        for i in range(0, len(chunk), step):
+            screen_x = screen_x_start + (i // step)
+            if screen_x >= x_start + w:
+                break
+            amp = chunk[i]
+            screen_y = y_start + (h // 2) - int(amp * (h / 2))
+            points.append((screen_x, screen_y))
+
+        if len(points) > 1:
+            pygame.draw.lines(surface, (255, 140, 0), False, points, 1)
+
+        pygame.draw.line(surface, (0, 200, 255), (x_start + center_x, y_start), (x_start + center_x, y_start + h), 1)
+
+        font = pygame.font.Font(None, 20)
+        ts = font.render(f"{current_time:.6f}s", True, (255, 255, 255))
+        surface.blit(ts, (x_start + 5, y_start + 5))
+
     def draw_controls():
-        slider_surface = pygame.Surface((window_width, 80))
+        base_y = window_height + (audio_height if show_audio else 0)
+        slider_surface = pygame.Surface((window_width, control_height))
         slider_surface.fill((30, 30, 30))
 
         # Draw slider bar
@@ -741,11 +956,10 @@ def play_video_with_cuts(video_path):
 
         # Draw frame information and cut markers
         font = pygame.font.Font(None, 24)
-        # Calculate time in seconds
         time_seconds = frame_count / fps if fps > 0 else 0.0
         time_total = total_frames / fps if fps > 0 else 0.0
         frame_text = font.render(
-            f"Frame: {frame_count + 1}/{total_frames} ({time_seconds:.2f}s/{time_total:.2f}s)", 
+            f"Frame: {frame_count + 1}/{total_frames} ({time_seconds:.6f}s/{time_total:.6f}s)", 
             True, (255, 255, 255)
         )
         slider_surface.blit(frame_text, (10, 10))
@@ -760,15 +974,34 @@ def play_video_with_cuts(video_path):
         cuts_text = font.render(f"Cuts: {len(cuts)}{sync_status}", True, (255, 255, 255))
         slider_surface.blit(cuts_text, (window_width - 150, 50))
 
-        # Draw help button
-        help_button_rect = pygame.Rect(window_width - 70, 10, 60, 25)
+        # Smaller font for buttons
+        button_font = pygame.font.Font(None, 15)
+        
+        # Button width and x position (aligned)
+        button_width = 70
+        button_x = window_width - button_width - 10
+        
+        # Loop button (above Help)
+        loop_button_rect = pygame.Rect(button_x, 10, button_width, 22)
+        loop_color = (60, 120, 60) if loop_enabled else (90, 90, 90)
+        pygame.draw.rect(slider_surface, loop_color, loop_button_rect)
+        loop_text = button_font.render("Loop" if loop_enabled else "Loop off", True, (255, 255, 255))
+        loop_text_rect = loop_text.get_rect(center=loop_button_rect.center)
+        slider_surface.blit(loop_text, loop_text_rect)
+
+        # Help button (below Loop)
+        help_button_rect = pygame.Rect(button_x, 35, button_width, 22)
         pygame.draw.rect(slider_surface, (100, 100, 100), help_button_rect)
-        help_text = font.render("Help", True, (255, 255, 255))
+        help_text = button_font.render("Help", True, (255, 255, 255))
         text_rect = help_text.get_rect(center=help_button_rect.center)
         slider_surface.blit(help_text, text_rect)
 
-        screen.blit(slider_surface, (0, window_height))
-        return slider_x, slider_width, slider_y, slider_height, help_button_rect
+        if show_audio:
+            audio_indicator = font.render("[AUDIO ON]", True, (0, 255, 0))
+            slider_surface.blit(audio_indicator, (window_width - 260, 10))
+
+        screen.blit(slider_surface, (0, base_y))
+        return slider_x, slider_width, slider_y, slider_height, help_button_rect, loop_button_rect, base_y
 
     def get_all_cut_markers():
         """Get a sorted flat list of all cut markers (start and end frames)."""
@@ -831,12 +1064,18 @@ def play_video_with_cuts(video_path):
             "- Down Arrow: Rewind (60 frames)",
             "- G: Go to Frame Number (enter frame number as int)",
             "- T: Go to Time (enter time in seconds as float)",
+            "- 0: Auto-fit window to screen",
+            "",
+            "Audio Controls:",
+            "- A: Toggle Audio Waveform Panel",
+            "- M: Mute/Unmute Audio",
+            "- Loop Button: Enable/Disable video/audio looping",
             "",
             "Cutting Operations:",
             "- S: Mark Start Frame",
             "- E: Mark End Frame",
             "- R: Reset Current Cut",
-            "- DELETE: Remove Last Cut",
+            "- DELETE or D: Remove Last Cut",
             "- L: List All Cuts",
             "",
             "Cut Navigation:",
@@ -847,24 +1086,30 @@ def play_video_with_cuts(video_path):
             "",
             "File Operations:",
             "- F: Load Sync File or Cuts TOML File",
-            "- I: Input Manual FPS",
-            "- ESC: Save cuts to file and optionally generate videos",
+            "- I or P: Input Manual FPS",
+            "- ESC: Save cuts to TOML file and optionally generate videos",
             "",
             "Help:",
             "- H: Show this help dialog",
             "",
             "Mouse Controls:",
             "- Click on slider: Jump to frame",
-            "- Click 'Help': Show this dialog",
+            "- Click 'Loop' button: Toggle looping",
+            "- Click 'Help' button: Show this dialog",
             "- Mouse Wheel: Scroll help text",
             "- Arrow Up/Down: Scroll help text",
             "- Drag window edges: Resize window",
             "",
+            "Display Features:",
+            "- Audio waveform shows synchronized audio with orange line",
+            "- Time precision: 6 decimal places (.6f) for scientific accuracy",
+            "- Auto-fit adjusts window to maximize use of screen space",
+            "",
             "Press ESC or click to close this help",
         ]
 
-        # Create semi-transparent overlay
-        overlay = pygame.Surface((window_width, window_height + 80))
+        total_overlay_h = window_height + control_height + (audio_height if show_audio else 0)
+        overlay = pygame.Surface((window_width, total_overlay_h))
         overlay.set_alpha(230)
         overlay.fill((0, 0, 0))
 
@@ -874,7 +1119,7 @@ def play_video_with_cuts(video_path):
         
         # Calculate total height needed
         total_height = len(help_lines) * line_height + 40
-        visible_height = window_height + 80 - 40  # Leave 20px margin top and bottom
+        visible_height = total_overlay_h - 40  # Leave 20px margin top and bottom
         scroll_offset = 0
         max_scroll = max(0, total_height - visible_height)
 
@@ -904,7 +1149,7 @@ def play_video_with_cuts(video_path):
                 # Show scroll hint
                 hint_font = pygame.font.Font(None, 20)
                 hint_text = hint_font.render("Use mouse wheel or arrows to scroll", True, (200, 200, 200))
-                overlay.blit(hint_text, (window_width - 280, window_height + 80 - 25))
+                overlay.blit(hint_text, (window_width - 280, total_overlay_h - 25))
 
             # Display help and wait for key/click
             screen.blit(overlay, (0, 0))
@@ -1144,10 +1389,20 @@ def play_video_with_cuts(video_path):
             if ret:
                 frame_count = int(cap.get(cv2.CAP_PROP_POS_FRAMES)) - 1
             else:
-                # Final do vídeo alcançado, reiniciar
-                frame_count = 0
-                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                ret, frame = cap.read()
+                # Final do vídeo alcançado
+                if loop_enabled:
+                    frame_count = 0
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                    ret, frame = cap.read()
+                    if ret and not audio_muted and audio_loaded and ensure_audio_player() and ensure_music_loaded():
+                        start_audio_playback(frame_count)
+                else:
+                    # Stop at last frame and pause
+                    frame_count = max(total_frames - 1, 0)
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, frame_count)
+                    ret, frame = cap.read()
+                    paused = True
+                    stop_audio_playback()
 
         if not ret:
             break
@@ -1179,8 +1434,12 @@ def play_video_with_cuts(video_path):
         # Draw frame at centered position
         screen.blit(frame_surface, (x_offset, y_offset))
 
+        # Draw audio waveform panel if enabled
+        if show_audio:
+            draw_waveform(screen, frame_count, fps, sample_rate, audio_data, 0, window_height, window_width, audio_height)
+
         # Draw controls
-        slider_x, slider_width, slider_y, slider_height, help_button_rect = draw_controls()
+        slider_x, slider_width, slider_y, slider_height, help_button_rect, loop_button_rect, base_y = draw_controls()
         pygame.display.flip()
 
         for event in pygame.event.get():
@@ -1189,20 +1448,22 @@ def play_video_with_cuts(video_path):
 
             elif event.type == pygame.VIDEORESIZE:
                 new_w, new_h = event.w, event.h
-                if new_h > 80:
-                    # Update window dimensions while maintaining aspect ratio
-                    window_width = max(640, new_w)
-                    window_height = max(480, new_h - 80)
+                min_total_h = control_height + (audio_height if show_audio else 0) + 100
+                if new_h > min_total_h:
+                    # Determine available height for video region
+                    target_video_h = new_h - control_height - (audio_height if show_audio else 0)
+                    target_video_h = max(240, target_video_h)
 
-                    # Recalculate window size to maintain aspect ratio
-                    if window_width / aspect_ratio > window_height:
+                    window_width = max(640, new_w)
+                    video_h_from_width = int(window_width / aspect_ratio)
+
+                    if video_h_from_width > target_video_h:
+                        window_height = target_video_h
                         window_width = int(window_height * aspect_ratio)
                     else:
-                        window_height = int(window_width / aspect_ratio)
+                        window_height = video_h_from_width
 
-                    screen = pygame.display.set_mode(
-                        (window_width, window_height + 80), pygame.RESIZABLE
-                    )
+                    screen = set_display_mode()
 
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
@@ -1212,8 +1473,53 @@ def play_video_with_cuts(video_path):
                             "Cuts saved to text file and videos generated (if selected)!",
                         )
                     running = False
+                elif event.key == pygame.K_a:
+                    show_audio = not show_audio
+                    if show_audio and not audio_loaded:
+                        # Quick feedback
+                        font = pygame.font.Font(None, 36)
+                        msg = font.render("Loading Audio...", True, (255, 255, 255))
+                        screen.blit(msg, (max(0, window_width // 2 - 120), max(0, window_height // 2 - 20)))
+                        pygame.display.flip()
+
+                        data, sr = extract_audio_data(video_path)
+                        if data is not None:
+                            audio_data = data
+                            sample_rate = sr
+                            audio_loaded = True
+                            if ensure_audio_player():
+                                if audio_wave_path is None:
+                                    audio_wave_path = write_wav_from_pcm(audio_data, sample_rate)
+                                if ensure_music_loaded() and not audio_muted and not paused:
+                                    start_audio_playback(frame_count)
+                            print("Audio loaded successfully.")
+                        else:
+                            print("Failed to load audio or no audio track.")
+
+                    screen = auto_fit_window()
+                    update_caption()
+                elif event.key == pygame.K_m:
+                    audio_muted = not audio_muted
+                    if audio_muted:
+                        stop_audio_playback()
+                    else:
+                        if audio_loaded and ensure_audio_player() and ensure_music_loaded() and not paused:
+                            sync_audio_to_frame(frame_count)
+                            pygame.mixer.music.unpause() if pygame.mixer.music.get_busy() else start_audio_playback(frame_count)
+                    update_caption()
+                elif event.key == pygame.K_0:
+                    screen = auto_fit_window()
+                    update_caption()
                 elif event.key == pygame.K_SPACE:
                     paused = not paused
+                    if paused:
+                        stop_audio_playback()
+                    else:
+                        if frame_count >= total_frames - 1 and loop_enabled:
+                            frame_count = 0
+                            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_count)
+                        if audio_loaded and ensure_audio_player() and ensure_music_loaded() and not audio_muted:
+                            start_audio_playback(frame_count)
                 elif event.key == pygame.K_RIGHT and paused:
                     frame_count = min(frame_count + 1, total_frames - 1)
                 elif event.key == pygame.K_LEFT and paused:
@@ -1334,20 +1640,16 @@ def play_video_with_cuts(video_path):
                     )
                     root_fps.destroy()
                     # Reinitialize pygame display
-                    screen = pygame.display.set_mode((window_width, window_height + 80), pygame.RESIZABLE)
+                    screen = set_display_mode()
                     if new_fps is not None and new_fps > 0:
                         fps = float(new_fps)
                         print(f"FPS updated to: {fps:.6f}")
                         # Update window title with new FPS
-                        pygame.display.set_caption(
-                            f"{video_filename} (FPS: {fps:.2f}) | Space:Play/Pause | ←→:Frame | S:Start | E:End | R:Reset | DEL:Remove | L:List | F:Load Sync | Home/End:Jump Cut | PgUp/PgDn:Next Cut | G:Frame | T:Time | I:FPS | H:Help | ESC:Save"
-                        )
+                        update_caption()
                         messagebox.showinfo("FPS Updated", f"FPS set to {fps:.6f}")
                     else:
                         # Keep original caption if FPS was not updated
-                        pygame.display.set_caption(
-                            f"{video_filename} (FPS: {fps:.2f}) | Space:Play/Pause | ←→:Frame | S:Start | E:End | R:Reset | DEL:Remove | L:List | F:Load Sync | Home/End:Jump Cut | PgUp/PgDn:Next Cut | G:Frame | T:Time | I:FPS | H:Help | ESC:Save"
-                        )
+                        update_caption()
                     pygame.display.flip()
                 elif event.key == pygame.K_h:  # Show help dialog
                     show_help_dialog()
@@ -1365,10 +1667,8 @@ def play_video_with_cuts(video_path):
                     )
                     root_frame.destroy()
                     # Reinitialize pygame display
-                    screen = pygame.display.set_mode((window_width, window_height + 80), pygame.RESIZABLE)
-                    pygame.display.set_caption(
-                        f"{video_filename} (FPS: {fps:.2f}) | Space:Play/Pause | ←→:Frame | S:Start | E:End | R:Reset | DEL:Remove | L:List | F:Load Sync | Home/End:Jump Cut | PgUp/PgDn:Next Cut | G:Frame | T:Time | I:FPS | H:Help | ESC:Save"
-                    )
+                    screen = set_display_mode()
+                    update_caption()
                     if target_frame is not None:
                         # Convert to 0-based frame index
                         frame_count = min(max(0, target_frame - 1), total_frames - 1)
@@ -1391,10 +1691,8 @@ def play_video_with_cuts(video_path):
                     )
                     root_time.destroy()
                     # Reinitialize pygame display
-                    screen = pygame.display.set_mode((window_width, window_height + 80), pygame.RESIZABLE)
-                    pygame.display.set_caption(
-                        f"{video_filename} (FPS: {fps:.2f}) | Space:Play/Pause | ←→:Frame | S:Start | E:End | R:Reset | DEL:Remove | L:List | F:Load Sync | Home/End:Jump Cut | PgUp/PgDn:Next Cut | G:Frame | T:Time | I:FPS | H:Help | ESC:Save"
-                    )
+                    screen = set_display_mode()
+                    update_caption()
                     if target_time is not None and fps > 0:
                         # Convert time to frame (0-based)
                         target_frame_float = target_time * fps
@@ -1405,9 +1703,15 @@ def play_video_with_cuts(video_path):
                     pygame.display.flip()
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 x, y = event.pos
-                if help_button_rect.collidepoint(x, y - window_height):
+                if help_button_rect.collidepoint(x, y - base_y):
                     show_help_dialog()
-                elif slider_y <= y - window_height <= slider_y + slider_height:
+                elif loop_button_rect.collidepoint(x, y - base_y):
+                    loop_enabled = not loop_enabled
+                    if not loop_enabled:
+                        stop_audio_playback()
+                    screen = set_display_mode()
+                    update_caption()
+                elif slider_y <= y - base_y <= slider_y + slider_height:
                     rel_x = x - slider_x
                     frame_count = int((rel_x / slider_width) * total_frames)
                     frame_count = max(0, min(frame_count, total_frames - 1))
@@ -1421,6 +1725,17 @@ def play_video_with_cuts(video_path):
             clock.tick(fps)
 
     cap.release()
+    stop_audio_playback()
+    if audio_ready:
+        try:
+            pygame.mixer.quit()
+        except Exception:
+            pass
+    if audio_wave_path:
+        try:
+            os.remove(audio_wave_path)
+        except Exception:
+            pass
     pygame.quit()
 
 
