@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ajuda - vailá Sprint Analysis</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; max-width: 900px; margin: 0 auto; padding: 40px; background-color: #f9f9f9; }
+        .container { background: white; padding: 40px; border-radius: 10px; box-shadow: 0 2px 15px rgba(0,0,0,0.05); }
+        h1, h2, h3 { color: #2c3e50; }
+        h1 { border-bottom: 3px solid #3498db; padding-bottom: 15px; text-align: center; }
+        h2 { margin-top: 40px; border-left: 5px solid #3498db; padding-left: 15px; }
+        .feature-box { background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0; border: 1px solid #e9ecef; }
+        .feature-title { font-weight: bold; color: #d35400; margin-bottom: 10px; display: block; font-size: 1.1em; }
+        code { background: #eaeaea; padding: 2px 6px; border-radius: 4px; font-family: Consolas, monospace; color: #c0392b; }
+        ul { padding-left: 20px; }
+        li { margin-bottom: 10px; }
+        .alert { background-color: #e8f4fd; border-left: 4px solid #3498db; padding: 15px; margin: 20px 0; color: #2c3e50; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>vailá Análise de Sprint (20m)</h1>
+
+    <p>Bem-vindo ao módulo <strong>vailá Sprint Analysis</strong>. Esta ferramenta fornece uma análise biomecânica e de desempenho detalhada de sprints lineares de 20 metros, utilizando dados coletados pelo vailá Tracker. Ela foi projetada para processar múltiplas corridas automaticamente, gerar relatórios visuais e compilar um banco de dados para análise da equipe.</p>
+
+    <h2>🚀 Fluxo de Trabalho</h2>
+    <ol>
+        <li><strong>Iniciar</strong>: Abra o <code>vaila.py</code>, verifique suas configurações e clique no botão <strong>Sprint</strong> (canto inferior esquerdo da interface principal).</li>
+        <li><strong>Selecionar Modo</strong>:
+            <ul>
+                <li><strong>Time Sprint (20m)</strong>: Escolha esta opção para sprints lineares padrão de 20m.</li>
+                <li><em>COD 90 Degree (20m)</em>: (Em Breve) Suporte para testes de Mudança de Direção.</li>
+            </ul>
+        </li>
+        <li><strong>Selecionar Pasta de Dados</strong>: Escolha o diretório contendo seus arquivos de rastreamento <code>.toml</code>.
+            <div class="alert">
+                <strong>Dica Importante:</strong> Para extração automática de frames do vídeo (0m, 5m, etc.), certifique-se de que os arquivos de vídeo estejam na <strong>mesma pasta</strong> que os arquivos <code>.toml</code>, ou no caminho especificado dentro do TOML.
+            </div>
+        </li>
+        <li><strong>Processamento</strong>: O script percorrerá cada arquivo <code>.toml</code> encontrado, calculará a cinemática e gerará os relatórios.</li>
+        <li><strong>Saída</strong>: Ao concluir, a pasta <code>vaila_sprint_reports</code> será aberta automaticamente.</li>
+    </ol>
+
+    <h2>📂 Estrutura de Saída (<code>vaila_sprint_reports</code>)</h2>
+    <p>Todos os resultados são organizados para facilitar tanto o feedback individual quanto a análise em grupo.</p>
+
+    <div class="feature-box">
+        <span class="feature-title">1. Painel Principal (<code>general_report.html</code>)</span>
+        <p><strong>Público-Alvo: Técnico Principal, Preparador Físico</strong></p>
+        <p>O ponto de partida para identificação de talentos e monitoramento.</p>
+        <ul>
+            <li><strong>Comparação de Corridas</strong>: Identifique rapidamente o jogador mais rápido do elenco. Use o Ranking para definir funções táticas (ex: pontas velozes).</li>
+            <li><strong>Banco de Dados Global</strong>: Arquivo mestre para o Preparador Físico monitorar o progresso da temporada no Excel/PowerBI.</li>
+        </ul>
+    </div>
+
+    <div class="feature-box">
+        <span class="feature-title">2. Relatórios Individuais do Atleta</span>
+        <p><strong>Público-Alvo: O Atleta, Analista de Desempenho</strong></p>
+        <p>Uma subpasta dedicada é criada para cada análise (ex: <code>Silva_analysis...</code>). Dentro dela, você encontrará:</p>
+
+        <h4>A. O Relatório Interativo (<code>*_report_sprint20m.html</code>)</h4>
+        <p>Arquivo único com a análise visual completa.</p>
+        <ul>
+            <li><strong>Curva de Velocidade</strong>: Mostra <em>onde</em> a velocidade máxima foi atingida. No futebol, a aceleração inicial é frequentemente chave.</li>
+            <li><strong>Evidência em Vídeo (0m, 5m, 10m...)</strong>:
+                <ul>
+                    <li><strong>0m (Saída)</strong>: Verifique se o Centro de Gravidade está baixo.</li>
+                    <li><strong>5m (Aceleração)</strong>: Verifique a inclinação do tronco (45°) e posição da cabeça.</li>
+                    <li><strong>20m (Velocidade Máx)</strong>: Verifique a postura ereta.</li>
+                </ul>
+            </li>
+        </ul>
+
+        <h4>B. Os Arquivos de Dados (<code>*_data.xlsx</code> / <code>*_data.csv</code>)</h4>
+        <p>Dados numéricos brutos. <strong>Colunas:</strong></p>
+        <ul>
+            <li><code>distance_cumulative</code>: 5.0, 10.0, 15.0, 20.0 m</li>
+            <li><code>duration</code>: Tempo gasto naquele segmento</li>
+            <li><code>speed_kmh</code>: Velocidade média no segmento</li>
+            <li><code>acceleration_ms2</code>: Aceleração média no segmento</li>
+        </ul>
+        <p><strong>Uso Prático:</strong> Importe no Excel para calcular índices de fadiga ou comparar o split crucial de 0-10m.</p>
+    </div>
+
+    <h2>📈 Entendendo as Métricas</h2>
+
+    <h3>Velocidade (Speed)</h3>
+    <ul>
+        <li><strong>Unidade</strong>: Reportada em <strong>km/h</strong> (padrão para comunicação) e <strong>m/s</strong> (padrão científico).</li>
+        <li><strong>Interpretação</strong>:
+            <ul>
+                <li><strong>Velocidade Máxima</strong>: A maior velocidade momentânea alcançada. Em um sprint de 20m, isso geralmente ocorre perto do final.</li>
+                <li><strong>Referência</strong>: A velocidade de pico de Usain Bolt foi ~44.72 km/h (12.42 m/s). Jogadores de futebol de elite frequentemente atingem 32-36 km/h.</li>
+            </ul>
+        </li>
+    </ul>
+
+    <h3>Aceleração</h3>
+    <ul>
+        <li><strong>Unidade</strong>: Metros por segundo ao quadrado (m/s<sup>2</sup>).</li>
+        <li><strong>Interpretação</strong>: Quão rapidamente o atleta ganha velocidade.
+            <ul>
+                <li><strong>Fase de Partida (0-5m)</strong>: deve mostrar os maiores valores de aceleração (potência explosiva).
+                <li><strong>Fase de Transição</strong>: A aceleração diminui à medida que a velocidade aumenta.</li>
+                <li><strong>Aceleração Zero</strong>: Significa que o atleta atingiu sua velocidade constante máxima.</li>
+            </ul>
+        </li>
+    </ul>
+
+    <h2>🛠 Solução de Problemas (Troubleshooting)</h2>
+    <ul>
+        <li><strong>"No video frames extracted"</strong> (Nenhum frame extraído): O script procura pelo nome do arquivo de vídeo salvo no <code>.toml</code>. <br><strong>Correção</strong>: Copie os arquivos de vídeo originais (ex: <code>run1.mp4</code>) para a mesma pasta onde seus arquivos <code>.toml</code> estão localizados antes de rodar a análise.</li>
+        <li><strong>Logo faltando</strong>: O relatório procura por <code>vaila.png</code> em <code>docs/images/</code> ou localmente. Garanta que a estrutura do projeto esteja intacta.</li>
+    </ul>
+
+</div>
+
+</body>
+</html>
