@@ -1,67 +1,40 @@
-# filemanager
+# filemanager.py
 
 ## 📋 Module Information
 
-- **Category:** Tools
-- **File:** `vaila\filemanager.py`
-- **Lines:** 820
-- **Size:** 34799 characters
-- **Version:** 1.3
-- **Author:** Prof. Dr. Paulo R. P. Santiago
-- **GUI Interface:** ✅ Yes
+- **Category:** Tools  
+- **File:** `vaila/filemanager.py`  
+- **Version:** 0.1.1  
+- **Author:** Paulo Roberto Pereira Santiago  
+- **GUI Interface:** ✅ Yes  
+- **License:** AGPLv3  
 
 ## 📖 Description
+GUI toolkit for file operations (copy, move, remove, import/export, rename, tree, find, transfer). Provides terminal feedback for each action and supports pattern/extension filters with safe guards against dangerous paths.
 
+## 🚀 Key Updates
+- Terminal feedback for every action (Copy/Move/Remove/Rename/Find/Tree/Transfer/Import menu).
+- Copy: patterns empty → copy all files; extension empty → all extensions; collision-safe naming.
+- Normalize names: accent/lower/underscore cleanup; topdown=False to avoid path breaks.
+- Safety: forbidden patterns for destructive remove.
 
-================================================================================
-File Manager - Comprehensive File and Directory Management Tool
-================================================================================
-Author: Prof. Dr. Paulo R. P. Santiago
-Date: 2024-08-29
-Version: 1.3
+## 🎛️ Controls & Prompts
+- Source/destination directory pickers (Tk dialogs) per operation.
+- Copy/Move: ask extension (blank = all), patterns (blank = all); creates timestamped output dirs (`vaila_copy_...`, `vaila_move_...`); collision suffix `_1`, `_2`...
+- Rename: text replace with extension filter.
+- Tree/Find: saves results with timestamp in selected destination.
+- Transfer: calls platform script (`transfer.bat` on Windows, `transfer.sh` on *nix).
 
-verview:
+## 🛠 Main Functions
+- `copy_file` / `process_copy`  
+- `move_file` / `process_move`  
+- `export_file`, `remove_file`, `import_file`, `rename_files`, `tree_file`, `find_file`, `transfer_file`  
 
-This Python script is designed to manage files and directories through a graphical user interface (GUI) using Tkinter. It supports various operations such as copying, moving, removing, and converting files, along with advanced features like pattern matching and batch processing. The tool is particularly useful for organizing large datasets and automating repetitive file operations.
-Main Features:
+## ⚠️ Safety Notes
+- Remove blocks dangerous patterns/system paths.  
+- Normalize uses topdown=False to rename children before parents.  
 
-    File Import:
-        Imports specific file types from selected directories into a predefined structure.
-        Supports multiple file types like .csv, .mat, .tsv, .html, .xml, .xlsx, etc.
-        Helps standardize file organization by importing various data formats.
-
-    File Conversion...
-
-## 🔧 Main Functions
-
-**Total functions found:** 20
-
-- `copy_file`
-- `process_copy`
-- `export_file`
-- `move_file`
-- `process_move`
-- `remove_file`
-- `import_file`
-- `rename_files`
-- `tree_file`
-- `find_file`
-- `transfer_file`
-- `on_submit`
-- `on_submit`
-- `data_import_tsv_qualysis`
-- `data_import_mat_matlab`
-- `data_import_csv_vicon_nexus`
-- `data_import_html`
-- `data_import_xml`
-- `data_import_xlsx`
-- `data_import_bvh`
-
-
-
-
----
-
-📅 **Generated automatically on:** 15/10/2025 08:04:44
-🔗 **Part of vailá - Multimodal Toolbox**
+## 🔗 Project
+📅 **Last Updated:** Jan 2026  
+🔗 **Part of vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
