@@ -4,7 +4,7 @@ forceplate_analysis.py
 ================================================================================
 Author: Prof. Paulo Santiago
 Date: 9 September 2024
-Update: 30 December 2025
+Update: 11 January 2026
 Version: 2.0
 
 Description:

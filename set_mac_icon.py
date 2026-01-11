@@ -4,6 +4,8 @@ Script to set macOS application icons using AppKit.
 
 This script must be run on macOS and requires pyobjc-framework-Cocoa.
 Usage: python set_mac_icon.py <target_path> <icon_path>
+
+Update: 11 January 2026
 """
 
 import importlib.util
