@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 18 February 2025
-Update Date: 09 January 2026
-Version: 0.0.5
+Update Date: 10 January 2026
+Version: 0.0.6
 
 Description:
     This script performs object detection and tracking on video files using the YOLO model v11.
@@ -52,13 +52,14 @@ import csv
 import datetime
 import glob
 import os
+import platform
 import subprocess
 import sys
 import tkinter as tk
-from collections import deque
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
+import contextlib
 import cv2
 import numpy as np
 import pandas as pd
@@ -76,6 +77,7 @@ except ImportError:
     print("Warning: PIL (Pillow) not found. Installing...")
     import subprocess
     import sys
+
     subprocess.check_call([sys.executable, "-m", "pip", "install", "Pillow"])
     from PIL import Image, ImageTk
 
@@ -86,6 +88,7 @@ except ImportError:
     print("Warning: toml not found. Installing...")
     import subprocess
     import sys
+
     subprocess.check_call([sys.executable, "-m", "pip", "install", "toml"])
     import toml
 
@@ -200,7 +203,7 @@ def update_csv(csv_file, frame_idx, tracker_id, label, x_min, y_min, x_max, y_ma
 
 
 def get_hardware_info():
-    """Get detailed hardware information for GPU/CPU detection"""
+    """Get detailed hardware information for GPU/CPU/MPS detection"""
     info = []
     info.append(f"Python version: {sys.version}")
     info.append(f"PyTorch version: {torch.__version__}")
@@ -216,6 +219,14 @@ def get_hardware_info():
             )
     else:
         info.append("CUDA available: No")
+
+    # Check for MPS (Metal Performance Shaders) on macOS Apple Silicon
+    if platform.system() == "Darwin" and platform.machine() == "arm64":
+        if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            info.append("MPS (Metal) available: Yes")
+        else:
+            info.append("MPS (Metal) available: No")
+
         info.append(f"CPU cores: {os.cpu_count()}")
 
     return "\n".join(info)
@@ -223,28 +234,38 @@ def get_hardware_info():
 
 def detect_optimal_device():
     """Detect and return the optimal device for processing"""
-    # Default to CPU for better compatibility
+    # Check for CUDA first (NVIDIA GPU)
     if torch.cuda.is_available():
         gpu_count = torch.cuda.device_count()
         if gpu_count > 1:
             print(f"Multiple GPUs detected ({gpu_count}). GPU 0 available for selection.")
-
-        # Clear cache for optimal performance
         torch.cuda.empty_cache()
-        # Still return "cpu" as default for better compatibility
-        return "cpu"
-    else:
+        return "cuda"
+    # Check for MPS (Metal Performance Shaders) on macOS Apple Silicon
+    elif platform.system() == "Darwin" and platform.machine() == "arm64":
+        if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            return "mps"
+    # Default to CPU
         return "cpu"
 
 
 def validate_device_choice(user_device):
     """Validate user device choice and provide feedback"""
-    if user_device.lower() == "cuda":
+    device_lower = user_device.lower()
+    if device_lower == "cuda":
         if torch.cuda.is_available():
             return True, "GPU (CUDA) - High performance"
         else:
             return False, "GPU (CUDA) requested but not available. Using CPU instead."
-    elif user_device.lower() == "cpu":
+    elif device_lower == "mps":
+        if platform.system() == "Darwin" and platform.machine() == "arm64":
+            if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+                return True, "GPU (MPS/Metal) - Apple Silicon acceleration"
+            else:
+                return False, "MPS requested but not available. Using CPU instead."
+        else:
+            return False, "MPS only available on macOS Apple Silicon. Using CPU instead."
+    elif device_lower == "cpu":
         return True, "CPU - Universal compatibility (default)"
     else:
         return False, f"Invalid device: {user_device}. Using CPU instead."
@@ -256,26 +277,25 @@ def save_roi_to_toml(video_path, roi_poly):
     Returns the path to the saved file, or None on error.
     """
     try:
-        
         # Create ROI directory in the same location as the video
         video_dir = os.path.dirname(os.path.abspath(video_path))
         video_name = os.path.splitext(os.path.basename(video_path))[0]
         roi_dir = os.path.join(video_dir, "roi_configs")
         os.makedirs(roi_dir, exist_ok=True)
-        
+
         # Generate filename with timestamp
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         roi_file = os.path.join(roi_dir, f"{video_name}_roi_{timestamp}.toml")
-        
+
         # Convert ROI points to list of [x, y] pairs
         roi_points = [[int(pt[0]), int(pt[1])] for pt in roi_poly]
-        
+
         # Get video dimensions for reference
         cap = cv2.VideoCapture(video_path)
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         cap.release()
-        
+
         # Create TOML content
         roi_data = {
             "roi_info": {
@@ -286,21 +306,20 @@ def save_roi_to_toml(video_path, roi_poly):
                 "created": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "num_points": len(roi_points),
             },
-            "roi_polygon": {
-                "points": roi_points
-            }
+            "roi_polygon": {"points": roi_points},
         }
-        
+
         # Write to TOML file
         with open(roi_file, "w") as f:
             toml.dump(roi_data, f)
-        
+
         print(f"ROI saved to: {roi_file}")
         return roi_file
-        
+
     except Exception as e:
         print(f"Error saving ROI to TOML: {e}")
         import traceback
+
         traceback.print_exc()
         return None
 
@@ -311,38 +330,40 @@ def load_roi_from_toml(roi_file_path):
     Returns a numpy array of int32 points, or None on error.
     """
     try:
-        
         if not os.path.exists(roi_file_path):
             print(f"ROI file not found: {roi_file_path}")
             return None
-        
-        with open(roi_file_path, "r") as f:
+
+        with open(roi_file_path) as f:
             roi_data = toml.load(f)
-        
+
         if "roi_polygon" not in roi_data or "points" not in roi_data["roi_polygon"]:
             print("Invalid ROI file format: missing polygon points")
             return None
-        
+
         points = roi_data["roi_polygon"]["points"]
         if len(points) < 3:
             print(f"Invalid ROI: need at least 3 points, got {len(points)}")
             return None
-        
+
         # Convert to numpy array
         roi_poly = np.array(points, dtype=np.int32)
-        
+
         print(f"ROI loaded from: {roi_file_path}")
         print(f"  Points: {len(points)}")
         if "roi_info" in roi_data:
             info = roi_data["roi_info"]
             print(f"  Original video: {info.get('video_name', 'unknown')}")
-            print(f"  Video dimensions: {info.get('video_width', '?')}x{info.get('video_height', '?')}")
-        
+            print(
+                f"  Video dimensions: {info.get('video_width', '?')}x{info.get('video_height', '?')}"
+            )
+
         return roi_poly
-        
+
     except Exception as e:
         print(f"Error loading ROI from TOML: {e}")
         import traceback
+
         traceback.print_exc()
         return None
 
@@ -361,7 +382,7 @@ def select_free_polygon_roi(video_path):
         if not cap.isOpened():
             print(f"Error: Could not open video file: {video_path}")
             return None
-        
+
         # Read first frame
         ret, frame = cap.read()
         cap.release()
@@ -387,9 +408,7 @@ def select_free_polygon_roi(video_path):
             elif event == cv2.EVENT_RBUTTONDOWN and roi_points:
                 roi_points.pop()
 
-        window_name = (
-            "Select ROI (Left: add, Right: undo, Enter: confirm, Esc: skip, r: reset)"
-        )
+        window_name = "Select ROI (Left: add, Right: undo, Enter: confirm, Esc: skip, r: reset)"
         cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
         cv2.setMouseCallback(window_name, mouse_callback)
 
@@ -426,10 +445,11 @@ def select_free_polygon_roi(video_path):
         # Scale points back to original resolution
         final_points = (np.array(roi_points, dtype=np.float32) / scale).astype(np.int32)
         return final_points
-        
+
     except Exception as e:
         print(f"Error in ROI selection: {e}")
         import traceback
+
         traceback.print_exc()
         # Clean up resources
         if cap is not None:
@@ -438,7 +458,7 @@ def select_free_polygon_roi(video_path):
             try:
                 cv2.destroyWindow(window_name)
                 cv2.waitKey(1)
-            except:
+            except Exception:
                 pass
         cv2.destroyAllWindows()
         return None
@@ -468,11 +488,25 @@ class TrackerConfigDialog(tk.simpledialog.Dialog):
         # Device choice
         tk.Label(device_frame, text="Processing Device:").grid(row=0, column=0, padx=5, pady=5)
 
-        self.device_var = tk.StringVar(value="cpu")  # Default to CPU
+        # Build device options based on available hardware
+        device_options = ["cpu"]  # CPU is always available
+        if torch.cuda.is_available():
+            device_options.append("cuda")
+        if (
+            platform.system() == "Darwin"
+            and platform.machine() == "arm64"
+            and hasattr(torch.backends, "mps")
+            and torch.backends.mps.is_available()
+        ):
+            device_options.append("mps")
+
+        # Set default device to optimal device
+        default_device = self.optimal_device if self.optimal_device in device_options else "cpu"
+        self.device_var = tk.StringVar(value=default_device)
         device_combo = ttk.Combobox(
             device_frame,
             textvariable=self.device_var,
-            values=["cpu", "cuda"],
+            values=device_options,
             state="readonly",
             width=10,
         )
@@ -489,12 +523,14 @@ class TrackerConfigDialog(tk.simpledialog.Dialog):
             if is_valid:
                 if device == "cpu":
                     self.device_status.config(text="✓ " + message, fg="blue")  # Blue for CPU
-                else:
-                    self.device_status.config(text="✓ " + message, fg="green")  # Green for GPU
+                elif device == "mps":
+                    self.device_status.config(text="✓ " + message, fg="purple")  # Purple for MPS
+                else:  # cuda
+                    self.device_status.config(text="✓ " + message, fg="green")  # Green for CUDA
             else:
                 self.device_status.config(text="⚠ " + message, fg="orange")
 
-        self.device_var.trace("w", update_device_status)
+        self.device_var.trace_add("write", update_device_status)
         update_device_status()  # Initial update
 
         # Help text for device selection
@@ -502,7 +538,7 @@ class TrackerConfigDialog(tk.simpledialog.Dialog):
         help_text.grid(row=0, column=3, padx=5, pady=5)
         device_tooltip = (
             "Processing device options:\n"
-            "'cpu'  - Use CPU (DEFAULT)\n"
+            "'cpu'  - Use CPU\n"
             "        Universal compatibility\n"
             "        Works on all computers\n"
             "        Slower but reliable\n\n"
@@ -510,6 +546,10 @@ class TrackerConfigDialog(tk.simpledialog.Dialog):
             "        Much faster processing (10-20x)\n"
             "        Requires NVIDIA GPU and CUDA\n"
             "        May have compatibility issues\n\n"
+            "'mps'  - Use GPU (Apple Silicon only)\n"
+            "        Fast processing via Metal Performance Shaders\n"
+            "        Requires macOS on Apple Silicon (M1/M2/M3)\n"
+            "        Recommended for Apple Silicon Macs\n\n"
             "CPU is recommended for most users."
         )
         help_text.bind("<Enter>", lambda e: self.show_help(e, device_tooltip))
@@ -570,34 +610,32 @@ class TrackerConfigDialog(tk.simpledialog.Dialog):
         help_text.bind("<Leave>", self.hide_help)
 
         # ROI selection section
-        tk.Label(master, text="Region of Interest (ROI):").grid(
-            row=5, column=0, padx=5, pady=5
-        )
+        tk.Label(master, text="Region of Interest (ROI):").grid(row=5, column=0, padx=5, pady=5)
         self.roi_file_path = None
         self.roi_status_label = tk.Label(master, text="No ROI selected", fg="gray")
         self.roi_status_label.grid(row=5, column=1, padx=5, pady=5, sticky="w")
-        
+
         # Frame for ROI buttons
         roi_buttons_frame = tk.Frame(master)
         roi_buttons_frame.grid(row=6, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
-        
+
         btn_create_roi = tk.Button(
-            roi_buttons_frame, 
-            text="Create New ROI", 
+            roi_buttons_frame,
+            text="Create New ROI",
             command=self.select_roi_from_video,
             bg="#4CAF50",
             fg="white",
-            width=15
+            width=15,
         )
         btn_create_roi.pack(side="left", padx=5)
-        
+
         btn_load_roi = tk.Button(
-            roi_buttons_frame, 
-            text="Load Existing ROI", 
+            roi_buttons_frame,
+            text="Load Existing ROI",
             command=self.load_existing_roi,
             bg="#2196F3",
             fg="white",
-            width=15
+            width=15,
         )
         btn_load_roi.pack(side="left", padx=5)
 
@@ -657,29 +695,28 @@ class TrackerConfigDialog(tk.simpledialog.Dialog):
                 ("All files", "*.*"),
             ],
         )
-        
+
         if not video_path:
             return
-        
+
         try:
             # Open ROI selection window
             roi_poly = select_free_polygon_roi(video_path)
-            
+
             if roi_poly is not None and len(roi_poly) >= 3:
                 # Save ROI to TOML file
                 roi_file = save_roi_to_toml(video_path, roi_poly)
                 if roi_file:
                     self.roi_file_path = roi_file
                     self.roi_status_label.config(
-                        text=f"ROI saved: {os.path.basename(roi_file)}", 
-                        fg="green"
+                        text=f"ROI saved: {os.path.basename(roi_file)}", fg="green"
                     )
                     messagebox.showinfo(
                         "ROI Saved",
                         f"ROI polygon saved successfully!\n\n"
                         f"File: {os.path.basename(roi_file)}\n"
                         f"Points: {len(roi_poly)}\n\n"
-                        f"This ROI will be applied to all videos in the batch."
+                        f"This ROI will be applied to all videos in the batch.",
                     )
                 else:
                     self.roi_status_label.config(text="Error saving ROI", fg="red")
@@ -698,32 +735,30 @@ class TrackerConfigDialog(tk.simpledialog.Dialog):
                 ("All files", "*.*"),
             ],
         )
-        
+
         if not roi_file_path:
             return
-        
+
         try:
             # Load ROI from TOML file
             roi_poly = load_roi_from_toml(roi_file_path)
-            
+
             if roi_poly is not None and len(roi_poly) >= 3:
                 self.roi_file_path = roi_file_path
                 self.roi_status_label.config(
-                    text=f"ROI loaded: {os.path.basename(roi_file_path)}", 
-                    fg="green"
+                    text=f"ROI loaded: {os.path.basename(roi_file_path)}", fg="green"
                 )
                 messagebox.showinfo(
                     "ROI Loaded",
                     f"ROI polygon loaded successfully!\n\n"
                     f"File: {os.path.basename(roi_file_path)}\n"
                     f"Points: {len(roi_poly)}\n\n"
-                    f"This ROI will be applied to all videos in the batch."
+                    f"This ROI will be applied to all videos in the batch.",
                 )
             else:
                 self.roi_status_label.config(text="Invalid ROI file", fg="red")
                 messagebox.showerror(
-                    "Error", 
-                    "The selected ROI file is invalid or contains less than 3 points."
+                    "Error", "The selected ROI file is invalid or contains less than 3 points."
                 )
         except Exception as e:
             messagebox.showerror("Error", f"Error loading ROI: {str(e)}")
@@ -1419,63 +1454,30 @@ def create_merged_detection_csv(output_dir, total_frames):
     return out_paths
 
 
-# Helper to pick a video for pose estimation (prefers processed_* but allows any video)
-def pick_video_for_pose(tracking_dir, parent=None):
-    video_exts = [".mp4", ".avi", ".mov", ".mkv"]
-    processed_candidates = []
-    other_candidates = []
-    for ext in video_exts:
-        processed_candidates.extend(glob.glob(os.path.join(tracking_dir, f"processed_*{ext}")))
-        other_candidates.extend(glob.glob(os.path.join(tracking_dir, f"*{ext}")))
-    # Deduplicate while preserving order: processed first
-    seen = set()
-    ordered = []
-    for lst in (processed_candidates, other_candidates):
-        for path in lst:
-            if path not in seen:
-                seen.add(path)
-                ordered.append(path)
-    if not ordered:
-        # Let user pick manually
-        selected = filedialog.askopenfilename(
-            parent=parent,
-            title="Select video for pose estimation",
-            initialdir=tracking_dir,
-            filetypes=[
-                ("Video files", "*.mp4 *.avi *.mov *.mkv"),
-                ("All files", "*.*"),
-            ],
-        )
-        return selected if selected else None
-    if len(ordered) == 1:
-        return ordered[0]
-    # Prefer first processed_* if available
-    if processed_candidates:
-        return processed_candidates[0]
-    # Otherwise ask user to choose among the found videos
-    selected = filedialog.askopenfilename(
-        parent=parent,
-        title="Multiple videos found - select one for pose estimation",
-        initialdir=tracking_dir,
-        filetypes=[
-            ("Video files", "*.mp4 *.avi *.mov *.mkv"),
-            ("All files", "*.*"),
-        ],
-    )
-    if selected:
-        return selected
-    # Fallback to the first candidate if user cancels selection
-    return ordered[0]
+
 
 
 def _get_pose_skeleton():
     """Return COCO keypoint skeleton edges (17-keypoint layout)."""
     return [
-        (0, 1), (0, 2), (1, 3), (2, 4),  # head
-        (0, 5), (0, 6),  # shoulders to nose
-        (5, 6), (5, 7), (7, 9), (6, 8), (8, 10),  # arms
-        (5, 11), (6, 12), (11, 12),  # torso
-        (11, 13), (13, 15), (12, 14), (14, 16),  # legs
+        (0, 1),
+        (0, 2),
+        (1, 3),
+        (2, 4),  # head
+        (0, 5),
+        (0, 6),  # shoulders to nose
+        (5, 6),
+        (5, 7),
+        (7, 9),
+        (6, 8),
+        (8, 10),  # arms
+        (5, 11),
+        (6, 12),
+        (11, 12),  # torso
+        (11, 13),
+        (13, 15),
+        (12, 14),
+        (14, 16),  # legs
     ]
 
 
@@ -1505,12 +1507,12 @@ def merge_tracking_csvs(csv_files, output_csv_path, label="merged"):
     Merge multiple tracking CSV files into a single CSV.
     For each frame, uses the first non-NaN bbox found across all CSVs.
     This is useful when multiple IDs track the same person over time.
-    
+
     Args:
         csv_files: List of paths to CSV files to merge
         output_csv_path: Path where merged CSV will be saved
         label: Label to use in the merged CSV (default: "merged")
-    
+
     Returns:
         Path to merged CSV file, or None on error
     """
@@ -1518,11 +1520,11 @@ def merge_tracking_csvs(csv_files, output_csv_path, label="merged"):
         if not csv_files:
             print("Error: No CSV files provided for merging")
             return None
-        
+
         print(f"Merging {len(csv_files)} tracking CSV files...")
         for csv_file in csv_files:
             print(f"  - {os.path.basename(csv_file)}")
-        
+
         # Read all CSVs
         dfs = []
         max_frames = 0
@@ -1535,15 +1537,15 @@ def merge_tracking_csvs(csv_files, output_csv_path, label="merged"):
             except Exception as e:
                 print(f"Warning: Error reading {csv_file}: {e}")
                 continue
-        
+
         if not dfs:
             print("Error: Could not read any CSV files")
             return None
-        
+
         # Create merged DataFrame with all frames
         merged_data = []
         merged_id = 1  # Use ID 1 for merged data
-        
+
         for frame_idx in range(max_frames):
             row_data = {
                 "Frame": frame_idx,
@@ -1558,15 +1560,19 @@ def merge_tracking_csvs(csv_files, output_csv_path, label="merged"):
                 "Color_G": 0,
                 "Color_B": 0,
             }
-            
+
             # Find first non-NaN bbox for this frame across all CSVs
             for df in dfs:
                 frame_data = df[df["Frame"] == frame_idx]
                 if not frame_data.empty:
                     row = frame_data.iloc[0]
                     # Check if bbox is valid (not NaN)
-                    if pd.notna(row.get("X_min")) and pd.notna(row.get("Y_min")) and \
-                       pd.notna(row.get("X_max")) and pd.notna(row.get("Y_max")):
+                    if (
+                        pd.notna(row.get("X_min"))
+                        and pd.notna(row.get("Y_min"))
+                        and pd.notna(row.get("X_max"))
+                        and pd.notna(row.get("Y_max"))
+                    ):
                         row_data["X_min"] = float(row["X_min"])
                         row_data["Y_min"] = float(row["Y_min"])
                         row_data["X_max"] = float(row["X_max"])
@@ -1581,24 +1587,25 @@ def merge_tracking_csvs(csv_files, output_csv_path, label="merged"):
                         if pd.notna(row.get("Color_B")):
                             row_data["Color_B"] = int(row["Color_B"])
                         break  # Use first valid bbox found
-            
+
             merged_data.append(row_data)
-        
+
         # Create DataFrame and save
         merged_df = pd.DataFrame(merged_data)
         merged_df.to_csv(output_csv_path, index=False)
-        
+
         # Count frames with valid bboxes
         valid_frames = merged_df[merged_df["X_min"].notna()].shape[0]
         print(f"Merged CSV created: {os.path.basename(output_csv_path)}")
         print(f"  Total frames: {len(merged_df)}")
         print(f"  Frames with valid bbox: {valid_frames}")
-        
+
         return output_csv_path
-        
+
     except Exception as e:
         print(f"Error merging CSV files: {e}")
         import traceback
+
         traceback.print_exc()
         return None
 
@@ -1609,18 +1616,18 @@ def pick_video_for_pose(tracking_dir, parent=None):
     Prioritizes processed_*.mp4 files, but also accepts any .mp4, .avi, .mov, .mkv file.
     If multiple videos found, prompts user to select one.
     If no videos found, allows manual file selection.
-    
+
     Returns:
         Path to selected video file, or None if cancelled.
     """
     video_extensions = [".mp4", ".avi", ".mov", ".mkv"]
     video_files = []
-    
+
     # First, look for processed_*.mp4 files
     processed_videos = glob.glob(os.path.join(tracking_dir, "processed_*.mp4"))
     if processed_videos:
         video_files.extend(sorted(processed_videos))
-    
+
     # Then, look for any other video files
     for ext in video_extensions:
         pattern = os.path.join(tracking_dir, f"*{ext}")
@@ -1628,29 +1635,26 @@ def pick_video_for_pose(tracking_dir, parent=None):
         for video in found_videos:
             if video not in video_files:  # Avoid duplicates
                 video_files.append(video)
-    
+
     # Remove processed_* from general list if already in priority list
     video_files = sorted(set(video_files))
-    
+
     if not video_files:
         # No videos found, allow manual selection
         if parent:
             video_path = filedialog.askopenfilename(
                 parent=parent,
                 title="Select Video File",
-                filetypes=[
-                    ("Video files", "*.mp4 *.avi *.mov *.mkv"),
-                    ("All files", "*.*")
-                ]
+                filetypes=[("Video files", "*.mp4 *.avi *.mov *.mkv"), ("All files", "*.*")],
             )
             return video_path if video_path else None
         else:
             return None
-    
+
     if len(video_files) == 1:
         # Only one video found, use it automatically
         return video_files[0]
-    
+
     # Multiple videos found, prompt user to select
     if parent is None:
         root = tk.Tk()
@@ -1659,38 +1663,38 @@ def pick_video_for_pose(tracking_dir, parent=None):
     else:
         root = parent
         created_root = False
-    
+
     selection_dialog = tk.Toplevel(root)
     selection_dialog.title("Select Video for Pose Estimation")
     selection_dialog.geometry("600x500")
     selection_dialog.transient(root)
     selection_dialog.grab_set()
-    
+
     # Center window
     selection_dialog.update_idletasks()
     x = (selection_dialog.winfo_screenwidth() // 2) - (selection_dialog.winfo_width() // 2)
     y = (selection_dialog.winfo_screenheight() // 2) - (selection_dialog.winfo_height() // 2)
     selection_dialog.geometry(f"+{x}+{y}")
-    
+
     tk.Label(
         selection_dialog,
         text="Multiple videos found. Please select one:",
-        font=("Arial", 10, "bold")
+        font=("Arial", 10, "bold"),
     ).pack(pady=10)
-    
+
     listbox = tk.Listbox(selection_dialog, height=12)
     scrollbar = tk.Scrollbar(selection_dialog, orient="vertical", command=listbox.yview)
     listbox.configure(yscrollcommand=scrollbar.set)
-    
+
     for video_file in video_files:
         listbox.insert(tk.END, os.path.basename(video_file))
-    
+
     listbox.pack(side="left", fill="both", expand=True, padx=(10, 0), pady=10)
     scrollbar.pack(side="right", fill="y", pady=10)
     listbox.selection_set(0)
-    
+
     selected_video = [None]
-    
+
     def confirm_selection():
         if listbox.curselection():
             idx = listbox.curselection()[0]
@@ -1698,35 +1702,27 @@ def pick_video_for_pose(tracking_dir, parent=None):
         selection_dialog.destroy()
         if created_root and root.winfo_exists():
             root.destroy()
-    
+
     def cancel_selection():
         selection_dialog.destroy()
         if created_root and root.winfo_exists():
             root.destroy()
-    
+
     buttons_frame = tk.Frame(selection_dialog)
     buttons_frame.pack(fill="x", padx=10, pady=10)
-    
+
     tk.Button(
-        buttons_frame,
-        text="OK",
-        command=confirm_selection,
-        bg="#4CAF50",
-        fg="white",
-        padx=20
+        buttons_frame, text="OK", command=confirm_selection, bg="#4CAF50", fg="white", padx=20
     ).pack(side="left", padx=5)
-    
-    tk.Button(
-        buttons_frame,
-        text="Cancel",
-        command=cancel_selection,
-        padx=20
-    ).pack(side="left", padx=5)
-    
+
+    tk.Button(buttons_frame, text="Cancel", command=cancel_selection, padx=20).pack(
+        side="left", padx=5
+    )
+
     selection_dialog.wait_window()
     if created_root and root.winfo_exists():
         root.destroy()
-    
+
     return selected_video[0]
 
 
@@ -1742,30 +1738,30 @@ def select_id_and_run_pose():
         root.withdraw()
         created_root = True
     print(f"[pose] Using root: created={created_root}, exists={root.winfo_exists()}")
-    
+
     # Select tracking directory
     tracking_dir = filedialog.askdirectory(title="Select Tracking Directory")
     if not tracking_dir:
         if created_root and root.winfo_exists():
             root.destroy()
         return
-    
+
     # Find tracking CSV files
     csv_files = glob.glob(os.path.join(tracking_dir, "*_id_*.csv"))
     if not csv_files:
         messagebox.showerror("Error", f"No tracking CSV files found in:\n{tracking_dir}")
         return
-    
+
     # Find video (processed_* preferred, else any video; allow manual pick)
     video_path = pick_video_for_pose(tracking_dir, parent=root)
     if not video_path:
         messagebox.showerror("Error", f"No video found in:\n{tracking_dir}")
         return
-    
+
     # Parse available IDs from CSV files
     available_ids = []
     id_info = {}  # {id: (label, csv_file)}
-    
+
     for csv_file in csv_files:
         filename = os.path.basename(csv_file)
         parts = filename.replace(".csv", "").split("_id_")
@@ -1774,40 +1770,38 @@ def select_id_and_run_pose():
             tracker_id = int(parts[1])
             available_ids.append(tracker_id)
             id_info[tracker_id] = (label, csv_file)
-    
+
     if not available_ids:
         messagebox.showerror("Error", "No valid tracking IDs found in CSV files")
         return
-    
+
     available_ids.sort()
-    
+
     # Create selection dialog
     selection_dialog = tk.Toplevel(root)
     selection_dialog.title("Select ID for Pose Estimation")
     selection_dialog.geometry("1200x900")
     selection_dialog.transient(root)
     selection_dialog.grab_set()
-    
+
     # Center window
     selection_dialog.update_idletasks()
     x = (selection_dialog.winfo_screenwidth() // 2) - (selection_dialog.winfo_width() // 2)
     y = (selection_dialog.winfo_screenheight() // 2) - (selection_dialog.winfo_height() // 2)
     selection_dialog.geometry(f"+{x}+{y}")
-    
+
     # Video preview frame
     preview_frame = tk.Frame(selection_dialog)
     preview_frame.pack(fill="both", expand=True, padx=10, pady=10)
-    
-    tk.Label(
-        preview_frame,
-        text="Video Preview with Tracked IDs",
-        font=("Arial", 12, "bold")
-    ).pack(pady=5)
-    
+
+    tk.Label(preview_frame, text="Video Preview with Tracked IDs", font=("Arial", 12, "bold")).pack(
+        pady=5
+    )
+
     # Canvas for video display
     canvas = tk.Canvas(preview_frame, bg="black", width=640, height=360)
     canvas.pack(pady=10, fill="both", expand=True)
-    
+
     # Load first frame and draw bboxes
     cap = cv2.VideoCapture(video_path)
     ret, frame = cap.read()
@@ -1817,7 +1811,7 @@ def select_id_and_run_pose():
         selection_dialog.destroy()
         root.destroy()
         return
-    
+
     # Read tracking data for first frame
     tracking_data = {}
     for tracker_id, (label, csv_file) in id_info.items():
@@ -1831,17 +1825,13 @@ def select_id_and_run_pose():
                 "x_max": int(frame_data.iloc[0]["X_max"]),
                 "y_max": int(frame_data.iloc[0]["Y_max"]),
             }
-    
+
     # Draw bboxes on frame
     display_frame = frame.copy()
     for tracker_id, data in tracking_data.items():
         color = get_color_for_id(tracker_id)
         cv2.rectangle(
-            display_frame,
-            (data["x_min"], data["y_min"]),
-            (data["x_max"], data["y_max"]),
-            color,
-            2
+            display_frame, (data["x_min"], data["y_min"]), (data["x_max"], data["y_max"]), color, 2
         )
         cv2.putText(
             display_frame,
@@ -1850,21 +1840,21 @@ def select_id_and_run_pose():
             cv2.FONT_HERSHEY_SIMPLEX,
             0.6,
             color,
-            2
+            2,
         )
-    
+
     # Resize frame to fit canvas (max 640x360)
     h, w = display_frame.shape[:2]
     scale = min(640 / w, 360 / h)
     new_w = int(w * scale)
     new_h = int(h * scale)
     display_frame = cv2.resize(display_frame, (new_w, new_h))
-    
+
     # Convert to PhotoImage
     display_frame_rgb = cv2.cvtColor(display_frame, cv2.COLOR_BGR2RGB)
     pil_image = Image.fromarray(display_frame_rgb)
     img = ImageTk.PhotoImage(image=pil_image)
-    
+
     # Center image on canvas
     canvas_width = 640
     canvas_height = 360
@@ -1872,87 +1862,80 @@ def select_id_and_run_pose():
     y = canvas_height // 2
     canvas.create_image(x, y, image=img, anchor="center")
     canvas.image = img  # Keep a reference
-    
+
     cap.release()
-    
+
     # ID selection frame
     id_frame = tk.Frame(selection_dialog)
     id_frame.pack(fill="x", padx=10, pady=10)
-    
-    tk.Label(
-        id_frame,
-        text="Available Tracked IDs:",
-        font=("Arial", 10, "bold")
-    ).pack(anchor="w")
-    
+
+    tk.Label(id_frame, text="Available Tracked IDs:", font=("Arial", 10, "bold")).pack(anchor="w")
+
     # Listbox for ID selection (multiple selection enabled)
     listbox_frame = tk.Frame(id_frame)
     listbox_frame.pack(fill="both", expand=True, pady=5)
-    
+
     listbox = tk.Listbox(listbox_frame, height=6, selectmode=tk.EXTENDED)
     scrollbar = tk.Scrollbar(listbox_frame, orient="vertical", command=listbox.yview)
     listbox.configure(yscrollcommand=scrollbar.set)
-    
+
     for tracker_id in available_ids:
         label = id_info[tracker_id][0]
         listbox.insert(tk.END, f"ID {tracker_id:02d} ({label})")
-    
+
     listbox.pack(side="left", fill="both", expand=True)
     scrollbar.pack(side="right", fill="y")
-    
+
     if available_ids:
         listbox.selection_set(0)  # Select first by default
-    
+
     # Help text for multiple selection
     help_label = tk.Label(
         id_frame,
         text="Tip: Hold Ctrl/Cmd to select multiple IDs for merging",
         font=("Arial", 8),
-        fg="gray"
+        fg="gray",
     )
     help_label.pack(anchor="w", pady=(5, 0))
-    
+
     # Buttons frame
     buttons_frame = tk.Frame(selection_dialog)
     buttons_frame.pack(fill="x", padx=10, pady=10)
-    
+
     selected_ids = [None]  # Now can be a list of IDs
     selected_model = [None]
     selected_conf = [0.10]
     selected_iou = [0.70]
-    
+
     def run_pose():
         if not listbox.curselection():
             messagebox.showwarning("Warning", "Please select at least one ID")
             return
-        
+
         # Get all selected IDs
         selections = listbox.curselection()
         selected_id_list = []
         selected_csvs = []
         selected_labels = []
-        
+
         for idx in selections:
             selection = listbox.get(idx)
             # Extract ID from "ID 01 (person)" format
             id_str = selection.split()[1]
             tracker_id = int(id_str)
             selected_id_list.append(tracker_id)
-            
+
             # Get CSV file and label for this ID
             label, csv_file = id_info[tracker_id]
             selected_csvs.append(csv_file)
             selected_labels.append(label)
-        
+
         # Check if all selected IDs have the same label
         unique_labels = set(selected_labels)
-        if len(unique_labels) == 1:
-            merged_label = selected_labels[0]
-        else:
-            merged_label = "merged"
-        
+        merged_label = selected_labels[0] if len(unique_labels) == 1 else "merged"
+
         selected_ids[0] = selected_id_list
-        
+
         # Ask for pose model
         pose_models = [
             ("yolo11n-pose.pt", "Pose - Nano (fastest)"),
@@ -1961,35 +1944,33 @@ def select_id_and_run_pose():
             ("yolo11l-pose.pt", "Pose - Large"),
             ("yolo11x-pose.pt", "Pose - XLarge (most accurate)"),
         ]
-        
+
         model_dialog = tk.Toplevel(selection_dialog)
         model_dialog.title("Pose Configuration")
         model_dialog.geometry("450x400")
         model_dialog.transient(selection_dialog)
         model_dialog.grab_set()
-        
+
         model_dialog.update_idletasks()
         x = (model_dialog.winfo_screenwidth() // 2) - (model_dialog.winfo_width() // 2)
         y = (model_dialog.winfo_screenheight() // 2) - (model_dialog.winfo_height() // 2)
         model_dialog.geometry(f"+{x}+{y}")
-        
+
         # Model selection
         tk.Label(
-            model_dialog,
-            text="Select Pose Estimation Model:",
-            font=("Arial", 10, "bold")
+            model_dialog, text="Select Pose Estimation Model:", font=("Arial", 10, "bold")
         ).pack(pady=(10, 5))
-        
+
         model_listbox = tk.Listbox(model_dialog, height=5)
         for model, desc in pose_models:
             model_listbox.insert(tk.END, f"{model} - {desc}")
         model_listbox.pack(padx=10, pady=5, fill="both", expand=True)
         model_listbox.selection_set(0)
-        
+
         # Configuration frame for conf and iou
         config_frame = tk.LabelFrame(model_dialog, text="Pose Detection Parameters", padx=5, pady=5)
         config_frame.pack(fill="x", padx=10, pady=10)
-        
+
         # Confidence threshold
         conf_frame = tk.Frame(config_frame)
         conf_frame.pack(fill="x", padx=5, pady=5)
@@ -2006,17 +1987,23 @@ def select_id_and_run_pose():
             "Higher values (e.g., 0.5): Fewer but more accurate detections\n"
             "Recommended: 0.1-0.3 for pose estimation"
         )
+
         def show_conf_help(e):
             tooltip = tk.Toplevel()
             tooltip.wm_overrideredirect(True)
-            tooltip.geometry(f"+{e.x_root+10}+{e.y_root+10}")
-            label = tk.Label(tooltip, text=conf_tooltip, bg="yellow", justify="left", padx=5, pady=5)
+            tooltip.geometry(f"+{e.x_root + 10}+{e.y_root + 10}")
+            label = tk.Label(
+                tooltip, text=conf_tooltip, bg="yellow", justify="left", padx=5, pady=5
+            )
             label.pack()
+
             def hide_help(e):
                 tooltip.destroy()
+
             tooltip.bind("<Leave>", hide_help)
+
         help_conf.bind("<Enter>", show_conf_help)
-        
+
         # IoU threshold
         iou_frame = tk.Frame(config_frame)
         iou_frame.pack(fill="x", padx=5, pady=5)
@@ -2033,34 +2020,40 @@ def select_id_and_run_pose():
             "Lower values (e.g., 0.5): More lenient matching\n"
             "Recommended: 0.7 for most cases"
         )
+
         def show_iou_help(e):
             tooltip = tk.Toplevel()
             tooltip.wm_overrideredirect(True)
-            tooltip.geometry(f"+{e.x_root+10}+{e.y_root+10}")
+            tooltip.geometry(f"+{e.x_root + 10}+{e.y_root + 10}")
             label = tk.Label(tooltip, text=iou_tooltip, bg="yellow", justify="left", padx=5, pady=5)
             label.pack()
+
             def hide_help(e):
                 tooltip.destroy()
+
             tooltip.bind("<Leave>", hide_help)
+
         help_iou.bind("<Enter>", show_iou_help)
-        
+
         def confirm_model():
             # Get model selection
             if model_listbox.curselection():
                 selection = model_listbox.get(model_listbox.curselection())
                 selected_model[0] = selection.split(" - ")[0]
-            
+
             # Get conf and iou values
             try:
                 conf_val = float(conf_entry.get())
                 if not 0.0 <= conf_val <= 1.0:
-                    messagebox.showerror("Error", "Confidence threshold must be between 0.0 and 1.0")
+                    messagebox.showerror(
+                        "Error", "Confidence threshold must be between 0.0 and 1.0"
+                    )
                     return
                 selected_conf[0] = conf_val
             except ValueError:
                 messagebox.showerror("Error", "Invalid confidence threshold value")
                 return
-            
+
             try:
                 iou_val = float(iou_entry.get())
                 if not 0.0 <= iou_val <= 1.0:
@@ -2070,37 +2063,39 @@ def select_id_and_run_pose():
             except ValueError:
                 messagebox.showerror("Error", "Invalid IoU threshold value")
                 return
-            
+
             model_dialog.destroy()
             selection_dialog.destroy()
             if created_root and root.winfo_exists():
                 root.destroy()
-            
+
             # Process pose estimation for selected ID(s)
             if selected_ids[0] and selected_model[0]:
                 selected_id_list = selected_ids[0]
-                
+
                 # If multiple IDs selected, merge CSVs first
                 if len(selected_id_list) > 1:
                     print(f"\nMultiple IDs selected: {selected_id_list}")
                     print("Merging CSVs before pose estimation...")
-                    
+
                     # Get CSV files for selected IDs
                     csv_files_to_merge = []
                     for tracker_id in selected_id_list:
-                        csv_files = glob.glob(os.path.join(tracking_dir, f"*_id_{tracker_id:02d}.csv"))
+                        csv_files = glob.glob(
+                            os.path.join(tracking_dir, f"*_id_{tracker_id:02d}.csv")
+                        )
                         if csv_files:
                             csv_files_to_merge.append(csv_files[0])
-                    
+
                     if csv_files_to_merge:
                         # Create merged CSV in tracking directory
-                        merged_csv_path = os.path.join(tracking_dir, f"{merged_label}_id_merged.csv")
-                        merged_csv = merge_tracking_csvs(
-                            csv_files_to_merge,
-                            merged_csv_path,
-                            label=merged_label
+                        merged_csv_path = os.path.join(
+                            tracking_dir, f"{merged_label}_id_merged.csv"
                         )
-                        
+                        merged_csv = merge_tracking_csvs(
+                            csv_files_to_merge, merged_csv_path, label=merged_label
+                        )
+
                         if merged_csv:
                             # Process pose estimation using merged CSV
                             process_pose_for_merged_csv(
@@ -2110,7 +2105,7 @@ def select_id_and_run_pose():
                                 device="cpu",  # Could be made configurable
                                 pose_model_name=selected_model[0],
                                 conf=selected_conf[0],
-                                iou=selected_iou[0]
+                                iou=selected_iou[0],
                             )
                         else:
                             messagebox.showerror("Error", "Failed to merge CSV files")
@@ -2125,28 +2120,20 @@ def select_id_and_run_pose():
                         device="cpu",  # Could be made configurable
                         pose_model_name=selected_model[0],
                         conf=selected_conf[0],
-                        iou=selected_iou[0]
+                        iou=selected_iou[0],
                     )
-        
+
         buttons_frame = tk.Frame(model_dialog)
         buttons_frame.pack(fill="x", padx=10, pady=10)
-        
+
         tk.Button(
-            buttons_frame,
-            text="OK",
-            command=confirm_model,
-            bg="#4CAF50",
-            fg="white",
-            padx=20
+            buttons_frame, text="OK", command=confirm_model, bg="#4CAF50", fg="white", padx=20
         ).pack(side="left", padx=5)
-        
+
         tk.Button(
-            buttons_frame,
-            text="Cancel",
-            command=lambda: model_dialog.destroy(),
-            padx=20
+            buttons_frame, text="Cancel", command=lambda: model_dialog.destroy(), padx=20
         ).pack(side="left", padx=5)
-    
+
     tk.Button(
         buttons_frame,
         text="Run Pose Estimation",
@@ -2155,9 +2142,9 @@ def select_id_and_run_pose():
         fg="white",
         font=("Arial", 10, "bold"),
         padx=20,
-        pady=5
+        pady=5,
     ).pack(side="left", padx=5)
-    
+
     tk.Button(
         buttons_frame,
         text="Cancel",
@@ -2166,18 +2153,26 @@ def select_id_and_run_pose():
             root.destroy() if created_root and root.winfo_exists() else None,
         ),
         padx=20,
-        pady=5
+        pady=5,
     ).pack(side="left", padx=5)
-    
+
     selection_dialog.wait_window()
     if created_root and root.winfo_exists() and not selection_dialog.winfo_exists():
         root.destroy()
 
 
-def process_pose_for_merged_csv(tracking_dir, merged_csv_path, video_path, device="cpu", pose_model_name="yolo11n-pose.pt", conf=0.10, iou=0.70):
+def process_pose_for_merged_csv(
+    tracking_dir,
+    merged_csv_path,
+    video_path,
+    device="cpu",
+    pose_model_name="yolo11n-pose.pt",
+    conf=0.10,
+    iou=0.70,
+):
     """
     Process pose estimation using a merged CSV file (from multiple IDs).
-    
+
     Args:
         tracking_dir: Directory containing tracking results
         merged_csv_path: Path to the merged CSV file
@@ -2190,37 +2185,53 @@ def process_pose_for_merged_csv(tracking_dir, merged_csv_path, video_path, devic
     print("\n" + "=" * 80)
     print("POSE ESTIMATION FOR MERGED CSV")
     print("=" * 80)
-    
+
     if not os.path.exists(merged_csv_path):
         print(f"Error: Merged CSV file not found: {merged_csv_path}")
         messagebox.showerror("Error", f"Merged CSV file not found:\n{merged_csv_path}")
         return False
-    
+
     # Get video basename (without extension) for directory and file naming
     video_basename = os.path.splitext(os.path.basename(video_path))[0]
     pose_output_dir = os.path.join(tracking_dir, f"{video_basename}_pose_outputs")
     os.makedirs(pose_output_dir, exist_ok=True)
-    
+
     csv_file = merged_csv_path
     filename = os.path.basename(csv_file)
     parts = filename.replace(".csv", "").split("_id_")
     label = parts[0] if len(parts) == 2 else "merged"
-    
+
     print(f"Using video: {os.path.basename(video_path)}")
     print(f"Using merged CSV: {os.path.basename(merged_csv_path)}")
     print(f"Pose detection params: conf={conf}, iou={iou}")
-    
+
     # Continue with same processing as single ID (using merged CSV)
     return _process_pose_from_csv(
-        tracking_dir, video_path, csv_file, label, video_basename, pose_output_dir,
-        device, pose_model_name, conf, iou
+        tracking_dir,
+        video_path,
+        csv_file,
+        label,
+        video_basename,
+        pose_output_dir,
+        device,
+        pose_model_name,
+        conf,
+        iou,
     )
 
 
-def process_pose_for_single_id(tracking_dir, tracker_id, video_path, device="cpu", pose_model_name="yolo11n-pose.pt", conf=0.10, iou=0.70):
+def process_pose_for_single_id(
+    tracking_dir,
+    tracker_id,
+    video_path,
+    device="cpu",
+    pose_model_name="yolo11n-pose.pt",
+    conf=0.10,
+    iou=0.70,
+):
     """
     Process pose estimation for a single tracked ID.
-    
+
     Args:
         tracking_dir: Directory containing tracking results
         tracker_id: The ID to process
@@ -2233,41 +2244,61 @@ def process_pose_for_single_id(tracking_dir, tracker_id, video_path, device="cpu
     print("\n" + "=" * 80)
     print(f"POSE ESTIMATION FOR ID {tracker_id:02d}")
     print("=" * 80)
-    
+
     # Get video basename (without extension) for directory and file naming
     video_basename = os.path.splitext(os.path.basename(video_path))[0]
     pose_output_dir = os.path.join(tracking_dir, f"{video_basename}_pose_outputs")
     os.makedirs(pose_output_dir, exist_ok=True)
-    
+
     # Find CSV file for this ID
     csv_files = glob.glob(os.path.join(tracking_dir, f"*_id_{tracker_id:02d}.csv"))
     if not csv_files:
         print(f"Error: No tracking CSV found for ID {tracker_id:02d}")
         messagebox.showerror("Error", f"No tracking CSV found for ID {tracker_id:02d}")
         return False
-    
+
     csv_file = csv_files[0]
     filename = os.path.basename(csv_file)
     parts = filename.replace(".csv", "").split("_id_")
     label = parts[0] if len(parts) == 2 else "unknown"
-    
+
     print(f"Using video: {os.path.basename(video_path)}")
     print(f"Processing ID {tracker_id:02d} ({label})")
     print(f"Pose detection params: conf={conf}, iou={iou}")
-    
+
     # Continue with shared processing function
     return _process_pose_from_csv(
-        tracking_dir, video_path, csv_file, label, video_basename, pose_output_dir,
-        device, pose_model_name, conf, iou, tracker_id=tracker_id
+        tracking_dir,
+        video_path,
+        csv_file,
+        label,
+        video_basename,
+        pose_output_dir,
+        device,
+        pose_model_name,
+        conf,
+        iou,
+        tracker_id=tracker_id,
     )
 
 
-def _process_pose_from_csv(tracking_dir, video_path, csv_file, label, video_basename, pose_output_dir,
-                           device, pose_model_name, conf, iou, tracker_id=None):
+def _process_pose_from_csv(
+    tracking_dir,
+    video_path,
+    csv_file,
+    label,
+    video_basename,
+    pose_output_dir,
+    device,
+    pose_model_name,
+    conf,
+    iou,
+    tracker_id=None,
+):
     """
     Shared function to process pose estimation from a CSV file.
     Used by both single ID and merged CSV processing.
-    
+
     Args:
         tracking_dir: Directory containing tracking results
         video_path: Path to the video file
@@ -2281,12 +2312,12 @@ def _process_pose_from_csv(tracking_dir, video_path, csv_file, label, video_base
         iou: IoU threshold for pose detection
         tracker_id: Optional tracker ID (None for merged CSV)
     """
-    
+
     # Load pose model
     models_dir = os.path.join(os.path.dirname(__file__), "models")
     os.makedirs(models_dir, exist_ok=True)
     pose_model_path = os.path.join(models_dir, pose_model_name)
-    
+
     # Download model if needed
     if not os.path.exists(pose_model_path):
         try:
@@ -2295,31 +2326,31 @@ def _process_pose_from_csv(tracking_dir, video_path, csv_file, label, video_base
             os.chdir(models_dir)
             YOLO(pose_model_name)
             os.chdir(current_dir)
-            print(f"Model downloaded successfully")
+            print("Model downloaded successfully")
         except Exception as e:
             messagebox.showerror("Error", f"Failed to download pose model: {str(e)}")
             return False
-    
+
     try:
         pose_model = YOLO(pose_model_path)
         print(f"Pose model loaded: {pose_model_name}")
     except Exception as e:
         messagebox.showerror("Error", f"Failed to load pose model: {str(e)}")
         return False
-    
+
     # Open video
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         messagebox.showerror("Error", f"Could not open video:\n{video_path}")
         return False
-    
+
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     fps = cap.get(cv2.CAP_PROP_FPS)
     print(f"Video: {total_frames} frames @ {fps:.6f} FPS")
-    
+
     # Read tracking CSV
     df = pd.read_csv(csv_file)
-    
+
     # Create output CSV and video for pose keypoints using basename
     if tracker_id is not None:
         pose_csv = os.path.join(pose_output_dir, f"{video_basename}_id_{tracker_id:02d}_pose.csv")
@@ -2330,21 +2361,34 @@ def _process_pose_from_csv(tracking_dir, video_path, csv_file, label, video_base
         pose_csv = os.path.join(pose_output_dir, f"{video_basename}_{label}_merged_pose.csv")
         pose_video = os.path.join(pose_output_dir, f"{video_basename}_{label}_merged_pose.mp4")
         output_tracker_id = 1  # Use ID 1 for merged data
-    
+
     # Initialize pose CSV with headers
     keypoint_names = [
-        "nose", "left_eye", "right_eye", "left_ear", "right_ear",
-        "left_shoulder", "right_shoulder", "left_elbow", "right_elbow",
-        "left_wrist", "right_wrist", "left_hip", "right_hip",
-        "left_knee", "right_knee", "left_ankle", "right_ankle"
+        "nose",
+        "left_eye",
+        "right_eye",
+        "left_ear",
+        "right_ear",
+        "left_shoulder",
+        "right_shoulder",
+        "left_elbow",
+        "right_elbow",
+        "left_wrist",
+        "right_wrist",
+        "left_hip",
+        "right_hip",
+        "left_knee",
+        "right_knee",
+        "left_ankle",
+        "right_ankle",
     ]
-    
+
     pose_headers = ["Frame", "Tracker_ID", "Label"]
     for kp_name in keypoint_names:
         pose_headers.extend([f"{kp_name}_x", f"{kp_name}_y", f"{kp_name}_conf"])
-    
+
     pose_data = []
-    
+
     # Prepare video writer for skeleton overlay
     frame_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     frame_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -2357,19 +2401,19 @@ def _process_pose_from_csv(tracking_dir, video_path, csv_file, label, video_base
         ret, frame = cap.read()
         if not ret:
             break
-        
+
         # Get bbox for this frame from CSV
         frame_data = df[df["Frame"] == frame_idx]
-        
+
         if not frame_data.empty and pd.notna(frame_data.iloc[0]["X_min"]):
             x_min = int(frame_data.iloc[0]["X_min"])
             y_min = int(frame_data.iloc[0]["Y_min"])
             x_max = int(frame_data.iloc[0]["X_max"])
             y_max = int(frame_data.iloc[0]["Y_max"])
-            
+
             # Extract ROI from frame
             roi = frame[y_min:y_max, x_min:x_max]
-            
+
             if roi.size > 0:
                 # Run pose estimation on ROI
                 results = pose_model.predict(
@@ -2381,21 +2425,21 @@ def _process_pose_from_csv(tracking_dir, video_path, csv_file, label, video_base
                     show=False,
                     save=False,
                 )
-                
+
                 # Extract keypoints
                 keypoints_row = [frame_idx, output_tracker_id, label]
-                
+
                 if results and len(results) > 0 and results[0].keypoints is not None:
                     kp_data = results[0].keypoints.data
                     if kp_data is not None and len(kp_data) > 0:
-                        if hasattr(kp_data, 'cpu'):
+                        if hasattr(kp_data, "cpu"):
                             kp_data = kp_data.cpu().numpy()
-                        elif hasattr(kp_data, 'numpy'):
+                        elif hasattr(kp_data, "numpy"):
                             kp_data = kp_data.numpy()
-                        
+
                         keypoints = kp_data[0]
-                        
-                        for i, kp_name in enumerate(keypoint_names):
+
+                        for i, _ in enumerate(keypoint_names):
                             if i < len(keypoints):
                                 kp = keypoints[i]
                                 kp_x = float(kp[0]) + x_min
@@ -2410,7 +2454,7 @@ def _process_pose_from_csv(tracking_dir, video_path, csv_file, label, video_base
                 else:
                     for _ in keypoint_names:
                         keypoints_row.extend([np.nan, np.nan, np.nan])
-                
+
                 pose_data.append(keypoints_row)
 
                 # Draw skeleton on full frame using absolute keypoints
@@ -2431,40 +2475,39 @@ def _process_pose_from_csv(tracking_dir, video_path, csv_file, label, video_base
                 for _ in keypoint_names:
                     keypoints_row.extend([np.nan, np.nan, np.nan])
                 pose_data.append(keypoints_row)
-            
+
             writer.write(frame)
         else:
             keypoints_row = [frame_idx, output_tracker_id, label]
             for _ in keypoint_names:
                 keypoints_row.extend([np.nan, np.nan, np.nan])
             pose_data.append(keypoints_row)
-        
+
         frame_idx += 1
-        
+
         if frame_idx % 20 == 0:
             print(f"Processing frame {frame_idx}/{total_frames}", end="\r")
-    
+
     cap.release()
     writer.release()
-    
+
     # Save pose CSV
     pose_df = pd.DataFrame(pose_data, columns=pose_headers)
     pose_df.to_csv(pose_csv, index=False)
     print(f"\nPose data saved: {os.path.basename(pose_csv)}")
     print(f"Pose video saved: {os.path.basename(pose_video)}")
-    
+
     print("\n" + "=" * 80)
     print("POSE ESTIMATION COMPLETED!")
     print("=" * 80)
-    
+
     if tracker_id is not None:
         completion_msg = f"Pose estimation completed for ID {tracker_id:02d}!\n\n"
     else:
-        completion_msg = f"Pose estimation completed for merged CSV!\n\n"
-    
+        completion_msg = "Pose estimation completed for merged CSV!\n\n"
+
     messagebox.showinfo(
-        "Pose Estimation Completed",
-        completion_msg + f"Results saved in:\n{pose_csv}"
+        "Pose Estimation Completed", completion_msg + f"Results saved in:\n{pose_csv}"
     )
     return True
 
@@ -2472,12 +2515,12 @@ def _process_pose_from_csv(tracking_dir, video_path, csv_file, label, video_base
 def process_pose_in_bboxes(tracking_dir, device="cpu", pose_model_name="yolo11n-pose.pt"):
     """
     Process pose estimation within bounding boxes from tracking results.
-    
+
     Args:
         tracking_dir: Directory containing tracking results (CSVs and processed video)
         device: Device to use for pose estimation ("cpu" or "cuda")
         pose_model_name: Name of the pose model to use (default: yolo11n-pose.pt)
-    
+
     Returns:
         True if successful, False otherwise
     """
@@ -2486,14 +2529,14 @@ def process_pose_in_bboxes(tracking_dir, device="cpu", pose_model_name="yolo11n-
     print("=" * 80)
     pose_output_dir = os.path.join(tracking_dir, "pose_outputs")
     os.makedirs(pose_output_dir, exist_ok=True)
-    
+
     # Find tracking CSV files
     csv_files = glob.glob(os.path.join(tracking_dir, "*_id_*.csv"))
     if not csv_files:
         print(f"Error: No tracking CSV files found in {tracking_dir}")
         messagebox.showerror("Error", f"No tracking CSV files found in:\n{tracking_dir}")
         return False
-    
+
     # Find video (processed_* preferred, else any; allow manual pick)
     video_path = pick_video_for_pose(tracking_dir)
     if not video_path:
@@ -2502,12 +2545,12 @@ def process_pose_in_bboxes(tracking_dir, device="cpu", pose_model_name="yolo11n-
         return False
     print(f"Using video: {os.path.basename(video_path)}")
     print(f"Found {len(csv_files)} tracking CSV files")
-    
+
     # Load pose model
     models_dir = os.path.join(os.path.dirname(__file__), "models")
     os.makedirs(models_dir, exist_ok=True)
     pose_model_path = os.path.join(models_dir, pose_model_name)
-    
+
     # Download model if needed
     if not os.path.exists(pose_model_path):
         try:
@@ -2521,7 +2564,7 @@ def process_pose_in_bboxes(tracking_dir, device="cpu", pose_model_name="yolo11n-
             print(f"Error downloading pose model: {e}")
             messagebox.showerror("Error", f"Failed to download pose model: {str(e)}")
             return False
-    
+
     try:
         pose_model = YOLO(pose_model_path)
         print(f"Pose model loaded: {pose_model_name}")
@@ -2529,18 +2572,18 @@ def process_pose_in_bboxes(tracking_dir, device="cpu", pose_model_name="yolo11n-
         print(f"Error loading pose model: {e}")
         messagebox.showerror("Error", f"Failed to load pose model: {str(e)}")
         return False
-    
+
     # Open video
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         print(f"Error: Could not open video {video_path}")
         messagebox.showerror("Error", f"Could not open video:\n{video_path}")
         return False
-    
+
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     fps = cap.get(cv2.CAP_PROP_FPS)
     print(f"Video: {total_frames} frames @ {fps:.6f} FPS")
-    
+
     # Process each tracking CSV file (each ID)
     for csv_file in csv_files:
         try:
@@ -2551,34 +2594,47 @@ def process_pose_in_bboxes(tracking_dir, device="cpu", pose_model_name="yolo11n-
             if len(parts) != 2:
                 print(f"Skipping {filename}: invalid format")
                 continue
-            
+
             label = parts[0]
             tracker_id = int(parts[1])
-            
+
             print(f"\nProcessing ID {tracker_id} ({label})...")
-            
+
             # Read tracking CSV
             df = pd.read_csv(csv_file)
-            
+
             # Create output CSV for pose keypoints
             pose_csv = os.path.join(pose_output_dir, f"{label}_id_{tracker_id:02d}_pose.csv")
             pose_video = os.path.join(pose_output_dir, f"{label}_id_{tracker_id:02d}_pose.mp4")
-            
+
             # Initialize pose CSV with headers
             # YOLO pose has 17 keypoints (COCO format)
             keypoint_names = [
-                "nose", "left_eye", "right_eye", "left_ear", "right_ear",
-                "left_shoulder", "right_shoulder", "left_elbow", "right_elbow",
-                "left_wrist", "right_wrist", "left_hip", "right_hip",
-                "left_knee", "right_knee", "left_ankle", "right_ankle"
+                "nose",
+                "left_eye",
+                "right_eye",
+                "left_ear",
+                "right_ear",
+                "left_shoulder",
+                "right_shoulder",
+                "left_elbow",
+                "right_elbow",
+                "left_wrist",
+                "right_wrist",
+                "left_hip",
+                "right_hip",
+                "left_knee",
+                "right_knee",
+                "left_ankle",
+                "right_ankle",
             ]
-            
+
             pose_headers = ["Frame", "Tracker_ID", "Label"]
             for kp_name in keypoint_names:
                 pose_headers.extend([f"{kp_name}_x", f"{kp_name}_y", f"{kp_name}_conf"])
-            
+
             pose_data = []
-            
+
             # Prepare pose video writer for this ID
             cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # Reset to beginning
             frame_idx = 0
@@ -2588,24 +2644,24 @@ def process_pose_in_bboxes(tracking_dir, device="cpu", pose_model_name="yolo11n-
                 fps if fps > 0 else 25.0,
                 (int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))),
             )
-            
+
             while frame_idx < total_frames:
                 ret, frame = cap.read()
                 if not ret:
                     break
-                
+
                 # Get bbox for this frame from CSV
                 frame_data = df[df["Frame"] == frame_idx]
-                
+
                 if not frame_data.empty and pd.notna(frame_data.iloc[0]["X_min"]):
                     x_min = int(frame_data.iloc[0]["X_min"])
                     y_min = int(frame_data.iloc[0]["Y_min"])
                     x_max = int(frame_data.iloc[0]["X_max"])
                     y_max = int(frame_data.iloc[0]["Y_max"])
-                    
+
                     # Extract ROI from frame
                     roi = frame[y_min:y_max, x_min:x_max]
-                    
+
                     if roi.size > 0:
                         # Run pose estimation on ROI
                         results = pose_model.predict(
@@ -2617,24 +2673,24 @@ def process_pose_in_bboxes(tracking_dir, device="cpu", pose_model_name="yolo11n-
                             show=False,
                             save=False,
                         )
-                        
+
                         # Extract keypoints (use first detection if multiple)
                         keypoints_row = [frame_idx, tracker_id, label]
-                        
+
                         if results and len(results) > 0 and results[0].keypoints is not None:
                             # Get keypoints tensor and convert to numpy
                             kp_data = results[0].keypoints.data
                             if kp_data is not None and len(kp_data) > 0:
                                 # Convert tensor to numpy if needed
-                                if hasattr(kp_data, 'cpu'):
+                                if hasattr(kp_data, "cpu"):
                                     kp_data = kp_data.cpu().numpy()
-                                elif hasattr(kp_data, 'numpy'):
+                                elif hasattr(kp_data, "numpy"):
                                     kp_data = kp_data.numpy()
-                                
+
                                 keypoints = kp_data[0]  # First person detected
-                                
+
                                 # YOLO pose returns [num_keypoints, 3] where 3 = [x, y, conf]
-                                for i, kp_name in enumerate(keypoint_names):
+                                for i, _ in enumerate(keypoint_names):
                                     if i < len(keypoints):
                                         kp = keypoints[i]
                                         # Keypoints are relative to ROI, convert to absolute coordinates
@@ -2652,7 +2708,7 @@ def process_pose_in_bboxes(tracking_dir, device="cpu", pose_model_name="yolo11n-
                             # No pose detected, fill with NaN
                             for _ in keypoint_names:
                                 keypoints_row.extend([np.nan, np.nan, np.nan])
-                        
+
                         pose_data.append(keypoints_row)
 
                         # Draw skeleton on full frame using absolute keypoints
@@ -2667,7 +2723,9 @@ def process_pose_in_bboxes(tracking_dir, device="cpu", pose_model_name="yolo11n-
                                         keypoints_row[3 + base + 2],
                                     )
                                 )
-                        frame = _draw_keypoints_and_skeleton(frame, abs_kps, color=get_color_for_id(tracker_id))
+                        frame = _draw_keypoints_and_skeleton(
+                            frame, abs_kps, color=get_color_for_id(tracker_id)
+                        )
                     else:
                         # Empty ROI, fill with NaN
                         keypoints_row = [frame_idx, tracker_id, label]
@@ -2680,26 +2738,27 @@ def process_pose_in_bboxes(tracking_dir, device="cpu", pose_model_name="yolo11n-
                     for _ in keypoint_names:
                         keypoints_row.extend([np.nan, np.nan, np.nan])
                     pose_data.append(keypoints_row)
-                
+
                 frame_idx += 1
-                
+
                 if frame_idx % 20 == 0:
                     print(f"  Frame {frame_idx}/{total_frames}", end="\r")
                 writer.write(frame)
-            
+
             # Save pose CSV
             pose_df = pd.DataFrame(pose_data, columns=pose_headers)
             pose_df.to_csv(pose_csv, index=False)
             print(f"\n  Pose data saved: {os.path.basename(pose_csv)}")
             print(f"  Pose video saved: {os.path.basename(pose_video)}")
             writer.release()
-            
+
         except Exception as e:
             print(f"\nError processing {csv_file}: {e}")
             import traceback
+
             traceback.print_exc()
             continue
-    
+
     cap.release()
     print("\n" + "=" * 80)
     print("POSE ESTIMATION COMPLETED!")
@@ -2708,7 +2767,7 @@ def process_pose_in_bboxes(tracking_dir, device="cpu", pose_model_name="yolo11n-
         "Pose Estimation Completed",
         f"Pose estimation completed successfully!\n\n"
         f"Results saved in:\n{tracking_dir}\n\n"
-        f"Look for *_pose.csv files for each tracked ID."
+        f"Look for *_pose.csv files for each tracked ID.",
     )
     return True
 
@@ -2795,6 +2854,9 @@ def run_yolov11track():
     if device == "cuda":
         print(f"GPU: {torch.cuda.get_device_name(0)}")
         print(f"GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f} GB")
+    elif device == "mps":
+        print("GPU: Apple Silicon (MPS/Metal)")
+        print(f"CPU cores: {os.cpu_count()}")
     else:
         print(f"CPU cores: {os.cpu_count()}")
 
@@ -2856,7 +2918,7 @@ def run_yolov11track():
                     temp_avi_path, cv2.VideoWriter_fourcc(*"XVID"), fps, (width, height)
                 )
                 if not writer.isOpened():
-                    print(f"Error: Could not create video writer with any codec")
+                    print("Error: Could not create video writer with any codec")
                     continue
 
             # Load ROI from saved TOML file if available
@@ -2874,6 +2936,7 @@ def run_yolov11track():
                 except Exception as e:
                     print(f"Error loading ROI from file: {e}")
                     import traceback
+
                     traceback.print_exc()
                     print("Continuing with full frame processing...")
                     roi_poly = None
@@ -2891,18 +2954,33 @@ def run_yolov11track():
             tracker_config = None
             try:
                 # Option 1: Try to load default tracker config from Ultralytics
-                ultralytics_path = pkg_resources.resource_filename("ultralytics", "cfg/trackers")
-                tracker_yaml = f"{tracker_name}.yaml"
-                yaml_path = os.path.join(ultralytics_path, tracker_yaml)
-                
-                if os.path.exists(yaml_path):
+                # Use importlib.resources or fallback to pkg_resources for macOS compatibility
+                ultralytics_path = None
+                try:
+                    # Try importlib.resources first (Python 3.9+, recommended)
+                    try:
+                        from importlib.resources import files
+                        ultralytics_path = str(files("ultralytics") / "cfg" / "trackers")
+                    except (ImportError, ModuleNotFoundError, AttributeError, TypeError):
+                        # Fallback: try pkg_resources (deprecated but still works)
+                        with contextlib.suppress(Exception):
+                            ultralytics_path = pkg_resources.resource_filename("ultralytics", "cfg/trackers")
+                except Exception:
+                    pass
+                # If we couldn't find the path, skip to Option 2 (create from scratch)
+                yaml_path = None
+                if ultralytics_path and os.path.exists(ultralytics_path):
+                    tracker_yaml = f"{tracker_name}.yaml"
+                    yaml_path = os.path.join(ultralytics_path, tracker_yaml)
+
+                if yaml_path and os.path.exists(yaml_path):
                     # Read the default config
-                    with open(yaml_path, "r") as f:
+                    with open(yaml_path) as f:
                         tracker_cfg = yaml.safe_load(f)
-                    
+
                     # Apply optimizations
                     tracker_cfg["track_buffer"] = 60  # Increased for better occlusion handling
-                    
+
                     # BoT-SORT specific optimizations
                     if tracker_name == "botsort":
                         tracker_cfg["gmc_method"] = "sparseOptFlow"
@@ -2910,23 +2988,25 @@ def run_yolov11track():
                         tracker_cfg["proximity_thresh"] = 0.5
                         tracker_cfg["appearance_thresh"] = 0.25
                         print("BoT-SORT configured with GMC and ReID for maximum robustness")
-                    
+
                     # Save customized config
                     trackers_dir = os.path.join(models_dir, "trackers")
                     os.makedirs(trackers_dir, exist_ok=True)
                     custom_yaml = os.path.join(trackers_dir, f"{tracker_name}_custom.yaml")
-                    
+
                     with open(custom_yaml, "w") as f:
                         yaml.dump(tracker_cfg, f, default_flow_style=False, sort_keys=False)
-                    
+
                     tracker_config = custom_yaml
-                    print(f"Using optimized tracker config based on Ultralytics default: {tracker_config}")
+                    print(
+                        f"Using optimized tracker config based on Ultralytics default: {tracker_config}"
+                    )
                 else:
                     # Option 2: Create config from scratch with all required fields
                     trackers_dir = os.path.join(models_dir, "trackers")
                     os.makedirs(trackers_dir, exist_ok=True)
                     custom_yaml = os.path.join(trackers_dir, f"{tracker_name}_custom.yaml")
-                    
+
                     # Create complete tracker config with all required fields
                     tracker_cfg = {
                         "tracker_type": tracker_name,
@@ -2937,7 +3017,7 @@ def run_yolov11track():
                         "match_thresh": 0.8,
                         "fuse_score": True,  # Required field that was missing
                     }
-                    
+
                     # BoT-SORT specific settings
                     if tracker_name == "botsort":
                         tracker_cfg["gmc_method"] = "sparseOptFlow"
@@ -2945,13 +3025,13 @@ def run_yolov11track():
                         tracker_cfg["proximity_thresh"] = 0.5
                         tracker_cfg["appearance_thresh"] = 0.25
                         print("BoT-SORT configured with GMC and ReID for maximum robustness")
-                    
+
                     with open(custom_yaml, "w") as f:
                         yaml.dump(tracker_cfg, f, default_flow_style=False, sort_keys=False)
-                    
+
                     tracker_config = custom_yaml
                     print(f"Using custom tracker config: {tracker_config}")
-                    
+
             except Exception as e:
                 print(f"Warning: Could not load default tracker config: {e}")
                 print("Falling back to using tracker name directly")
@@ -2999,7 +3079,7 @@ def run_yolov11track():
                     conf = box.conf[0].item()
                     raw_id = int(box.id[0]) if box.id is not None else -1
                     class_id = int(box.cls[0].item()) if box.cls is not None else -1
-                    label = model.names[class_id] if class_id in model.names else "unknown"
+                    label = model.names.get(class_id, "unknown")
 
                     if raw_id < 0:
                         continue
@@ -3062,47 +3142,53 @@ def run_yolov11track():
 
             writer.release()
             print("")  # newline after progress
-            
+
             # Verify the AVI file was written successfully
             if not os.path.exists(temp_avi_path) or os.path.getsize(temp_avi_path) == 0:
                 print(f"Error: Video file {temp_avi_path} was not created or is empty")
                 continue
 
             # Convert AVI to MP4 using FFmpeg with robust settings for VLC compatibility
-            print(f"Converting video to MP4 format for maximum compatibility...")
+            print("Converting video to MP4 format for maximum compatibility...")
             try:
                 # Use subprocess for better security and error handling
                 # These FFmpeg parameters ensure VLC and other players can read the file
                 ffmpeg_cmd = [
                     "ffmpeg",
                     "-y",  # Overwrite output file if it exists
-                    "-i", temp_avi_path,
-                    "-c:v", "libx264",  # H.264 codec (universal compatibility)
-                    "-preset", "medium",  # Balance between speed and compression
-                    "-crf", "23",  # Quality (lower = better, 23 is good default)
-                    "-pix_fmt", "yuv420p",  # Pixel format (required for compatibility)
-                    "-movflags", "+faststart",  # Enable fast start for web playback
-                    "-c:a", "aac",  # Audio codec (if audio exists)
-                    "-b:a", "128k",  # Audio bitrate
-                    "-strict", "-2",  # Allow experimental codecs if needed
-                    out_video_path
+                    "-i",
+                    temp_avi_path,
+                    "-c:v",
+                    "libx264",  # H.264 codec (universal compatibility)
+                    "-preset",
+                    "medium",  # Balance between speed and compression
+                    "-crf",
+                    "23",  # Quality (lower = better, 23 is good default)
+                    "-pix_fmt",
+                    "yuv420p",  # Pixel format (required for compatibility)
+                    "-movflags",
+                    "+faststart",  # Enable fast start for web playback
+                    "-c:a",
+                    "aac",  # Audio codec (if audio exists)
+                    "-b:a",
+                    "128k",  # Audio bitrate
+                    "-strict",
+                    "-2",  # Allow experimental codecs if needed
+                    out_video_path,
                 ]
-                
-                result = subprocess.run(
-                    ffmpeg_cmd,
-                    capture_output=True,
-                    text=True,
-                    check=False
-                )
-                
+
+                result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True, check=False)
+
                 if result.returncode == 0:
                     # Verify output file exists and has content
                     if os.path.exists(out_video_path) and os.path.getsize(out_video_path) > 0:
                         os.remove(temp_avi_path)
                         print(f"OK - Video converted successfully: {out_video_path}")
-                        print(f"  File size: {os.path.getsize(out_video_path) / (1024*1024):.2f} MB")
+                        print(
+                            f"  File size: {os.path.getsize(out_video_path) / (1024 * 1024):.2f} MB"
+                        )
                     else:
-                        print(f"Warning: FFmpeg completed but output file is missing or empty")
+                        print("Warning: FFmpeg completed but output file is missing or empty")
                         if os.path.exists(temp_avi_path):
                             print(f"Keeping temporary AVI file: {temp_avi_path}")
                 else:
@@ -3119,13 +3205,14 @@ def run_yolov11track():
                             print(f"Saved as AVI instead: {avi_final}")
                         except Exception:
                             pass
-                        
+
             except FileNotFoundError:
-                print(f"Error: FFmpeg not found. Please install FFmpeg.")
+                print("Error: FFmpeg not found. Please install FFmpeg.")
                 print(f"Keeping temporary AVI file: {temp_avi_path}")
             except Exception as e:
                 print(f"Error in video conversion: {str(e)}")
                 import traceback
+
                 traceback.print_exc()
                 # Keep temp AVI file if conversion fails
                 if os.path.exists(temp_avi_path):
@@ -3152,7 +3239,7 @@ def run_yolov11track():
         messagebox.showwarning(
             "No Videos Found",
             "No video files (.mp4, .avi, .mov, .mkv) were found in the input directory.\n\n"
-            f"Input directory: {video_dir}"
+            f"Input directory: {video_dir}",
         )
     else:
         print("\n" + "=" * 80)
@@ -3161,47 +3248,46 @@ def run_yolov11track():
         print(f"Videos processed: {processed_count} / {video_count}")
         print(f"All results saved in: {main_output_dir}")
         print("=" * 80 + "\n")
-        
+
         # Create custom completion dialog with pose estimation button
         completion_dialog = tk.Toplevel(root)
         completion_dialog.title("Processing Completed")
         completion_dialog.geometry("500x300")
         completion_dialog.transient(root)
         completion_dialog.grab_set()
-        
+
         # Center the window
         completion_dialog.update_idletasks()
         x = (completion_dialog.winfo_screenwidth() // 2) - (completion_dialog.winfo_width() // 2)
         y = (completion_dialog.winfo_screenheight() // 2) - (completion_dialog.winfo_height() // 2)
         completion_dialog.geometry(f"+{x}+{y}")
-        
+
         # Message
         msg_frame = tk.Frame(completion_dialog, padx=20, pady=20)
         msg_frame.pack(fill="both", expand=True)
-        
+
         tk.Label(
             msg_frame,
             text="All videos have been processed successfully!",
-            font=("Arial", 12, "bold")
+            font=("Arial", 12, "bold"),
         ).pack(pady=(0, 10))
-        
+
         tk.Label(
             msg_frame,
             text=f"Videos processed: {processed_count} / {video_count}\n\n"
-                 f"Results saved in:\n{main_output_dir}",
-            justify="left"
+            f"Results saved in:\n{main_output_dir}",
+            justify="left",
         ).pack(pady=10)
-        
+
         # Buttons frame
         buttons_frame = tk.Frame(completion_dialog, padx=20, pady=20)
         buttons_frame.pack(fill="x")
-        
+
         def run_pose_estimation():
             completion_dialog.destroy()
             # Ask user to select a tracking directory
             tracking_dir = filedialog.askdirectory(
-                title="Select Tracking Directory",
-                initialdir=main_output_dir
+                title="Select Tracking Directory", initialdir=main_output_dir
             )
             if tracking_dir:
                 # Simple pose model selection dialog
@@ -3212,72 +3298,62 @@ def run_yolov11track():
                     ("yolo11l-pose.pt", "Pose - Large"),
                     ("yolo11x-pose.pt", "Pose - XLarge (most accurate)"),
                 ]
-                
+
                 pose_dialog = tk.Toplevel(root)
                 pose_dialog.title("Select Pose Model")
                 pose_dialog.geometry("400x300")
                 pose_dialog.transient(root)
                 pose_dialog.grab_set()
-                
+
                 # Center window
                 pose_dialog.update_idletasks()
                 x = (pose_dialog.winfo_screenwidth() // 2) - (pose_dialog.winfo_width() // 2)
                 y = (pose_dialog.winfo_screenheight() // 2) - (pose_dialog.winfo_height() // 2)
                 pose_dialog.geometry(f"+{x}+{y}")
-                
+
                 tk.Label(
-                    pose_dialog,
-                    text="Select Pose Estimation Model:",
-                    font=("Arial", 10, "bold")
+                    pose_dialog, text="Select Pose Estimation Model:", font=("Arial", 10, "bold")
                 ).pack(pady=10)
-                
+
                 listbox = tk.Listbox(pose_dialog, width=50, height=8)
                 for model, desc in pose_models:
                     listbox.insert(tk.END, f"{model} - {desc}")
                 listbox.pack(padx=10, pady=10, fill="both", expand=True)
                 listbox.selection_set(0)  # Select first by default
-                
+
                 selected_model = [None]
-                
+
                 def confirm():
                     if listbox.curselection():
                         selection = listbox.get(listbox.curselection())
                         selected_model[0] = selection.split(" - ")[0]
                     pose_dialog.destroy()
-                
+
                 btn_frame = tk.Frame(pose_dialog)
                 btn_frame.pack(pady=10)
-                
+
                 tk.Button(
-                    btn_frame,
-                    text="OK",
-                    command=confirm,
-                    bg="#4CAF50",
-                    fg="white",
-                    padx=20
+                    btn_frame, text="OK", command=confirm, bg="#4CAF50", fg="white", padx=20
                 ).pack(side="left", padx=5)
-                
-                tk.Button(
-                    btn_frame,
-                    text="Cancel",
-                    command=pose_dialog.destroy,
-                    padx=20
-                ).pack(side="left", padx=5)
-                
+
+                tk.Button(btn_frame, text="Cancel", command=pose_dialog.destroy, padx=20).pack(
+                    side="left", padx=5
+                )
+
                 pose_dialog.wait_window()
-                
+
                 if selected_model[0]:
                     # Run pose estimation
                     process_pose_in_bboxes(
                         tracking_dir,
                         device=config.get("device", "cpu"),
-                        pose_model_name=selected_model[0]
+                        pose_model_name=selected_model[0],
                     )
-        
+
         def close_dialog():
             completion_dialog.destroy()
             root.destroy()
-        
+
         # Pose estimation button
         btn_pose = tk.Button(
             buttons_frame,
@@ -3287,10 +3363,10 @@ def run_yolov11track():
             fg="white",
             font=("Arial", 10, "bold"),
             padx=10,
-            pady=5
+            pady=5,
         )
         btn_pose.pack(side="left", padx=5, fill="x", expand=True)
-        
+
         # Close button
         btn_close = tk.Button(
             buttons_frame,
@@ -3300,13 +3376,13 @@ def run_yolov11track():
             fg="white",
             font=("Arial", 10),
             padx=10,
-            pady=5
+            pady=5,
         )
         btn_close.pack(side="left", padx=5, fill="x", expand=True)
-        
+
         # Wait for dialog to close
         completion_dialog.wait_window()
-    
+
     root.destroy()
 
 
@@ -3320,5 +3396,6 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"\n\nAn error occurred: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
