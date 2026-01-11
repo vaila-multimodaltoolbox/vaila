@@ -13,9 +13,9 @@ Version: 0.7.0
 
 Description:
     This script is a comprehensive biomechanical and performance analysis tool
-    for 20-meter linear sprints and Change of Direction (COD 180 degree) tests 
+    for 20-meter linear sprints and Change of Direction (COD 180 degree) tests
     using data collected by the vaila Tracker.
-    
+
     It is designed to automatically process multiple runs from TOML files,
     generate visual reports, and compile a database for team-wide analysis.
 
@@ -50,7 +50,7 @@ Output:
         - {athlete}_Run_N_acceleration.png: Acceleration plot
         - {athlete}_Run_N_data.xlsx/.csv: Raw data export
         - Frame images at each distance marker
-    
+
     General report (team analysis):
         - general_report.html: Comprehensive team analysis
         - vaila_sprint_database.csv: Consolidated database
@@ -66,7 +66,7 @@ Dependencies:
         - scipy (for Z-score calculations)
         - toml (for reading TOML files)
         - tkinter (for GUI dialogs)
-    
+
     Optional:
         - opencv-python (cv2): For video frame extraction
         - scikit-learn: For K-means clustering analysis
@@ -75,7 +75,7 @@ Dependencies:
 How to run:
     From command line:
         python vailasprint.py
-    
+
     From vaila GUI:
         Access through the Sprint Analysis button
 
@@ -91,19 +91,21 @@ License:
 ================================================================================
 """
 
+import base64
+import glob
 import os
 import sys
-import toml
-import glob
-import base64
-import warnings
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
-from datetime import datetime
 import tkinter as tk
-from tkinter import filedialog, messagebox, simpledialog
+import warnings
+from datetime import datetime
+from tkinter import filedialog, messagebox
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import seaborn as sns
+import toml
+
 try:
     import cv2
 except ImportError:
@@ -112,6 +114,7 @@ except ImportError:
 
 try:
     from ydata_profiling import ProfileReport
+
     HAS_PROFILING = True
 except ImportError:
     HAS_PROFILING = False
@@ -120,6 +123,7 @@ except ImportError:
 try:
     from sklearn.cluster import KMeans
     from sklearn.preprocessing import StandardScaler
+
     HAS_SKLEARN = True
 except ImportError:
     HAS_SKLEARN = False
@@ -140,119 +144,156 @@ def create_dumbbell_chart(run_stats, output_dir):
     Create a horizontal dumbbell chart showing Run 1 vs Run 2 performance.
     Athletes are sorted by their best speed for ranking visualization.
     Line colors indicate improvement (green) or decline (red).
-    
+
     Returns the path to the saved figure.
     """
     # Pivot data to get Run 1 and Run 2 speeds per athlete
     pivot_df = run_stats.pivot_table(
-        index='athlete_name', 
-        columns='run_id', 
-        values='max_speed_kmh',
-        aggfunc='first'
+        index="athlete_name", columns="run_id", values="max_speed_kmh", aggfunc="first"
     ).reset_index()
-    
+
     # Handle cases where athletes may not have both runs
     if 1 not in pivot_df.columns:
         pivot_df[1] = np.nan
     if 2 not in pivot_df.columns:
         pivot_df[2] = np.nan
-    
-    pivot_df.columns = ['athlete_name', 'run1_speed', 'run2_speed']
-    
+
+    pivot_df.columns = ["athlete_name", "run1_speed", "run2_speed"]
+
     # Calculate best speed and improvement
-    pivot_df['best_speed'] = pivot_df[['run1_speed', 'run2_speed']].max(axis=1)
-    pivot_df['improvement'] = pivot_df['run2_speed'] - pivot_df['run1_speed']
-    
+    pivot_df["best_speed"] = pivot_df[["run1_speed", "run2_speed"]].max(axis=1)
+    pivot_df["improvement"] = pivot_df["run2_speed"] - pivot_df["run1_speed"]
+
     # Sort by best speed (descending) for ranking
-    pivot_df = pivot_df.sort_values('best_speed', ascending=True).reset_index(drop=True)
-    
+    pivot_df = pivot_df.sort_values("best_speed", ascending=True).reset_index(drop=True)
+
     # Create figure with appropriate size based on number of athletes
     n_athletes = len(pivot_df)
     fig_height = max(8, n_athletes * 0.5)
     fig, ax = plt.subplots(figsize=(14, fig_height))
-    
+
     # Plot each athlete
     y_positions = range(len(pivot_df))
-    
+
     for idx, row in pivot_df.iterrows():
         y = idx
-        run1 = row['run1_speed']
-        run2 = row['run2_speed']
-        improvement = row['improvement']
-        
+        run1 = row["run1_speed"]
+        run2 = row["run2_speed"]
+        improvement = row["improvement"]
+
         # Determine colors based on improvement
         if pd.notna(improvement):
             if improvement > 0:
-                line_color = '#2ecc71'  # Green for improvement
+                line_color = "#2ecc71"  # Green for improvement
                 line_alpha = 0.7
             elif improvement < 0:
-                line_color = '#e74c3c'  # Red for decline
+                line_color = "#e74c3c"  # Red for decline
                 line_alpha = 0.7
             else:
-                line_color = '#95a5a6'  # Gray for no change
+                line_color = "#95a5a6"  # Gray for no change
                 line_alpha = 0.5
         else:
-            line_color = '#95a5a6'
+            line_color = "#95a5a6"
             line_alpha = 0.5
-        
+
         # Draw connecting line
         if pd.notna(run1) and pd.notna(run2):
             ax.plot([run1, run2], [y, y], color=line_color, linewidth=3, alpha=line_alpha, zorder=1)
-        
+
         # Plot Run 1 dot (dark blue)
         if pd.notna(run1):
-            ax.scatter(run1, y, s=150, color='#2c3e50', edgecolors='white', linewidths=2, zorder=2, label='Run 1' if idx == 0 else '')
-        
+            ax.scatter(
+                run1,
+                y,
+                s=150,
+                color="#2c3e50",
+                edgecolors="white",
+                linewidths=2,
+                zorder=2,
+                label="Run 1" if idx == 0 else "",
+            )
+
         # Plot Run 2 dot (light coral/orange)
         if pd.notna(run2):
-            ax.scatter(run2, y, s=150, color='#e67e22', edgecolors='white', linewidths=2, zorder=2, label='Run 2' if idx == 0 else '')
-        
+            ax.scatter(
+                run2,
+                y,
+                s=150,
+                color="#e67e22",
+                edgecolors="white",
+                linewidths=2,
+                zorder=2,
+                label="Run 2" if idx == 0 else "",
+            )
+
         # Add improvement annotation
         if pd.notna(improvement) and pd.notna(run1) and pd.notna(run2):
             max_val = max(run1, run2)
-            sign = '+' if improvement > 0 else ''
-            ax.annotate(f'{sign}{improvement:.1f}', xy=(max_val + 0.3, y), fontsize=9, 
-                       color=line_color, va='center', fontweight='bold')
-    
+            sign = "+" if improvement > 0 else ""
+            ax.annotate(
+                f"{sign}{improvement:.1f}",
+                xy=(max_val + 0.3, y),
+                fontsize=9,
+                color=line_color,
+                va="center",
+                fontweight="bold",
+            )
+
     # Customize axes
     ax.set_yticks(y_positions)
-    ax.set_yticklabels(pivot_df['athlete_name'], fontsize=11)
-    ax.set_xlabel('Max Speed (km/h)', fontsize=12, fontweight='bold')
-    ax.set_title('Sprint Performance: Run 1 vs Run 2 by Athlete\n(Sorted by Best Speed - Ranking)', 
-                fontsize=14, fontweight='bold', pad=20)
-    
+    ax.set_yticklabels(pivot_df["athlete_name"], fontsize=11)
+    ax.set_xlabel("Max Speed (km/h)", fontsize=12, fontweight="bold")
+    ax.set_title(
+        "Sprint Performance: Run 1 vs Run 2 by Athlete\n(Sorted by Best Speed - Ranking)",
+        fontsize=14,
+        fontweight="bold",
+        pad=20,
+    )
+
     # Set x-axis limits with some padding based on actual data only
-    x_min = pivot_df[['run1_speed', 'run2_speed']].min().min()
-    x_max = pivot_df[['run1_speed', 'run2_speed']].max().max()
+    x_min = pivot_df[["run1_speed", "run2_speed"]].min().min()
+    x_max = pivot_df[["run1_speed", "run2_speed"]].max().max()
     ax.set_xlim(max(0, x_min - 2), x_max + 3)
-    
+
     # Add grid for readability
-    ax.xaxis.grid(True, linestyle='-', alpha=0.3)
+    ax.xaxis.grid(True, linestyle="-", alpha=0.3)
     ax.yaxis.grid(False)
-    
+
     # Add custom legend for Run 1 and Run 2
     from matplotlib.lines import Line2D
+
     legend_elements = [
-        Line2D([0], [0], marker='o', color='w', markerfacecolor='#2c3e50', markersize=10, label='Run 1'),
-        Line2D([0], [0], marker='o', color='w', markerfacecolor='#e67e22', markersize=10, label='Run 2'),
-        Line2D([0], [0], color='#2ecc71', linewidth=3, label='Improved'),
-        Line2D([0], [0], color='#e74c3c', linewidth=3, label='Declined'),
+        Line2D(
+            [0], [0], marker="o", color="w", markerfacecolor="#2c3e50", markersize=10, label="Run 1"
+        ),
+        Line2D(
+            [0], [0], marker="o", color="w", markerfacecolor="#e67e22", markersize=10, label="Run 2"
+        ),
+        Line2D([0], [0], color="#2ecc71", linewidth=3, label="Improved"),
+        Line2D([0], [0], color="#e74c3c", linewidth=3, label="Declined"),
     ]
-    ax.legend(handles=legend_elements, loc='lower right', fontsize=10, framealpha=0.9)
-    
+    ax.legend(handles=legend_elements, loc="lower right", fontsize=10, framealpha=0.9)
+
     # Add ranking numbers on the left
     for idx, row in pivot_df.iterrows():
         rank = len(pivot_df) - idx  # Reverse ranking (top = 1)
-        ax.annotate(f'#{rank}', xy=(ax.get_xlim()[0] - 0.5, idx), fontsize=9, 
-                   color='#7f8c8d', va='center', ha='right', fontweight='bold')
-    
+        ax.annotate(
+            f"#{rank}",
+            xy=(ax.get_xlim()[0] - 0.5, idx),
+            fontsize=9,
+            color="#7f8c8d",
+            va="center",
+            ha="right",
+            fontweight="bold",
+        )
+
     plt.tight_layout()
-    
+
     # Save figure
     output_path = os.path.join(output_dir, "dumbbell_chart_performance.png")
-    plt.savefig(output_path, dpi=150, bbox_inches='tight', facecolor='white', edgecolor='none')
+    plt.savefig(output_path, dpi=150, bbox_inches="tight", facecolor="white", edgecolor="none")
     plt.close()
-    
+
     print(f"Dumbbell chart saved: {output_path}")
     return output_path
 
@@ -262,151 +303,211 @@ def create_improvement_scatter(run_stats, output_dir):
     Create a scatter plot showing Run 1 vs Run 2 performance.
     Points above the diagonal = improved, below = declined.
     Color gradient indicates improvement magnitude.
-    
+
     Returns the path to the saved figure.
     """
     # Pivot data to get Run 1 and Run 2 speeds per athlete
     pivot_df = run_stats.pivot_table(
-        index='athlete_name', 
-        columns='run_id', 
-        values='max_speed_kmh',
-        aggfunc='first'
+        index="athlete_name", columns="run_id", values="max_speed_kmh", aggfunc="first"
     ).reset_index()
-    
+
     # Handle cases where athletes may not have both runs
     if 1 not in pivot_df.columns:
         pivot_df[1] = np.nan
     if 2 not in pivot_df.columns:
         pivot_df[2] = np.nan
-    
-    pivot_df.columns = ['athlete_name', 'run1_speed', 'run2_speed']
-    
+
+    pivot_df.columns = ["athlete_name", "run1_speed", "run2_speed"]
+
     # Filter to only athletes with both runs
-    complete_df = pivot_df.dropna(subset=['run1_speed', 'run2_speed']).copy()
-    
+    complete_df = pivot_df.dropna(subset=["run1_speed", "run2_speed"]).copy()
+
     if complete_df.empty:
         print("Warning: No athletes with both runs found for scatter plot.")
         return None
-    
+
     # Calculate improvement
-    complete_df['improvement'] = complete_df['run2_speed'] - complete_df['run1_speed']
-    complete_df['improvement_pct'] = (complete_df['improvement'] / complete_df['run1_speed']) * 100
-    
+    complete_df["improvement"] = complete_df["run2_speed"] - complete_df["run1_speed"]
+    complete_df["improvement_pct"] = (complete_df["improvement"] / complete_df["run1_speed"]) * 100
+
     # Create figure
     fig, ax = plt.subplots(figsize=(10, 10))
-    
+
     # Determine axis limits
-    all_speeds = pd.concat([complete_df['run1_speed'], complete_df['run2_speed']])
+    all_speeds = pd.concat([complete_df["run1_speed"], complete_df["run2_speed"]])
     min_speed = max(0, all_speeds.min() - 2)
     max_speed = all_speeds.max() + 2
-    
+
     # Draw diagonal line (no change line)
-    ax.plot([min_speed, max_speed], [min_speed, max_speed], 
-            color='#bdc3c7', linestyle='--', linewidth=2, alpha=0.8, 
-            label='No Change Line', zorder=1)
-    
+    ax.plot(
+        [min_speed, max_speed],
+        [min_speed, max_speed],
+        color="#bdc3c7",
+        linestyle="--",
+        linewidth=2,
+        alpha=0.8,
+        label="No Change Line",
+        zorder=1,
+    )
+
     # Fill regions for improved/declined
-    ax.fill_between([min_speed, max_speed], [min_speed, max_speed], max_speed,
-                   color='#2ecc71', alpha=0.1, label='Improved Zone')
-    ax.fill_between([min_speed, max_speed], min_speed, [min_speed, max_speed],
-                   color='#e74c3c', alpha=0.1, label='Declined Zone')
-    
+    ax.fill_between(
+        [min_speed, max_speed],
+        [min_speed, max_speed],
+        max_speed,
+        color="#2ecc71",
+        alpha=0.1,
+        label="Improved Zone",
+    )
+    ax.fill_between(
+        [min_speed, max_speed],
+        min_speed,
+        [min_speed, max_speed],
+        color="#e74c3c",
+        alpha=0.1,
+        label="Declined Zone",
+    )
+
     # Create color map based on improvement
-    improvement_values = complete_df['improvement'].values
+    improvement_values = complete_df["improvement"].values
     max_abs_improvement = max(abs(improvement_values.min()), abs(improvement_values.max()), 0.1)
-    
+
     # Normalize colors: green for positive, red for negative
     colors = []
     for imp in improvement_values:
         if imp > 0:
             intensity = min(imp / max_abs_improvement, 1.0)
-            colors.append((0.18 + 0.7 * (1-intensity), 0.8, 0.44 + 0.4 * (1-intensity)))  # Green shades
+            colors.append(
+                (0.18 + 0.7 * (1 - intensity), 0.8, 0.44 + 0.4 * (1 - intensity))
+            )  # Green shades
         elif imp < 0:
             intensity = min(abs(imp) / max_abs_improvement, 1.0)
-            colors.append((0.91, 0.30 + 0.5 * (1-intensity), 0.24 + 0.5 * (1-intensity)))  # Red shades
+            colors.append(
+                (0.91, 0.30 + 0.5 * (1 - intensity), 0.24 + 0.5 * (1 - intensity))
+            )  # Red shades
         else:
             colors.append((0.58, 0.65, 0.65))  # Gray for no change
-    
+
     # Plot scatter points
-    scatter = ax.scatter(complete_df['run1_speed'], complete_df['run2_speed'], 
-                        s=200, c=colors, edgecolors='white', linewidths=2, 
-                        alpha=0.9, zorder=3)
-    
+    scatter = ax.scatter(
+        complete_df["run1_speed"],
+        complete_df["run2_speed"],
+        s=200,
+        c=colors,
+        edgecolors="white",
+        linewidths=2,
+        alpha=0.9,
+        zorder=3,
+    )
+
     # Add athlete name annotations
     for idx, row in complete_df.iterrows():
         # Position text slightly above and to the right of the point
         offset_x = 0.3
         offset_y = 0.3
-        
+
         # Adjust position to avoid overlap with diagonal
-        if row['run2_speed'] > row['run1_speed']:
-            va = 'bottom'
+        if row["run2_speed"] > row["run1_speed"]:
+            va = "bottom"
         else:
-            va = 'top'
+            va = "top"
             offset_y = -offset_y
-        
-        ax.annotate(row['athlete_name'], 
-                   xy=(row['run1_speed'], row['run2_speed']),
-                   xytext=(row['run1_speed'] + offset_x, row['run2_speed'] + offset_y),
-                   fontsize=9, fontweight='bold', color='#2c3e50',
-                   ha='left', va=va,
-                   arrowprops=dict(arrowstyle='-', color='#95a5a6', alpha=0.5, lw=0.5))
-    
+
+        ax.annotate(
+            row["athlete_name"],
+            xy=(row["run1_speed"], row["run2_speed"]),
+            xytext=(row["run1_speed"] + offset_x, row["run2_speed"] + offset_y),
+            fontsize=9,
+            fontweight="bold",
+            color="#2c3e50",
+            ha="left",
+            va=va,
+            arrowprops=dict(arrowstyle="-", color="#95a5a6", alpha=0.5, lw=0.5),
+        )
+
     # Add reference lines for Usain Bolt
-    ax.axvline(x=BOLT_AVG_SPEED, color='gold', linestyle='--', linewidth=1.5, alpha=0.6)
-    ax.axhline(y=BOLT_AVG_SPEED, color='gold', linestyle='--', linewidth=1.5, alpha=0.6)
-    ax.axvline(x=BOLT_MAX_SPEED, color='red', linestyle=':', linewidth=1.5, alpha=0.6)
-    ax.axhline(y=BOLT_MAX_SPEED, color='red', linestyle=':', linewidth=1.5, alpha=0.6)
-    
+    ax.axvline(x=BOLT_AVG_SPEED, color="gold", linestyle="--", linewidth=1.5, alpha=0.6)
+    ax.axhline(y=BOLT_AVG_SPEED, color="gold", linestyle="--", linewidth=1.5, alpha=0.6)
+    ax.axvline(x=BOLT_MAX_SPEED, color="red", linestyle=":", linewidth=1.5, alpha=0.6)
+    ax.axhline(y=BOLT_MAX_SPEED, color="red", linestyle=":", linewidth=1.5, alpha=0.6)
+
     # Customize axes
-    ax.set_xlabel('Run 1 - Max Speed (km/h)', fontsize=12, fontweight='bold')
-    ax.set_ylabel('Run 2 - Max Speed (km/h)', fontsize=12, fontweight='bold')
-    ax.set_title('Performance Improvement Analysis\nRun 1 vs Run 2 Comparison', 
-                fontsize=14, fontweight='bold', pad=20)
-    
+    ax.set_xlabel("Run 1 - Max Speed (km/h)", fontsize=12, fontweight="bold")
+    ax.set_ylabel("Run 2 - Max Speed (km/h)", fontsize=12, fontweight="bold")
+    ax.set_title(
+        "Performance Improvement Analysis\nRun 1 vs Run 2 Comparison",
+        fontsize=14,
+        fontweight="bold",
+        pad=20,
+    )
+
     ax.set_xlim(min_speed, max_speed)
     ax.set_ylim(min_speed, max_speed)
-    ax.set_aspect('equal')
-    
+    ax.set_aspect("equal")
+
     # Add grid
-    ax.grid(True, linestyle='-', alpha=0.3)
-    
+    ax.grid(True, linestyle="-", alpha=0.3)
+
     # Add text annotations for zones
-    ax.text(min_speed + 1, max_speed - 1, 'IMPROVED', fontsize=12, 
-           color='#27ae60', fontweight='bold', alpha=0.7, va='top')
-    ax.text(max_speed - 1, min_speed + 1, 'DECLINED', fontsize=12, 
-           color='#c0392b', fontweight='bold', alpha=0.7, ha='right')
-    
+    ax.text(
+        min_speed + 1,
+        max_speed - 1,
+        "IMPROVED",
+        fontsize=12,
+        color="#27ae60",
+        fontweight="bold",
+        alpha=0.7,
+        va="top",
+    )
+    ax.text(
+        max_speed - 1,
+        min_speed + 1,
+        "DECLINED",
+        fontsize=12,
+        color="#c0392b",
+        fontweight="bold",
+        alpha=0.7,
+        ha="right",
+    )
+
     # Add legend
     legend_elements = [
-        plt.Line2D([0], [0], color='#bdc3c7', linestyle='--', linewidth=2, label='No Change'),
-        plt.scatter([0], [0], s=100, c='#2ecc71', edgecolors='white', label='Improved'),
-        plt.scatter([0], [0], s=100, c='#e74c3c', edgecolors='white', label='Declined'),
+        plt.Line2D([0], [0], color="#bdc3c7", linestyle="--", linewidth=2, label="No Change"),
+        plt.scatter([0], [0], s=100, c="#2ecc71", edgecolors="white", label="Improved"),
+        plt.scatter([0], [0], s=100, c="#e74c3c", edgecolors="white", label="Declined"),
     ]
-    ax.legend(handles=legend_elements, loc='lower right', fontsize=10, framealpha=0.9)
-    
+    ax.legend(handles=legend_elements, loc="lower right", fontsize=10, framealpha=0.9)
+
     # Add statistics text box
-    n_improved = (complete_df['improvement'] > 0).sum()
-    n_declined = (complete_df['improvement'] < 0).sum()
-    n_same = (complete_df['improvement'] == 0).sum()
-    avg_improvement = complete_df['improvement'].mean()
-    
-    stats_text = f'Athletes: {len(complete_df)}\n'
-    stats_text += f'Improved: {n_improved} ({n_improved/len(complete_df)*100:.1f}%)\n'
-    stats_text += f'Declined: {n_declined} ({n_declined/len(complete_df)*100:.1f}%)\n'
-    stats_text += f'Avg Change: {avg_improvement:+.2f} km/h'
-    
-    props = dict(boxstyle='round,pad=0.5', facecolor='white', alpha=0.9, edgecolor='#bdc3c7')
-    ax.text(0.02, 0.98, stats_text, transform=ax.transAxes, fontsize=10,
-           verticalalignment='top', bbox=props, family='monospace')
-    
+    n_improved = (complete_df["improvement"] > 0).sum()
+    n_declined = (complete_df["improvement"] < 0).sum()
+    n_same = (complete_df["improvement"] == 0).sum()
+    avg_improvement = complete_df["improvement"].mean()
+
+    stats_text = f"Athletes: {len(complete_df)}\n"
+    stats_text += f"Improved: {n_improved} ({n_improved / len(complete_df) * 100:.1f}%)\n"
+    stats_text += f"Declined: {n_declined} ({n_declined / len(complete_df) * 100:.1f}%)\n"
+    stats_text += f"Avg Change: {avg_improvement:+.2f} km/h"
+
+    props = dict(boxstyle="round,pad=0.5", facecolor="white", alpha=0.9, edgecolor="#bdc3c7")
+    ax.text(
+        0.02,
+        0.98,
+        stats_text,
+        transform=ax.transAxes,
+        fontsize=10,
+        verticalalignment="top",
+        bbox=props,
+        family="monospace",
+    )
+
     plt.tight_layout()
-    
+
     # Save figure
     output_path = os.path.join(output_dir, "scatter_improvement_analysis.png")
-    plt.savefig(output_path, dpi=150, bbox_inches='tight', facecolor='white', edgecolor='none')
+    plt.savefig(output_path, dpi=150, bbox_inches="tight", facecolor="white", edgecolor="none")
     plt.close()
-    
+
     print(f"Scatter plot saved: {output_path}")
     return output_path
 
@@ -416,114 +517,123 @@ def create_performance_heatmap(run_stats, output_dir):
     Create a performance heatmap showing all metrics in a matrix format.
     Rows = Athletes (sorted by average speed)
     Columns = Run 1 Speed, Run 2 Speed, Difference, Average, Best Time
-    
+
     Returns the path to the saved figure.
     """
     # Pivot data to get metrics per athlete
     pivot_speed = run_stats.pivot_table(
-        index='athlete_name', 
-        columns='run_id', 
-        values='max_speed_kmh',
-        aggfunc='first'
+        index="athlete_name", columns="run_id", values="max_speed_kmh", aggfunc="first"
     )
-    
+
     pivot_time = run_stats.pivot_table(
-        index='athlete_name', 
-        columns='run_id', 
-        values='total_time_s',
-        aggfunc='first'
+        index="athlete_name", columns="run_id", values="total_time_s", aggfunc="first"
     )
-    
+
     # Create comprehensive DataFrame
     heatmap_df = pd.DataFrame(index=pivot_speed.index)
-    
+
     # Add speed columns
     if 1 in pivot_speed.columns:
-        heatmap_df['Run 1\nSpeed\n(km/h)'] = pivot_speed[1]
+        heatmap_df["Run 1\nSpeed\n(km/h)"] = pivot_speed[1]
     else:
-        heatmap_df['Run 1\nSpeed\n(km/h)'] = np.nan
-        
+        heatmap_df["Run 1\nSpeed\n(km/h)"] = np.nan
+
     if 2 in pivot_speed.columns:
-        heatmap_df['Run 2\nSpeed\n(km/h)'] = pivot_speed[2]
+        heatmap_df["Run 2\nSpeed\n(km/h)"] = pivot_speed[2]
     else:
-        heatmap_df['Run 2\nSpeed\n(km/h)'] = np.nan
-    
+        heatmap_df["Run 2\nSpeed\n(km/h)"] = np.nan
+
     # Calculate derived metrics
-    heatmap_df['Speed\nChange\n(km/h)'] = heatmap_df['Run 2\nSpeed\n(km/h)'] - heatmap_df['Run 1\nSpeed\n(km/h)']
-    heatmap_df['Average\nSpeed\n(km/h)'] = heatmap_df[['Run 1\nSpeed\n(km/h)', 'Run 2\nSpeed\n(km/h)']].mean(axis=1)
-    heatmap_df['Best\nSpeed\n(km/h)'] = heatmap_df[['Run 1\nSpeed\n(km/h)', 'Run 2\nSpeed\n(km/h)']].max(axis=1)
-    
+    heatmap_df["Speed\nChange\n(km/h)"] = (
+        heatmap_df["Run 2\nSpeed\n(km/h)"] - heatmap_df["Run 1\nSpeed\n(km/h)"]
+    )
+    heatmap_df["Average\nSpeed\n(km/h)"] = heatmap_df[
+        ["Run 1\nSpeed\n(km/h)", "Run 2\nSpeed\n(km/h)"]
+    ].mean(axis=1)
+    heatmap_df["Best\nSpeed\n(km/h)"] = heatmap_df[
+        ["Run 1\nSpeed\n(km/h)", "Run 2\nSpeed\n(km/h)"]
+    ].max(axis=1)
+
     # Add time columns
     if 1 in pivot_time.columns:
-        heatmap_df['Run 1\nTime\n(s)'] = pivot_time[1]
+        heatmap_df["Run 1\nTime\n(s)"] = pivot_time[1]
     else:
-        heatmap_df['Run 1\nTime\n(s)'] = np.nan
-        
+        heatmap_df["Run 1\nTime\n(s)"] = np.nan
+
     if 2 in pivot_time.columns:
-        heatmap_df['Run 2\nTime\n(s)'] = pivot_time[2]
+        heatmap_df["Run 2\nTime\n(s)"] = pivot_time[2]
     else:
-        heatmap_df['Run 2\nTime\n(s)'] = np.nan
-    
-    heatmap_df['Best\nTime\n(s)'] = heatmap_df[['Run 1\nTime\n(s)', 'Run 2\nTime\n(s)']].min(axis=1)
-    
+        heatmap_df["Run 2\nTime\n(s)"] = np.nan
+
+    heatmap_df["Best\nTime\n(s)"] = heatmap_df[["Run 1\nTime\n(s)", "Run 2\nTime\n(s)"]].min(axis=1)
+
     # Sort by average speed (descending)
-    heatmap_df = heatmap_df.sort_values('Average\nSpeed\n(km/h)', ascending=False)
-    
+    heatmap_df = heatmap_df.sort_values("Average\nSpeed\n(km/h)", ascending=False)
+
     # Create figure with appropriate size
     n_athletes = len(heatmap_df)
     n_cols = len(heatmap_df.columns)
     fig_height = max(8, n_athletes * 0.4 + 2)
     fig_width = max(12, n_cols * 1.5 + 3)
-    
+
     fig, ax = plt.subplots(figsize=(fig_width, fig_height))
-    
+
     # Create mask for NaN values
     mask = heatmap_df.isnull()
-    
+
     # Normalize data for coloring (separate normalization for different metrics)
     # Speed columns use one colormap, time columns use reverse
-    speed_cols = ['Run 1\nSpeed\n(km/h)', 'Run 2\nSpeed\n(km/h)', 'Average\nSpeed\n(km/h)', 'Best\nSpeed\n(km/h)']
-    change_col = 'Speed\nChange\n(km/h)'
-    time_cols = ['Run 1\nTime\n(s)', 'Run 2\nTime\n(s)', 'Best\nTime\n(s)']
-    
+    speed_cols = [
+        "Run 1\nSpeed\n(km/h)",
+        "Run 2\nSpeed\n(km/h)",
+        "Average\nSpeed\n(km/h)",
+        "Best\nSpeed\n(km/h)",
+    ]
+    change_col = "Speed\nChange\n(km/h)"
+    time_cols = ["Run 1\nTime\n(s)", "Run 2\nTime\n(s)", "Best\nTime\n(s)"]
+
     # Create custom annotation array with formatted values
     annot_array = heatmap_df.copy()
     for col in annot_array.columns:
-        annot_array[col] = annot_array[col].apply(lambda x: f'{x:.2f}' if pd.notna(x) else '')
-    
+        annot_array[col] = annot_array[col].apply(lambda x: f"{x:.2f}" if pd.notna(x) else "")
+
     # Plot heatmap with viridis colormap for speeds
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        
+
         # Create a custom colormap that handles the change column differently
         hm = sns.heatmap(
             heatmap_df,
             annot=annot_array,
-            fmt='',
-            cmap='YlGnBu',
+            fmt="",
+            cmap="YlGnBu",
             mask=mask,
             linewidths=2,
-            linecolor='white',
-            cbar_kws={'label': 'Value', 'shrink': 0.8},
+            linecolor="white",
+            cbar_kws={"label": "Value", "shrink": 0.8},
             ax=ax,
-            annot_kws={'size': 10, 'weight': 'bold'}
+            annot_kws={"size": 10, "weight": "bold"},
         )
-    
+
     # Customize appearance
-    ax.set_title('Sprint Performance Matrix\n(Athletes Sorted by Average Speed)', 
-                fontsize=14, fontweight='bold', pad=20)
-    ax.set_xlabel('')
-    ax.set_ylabel('')
-    
+    ax.set_title(
+        "Sprint Performance Matrix\n(Athletes Sorted by Average Speed)",
+        fontsize=14,
+        fontweight="bold",
+        pad=20,
+    )
+    ax.set_xlabel("")
+    ax.set_ylabel("")
+
     # Rotate x-axis labels
-    plt.xticks(rotation=0, ha='center', fontsize=10)
+    plt.xticks(rotation=0, ha="center", fontsize=10)
     plt.yticks(rotation=0, fontsize=11)
-    
+
     # Add ranking on y-axis labels
     current_labels = [item.get_text() for item in ax.get_yticklabels()]
-    ranked_labels = [f'#{i+1} {label}' for i, label in enumerate(current_labels)]
+    ranked_labels = [f"#{i + 1} {label}" for i, label in enumerate(current_labels)]
     ax.set_yticklabels(ranked_labels, fontsize=10)
-    
+
     # Color the change column cells based on positive/negative
     # Find the column index for the change column
     col_idx = list(heatmap_df.columns).index(change_col)
@@ -532,22 +642,24 @@ def create_performance_heatmap(run_stats, output_dir):
         if pd.notna(change_val):
             if change_val > 0:
                 # Green background for improvement
-                rect = plt.Rectangle((col_idx, row_idx), 1, 1, fill=True, 
-                                     facecolor='#2ecc71', alpha=0.3, zorder=0)
+                rect = plt.Rectangle(
+                    (col_idx, row_idx), 1, 1, fill=True, facecolor="#2ecc71", alpha=0.3, zorder=0
+                )
                 ax.add_patch(rect)
             elif change_val < 0:
                 # Red background for decline
-                rect = plt.Rectangle((col_idx, row_idx), 1, 1, fill=True, 
-                                     facecolor='#e74c3c', alpha=0.3, zorder=0)
+                rect = plt.Rectangle(
+                    (col_idx, row_idx), 1, 1, fill=True, facecolor="#e74c3c", alpha=0.3, zorder=0
+                )
                 ax.add_patch(rect)
-    
+
     plt.tight_layout()
-    
+
     # Save figure
     output_path = os.path.join(output_dir, "heatmap_performance_matrix.png")
-    plt.savefig(output_path, dpi=150, bbox_inches='tight', facecolor='white', edgecolor='none')
+    plt.savefig(output_path, dpi=150, bbox_inches="tight", facecolor="white", edgecolor="none")
     plt.close()
-    
+
     print(f"Heatmap saved: {output_path}")
     return output_path
 
@@ -558,18 +670,18 @@ def calculate_team_statistics(run_stats):
     Returns a dictionary with mean, min, max, std for key metrics.
     """
     stats_dict = {
-        'speed': {
-            'mean': run_stats['max_speed_kmh'].mean(),
-            'std': run_stats['max_speed_kmh'].std(),
-            'min': run_stats['max_speed_kmh'].min(),
-            'max': run_stats['max_speed_kmh'].max(),
+        "speed": {
+            "mean": run_stats["max_speed_kmh"].mean(),
+            "std": run_stats["max_speed_kmh"].std(),
+            "min": run_stats["max_speed_kmh"].min(),
+            "max": run_stats["max_speed_kmh"].max(),
         },
-        'time': {
-            'mean': run_stats['total_time_s'].mean(),
-            'std': run_stats['total_time_s'].std(),
-            'min': run_stats['total_time_s'].min(),
-            'max': run_stats['total_time_s'].max(),
-        }
+        "time": {
+            "mean": run_stats["total_time_s"].mean(),
+            "std": run_stats["total_time_s"].std(),
+            "min": run_stats["total_time_s"].min(),
+            "max": run_stats["total_time_s"].max(),
+        },
     }
     return stats_dict
 
@@ -578,131 +690,169 @@ def perform_kmeans_clustering(run_stats, n_clusters=3):
     """
     Perform K-means clustering on sprint performance data.
     Clusters are ordered by performance (1=best, 3=lowest).
-    
+
     Returns: run_stats DataFrame with 'cluster' column added, cluster_summary DataFrame
     """
     if not HAS_SKLEARN:
         print("Warning: scikit-learn not available. Skipping clustering.")
         return run_stats, None
-    
+
     # Features for clustering
-    features = run_stats[['max_speed_kmh', 'total_time_s']].copy()
-    
+    features = run_stats[["max_speed_kmh", "total_time_s"]].copy()
+
     # Standardize features
     scaler = StandardScaler()
     features_scaled = scaler.fit_transform(features)
-    
+
     # Perform K-means
     kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
     clusters = kmeans.fit_predict(features_scaled)
-    
+
     # Add cluster to dataframe
     run_stats_clustered = run_stats.copy()
-    run_stats_clustered['cluster_raw'] = clusters
-    
+    run_stats_clustered["cluster_raw"] = clusters
+
     # Reorder clusters by performance (higher speed = better = lower cluster number)
-    cluster_means = run_stats_clustered.groupby('cluster_raw')['max_speed_kmh'].mean()
+    cluster_means = run_stats_clustered.groupby("cluster_raw")["max_speed_kmh"].mean()
     cluster_order = cluster_means.sort_values(ascending=False).index.tolist()
     cluster_mapping = {old: new + 1 for new, old in enumerate(cluster_order)}
-    run_stats_clustered['cluster'] = run_stats_clustered['cluster_raw'].map(cluster_mapping)
-    run_stats_clustered.drop('cluster_raw', axis=1, inplace=True)
-    
+    run_stats_clustered["cluster"] = run_stats_clustered["cluster_raw"].map(cluster_mapping)
+    run_stats_clustered.drop("cluster_raw", axis=1, inplace=True)
+
     # Create cluster summary
-    cluster_summary = run_stats_clustered.groupby('cluster').agg({
-        'max_speed_kmh': ['mean', 'std', 'min', 'max', 'count'],
-        'total_time_s': ['mean', 'std', 'min', 'max']
-    }).round(3)
-    
+    cluster_summary = (
+        run_stats_clustered.groupby("cluster")
+        .agg(
+            {
+                "max_speed_kmh": ["mean", "std", "min", "max", "count"],
+                "total_time_s": ["mean", "std", "min", "max"],
+            }
+        )
+        .round(3)
+    )
+
     # Flatten column names
-    cluster_summary.columns = ['_'.join(col).strip() for col in cluster_summary.columns.values]
+    cluster_summary.columns = ["_".join(col).strip() for col in cluster_summary.columns.values]
     cluster_summary = cluster_summary.reset_index()
-    
+
     # Add cluster labels
-    cluster_labels = {1: 'High Performers', 2: 'Medium Performers', 3: 'Low Performers'}
-    cluster_summary['cluster_label'] = cluster_summary['cluster'].map(cluster_labels)
-    
+    cluster_labels = {1: "High Performers", 2: "Medium Performers", 3: "Low Performers"}
+    cluster_summary["cluster_label"] = cluster_summary["cluster"].map(cluster_labels)
+
     return run_stats_clustered, cluster_summary
 
 
 def create_beeswarm_plot(run_stats_clustered, output_dir):
     """
     Create a beeswarm (strip) plot showing individual data points colored by cluster.
-    
+
     Returns the path to the saved figure.
     """
-    if 'cluster' not in run_stats_clustered.columns:
+    if "cluster" not in run_stats_clustered.columns:
         print("Warning: No cluster data available for beeswarm plot.")
         return None
-    
+
     # Define cluster colors
-    cluster_colors = {1: '#27ae60', 2: '#f39c12', 3: '#e74c3c'}  # Green, Orange, Red
-    cluster_labels = {1: 'High Performers', 2: 'Medium Performers', 3: 'Low Performers'}
-    
+    cluster_colors = {1: "#27ae60", 2: "#f39c12", 3: "#e74c3c"}  # Green, Orange, Red
+    cluster_labels = {1: "High Performers", 2: "Medium Performers", 3: "Low Performers"}
+
     fig, axes = plt.subplots(1, 2, figsize=(14, 7))
-    
+
     # Speed beeswarm
     ax1 = axes[0]
-    for cluster in sorted(run_stats_clustered['cluster'].unique()):
-        data = run_stats_clustered[run_stats_clustered['cluster'] == cluster]
+    for cluster in sorted(run_stats_clustered["cluster"].unique()):
+        data = run_stats_clustered[run_stats_clustered["cluster"] == cluster]
         # Add jitter
         y_jitter = np.random.uniform(-0.2, 0.2, len(data))
-        ax1.scatter(data['max_speed_kmh'], [cluster + j for j in y_jitter], 
-                   s=120, c=cluster_colors.get(cluster, 'gray'), 
-                   alpha=0.7, edgecolors='white', linewidths=1.5,
-                   label=cluster_labels.get(cluster, f'Cluster {cluster}'))
-        
+        ax1.scatter(
+            data["max_speed_kmh"],
+            [cluster + j for j in y_jitter],
+            s=120,
+            c=cluster_colors.get(cluster, "gray"),
+            alpha=0.7,
+            edgecolors="white",
+            linewidths=1.5,
+            label=cluster_labels.get(cluster, f"Cluster {cluster}"),
+        )
+
         # Add athlete names
         for idx, row in data.iterrows():
-            ax1.annotate(row['athlete_name'], 
-                        xy=(row['max_speed_kmh'], cluster + y_jitter[list(data.index).index(idx)]),
-                        fontsize=7, alpha=0.7, ha='left', va='center',
-                        xytext=(5, 0), textcoords='offset points')
-    
-    ax1.set_xlabel('Max Speed (km/h)', fontsize=12, fontweight='bold')
-    ax1.set_ylabel('Performance Level', fontsize=12, fontweight='bold')
+            ax1.annotate(
+                row["athlete_name"],
+                xy=(row["max_speed_kmh"], cluster + y_jitter[list(data.index).index(idx)]),
+                fontsize=7,
+                alpha=0.7,
+                ha="left",
+                va="center",
+                xytext=(5, 0),
+                textcoords="offset points",
+            )
+
+    ax1.set_xlabel("Max Speed (km/h)", fontsize=12, fontweight="bold")
+    ax1.set_ylabel("Performance Level", fontsize=12, fontweight="bold")
     ax1.set_yticks([1, 2, 3])
-    ax1.set_yticklabels(['High', 'Medium', 'Low'])
-    ax1.set_title('Speed Distribution by Cluster', fontsize=14, fontweight='bold')
+    ax1.set_yticklabels(["High", "Medium", "Low"])
+    ax1.set_title("Speed Distribution by Cluster", fontsize=14, fontweight="bold")
     ax1.grid(True, alpha=0.3)
     ax1.invert_yaxis()  # High performers at top
-    
+
     # Time beeswarm (inverted - lower time is better)
     ax2 = axes[1]
-    for cluster in sorted(run_stats_clustered['cluster'].unique()):
-        data = run_stats_clustered[run_stats_clustered['cluster'] == cluster]
+    for cluster in sorted(run_stats_clustered["cluster"].unique()):
+        data = run_stats_clustered[run_stats_clustered["cluster"] == cluster]
         y_jitter = np.random.uniform(-0.2, 0.2, len(data))
-        ax2.scatter(data['total_time_s'], [cluster + j for j in y_jitter], 
-                   s=120, c=cluster_colors.get(cluster, 'gray'), 
-                   alpha=0.7, edgecolors='white', linewidths=1.5,
-                   label=cluster_labels.get(cluster, f'Cluster {cluster}'))
-        
+        ax2.scatter(
+            data["total_time_s"],
+            [cluster + j for j in y_jitter],
+            s=120,
+            c=cluster_colors.get(cluster, "gray"),
+            alpha=0.7,
+            edgecolors="white",
+            linewidths=1.5,
+            label=cluster_labels.get(cluster, f"Cluster {cluster}"),
+        )
+
         for idx, row in data.iterrows():
-            ax2.annotate(row['athlete_name'], 
-                        xy=(row['total_time_s'], cluster + y_jitter[list(data.index).index(idx)]),
-                        fontsize=7, alpha=0.7, ha='left', va='center',
-                        xytext=(5, 0), textcoords='offset points')
-    
-    ax2.set_xlabel('Total Time (s)', fontsize=12, fontweight='bold')
-    ax2.set_ylabel('Performance Level', fontsize=12, fontweight='bold')
+            ax2.annotate(
+                row["athlete_name"],
+                xy=(row["total_time_s"], cluster + y_jitter[list(data.index).index(idx)]),
+                fontsize=7,
+                alpha=0.7,
+                ha="left",
+                va="center",
+                xytext=(5, 0),
+                textcoords="offset points",
+            )
+
+    ax2.set_xlabel("Total Time (s)", fontsize=12, fontweight="bold")
+    ax2.set_ylabel("Performance Level", fontsize=12, fontweight="bold")
     ax2.set_yticks([1, 2, 3])
-    ax2.set_yticklabels(['High', 'Medium', 'Low'])
-    ax2.set_title('Time Distribution by Cluster', fontsize=14, fontweight='bold')
+    ax2.set_yticklabels(["High", "Medium", "Low"])
+    ax2.set_title("Time Distribution by Cluster", fontsize=14, fontweight="bold")
     ax2.grid(True, alpha=0.3)
     ax2.invert_yaxis()
-    
+
     # Add legend
     handles, labels = ax1.get_legend_handles_labels()
-    fig.legend(handles, labels, loc='upper center', ncol=3, fontsize=10, 
-              bbox_to_anchor=(0.5, 1.02), framealpha=0.9)
-    
-    plt.suptitle('Beeswarm Plot: Performance Distribution by Cluster', 
-                fontsize=16, fontweight='bold', y=1.08)
+    fig.legend(
+        handles,
+        labels,
+        loc="upper center",
+        ncol=3,
+        fontsize=10,
+        bbox_to_anchor=(0.5, 1.02),
+        framealpha=0.9,
+    )
+
+    plt.suptitle(
+        "Beeswarm Plot: Performance Distribution by Cluster", fontsize=16, fontweight="bold", y=1.08
+    )
     plt.tight_layout()
-    
+
     output_path = os.path.join(output_dir, "beeswarm_cluster_plot.png")
-    plt.savefig(output_path, dpi=150, bbox_inches='tight', facecolor='white', edgecolor='none')
+    plt.savefig(output_path, dpi=150, bbox_inches="tight", facecolor="white", edgecolor="none")
     plt.close()
-    
+
     print(f"Beeswarm plot saved: {output_path}")
     return output_path
 
@@ -710,23 +860,23 @@ def create_beeswarm_plot(run_stats_clustered, output_dir):
 def calculate_zscore_table(run_stats):
     """
     Calculate Z-scores for each athlete's metrics.
-    
+
     Returns: DataFrame with Z-scores and original values
     """
-    zscore_df = run_stats[['athlete_name', 'run_id', 'max_speed_kmh', 'total_time_s']].copy()
-    
+    zscore_df = run_stats[["athlete_name", "run_id", "max_speed_kmh", "total_time_s"]].copy()
+
     # Calculate Z-scores
-    zscore_df['speed_zscore'] = stats.zscore(zscore_df['max_speed_kmh'])
+    zscore_df["speed_zscore"] = stats.zscore(zscore_df["max_speed_kmh"])
     # For time, negative Z-score is better (faster), so we invert
-    zscore_df['time_zscore'] = -stats.zscore(zscore_df['total_time_s'])
-    
+    zscore_df["time_zscore"] = -stats.zscore(zscore_df["total_time_s"])
+
     # Calculate composite score (average of z-scores)
-    zscore_df['composite_zscore'] = (zscore_df['speed_zscore'] + zscore_df['time_zscore']) / 2
-    
+    zscore_df["composite_zscore"] = (zscore_df["speed_zscore"] + zscore_df["time_zscore"]) / 2
+
     # Sort by composite score (highest = best)
-    zscore_df = zscore_df.sort_values('composite_zscore', ascending=False).reset_index(drop=True)
+    zscore_df = zscore_df.sort_values("composite_zscore", ascending=False).reset_index(drop=True)
     zscore_df.index += 1  # 1-based ranking
-    
+
     return zscore_df
 
 
@@ -735,67 +885,68 @@ def generate_zscore_html_table(zscore_df):
     Generate HTML table with color-coded Z-scores.
     Green = positive (above average), Red = negative (below average)
     """
+
     def get_zscore_color(z):
         """Return color based on Z-score value."""
         if pd.isna(z):
-            return '#ffffff'
+            return "#ffffff"
         if z > 1.5:
-            return '#1e8449'  # Dark green
+            return "#1e8449"  # Dark green
         elif z > 0.5:
-            return '#27ae60'  # Green
+            return "#27ae60"  # Green
         elif z > -0.5:
-            return '#f9e79f'  # Yellow
+            return "#f9e79f"  # Yellow
         elif z > -1.5:
-            return '#e74c3c'  # Red
+            return "#e74c3c"  # Red
         else:
-            return '#922b21'  # Dark red
-    
+            return "#922b21"  # Dark red
+
     def get_text_color(z):
         """Return text color based on background."""
         if pd.isna(z):
-            return '#000000'
+            return "#000000"
         if z > 1.5 or z < -1.5:
-            return '#ffffff'
-        return '#000000'
-    
+            return "#ffffff"
+        return "#000000"
+
     html = '<table class="zscore-table">\n'
-    html += '<thead><tr>'
-    html += '<th>Rank</th><th>Athlete</th><th>Run</th>'
-    html += '<th>Speed (km/h)</th><th>Speed Z</th>'
-    html += '<th>Time (s)</th><th>Time Z</th>'
-    html += '<th>Composite Z</th>'
-    html += '</tr></thead>\n<tbody>\n'
-    
+    html += "<thead><tr>"
+    html += "<th>Rank</th><th>Athlete</th><th>Run</th>"
+    html += "<th>Speed (km/h)</th><th>Speed Z</th>"
+    html += "<th>Time (s)</th><th>Time Z</th>"
+    html += "<th>Composite Z</th>"
+    html += "</tr></thead>\n<tbody>\n"
+
     for idx, row in zscore_df.iterrows():
-        html += '<tr>'
-        html += f'<td><strong>#{idx}</strong></td>'
-        html += f'<td>{row["athlete_name"]}</td>'
-        html += f'<td>{int(row["run_id"])}</td>'
-        html += f'<td>{row["max_speed_kmh"]:.2f}</td>'
-        
+        html += "<tr>"
+        html += f"<td><strong>#{idx}</strong></td>"
+        html += f"<td>{row['athlete_name']}</td>"
+        html += f"<td>{int(row['run_id'])}</td>"
+        html += f"<td>{row['max_speed_kmh']:.2f}</td>"
+
         # Speed Z-score cell
-        speed_z = row['speed_zscore']
+        speed_z = row["speed_zscore"]
         bg_color = get_zscore_color(speed_z)
         txt_color = get_text_color(speed_z)
         html += f'<td style="background-color: {bg_color}; color: {txt_color}; font-weight: bold;">{speed_z:+.2f}</td>'
-        
-        html += f'<td>{row["total_time_s"]:.2f}</td>'
-        
+
+        html += f"<td>{row['total_time_s']:.2f}</td>"
+
         # Time Z-score cell
-        time_z = row['time_zscore']
+        time_z = row["time_zscore"]
         bg_color = get_zscore_color(time_z)
         txt_color = get_text_color(time_z)
         html += f'<td style="background-color: {bg_color}; color: {txt_color}; font-weight: bold;">{time_z:+.2f}</td>'
-        
+
         # Composite Z-score cell
-        comp_z = row['composite_zscore']
+        comp_z = row["composite_zscore"]
         bg_color = get_zscore_color(comp_z)
         txt_color = get_text_color(comp_z)
         html += f'<td style="background-color: {bg_color}; color: {txt_color}; font-weight: bold;">{comp_z:+.2f}</td>'
-        
-        html += '</tr>\n'
-    
-    html += '</tbody></table>'
+
+        html += "</tr>\n"
+
+    html += "</tbody></table>"
     return html
 
 
@@ -803,45 +954,54 @@ def generate_cluster_html_table(run_stats_clustered):
     """
     Generate HTML table with cluster assignments and badges.
     """
-    if 'cluster' not in run_stats_clustered.columns:
+    if "cluster" not in run_stats_clustered.columns:
         return ""
-    
-    cluster_colors = {1: '#27ae60', 2: '#f39c12', 3: '#e74c3c'}
-    cluster_labels = {1: 'High', 2: 'Medium', 3: 'Low'}
-    
+
+    cluster_colors = {1: "#27ae60", 2: "#f39c12", 3: "#e74c3c"}
+    cluster_labels = {1: "High", 2: "Medium", 3: "Low"}
+
     # Sort by cluster then by speed
-    df_sorted = run_stats_clustered.sort_values(['cluster', 'max_speed_kmh'], 
-                                                 ascending=[True, False]).reset_index(drop=True)
-    
+    df_sorted = run_stats_clustered.sort_values(
+        ["cluster", "max_speed_kmh"], ascending=[True, False]
+    ).reset_index(drop=True)
+
     html = '<table class="cluster-table">\n'
-    html += '<thead><tr>'
-    html += '<th>Athlete</th><th>Run</th><th>Speed (km/h)</th><th>Time (s)</th><th>Level</th>'
-    html += '</tr></thead>\n<tbody>\n'
-    
+    html += "<thead><tr>"
+    html += "<th>Athlete</th><th>Run</th><th>Speed (km/h)</th><th>Time (s)</th><th>Level</th>"
+    html += "</tr></thead>\n<tbody>\n"
+
     for _, row in df_sorted.iterrows():
-        cluster = row['cluster']
-        color = cluster_colors.get(cluster, '#95a5a6')
-        label = cluster_labels.get(cluster, 'N/A')
-        
-        html += '<tr>'
-        html += f'<td><strong>{row["athlete_name"]}</strong></td>'
-        html += f'<td>{int(row["run_id"])}</td>'
-        html += f'<td>{row["max_speed_kmh"]:.2f}</td>'
-        html += f'<td>{row["total_time_s"]:.2f}</td>'
+        cluster = row["cluster"]
+        color = cluster_colors.get(cluster, "#95a5a6")
+        label = cluster_labels.get(cluster, "N/A")
+
+        html += "<tr>"
+        html += f"<td><strong>{row['athlete_name']}</strong></td>"
+        html += f"<td>{int(row['run_id'])}</td>"
+        html += f"<td>{row['max_speed_kmh']:.2f}</td>"
+        html += f"<td>{row['total_time_s']:.2f}</td>"
         html += f'<td><span class="cluster-badge" style="background-color: {color};">{label}</span></td>'
-        html += '</tr>\n'
-    
-    html += '</tbody></table>'
+        html += "</tr>\n"
+
+    html += "</tbody></table>"
     return html
 
 
 def get_reference_data():
     """Returns the reference data for comparison."""
     data = {
-        "Atleta": ["Usain Bolt (WR 100m Avg)", "Usain Bolt (Max Speed)", "Gabriel Silva (Recorde Futebol)"],
+        "Atleta": [
+            "Usain Bolt (WR 100m Avg)",
+            "Usain Bolt (Max Speed)",
+            "Gabriel Silva (Recorde Futebol)",
+        ],
         "Speed (km/h)": [37.58, 44.72, 40.30],
         "Speed (m/s)": [10.44, 12.42, 11.19],
-        "Detalhes": ["Average speed during 9.58s WR", "Top momentary speed recorded", "Sta Clara vs Famalicão (GPS) - May 2025"]
+        "Detalhes": [
+            "Average speed during 9.58s WR",
+            "Top momentary speed recorded",
+            "Sta Clara vs Famalicão (GPS) - May 2025",
+        ],
     }
     return pd.DataFrame(data)
 
@@ -854,12 +1014,12 @@ def get_logo_base64():
         os.path.join(script_dir, "..", "docs", "images", "vaila.png"),
         os.path.join(script_dir, "..", "..", "docs", "images", "vaila.png"),
     ]
-    
+
     for path in candidates:
         if os.path.exists(path):
             try:
                 with open(path, "rb") as image_file:
-                    return base64.b64encode(image_file.read()).decode('utf-8')
+                    return base64.b64encode(image_file.read()).decode("utf-8")
             except Exception as e:
                 print(f"Error reading logo {path}: {e}")
                 return None
@@ -870,12 +1030,12 @@ def extract_frame(video_path, frame_number, output_path):
     """Extracts a specific frame from a video and saves it as an image."""
     if cv2 is None:
         return False
-        
+
     try:
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
             return False
-            
+
         # Get total frames to ensure frame_number is valid
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         if total_frames <= 0:
@@ -883,11 +1043,11 @@ def extract_frame(video_path, frame_number, output_path):
 
         if frame_number >= total_frames:
             frame_number = total_frames - 1
-            
+
         cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
         ret, frame = cap.read()
         cap.release()
-        
+
         if ret:
             cv2.imwrite(output_path, frame)
             return True
@@ -903,47 +1063,44 @@ def get_video_and_frame_indices(cut_data, root_data, input_dir):
     Determines the best video file path and frame indices (start, end)
     to extract for a given cut.
     """
-    
+
     # Strategy 1: Look for the specific CUT video file
     # Normalize path separators to ensure correct basename extraction across OSs
-    raw_cut_path = cut_data.get('output_file', '')
-    cut_file_name = os.path.basename(raw_cut_path.replace('\\', '/'))
+    raw_cut_path = cut_data.get("output_file", "")
+    cut_file_name = os.path.basename(raw_cut_path.replace("\\", "/"))
     cut_video_path = os.path.join(input_dir, cut_file_name)
-    
+
     if cut_file_name and os.path.exists(cut_video_path):
-        frame_count = cut_data.get('frame_count', 1)
+        frame_count = cut_data.get("frame_count", 1)
         return cut_video_path, 0, frame_count - 1
-        
+
     # Strategy 2: Look for the SOURCE video file
-    raw_source_path = root_data.get('source_file', '')
-    source_file_name = os.path.basename(raw_source_path.replace('\\', '/'))
-    
-    candidates = [
-        raw_source_path, 
-        os.path.join(input_dir, source_file_name)
-    ]
-    
+    raw_source_path = root_data.get("source_file", "")
+    source_file_name = os.path.basename(raw_source_path.replace("\\", "/"))
+
+    candidates = [raw_source_path, os.path.join(input_dir, source_file_name)]
+
     source_video_path = None
     for cand in candidates:
         if cand and os.path.exists(cand):
             source_video_path = cand
             break
-            
+
     if source_video_path:
-        start_frame = cut_data.get('start_frame', 0)
-        end_frame = cut_data.get('end_frame', 0)
+        start_frame = cut_data.get("start_frame", 0)
+        end_frame = cut_data.get("end_frame", 0)
         return source_video_path, start_frame, end_frame
-        
+
     return None, None, None
 
 
 def process_sprint_file(filepath, output_base_dir, logo_b64, mode="sprint"):
     """
     Process a single TOML file and generate individual athlete report.
-    
+
     This function processes sprint data from a TOML file generated by vaila Tracker,
     calculates performance metrics, generates visualizations, and creates an HTML report.
-    
+
     Parameters:
         filepath: str
             Path to the TOML file containing cut/timing data
@@ -953,12 +1110,12 @@ def process_sprint_file(filepath, output_base_dir, logo_b64, mode="sprint"):
             Base64-encoded logo image for HTML report
         mode: str
             Analysis mode - "sprint" for 20m linear or "cod" for COD 180
-    
+
     Returns:
         list of dict: Database rows containing metrics for each run/section
             Keys: file_name, athlete_name, patient_id, run_id, distance_m,
                   duration_s, speed_ms, speed_kmh, acceleration_ms2, date_processed
-    
+
     Output files (per athlete):
         - {basename}_analysis_{timestamp}/ directory containing:
             * {athlete}_report_sprint20m.html: Individual HTML report
@@ -968,7 +1125,7 @@ def process_sprint_file(filepath, output_base_dir, logo_b64, mode="sprint"):
             * {athlete}_Run_N_data.csv: CSV data export
             * Frame images at each distance marker (0m, 5m, 10m, 15m, 20m)
             * summary.txt: Text summary of results
-    
+
     Calculations:
         - Speed (m/s and km/h) for each 5m section
         - Acceleration (m/s^2) between sections
@@ -976,7 +1133,7 @@ def process_sprint_file(filepath, output_base_dir, logo_b64, mode="sprint"):
         - Maximum speed and peak acceleration per run
     """
     print(f"Processing: {filepath} (Mode: {mode})")
-    
+
     # helper for labels
     def get_labels(mode):
         if mode == "cod":
@@ -984,10 +1141,10 @@ def process_sprint_file(filepath, output_base_dir, logo_b64, mode="sprint"):
                 "title_suffix": "(2X COD 180°)",
                 "report_file_suffix": "_report_cod180.html",
                 "0m": "Start",
-                "5m": "5m", 
+                "5m": "5m",
                 "10m": "10m",
-                "15m": "15m (Turn)", 
-                "20m": "20m (Finish)"
+                "15m": "15m (Turn)",
+                "20m": "20m (Finish)",
             }
         else:
             return {
@@ -997,15 +1154,15 @@ def process_sprint_file(filepath, output_base_dir, logo_b64, mode="sprint"):
                 "5m": "5m",
                 "10m": "10m",
                 "15m": "15m",
-                "20m": "20m"
+                "20m": "20m",
             }
-    
+
     labels_map = get_labels(mode)
-    
+
     try:
-        with open(filepath, 'r', encoding='utf-8') as f:
+        with open(filepath, encoding="utf-8") as f:
             data = toml.load(f)
-            
+
         if "cuts" not in data:
             print(f"Skipping {filepath}: 'cuts' key not found.")
             return []
@@ -1014,33 +1171,39 @@ def process_sprint_file(filepath, output_base_dir, logo_b64, mode="sprint"):
         df = pd.DataFrame(cuts)
 
         if df.empty:
-             print(f"Skipping {filepath}: No cuts data.")
-             return []
+            print(f"Skipping {filepath}: No cuts data.")
+            return []
 
         # Prepare output directory
         file_basename = os.path.splitext(os.path.basename(filepath))[0]
         # Extract Athlete Name: everything before the first underscore in basename
-        athlete_name = file_basename.split('_')[0]
-        
+        athlete_name = file_basename.split("_")[0]
+
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         output_dir = os.path.join(output_base_dir, f"{file_basename}_analysis_{timestamp}")
         os.makedirs(output_dir, exist_ok=True)
-        
+
         # --- Calculations ---
         SECTION_DISTANCE = 5.0  # meters
         CUTS_PER_RUN = 4
-        
-        df['run_id'] = ((df['index'] - 1) // CUTS_PER_RUN) + 1
-        df['distance_cumulative'] = df.groupby('run_id').cumcount() * SECTION_DISTANCE + SECTION_DISTANCE
-        df['speed_ms'] = SECTION_DISTANCE / df['duration']
-        df['speed_kmh'] = df['speed_ms'] * 3.6
-        df['prev_speed_ms'] = df.groupby('run_id')['speed_ms'].shift(1).fillna(0)
-        df['acceleration_ms2'] = (df['speed_ms'] - df['prev_speed_ms']) / df['duration']
-        
+
+        df["run_id"] = ((df["index"] - 1) // CUTS_PER_RUN) + 1
+        df["distance_cumulative"] = (
+            df.groupby("run_id").cumcount() * SECTION_DISTANCE + SECTION_DISTANCE
+        )
+        df["speed_ms"] = SECTION_DISTANCE / df["duration"]
+        df["speed_kmh"] = df["speed_ms"] * 3.6
+        df["prev_speed_ms"] = df.groupby("run_id")["speed_ms"].shift(1).fillna(0)
+        df["acceleration_ms2"] = (df["speed_ms"] - df["prev_speed_ms"]) / df["duration"]
+
         # --- Reports Generation ---
-        runs = df['run_id'].unique()
-        
-        summary_lines = [f"Analysis Report for {athlete_name} ({file_basename}) - {labels_map['title_suffix']}", "="*40, ""]
+        runs = df["run_id"].unique()
+
+        summary_lines = [
+            f"Analysis Report for {athlete_name} ({file_basename}) - {labels_map['title_suffix']}",
+            "=" * 40,
+            "",
+        ]
         html_sections = []
         database_rows = []
 
@@ -1050,59 +1213,69 @@ def process_sprint_file(filepath, output_base_dir, logo_b64, mode="sprint"):
             logo_html = f'<div style="text-align: center; margin-bottom: 20px;"><img src="data:image/png;base64,{logo_b64}" width="120"></div>'
 
         for rid in runs:
-            df_run = df[df['run_id'] == rid].copy()
+            df_run = df[df["run_id"] == rid].copy()
             prefix = f"{athlete_name}_Run_{rid}"
-            
+
             # Metrics
-            total_time = df_run['duration'].sum()
-            max_spd_kmh = df_run['speed_kmh'].max()
-            max_spd_ms = df_run['speed_ms'].max()
-            max_acc = df_run['acceleration_ms2'].max()
-            
-            summary_lines.extend([
-                f"Run {rid}:",
-                f"  Total Time (20m): {total_time:.3f} s  [{labels_map['title_suffix']}]",
-                f"  Max Speed:        {max_spd_kmh:.3f} km/h ({max_spd_ms:.3f} m/s)",
-                f"  Peak Acceleration: {max_acc:.3f} m/s²",
-                "-"*20
-            ])
-            
+            total_time = df_run["duration"].sum()
+            max_spd_kmh = df_run["speed_kmh"].max()
+            max_spd_ms = df_run["speed_ms"].max()
+            max_acc = df_run["acceleration_ms2"].max()
+
+            summary_lines.extend(
+                [
+                    f"Run {rid}:",
+                    f"  Total Time (20m): {total_time:.3f} s  [{labels_map['title_suffix']}]",
+                    f"  Max Speed:        {max_spd_kmh:.3f} km/h ({max_spd_ms:.3f} m/s)",
+                    f"  Peak Acceleration: {max_acc:.3f} m/s²",
+                    "-" * 20,
+                ]
+            )
+
             # --- Frame Extraction Logic (0, 5, 10, 15, 20m) ---
             frame_imgs_html = ""
-            if cv2: 
+            if cv2:
                 input_dir = os.path.dirname(filepath)
                 frames_to_extract = []
 
                 # 1. Start (0m) - Start of first cut
                 if not df_run.empty:
-                    frames_to_extract.append({
-                        "dist_label": labels_map.get("0m", "0m"),
-                        "cut_idx": df_run.index[0],
-                        "use_end_frame": False
-                    })
+                    frames_to_extract.append(
+                        {
+                            "dist_label": labels_map.get("0m", "0m"),
+                            "cut_idx": df_run.index[0],
+                            "use_end_frame": False,
+                        }
+                    )
 
                 # 2. Ends (5m, 10m, 15m, 20m...)
                 # Aggregating based on cuts in the run
                 current_dist = 0
                 for idx_in_run, cut_idx in enumerate(df_run.index):
                     current_dist += SECTION_DISTANCE
-                    frames_to_extract.append({
-                        "dist_label": labels_map.get(f"{int(current_dist)}m", f"{int(current_dist)}m"),
-                        "cut_idx": cut_idx,
-                        "use_end_frame": True
-                    })
+                    frames_to_extract.append(
+                        {
+                            "dist_label": labels_map.get(
+                                f"{int(current_dist)}m", f"{int(current_dist)}m"
+                            ),
+                            "cut_idx": cut_idx,
+                            "use_end_frame": True,
+                        }
+                    )
 
                 valid_frames_count = 0
                 for item in frames_to_extract:
-                    cut_data = cuts[item['cut_idx']]
-                    vid_path, frame_start, frame_end = get_video_and_frame_indices(cut_data, data, input_dir)
-                    
+                    cut_data = cuts[item["cut_idx"]]
+                    vid_path, frame_start, frame_end = get_video_and_frame_indices(
+                        cut_data, data, input_dir
+                    )
+
                     if vid_path:
-                        target_frame = frame_end if item['use_end_frame'] else frame_start
-                        label = item['dist_label']
+                        target_frame = frame_end if item["use_end_frame"] else frame_start
+                        label = item["dist_label"]
                         img_name = f"{prefix}_{label}.png"
                         img_path = os.path.join(output_dir, img_name)
-                        
+
                         if extract_frame(vid_path, target_frame, img_path):
                             frame_imgs_html += f'''
                             <div style="text-align: center;">
@@ -1111,60 +1284,101 @@ def process_sprint_file(filepath, output_base_dir, logo_b64, mode="sprint"):
                             </div>
                             '''
                             valid_frames_count += 1
-                
+
                 if valid_frames_count == 0:
-                     frame_imgs_html = "<div style='color: gray; font-style: italic;'>No video frames extracted (Check video file names)</div>"
-            
-            
+                    frame_imgs_html = "<div style='color: gray; font-style: italic;'>No video frames extracted (Check video file names)</div>"
+
             # --- Enhanced Plotting ---
             # Speed Plot
             plt.figure(figsize=(10, 6))
-            sns.lineplot(data=df_run, x='distance_cumulative', y='speed_kmh', marker='o', linewidth=3, label=athlete_name)
-            
+            sns.lineplot(
+                data=df_run,
+                x="distance_cumulative",
+                y="speed_kmh",
+                marker="o",
+                linewidth=3,
+                label=athlete_name,
+            )
+
             # Updated Reference Line (Usain Bolt - Dual)
-            plt.axhline(y=37.58, color='gold', linestyle='--', linewidth=2, label='Bolt Avg (37.58 km/h)')
-            plt.axhline(y=44.72, color='red', linestyle=':', linewidth=2, label='Bolt Max (44.72 km/h)')
-            
-            max_v_idx = df_run['speed_kmh'].idxmax()
-            max_v_x = df_run.loc[max_v_idx, 'distance_cumulative']
-            max_v_y = df_run.loc[max_v_idx, 'speed_kmh']
-            plt.annotate(f'Max: {max_v_y:.1f} km/h', 
-                         xy=(max_v_x, max_v_y), xytext=(max_v_x, max_v_y + 2),
-                         arrowprops=dict(facecolor='black', shrink=0.05))
-            
-            plt.title(f"Speed Profile {labels_map['title_suffix']} - Run {rid} ({athlete_name})", fontsize=16, fontweight='bold')
+            plt.axhline(
+                y=37.58, color="gold", linestyle="--", linewidth=2, label="Bolt Avg (37.58 km/h)"
+            )
+            plt.axhline(
+                y=44.72, color="red", linestyle=":", linewidth=2, label="Bolt Max (44.72 km/h)"
+            )
+
+            max_v_idx = df_run["speed_kmh"].idxmax()
+            max_v_x = df_run.loc[max_v_idx, "distance_cumulative"]
+            max_v_y = df_run.loc[max_v_idx, "speed_kmh"]
+            plt.annotate(
+                f"Max: {max_v_y:.1f} km/h",
+                xy=(max_v_x, max_v_y),
+                xytext=(max_v_x, max_v_y + 2),
+                arrowprops=dict(facecolor="black", shrink=0.05),
+            )
+
+            plt.title(
+                f"Speed Profile {labels_map['title_suffix']} - Run {rid} ({athlete_name})",
+                fontsize=16,
+                fontweight="bold",
+            )
             plt.xlabel("Distance (m)", fontsize=12)
             plt.ylabel("Speed (km/h)", fontsize=12)
             plt.ylim(bottom=0)
-            plt.legend(loc='lower right')
+            plt.legend(loc="lower right")
             vel_plot_path = os.path.join(output_dir, f"{prefix}_speed.png")
-            plt.savefig(vel_plot_path, bbox_inches='tight', dpi=150)
+            plt.savefig(vel_plot_path, bbox_inches="tight", dpi=150)
             plt.close()
 
             # Acceleration Plot
             plt.figure(figsize=(10, 6))
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", category=FutureWarning)
-                bar_plot = sns.barplot(data=df_run, x='distance_cumulative', y='acceleration_ms2', hue='distance_cumulative', palette='viridis', legend=False)
-            
-            plt.title(f"Acceleration per Section {labels_map['title_suffix']} - Run {rid} ({athlete_name})", fontsize=16, fontweight='bold')
+                bar_plot = sns.barplot(
+                    data=df_run,
+                    x="distance_cumulative",
+                    y="acceleration_ms2",
+                    hue="distance_cumulative",
+                    palette="viridis",
+                    legend=False,
+                )
+
+            plt.title(
+                f"Acceleration per Section {labels_map['title_suffix']} - Run {rid} ({athlete_name})",
+                fontsize=16,
+                fontweight="bold",
+            )
             plt.xlabel("Distance (m)", fontsize=12)
             plt.ylabel("Acceleration (m/s²)", fontsize=12)
-            
+
             for p in bar_plot.patches:
-                bar_plot.annotate(f'{p.get_height():.2f}', 
-                                  (p.get_x() + p.get_width() / 2., p.get_height()), 
-                                  ha='center', va='center', xytext=(0, 10), textcoords='offset points')
-                                  
+                bar_plot.annotate(
+                    f"{p.get_height():.2f}",
+                    (p.get_x() + p.get_width() / 2.0, p.get_height()),
+                    ha="center",
+                    va="center",
+                    xytext=(0, 10),
+                    textcoords="offset points",
+                )
+
             acc_plot_path = os.path.join(output_dir, f"{prefix}_acceleration.png")
-            plt.savefig(acc_plot_path, bbox_inches='tight', dpi=150)
+            plt.savefig(acc_plot_path, bbox_inches="tight", dpi=150)
             plt.close()
-            
+
             # Save CSV/Excel
-            cols_export = ['distance_cumulative', 'duration', 'speed_ms', 'speed_kmh', 'acceleration_ms2']
-            df_run[cols_export].to_excel(os.path.join(output_dir, f"{prefix}_data.xlsx"), index=False)
+            cols_export = [
+                "distance_cumulative",
+                "duration",
+                "speed_ms",
+                "speed_kmh",
+                "acceleration_ms2",
+            ]
+            df_run[cols_export].to_excel(
+                os.path.join(output_dir, f"{prefix}_data.xlsx"), index=False
+            )
             df_run[cols_export].to_csv(os.path.join(output_dir, f"{prefix}_data.csv"), index=False)
-            
+
             # HTML Section
             html_sections.append(f"""
             <div class="run-section">
@@ -1196,30 +1410,30 @@ def process_sprint_file(filepath, output_base_dir, logo_b64, mode="sprint"):
                 </div>
                 
                 <h3 style="margin-top: 30px; color: #34495e;">Interval Data</h3>
-                {df_run[cols_export].to_html(classes='data-table', float_format='%.3f', index=False)}
+                {df_run[cols_export].to_html(classes="data-table", float_format="%.3f", index=False)}
                 <br>
             </div>
             """)
-            
+
             # Database Record
             for idx, row in df_run.iterrows():
                 cut_row = {
-                    'file_name': file_basename,
-                    'athlete_name': athlete_name,
-                    'patient_id': athlete_name,
-                    'run_id': rid,
-                    'distance_m': row['distance_cumulative'],
-                    'duration_s': row['duration'],
-                    'speed_ms': row['speed_ms'],
-                    'speed_kmh': row['speed_kmh'],
-                    'acceleration_ms2': row['acceleration_ms2'],
-                    'date_processed': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    "file_name": file_basename,
+                    "athlete_name": athlete_name,
+                    "patient_id": athlete_name,
+                    "run_id": rid,
+                    "distance_m": row["distance_cumulative"],
+                    "duration_s": row["duration"],
+                    "speed_ms": row["speed_ms"],
+                    "speed_kmh": row["speed_kmh"],
+                    "acceleration_ms2": row["acceleration_ms2"],
+                    "date_processed": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 }
                 database_rows.append(cut_row)
 
-        with open(os.path.join(output_dir, "summary.txt"), "w", encoding='utf-8') as f:
+        with open(os.path.join(output_dir, "summary.txt"), "w", encoding="utf-8") as f:
             f.write("\n".join(summary_lines))
-            
+
         html_content = f"""
         <!DOCTYPE html>
         <html>
@@ -1267,15 +1481,15 @@ def process_sprint_file(filepath, output_base_dir, logo_b64, mode="sprint"):
         <body>
             <div class="container">
                 {logo_html}
-                <h1><i>vailá</i> Sprint Analysis {labels_map['title_suffix']} - {athlete_name}</h1>
+                <h1><i>vailá</i> Sprint Analysis {labels_map["title_suffix"]} - {athlete_name}</h1>
                 <div class="meta-info">
                     <p><strong>File:</strong> {file_basename} | <strong>Date:</strong> {datetime.now().strftime("%d/%m/%Y %H:%M:%S")}</p>
                 </div>
                 
-                {''.join(html_sections)}
+                {"".join(html_sections)}
                 
                 <h2>Reference Values</h2>
-                {get_reference_data().to_html(classes='data-table', index=False)}
+                {get_reference_data().to_html(classes="data-table", index=False)}
             </div>
             
             <!-- Lightbox Modal -->
@@ -1287,7 +1501,11 @@ def process_sprint_file(filepath, output_base_dir, logo_b64, mode="sprint"):
         </body>
         </html>
         """
-        with open(os.path.join(output_dir, f"{file_basename}{labels_map['report_file_suffix']}"), "w", encoding='utf-8') as f:
+        with open(
+            os.path.join(output_dir, f"{file_basename}{labels_map['report_file_suffix']}"),
+            "w",
+            encoding="utf-8",
+        ) as f:
             f.write(html_content)
 
         print(f"Finished {file_basename} -> Output: {output_dir}")
@@ -1296,6 +1514,7 @@ def process_sprint_file(filepath, output_base_dir, logo_b64, mode="sprint"):
     except Exception as e:
         print(f"Error processing {filepath}: {e}")
         import traceback
+
         traceback.print_exc()
         return []
 
@@ -1303,7 +1522,7 @@ def process_sprint_file(filepath, output_base_dir, logo_b64, mode="sprint"):
 def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
     """
     Generate comprehensive team analysis report with statistics and visualizations.
-    
+
     This function creates a complete team performance analysis including:
     - Consolidated database (CSV) of all runs
     - Performance rankings (by speed and time)
@@ -1316,7 +1535,7 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
     - K-means clustering (3 performance levels)
     - Z-score analysis table
     - ydata-profiling report (if available)
-    
+
     Parameters:
         all_data: list of dict
             Database rows from all processed athletes/runs
@@ -1326,7 +1545,7 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
             Base64-encoded logo image for HTML report
         mode: str
             Analysis mode - "sprint" for 20m linear or "cod" for COD 180
-    
+
     Output files:
         - general_report.html: Main HTML report
         - vaila_sprint_database.csv: Consolidated database
@@ -1338,7 +1557,7 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
     """
     if not all_data:
         return
-        
+
     # Naming setup
     if mode == "cod":
         report_title = "2X COD 180° Analysis"
@@ -1350,77 +1569,84 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
         profiling_filename = "vaila_sprint_profiling.html"
 
     df = pd.DataFrame(all_data)
-    
+
     # 1. Consolidated Database
     db_path = os.path.join(output_dir, db_filename)
     df.to_csv(db_path, index=False)
     print(f"Database generated: {db_path}")
 
     # 2. Ranking Summary
-    run_stats = df.groupby(['athlete_name', 'file_name', 'run_id']).agg({
-        'speed_kmh': 'max',
-        'duration_s': 'sum'
-    }).reset_index()
-    
-    run_stats.rename(columns={'speed_kmh': 'max_speed_kmh', 'duration_s': 'total_time_s'}, inplace=True)
-    
-    ranking_speed = run_stats.sort_values(by='max_speed_kmh', ascending=False).reset_index(drop=True)
-    ranking_speed.index += 1 
-    
-    ranking_time = run_stats.sort_values(by='total_time_s', ascending=True).reset_index(drop=True)
+    run_stats = (
+        df.groupby(["athlete_name", "file_name", "run_id"])
+        .agg({"speed_kmh": "max", "duration_s": "sum"})
+        .reset_index()
+    )
+
+    run_stats.rename(
+        columns={"speed_kmh": "max_speed_kmh", "duration_s": "total_time_s"}, inplace=True
+    )
+
+    ranking_speed = run_stats.sort_values(by="max_speed_kmh", ascending=False).reset_index(
+        drop=True
+    )
+    ranking_speed.index += 1
+
+    ranking_time = run_stats.sort_values(by="total_time_s", ascending=True).reset_index(drop=True)
     ranking_time.index += 1
 
     # 3. ydata-profiling
     if HAS_PROFILING:
         print("Generating ydata-profiling report... (This may take a moment)")
         try:
-            profile = ProfileReport(df, title=f"{report_title} - Statistical Profiling", minimal=True) 
+            profile = ProfileReport(
+                df, title=f"{report_title} - Statistical Profiling", minimal=True
+            )
             profile.to_file(os.path.join(output_dir, profiling_filename))
         except Exception as e:
             print(f"Error generating profiling report: {e}")
 
     # 4. Find top performers
-    top_speed_row = run_stats.loc[run_stats['max_speed_kmh'].idxmax()]
-    top_speed_athlete = top_speed_row['athlete_name']
-    top_speed_run = int(top_speed_row['run_id'])
-    top_speed_value = top_speed_row['max_speed_kmh']
-    
-    best_time_row = run_stats.loc[run_stats['total_time_s'].idxmin()]
-    best_time_athlete = best_time_row['athlete_name']
-    best_time_run = int(best_time_row['run_id'])
-    best_time_value = best_time_row['total_time_s']
-    
+    top_speed_row = run_stats.loc[run_stats["max_speed_kmh"].idxmax()]
+    top_speed_athlete = top_speed_row["athlete_name"]
+    top_speed_run = int(top_speed_row["run_id"])
+    top_speed_value = top_speed_row["max_speed_kmh"]
+
+    best_time_row = run_stats.loc[run_stats["total_time_s"].idxmin()]
+    best_time_athlete = best_time_row["athlete_name"]
+    best_time_run = int(best_time_row["run_id"])
+    best_time_value = best_time_row["total_time_s"]
+
     # 5. Calculate team statistics
     team_stats = calculate_team_statistics(run_stats)
-    
+
     # 6. Perform K-means clustering
     print("Performing K-means clustering...")
     run_stats_clustered, cluster_summary = perform_kmeans_clustering(run_stats, n_clusters=3)
-    
+
     # 7. Calculate Z-scores
     print("Calculating Z-scores...")
     zscore_df = calculate_zscore_table(run_stats)
-    
+
     # 8. Generate Enhanced Visualizations
     logo_html = ""
     if logo_b64:
         logo_html = f'<div style="text-align: center; margin-bottom: 20px;"><img src="data:image/png;base64,{logo_b64}" width="120"></div>'
-    
+
     # Create all visualizations
     print("Generating enhanced visualizations...")
-    
+
     # 8.1 Dumbbell Chart - Primary visualization
     dumbbell_path = create_dumbbell_chart(run_stats, output_dir)
-    
+
     # 8.2 Improvement Scatter Plot - Secondary visualization
     scatter_path = create_improvement_scatter(run_stats, output_dir)
-    
+
     # 8.3 Performance Heatmap - Overview visualization
     heatmap_path = create_performance_heatmap(run_stats, output_dir)
-    
+
     # 8.4 Beeswarm Plot - Cluster visualization
     beeswarm_path = create_beeswarm_plot(run_stats_clustered, output_dir)
-    
+
     # Build visualization HTML sections
     dumbbell_html = ""
     if dumbbell_path:
@@ -1431,7 +1657,7 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
                 <img src="{os.path.basename(dumbbell_path)}" class="chart-img" alt="Dumbbell Chart">
             </div>
         '''
-    
+
     scatter_html = ""
     if scatter_path:
         scatter_html = f'''
@@ -1441,7 +1667,7 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
                 <img src="{os.path.basename(scatter_path)}" class="chart-img" alt="Scatter Plot">
             </div>
         '''
-    
+
     heatmap_html = ""
     if heatmap_path:
         heatmap_html = f'''
@@ -1451,7 +1677,7 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
                 <img src="{os.path.basename(heatmap_path)}" class="chart-img" alt="Heatmap">
             </div>
         '''
-    
+
     beeswarm_html = ""
     if beeswarm_path:
         beeswarm_html = f'''
@@ -1461,40 +1687,44 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
                 <img src="{os.path.basename(beeswarm_path)}" class="chart-img" alt="Beeswarm Plot">
             </div>
         '''
-    
+
     # Generate cluster and Z-score HTML tables
     cluster_table_html = generate_cluster_html_table(run_stats_clustered)
     zscore_table_html = generate_zscore_html_table(zscore_df)
-    
+
     # Generate cluster summary HTML
     cluster_summary_html = ""
     if cluster_summary is not None and not cluster_summary.empty:
         try:
             cluster_cards_html = ""
-            card_styles = {1: ('high', 'High Performers'), 2: ('medium', 'Medium Performers'), 3: ('low', 'Low Performers')}
-            
+            card_styles = {
+                1: ("high", "High Performers"),
+                2: ("medium", "Medium Performers"),
+                3: ("low", "Low Performers"),
+            }
+
             for cluster_num in [1, 2, 3]:
-                if cluster_num in cluster_summary['cluster'].values:
-                    row = cluster_summary[cluster_summary['cluster'] == cluster_num].iloc[0]
+                if cluster_num in cluster_summary["cluster"].values:
+                    row = cluster_summary[cluster_summary["cluster"] == cluster_num].iloc[0]
                     style_class, label = card_styles[cluster_num]
-                    cluster_cards_html += f'''
+                    cluster_cards_html += f"""
                         <div class="cluster-card {style_class}">
                             <div class="cluster-title">{label}</div>
                             <div class="cluster-stat">Avg Speed: {row["max_speed_kmh_mean"]:.2f} km/h</div>
                             <div class="cluster-stat">Avg Time: {row["total_time_s_mean"]:.2f} s</div>
                             <div class="cluster-stat">Count: {int(row["max_speed_kmh_count"])}</div>
                         </div>
-                    '''
-            
+                    """
+
             if cluster_cards_html:
-                cluster_summary_html = f'''
+                cluster_summary_html = f"""
                     <div class="cluster-summary">
                         <h4>Cluster Summary Statistics</h4>
                         <div class="cluster-cards">
                             {cluster_cards_html}
                         </div>
                     </div>
-                '''
+                """
         except Exception as e:
             print(f"Warning: Could not generate cluster summary HTML: {e}")
             cluster_summary_html = ""
@@ -1915,7 +2145,7 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
             
             <div class="stats-banner">
                 <div class="stat-item">
-                    <span class="stat-value">{len(set(run_stats['athlete_name']))}</span>
+                    <span class="stat-value">{len(set(run_stats["athlete_name"]))}</span>
                     <span class="stat-label">Athletes</span>
                 </div>
                 <div class="stat-item">
@@ -1946,22 +2176,22 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
             <div class="team-stats-grid">
                 <div class="team-stat-card speed">
                     <div class="team-stat-title">Average Speed</div>
-                    <div class="team-stat-value">{team_stats['speed']['mean']:.2f}</div>
+                    <div class="team-stat-value">{team_stats["speed"]["mean"]:.2f}</div>
                     <div class="team-stat-sub">km/h</div>
                 </div>
                 <div class="team-stat-card speed">
                     <div class="team-stat-title">Speed Std Dev</div>
-                    <div class="team-stat-value">{team_stats['speed']['std']:.2f}</div>
+                    <div class="team-stat-value">{team_stats["speed"]["std"]:.2f}</div>
                     <div class="team-stat-sub">km/h</div>
                 </div>
                 <div class="team-stat-card time">
                     <div class="team-stat-title">Average Time</div>
-                    <div class="team-stat-value">{team_stats['time']['mean']:.2f}</div>
+                    <div class="team-stat-value">{team_stats["time"]["mean"]:.2f}</div>
                     <div class="team-stat-sub">seconds</div>
                 </div>
                 <div class="team-stat-card time">
                     <div class="team-stat-title">Time Std Dev</div>
-                    <div class="team-stat-value">{team_stats['time']['std']:.2f}</div>
+                    <div class="team-stat-value">{team_stats["time"]["std"]:.2f}</div>
                     <div class="team-stat-sub">seconds</div>
                 </div>
             </div>
@@ -2027,11 +2257,11 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
             <div class="rankings-grid">
                 <div>
                     <h3 style="color: var(--danger-color);">Ranking by Max Speed (Fastest First)</h3>
-                    {ranking_speed[['athlete_name', 'run_id', 'max_speed_kmh', 'total_time_s']].to_html(classes='data-table', float_format='%.3f')}
+                    {ranking_speed[["athlete_name", "run_id", "max_speed_kmh", "total_time_s"]].to_html(classes="data-table", float_format="%.3f")}
                 </div>
                 <div>
                     <h3 style="color: var(--success-color);">Ranking by Total Time (Fastest First)</h3>
-                    {ranking_time[['athlete_name', 'run_id', 'total_time_s', 'max_speed_kmh']].to_html(classes='data-table', float_format='%.3f')}
+                    {ranking_time[["athlete_name", "run_id", "total_time_s", "max_speed_kmh"]].to_html(classes="data-table", float_format="%.3f")}
                 </div>
             </div>
             
@@ -2039,8 +2269,8 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
     </body>
     </html>
     """
-    
-    with open(os.path.join(output_dir, "general_report.html"), "w", encoding='utf-8') as f:
+
+    with open(os.path.join(output_dir, "general_report.html"), "w", encoding="utf-8") as f:
         f.write(html_content)
     print(f"General Report generated: {os.path.join(output_dir, 'general_report.html')}")
 
@@ -2048,7 +2278,7 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
 def main():
     """
     Main entry point for vaila Sprint Analysis.
-    
+
     This function orchestrates the complete sprint analysis workflow:
     1. Displays mode selection dialog (Sprint 20m or COD 180)
     2. Opens directory selection dialog for TOML files
@@ -2060,7 +2290,7 @@ def main():
        - Z-score analysis
        - Team statistics
     6. Optionally opens the output directory
-    
+
     The function uses tkinter dialogs for user interaction and
     processes data from vaila Tracker TOML files.
     """
@@ -2068,7 +2298,7 @@ def main():
     root.withdraw()
 
     # --- Mode Selection ---
-    
+
     # Custom Dialog for clearer options
     class ModeSelectionDialog(tk.Toplevel):
         def __init__(self, parent):
@@ -2076,22 +2306,26 @@ def main():
             self.title("Select Analysis Mode")
             self.geometry("300x150")
             self.result = None
-            
+
             tk.Label(self, text="Choose Sprint Analysis Mode:", font=("Arial", 12)).pack(pady=10)
-            
-            tk.Button(self, text="Time Sprint (20m)", width=25, command=self.set_sprint).pack(pady=5)
-            tk.Button(self, text="2X COD 180 degree (20m)", width=25, command=self.set_cod).pack(pady=5)
-            
+
+            tk.Button(self, text="Time Sprint (20m)", width=25, command=self.set_sprint).pack(
+                pady=5
+            )
+            tk.Button(self, text="2X COD 180 degree (20m)", width=25, command=self.set_cod).pack(
+                pady=5
+            )
+
             self.protocol("WM_DELETE_WINDOW", self.on_close)
-            
+
         def set_sprint(self):
             self.result = "sprint"
             self.destroy()
-            
+
         def set_cod(self):
             self.result = "cod"
             self.destroy()
-            
+
         def on_close(self):
             self.result = None
             self.destroy()
@@ -2099,24 +2333,24 @@ def main():
     dialog = ModeSelectionDialog(root)
     root.wait_window(dialog)
     mode = dialog.result
-    
+
     if not mode:
         print("Operation cancelled.")
         return
-        
+
     # Removed "Coming Soon" block for COD
 
     # --- Sprint Mode ---
-    
+
     print("Select a directory containing TOML files...")
     input_dir = filedialog.askdirectory(title="Select Directory with TOML files")
-    
+
     if not input_dir:
         print("No directory selected.")
         return
 
     toml_files = glob.glob(os.path.join(input_dir, "*.toml"))
-    
+
     if not toml_files:
         messagebox.showinfo("vailá Sprint", "No .toml files found in the selected directory.")
         return
@@ -2125,16 +2359,16 @@ def main():
         dir_name = "vaila_cod180_reports"
     else:
         dir_name = "vaila_sprint_reports"
-        
+
     output_base_dir = os.path.join(input_dir, dir_name)
     os.makedirs(output_base_dir, exist_ok=True)
-    
+
     logo_b64 = get_logo_base64()
     if not logo_b64:
         print("Logo not found (checked standard locations). Report will be plain.")
-    
+
     print(f"Found {len(toml_files)} TOML files. Processing...")
-    
+
     all_database_rows = []
     count = 0
     for f in toml_files:
@@ -2142,23 +2376,28 @@ def main():
         if rows:
             all_database_rows.extend(rows)
             count += 1
-            
+
     # Generate General Report & Database
     if all_database_rows:
         generate_general_report(all_database_rows, output_base_dir, logo_b64, mode=mode)
     else:
         print("No valid data processed. Skipping General Report.")
-        
-    messagebox.showinfo("Success", f"Processed {count} files.\nReports saved in:\n{output_base_dir}")
-    webbrowser_open = messagebox.askyesno("Open Output?", "Do you want to open the output directory?")
-    
+
+    messagebox.showinfo(
+        "Success", f"Processed {count} files.\nReports saved in:\n{output_base_dir}"
+    )
+    webbrowser_open = messagebox.askyesno(
+        "Open Output?", "Do you want to open the output directory?"
+    )
+
     if webbrowser_open:
-        if sys.platform == 'win32':
+        if sys.platform == "win32":
             os.startfile(output_base_dir)
-        elif sys.platform == 'darwin':
+        elif sys.platform == "darwin":
             os.system(f'open "{output_base_dir}"')
         else:
             os.system(f'xdg-open "{output_base_dir}"')
+
 
 if __name__ == "__main__":
     main()
