@@ -49,18 +49,6 @@ from .readcsv_export import convert_csv_to_c3d, create_c3d_from_csv
 from .rearrange_data import rearrange_data_in_directory
 from .rotation import calcmatrot, createortbase, rotdata, rotmat2euler
 from .showc3d import show_c3d
-from .spectral_features import (
-    centroid_frequency,
-    energy_content_0_5_2,
-    energy_content_above_2,
-    energy_content_below_0_5,
-    frequency_dispersion,
-    frequency_quotient,
-    power_frequency_50,
-    power_frequency_95,
-    power_mode,
-    total_power,
-)
 from .vailaplot2d import run_plot_2d as plot_2d
 from .vailaplot3d import run_plot_3d as plot_3d
 from .videoprocessor import process_videos_gui
@@ -110,14 +98,4 @@ __all__ = [
     "stack_csv_files",
     "process_videos_gui",
     "get_median_brightness",
-    "total_power",
-    "power_frequency_50",
-    "power_frequency_95",
-    "power_mode",
-    "centroid_frequency",
-    "frequency_dispersion",
-    "energy_content_below_0_5",
-    "energy_content_0_5_2",
-    "energy_content_above_2",
-    "frequency_quotient",
 ]

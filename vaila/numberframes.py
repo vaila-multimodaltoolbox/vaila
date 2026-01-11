@@ -177,7 +177,7 @@ def get_video_info(video_path):
         avg_str = f"{avg_fps:.9f}" if avg_fps else "N/A"
         cap_str = f"{capture_fps:.9f}" if capture_fps else "N/A"
         dur_str = f"{duration:.9f}" if duration else "N/A"
-        
+
         print(
             f"Video info: {width}x{height}, codec={codec_name}, container={container_format}, "
             f"display≈{disp_str} fps, avg≈{avg_str} fps, cap={cap_str} Hz, "

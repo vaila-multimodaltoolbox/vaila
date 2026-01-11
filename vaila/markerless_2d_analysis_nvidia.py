@@ -17,9 +17,9 @@ python markerless_2d_analysis_nvidia.py -i input_directory -o output_directory -
 
 Description:
 This script performs batch processing of videos for 2D pose estimation using
-MediaPipe's Pose model with NVIDIA GPU acceleration (Tasks API 0.10.31+). It processes videos 
-from a specified input directory, overlays pose landmarks on each video frame, and exports 
-both normalized and pixel-based landmark coordinates to CSV files. The script also generates 
+MediaPipe's Pose model with NVIDIA GPU acceleration (Tasks API 0.10.31+). It processes videos
+from a specified input directory, overlays pose landmarks on each video frame, and exports
+both normalized and pixel-based landmark coordinates to CSV files. The script also generates
 a video with the landmarks overlaid on the original frames.
 
 This script is identical to markerless_2d_analysis.py but optimized for NVIDIA GPUs using
@@ -54,8 +54,8 @@ Usage:
 - Configure MediaPipe parameters via GUI or load TOML file
 - Optionally select bounding box (ROI) from first video frame
 - Optionally resize cropped region for better detection
-- The script processes each video with selected device (CPU or GPU), generating 
-  an output video with overlaid pose landmarks, and CSV files containing both 
+- The script processes each video with selected device (CPU or GPU), generating
+  an output video with overlaid pose landmarks, and CSV files containing both
   normalized and pixel-based landmark coordinates in original video dimensions.
 
 Requirements:
@@ -89,12 +89,15 @@ License:
 
 import datetime
 import gc
+import json
 import os
 import platform
 import shutil
 import tempfile
 import time
+import time as _time_module
 import tkinter as tk
+import urllib.request
 from collections import deque
 from pathlib import Path
 from tkinter import filedialog, messagebox
@@ -104,10 +107,8 @@ import mediapipe as mp
 import numpy as np
 import pandas as pd
 import psutil
-import json
-import os
-import time as _time_module
-import urllib.request
+
+
 # #region agent log
 def _debug_log(hypothesis_id, location, message, data=None):
     try:
@@ -122,25 +123,80 @@ def _debug_log(hypothesis_id, location, message, data=None):
             _log_path = Path(__file__).parent / "debug.log"
 
         with open(_log_path, "a", encoding="utf-8") as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":hypothesis_id,"location":location,"message":message,"data":data or {},"timestamp":int(_time_module.time()*1000)})+"\n")
-    except: pass
+            f.write(
+                json.dumps(
+                    {
+                        "sessionId": "debug-session",
+                        "runId": "run1",
+                        "hypothesisId": hypothesis_id,
+                        "location": location,
+                        "message": message,
+                        "data": data or {},
+                        "timestamp": int(_time_module.time() * 1000),
+                    }
+                )
+                + "\n"
+            )
+    except:
+        pass
+
+
 # #endregion
 
 # --- NOVAS IMPORTAÇÕES PARA A TASKS API (MediaPipe 0.10.31+) ---
-from mediapipe.tasks import python
-from mediapipe.tasks.python import vision
 
 # Definição manual das conexões do corpo (pois mp.solutions foi removido)
-POSE_CONNECTIONS = frozenset([
-    (0, 1), (1, 2), (2, 3), (3, 7), (0, 4), (4, 5), (5, 6), (6, 8), (9, 10),
-    (11, 12), (11, 13), (13, 15), (15, 17), (15, 19), (15, 21), (17, 19),
-    (12, 14), (14, 16), (16, 18), (16, 20), (16, 22), (18, 20), (11, 23),
-    (12, 24), (23, 24), (23, 25), (24, 26), (25, 27), (26, 28), (27, 29),
-    (28, 30), (29, 31), (30, 32), (27, 31), (28, 32)
-])
+POSE_CONNECTIONS = frozenset(
+    [
+        (0, 1),
+        (1, 2),
+        (2, 3),
+        (3, 7),
+        (0, 4),
+        (4, 5),
+        (5, 6),
+        (6, 8),
+        (9, 10),
+        (11, 12),
+        (11, 13),
+        (13, 15),
+        (15, 17),
+        (15, 19),
+        (15, 21),
+        (17, 19),
+        (12, 14),
+        (14, 16),
+        (16, 18),
+        (16, 20),
+        (16, 22),
+        (18, 20),
+        (11, 23),
+        (12, 24),
+        (23, 24),
+        (23, 25),
+        (24, 26),
+        (25, 27),
+        (26, 28),
+        (27, 29),
+        (28, 30),
+        (29, 31),
+        (30, 32),
+        (27, 31),
+        (28, 32),
+    ]
+)
 
 # #region agent log
-_debug_log("A", "import:100", "After importing mediapipe Tasks API", {"mp_type":str(type(mp)),"has_tasks":hasattr(mp,"tasks"),"mp_attrs":str([x for x in dir(mp) if not x.startswith("_")])[:500]})
+_debug_log(
+    "A",
+    "import:100",
+    "After importing mediapipe Tasks API",
+    {
+        "mp_type": str(type(mp)),
+        "has_tasks": hasattr(mp, "tasks"),
+        "mp_attrs": str([x for x in dir(mp) if not x.startswith("_")])[:500],
+    },
+)
 # #endregion
 
 # Additional imports for filtering and interpolation
@@ -988,7 +1044,9 @@ def save_config_to_toml(config, filepath):
             f.write(
                 f"enable_resize_crop = {str(bb['enable_resize_crop']).lower()}       # Resize the cropped region (true/false)\n"
             )
-            f.write("#                         # true = upscale cropped region for better detection\n")
+            f.write(
+                "#                         # true = upscale cropped region for better detection\n"
+            )
             f.write("#                         # false = use cropped region at original size\n\n")
 
             f.write(
@@ -1149,12 +1207,12 @@ def load_config_from_toml(filepath):
             bbox_y_min = int(bb.get("bbox_y_min", 0))
             bbox_x_max = int(bb.get("bbox_x_max", 1920))
             bbox_y_max = int(bb.get("bbox_y_max", 1080))
-            
+
             # Validate coordinates
             if bbox_x_max <= bbox_x_min or bbox_y_max <= bbox_y_min:
                 print("Warning: Invalid bounding box coordinates, using defaults")
                 bbox_x_min, bbox_y_min, bbox_x_max, bbox_y_max = 0, 0, 1920, 1080
-            
+
             config.update(
                 {
                     "enable_crop": bool(bb.get("enable_crop", False)),
@@ -1306,7 +1364,9 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
         self.bbox_y_max_entry.grid(row=4, column=1, sticky="w", padx=5)
 
         # Normalized coordinates display (read-only)
-        tk.Label(bbox_frame, text="Normalized coordinates:").grid(row=5, column=0, sticky="e", padx=5, pady=(5, 0))
+        tk.Label(bbox_frame, text="Normalized coordinates:").grid(
+            row=5, column=0, sticky="e", padx=5, pady=(5, 0)
+        )
         self.norm_coords_label = tk.Label(bbox_frame, text="(0.0, 0.0) to (1.0, 1.0)", fg="gray")
         self.norm_coords_label.grid(row=5, column=1, sticky="w", padx=5, pady=(5, 0))
 
@@ -1332,7 +1392,12 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
         self.resize_crop_scale_entry.grid(row=8, column=1, sticky="w", padx=5)
 
         # Bind update function to coordinate entries
-        for entry in [self.bbox_x_min_entry, self.bbox_y_min_entry, self.bbox_x_max_entry, self.bbox_y_max_entry]:
+        for entry in [
+            self.bbox_x_min_entry,
+            self.bbox_y_min_entry,
+            self.bbox_x_max_entry,
+            self.bbox_y_max_entry,
+        ]:
             entry.bind("<KeyRelease>", self.update_normalized_coords)
 
         # TOML section
@@ -1465,18 +1530,24 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
                     summary += f"enable_crop: {config.get('enable_crop', False)}\n"
                     if config.get("enable_crop", False):
                         summary += f"bbox: ({config.get('bbox_x_min', 0)}, {config.get('bbox_y_min', 0)}) to ({config.get('bbox_x_max', 1920)}, {config.get('bbox_y_max', 1080)})\n"
-                        summary += f"enable_resize_crop: {config.get('enable_resize_crop', False)}\n"
+                        summary += (
+                            f"enable_resize_crop: {config.get('enable_resize_crop', False)}\n"
+                        )
                         if config.get("enable_resize_crop", False):
                             summary += f"resize_crop_scale: {config.get('resize_crop_scale', 2)}\n"
                     print("\n=== TOML configuration loaded and GUI updated ===\n" + summary)
                     from tkinter import messagebox
 
-                    messagebox.showinfo("TOML Parameters Loaded", "Configuration loaded and GUI fields updated!\n\n" + summary)
+                    messagebox.showinfo(
+                        "TOML Parameters Loaded",
+                        "Configuration loaded and GUI fields updated!\n\n" + summary,
+                    )
                 else:
                     self.toml_label.config(text="Error loading TOML", fg="red")
             except Exception as e:
                 self.toml_label.config(text=f"Error: {e}", fg="red")
                 from tkinter import messagebox
+
                 messagebox.showerror("Error", f"Failed to load TOML: {e}")
 
         dialog_root.destroy()
@@ -1699,7 +1770,9 @@ For more information, visit: https://github.com/vaila-multimodaltoolbox/vaila
     def select_roi_from_video(self):
         """Open first video and let user select ROI using cv2.selectROI"""
         if not self.input_dir:
-            messagebox.showerror("Error", "No input directory specified. Please select input directory first.")
+            messagebox.showerror(
+                "Error", "No input directory specified. Please select input directory first."
+            )
             return
 
         # Find first video file
@@ -1731,7 +1804,9 @@ For more information, visit: https://github.com/vaila-multimodaltoolbox/vaila
         # Let user select ROI
         print(f"Select ROI from first frame of: {first_video.name}")
         print("Instructions: Drag to select region, press SPACE or ENTER to confirm, ESC to cancel")
-        roi = cv2.selectROI("Select ROI - Press SPACE/ENTER to confirm, ESC to cancel", frame, False)
+        roi = cv2.selectROI(
+            "Select ROI - Press SPACE/ENTER to confirm, ESC to cancel", frame, False
+        )
 
         # Check if user cancelled (roi is all zeros)
         if roi[2] == 0 or roi[3] == 0:
@@ -1770,61 +1845,65 @@ For more information, visit: https://github.com/vaila-multimodaltoolbox/vaila
         # MediaPipe parameters
         self.min_detection_entry.delete(0, tk.END)
         self.min_detection_entry.insert(0, str(config.get("min_detection_confidence", 0.1)))
-        
+
         self.min_tracking_entry.delete(0, tk.END)
         self.min_tracking_entry.insert(0, str(config.get("min_tracking_confidence", 0.1)))
-        
+
         self.model_complexity_entry.delete(0, tk.END)
         self.model_complexity_entry.insert(0, str(config.get("model_complexity", 2)))
-        
+
         self.enable_segmentation_entry.delete(0, tk.END)
         self.enable_segmentation_entry.insert(0, str(config.get("enable_segmentation", False)))
-        
+
         self.smooth_segmentation_entry.delete(0, tk.END)
         self.smooth_segmentation_entry.insert(0, str(config.get("smooth_segmentation", False)))
-        
+
         self.static_image_mode_entry.delete(0, tk.END)
         self.static_image_mode_entry.insert(0, str(config.get("static_image_mode", False)))
-        
+
         self.apply_filtering_entry.delete(0, tk.END)
         self.apply_filtering_entry.insert(0, str(config.get("apply_filtering", True)))
-        
+
         self.estimate_occluded_entry.delete(0, tk.END)
         self.estimate_occluded_entry.insert(0, str(config.get("estimate_occluded", True)))
-        
+
         self.enable_resize_entry.delete(0, tk.END)
         self.enable_resize_entry.insert(0, str(config.get("enable_resize", False)))
-        
+
         self.resize_scale_entry.delete(0, tk.END)
         self.resize_scale_entry.insert(0, str(config.get("resize_scale", 2)))
-        
+
         self.enable_padding_entry.delete(0, tk.END)
-        self.enable_padding_entry.insert(0, str(config.get("enable_padding", ENABLE_PADDING_DEFAULT)))
-        
+        self.enable_padding_entry.insert(
+            0, str(config.get("enable_padding", ENABLE_PADDING_DEFAULT))
+        )
+
         self.pad_start_frames_entry.delete(0, tk.END)
-        self.pad_start_frames_entry.insert(0, str(config.get("pad_start_frames", PAD_START_FRAMES_DEFAULT)))
-        
+        self.pad_start_frames_entry.insert(
+            0, str(config.get("pad_start_frames", PAD_START_FRAMES_DEFAULT))
+        )
+
         # Bounding box parameters
         enable_crop = config.get("enable_crop", False)
         self.enable_crop_var.set(enable_crop)
-        
+
         self.bbox_x_min_entry.delete(0, tk.END)
         self.bbox_x_min_entry.insert(0, str(config.get("bbox_x_min", 0)))
-        
+
         self.bbox_y_min_entry.delete(0, tk.END)
         self.bbox_y_min_entry.insert(0, str(config.get("bbox_y_min", 0)))
-        
+
         self.bbox_x_max_entry.delete(0, tk.END)
         self.bbox_x_max_entry.insert(0, str(config.get("bbox_x_max", 1920)))
-        
+
         self.bbox_y_max_entry.delete(0, tk.END)
         self.bbox_y_max_entry.insert(0, str(config.get("bbox_y_max", 1080)))
-        
+
         self.enable_resize_crop_var.set(config.get("enable_resize_crop", False))
-        
+
         self.resize_crop_scale_entry.delete(0, tk.END)
         self.resize_crop_scale_entry.insert(0, str(config.get("resize_crop_scale", 2)))
-        
+
         # Update normalized coordinates display
         self.update_normalized_coords()
 
@@ -1997,17 +2076,26 @@ def convert_coordinates_to_original(df, metadata, progress_callback=None):
     return converted_df
 
 
-def map_landmarks_to_full_frame(landmarks, bbox_config, crop_width, crop_height, processing_width, processing_height, original_width=None, original_height=None):
+def map_landmarks_to_full_frame(
+    landmarks,
+    bbox_config,
+    crop_width,
+    crop_height,
+    processing_width,
+    processing_height,
+    original_width=None,
+    original_height=None,
+):
     """
     Map landmarks from cropped/resized space to original video space.
-    
+
     Args:
         landmarks: List of [x, y, z] in normalized crop space (0-1)
         bbox_config: Dict with bbox coordinates and resize settings
         crop_width, crop_height: Dimensions of cropped region (after resize if enabled)
         processing_width, processing_height: Dimensions of processing frame (may be resized video)
         original_width, original_height: Dimensions of original video (optional, inferred if not provided)
-    
+
     Returns:
         List of [x, y, z] in normalized original video space (0-1)
     """
@@ -2015,7 +2103,7 @@ def map_landmarks_to_full_frame(landmarks, bbox_config, crop_width, crop_height,
     resize_crop_scale = bbox_config.get("resize_crop_scale", 1)
     video_resized = bbox_config.get("video_resized", False)
     video_resize_scale = bbox_config.get("resize_scale", 1.0)
-    
+
     # Get original video dimensions
     if original_width is None or original_height is None:
         # Infer from processing dimensions and resize scale
@@ -2025,19 +2113,19 @@ def map_landmarks_to_full_frame(landmarks, bbox_config, crop_width, crop_height,
         else:
             original_width = processing_width
             original_height = processing_height
-    
+
     # Use scaled bbox coordinates (they are in processing video coordinates)
     bbox_x_min_processing = bbox_config.get("bbox_x_min", 0)
     bbox_y_min_processing = bbox_config.get("bbox_y_min", 0)
-    
+
     mapped_landmarks = []
     for landmark in landmarks:
         x_norm_crop, y_norm_crop, z = landmark
-        
+
         # Step 1: Convert normalized crop → pixel crop-resized
         x_px_crop_resized = x_norm_crop * crop_width
         y_px_crop_resized = y_norm_crop * crop_height
-        
+
         # Step 2: If resize crop enabled, convert pixel crop-resized → pixel crop
         if enable_resize_crop and resize_crop_scale > 1:
             x_px_crop = x_px_crop_resized / resize_crop_scale
@@ -2045,11 +2133,11 @@ def map_landmarks_to_full_frame(landmarks, bbox_config, crop_width, crop_height,
         else:
             x_px_crop = x_px_crop_resized
             y_px_crop = y_px_crop_resized
-        
+
         # Step 3: Convert pixel crop → pixel full frame (in processing video coordinates)
         x_px_full_processing = x_px_crop + bbox_x_min_processing
         y_px_full_processing = y_px_crop + bbox_y_min_processing
-        
+
         # Step 4: If video was resized, convert from processing video → original video
         if video_resized and video_resize_scale > 1:
             x_px_full_original = x_px_full_processing / video_resize_scale
@@ -2057,13 +2145,13 @@ def map_landmarks_to_full_frame(landmarks, bbox_config, crop_width, crop_height,
         else:
             x_px_full_original = x_px_full_processing
             y_px_full_original = y_px_full_processing
-        
+
         # Step 5: Convert pixel original video → normalized original video
         x_norm_full = x_px_full_original / original_width if original_width > 0 else 0.0
         y_norm_full = y_px_full_original / original_height if original_height > 0 else 0.0
-        
+
         mapped_landmarks.append([x_norm_full, y_norm_full, z])
-    
+
     return mapped_landmarks
 
 
@@ -2361,35 +2449,42 @@ def detect_nvidia_gpu():
     """
     gpu_info = {}
     error_message = None
-    
+
     # Check for nvidia-smi command
     try:
         import subprocess
+
         result = subprocess.run(
-            ["nvidia-smi", "--query-gpu=name,driver_version,memory.total", "--format=csv,noheader,nounits"],
+            [
+                "nvidia-smi",
+                "--query-gpu=name,driver_version,memory.total",
+                "--format=csv,noheader,nounits",
+            ],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             timeout=5,
-            text=True
+            text=True,
         )
-        
+
         if result.returncode == 0 and result.stdout.strip():
-            lines = result.stdout.strip().split('\n')
+            lines = result.stdout.strip().split("\n")
             if lines and lines[0]:
                 # Parse first GPU info
-                parts = lines[0].split(',')
+                parts = lines[0].split(",")
                 if len(parts) >= 3:
                     gpu_info = {
                         "name": parts[0].strip(),
                         "driver_version": parts[1].strip(),
-                        "memory_total_mb": int(parts[2].strip()) if parts[2].strip().isdigit() else 0,
-                        "count": len(lines)
+                        "memory_total_mb": int(parts[2].strip())
+                        if parts[2].strip().isdigit()
+                        else 0,
+                        "count": len(lines),
                     }
                     return True, gpu_info, None
         else:
             error_message = "nvidia-smi found but no GPU detected"
             return False, gpu_info, error_message
-            
+
     except FileNotFoundError:
         error_message = "nvidia-smi not found (NVIDIA drivers may not be installed)"
         return False, gpu_info, error_message
@@ -2410,45 +2505,48 @@ def test_mediapipe_gpu():
         import mediapipe as mp
         from mediapipe.tasks import python
         from mediapipe.tasks.python import vision
-        
+
         # Try to create a simple PoseLandmarker with GPU delegate
         BaseOptions = mp.tasks.BaseOptions
         PoseLandmarker = mp.tasks.vision.PoseLandmarker
         PoseLandmarkerOptions = mp.tasks.vision.PoseLandmarkerOptions
         VisionRunningMode = mp.tasks.vision.RunningMode
-        
+
         # Check if GPU delegate is available
-        if not hasattr(BaseOptions.Delegate, 'GPU'):
+        if not hasattr(BaseOptions.Delegate, "GPU"):
             return False, "MediaPipe GPU delegate not available in this version"
-        
+
         # Try to get a model path (use lite for quick test)
         try:
             model_path = get_model_path(0)  # Lite model for testing
         except Exception as e:
             return False, f"Could not get model for testing: {str(e)}"
-        
+
         # Try to create options with GPU delegate
         try:
             options = PoseLandmarkerOptions(
-                base_options=BaseOptions(model_asset_path=model_path, delegate=BaseOptions.Delegate.GPU),
+                base_options=BaseOptions(
+                    model_asset_path=model_path, delegate=BaseOptions.Delegate.GPU
+                ),
                 running_mode=VisionRunningMode.IMAGE,  # Use IMAGE mode for quick test
                 num_poses=1,
                 min_pose_detection_confidence=0.5,
                 min_pose_presence_confidence=0.5,
             )
-            
+
             # Try to create landmarker (this will fail if GPU is not available)
             with PoseLandmarker.create_from_options(options) as landmarker:
                 # Create a dummy test image
                 import numpy as np
+
                 test_image = np.zeros((100, 100, 3), dtype=np.uint8)
                 rgb_image = cv2.cvtColor(test_image, cv2.COLOR_BGR2RGB)
                 mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_image)
-                
+
                 # Try to detect (this will fail if GPU delegate doesn't work)
                 result = landmarker.detect(mp_image)
                 return True, None
-                
+
         except Exception as e:
             error_msg = str(e)
             if "GPU" in error_msg or "delegate" in error_msg.lower() or "CUDA" in error_msg:
@@ -2456,7 +2554,7 @@ def test_mediapipe_gpu():
             else:
                 # Might be a different error, but GPU delegate was created
                 return True, None
-                
+
     except ImportError as e:
         return False, f"MediaPipe import error: {str(e)}"
     except Exception as e:
@@ -2588,7 +2686,17 @@ def calculate_batch_size(video_path, pose_config):
 
 
 def process_video_batch(
-    frames, landmarker, pose_config, width, height, full_width=None, full_height=None, progress_callback=None, batch_index=0, fps=30.0, start_frame_idx=0
+    frames,
+    landmarker,
+    pose_config,
+    width,
+    height,
+    full_width=None,
+    full_height=None,
+    progress_callback=None,
+    batch_index=0,
+    fps=30.0,
+    start_frame_idx=0,
 ):
     """
     Process a batch of frames using MediaPipe Tasks API and return landmarks with CPU throttling.
@@ -2630,8 +2738,17 @@ def process_video_batch(
 
         # Process frame with Tasks API
         landmarks = process_frame_with_tasks_api(
-            frame, landmarker, timestamp_ms, enable_crop, bbox_config,
-            width, height, full_width, full_height, pose_config, landmarks_history
+            frame,
+            landmarker,
+            timestamp_ms,
+            enable_crop,
+            bbox_config,
+            width,
+            height,
+            full_width,
+            full_height,
+            pose_config,
+            landmarks_history,
         )
 
         if landmarks:
@@ -2640,8 +2757,7 @@ def process_video_batch(
 
             # Convert to pixel coordinates (using full frame dimensions)
             pixel_landmarks = [
-                [int(lm[0] * full_width), int(lm[1] * full_height), lm[2]]
-                for lm in landmarks
+                [int(lm[0] * full_width), int(lm[1] * full_height), lm[2]] for lm in landmarks
             ]
             batch_pixel_landmarks.append(pixel_landmarks)
         else:
@@ -2695,15 +2811,15 @@ def get_model_path(complexity):
     # Use vaila/models directory for storing models
     models_dir = Path(__file__).parent / "models"
     models_dir.mkdir(exist_ok=True)
-    
+
     models = {
         0: "pose_landmarker_lite.task",
         1: "pose_landmarker_full.task",
-        2: "pose_landmarker_heavy.task"
+        2: "pose_landmarker_heavy.task",
     }
     model_name = models.get(complexity, "pose_landmarker_full.task")
     model_path = models_dir / model_name
-    
+
     if not model_path.exists():
         print(f"Downloading MediaPipe Tasks model ({model_name})... please wait.")
         print(f"Download location: {model_path}")
@@ -2711,7 +2827,7 @@ def get_model_path(complexity):
         model_urls = {
             0: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
             1: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task",
-            2: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_heavy/float16/1/pose_landmarker_heavy.task"
+            2: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_heavy/float16/1/pose_landmarker_heavy.task",
         }
         url = model_urls.get(complexity, model_urls[1])
         try:
@@ -2719,11 +2835,23 @@ def get_model_path(complexity):
             print("Download completed!")
         except Exception as e:
             print(f"Error downloading model: {e}")
-            raise RuntimeError("Failed to download MediaPipe model.")  
+            raise RuntimeError("Failed to download MediaPipe model.")
     return str(model_path.resolve())
 
 
-def process_frame_with_tasks_api(frame, landmarker, timestamp_ms, enable_crop, bbox_config, process_width, process_height, original_width, original_height, pose_config, landmarks_history):
+def process_frame_with_tasks_api(
+    frame,
+    landmarker,
+    timestamp_ms,
+    enable_crop,
+    bbox_config,
+    process_width,
+    process_height,
+    original_width,
+    original_height,
+    pose_config,
+    landmarks_history,
+):
     """
     Process a single frame using MediaPipe Tasks API.
     Returns landmarks in normalized coordinates (mapped to full frame if cropping was used).
@@ -2732,7 +2860,7 @@ def process_frame_with_tasks_api(frame, landmarker, timestamp_ms, enable_crop, b
     process_frame = frame
     actual_process_width = process_width
     actual_process_height = process_height
-    
+
     if enable_crop:
         x_min = max(0, min(bbox_config["bbox_x_min"], process_width - 1))
         y_min = max(0, min(bbox_config["bbox_y_min"], process_height - 1))
@@ -2741,40 +2869,50 @@ def process_frame_with_tasks_api(frame, landmarker, timestamp_ms, enable_crop, b
         process_frame = frame[y_min:y_max, x_min:x_max]
         actual_process_width = x_max - x_min
         actual_process_height = y_max - y_min
-        
-        if bbox_config.get("enable_resize_crop", False) and bbox_config.get("resize_crop_scale", 1) > 1:
+
+        if (
+            bbox_config.get("enable_resize_crop", False)
+            and bbox_config.get("resize_crop_scale", 1) > 1
+        ):
             new_w = int(actual_process_width * bbox_config["resize_crop_scale"])
             new_h = int(actual_process_height * bbox_config["resize_crop_scale"])
-            process_frame = cv2.resize(process_frame, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+            process_frame = cv2.resize(
+                process_frame, (new_w, new_h), interpolation=cv2.INTER_LINEAR
+            )
             actual_process_width = new_w
             actual_process_height = new_h
-    
+
     # Convert to RGB and create MP Image
     rgb_frame = cv2.cvtColor(process_frame, cv2.COLOR_BGR2RGB)
     mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
-    
+
     # Detect pose
     pose_landmarker_result = landmarker.detect_for_video(mp_image, timestamp_ms)
-    
+
     # Parse results
     if pose_landmarker_result.pose_landmarks and len(pose_landmarker_result.pose_landmarks) > 0:
         # Get first pose
         raw_landmarks = pose_landmarker_result.pose_landmarks[0]
         landmarks = [[lm.x, lm.y, lm.z] for lm in raw_landmarks]
-        
+
         # Map coordinates to full frame if cropping was used
         if enable_crop:
             # Pass processing dimensions (may be resized) and original dimensions
             landmarks = map_landmarks_to_full_frame(
-                landmarks, bbox_config, actual_process_width, actual_process_height, 
-                process_width, process_height,  # Processing frame dimensions (may be resized)
-                original_width, original_height  # Original video dimensions
+                landmarks,
+                bbox_config,
+                actual_process_width,
+                actual_process_height,
+                process_width,
+                process_height,  # Processing frame dimensions (may be resized)
+                original_width,
+                original_height,  # Original video dimensions
             )
-        
+
         # Apply occluded landmark estimation if enabled
         if pose_config.get("estimate_occluded", False):
             landmarks = estimate_occluded_landmarks(landmarks, list(landmarks_history))
-        
+
         return landmarks
     else:
         # No pose detected
@@ -2788,8 +2926,19 @@ def process_video(video_path, output_dir, pose_config, use_gpu=True):
     # #region agent log
     try:
         import mediapipe as mp_test
-        _debug_log("E", "process_video:2475", "Function entry", {"video_path":str(video_path),"output_dir":str(output_dir),"has_mp_solutions":hasattr(mp_test,"solutions"),"mp_test_type":str(type(mp_test))})
-    except Exception as log_e:
+
+        _debug_log(
+            "E",
+            "process_video:2475",
+            "Function entry",
+            {
+                "video_path": str(video_path),
+                "output_dir": str(output_dir),
+                "has_mp_solutions": hasattr(mp_test, "solutions"),
+                "mp_test_type": str(type(mp_test)),
+            },
+        )
+    except Exception:
         # Log function itself may fail, but continue
         pass
     # #endregion
@@ -2864,11 +3013,12 @@ def process_video(video_path, output_dir, pose_config, use_gpu=True):
     # #region agent log
     try:
         _debug_log("A", "process_video:2610", "Initializing MediaPipe Tasks API", {})
-    except: pass
+    except:
+        pass
     # #endregion
-    
+
     model_path = get_model_path(pose_config["model_complexity"])
-    
+
     BaseOptions = mp.tasks.BaseOptions
     PoseLandmarker = mp.tasks.vision.PoseLandmarker
     PoseLandmarkerOptions = mp.tasks.vision.PoseLandmarkerOptions
@@ -2888,20 +3038,26 @@ def process_video(video_path, output_dir, pose_config, use_gpu=True):
     else:
         delegate = BaseOptions.Delegate.CPU
         print("Using CPU for processing")
-    
+
     options = PoseLandmarkerOptions(
         base_options=BaseOptions(model_asset_path=model_path, delegate=delegate),
         running_mode=VisionRunningMode.VIDEO,
         num_poses=1,
         min_pose_detection_confidence=pose_config["min_detection_confidence"],
         min_pose_presence_confidence=pose_config["min_tracking_confidence"],
-        output_segmentation_masks=pose_config["enable_segmentation"]
+        output_segmentation_masks=pose_config["enable_segmentation"],
     )
-    
+
     # #region agent log
     try:
-        _debug_log("B", "process_video:2625", "MediaPipe Tasks API options created", {"model_path": model_path})
-    except: pass
+        _debug_log(
+            "B",
+            "process_video:2625",
+            "MediaPipe Tasks API options created",
+            {"model_path": model_path},
+        )
+    except:
+        pass
     # #endregion
 
     # Prepare headers for CSV
@@ -2956,13 +3112,15 @@ def process_video(video_path, output_dir, pose_config, use_gpu=True):
         bbox_y_min_scaled = int(bbox_y_min_orig * resize_scale)
         bbox_x_max_scaled = int(bbox_x_max_orig * resize_scale)
         bbox_y_max_scaled = int(bbox_y_max_orig * resize_scale)
-        print(f"Bbox scaled for resized video: ({bbox_x_min_scaled}, {bbox_y_min_scaled}) to ({bbox_x_max_scaled}, {bbox_y_max_scaled})")
+        print(
+            f"Bbox scaled for resized video: ({bbox_x_min_scaled}, {bbox_y_min_scaled}) to ({bbox_x_max_scaled}, {bbox_y_max_scaled})"
+        )
     else:
         bbox_x_min_scaled = pose_config.get("bbox_x_min", 0)
         bbox_y_min_scaled = pose_config.get("bbox_y_min", 0)
         bbox_x_max_scaled = pose_config.get("bbox_x_max", width)
         bbox_y_max_scaled = pose_config.get("bbox_y_max", height)
-    
+
     bbox_config = {
         "enable_resize_crop": pose_config.get("enable_resize_crop", False),
         "resize_crop_scale": pose_config.get("resize_crop_scale", 2),
@@ -2976,7 +3134,9 @@ def process_video(video_path, output_dir, pose_config, use_gpu=True):
         "bbox_x_max_orig": pose_config.get("bbox_x_max", original_width),
         "bbox_y_max_orig": pose_config.get("bbox_y_max", original_height),
         "video_resized": enable_resize and resize_metadata is not None,
-        "resize_scale": resize_metadata["scale_factor"] if (enable_resize and resize_metadata) else 1.0,
+        "resize_scale": resize_metadata["scale_factor"]
+        if (enable_resize and resize_metadata)
+        else 1.0,
     }
 
     # Check if batch processing should be used
@@ -3009,8 +3169,17 @@ def process_video(video_path, output_dir, pose_config, use_gpu=True):
 
                     timestamp_ms = int((frame_count * 1000) / fps) if fps > 0 else frame_count * 33
                     landmarks = process_frame_with_tasks_api(
-                        padding_frame, landmarker, timestamp_ms, enable_crop, bbox_config,
-                        width, height, original_width, original_height, pose_config, landmarks_history
+                        padding_frame,
+                        landmarker,
+                        timestamp_ms,
+                        enable_crop,
+                        bbox_config,
+                        width,
+                        height,
+                        original_width,
+                        original_height,
+                        pose_config,
+                        landmarks_history,
                     )
 
                     if landmarks:
@@ -3126,8 +3295,17 @@ def process_video(video_path, output_dir, pose_config, use_gpu=True):
 
                     timestamp_ms = int((frame_count * 1000) / fps) if fps > 0 else frame_count * 33
                     landmarks = process_frame_with_tasks_api(
-                        padding_frame, landmarker, timestamp_ms, enable_crop, bbox_config,
-                        width, height, original_width, original_height, pose_config, landmarks_history
+                        padding_frame,
+                        landmarker,
+                        timestamp_ms,
+                        enable_crop,
+                        bbox_config,
+                        width,
+                        height,
+                        original_width,
+                        original_height,
+                        pose_config,
+                        landmarks_history,
                     )
 
                     if landmarks:
@@ -3169,8 +3347,17 @@ def process_video(video_path, output_dir, pose_config, use_gpu=True):
 
                 timestamp_ms = int((frame_count * 1000) / fps) if fps > 0 else frame_count * 33
                 landmarks = process_frame_with_tasks_api(
-                    frame, landmarker, timestamp_ms, enable_crop, bbox_config,
-                    width, height, original_width, original_height, pose_config, landmarks_history
+                    frame,
+                    landmarker,
+                    timestamp_ms,
+                    enable_crop,
+                    bbox_config,
+                    width,
+                    height,
+                    original_width,
+                    original_height,
+                    pose_config,
+                    landmarks_history,
                 )
 
                 if landmarks:
@@ -3443,7 +3630,7 @@ def process_video(video_path, output_dir, pose_config, use_gpu=True):
                         points[i] = (x, y)
                         # Draw point
                         cv2.circle(frame, (x, y), 3, (0, 255, 0), -1)
-                
+
                 # Draw connections (using POSE_CONNECTIONS defined at module level)
                 for start_idx, end_idx in POSE_CONNECTIONS:
                     if start_idx in points and end_idx in points:
@@ -3593,57 +3780,57 @@ def process_video(video_path, output_dir, pose_config, use_gpu=True):
 
 class DeviceSelectionDialog(tk.simpledialog.Dialog):
     """Dialog to select CPU or GPU for processing"""
-    
+
     def __init__(self, parent, gpu_available, gpu_info, gpu_test_result):
         self.gpu_available = gpu_available
         self.gpu_info = gpu_info
         self.gpu_test_result = gpu_test_result
         self.selected_device = "cpu"  # Default
         super().__init__(parent, title="Select Processing Device")
-    
+
     def body(self, master):
         tk.Label(master, text="Select processing device:", font=("Arial", 10, "bold")).grid(
             row=0, column=0, columnspan=2, pady=(10, 20), sticky="w"
         )
-        
+
         # Create a shared StringVar for radio buttons
         self.device_var = tk.StringVar(value="cpu")
-        
+
         # CPU option
         self.cpu_var = tk.Radiobutton(
             master,
             text="CPU (Standard Processing)",
             variable=self.device_var,
             value="cpu",
-            command=lambda: setattr(self, 'selected_device', 'cpu'),
-            font=("Arial", 9)
+            command=lambda: setattr(self, "selected_device", "cpu"),
+            font=("Arial", 9),
         )
         self.cpu_var.grid(row=1, column=0, columnspan=2, sticky="w", padx=20, pady=5)
-        
+
         # GPU option
         gpu_text = "GPU (NVIDIA CUDA - High Performance)"
         if not self.gpu_available:
             gpu_text += " [NOT AVAILABLE]"
-        
+
         self.gpu_var = tk.Radiobutton(
             master,
             text=gpu_text,
             variable=self.device_var,
             value="gpu",
-            command=lambda: setattr(self, 'selected_device', 'gpu'),
+            command=lambda: setattr(self, "selected_device", "gpu"),
             font=("Arial", 9),
-            state="normal" if self.gpu_available else "disabled"
+            state="normal" if self.gpu_available else "disabled",
         )
         self.gpu_var.grid(row=2, column=0, columnspan=2, sticky="w", padx=20, pady=5)
-        
+
         # GPU info frame
         info_frame = tk.LabelFrame(master, text="GPU Information", padx=10, pady=10)
         info_frame.grid(row=3, column=0, columnspan=2, padx=20, pady=10, sticky="ew")
-        
+
         if self.gpu_available and self.gpu_info:
             info_text = f"GPU: {self.gpu_info.get('name', 'Unknown')}\n"
             info_text += f"Driver: {self.gpu_info.get('driver_version', 'Unknown')}\n"
-            if self.gpu_info.get('memory_total_mb', 0) > 0:
+            if self.gpu_info.get("memory_total_mb", 0) > 0:
                 info_text += f"Memory: {self.gpu_info['memory_total_mb'] / 1024:.1f} GB\n"
             if self.gpu_test_result[0]:
                 info_text += "Status: ✓ GPU tested and working"
@@ -3651,20 +3838,22 @@ class DeviceSelectionDialog(tk.simpledialog.Dialog):
                 info_text += f"Status: ⚠ {self.gpu_test_result[1]}"
         else:
             if self.gpu_info:
-                info_text = f"GPU detected but not available:\n{self.gpu_info.get('name', 'Unknown')}"
+                info_text = (
+                    f"GPU detected but not available:\n{self.gpu_info.get('name', 'Unknown')}"
+                )
             else:
                 info_text = "No NVIDIA GPU detected.\n"
                 info_text += "Requirements:\n"
                 info_text += "• NVIDIA GPU with CUDA support\n"
                 info_text += "• NVIDIA drivers installed\n"
                 info_text += "• MediaPipe with GPU delegate support"
-        
+
         tk.Label(info_frame, text=info_text, justify="left", font=("Arial", 8)).grid(
             row=0, column=0, sticky="w"
         )
-        
+
         return self.cpu_var
-    
+
     def apply(self):
         # Get selected value from StringVar
         selected = self.device_var.get()
@@ -3694,17 +3883,17 @@ def process_videos_in_directory(existing_root=None):
     """
     print(f"Running script: {Path(__file__).name}")
     print(f"Script directory: {Path(__file__).parent.resolve()}")
-    
+
     # Detect GPU availability
     print("\n=== Detecting GPU Availability ===")
     gpu_available, gpu_info, gpu_error = detect_nvidia_gpu()
-    
+
     if gpu_available:
         print(f"✓ NVIDIA GPU detected: {gpu_info.get('name', 'Unknown')}")
         print(f"  Driver: {gpu_info.get('driver_version', 'Unknown')}")
-        if gpu_info.get('memory_total_mb', 0) > 0:
+        if gpu_info.get("memory_total_mb", 0) > 0:
             print(f"  Memory: {gpu_info['memory_total_mb'] / 1024:.1f} GB")
-        
+
         # Test MediaPipe GPU support
         print("\nTesting MediaPipe GPU delegate...")
         gpu_test_result = test_mediapipe_gpu()
@@ -3717,7 +3906,7 @@ def process_videos_in_directory(existing_root=None):
         print(f"✗ No NVIDIA GPU available: {gpu_error}")
         gpu_info = {}
         gpu_test_result = (False, gpu_error)
-    
+
     print("=" * 40 + "\n")
 
     # Use existing root or create new one for dialogs
@@ -3735,12 +3924,12 @@ def process_videos_in_directory(existing_root=None):
     # Show device selection dialog
     device_dialog = DeviceSelectionDialog(root, gpu_available, gpu_info, gpu_test_result)
     use_gpu = device_dialog.result == "gpu" if device_dialog.result else False
-    
+
     if use_gpu:
         print("✓ GPU processing selected")
     else:
         print("✓ CPU processing selected")
-    
+
     print()
 
     # Helper function to prepare root window for dialogs on macOS
