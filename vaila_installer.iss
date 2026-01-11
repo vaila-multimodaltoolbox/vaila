@@ -42,7 +42,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
 Source: "vaila.py"; DestDir: "{app}"; Flags: ignoreversion
-Source: "install_vaila_win_uv.ps1"; DestDir: "{app}"; Flags: ignoreversion
+Source: "install_vaila_win.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "uninstall_vaila_win.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "vaila\*"; DestDir: "{app}\vaila"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "docs\*"; DestDir: "{app}\docs"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -60,7 +60,7 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "pwsh.exe"; Parameters: "-Executio
 ; Use -File instead of -Command for better reliability with paths containing spaces
 ; Note: Removing runascurrentuser so the script runs with installer's admin privileges
 ; This ensures the script can create .venv in Program Files
-Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\install_vaila_win_uv.ps1"""; WorkingDir: "{app}"; Flags: shellexec waituntilterminated postinstall; Description: "Run vaila installation (uv-based)"
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\install_vaila_win.ps1"""; WorkingDir: "{app}"; Flags: shellexec waituntilterminated postinstall; Description: "Run vaila installation (uv or Conda)"
 
 [Code]
 // This code is executed before installation begins
@@ -107,7 +107,7 @@ begin
       '    & uv run "' + ExpandConstant('{app}') + '\vaila.py"' + #13#10 +
       '} catch {' + #13#10 +
       '    Write-Host "Error: Could not start vaila. Please ensure uv is properly installed." -ForegroundColor Red' + #13#10 +
-      '    Write-Host "You can run the installation script again: install_vaila_win_uv.ps1" -ForegroundColor Yellow' + #13#10 +
+      '    Write-Host "You can run the installation script again: install_vaila_win.ps1" -ForegroundColor Yellow' + #13#10 +
       '    Read-Host "Press Enter to exit"' + #13#10 +
       '}',
       False);
