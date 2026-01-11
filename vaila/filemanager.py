@@ -7,8 +7,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 08 January 2026
-Version: 0.1.1
+Update Date: 11 January 2026
+Version: 0.1.2
 
 Description:
 This script is designed to manage files and directories through a graphical user interface (GUI) using Tkinter. It supports various operations such as copying, moving, removing, and converting files, along with advanced features like pattern matching and batch processing. The tool is particularly useful for organizing large datasets and automating repetitive file operations.
@@ -96,7 +96,9 @@ def copy_file():
     pattern_text.pack()
 
     def on_submit():
-        patterns = [p for p in pattern_text.get("1.0", "end").strip().splitlines() if p.strip() != ""]
+        patterns = [
+            p for p in pattern_text.get("1.0", "end").strip().splitlines() if p.strip() != ""
+        ]
         pattern_window.destroy()
         process_copy(src_directory, file_extension, patterns)
 
@@ -107,7 +109,9 @@ def copy_file():
 
 
 def process_copy(src_directory, file_extension, patterns):
-    print(f"[Action] Copy processing | src={src_directory} | ext={file_extension or 'ALL'} | patterns={patterns or ['ALL']}")
+    print(
+        f"[Action] Copy processing | src={src_directory} | ext={file_extension or 'ALL'} | patterns={patterns or ['ALL']}"
+    )
 
     # If no patterns provided, match all
     if not patterns:
@@ -155,9 +159,7 @@ def process_copy(src_directory, file_extension, patterns):
                         counter = 1
                         base_name, ext = os.path.splitext(file)
                         while os.path.exists(dest_path):
-                            dest_path = os.path.join(
-                                copy_directory, f"{base_name}_{counter}{ext}"
-                            )
+                            dest_path = os.path.join(copy_directory, f"{base_name}_{counter}{ext}")
                             counter += 1
                         try:
                             shutil.copy2(src_path, dest_path)
@@ -244,7 +246,9 @@ def process_move(src_directory, file_extension, patterns):
     # Print the directory and name of the script being executed
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
-    print(f"[Action] Move processing | src={src_directory} | ext={file_extension} | patterns={patterns}")
+    print(
+        f"[Action] Move processing | src={src_directory} | ext={file_extension} | patterns={patterns}"
+    )
 
     # Prompt the user to select the destination directory where the new directories will be created
     base_dest_directory = filedialog.askdirectory(title="Select Destination Directory")
@@ -567,41 +571,41 @@ def _clean_text(text):
     """
     # 1. Convert to string and lowercase
     text = str(text).lower()
-    
+
     # 2. Manual substitutions
     text = text.replace("ç", "c")
-    
+
     # 3. Unicode normalization (remove accents)
-    nfkd_form = unicodedata.normalize('NFKD', text)
+    nfkd_form = unicodedata.normalize("NFKD", text)
     text = "".join([c for c in nfkd_form if not unicodedata.combining(c)])
-    
+
     # 4. Replace spaces and hyphens with underscore
     text = text.replace(" ", "_").replace("-", "_")
-    
+
     # 5. Remove non-alphanumeric characters (keep only letters, numbers, _ and .)
     # This preserves file extensions (e.g., .mp4)
-    text = re.sub(r'[^a-z0-9_.]', '', text)
-    
+    text = re.sub(r"[^a-z0-9_.]", "", text)
+
     # 6. Remove duplicate underscores
-    text = re.sub(r'_+', '_', text)
-    
+    text = re.sub(r"_+", "_", text)
+
     # 7. Remove underscore at edges (aesthetic)
-    text = text.strip('_')
-    
+    text = text.strip("_")
+
     return text
 
 
 def normalize_names():
     """
     Normalize file and folder names in a directory.
-    
+
     This function will:
     - Convert to lowercase
     - Remove accents
     - Replace spaces and hyphens with underscores
     - Remove special characters
     - Preserve file extensions
-    
+
     WARNING: This action is irreversible!
     """
     # Print header info consistent with other functions
@@ -611,20 +615,20 @@ def normalize_names():
 
     # Prompt user for directory
     directory = filedialog.askdirectory(title="Select Directory to Normalize (Files & Folders)")
-    
+
     if not directory:
         messagebox.showerror("Error", "No directory selected.")
         return
 
     # Warning Dialog
     confirm = messagebox.askyesno(
-        "WARNING: Irreversible Action", 
+        "WARNING: Irreversible Action",
         f"This will rename ALL files and folders inside:\n{directory}\n\n"
         "Changes applied:\n"
         "- Lowercase\n- Remove accents\n- Spaces to underscores\n- Remove special chars\n\n"
-        "Do you want to proceed?"
+        "Do you want to proceed?",
     )
-    
+
     if not confirm:
         return
 
@@ -634,19 +638,18 @@ def normalize_names():
 
     # topdown=False is crucial: rename children before parents
     for root, dirs, files in os.walk(directory, topdown=False):
-        
         # 1. Normalize Files
         for filename in files:
             original_path = os.path.join(root, filename)
             new_filename = _clean_text(filename)
             new_path = os.path.join(root, new_filename)
-            
+
             if original_path != new_path:
                 # Check for collision
                 if os.path.exists(new_path):
                     print(f"Skipped (exists): {filename} -> {new_filename}")
                     continue
-                
+
                 try:
                     os.rename(original_path, new_path)
                     print(f"File Renamed: {filename} -> {new_filename}")
@@ -659,13 +662,13 @@ def normalize_names():
             original_path = os.path.join(root, dirname)
             new_dirname = _clean_text(dirname)
             new_path = os.path.join(root, new_dirname)
-            
+
             if original_path != new_path:
                 # Check for collision
                 if os.path.exists(new_path):
                     print(f"Skipped (exists): {dirname} -> {new_dirname}")
                     continue
-                
+
                 try:
                     os.rename(original_path, new_path)
                     print(f"Folder Renamed: {dirname} -> {new_dirname}")
@@ -677,7 +680,7 @@ def normalize_names():
     msg = f"Normalization Complete!\n\nFiles renamed: {count_files}\nFolders renamed: {count_dirs}"
     if errors:
         msg += f"\n\nErrors encountered: {len(errors)}\n(Check console for details)"
-    
+
     messagebox.showinfo("Success", msg)
 
 
