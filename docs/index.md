@@ -150,8 +150,12 @@ All buttons in the vailá GUI (`vaila.py`) are documented in **[docs/vaila_butto
 ```powershell
 git clone https://github.com/vaila-multimodaltoolbox/vaila
 cd vaila
-.\install_vaila_win_uv.ps1
+.\install_vaila_win.ps1
 ```
+
+   The script will prompt you to choose between:
+   - **uv** (recommended - modern, fast)
+   - **Conda** (legacy - for compatibility)
 
 **Linux and macOS (Using uv):**
 

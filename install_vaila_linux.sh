@@ -2,159 +2,671 @@
 
 #########################################################################################
 #                                                                                       #
-# Script: install_vaila.linux.sh                                                        #
-# Description: Installs the vaila - Multimodal Toolbox on Ubuntu Linux, including the   #
-#              Conda environment setup, copying program files to the user's home        #
-#              directory, creating a desktop entry, and setting up the application.     #
+# Script: install_vaila_linux.sh                                                        #
+# Description: Installs the vaila - Multimodal Toolbox on Linux                        #
+#              Supports both uv (recommended) and Conda (legacy) installation methods #
 #                                                                                       #
 # Usage:                                                                                #
 #   1. Download the repository from GitHub manually and extract it.                     #
 #   2. Make the script executable:                                                      #
-#      chmod +x install_vaila.linux.sh                                                  #
+#      chmod +x install_vaila_linux.sh                                                 #
 #   3. Run the script from the root directory of the extracted repository:              #
-#      ./install_vaila.linux.sh                                                         #
+#      ./install_vaila_linux.sh                                                        #
 #                                                                                       #
 # Notes:                                                                                #
-#   - Ensure Conda is installed and accessible from the command line before running.    #
+#   - uv method: uv will be automatically installed if not present                     #
+#   - conda method: Requires Conda (Anaconda or Miniconda) to be installed             #
+#   - uv will be automatically installed if not present (uv method only)              #
+#   - Python 3.12.12 will be installed via uv or conda depending on method chosen     #
 #                                                                                       #
 # Author: Prof. Dr. Paulo R. P. Santiago                                                #
-# Date: September 17, 2024                                                              #
-# Updated Date: 11 September 2025                                                            #
-# Version: 0.0.11                                                                        #
-# OS: Ubuntu, Kubuntu, Linux Mint, Pop_OS!, Zorin OS, etc.                              #
+# Creation: September 17, 2024                                                          #
+# Updated: 11 January 2026                                                              #
+# Version: 0.3.0                                                                        #
+# OS: Ubuntu, Kubuntu, Linux Mint, Pop_OS!, Zorin OS, etc. (Debian-based)             #
 #########################################################################################
 
-echo "Starting installation of vaila - Multimodal Toolbox on Linux..."
+set -e  # Exit on error
 
-# Check if Conda is installed
-if ! command -v conda &> /dev/null; then
-    echo "Conda is not installed. Please install Conda first."
-    exit 1
+echo "============================================================"
+echo "vaila - Multimodal Toolbox Installation/Update"
+echo "============================================================"
+echo ""
+echo "This script will install or update vaila in: ~/vaila"
+echo "If vaila is already installed, it will be updated with the latest code."
+echo ""
+
+# Prompt user to choose installation method
+echo "---------------------------------------------"
+echo "Installation Method Selection"
+echo "  [1] uv (recommended - modern, fast)"
+echo "  [2] Conda (legacy - for compatibility)"
+echo "---------------------------------------------"
+printf "Choose an option [1-2] (default: 1): "
+read INSTALL_METHOD
+INSTALL_METHOD=${INSTALL_METHOD:-1}
+
+if [[ "$INSTALL_METHOD" != "1" && "$INSTALL_METHOD" != "2" ]]; then
+    echo "Invalid option. Defaulting to uv (option 1)."
+    INSTALL_METHOD=1
 fi
 
-# Get Conda base path
-CONDA_BASE=$(conda info --base)
+# Define paths (common to both methods)
+USER_HOME="$HOME"
+VAILA_HOME="$USER_HOME/vaila"
+DESKTOP_ENTRY_PATH="$HOME/.local/share/applications/vaila.desktop"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Check for missing dependencies
-echo "Verifying system dependencies..."
-for pkg in python3 pip git curl wget ffmpeg rsync pkg-config libcairo2-dev python3-dev; do
-    if ! dpkg -l | grep -q " $pkg "; then
-        echo "Installing $pkg..."
-        sudo apt install -y $pkg
-    fi
-done
-
-# Check if the "vaila" environment already exists and ask user for installation type
-echo "Checking for existing 'vaila' environment..."
-if conda env list | grep -q "^vaila"; then
-    echo ""
-    echo "============================================================"
-    echo "vaila environment already exists!"
-    echo "============================================================"
-    echo ""
-    echo "Choose installation type:"
-    echo "1. UPDATE - Keep existing environment and update vaila files only"
-    echo "   (Preserves NVIDIA CUDA installations and other custom packages)"
-    echo "2. RESET - Remove existing environment and create fresh installation"
-    echo "   (Will require reinstalling NVIDIA CUDA and other custom packages)"
-    echo ""
-    
-    while true; do
-        read -p "Enter your choice (1 for UPDATE, 2 for RESET): " choice
-        case $choice in
-            1)
-                echo ""
-                echo "Selected: UPDATE - Keeping existing environment"
-                echo "Updating existing 'vaila' environment..."
-                conda env update -n vaila -f yaml_for_conda_env/vaila_linux.yaml --prune
-                if [ $? -eq 0 ]; then
-                    echo "'vaila' environment updated successfully."
-                else
-                    echo "Failed to update 'vaila' environment."
-                    exit 1
-                fi
-                break
-                ;;
-            2)
-                echo ""
-                echo "Selected: RESET - Creating fresh environment"
-                echo "Removing old 'vaila' environment..."
-                conda env remove -n vaila -y
-                if [ $? -eq 0 ]; then
-                    echo "Old 'vaila' environment removed successfully."
-                else
-                    echo "Warning: Could not remove old environment. Continuing anyway."
-                fi
-                
-                # Clean conda cache
-                echo "Cleaning conda cache..."
-                conda clean --all -y
-                
-                # Create the environment
-                echo "Creating Conda environment from vaila_linux.yaml..."
-                conda env create -f yaml_for_conda_env/vaila_linux.yaml
-                if [ $? -eq 0 ]; then
-                    echo "'vaila' environment created successfully on Linux."
-                else
-                    echo "Failed to create 'vaila' environment."
-                    exit 1
-                fi
-                break
-                ;;
-            *)
-                echo "Invalid choice. Please enter 1 or 2."
-                ;;
-        esac
-    done
-else
-    echo "'vaila' environment does not exist. Creating new environment..."
-    
-    # Clean conda cache
-    echo "Cleaning conda cache..."
-    conda clean --all -y
-    
-    # Create the environment
-    echo "Creating Conda environment from vaila_linux.yaml..."
-    conda env create -f yaml_for_conda_env/vaila_linux.yaml
-    if [ $? -eq 0 ]; then
-        echo "'vaila' environment created successfully on Linux."
-    else
-        echo "Failed to create 'vaila' environment."
+# Check if pyproject.toml exists (for uv method)
+if [[ "$INSTALL_METHOD" == "1" ]]; then
+    if [ ! -f "$PROJECT_DIR/pyproject.toml" ]; then
+        echo "Error: pyproject.toml not found in $PROJECT_DIR"
+        echo "Please ensure you're running this script from the vaila project root."
         exit 1
     fi
 fi
 
-# Check for NVIDIA GPU and install PyTorch with CUDA if available
-if command -v nvidia-smi &> /dev/null; then
-    echo "NVIDIA GPU detected. Installing PyTorch with CUDA support..."
-    conda install pytorch torchvision torchaudio pytorch-cuda -c pytorch -c nvidia -n vaila
-    if [ $? -eq 0 ]; then
-        echo "PyTorch with CUDA support installed successfully."
-    else
-        echo "Failed to install PyTorch with CUDA support."
+# ============================================================================
+# COMMON FUNCTIONS (used by both methods)
+# ============================================================================
+
+create_desktop_entry() {
+    # Create a desktop entry for the application
+    echo "Creating a desktop entry for vaila..."
+    cat <<EOF > "$DESKTOP_ENTRY_PATH"
+[Desktop Entry]
+Version=1.0
+Name=vaila
+GenericName=Multimodal Toolbox
+Comment=Multimodal Toolbox for Biomechanics and Motion Analysis
+Exec=$RUN_SCRIPT
+Icon=$VAILA_HOME/vaila/images/vaila_ico.png
+Terminal=true
+Type=Application
+Categories=Science;Education;Utility;
+Keywords=biomechanics;motion;analysis;multimodal;
+StartupNotify=true
+StartupWMClass=vaila
+EOF
+
+    # Update desktop database for all desktop environments
+    echo "Updating desktop database..."
+    if command -v update-desktop-database &> /dev/null; then
+        update-desktop-database "$HOME/.local/share/applications"
     fi
-else
-    echo "No NVIDIA GPU detected. Skipping PyTorch with CUDA installation."
-fi
 
-# Define paths
-USER_HOME="$HOME"
-VAILA_HOME="$USER_HOME/vaila"
-DESKTOP_ENTRY_PATH="$HOME/.local/share/applications/vaila.desktop"
+    # For KDE Plasma, also create a .desktop file in the system applications directory
+    if [ -d "/usr/share/applications" ]; then
+        echo "Creating system-wide desktop entry for KDE compatibility..."
+        sudo tee "/usr/share/applications/vaila.desktop" > /dev/null <<EOF
+[Desktop Entry]
+Version=1.0
+Name=vaila
+GenericName=Multimodal Toolbox
+Comment=Multimodal Toolbox for Biomechanics and Motion Analysis
+Exec=$RUN_SCRIPT
+Icon=$VAILA_HOME/vaila/images/vaila_ico.png
+Terminal=true
+Type=Application
+Categories=Science;Education;Utility;
+Keywords=biomechanics;motion;analysis;multimodal;
+StartupNotify=true
+StartupWMClass=vaila
+EOF
+        sudo update-desktop-database
+    fi
 
-# Clean destination directory and copy the entire vaila program to the user's home directory
-echo "Cleaning destination directory and copying vaila program to the user's home directory..."
-if [ -d "$VAILA_HOME" ]; then
-    echo "Removing existing files from destination directory..."
-    rm -rf "$VAILA_HOME"/*
-fi
-mkdir -p "$VAILA_HOME"
-cp -Rfa "$(pwd)/." "$VAILA_HOME/"
+    # For XFCE, ensure the desktop entry is properly registered
+    if command -v xfce4-appfinder &> /dev/null; then
+        echo "XFCE detected. Ensuring desktop entry is properly registered..."
+        if command -v xfce4-panel &> /dev/null; then
+            echo "Refreshing XFCE panel..."
+            xfce4-panel --restart 2>/dev/null || true
+        fi
+    fi
 
-# Create a run_vaila.sh script
-RUN_SCRIPT="$VAILA_HOME/run_vaila.sh"
-echo "Creating run_vaila.sh script..."
-cat <<EOF > "$RUN_SCRIPT"
+    # For KDE Plasma, refresh the application menu
+    if command -v kbuildsycoca5 &> /dev/null; then
+        echo "KDE Plasma detected. Refreshing application menu..."
+        kbuildsycoca5 --noincremental 2>/dev/null || true
+    elif command -v kbuildsycoca6 &> /dev/null; then
+        echo "KDE Plasma 6 detected. Refreshing application menu..."
+        kbuildsycoca6 --noincremental 2>/dev/null || true
+    fi
+
+    # For GNOME, refresh the application menu
+    if command -v gtk-update-icon-cache &> /dev/null; then
+        echo "GNOME detected. Updating icon cache..."
+        gtk-update-icon-cache -f -t "$HOME/.local/share/icons" 2>/dev/null || true
+    fi
+}
+
+setup_ssh() {
+    # Install and configure SSH
+    echo ""
+    echo "Installing and configuring OpenSSH Server..."
+    sudo apt install -y openssh-server || true
+
+    echo "Ensuring SSH service is enabled and running..."
+    sudo systemctl enable ssh 2>/dev/null || true
+    sudo systemctl start ssh 2>/dev/null || true
+
+    # Configure SSH for better security (optional but recommended)
+    echo "Configuring SSH security settings..."
+    sudo sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin no/' /etc/ssh/sshd_config 2>/dev/null || true
+    sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config 2>/dev/null || true
+    sudo systemctl restart ssh 2>/dev/null || true
+
+    # Configure firewall to allow SSH connections
+    echo "Configuring firewall for SSH..."
+    if command -v ufw &> /dev/null; then
+        sudo ufw allow ssh 2>/dev/null || true
+        sudo ufw status 2>/dev/null || true
+    fi
+}
+
+show_anylabeling_info() {
+    # --------- AnyLabeling Download Information ---------
+    echo ""
+    echo "=================================================================="
+    echo "IMPORTANT INFORMATION FOR YOLO TRAINING / INFORMAÇÃO IMPORTANTE PARA TREINO YOLO"
+    echo "=================================================================="
+    echo ""
+    echo "To use YOLO training resources in vaila, you need AnyLabeling."
+    echo "Para usar recursos de treino YOLO no vaila, você precisa do AnyLabeling."
+    echo ""
+    echo "AnyLabeling is a free tool for training data annotation."
+    echo "O AnyLabeling é uma ferramenta gratuita para anotação de dados de treino."
+    echo ""
+    echo "Opening AnyLabeling download page in your default browser..."
+    echo "Abrindo página de download do AnyLabeling no seu navegador padrão..."
+    echo ""
+
+    # Open AnyLabeling download page in default browser
+    if command -v xdg-open &> /dev/null; then
+        xdg-open "https://github.com/vietanhdev/anylabeling/releases"
+        echo "AnyLabeling download page opened in your browser."
+        echo "Página do AnyLabeling aberta no navegador."
+    elif command -v gnome-open &> /dev/null; then
+        gnome-open "https://github.com/vietanhdev/anylabeling/releases"
+        echo "AnyLabeling download page opened in your browser."
+        echo "Página do AnyLabeling aberta no navegador."
+    else
+        echo "Could not automatically open browser. Please visit manually:"
+        echo "Não foi possível abrir o navegador automaticamente. Por favor, acesse manualmente:"
+        echo "https://github.com/vietanhdev/anylabeling/releases"
+    fi
+
+    echo ""
+    echo "INSTRUCTIONS FOR LINUX / INSTRUÇÕES PARA LINUX:"
+    echo "1. Download the latest AnyLabeling for Linux"
+    echo "   1. Baixe a versão mais recente do AnyLabeling para Linux"
+    echo "2. Extract the downloaded file"
+    echo "   2. Extraia o arquivo baixado"
+    echo "3. Make the anylabeling binary executable:"
+    echo "   3. Torne o binário anylabeling executável:"
+    echo "   sudo chmod +x anylabeling"
+    echo "4. Run AnyLabeling: ./anylabeling"
+    echo "   4. Execute o AnyLabeling: ./anylabeling"
+    echo "5. Use AnyLabeling to create training annotations"
+    echo "   5. Use o AnyLabeling para criar anotações de treino"
+    echo "6. Import the annotations into vaila to train YOLO networks"
+    echo "   6. Importe as anotações no vaila para treinar redes YOLO"
+    echo ""
+}
+
+# ============================================================================
+# UV INSTALLATION METHOD
+# ============================================================================
+
+install_with_uv() {
+    echo ""
+    echo "============================================================"
+    echo "Installing vaila using uv (recommended method)"
+    echo "============================================================"
+    echo ""
+
+    # Check for missing system dependencies
+    echo "Verifying system dependencies..."
+    MISSING_DEPS=()
+    for pkg in python3 git curl wget ffmpeg rsync pkg-config libcairo2-dev python3-dev build-essential zenity; do
+        if ! dpkg -l | grep -q "^ii  $pkg "; then
+            MISSING_DEPS+=("$pkg")
+        fi
+    done
+
+    if [ ${#MISSING_DEPS[@]} -gt 0 ]; then
+        echo "Installing missing system dependencies: ${MISSING_DEPS[*]}"
+        sudo apt update
+        sudo apt install -y "${MISSING_DEPS[@]}"
+    fi
+
+    # Install uv if not present
+    echo ""
+    echo "Checking for uv installation..."
+    if ! command -v uv &> /dev/null; then
+        echo "uv is not installed. Installing uv..."
+        echo "Using official installer: curl -LsSf https://astral.sh/uv/install.sh | sh"
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        
+        # Add uv to PATH for current session
+        if [ -d "$HOME/.local/bin" ]; then
+            export PATH="$HOME/.local/bin:$PATH"
+        fi
+        if [ -d "$HOME/.cargo/bin" ]; then
+            export PATH="$HOME/.cargo/bin:$PATH"
+        fi
+        
+        # Also add to .bashrc for future sessions
+        if [ -d "$HOME/.local/bin" ] && ! grep -q 'export PATH="$HOME/.local/bin:$PATH"' ~/.bashrc 2>/dev/null; then
+            echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+        fi
+        if [ -d "$HOME/.cargo/bin" ] && ! grep -q 'export PATH="$HOME/.cargo/bin:$PATH"' ~/.bashrc 2>/dev/null; then
+            echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.bashrc
+        fi
+        
+        # Source .bashrc to get uv in current session
+        source ~/.bashrc 2>/dev/null || true
+        
+        # Verify installation
+        if ! command -v uv &> /dev/null; then
+            echo "Error: uv installation failed. Please install manually:"
+            echo "  curl -LsSf https://astral.sh/uv/install.sh | sh"
+            echo "  Or visit: https://docs.astral.sh/uv/getting-started/installation/"
+            exit 1
+        fi
+        echo "uv installed successfully!"
+    else
+        echo "uv is already installed."
+        echo "Updating uv..."
+        uv self update || echo "Warning: Failed to update uv. Continuing with current version."
+    fi
+
+    # Get uv version
+    UV_VERSION=$(uv --version 2>/dev/null || echo "unknown")
+    echo "uv version: $UV_VERSION"
+    echo ""
+
+    # Install Python 3.12.12 via uv if needed
+    echo "Checking Python version..."
+    if ! uv python list | grep -q "3.12.12"; then
+        echo "Python 3.12.12 not found. Installing via uv..."
+        uv python install 3.12.12
+    else
+        echo "Python 3.12.12 found."
+    fi
+
+    # Clean destination directory and copy files
+    echo ""
+    if [ -d "$VAILA_HOME" ]; then
+        echo "Updating existing vaila installation in $VAILA_HOME..."
+        echo "Removing old files (keeping .venv to be recreated)..."
+        find "$VAILA_HOME" -mindepth 1 -maxdepth 1 ! -name '.venv' -exec rm -rf {} +
+    else
+        echo "Installing vaila to $VAILA_HOME..."
+        mkdir -p "$VAILA_HOME"
+    fi
+
+    echo "Copying files..."
+    rsync -av --exclude='.venv' --exclude='__pycache__' --exclude='*.pyc' --exclude='.git' --exclude='uv.lock' --exclude='.python-version' "$PROJECT_DIR/" "$VAILA_HOME/"
+
+    if [ -f "$VAILA_HOME/uv.lock" ]; then
+        rm -f "$VAILA_HOME/uv.lock"
+    fi
+
+    cd "$VAILA_HOME"
+
+    # Initialize uv project
+    echo ""
+    echo "Initializing uv project..."
+    if [ ! -f ".python-version" ]; then
+        uv python pin 3.12.12
+    fi
+
+    # Create virtual environment
+    echo ""
+    echo "Creating/updating virtual environment (.venv)..."
+    if [ ! -d ".venv" ]; then
+        echo "Creating new virtual environment..."
+        uv venv --python 3.12.12
+    else
+        echo "Virtual environment already exists. uv sync will update it as needed."
+    fi
+
+    # Generate lock file
+    echo ""
+    echo "Generating lock file (uv.lock)..."
+    uv lock
+
+    # Install Cairo dependencies BEFORE uv sync (needed for pycairo compilation)
+    echo ""
+    echo "Installing Cairo system dependencies (required for pycairo)..."
+    echo "This ensures pycairo can be compiled successfully during uv sync."
+    sudo apt update
+    sudo apt install -y libcairo2-dev pkg-config python3-dev build-essential || {
+        echo "Warning: Failed to install Cairo dependencies. pycairo may fail to build."
+    }
+
+    # Sync dependencies (install all packages from pyproject.toml)
+    echo ""
+    echo "Installing vaila dependencies with uv..."
+    echo "This may take a few minutes on first run..."
+    uv sync
+
+    # Detect NVIDIA GPU
+    echo ""
+    echo "Checking for NVIDIA GPU..."
+    NVIDIA_GPU_DETECTED=false
+    if command -v nvidia-smi &> /dev/null; then
+        if nvidia-smi &> /dev/null; then
+            NVIDIA_GPU_DETECTED=true
+            echo "NVIDIA GPU detected!"
+            nvidia-smi --query-gpu=name --format=csv,noheader | head -1 | sed 's/^/  GPU: /'
+        else
+            echo "nvidia-smi found but no GPU detected (drivers may not be installed)."
+        fi
+    else
+        echo "No NVIDIA GPU detected (nvidia-smi not found)."
+    fi
+    echo ""
+
+    # Prepare GPU info for prompt
+    if [[ "$NVIDIA_GPU_DETECTED" == true ]]; then
+        GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)
+        PYTORCH_DESC="PyTorch (CPU or CUDA/GPU) + YOLO"
+        PYTORCH_NOTE="NVIDIA GPU detected: $GPU_NAME"
+    else
+        PYTORCH_DESC="PyTorch (CPU or CUDA/GPU) + YOLO"
+        PYTORCH_NOTE="No NVIDIA GPU detected (CUDA option requires GPU)"
+    fi
+
+    # Prompt user about installing PyTorch/YOLO stack
+    echo "---------------------------------------------"
+    echo "PyTorch / YOLO installation options"
+    echo "  [1] Skip (default)"
+    echo "  [2] Install $PYTORCH_DESC"
+    if [[ "$NVIDIA_GPU_DETECTED" == true ]]; then
+        echo "      ($PYTORCH_NOTE)"
+    else
+        echo "      Note: $PYTORCH_NOTE"
+    fi
+    echo "---------------------------------------------"
+    printf "Choose an option [1-2]: "
+    read INSTALL_OPTION
+    INSTALL_OPTION=${INSTALL_OPTION:-1}
+
+    if [[ "$INSTALL_OPTION" == "2" ]]; then
+        PYTORCH_INSTALLED=false
+        echo ""
+        
+        # Show options based on GPU detection
+        if [[ "$NVIDIA_GPU_DETECTED" == true ]]; then
+            echo "Select PyTorch build:"
+            echo "  [1] CPU-only"
+            echo "  [2] CUDA/GPU (NVIDIA GPU detected: $GPU_NAME)"
+        else
+            echo "Select PyTorch build:"
+            echo "  [1] CPU-only"
+            echo "  [2] CUDA/GPU (requires NVIDIA GPU + drivers)"
+            echo "     Note: No NVIDIA GPU detected. CUDA will not work without GPU."
+        fi
+        
+        printf "Choose an option [1-2]: "
+        read PYTORCH_OPTION
+        PYTORCH_OPTION=${PYTORCH_OPTION:-1}
+
+        if [[ "$PYTORCH_OPTION" == "2" ]]; then
+            echo ""
+            echo "Installing PyTorch with CUDA support..."
+            if uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121; then
+                PYTORCH_INSTALLED=true
+                echo "PyTorch with CUDA installed successfully."
+            else
+                echo "Warning: Failed to install CUDA-enabled PyTorch."
+            fi
+        elif [[ "$PYTORCH_OPTION" == "1" ]]; then
+            echo ""
+            echo "Installing CPU-only PyTorch..."
+            if uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu; then
+                PYTORCH_INSTALLED=true
+                echo "CPU-only PyTorch installed successfully."
+            fi
+        fi
+
+        if [ "$PYTORCH_INSTALLED" = true ]; then
+            echo ""
+            echo "Installing YOLO dependencies (ultralytics, boxmot)..."
+            uv pip install ultralytics boxmot || echo "Warning: Failed to install YOLO dependencies."
+        fi
+    else
+        echo ""
+        echo "Skipping PyTorch/YOLO installation. You can install later using:"
+        echo "  CUDA PyTorch: uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121"
+        echo "  CPU PyTorch : uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu"
+        echo "  YOLO stack  : uv pip install ultralytics boxmot"
+    fi
+
+    # Verify pycairo installation
+    echo ""
+    echo "Verifying pycairo installation..."
+    if ! uv pip show pycairo &>/dev/null; then
+        echo "pycairo not found. Attempting to install..."
+        uv pip install pycairo || {
+            echo "Warning: pycairo installation failed. Trying with force-reinstall..."
+            uv pip install --force-reinstall --no-cache-dir pycairo || {
+                echo "Warning: pycairo installation failed. This may cause issues with the application."
+            }
+        }
+    else
+        echo "pycairo is already installed."
+    fi
+
+    # Create run_vaila.sh script using uv
+    RUN_SCRIPT="$VAILA_HOME/run_vaila.sh"
+    echo ""
+    echo "Creating run_vaila.sh script..."
+    cat <<EOF > "$RUN_SCRIPT"
+#!/bin/bash
+cd "$VAILA_HOME"
+uv run --no-sync "$VAILA_HOME/vaila.py"
+# Keep terminal open after execution
+echo
+echo "Program finished. Press Enter to close this window..."
+read
+EOF
+
+    chmod +x "$RUN_SCRIPT"
+}
+
+# ============================================================================
+# CONDA INSTALLATION METHOD
+# ============================================================================
+
+install_with_conda() {
+    echo ""
+    echo "============================================================"
+    echo "Installing vaila using Conda (legacy method)"
+    echo "============================================================"
+    echo ""
+
+    # Check if Conda is installed
+    if ! command -v conda &> /dev/null; then
+        echo "Error: Conda is not installed."
+        echo "Please install Conda (Anaconda or Miniconda) first:"
+        echo "  https://www.anaconda.com/products/individual"
+        exit 1
+    fi
+
+    # Get Conda base path
+    CONDA_BASE=$(conda info --base)
+
+    # Check for missing dependencies
+    echo "Verifying system dependencies..."
+    MISSING_DEPS=()
+    for pkg in python3 pip git curl wget ffmpeg rsync pkg-config libcairo2-dev python3-dev; do
+        if ! dpkg -l | grep -q "^ii  $pkg "; then
+            MISSING_DEPS+=("$pkg")
+        fi
+    done
+
+    if [ ${#MISSING_DEPS[@]} -gt 0 ]; then
+        echo "Installing missing system dependencies: ${MISSING_DEPS[*]}"
+        sudo apt update
+        sudo apt install -y "${MISSING_DEPS[@]}"
+    fi
+
+    # Check if the "vaila" environment already exists
+    echo "Checking for existing 'vaila' environment..."
+    if conda env list | grep -q "^vaila"; then
+        echo ""
+        echo "============================================================"
+        echo "vaila environment already exists!"
+        echo "============================================================"
+        echo ""
+        echo "Choose installation type:"
+        echo "1. UPDATE - Keep existing environment and update vaila files only"
+        echo "   (Preserves NVIDIA CUDA installations and other custom packages)"
+        echo "2. RESET - Remove existing environment and create fresh installation"
+        echo "   (Will require reinstalling NVIDIA CUDA and other custom packages)"
+        echo ""
+        
+        while true; do
+            read -p "Enter your choice (1 for UPDATE, 2 for RESET): " choice
+            case $choice in
+                1)
+                    echo ""
+                    echo "Selected: UPDATE - Keeping existing environment"
+                    echo "Updating existing 'vaila' environment..."
+                    conda env update -n vaila -f "$PROJECT_DIR/yaml_for_conda_env/vaila_linux.yaml" --prune
+                    if [ $? -eq 0 ]; then
+                        echo "'vaila' environment updated successfully."
+                    else
+                        echo "Failed to update 'vaila' environment."
+                        exit 1
+                    fi
+                    break
+                    ;;
+                2)
+                    echo ""
+                    echo "Selected: RESET - Creating fresh environment"
+                    echo "Removing old 'vaila' environment..."
+                    conda env remove -n vaila -y
+                    if [ $? -eq 0 ]; then
+                        echo "Old 'vaila' environment removed successfully."
+                    else
+                        echo "Warning: Could not remove old environment. Continuing anyway."
+                    fi
+                    
+                    echo "Cleaning conda cache..."
+                    conda clean --all -y
+                    
+                    echo "Creating Conda environment from vaila_linux.yaml..."
+                    conda env create -f "$PROJECT_DIR/yaml_for_conda_env/vaila_linux.yaml"
+                    if [ $? -eq 0 ]; then
+                        echo "'vaila' environment created successfully on Linux."
+                    else
+                        echo "Failed to create 'vaila' environment."
+                        exit 1
+                    fi
+                    break
+                    ;;
+                *)
+                    echo "Invalid choice. Please enter 1 or 2."
+                    ;;
+            esac
+        done
+    else
+        echo "'vaila' environment does not exist. Creating new environment..."
+        
+        echo "Cleaning conda cache..."
+        conda clean --all -y
+        
+        echo "Creating Conda environment from vaila_linux.yaml..."
+        conda env create -f "$PROJECT_DIR/yaml_for_conda_env/vaila_linux.yaml"
+        if [ $? -eq 0 ]; then
+            echo "'vaila' environment created successfully on Linux."
+        else
+            echo "Failed to create 'vaila' environment."
+            exit 1
+        fi
+    fi
+
+    # Check for NVIDIA GPU and install PyTorch with CUDA if available
+    if command -v nvidia-smi &> /dev/null; then
+        echo "NVIDIA GPU detected. Installing PyTorch with CUDA support..."
+        conda install pytorch torchvision torchaudio pytorch-cuda -c pytorch -c nvidia -n vaila -y
+        if [ $? -eq 0 ]; then
+            echo "PyTorch with CUDA support installed successfully."
+        else
+            echo "Failed to install PyTorch with CUDA support."
+        fi
+    else
+        echo "No NVIDIA GPU detected. Skipping PyTorch with CUDA installation."
+    fi
+
+    # Clean destination directory and copy files
+    echo ""
+    echo "Cleaning destination directory and copying vaila program to the user's home directory..."
+    if [ -d "$VAILA_HOME" ]; then
+        echo "Removing existing files from destination directory..."
+        rm -rf "$VAILA_HOME"/*
+    else
+        echo "Installing vaila to $VAILA_HOME..."
+        mkdir -p "$VAILA_HOME"
+    fi
+    cp -Rfa "$PROJECT_DIR/." "$VAILA_HOME/"
+
+    # Remove ffmpeg from the Conda environment if installed
+    echo "Removing ffmpeg installed via Conda..."
+    conda remove -n vaila ffmpeg -y
+
+    # Install the system version of ffmpeg
+    echo "Installing ffmpeg from system repositories..."
+    sudo apt update
+    sudo apt install ffmpeg -y
+
+    # Activate the Conda environment
+    source "$CONDA_BASE/etc/profile.d/conda.sh"
+    conda activate vaila
+
+    # Install Cairo dependencies and pycairo
+    echo "Installing Cairo dependencies..."
+    sudo apt install libcairo2-dev pkg-config python3-dev -y
+
+    # First try normal installation of pycairo
+    echo "Trying normal installation of pycairo..."
+    if pip install pycairo; then
+        echo "Normal pycairo installation succeeded."
+    else
+        echo "Normal pycairo installation failed. Trying with force-reinstall option..."
+        pip install --force-reinstall --no-cache-dir pycairo
+        
+        if [ $? -eq 0 ]; then
+            echo "Forced pycairo installation succeeded."
+        else
+            echo "Warning: pycairo installation failed. This may cause issues with the application."
+        fi
+    fi
+
+    # Install moviepy using pip
+    echo "Installing moviepy..."
+    pip install moviepy
+
+    # Grant permissions to the Conda environment directory
+    echo "Setting permissions for Conda environment..."
+    VAILA_ENV_DIR="${CONDA_BASE}/envs/vaila"
+    if [ -d "$VAILA_ENV_DIR" ]; then
+        chmod -R u+rwX "$VAILA_ENV_DIR"
+        echo "Permissions set for Conda environment directory."
+    else
+        echo "Conda environment directory not found at $VAILA_ENV_DIR."
+    fi
+
+    # Create run_vaila.sh script
+    RUN_SCRIPT="$VAILA_HOME/run_vaila.sh"
+    echo ""
+    echo "Creating run_vaila.sh script..."
+    cat <<EOF > "$RUN_SCRIPT"
 #!/bin/bash
 source "$CONDA_BASE/etc/profile.d/conda.sh"
 conda activate vaila
@@ -165,214 +677,46 @@ echo "Program finished. Press Enter to close this window..."
 read
 EOF
 
-# Make the run_vaila.sh script executable
-chmod +x "$RUN_SCRIPT"
+    chmod +x "$RUN_SCRIPT"
+}
 
-# Create a desktop entry for the application
-echo "Creating a desktop entry for vaila..."
-cat <<EOF > "$DESKTOP_ENTRY_PATH"
-[Desktop Entry]
-Version=1.0
-Name=vaila
-GenericName=Multimodal Toolbox
-Comment=Multimodal Toolbox for Biomechanics and Motion Analysis
-Exec=$RUN_SCRIPT
-Icon=$VAILA_HOME/vaila/images/vaila_ico.png
-Terminal=true
-Type=Application
-Categories=Science;Education;Utility;
-Keywords=biomechanics;motion;analysis;multimodal;
-StartupNotify=true
-StartupWMClass=vaila
-EOF
+# ============================================================================
+# MAIN EXECUTION
+# ============================================================================
 
-# Update desktop database for all desktop environments
-echo "Updating desktop database..."
-if command -v update-desktop-database &> /dev/null; then
-    update-desktop-database "$HOME/.local/share/applications"
+# Initialize RUN_SCRIPT variable (will be set by install functions)
+RUN_SCRIPT="$VAILA_HOME/run_vaila.sh"
+
+# Execute installation based on chosen method
+if [[ "$INSTALL_METHOD" == "1" ]]; then
+    install_with_uv
+else
+    install_with_conda
 fi
 
-# For KDE Plasma, also create a .desktop file in the system applications directory
-if [ -d "/usr/share/applications" ]; then
-    echo "Creating system-wide desktop entry for KDE compatibility..."
-    sudo tee "/usr/share/applications/vaila.desktop" > /dev/null <<EOF
-[Desktop Entry]
-Version=1.0
-Name=vaila
-GenericName=Multimodal Toolbox
-Comment=Multimodal Toolbox for Biomechanics and Motion Analysis
-Exec=$RUN_SCRIPT
-Icon=$VAILA_HOME/vaila/images/vaila_ico.png
-Terminal=true
-Type=Application
-Categories=Science;Education;Utility;
-Keywords=biomechanics;motion;analysis;multimodal;
-StartupNotify=true
-StartupWMClass=vaila
-EOF
-    sudo update-desktop-database
+# Ensure RUN_SCRIPT is set (should be set by install functions, but ensure it exists)
+if [ -z "$RUN_SCRIPT" ]; then
+    RUN_SCRIPT="$VAILA_HOME/run_vaila.sh"
 fi
 
-# For XFCE, ensure the desktop entry is properly registered
-if command -v xfce4-appfinder &> /dev/null; then
-    echo "XFCE detected. Ensuring desktop entry is properly registered..."
-    # XFCE may need a refresh of the application menu
-    if command -v xfce4-panel &> /dev/null; then
-        echo "Refreshing XFCE panel..."
-        xfce4-panel --restart
-    fi
-fi
+# Common setup tasks (for both methods)
+setup_ssh
+create_desktop_entry
 
-# For KDE Plasma, refresh the application menu
-if command -v kbuildsycoca5 &> /dev/null; then
-    echo "KDE Plasma detected. Refreshing application menu..."
-    kbuildsycoca5 --noincremental
-elif command -v kbuildsycoca6 &> /dev/null; then
-    echo "KDE Plasma 6 detected. Refreshing application menu..."
-    kbuildsycoca6 --noincremental
-fi
-
-# For GNOME, refresh the application menu
-if command -v gtk-update-icon-cache &> /dev/null; then
-    echo "GNOME detected. Updating icon cache..."
-    gtk-update-icon-cache -f -t "$HOME/.local/share/icons"
-fi
-
-# Ensure the application directory is owned by the user and has the correct permissions
+# Ensure correct ownership and permissions
 echo "Ensuring correct ownership and permissions for the application..."
 chown -R "$USER:$USER" "$VAILA_HOME"
 chmod -R u+rwX "$VAILA_HOME"
 chmod +x "$RUN_SCRIPT"
 
-# Remove ffmpeg from the Conda environment if installed
-echo "Removing ffmpeg installed via Conda..."
-conda remove -n vaila ffmpeg -y
-
-# Install the system version of ffmpeg
-echo "Installing ffmpeg from system repositories..."
-sudo apt update
-sudo apt install ffmpeg -y
-
-# Install rsync
-echo "Installing rsync..."
-sudo apt install rsync -y
-
-# Install and configure SSH
-echo "Installing and configuring OpenSSH Server..."
-sudo apt install openssh-server -y
-
-# Check if SSH server is running and enable it
-echo "Ensuring SSH service is enabled and running..."
-sudo systemctl enable ssh
-sudo systemctl start ssh
-
-# Configure SSH for better security (optional but recommended)
-echo "Configuring SSH security settings..."
-sudo sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin no/' /etc/ssh/sshd_config
-sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
-sudo systemctl restart ssh
-
-# Configure firewall to allow SSH connections
-echo "Configuring firewall for SSH..."
-if command -v ufw &> /dev/null; then
-    sudo ufw allow ssh
-    sudo ufw status
-fi
-
-# Activate the Conda environment
-source "$CONDA_BASE/etc/profile.d/conda.sh"
-conda activate vaila
-
-# Install Cairo dependencies and pycairo
-echo "Installing Cairo dependencies..."
-sudo apt install libcairo2-dev pkg-config python3-dev -y
-
-# First try normal installation of pycairo
-echo "Trying normal installation of pycairo..."
-if pip install pycairo; then
-    echo "Normal pycairo installation succeeded."
-else
-    echo "Normal pycairo installation failed. Trying with force-reinstall option..."
-    pip install --force-reinstall --no-cache-dir pycairo
-    
-    if [ $? -eq 0 ]; then
-        echo "Forced pycairo installation succeeded."
-    else
-        echo "Warning: pycairo installation failed. This may cause issues with the application."
-    fi
-fi
-
-# Install moviepy using pip
-echo "Installing moviepy..."
-pip install moviepy
-
-# Grant permissions to the Conda environment directory
-echo "Setting permissions for Conda environment..."
-VAILA_ENV_DIR="${CONDA_BASE}/envs/vaila"
-if [ -d "$VAILA_ENV_DIR" ]; then
-    chmod -R u+rwX "$VAILA_ENV_DIR"
-    echo "Permissions set for Conda environment directory."
-else
-    echo "Conda environment directory not found at $VAILA_ENV_DIR."
-fi
-
-echo "vaila Launcher created and available in the Applications menu!"
-echo "Installation and setup completed."
-echo " "
-
 # Verify and install x-terminal-emulator if necessary
 if ! command -v x-terminal-emulator &> /dev/null; then
     echo "Installing terminal utility..."
-    sudo apt install -y x-terminal-emulator
+    sudo apt install -y x-terminal-emulator || true
 fi
 
-# --------- AnyLabeling Download Information ---------
-echo ""
-echo "=================================================================="
-echo "IMPORTANT INFORMATION FOR YOLO TRAINING / INFORMAÇÃO IMPORTANTE PARA TREINO YOLO"
-echo "=================================================================="
-echo ""
-echo "To use YOLO training resources in vaila, you need AnyLabeling."
-echo "Para usar recursos de treino YOLO no vaila, você precisa do AnyLabeling."
-echo ""
-echo "AnyLabeling is a free tool for training data annotation."
-echo "O AnyLabeling é uma ferramenta gratuita para anotação de dados de treino."
-echo ""
-echo "Opening AnyLabeling download page in your default browser..."
-echo "Abrindo página de download do AnyLabeling no seu navegador padrão..."
-echo ""
-
-# Open AnyLabeling download page in default browser
-if command -v xdg-open &> /dev/null; then
-    xdg-open "https://github.com/vietanhdev/anylabeling/releases"
-    echo "AnyLabeling download page opened in your browser."
-    echo "Página do AnyLabeling aberta no navegador."
-elif command -v gnome-open &> /dev/null; then
-    gnome-open "https://github.com/vietanhdev/anylabeling/releases"
-    echo "AnyLabeling download page opened in your browser."
-    echo "Página do AnyLabeling aberta no navegador."
-else
-    echo "Could not automatically open browser. Please visit manually:"
-    echo "Não foi possível abrir o navegador automaticamente. Por favor, acesse manualmente:"
-    echo "https://github.com/vietanhdev/anylabeling/releases"
-fi
-
-echo ""
-echo "INSTRUCTIONS FOR LINUX / INSTRUÇÕES PARA LINUX:"
-echo "1. Download the latest AnyLabeling for Linux"
-echo "   1. Baixe a versão mais recente do AnyLabeling para Linux"
-echo "2. Extract the downloaded file"
-echo "   2. Extraia o arquivo baixado"
-echo "3. Make the anylabeling binary executable:"
-echo "   3. Torne o binário anylabeling executável:"
-echo "   sudo chmod +x anylabeling"
-echo "4. Run AnyLabeling: ./anylabeling"
-echo "   4. Execute o AnyLabeling: ./anylabeling"
-echo "5. Use AnyLabeling to create training annotations"
-echo "   5. Use o AnyLabeling para criar anotações de treino"
-echo "6. Import the annotations into vaila to train YOLO networks"
-echo "   6. Importe as anotações no vaila para treinar redes YOLO"
-echo ""
+# Show AnyLabeling information
+show_anylabeling_info
 
 echo "=================================================================="
 echo "vaila installation completed successfully!"

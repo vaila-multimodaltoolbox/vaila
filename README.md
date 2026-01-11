@@ -155,9 +155,9 @@ An overview of the project file structure:
 ```bash
 vaila
 ├── vaila.py                        # Main Entry Point
-├── install_vaila_linux_uv.sh       # Linux Installer (uv)
+├── install_vaila_linux.sh           # Linux Installer (uv or Conda)
 ├── install_vaila_mac_uv.sh         # macOS Installer (unified: uv)
-├── install_vaila_win_uv.ps1        # Windows Installer (uv)
+├── install_vaila_win.ps1            # Windows Installer (uv or Conda)
 ├── pyproject.toml                  # Project Dependencies (uv/poetry)
 ├── uv.lock                         # Dependency Lock File
 ├── vaila                           # Package Source Directory
@@ -270,12 +270,6 @@ For more information about uv, visit: [https://github.com/astral-sh/uv](https://
 
 Installation is now streamlined using **uv**. Simply download and run the installation script.
 
-### YouTube: How to Install *vailá* on Windows 11
-
-[![How to Install Vailá on Windows 11 | Step-by-Step Guide](https://img.youtube.com/vi/w2iZfeD_j30/0.jpg)](https://youtu.be/w2iZfeD_j30)
-
----
-
 ### **Important Notice Before Installation**
 
 > *vailá* values freedom and the goodwill to learn. If you are not the owner of your computer and do not have permission to perform the installation, we recommend doing it on your own computer. If you are prevented from installing software, it means you are not prepared to liberate yourself, make your modifications, and create, which is the philosophy of *vailá!*
@@ -298,8 +292,12 @@ Installation is now streamlined using **uv**. Simply download and run the instal
 
    Open **PowerShell** inside the `vaila` folder and run:
    ```powershell
-   .\install_vaila_win_uv.ps1
+   .\install_vaila_win.ps1
    ```
+   
+   The script will prompt you to choose between:
+   - **uv** (recommended - modern, fast)
+   - **Conda** (legacy - for compatibility)
 
    **Note:** If you run as **Administrator**, *vailá* installs to `C:\Program Files\vaila`. If you run as a **Standard User**, it installs to your user profile (`~\vaila`).
 
@@ -351,13 +349,17 @@ We provide an automated installation script that handles everything for you (dep
 
 1. **Make the script executable**:
    ```bash
-   chmod +x install_vaila_linux_uv.sh
+   chmod +x install_vaila_linux.sh
    ```
 
 2. **Run the installation script**:
    ```bash
-   ./install_vaila_linux_uv.sh
+   ./install_vaila_linux.sh
    ```
+   
+   The script will prompt you to choose between:
+   - **uv** (recommended - modern, fast)
+   - **Conda** (legacy - for compatibility)
 
 3. **Manual Installation (Alternative)**
 
