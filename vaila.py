@@ -2,17 +2,19 @@
 ===============================================================================
 vaila.py
 ===============================================================================
-Author: Prof. Paulo R. P. Santiago
-Date: 07 October 2024
-Update: 10 January 2026
-Version updated: 0.3.8
-Python Version: 3.12.12
+Author: Paulo Roberto Pereira Santiago
+Email: paulosantiago@usp.br
+GitHub: https://github.com/vaila-multimodaltoolbox/vaila
+Creation Date: 07 October 2024
+Update Date: 10 January 2026
+Version: 0.3.8
 
 Example of usage:
 First activate the vaila environment:
 conda activate vaila
 Then run the vaila.py script:
 python vaila.py
+uv run vaila.py
 
 Description:
 ------------
