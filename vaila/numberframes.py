@@ -5,7 +5,7 @@ Author: Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 10 October 2024
-Update Date: 13 August 2025
+Update Date: 11 January 2026
 Version: 0.1.2
 Python Version: 3.12.11
 
@@ -177,7 +177,6 @@ def get_video_info(video_path):
         avg_str = f"{avg_fps:.9f}" if avg_fps else "N/A"
         cap_str = f"{capture_fps:.9f}" if capture_fps else "N/A"
         dur_str = f"{duration:.9f}" if duration else "N/A"
-        
         print(
             f"Video info: {width}x{height}, codec={codec_name}, container={container_format}, "
             f"display≈{disp_str} fps, avg≈{avg_str} fps, cap={cap_str} Hz, "

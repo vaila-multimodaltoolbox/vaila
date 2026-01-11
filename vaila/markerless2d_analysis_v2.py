@@ -6,7 +6,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation: 29 July 2024
-Update: 09 January 2026
+Update: 11 January 2026
 Version: 0.1.0
 
 Description:
@@ -74,6 +74,7 @@ import platform
 import shutil
 import time
 import tkinter as tk
+import urllib.request
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
@@ -81,21 +82,50 @@ import cv2
 import mediapipe as mp
 import numpy as np
 import torch
-import urllib.request
-from ultralytics import YOLO
 
 # --- NEW IMPORTS FOR THE TASKS API (MediaPipe 0.10.31+) ---
-from mediapipe.tasks import python
-from mediapipe.tasks.python import vision
+from ultralytics import YOLO
 
 # MANUAL DEFINITION OF THE BODY CONNECTIONS (since mp.solutions was removed)
-POSE_CONNECTIONS = frozenset([
-    (0, 1), (1, 2), (2, 3), (3, 7), (0, 4), (4, 5), (5, 6), (6, 8), (9, 10),
-    (11, 12), (11, 13), (13, 15), (15, 17), (15, 19), (15, 21), (17, 19),
-    (12, 14), (14, 16), (16, 18), (16, 20), (16, 22), (18, 20), (11, 23),
-    (12, 24), (23, 24), (23, 25), (24, 26), (25, 27), (26, 28), (27, 29),
-    (28, 30), (29, 31), (30, 32), (27, 31), (28, 32)
-])
+POSE_CONNECTIONS = frozenset(
+    [
+        (0, 1),
+        (1, 2),
+        (2, 3),
+        (3, 7),
+        (0, 4),
+        (4, 5),
+        (5, 6),
+        (6, 8),
+        (9, 10),
+        (11, 12),
+        (11, 13),
+        (13, 15),
+        (15, 17),
+        (15, 19),
+        (15, 21),
+        (17, 19),
+        (12, 14),
+        (14, 16),
+        (16, 18),
+        (16, 20),
+        (16, 22),
+        (18, 20),
+        (11, 23),
+        (12, 24),
+        (23, 24),
+        (23, 25),
+        (24, 26),
+        (25, 27),
+        (26, 28),
+        (27, 29),
+        (28, 30),
+        (29, 31),
+        (30, 32),
+        (27, 31),
+        (28, 32),
+    ]
+)
 
 
 def get_hardware_info():
@@ -299,7 +329,6 @@ def get_pose_config(existing_root=None):
             root.attributes("-topmost", True)
         except Exception:
             pass
-    
     # Prepare root for dialog (for all platforms, but especially for Windows)
     try:
         # Ensure root is ready for dialogs on all platforms
@@ -315,7 +344,6 @@ def get_pose_config(existing_root=None):
         print("Root window prepared for dialog.")
     except Exception as e:
         print(f"Warning: Could not prepare root for dialog: {e}")
-    
     try:
         print("Creating pose configuration dialog...")
         # Ensure root is active before creating dialog
@@ -331,15 +359,15 @@ def get_pose_config(existing_root=None):
             root.after(100, lambda: root.attributes("-topmost", False))
         except Exception:
             pass
-        
+
         dialog = ConfidenceInputDialog(root, title="Pose Configuration")
         print("Dialog created, checking result...")
-        
+
         # Update root after dialog closes
         root.update_idletasks()
         root.update()
-        
-        if hasattr(dialog, 'result') and dialog.result:
+
+        if hasattr(dialog, "result") and dialog.result:
             print("Configuration accepted.")
             return dialog.result
         else:
@@ -521,15 +549,15 @@ def get_mediapipe_model_path(complexity):
     # Use vaila/models directory for storing models
     models_dir = Path(__file__).parent / "models"
     models_dir.mkdir(exist_ok=True)
-    
+
     models = {
         0: "pose_landmarker_lite.task",
         1: "pose_landmarker_full.task",
-        2: "pose_landmarker_heavy.task"
+        2: "pose_landmarker_heavy.task",
     }
     model_name = models.get(complexity, "pose_landmarker_full.task")
     model_path = models_dir / model_name
-    
+
     if not model_path.exists():
         print(f"Downloading MediaPipe Tasks model ({model_name})... please wait.")
         print(f"Download location: {model_path}")
@@ -537,7 +565,7 @@ def get_mediapipe_model_path(complexity):
         model_urls = {
             0: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
             1: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task",
-            2: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_heavy/float16/1/pose_landmarker_heavy.task"
+            2: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_heavy/float16/1/pose_landmarker_heavy.task",
         }
         url = model_urls.get(complexity, model_urls[1])
         try:
@@ -799,10 +827,12 @@ def process_frame_with_yolo_pose_only(frame, yolo_model, conf_threshold=0.5, fra
     return landmarks_norm, landmarks_px
 
 
-def process_frame_with_mediapipe_tasks(frame, landmarker, timestamp_ms, yolo_model=None, yolo_conf=0.4, use_yolo=True):
+def process_frame_with_mediapipe_tasks(
+    frame, landmarker, timestamp_ms, yolo_model=None, yolo_conf=0.4, use_yolo=True
+):
     """
     Process a frame with MediaPipe Tasks API, optionally using YOLO for better detection.
-    
+
     Args:
         frame: Input frame (BGR format)
         landmarker: MediaPipe PoseLandmarker object
@@ -810,7 +840,6 @@ def process_frame_with_mediapipe_tasks(frame, landmarker, timestamp_ms, yolo_mod
         yolo_model: YOLO model for person detection
         yolo_conf: YOLO confidence threshold
         use_yolo: Whether to use YOLO for person detection
-    
     Returns:
         landmarks_norm: Normalized landmarks (0-1)
         landmarks_px: Pixel landmarks
@@ -837,7 +866,6 @@ def process_frame_with_mediapipe_tasks(frame, landmarker, timestamp_ms, yolo_mod
     # Process with MediaPipe Tasks API
     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
-    
     # Detect pose using Tasks API
     pose_landmarker_result = landmarker.detect_for_video(mp_image, timestamp_ms)
 
@@ -1082,7 +1110,6 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
 
     # Initialize MediaPipe Tasks API
     model_path = get_mediapipe_model_path(pose_config["model_complexity"])
-    
     BaseOptions = mp.tasks.BaseOptions
     PoseLandmarker = mp.tasks.vision.PoseLandmarker
     PoseLandmarkerOptions = mp.tasks.vision.PoseLandmarkerOptions
@@ -1095,9 +1122,9 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
         num_poses=1,
         min_pose_detection_confidence=pose_config["min_detection_confidence"],
         min_pose_presence_confidence=pose_config["min_tracking_confidence"],
-        output_segmentation_masks=pose_config["enable_segmentation"]
+        output_segmentation_masks=pose_config["enable_segmentation"],
     )
-    
+
     # Create the PoseLandmarker
     landmarker = PoseLandmarker.create_from_options(options)
 
@@ -1372,7 +1399,6 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
                             if 0 <= x < width and 0 <= y < height:
                                 points[i] = (x, y)
                                 cv2.circle(frame, (x, y), 3, (0, 255, 0), -1)
-                    
                     # Draw connections (using POSE_CONNECTIONS defined at module level)
                     for start_idx, end_idx in POSE_CONNECTIONS:
                         if start_idx in points and end_idx in points:
@@ -1509,7 +1535,6 @@ def process_videos_in_directory(existing_root=None):
             root.focus_force()
             root.geometry("1x1+100+100")
             root.update_idletasks()
-            
             # On Windows, ensure root stays visible and active
             if platform.system() == "Windows":
                 try:
@@ -1517,7 +1542,6 @@ def process_videos_in_directory(existing_root=None):
                     root.after(100, lambda: root.attributes("-topmost", False))
                 except Exception:
                     pass
-            
             root.update()
         except Exception as e:
             print(f"Warning: Could not prepare root for dialog: {e}")
@@ -1525,7 +1549,6 @@ def process_videos_in_directory(existing_root=None):
     # Select input directory
     print("\nPlease select the input directory containing videos...")
     prepare_root_for_dialog()
-    
     try:
         # Ensure root is active and ready for dialog (especially on Windows)
         root.update_idletasks()
@@ -1533,7 +1556,6 @@ def process_videos_in_directory(existing_root=None):
         # Small delay to ensure window is ready (especially on Windows)
         root.after(50, lambda: None)
         root.update()
-        
         input_dir = filedialog.askdirectory(
             parent=root, title="Select the input directory containing videos"
         )
@@ -1561,7 +1583,6 @@ def process_videos_in_directory(existing_root=None):
                 root.update()
             except Exception:
                 pass
-    
     if not input_dir:
         print("No input directory selected.")
         try:
@@ -1569,13 +1590,11 @@ def process_videos_in_directory(existing_root=None):
         except Exception:
             pass
         return
-    
     print(f"Input directory selected: {input_dir}")
 
     # Select output base directory
     print("\nPlease select the base output directory...")
     prepare_root_for_dialog()
-    
     try:
         # Ensure root is active and ready for dialog (especially on Windows)
         root.update_idletasks()
@@ -1583,7 +1602,6 @@ def process_videos_in_directory(existing_root=None):
         # Small delay to ensure window is ready (especially on Windows)
         root.after(50, lambda: None)
         root.update()
-        
         output_base = filedialog.askdirectory(parent=root, title="Select the base output directory")
         root.update_idletasks()
         root.update()
@@ -1609,7 +1627,6 @@ def process_videos_in_directory(existing_root=None):
                 root.update()
             except Exception:
                 pass
-        
     if not output_base:
         print("No output directory selected.")
         try:
@@ -1617,7 +1634,6 @@ def process_videos_in_directory(existing_root=None):
         except Exception:
             pass
         return
-    
     print(f"Output directory selected: {output_base}")
 
     # Get pose configuration
@@ -1631,9 +1647,9 @@ def process_videos_in_directory(existing_root=None):
         root.update()
     except Exception as e:
         print(f"Warning: Could not prepare root for configuration dialog: {e}")
-    
+
     pose_config = get_pose_config(root)
-    
+
     # Hide root again after configuration (only if we created it)
     if existing_root is None and platform.system() != "Windows":
         # On Windows, keep root visible for subsequent dialogs if needed
@@ -1641,11 +1657,11 @@ def process_videos_in_directory(existing_root=None):
             root.withdraw()
         except Exception:
             pass
-    
+
     if not pose_config:
         print("Pose configuration cancelled or failed.")
         return
-    
+
     print("Pose configuration completed successfully.")
 
     # Load YOLO model if necessary
