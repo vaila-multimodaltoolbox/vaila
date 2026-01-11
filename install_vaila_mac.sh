@@ -602,7 +602,7 @@ if [ ! -f "pyproject.toml" ]; then
     exit 1
 fi
 
-uv run python vaila.py
+uv run --no-sync python vaila.py
 
 echo
 echo "Program finished. Press Enter to close this window..."
