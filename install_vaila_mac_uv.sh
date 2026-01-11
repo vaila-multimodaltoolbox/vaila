@@ -20,8 +20,8 @@
 #                                                                                       #
 # Author: Prof. Dr. Paulo R. P. Santiago                                                #
 # Creation: 20 November 2025      
-# Update: 17 December 2025                                                              #
-# Version: 0.2.1                                                                        #
+# Update: 11 January 2026                                                              #
+# Version: 0.3.0                                                                        #
 # OS: macOS (Apple Silicon or Intel)                                                    #
 #########################################################################################
 
@@ -184,14 +184,15 @@ if [ ! -f ".python-version" ]; then
     uv python pin 3.12.12
 fi
 
-# Create virtual environment explicitly
+# Create virtual environment explicitly (or use existing)
 echo ""
-echo "Creating virtual environment (.venv)..."
-if [ -d ".venv" ]; then
-    echo "Virtual environment already exists. Removing old one..."
-    rm -rf .venv
+echo "Creating/updating virtual environment (.venv)..."
+if [ ! -d ".venv" ]; then
+    echo "Creating new virtual environment..."
+    uv venv --python 3.12.12
+else
+    echo "Virtual environment already exists. uv sync will update it as needed."
 fi
-uv venv --python 3.12.12
 
 # Generate lock file
 echo ""
@@ -316,6 +317,15 @@ cd "$VAILA_HOME" || {
 
 # Ensure uv is in PATH
 export PATH="\$HOME/.local/bin:\$HOME/.cargo/bin:\$PATH"
+
+# Add Homebrew paths to ensure Tkinter and FFmpeg are found
+# Homebrew on Apple Silicon uses /opt/homebrew, on Intel uses /usr/local
+if [ -d "/opt/homebrew/bin" ]; then
+    export PATH="/opt/homebrew/bin:\$PATH"
+fi
+if [ -d "/usr/local/bin" ]; then
+    export PATH="/usr/local/bin:\$PATH"
+fi
 
 # Verify we're in the correct directory (must have pyproject.toml and .venv)
 if [ ! -f "pyproject.toml" ]; then
@@ -541,6 +551,20 @@ echo "Setting application icon..."
 if [ -f "$APP_DIR/Contents/Resources/vaila.icns" ]; then
     echo "Applying icon to app bundle using Python script..."
     
+    # Ensure pyobjc-framework-Cocoa is installed before running set_mac_icon.py
+    echo "Ensuring pyobjc-framework-Cocoa is installed..."
+    if ! uv pip list | grep -q "pyobjc-framework-Cocoa"; then
+        echo "Installing pyobjc-framework-Cocoa..."
+        uv pip install pyobjc-framework-Cocoa || {
+            echo "Warning: Failed to install pyobjc-framework-Cocoa. Icon setting may fail."
+        }
+    fi
+    
+    # Check if set_mac_icon.py exists
+    if [ ! -f "$PROJECT_DIR/set_mac_icon.py" ]; then
+        echo "Warning: set_mac_icon.py not found at $PROJECT_DIR/set_mac_icon.py"
+        echo "Skipping icon application. Icon will use default macOS behavior."
+    else
     # Ensure we're in the project directory for uv to work correctly
     cd "$VAILA_HOME"
     
@@ -557,6 +581,7 @@ if [ -f "$APP_DIR/Contents/Resources/vaila.icns" ]; then
         echo "Icon applied successfully to installation directory."
     else
         echo "Warning: Failed to apply icon to installation directory."
+        fi
     fi
 
     # Force Finder refresh

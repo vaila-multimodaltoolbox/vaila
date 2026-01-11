@@ -8,7 +8,7 @@
 #                                                                                       #
 # Usage:                                                                                #
 #   1. First run the installation script to create ~/vaila:                             #
-#      ./install_vaila_mac_uv.sh                                                        #
+#      ./install_vaila_mac.sh                                                           #
 #   2. Then run this script to create the .dmg installer:                               #
 #      ./create_dmg_installer.sh                                                        #
 #                                                                                       #
@@ -19,7 +19,8 @@
 #                                                                                       #
 # Author: Prof. Dr. Paulo R. P. Santiago                                                #
 # Creation: 20 November 2025                                                           #
-# Version: 0.1.0                                                                        #
+# Update: 11 January 2026                                                              #
+# Version: 0.3.0                                                                        #
 # OS: macOS                                                                             #
 #########################################################################################
 
@@ -42,6 +43,13 @@ if ! command -v hdiutil &> /dev/null; then
     exit 1
 fi
 
+# Check if rsync is available (required for file copying)
+if ! command -v rsync &> /dev/null; then
+    echo "Error: rsync is not available. Please install it:"
+    echo "  brew install rsync"
+    exit 1
+fi
+
 # Define paths
 USER_HOME="$HOME"
 VAILA_HOME="$USER_HOME/vaila"
@@ -57,8 +65,8 @@ if [ ! -f "$PROJECT_DIR/pyproject.toml" ]; then
     exit 1
 fi
 
-if [ ! -f "$PROJECT_DIR/install_vaila_mac_uv.sh" ]; then
-    echo "Error: install_vaila_mac_uv.sh not found in $PROJECT_DIR"
+if [ ! -f "$PROJECT_DIR/install_vaila_mac.sh" ]; then
+    echo "Error: install_vaila_mac.sh not found in $PROJECT_DIR"
     echo "Please run this script from the vaila project root directory."
     exit 1
 fi
@@ -105,7 +113,7 @@ rsync -av \
     "$PROJECT_DIR/" "$INSTALLER_DIR/"
 
 # Make install script executable
-chmod +x "$INSTALLER_DIR/install_vaila_mac_uv.sh"
+chmod +x "$INSTALLER_DIR/install_vaila_mac.sh"
 
 # Create Applications symlink (for drag-and-drop install)
 echo "Creating Applications symlink..."
@@ -122,12 +130,16 @@ To install vaila:
 1. Double-click "vaila_installer" folder
 2. Open Terminal and run:
    cd vaila_installer
-   ./install_vaila_mac_uv.sh
+   ./install_vaila_mac.sh
 
    OR simply drag "vaila_installer" folder to your Desktop,
    open Terminal, and run:
    cd ~/Desktop/vaila_installer
-   ./install_vaila_mac_uv.sh
+   ./install_vaila_mac.sh
+   
+   Note: The installer will ask you to choose between:
+   - Option 1: uv (recommended, modern, fast)
+   - Option 2: Conda (legacy, for compatibility)
 
 3. The installer will:
    - Install uv (if needed)
@@ -198,13 +210,48 @@ hdiutil create -srcfolder "$DMG_TEMP_DIR" -volname "vaila Installer" -fs HFS+ -f
 # Mount the DMG
 echo "Mounting DMG to configure appearance..."
 MOUNT_DIR="/Volumes/vaila Installer"
-DEVICE=$(hdiutil attach -readwrite -noverify -noautoopen "$DMG_OUTPUT.temp.dmg" | grep -E '^/dev/' | sed 1q | awk '{print $1}')
+DEVICE=""
+
+# Attach DMG and capture device
+if ! DEVICE=$(hdiutil attach -readwrite -noverify -noautoopen "$DMG_OUTPUT.temp.dmg" 2>&1 | grep -E '^/dev/' | head -1 | awk '{print $1}'); then
+    echo "Error: Failed to mount DMG file."
+    echo "Attempting to unmount any existing mounts..."
+    hdiutil detach "$MOUNT_DIR" 2>/dev/null || true
+    echo "Please try running the script again."
+    exit 1
+fi
+
+if [ -z "$DEVICE" ]; then
+    echo "Error: Could not determine DMG device. DMG may have already been mounted."
+    echo "Checking for existing mount..."
+    if mount | grep -q "$MOUNT_DIR"; then
+        echo "DMG appears to be already mounted at $MOUNT_DIR"
+        DEVICE=$(mount | grep "$MOUNT_DIR" | awk '{print $1}')
+    else
+        echo "Attempting alternative mount method..."
+        DEVICE=$(hdiutil attach -readwrite -noverify -noautoopen "$DMG_OUTPUT.temp.dmg" 2>&1 | tail -1 | awk '{print $1}')
+    fi
+fi
+
+if [ -z "$DEVICE" ]; then
+    echo "Error: Failed to determine DMG device. Skipping window customization."
+    echo "DMG will be created but without custom window appearance."
+    # Continue anyway - the DMG will work, just without custom appearance
+else
+    echo "DMG mounted at device: $DEVICE"
 
 # Wait for mount to complete
 echo "Waiting for DMG to mount..."
 sleep 3
 
-# Configure DMG window appearance using AppleScript
+    # Verify mount point exists
+    if [ ! -d "$MOUNT_DIR" ]; then
+        echo "Warning: Mount point $MOUNT_DIR not found. Window customization may fail."
+    fi
+fi
+
+# Configure DMG window appearance using AppleScript (only if mount succeeded)
+if [ -n "$DEVICE" ] && [ -d "$MOUNT_DIR" ]; then
 echo "Configuring DMG window appearance..."
 osascript << 'APPLESCRIPT'
 tell application "Finder"
@@ -259,7 +306,18 @@ sleep 2
 
 # Unmount the DMG
 echo "Unmounting DMG..."
-hdiutil detach "$DEVICE"
+    if [ -n "$DEVICE" ]; then
+        hdiutil detach "$DEVICE" 2>/dev/null || {
+            echo "Warning: Failed to detach DMG. Attempting force detach..."
+            hdiutil detach "$DEVICE" -force 2>/dev/null || true
+        }
+    else
+        # Try to detach by mount point
+        hdiutil detach "$MOUNT_DIR" 2>/dev/null || true
+    fi
+else
+    echo "Skipping DMG window customization (mount verification failed)."
+fi
 
 # Convert to read-only/compressed DMG
 echo "Converting to final DMG format..."
@@ -283,8 +341,31 @@ if [ -n "$DMG_ICON" ]; then
     echo "Found icon at: $DMG_ICON"
     # Use Python script to set DMG file icon
     echo "Setting DMG file icon using Python script..."
+    
+    # Check if uv is available
+    if ! command -v uv &> /dev/null; then
+        echo "Warning: uv is not installed. Skipping icon setting via Python script."
+        echo "You can set the icon manually or install uv and run:"
+        echo "  uv pip install pyobjc-framework-Cocoa"
+        echo "  uv run python $PROJECT_DIR/set_mac_icon.py \"$DMG_OUTPUT\" \"$DMG_ICON\""
+    # Check if set_mac_icon.py exists
+    elif [ ! -f "$PROJECT_DIR/set_mac_icon.py" ]; then
+        echo "Warning: set_mac_icon.py not found at $PROJECT_DIR/set_mac_icon.py"
+        echo "Skipping icon setting. DMG file will use default icon."
+    else
     # Change to project directory to ensure uv can find pyproject.toml
     cd "$PROJECT_DIR"
+        
+        # Ensure pyobjc-framework-Cocoa is installed before running set_mac_icon.py
+        echo "Ensuring pyobjc-framework-Cocoa is installed..."
+        if ! uv pip list 2>/dev/null | grep -q "pyobjc-framework-Cocoa"; then
+            echo "Installing pyobjc-framework-Cocoa..."
+            uv pip install pyobjc-framework-Cocoa || {
+                echo "Warning: Failed to install pyobjc-framework-Cocoa. Icon setting may fail."
+            }
+        fi
+        
+        # Run the Python script using uv run python
     if uv run python "$PROJECT_DIR/set_mac_icon.py" "$DMG_OUTPUT" "$DMG_ICON"; then
         echo "DMG file icon set successfully."
     else
@@ -298,6 +379,8 @@ if [ -n "$DMG_ICON" ]; then
             SetFile -a C "$DMG_OUTPUT" 2>/dev/null || true
         fi
     fi
+    fi
+    
     # Update Finder cache
     touch "$DMG_OUTPUT" 2>/dev/null || true
     killall Finder 2>/dev/null || true
@@ -324,6 +407,7 @@ echo "  1. Double-click the .dmg file to mount it"
 echo "  2. Copy the 'vaila_installer' folder to their Desktop or desired location"
 echo "  3. Open Terminal and run:"
 echo "     cd ~/Desktop/vaila_installer"
-echo "     ./install_vaila_mac_uv.sh"
+echo "     ./install_vaila_mac.sh"
+echo "     (The installer will ask you to choose between uv or Conda installation method)"
 echo ""
 

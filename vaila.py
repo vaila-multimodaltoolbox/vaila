@@ -2,17 +2,19 @@
 ===============================================================================
 vaila.py
 ===============================================================================
-Author: Prof. Paulo R. P. Santiago
-Date: 07 October 2024
-Update: 09 January 2026
-Version updated: 0.3.7
-Python Version: 3.12.12
+Author: Paulo Roberto Pereira Santiago
+Email: paulosantiago@usp.br
+GitHub: https://github.com/vaila-multimodaltoolbox/vaila
+Creation Date: 07 October 2024
+Update Date: 11 January 2026
+Version: 0.3.8
 
 Example of usage:
 First activate the vaila environment:
 conda activate vaila
 Then run the vaila.py script:
 python vaila.py
+uv run vaila.py
 
 Description:
 ------------
@@ -90,7 +92,6 @@ def run_vaila_module(module_name, script_path=None):
             if not os.path.exists(full_script_path):
                 # Try without vaila prefix
                 full_script_path = os.path.join(vaila_dir, script_path)
-            
             if os.path.exists(full_script_path):
                 print(f"Running script directly: {full_script_path}")
                 subprocess.Popen(
@@ -104,7 +105,6 @@ def run_vaila_module(module_name, script_path=None):
         except Exception as e:
             print(f"Error running script directly: {e}")
             # Fall through to try module import
-    
     try:
         # Try to run the module directly (will import __init__.py)
         print(f"Running module: {module_name}")
@@ -152,7 +152,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 09.January.2026 v0.3.7 (Python 3.12.12)
+vailá - 10.January.2026 v0.3.8 (Python 3.12.12)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -205,7 +205,7 @@ C_A_r4_c1 - ReID Marker   C_A_r4_c2 - vailá          C_A_r4_c3 - vailá
 
 -> C_B: Video and Image
 C_B_r1_c1 - Video<-->PNG  C_B_r1_c2 - vailá          C_B_r1_c3 - Draw Box
-C_B_r2_c1 - Compress  C_B_r2_c2 - vailá          C_B_r2_c3 - Make Sync file
+C_B_r2_c1 - Compress      C_B_r2_c2 - vailá          C_B_r2_c3 - Make Sync file
 C_B_r3_c1 - GetPixelCoord C_B_r3_c2 - Metadata info  C_B_r3_c3 - Merge Videos
 C_B_r4_c1 - Distort video C_B_r4_c2 - Cut Video      C_B_r4_c3 - Resize Video
 C_B_r5_c1 - YT Downloader C_B_r5_c2 - Insert Audio   C_B_r5_c3 - rm Dup PNG
@@ -258,7 +258,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 09.January.2026 v0.3.7 (Python 3.12.12)")
+        self.title("vailá - 10.January.2026 v0.3.8 (Python 3.12.12)")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -1508,7 +1508,6 @@ class Vaila(tk.Tk):
         dialog.geometry("600x400")
         dialog.transient(self)
         dialog.grab_set()
-        
         # Center the dialog
         dialog.update_idletasks()
         x = (dialog.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
@@ -1620,7 +1619,9 @@ class Vaila(tk.Tk):
                     print("Launching: vaila.markerless2d_analysis_v2")
                     print("Features: Multi-person detection with YOLOv11, slower but more accurate")
                     print("=" * 60 + "\n")
-                    run_vaila_module("vaila.markerless2d_analysis_v2", script_path="markerless2d_analysis_v2.py")
+                    run_vaila_module(
+                        "vaila.markerless2d_analysis_v2", script_path="markerless2d_analysis_v2.py"
+                    )
             except Exception as e:
                 print(f"\nERROR: Failed to launch markerless analysis: {e}\n")
                 messagebox.showerror("Error", f"Failed to launch markerless analysis: {e}")
