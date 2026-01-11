@@ -52,8 +52,12 @@ All buttons in the vailá GUI (`vaila.py`) are documented in **[vaila_buttons/](
    **Windows (Recommended):**
 
    ```powershell
-   .\install_vaila_win_uv.ps1
+   .\install_vaila_win.ps1
    ```
+   
+   The script will prompt you to choose between:
+   - **uv** (recommended - modern, fast)
+   - **Conda** (legacy - for compatibility)
 
    **Linux and macOS (Using uv):**
 
