@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 28 October 2024
-Update Date: 08 January 2026
-Version: 0.0.9
+Update Date: 11 January 2026
+Version: 0.0.10
 Description:
     Draw boxes on videos.
     This script is a modified version of the original drawboxe.py script.
@@ -62,22 +62,26 @@ def get_precise_video_metadata(video_path):
     try:
         cmd = [
             "ffprobe",
-            "-v", "error",
-            "-print_format", "json",
+            "-v",
+            "error",
+            "-print_format",
+            "json",
             "-show_format",
             "-show_streams",
             str(video_path),
         ]
-        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+        result = subprocess.run(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True
+        )
         data = json.loads(result.stdout)
-        
+
         # Find video stream
         video_stream = None
         for stream in data.get("streams", []):
             if stream.get("codec_type") == "video":
                 video_stream = stream
                 break
-        
+
         if not video_stream:
             # Fallback to OpenCV if ffprobe fails
             cap = cv2.VideoCapture(str(video_path))
@@ -95,11 +99,11 @@ def get_precise_video_metadata(video_path):
                 "avg_frame_rate": None,
                 "nb_frames": total_frames,
             }
-        
+
         # Get precise FPS from r_frame_rate or avg_frame_rate
         r_frame_rate_str = video_stream.get("r_frame_rate", "0/0")
         avg_frame_rate_str = video_stream.get("avg_frame_rate", "0/0")
-        
+
         # Convert fraction strings to float
         def fraction_to_float(frac_str):
             try:
@@ -109,13 +113,13 @@ def get_precise_video_metadata(video_path):
                 return float(frac_str)
             except (ValueError, ZeroDivisionError):
                 return None
-        
+
         r_fps = fraction_to_float(r_frame_rate_str)
         avg_fps = fraction_to_float(avg_frame_rate_str)
-        
+
         # Use avg_frame_rate if available, otherwise r_frame_rate
         fps = avg_fps if avg_fps and avg_fps > 0 else (r_fps if r_fps and r_fps > 0 else 30.0)
-        
+
         # Get frame count if available
         nb_frames = None
         try:
@@ -123,12 +127,12 @@ def get_precise_video_metadata(video_path):
                 nb_frames = int(video_stream["nb_frames"])
         except (ValueError, TypeError):
             nb_frames = None
-        
+
         # Calculate frame count from duration and FPS if nb_frames not available
         duration = float(data.get("format", {}).get("duration", 0))
         if nb_frames is None and duration > 0 and fps > 0:
             nb_frames = int(round(duration * fps))
-        
+
         return {
             "fps": fps,
             "width": video_stream.get("width"),
@@ -176,7 +180,7 @@ def extract_frames(video_path, frames_dir):
         os.makedirs(frames_dir, exist_ok=True)
         video_path = os.path.normpath(os.path.abspath(video_path))
         frames_dir = os.path.normpath(os.path.abspath(frames_dir))
-        
+
         # Use ffmpeg with frame-accurate extraction
         # -vsync 0 ensures no frame dropping or duplication
         # -start_number 1 ensures frame numbering starts at 1
@@ -184,20 +188,24 @@ def extract_frames(video_path, frames_dir):
             "ffmpeg",
             "-i",
             video_path,
-            "-vsync", "0",  # Don't drop or duplicate frames
-            "-start_number", "1",  # Start numbering at 1
+            "-vsync",
+            "0",  # Don't drop or duplicate frames
+            "-start_number",
+            "1",  # Start numbering at 1
             os.path.join(frames_dir, "frame_%09d.png"),
         ]
-        
+
         if os.name == "nt":
             result = subprocess.run(command, check=True, capture_output=True, text=True, shell=True)
         else:
             result = subprocess.run(command, check=True, capture_output=True, text=True)
-        
+
         # Count extracted frames
-        frame_files = [f for f in os.listdir(frames_dir) if f.startswith("frame_") and f.endswith(".png")]
+        frame_files = [
+            f for f in os.listdir(frames_dir) if f.startswith("frame_") and f.endswith(".png")
+        ]
         print(f"Extracted {len(frame_files)} frames from {os.path.basename(video_path)}")
-        
+
     except subprocess.CalledProcessError as e:
         print(f"Error running ffmpeg: {e.stderr}")
         raise
@@ -212,44 +220,46 @@ def apply_boxes_directly_to_video(input_path, output_path, coordinates, selectio
     audio and metadata. Ensures all frames are preserved with original audio and metadata.
     """
     import tempfile
-    
+
     # Get precise metadata first
     metadata = get_precise_video_metadata(input_path)
     width = metadata["width"]
     height = metadata["height"]
     fps = metadata["fps"]
     total_frames = metadata.get("nb_frames")
-    
+
     vidcap = cv2.VideoCapture(input_path)
     if not vidcap.isOpened():
         print(f"Error: Could not open video {input_path}")
         return False
-    
+
     # Verify dimensions match
     actual_width = int(vidcap.get(cv2.CAP_PROP_FRAME_WIDTH))
     actual_height = int(vidcap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     if actual_width != width or actual_height != height:
-        print(f"Warning: Metadata dimensions ({width}x{height}) don't match video ({actual_width}x{actual_height})")
+        print(
+            f"Warning: Metadata dimensions ({width}x{height}) don't match video ({actual_width}x{actual_height})"
+        )
         width, height = actual_width, actual_height
-    
+
     # Get actual frame count if metadata didn't provide it
     if total_frames is None:
         total_frames = int(vidcap.get(cv2.CAP_PROP_FRAME_COUNT))
-    
+
     # Create temporary video file for processed frames (without audio)
     temp_video = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
     temp_video_path = temp_video.name
     temp_video.close()
-    
+
     # Use float FPS to preserve precision
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     out = cv2.VideoWriter(temp_video_path, fourcc, fps, (width, height))
-    
+
     if not out.isOpened():
         print(f"Error: Could not create temporary video {temp_video_path}")
         vidcap.release()
         return False
-    
+
     frame_count = 0
     frames_written = 0
 
@@ -258,7 +268,7 @@ def apply_boxes_directly_to_video(input_path, output_path, coordinates, selectio
         # Explicitly set frame position to ensure we don't skip frames
         vidcap.set(cv2.CAP_PROP_POS_FRAMES, frame_count)
         ret, frame = vidcap.read()
-        
+
         if not ret:
             # If we can't read this frame, try to continue but warn
             print(f"\nWarning: Could not read frame {frame_count + 1}, skipping...")
@@ -297,18 +307,18 @@ def apply_boxes_directly_to_video(input_path, output_path, coordinates, selectio
         out.write(frame)
         frames_written += 1
         frame_count += 1
-        
+
         if frame_count % 100 == 0 or frame_count == total_frames:
             print(
                 f"Processed {frame_count}/{total_frames} frames for {os.path.basename(input_path)}",
                 end="\r",
             )
-    
+
     print(f"\nCompleted processing frames: {frames_written}/{total_frames}")
-    
+
     out.release()
     vidcap.release()
-    
+
     # Verify frame count preservation
     if frames_written != total_frames:
         print(f"Warning: Frame count mismatch! Expected {total_frames}, wrote {frames_written}")
@@ -317,80 +327,92 @@ def apply_boxes_directly_to_video(input_path, output_path, coordinates, selectio
         except:
             pass
         return False
-    
+
     # Now use ffmpeg to combine processed video with original audio and preserve metadata
     try:
         # Check if ffmpeg is available
-        subprocess.run(["ffmpeg", "-version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
-        
+        subprocess.run(
+            ["ffmpeg", "-version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True
+        )
+
         fps_str = f"{fps:.6f}"
-        
+
         # Check if original video has audio stream
         probe_cmd = [
             "ffprobe",
-            "-v", "error",
-            "-select_streams", "a:0",
-            "-show_entries", "stream=codec_type",
-            "-of", "csv=p=0",
+            "-v",
+            "error",
+            "-select_streams",
+            "a:0",
+            "-show_entries",
+            "stream=codec_type",
+            "-of",
+            "csv=p=0",
             str(input_path),
         ]
         probe_result = subprocess.run(
-            probe_cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
+            probe_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
         )
         has_audio = probe_result.returncode == 0 and probe_result.stdout.strip() == "audio"
-        
+
         # Build ffmpeg command to combine video with audio and preserve metadata
         cmd = [
             "ffmpeg",
             "-y",  # Overwrite output
-            "-i", temp_video_path,  # Processed video (no audio)
-            "-i", str(input_path),  # Original video (for audio and metadata)
-            "-c:v", "libx264",  # Video codec
-            "-preset", "medium",  # Encoding preset
-            "-crf", "18",  # High quality
-            "-r", fps_str,  # Preserve exact FPS
-            "-map", "0:v",  # Use video from processed file
-            "-map_metadata", "1",  # Copy all metadata from original video
+            "-i",
+            temp_video_path,  # Processed video (no audio)
+            "-i",
+            str(input_path),  # Original video (for audio and metadata)
+            "-c:v",
+            "libx264",  # Video codec
+            "-preset",
+            "medium",  # Encoding preset
+            "-crf",
+            "18",  # High quality
+            "-r",
+            fps_str,  # Preserve exact FPS
+            "-map",
+            "0:v",  # Use video from processed file
+            "-map_metadata",
+            "1",  # Copy all metadata from original video
         ]
-        
+
         # Add audio mapping if available
         if has_audio:
             cmd.extend(["-map", "1:a?", "-c:a", "copy"])  # Copy audio codec (no re-encoding)
         else:
             print("Info: Original video has no audio stream, video will be saved without audio")
-        
-        cmd.extend([
-            "-pix_fmt", "yuv420p",  # Ensure compatibility
-            "-avoid_negative_ts", "make_zero",
-            str(output_path),
-        ])
-        
-        result = subprocess.run(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            check=True
+
+        cmd.extend(
+            [
+                "-pix_fmt",
+                "yuv420p",  # Ensure compatibility
+                "-avoid_negative_ts",
+                "make_zero",
+                str(output_path),
+            ]
         )
-        
+
+        result = subprocess.run(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True
+        )
+
         print(f"Combined video with audio and metadata: {os.path.basename(output_path)}")
-        
+
         # Clean up temporary file
         try:
             os.remove(temp_video_path)
         except:
             pass
-        
+
         return True
-        
+
     except (subprocess.CalledProcessError, FileNotFoundError) as e:
         # If ffmpeg fails or is not available, fallback to just using the temp video
         print(f"Warning: ffmpeg not available or failed, saving without audio/metadata: {e}")
         try:
             import shutil
+
             shutil.move(temp_video_path, output_path)
             print(f"Saved video without audio/metadata: {os.path.basename(output_path)}")
             return True
@@ -453,22 +475,24 @@ def reassemble_video(frames_dir, output_path, fps, total_frames=None, original_v
     Ensures all frames are included and FPS is preserved exactly.
     """
     import tempfile
-    
+
     # Count actual frames in directory
-    frame_files = sorted([f for f in os.listdir(frames_dir) if f.startswith("frame_") and f.endswith(".png")])
+    frame_files = sorted(
+        [f for f in os.listdir(frames_dir) if f.startswith("frame_") and f.endswith(".png")]
+    )
     actual_frame_count = len(frame_files)
-    
+
     if total_frames is not None and actual_frame_count != total_frames:
         print(f"Warning: Expected {total_frames} frames, found {actual_frame_count} in directory")
-    
+
     # Use precise FPS (6 decimal places) for scientific accuracy
     fps_str = f"{fps:.6f}"
-    
+
     # Create temporary video file (without audio) first
     temp_video = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
     temp_video_path = temp_video.name
     temp_video.close()
-    
+
     # Build ffmpeg command to create video from frames (no audio)
     command = [
         "ffmpeg",
@@ -490,23 +514,19 @@ def reassemble_video(frames_dir, output_path, fps, total_frames=None, original_v
         "-avoid_negative_ts",
         "make_zero",  # Avoid timestamp issues
     ]
-    
+
     # If we know the exact frame count, specify it
     if total_frames is not None:
         command.extend(["-frames:v", str(total_frames)])
     elif actual_frame_count > 0:
         # Use actual frame count as fallback
         command.extend(["-frames:v", str(actual_frame_count)])
-    
+
     command.append(str(temp_video_path))
-    
+
     try:
         result = subprocess.run(
-            command,
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
+            command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
         )
         print(f"Created video from frames: {actual_frame_count} frames at {fps_str} fps")
     except subprocess.CalledProcessError as e:
@@ -516,76 +536,86 @@ def reassemble_video(frames_dir, output_path, fps, total_frames=None, original_v
         except:
             pass
         raise
-    
+
     # If original video path is provided, combine with audio and metadata
     if original_video_path and os.path.exists(original_video_path):
         try:
             # Check if original video has audio stream
             probe_cmd = [
                 "ffprobe",
-                "-v", "error",
-                "-select_streams", "a:0",
-                "-show_entries", "stream=codec_type",
-                "-of", "csv=p=0",
+                "-v",
+                "error",
+                "-select_streams",
+                "a:0",
+                "-show_entries",
+                "stream=codec_type",
+                "-of",
+                "csv=p=0",
                 str(original_video_path),
             ]
             probe_result = subprocess.run(
-                probe_cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
+                probe_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
             )
             has_audio = probe_result.returncode == 0 and probe_result.stdout.strip() == "audio"
-            
+
             # Build command to combine video with audio and metadata
             combine_cmd = [
                 "ffmpeg",
                 "-y",
-                "-i", temp_video_path,  # Processed video (no audio)
-                "-i", str(original_video_path),  # Original video (for audio and metadata)
-                "-c:v", "libx264",  # Video codec
-                "-preset", "medium",
-                "-crf", "18",
-                "-r", fps_str,  # Preserve exact FPS
-                "-map", "0:v",  # Use video from processed file
-                "-map_metadata", "1",  # Copy all metadata from original
+                "-i",
+                temp_video_path,  # Processed video (no audio)
+                "-i",
+                str(original_video_path),  # Original video (for audio and metadata)
+                "-c:v",
+                "libx264",  # Video codec
+                "-preset",
+                "medium",
+                "-crf",
+                "18",
+                "-r",
+                fps_str,  # Preserve exact FPS
+                "-map",
+                "0:v",  # Use video from processed file
+                "-map_metadata",
+                "1",  # Copy all metadata from original
             ]
-            
+
             # Add audio mapping if available (use ? to make it optional)
             if has_audio:
                 combine_cmd.extend(["-map", "1:a?", "-c:a", "copy"])  # Copy audio codec
             else:
                 print("Info: Original video has no audio stream, video will be saved without audio")
-            
-            combine_cmd.extend([
-                "-pix_fmt", "yuv420p",
-                "-avoid_negative_ts", "make_zero",
-                str(output_path),
-            ])
-            
-            result = subprocess.run(
-                combine_cmd,
-                check=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
+
+            combine_cmd.extend(
+                [
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-avoid_negative_ts",
+                    "make_zero",
+                    str(output_path),
+                ]
             )
-            
+
+            result = subprocess.run(
+                combine_cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+            )
+
             print(f"Combined with audio and metadata: {os.path.basename(output_path)}")
-            
+
             # Clean up temporary file
             try:
                 os.remove(temp_video_path)
             except:
                 pass
-            
+
             return True
-            
+
         except (subprocess.CalledProcessError, FileNotFoundError) as e:
             print(f"Warning: Could not combine with audio/metadata, using video only: {e}")
             # Fallback: just use the temp video
             try:
                 import shutil
+
                 shutil.move(temp_video_path, output_path)
                 print(f"Saved video without audio/metadata: {os.path.basename(output_path)}")
                 return True
@@ -600,6 +630,7 @@ def reassemble_video(frames_dir, output_path, fps, total_frames=None, original_v
         # No original video provided, just use the temp video
         try:
             import shutil
+
             shutil.move(temp_video_path, output_path)
             print(f"Saved video: {os.path.basename(output_path)}")
             return True
@@ -1778,13 +1809,13 @@ def run_drawboxe():
     for video_file in video_files:
         input_path = os.path.join(video_directory, video_file)
         final_output_path = os.path.join(output_dir, f"{os.path.splitext(video_file)[0]}_dbox.mp4")
-        
+
         # Get precise video metadata to preserve frame count and FPS
         print(f"\nProcessing: {video_file}")
         metadata = get_precise_video_metadata(input_path)
         fps = metadata["fps"]
         total_frames = metadata.get("nb_frames")
-        
+
         if frame_intervals:
             frames_dir = os.path.join(video_directory, "frames_temp")
             if os.path.exists(frames_dir):
@@ -1792,7 +1823,9 @@ def run_drawboxe():
             extract_frames(input_path, frames_dir)
             apply_boxes_to_frames(frames_dir, coordinates, selections, colors, frame_intervals)
             # Pass precise FPS, total frame count, and original video path to preserve audio and metadata
-            reassemble_video(frames_dir, final_output_path, fps, total_frames, original_video_path=input_path)
+            reassemble_video(
+                frames_dir, final_output_path, fps, total_frames, original_video_path=input_path
+            )
             clean_up(frames_dir)
         else:
             # apply_boxes_directly_to_video now uses precise metadata internally

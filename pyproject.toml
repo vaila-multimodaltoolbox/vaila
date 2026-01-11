@@ -47,9 +47,6 @@ dependencies = [
     # Web frameworks
     "flask",
     "dash",
-    "dash-core-components",
-    "dash-html-components",
-    "dash-table",
     "werkzeug",
     "itsdangerous",
     "blinker",
@@ -70,7 +67,7 @@ dependencies = [
     "mediapipe==0.10.31",
     "torch",
     "torchvision",
-    "ultralytics==8.3.250",
+    "ultralytics",
     "boxmot",
     "requests",
     # 3D processing
@@ -122,8 +119,11 @@ dependencies = [
     "pyzmq",
     "protobuf",
     "pyobjc-framework-Cocoa; sys_platform == 'darwin'",
-    "opencv-python==4.12.0.88",
-    "ruff>=0.14.10",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff",
 ]
 
 [project.scripts]
