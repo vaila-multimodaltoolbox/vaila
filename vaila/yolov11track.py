@@ -2314,6 +2314,7 @@ def _process_pose_from_csv(
     """
 
     # Load pose model
+    # Models are downloaded to vaila/models/ directory
     models_dir = os.path.join(os.path.dirname(__file__), "models")
     os.makedirs(models_dir, exist_ok=True)
     pose_model_path = os.path.join(models_dir, pose_model_name)
@@ -2547,6 +2548,7 @@ def process_pose_in_bboxes(tracking_dir, device="cpu", pose_model_name="yolo11n-
     print(f"Found {len(csv_files)} tracking CSV files")
 
     # Load pose model
+    # Models are downloaded to vaila/models/ directory
     models_dir = os.path.join(os.path.dirname(__file__), "models")
     os.makedirs(models_dir, exist_ok=True)
     pose_model_path = os.path.join(models_dir, pose_model_name)
@@ -2824,6 +2826,7 @@ def run_yolov11track():
             return
     else:
         # Pre-trained model - build the path in models directory
+        # Models are downloaded to vaila/models/ directory
         models_dir = os.path.join(os.path.dirname(__file__), "models")
         os.makedirs(models_dir, exist_ok=True)
         model_path = os.path.join(models_dir, model_name)
