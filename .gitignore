@@ -165,3 +165,5 @@ hooks/*
 !hooks/pre-commit
 !install-hooks.sh
 
+# Ignore all .pt files at root level
+*.pt
