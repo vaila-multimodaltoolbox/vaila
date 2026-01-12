@@ -133,8 +133,9 @@
             <div class="module-section">
                 <h3>Camera Views</h3>
                 <div class="keyboard-shortcut"><strong>1</strong> - Front view</div>
-                <div class="keyboard-shortcut"><strong>3</strong> - Right view</div>
-                <div class="keyboard-shortcut"><strong>7</strong> - Top view</div>
+                <div class="keyboard-shortcut"><strong>2</strong> - Right view</div>
+                <div class="keyboard-shortcut"><strong>3</strong> - Top view</div>
+                <div class="keyboard-shortcut"><strong>4</strong> - Isometric view</div>
                 <div class="keyboard-shortcut"><strong>R</strong> - Reset camera view</div>
                 <div class="keyboard-shortcut"><strong>L</strong> - Set custom view limits</div>
             </div>
@@ -173,9 +174,14 @@
             <div class="module-section">
                 <h3>Information</h3>
                 <div class="keyboard-shortcut"><strong>I</strong> - Show frame info</div>
-                <div class="keyboard-shortcut"><strong>O</strong> - Show camera parameters</div>
+                <div class="keyboard-shortcut"><strong>A</strong> - Show marker quality statistics (gaps, residuals)</div>
                 <div class="keyboard-shortcut"><strong>H</strong> - Show this help</div>
                 <div class="keyboard-shortcut"><strong>U</strong> - Override unit conversion (mm/m)</div>
+            </div>
+
+            <div class="module-section">
+                <h3>Editing</h3>
+                <div class="keyboard-shortcut"><strong>O</strong> - Create swap CSV file</div>
             </div>
         </div>
 
@@ -191,7 +197,19 @@
             <div class="module-section">
                 <h3>Video Export</h3>
                 <div class="keyboard-shortcut"><strong>V</strong> - Export MP4 (requires ffmpeg)</div>
-                <div class="keyboard-shortcut"><strong>9</strong> - Render turntable MP4 (requires ffmpeg)</div>
+                <div class="keyboard-shortcut"><strong>8</strong> - Render turntable MP4 (requires ffmpeg)</div>
+            </div>
+
+            <div class="module-section">
+                <h3>File Operations</h3>
+                <div class="keyboard-shortcut"><strong>N</strong> - Apply marker label swaps from CSV/TOML</div>
+                <div class="keyboard-shortcut"><strong>Ctrl+S</strong> - Save edited C3D file</div>
+            </div>
+
+            <div class="module-section">
+                <h3>Templates</h3>
+                <div class="keyboard-shortcut"><strong>9</strong> - Save swap template CSV</div>
+                <div class="keyboard-shortcut"><strong>0</strong> - Save skeleton template JSON</div>
             </div>
         </div>
 
@@ -215,6 +233,17 @@
         </div>
 
         <h2>Advanced Features</h2>
+
+        <div class="feature-highlight">
+            <h3>📊 Marker Quality Statistics (A key)</h3>
+            <ul>
+                <li>Analyze marker data quality and detect gaps</li>
+                <li>Display statistics: valid data percentage, gap count, max gap size</li>
+                <li>Show residual statistics (if available in C3D file)</li>
+                <li>Display event information and analog channel details</li>
+                <li>Summary statistics for all selected markers</li>
+            </ul>
+        </div>
 
         <div class="feature-highlight">
             <h3>🎯 Marker Trails (W key)</h3>
@@ -247,12 +276,44 @@
         </div>
 
         <div class="feature-highlight">
+            <h3>🔄 Marker Label Swaps (N and O keys)</h3>
+            <ul>
+                <li><strong>N key:</strong> Apply marker label corrections from CSV or TOML files</li>
+                <li><strong>O key:</strong> Manual swap markers via dialog (visual editing)</li>
+                <li>Swap marker data (X, Y, Z, Residual) between markers</li>
+                <li>Support for single frame or frame range swaps</li>
+                <li>Automatic visualization update after applying swaps</li>
+                <li>Detailed log of applied corrections in terminal</li>
+            </ul>
+        </div>
+
+        <div class="feature-highlight">
+            <h3>💾 Save Edited C3D (Ctrl+S)</h3>
+            <ul>
+                <li>Save C3D files with any modifications made during the session</li>
+                <li>Includes all marker label swaps and edits</li>
+                <li>Suggests filename with "_fixed.c3d" suffix</li>
+                <li>Preserves all original C3D structure and metadata</li>
+            </ul>
+        </div>
+
+        <div class="feature-highlight">
             <h3>🎬 Video Export</h3>
             <ul>
                 <li><strong>V key:</strong> Export full animation as MP4</li>
-                <li><strong>9 key:</strong> Create turntable video (360° rotation)</li>
+                <li><strong>8 key:</strong> Create turntable video (360° rotation)</li>
                 <li>Requires ffmpeg installation</li>
                 <li>High-quality video output</li>
+            </ul>
+        </div>
+
+        <div class="feature-highlight">
+            <h3>📝 Template Generation (9 and 0 keys)</h3>
+            <ul>
+                <li><strong>9 key:</strong> Save marker swap template CSV with example entries</li>
+                <li><strong>0 key:</strong> Save skeleton template JSON with example connections</li>
+                <li>Templates include available markers from the current C3D file</li>
+                <li>Ready-to-use examples with proper formatting</li>
             </ul>
         </div>
 
@@ -318,9 +379,13 @@ ffmpeg (for video export)
         <div class="step">
             <h3>🆕 New Features</h3>
             <ul>
+                <li><strong>Marker Quality Statistics:</strong> Analyze marker data quality, gaps, and residuals (A key)</li>
                 <li><strong>Marker Trails:</strong> Visualize movement history with velocity coloring</li>
                 <li><strong>Skeleton Loading:</strong> Load and visualize skeleton connections from JSON</li>
                 <li><strong>Distance Measurement:</strong> Interactive distance measurement between markers</li>
+                <li><strong>Marker Label Swaps:</strong> Apply corrections from CSV/TOML files (N key)</li>
+                <li><strong>Save Edited C3D:</strong> Save C3D files with modifications (Ctrl+S)</li>
+                <li><strong>Improved Labels:</strong> Enhanced label visibility with hash-based colors and terminal output</li>
                 <li><strong>Video Export:</strong> Export animations and turntable videos</li>
                 <li><strong>Blender-like Views:</strong> Front, Right, Top views with numpad-style keys</li>
             </ul>

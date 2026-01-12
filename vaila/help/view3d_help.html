@@ -133,8 +133,9 @@
             <div class="module-section">
                 <h3>Vistas da Câmera</h3>
                 <div class="keyboard-shortcut"><strong>1</strong> - Vista frontal</div>
-                <div class="keyboard-shortcut"><strong>3</strong> - Vista lateral direita</div>
-                <div class="keyboard-shortcut"><strong>7</strong> - Vista superior</div>
+                <div class="keyboard-shortcut"><strong>2</strong> - Vista lateral direita</div>
+                <div class="keyboard-shortcut"><strong>3</strong> - Vista superior</div>
+                <div class="keyboard-shortcut"><strong>4</strong> - Vista isométrica</div>
                 <div class="keyboard-shortcut"><strong>R</strong> - Resetar vista da câmera</div>
                 <div class="keyboard-shortcut"><strong>L</strong> - Definir limites de vista personalizados</div>
             </div>
@@ -173,9 +174,14 @@
             <div class="module-section">
                 <h3>Informações</h3>
                 <div class="keyboard-shortcut"><strong>I</strong> - Mostrar informações do frame</div>
-                <div class="keyboard-shortcut"><strong>O</strong> - Mostrar parâmetros da câmera</div>
+                <div class="keyboard-shortcut"><strong>A</strong> - Mostrar estatísticas de qualidade dos marcadores (gaps, residuals)</div>
                 <div class="keyboard-shortcut"><strong>H</strong> - Mostrar esta ajuda</div>
                 <div class="keyboard-shortcut"><strong>U</strong> - Sobrescrever conversion de unidades (mm/m)</div>
+            </div>
+
+            <div class="module-section">
+                <h3>Edição</h3>
+                <div class="keyboard-shortcut"><strong>O</strong> - Criar arquivo CSV de swaps</div>
             </div>
         </div>
 
@@ -191,7 +197,19 @@
             <div class="module-section">
                 <h3>Exportação de Vídeo</h3>
                 <div class="keyboard-shortcut"><strong>V</strong> - Exportar MP4 (requer ffmpeg)</div>
-                <div class="keyboard-shortcut"><strong>9</strong> - Renderizar MP4 turntable (requer ffmpeg)</div>
+                <div class="keyboard-shortcut"><strong>8</strong> - Renderizar MP4 turntable (requer ffmpeg)</div>
+            </div>
+
+            <div class="module-section">
+                <h3>Operações de Arquivo</h3>
+                <div class="keyboard-shortcut"><strong>N</strong> - Aplicar trocas de labels de marcadores de CSV/TOML</div>
+                <div class="keyboard-shortcut"><strong>Ctrl+S</strong> - Salvar arquivo C3D editado</div>
+            </div>
+
+            <div class="module-section">
+                <h3>Templates</h3>
+                <div class="keyboard-shortcut"><strong>9</strong> - Salvar template CSV de swaps</div>
+                <div class="keyboard-shortcut"><strong>0</strong> - Salvar template JSON de skeleton</div>
             </div>
         </div>
 
@@ -215,6 +233,17 @@
         </div>
 
         <h2>Recursos Avançados</h2>
+
+        <div class="feature-highlight">
+            <h3>📊 Estatísticas de Qualidade dos Marcadores (tecla A)</h3>
+            <ul>
+                <li>Analisar qualidade dos dados dos marcadores e detectar gaps</li>
+                <li>Exibir estatísticas: percentual de dados válidos, número de gaps, tamanho máximo de gap</li>
+                <li>Mostrar estatísticas de residuals (se disponíveis no arquivo C3D)</li>
+                <li>Exibir informações de eventos e detalhes de canais analógicos</li>
+                <li>Estatísticas resumidas para todos os marcadores selecionados</li>
+            </ul>
+        </div>
 
         <div class="feature-highlight">
             <h3>🎯 Trilhas de Marcadores (tecla W)</h3>
@@ -247,12 +276,44 @@
         </div>
 
         <div class="feature-highlight">
+            <h3>🔄 Trocas de Labels de Marcadores (teclas N e O)</h3>
+            <ul>
+                <li><strong>Tecla N:</strong> Aplicar correções de labels de marcadores de arquivos CSV ou TOML</li>
+                <li><strong>Tecla O:</strong> Troca manual de marcadores via diálogo (edição visual)</li>
+                <li>Trocar dados de marcadores (X, Y, Z, Residual) entre marcadores</li>
+                <li>Suporte para trocas em frame único ou intervalo de frames</li>
+                <li>Atualização automática da visualização após aplicar trocas</li>
+                <li>Log detalhado de correções aplicadas no terminal</li>
+            </ul>
+        </div>
+
+        <div class="feature-highlight">
+            <h3>💾 Salvar C3D Editado (Ctrl+S)</h3>
+            <ul>
+                <li>Salvar arquivos C3D com modificações feitas durante a sessão</li>
+                <li>Inclui todas as trocas de labels e edições de marcadores</li>
+                <li>Sugere nome de arquivo com sufixo "_fixed.c3d"</li>
+                <li>Preserva toda a estrutura e metadados originais do C3D</li>
+            </ul>
+        </div>
+
+        <div class="feature-highlight">
             <h3>🎬 Exportação de Vídeo</h3>
             <ul>
                 <li><strong>Tecla V:</strong> Exportar animação completa como MP4</li>
-                <li><strong>Tecla 9:</strong> Criar vídeo turntable (rotação 360°)</li>
+                <li><strong>Tecla 8:</strong> Criar vídeo turntable (rotação 360°)</li>
                 <li>Requer instalação do ffmpeg</li>
                 <li>Saída de vídeo de alta qualidade</li>
+            </ul>
+        </div>
+
+        <div class="feature-highlight">
+            <h3>📝 Geração de Templates (teclas 9 e 0)</h3>
+            <ul>
+                <li><strong>Tecla 9:</strong> Salvar template CSV de swaps com exemplos</li>
+                <li><strong>Tecla 0:</strong> Salvar template JSON de skeleton com exemplos</li>
+                <li>Templates incluem marcadores disponíveis do arquivo C3D atual</li>
+                <li>Exemplos prontos para uso com formatação adequada</li>
             </ul>
         </div>
 
@@ -318,9 +379,13 @@ ffmpeg (para exportação de vídeo)
         <div class="step">
             <h3>🆕 Novos Recursos</h3>
             <ul>
+                <li><strong>Estatísticas de Qualidade dos Marcadores:</strong> Analisar qualidade dos dados, gaps e residuals (tecla A)</li>
                 <li><strong>Trilhas de Marcadores:</strong> Visualizar histórico de movimento com coloração por velocidade</li>
                 <li><strong>Carregamento de Esqueleto:</strong> Carregar e visualizar conexões de esqueleto do JSON</li>
                 <li><strong>Medição de Distância:</strong> Medição interativa de distância entre marcadores</li>
+                <li><strong>Trocas de Labels de Marcadores:</strong> Aplicar correções de arquivos CSV/TOML (tecla N)</li>
+                <li><strong>Salvar C3D Editado:</strong> Salvar arquivos C3D com modificações (Ctrl+S)</li>
+                <li><strong>Labels Melhorados:</strong> Maior visibilidade com cores baseadas em hash e saída no terminal</li>
                 <li><strong>Exportação de Vídeo:</strong> Exportar animações e vídeos turntable</li>
                 <li><strong>Vistas Estilo Blender:</strong> Vistas frontal, lateral e superior com teclas estilo numpad</li>
             </ul>
