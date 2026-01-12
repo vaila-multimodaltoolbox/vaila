@@ -119,6 +119,7 @@ dependencies = [
     "pyzmq",
     "protobuf",
     "pyobjc-framework-Cocoa; sys_platform == 'darwin'",
+    "ruff>=0.14.11",
 ]
 
 [project.optional-dependencies]

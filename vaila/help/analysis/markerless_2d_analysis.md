@@ -4,8 +4,8 @@
 
 - **Category:** Analysis
 - **File:** `vaila/markerless_2d_analysis.py`
-- **Lines:** 3659
-- **Version:** 0.7.1
+- **Lines:** 4259
+- **Version:** 0.7.3
 - **Author:** Paulo Roberto Pereira Santiago
 - **Email:** paulosantiago@usp.br
 - **GitHub:** https://github.com/vaila-multimodaltoolbox/vaila
@@ -20,8 +20,10 @@ This script performs batch processing of videos for 2D pose estimation using Med
 
 - **MediaPipe Pose Model**: 33 landmark detection and tracking (MediaPipe Tasks API 0.10.31+)
 - **Video Resize Functionality**: Optional upscaling (2x-8x) for better detection
-- **Bounding Box (ROI) Selection**: Select region of interest for small subjects or multi-person scenarios
+- **Bounding Box (BBox) ROI Selection**: Select rectangular region of interest from first video frame
+- **Polygon ROI Selection**: Select free-form polygonal region of interest (irregular shapes)
 - **Crop Resize**: Optional upscaling of cropped region for improved detection
+- **Initial Frame Padding**: Add repeated frames at start for MediaPipe stabilization
 - **Advanced Filtering**: Multiple smoothing algorithms (Butterworth, Savitzky-Golay, LOWESS, Spline, Kalman, ARIMA)
 - **Batch Processing**: Process multiple videos in a single operation
 - **Memory Management**: Intelligent memory management for large video files
@@ -106,12 +108,20 @@ This script performs batch processing of videos for 2D pose estimation using Med
 - **enable_padding** (True/False): Add initial frames for stabilization
 - **pad_start_frames** (0-120): Number of padding frames
 
-### Bounding Box (ROI) Settings
-- **enable_crop** (True/False): Enable bounding box cropping
-- **bbox_x_min, bbox_y_min, bbox_x_max, bbox_y_max** (pixels): ROI coordinates
-- **enable_resize_crop** (True/False): Resize the cropped region
+### ROI (Region of Interest) Settings
+- **enable_crop** (True/False): Enable ROI cropping (BBox or Polygon)
+- **BBox ROI**: Rectangular region selection
+  - **bbox_x_min, bbox_y_min, bbox_x_max, bbox_y_max** (pixels): BBox coordinates
+  - Use "Select BBox ROI" button to visually select rectangular region
+  - Drag to select, press SPACE/ENTER to confirm, ESC to cancel
+- **Polygon ROI**: Free-form polygonal region selection
+  - **roi_polygon_points**: List of polygon points [[x1, y1], [x2, y2], ...]
+  - Use "Select Polygon ROI" button to visually select polygonal region
+  - Left click to add points, right click to remove last point
+  - Press ENTER to confirm (minimum 3 points), ESC to cancel, 'R' to reset
+- **enable_resize_crop** (True/False): Resize the cropped region for better detection
 - **resize_crop_scale** (2-8): Scale factor for cropped region
-- **Visual ROI Selection**: Use "Select ROI from Video" button in GUI to visually select region
+- **When to use**: Multi-person scenarios, small subjects, excluding background
 
 ### Advanced Filtering Settings
 - **enable_advanced_filtering** (True/False): Apply smoothing and gap filling
@@ -266,6 +276,17 @@ rich>=13.0.0
 
 ## 📝 Version History
 
+- **v0.7.3** (January 2026): 
+  - Added Polygon ROI selection for free-form regions
+  - Improved BBox ROI selection with resizable window
+  - Added initial frame padding for MediaPipe stabilization
+  - Fixed coordinate mapping for both BBox and Polygon ROI
+  - Improved ROI coordinate conversion when video resize is enabled
+  - Enhanced TOML configuration to save/load ROI settings
+- **v0.7.2** (January 2026): 
+  - Added bounding box (BBox) ROI selection for small subjects
+  - Added crop resize functionality
+  - Added initial frame padding option
 - **v0.7.1** (January 2026): 
   - Migrated to MediaPipe Tasks API (0.10.31+)
   - Added bounding box (ROI) selection for small subjects

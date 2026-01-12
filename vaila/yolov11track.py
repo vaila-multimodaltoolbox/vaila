@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 18 February 2025
-Update Date: 11 January 2026
-Version: 0.0.6
+Update Date: 12 January 2026
+Version: 0.0.7
 
 Description:
     This script performs object detection and tracking on video files using the YOLO model v11.
@@ -35,6 +35,7 @@ License:
     This project is licensed under the terms of the MIT License (or another applicable license).
 
 Change History:
+    - 2026-01: Added ROI selection with improved visibility on macOS.
     - 2023-10: Initial version implemented, integrating detection and tracking with various configurable options.
     - 2025-03: Added color-coding for each tracker ID, improved GUI, and added more detailed help text.
     - 2025-03: Added support for multiple models and trackers.
@@ -48,6 +49,7 @@ Notes:
 """
 
 import colorsys
+import contextlib
 import csv
 import datetime
 import glob
@@ -59,7 +61,6 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-import contextlib
 import cv2
 import numpy as np
 import pandas as pd
@@ -246,7 +247,7 @@ def detect_optimal_device():
         if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
             return "mps"
     # Default to CPU
-        return "cpu"
+    return "cpu"
 
 
 def validate_device_choice(user_device):
@@ -374,6 +375,370 @@ def select_free_polygon_roi(video_path):
     Left click adds points, right click removes the last point, Enter confirms,
     Esc skips, and 'r' resets. Returns a numpy array of int32 points or None.
     """
+    # #region agent log
+    log_file = "/Users/preto/Desktop/Preto/vaila/.cursor/debug.log"
+    import json
+
+    def log_debug(location, message, data, hypothesis_id):
+        try:
+            with open(log_file, "a") as f:
+                f.write(
+                    json.dumps(
+                        {
+                            "sessionId": "debug-session",
+                            "runId": "run1",
+                            "hypothesisId": hypothesis_id,
+                            "location": location,
+                            "message": message,
+                            "data": data,
+                            "timestamp": int(__import__("time").time() * 1000),
+                        }
+                    )
+                    + "\n"
+                )
+        except Exception:
+            pass
+
+    # #endregion agent log
+
+    cap = None
+    window_name = None
+    try:
+        # #region agent log
+        log_debug(
+            "yolov11track.py:381", "ROI selection started", {"video_path": str(video_path)}, "A"
+        )
+        # #endregion agent log
+
+        # Extract first frame from video
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            print(f"Error: Could not open video file: {video_path}")
+            return None
+
+        # Read first frame
+        ret, frame = cap.read()
+        cap.release()
+        cap = None
+
+        if not ret or frame is None:
+            print("Error: Could not read first frame from video for ROI selection.")
+            return None
+
+        # #region agent log
+        h_orig, w_orig = frame.shape[:2]
+        log_debug(
+            "yolov11track.py:395",
+            "Original frame dimensions",
+            {"width": w_orig, "height": h_orig},
+            "A",
+        )
+        # #endregion agent log
+
+        # Scale frame to reasonable size for display (much larger window for better visibility on macOS)
+        scale = 1.0
+        h, w = frame.shape[:2]
+        # Use much larger max dimensions for better visibility on macOS (allows seeing all controls)
+        max_h = 1800  # Increased from 1200
+        max_w = 2400  # Increased from 1600
+        # Scale down if too large, but keep aspect ratio
+        if h > max_h or w > max_w:
+            scale_h = max_h / h if h > max_h else 1.0
+            scale_w = max_w / w if w > max_w else 1.0
+            scale = min(scale_h, scale_w)
+            frame = cv2.resize(frame, (int(w * scale), int(h * scale)))
+
+        # #region agent log
+        h_scaled, w_scaled = frame.shape[:2]
+        log_debug(
+            "yolov11track.py:428",
+            "After scaling",
+            {"width": w_scaled, "height": h_scaled, "scale": scale},
+            "A",
+        )
+        # #endregion agent log
+
+        roi_points = []
+        mouse_clicked = False  # Flag to provide visual feedback
+
+        def mouse_callback(event, x, y, flags, param):
+            nonlocal mouse_clicked
+            # #region agent log
+            log_debug(
+                "yolov11track.py:437",
+                "Mouse event",
+                {"event": event, "x": x, "y": y, "flags": flags},
+                "D",
+            )
+            # #endregion agent log
+            if event == cv2.EVENT_LBUTTONDOWN:
+                roi_points.append((x, y))
+                mouse_clicked = True
+                print(f"Point added: ({x}, {y}) - Total points: {len(roi_points)}")
+                # #region agent log
+                log_debug(
+                    "yolov11track.py:443",
+                    "Point added",
+                    {"point": (x, y), "total_points": len(roi_points)},
+                    "D",
+                )
+                # #endregion agent log
+            elif event == cv2.EVENT_RBUTTONDOWN and roi_points:
+                removed = roi_points.pop()
+                mouse_clicked = True
+                print(f"Point removed: {removed} - Total points: {len(roi_points)}")
+                # #region agent log
+                log_debug(
+                    "yolov11track.py:449",
+                    "Point removed",
+                    {"removed": removed, "total_points": len(roi_points)},
+                    "D",
+                )
+                # #endregion agent log
+
+        window_name = "Select ROI (Left: add, Right: undo, Enter: confirm, Esc: skip, r: reset)"
+
+        # #region agent log
+        log_debug(
+            "yolov11track.py:455",
+            "Creating window",
+            {"window_name": window_name, "frame_size": (w_scaled, h_scaled)},
+            "B",
+        )
+        # #endregion agent log
+
+        # Create window with WINDOW_NORMAL flag for resizability
+        # On macOS, use WINDOW_GUI_NORMAL for better window management
+        if platform.system() == "Darwin":
+            window_flags = cv2.WINDOW_GUI_NORMAL | cv2.WINDOW_KEEPRATIO
+        else:
+            window_flags = cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO
+
+        cv2.namedWindow(window_name, window_flags)
+
+        # Set mouse callback BEFORE showing window (important for macOS)
+        cv2.setMouseCallback(window_name, mouse_callback)
+
+        # #region agent log
+        log_debug("yolov11track.py:473", "Mouse callback set", {}, "D")
+        # #endregion agent log
+
+        # Show window first to ensure it exists
+        cv2.imshow(window_name, frame)
+        cv2.waitKey(1)  # Force window to appear
+
+        # Set window size after showing (important for macOS resizing)
+        try:
+            # Calculate desired window size - make it larger to see all controls
+            desired_w = max(1200, min(w_scaled, 2400))  # Increased from 800-1600
+            desired_h = max(900, min(h_scaled, 1800))  # Increased from 600-1200
+
+            # Resize window - try multiple times on macOS if needed
+            cv2.resizeWindow(window_name, desired_w, desired_h)
+
+            # On macOS, sometimes need to call resize multiple times
+            if platform.system() == "Darwin":
+                cv2.waitKey(10)  # Small delay
+                cv2.resizeWindow(window_name, desired_w, desired_h)
+                cv2.waitKey(10)  # Another small delay
+
+            # #region agent log
+            log_debug(
+                "yolov11track.py:464",
+                "Window resize attempted",
+                {"width": desired_w, "height": desired_h},
+                "B",
+            )
+            # #endregion agent log
+        except Exception as e:
+            # #region agent log
+            log_debug("yolov11track.py:467", "Window resize failed", {"error": str(e)}, "B")
+            # #endregion agent log
+            pass
+
+        # Colors optimized for visibility in both light and dark mode
+        # Use bright cyan for polygon lines (high contrast)
+        polygon_color = (255, 255, 0)  # Cyan (BGR) - bright and visible
+        # Use bright yellow for points (high contrast)
+        point_color = (0, 255, 255)  # Yellow (BGR) - bright and visible
+        # Use bright magenta for closing line
+        closing_line_color = (255, 0, 255)  # Magenta (BGR) - bright and visible
+
+        # Add help text overlay (shown on first frame)
+        help_text = [
+            "Left Click: Add point",
+            "Right Click: Remove last point",
+            "Enter: Confirm selection",
+            "Esc: Cancel",
+            "R: Reset all points",
+        ]
+
+        loop_count = 0
+        while True:
+            display_img = frame.copy()
+
+            # Draw help text (fade out after first few frames or when points are added)
+            if loop_count < 100 or len(roi_points) == 0:
+                y_offset = 10
+                for i, text in enumerate(help_text):
+                    y_pos = y_offset + i * 25
+                    # White text with black outline for visibility
+                    cv2.putText(
+                        display_img, text, (10, y_pos), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 3
+                    )
+                    cv2.putText(
+                        display_img,
+                        text,
+                        (10, y_pos),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.6,
+                        (255, 255, 255),
+                        2,
+                    )
+
+            if roi_points:
+                pts = np.array(roi_points, np.int32).reshape((-1, 1, 2))
+                # Draw polygon with thicker, brighter lines
+                cv2.polylines(display_img, [pts], False, polygon_color, 3)
+                # Draw points with larger, brighter circles
+                for pt in roi_points:
+                    cv2.circle(display_img, pt, 5, point_color, -1)
+                    cv2.circle(display_img, pt, 5, (0, 0, 0), 1)  # Black outline for contrast
+                # Draw closing line if more than 1 point
+                if len(roi_points) > 1:
+                    cv2.line(display_img, roi_points[-1], roi_points[0], closing_line_color, 2)
+                # Show point count on image (bottom left)
+                point_text = f"Points: {len(roi_points)} (min 3 required)"
+                text_y = display_img.shape[0] - 20
+                # White text with black outline for visibility
+                cv2.putText(
+                    display_img,
+                    point_text,
+                    (10, text_y),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.8,
+                    (0, 0, 0),
+                    3,
+                )
+                cv2.putText(
+                    display_img,
+                    point_text,
+                    (10, text_y),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.8,
+                    (255, 255, 255),
+                    2,
+                )
+
+            # Visual feedback for mouse clicks
+            if mouse_clicked:
+                mouse_clicked = False
+                # Brief flash effect could be added here if needed
+
+            cv2.imshow(window_name, display_img)
+            # Increased waitKey time for better event processing on macOS
+            key = cv2.waitKey(30) & 0xFF
+
+            # #region agent log
+            if loop_count % 50 == 0:  # Log every 50 iterations to avoid spam
+                log_debug(
+                    "yolov11track.py:512",
+                    "Loop iteration",
+                    {"loop_count": loop_count, "key": key, "roi_points_count": len(roi_points)},
+                    "C",
+                )
+            loop_count += 1
+            # #endregion agent log
+
+            if key == 13 or key == 10:  # Enter (13) or Return (10) - both work
+                # #region agent log
+                log_debug(
+                    "yolov11track.py:518",
+                    "Enter pressed - confirming",
+                    {"roi_points_count": len(roi_points)},
+                    "C",
+                )
+                # #endregion agent log
+                if len(roi_points) >= 3:
+                    print(f"ROI confirmed with {len(roi_points)} points")
+                    break
+                else:
+                    print(f"Need at least 3 points. Currently have {len(roi_points)}")
+            elif key == 27:  # Esc
+                # #region agent log
+                log_debug("yolov11track.py:526", "Esc pressed - cancelling", {}, "C")
+                # #endregion agent log
+                print("ROI selection cancelled")
+                roi_points = []
+                break
+            elif key == ord("r") or key == ord("R"):  # Reset (case insensitive)
+                # #region agent log
+                log_debug("yolov11track.py:531", "R pressed - resetting", {}, "C")
+                # #endregion agent log
+                print("ROI points reset")
+                roi_points = []
+
+        if window_name:
+            cv2.destroyWindow(window_name)
+            cv2.waitKey(1)  # Ensure window is destroyed
+
+        if len(roi_points) < 3:
+            # #region agent log
+            log_debug(
+                "yolov11track.py:541",
+                "Insufficient points",
+                {"roi_points_count": len(roi_points)},
+                "D",
+            )
+            # #endregion agent log
+            print("ROI selection requires at least 3 points.")
+            return None
+
+        # Scale points back to original resolution
+        final_points = (np.array(roi_points, dtype=np.float32) / scale).astype(np.int32)
+        # #region agent log
+        log_debug(
+            "yolov11track.py:549",
+            "ROI selection completed",
+            {"final_points_count": len(final_points), "scale": scale},
+            "A",
+        )
+        # #endregion agent log
+        print(f"ROI selection completed with {len(final_points)} points")
+        return final_points
+
+    except Exception as e:
+        # #region agent log
+        log_debug(
+            "yolov11track.py:491",
+            "Exception in ROI selection",
+            {"error": str(e), "error_type": type(e).__name__},
+            "A",
+        )
+        # #endregion agent log
+        print(f"Error in ROI selection: {e}")
+        import traceback
+
+        traceback.print_exc()
+        # Clean up resources
+        if cap is not None:
+            cap.release()
+        if window_name:
+            try:
+                cv2.destroyWindow(window_name)
+                cv2.waitKey(1)
+            except Exception:
+                pass
+        cv2.destroyAllWindows()
+        return None
+
+
+def select_bbox_roi(video_path):
+    """
+    Let the user draw a bounding box (rectangle) ROI on the first frame of the video.
+    Click and drag to draw rectangle, Enter confirms, Esc cancels.
+    Returns a numpy array of int32 points (4 corners of rectangle) or None.
+    """
     cap = None
     window_name = None
     try:
@@ -392,62 +757,189 @@ def select_free_polygon_roi(video_path):
             print("Error: Could not read first frame from video for ROI selection.")
             return None
 
-        # Optional downscale for large frames to fit on screen
+        h_orig, w_orig = frame.shape[:2]
+
+        # Scale frame to reasonable size for display (larger window for better visibility)
         scale = 1.0
         h, w = frame.shape[:2]
-        max_h = 900
-        if h > max_h:
-            scale = max_h / h
+        # Use larger max dimensions for better visibility on macOS
+        max_h = 1800
+        max_w = 2400
+        # Scale down if too large, but keep aspect ratio
+        if h > max_h or w > max_w:
+            scale_h = max_h / h if h > max_h else 1.0
+            scale_w = max_w / w if w > max_w else 1.0
+            scale = min(scale_h, scale_w)
             frame = cv2.resize(frame, (int(w * scale), int(h * scale)))
 
-        roi_points = []
+        h_scaled, w_scaled = frame.shape[:2]
+
+        # Variables for rectangle drawing
+        drawing = False
+        start_point = None
+        end_point = None
+        bbox_rect = None
 
         def mouse_callback(event, x, y, flags, param):
-            if event == cv2.EVENT_LBUTTONDOWN:
-                roi_points.append((x, y))
-            elif event == cv2.EVENT_RBUTTONDOWN and roi_points:
-                roi_points.pop()
+            nonlocal drawing, start_point, end_point, bbox_rect
 
-        window_name = "Select ROI (Left: add, Right: undo, Enter: confirm, Esc: skip, r: reset)"
-        cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+            if event == cv2.EVENT_LBUTTONDOWN:
+                drawing = True
+                start_point = (x, y)
+                end_point = (x, y)
+
+            elif event == cv2.EVENT_MOUSEMOVE:
+                if drawing:
+                    end_point = (x, y)
+
+            elif event == cv2.EVENT_LBUTTONUP:
+                drawing = False
+                end_point = (x, y)
+                # Ensure we have a valid rectangle
+                if start_point and end_point:
+                    x1, y1 = start_point
+                    x2, y2 = end_point
+                    # Normalize to top-left and bottom-right
+                    x_min = min(x1, x2)
+                    y_min = min(y1, y2)
+                    x_max = max(x1, x2)
+                    y_max = max(y1, y2)
+                    bbox_rect = (x_min, y_min, x_max, y_max)
+                    print(f"BBox selected: ({x_min}, {y_min}) to ({x_max}, {y_max})")
+
+        window_name = "Select ROI BBox (Click & Drag: draw, Enter: confirm, Esc: cancel)"
+
+        # Create window with WINDOW_NORMAL flag for resizability
+        if platform.system() == "Darwin":
+            window_flags = cv2.WINDOW_GUI_NORMAL | cv2.WINDOW_KEEPRATIO
+        else:
+            window_flags = cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO
+
+        cv2.namedWindow(window_name, window_flags)
+
+        # Set mouse callback BEFORE showing window
         cv2.setMouseCallback(window_name, mouse_callback)
 
+        # Show window first
+        cv2.imshow(window_name, frame)
+        cv2.waitKey(1)
+
+        # Set window size after showing (larger for macOS)
+        try:
+            desired_w = max(1200, min(w_scaled, 2400))
+            desired_h = max(900, min(h_scaled, 1800))
+            cv2.resizeWindow(window_name, desired_w, desired_h)
+            if platform.system() == "Darwin":
+                cv2.waitKey(10)
+                cv2.resizeWindow(window_name, desired_w, desired_h)
+                cv2.waitKey(10)
+        except Exception:
+            pass
+
+        # Colors for rectangle
+        rect_color = (0, 255, 0)  # Green (BGR)
+        help_text_lines = [
+            "Click and Drag: Draw bounding box",
+            "Enter: Confirm selection",
+            "Esc: Cancel",
+        ]
+
+        loop_count = 0
         while True:
             display_img = frame.copy()
 
-            if roi_points:
-                pts = np.array(roi_points, np.int32).reshape((-1, 1, 2))
-                cv2.polylines(display_img, [pts], False, (0, 255, 0), 2)
-                for pt in roi_points:
-                    cv2.circle(display_img, pt, 3, (0, 0, 255), -1)
-                if len(roi_points) > 1:
-                    cv2.line(display_img, roi_points[-1], roi_points[0], (0, 255, 255), 1)
+            # Draw help text
+            if loop_count < 100 or bbox_rect is None:
+                y_offset = 10
+                for i, text in enumerate(help_text_lines):
+                    y_pos = y_offset + i * 25
+                    cv2.putText(
+                        display_img, text, (10, y_pos), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 3
+                    )
+                    cv2.putText(
+                        display_img,
+                        text,
+                        (10, y_pos),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.7,
+                        (255, 255, 255),
+                        2,
+                    )
+
+            # Draw rectangle if drawing or if bbox is set
+            if drawing and start_point and end_point:
+                x1, y1 = start_point
+                x2, y2 = end_point
+                cv2.rectangle(display_img, (x1, y1), (x2, y2), rect_color, 2)
+            elif bbox_rect:
+                x_min, y_min, x_max, y_max = bbox_rect
+                cv2.rectangle(display_img, (x_min, y_min), (x_max, y_max), rect_color, 3)
+                # Show dimensions
+                width = x_max - x_min
+                height = y_max - y_min
+                info_text = f"BBox: {width}x{height} pixels"
+                text_y = display_img.shape[0] - 20
+                cv2.putText(
+                    display_img, info_text, (10, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 0), 3
+                )
+                cv2.putText(
+                    display_img,
+                    info_text,
+                    (10, text_y),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.8,
+                    (255, 255, 255),
+                    2,
+                )
 
             cv2.imshow(window_name, display_img)
-            key = cv2.waitKey(20) & 0xFF
+            key = cv2.waitKey(30) & 0xFF
 
-            if key == 13:  # Enter
+            loop_count += 1
+
+            if key == 13 or key == 10:  # Enter
+                if bbox_rect:
+                    print(f"BBox ROI confirmed: {bbox_rect}")
+                    break
+                else:
+                    print("No bounding box drawn. Please draw a rectangle first.")
+            elif key == 27:  # Esc
+                print("BBox ROI selection cancelled")
+                bbox_rect = None
                 break
-            if key == 27:  # Esc
-                roi_points = []
-                break
-            if key == ord("r"):
-                roi_points = []
 
         if window_name:
             cv2.destroyWindow(window_name)
-            cv2.waitKey(1)  # Ensure window is destroyed
+            cv2.waitKey(1)
 
-        if len(roi_points) < 3:
-            print("ROI selection requires at least 3 points.")
+        if bbox_rect is None:
+            print("BBox ROI selection cancelled or no rectangle drawn.")
             return None
 
-        # Scale points back to original resolution
-        final_points = (np.array(roi_points, dtype=np.float32) / scale).astype(np.int32)
+        # Convert bbox to polygon (4 corners) and scale back to original resolution
+        x_min, y_min, x_max, y_max = bbox_rect
+        # Convert to original resolution
+        x_min_orig = int(x_min / scale)
+        y_min_orig = int(y_min / scale)
+        x_max_orig = int(x_max / scale)
+        y_max_orig = int(y_max / scale)
+
+        # Create polygon from rectangle (4 corners)
+        final_points = np.array(
+            [
+                [x_min_orig, y_min_orig],
+                [x_max_orig, y_min_orig],
+                [x_max_orig, y_max_orig],
+                [x_min_orig, y_max_orig],
+            ],
+            dtype=np.int32,
+        )
+
+        print(f"BBox ROI selection completed: {len(final_points)} points (rectangle)")
         return final_points
 
     except Exception as e:
-        print(f"Error in ROI selection: {e}")
+        print(f"Error in BBox ROI selection: {e}")
         import traceback
 
         traceback.print_exc()
@@ -619,23 +1111,33 @@ class TrackerConfigDialog(tk.simpledialog.Dialog):
         roi_buttons_frame = tk.Frame(master)
         roi_buttons_frame.grid(row=6, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
 
-        btn_create_roi = tk.Button(
+        btn_create_roi_poly = tk.Button(
             roi_buttons_frame,
-            text="Create New ROI",
+            text="Create Polygon ROI",
             command=self.select_roi_from_video,
             bg="#4CAF50",
-            fg="white",
-            width=15,
+            fg="black",
+            width=18,
         )
-        btn_create_roi.pack(side="left", padx=5)
+        btn_create_roi_poly.pack(side="left", padx=5)
+
+        btn_create_roi_bbox = tk.Button(
+            roi_buttons_frame,
+            text="Create BBox ROI",
+            command=self.select_bbox_roi_from_video,
+            bg="#FF9800",
+            fg="black",
+            width=18,
+        )
+        btn_create_roi_bbox.pack(side="left", padx=5)
 
         btn_load_roi = tk.Button(
             roi_buttons_frame,
             text="Load Existing ROI",
             command=self.load_existing_roi,
             bg="#2196F3",
-            fg="white",
-            width=15,
+            fg="black",
+            width=18,
         )
         btn_load_roi.pack(side="left", padx=5)
 
@@ -643,10 +1145,11 @@ class TrackerConfigDialog(tk.simpledialog.Dialog):
         help_text.grid(row=5, column=2, padx=5, pady=5)
         roi_tooltip = (
             "ROI Options:\n"
-            "'Create New ROI' - Draw a new polygon on a video frame\n"
+            "'Create Polygon ROI' - Draw a free polygon on a video frame\n"
+            "'Create BBox ROI' - Draw a rectangle (bounding box) on a video frame\n"
             "'Load Existing ROI' - Load a previously saved ROI from file\n\n"
             "The ROI will be applied to all videos in the batch.\n"
-            "Tracking and detection will only run inside the selected polygon."
+            "Tracking and detection will only run inside the selected area."
         )
         help_text.bind("<Enter>", lambda e: self.show_help(e, roi_tooltip))
         help_text.bind("<Leave>", self.hide_help)
@@ -682,7 +1185,7 @@ class TrackerConfigDialog(tk.simpledialog.Dialog):
             self.tooltip = None
 
     def select_roi_from_video(self):
-        """Open file dialog to select a video, then open ROI selection window"""
+        """Open file dialog to select a video, then open polygon ROI selection window"""
         # Ask user to select a video file for ROI selection
         video_path = filedialog.askopenfilename(
             title="Select a video file for ROI selection",
@@ -700,7 +1203,7 @@ class TrackerConfigDialog(tk.simpledialog.Dialog):
             return
 
         try:
-            # Open ROI selection window
+            # Open polygon ROI selection window
             roi_poly = select_free_polygon_roi(video_path)
 
             if roi_poly is not None and len(roi_poly) >= 3:
@@ -716,6 +1219,51 @@ class TrackerConfigDialog(tk.simpledialog.Dialog):
                         f"ROI polygon saved successfully!\n\n"
                         f"File: {os.path.basename(roi_file)}\n"
                         f"Points: {len(roi_poly)}\n\n"
+                        f"This ROI will be applied to all videos in the batch.",
+                    )
+                else:
+                    self.roi_status_label.config(text="Error saving ROI", fg="red")
+            else:
+                self.roi_status_label.config(text="ROI selection cancelled", fg="gray")
+        except Exception as e:
+            messagebox.showerror("Error", f"Error selecting ROI: {str(e)}")
+            self.roi_status_label.config(text="Error selecting ROI", fg="red")
+
+    def select_bbox_roi_from_video(self):
+        """Open file dialog to select a video, then open bbox ROI selection window"""
+        # Ask user to select a video file for ROI selection
+        video_path = filedialog.askopenfilename(
+            title="Select a video file for ROI selection",
+            filetypes=[
+                ("Video files", "*.mp4 *.avi *.mov *.mkv"),
+                ("MP4 files", "*.mp4"),
+                ("AVI files", "*.avi"),
+                ("MOV files", "*.mov"),
+                ("MKV files", "*.mkv"),
+                ("All files", "*.*"),
+            ],
+        )
+
+        if not video_path:
+            return
+
+        try:
+            # Open bbox ROI selection window
+            roi_poly = select_bbox_roi(video_path)
+
+            if roi_poly is not None and len(roi_poly) >= 3:
+                # Save ROI to TOML file
+                roi_file = save_roi_to_toml(video_path, roi_poly)
+                if roi_file:
+                    self.roi_file_path = roi_file
+                    self.roi_status_label.config(
+                        text=f"ROI saved: {os.path.basename(roi_file)}", fg="green"
+                    )
+                    messagebox.showinfo(
+                        "ROI Saved",
+                        f"ROI bounding box saved successfully!\n\n"
+                        f"File: {os.path.basename(roi_file)}\n"
+                        f"Points: {len(roi_poly)} (rectangle)\n\n"
                         f"This ROI will be applied to all videos in the batch.",
                     )
                 else:
@@ -1454,9 +2002,6 @@ def create_merged_detection_csv(output_dir, total_frames):
     return out_paths
 
 
-
-
-
 def _get_pose_skeleton():
     """Return COCO keypoint skeleton edges (17-keypoint layout)."""
     return [
@@ -1830,12 +2375,13 @@ def select_id_and_run_pose():
     display_frame = frame.copy()
     for tracker_id, data in tracking_data.items():
         color = get_color_for_id(tracker_id)
+        label = data["label"]
         cv2.rectangle(
             display_frame, (data["x_min"], data["y_min"]), (data["x_max"], data["y_max"]), color, 2
         )
         cv2.putText(
             display_frame,
-            f"id{tracker_id}",
+            f"id {tracker_id} {label}",
             (data["x_min"], data["y_min"] - 10),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.6,
@@ -2775,8 +3321,10 @@ def process_pose_in_bboxes(tracking_dir, device="cpu", pose_model_name="yolo11n-
 
 
 def run_yolov11track():
-    print(f"Running script: {os.path.basename(__file__)}")
-    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    print(f"Running script: {Path(__file__).name}")
+    print(f"Script directory: {Path(__file__).parent.resolve()}")
+    print("Starting yolov11track.py...")
+    print("-" * 80)
 
     # Print hardware information
     print("=" * 60)
@@ -2784,7 +3332,6 @@ def run_yolov11track():
     print("=" * 60)
     print(get_hardware_info())
     print("=" * 60)
-
     root = tk.Tk()
     root.withdraw()
 
@@ -2963,11 +3510,14 @@ def run_yolov11track():
                     # Try importlib.resources first (Python 3.9+, recommended)
                     try:
                         from importlib.resources import files
+
                         ultralytics_path = str(files("ultralytics") / "cfg" / "trackers")
                     except (ImportError, ModuleNotFoundError, AttributeError, TypeError):
                         # Fallback: try pkg_resources (deprecated but still works)
                         with contextlib.suppress(Exception):
-                            ultralytics_path = pkg_resources.resource_filename("ultralytics", "cfg/trackers")
+                            ultralytics_path = pkg_resources.resource_filename(
+                                "ultralytics", "cfg/trackers"
+                            )
                 except Exception:
                     pass
                 # If we couldn't find the path, skip to Option 2 (create from scratch)
@@ -3108,7 +3658,7 @@ def run_yolov11track():
                     cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), color, 2)
                     cv2.putText(
                         frame,
-                        f"id{tracker_id}",
+                        f"id {tracker_id} {label}",
                         (x_min, y_min - 10),
                         cv2.FONT_HERSHEY_SIMPLEX,
                         0.5,

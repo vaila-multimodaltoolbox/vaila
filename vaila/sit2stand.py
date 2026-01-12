@@ -4,8 +4,8 @@ sit2stand.py - Sit to Stand Analysis Module
 ================================================================================
 Author: Prof. Paulo Santiago
 Create: 10 October 2025
-Update: 16 October 2025
-Version: 0.0.4
+Update: 12 January 2026
+Version: 0.0.5
 
 Description:
 ------------
@@ -110,6 +110,7 @@ from tkinter import filedialog, messagebox, ttk
 
 import numpy as np
 import pandas as pd
+from rich import print
 
 try:
     import toml
@@ -117,7 +118,7 @@ try:
     TOML_SUPPORT = True
 except ImportError:
     try:
-        import tomli as toml  # Fallback for older Python
+        import tomli as toml  # pyright: ignore[reportMissingImports]  # Fallback for older Python
 
         TOML_SUPPORT = True
     except ImportError:
@@ -481,7 +482,7 @@ def auto_detect_force_column(sample_file):
                     if pd.api.types.is_numeric_dtype(sample_data[col]):
                         print(f"Auto-detected numeric column: {col}")
                         return col
-                except:
+                except Exception:
                     continue
 
         print("No suitable force column found")
@@ -1372,11 +1373,6 @@ def read_c3d_file(file_path, column_name):
         # Get analog data and labels
         analogs = datac3d["data"]["analogs"]
         analog_labels = datac3d["parameters"]["ANALOG"]["LABELS"]["value"]
-        analog_units = (
-            datac3d["parameters"]["ANALOG"]
-            .get("UNITS", {})
-            .get("value", ["Unknown"] * len(analog_labels))
-        )
 
         print(f"Available analog channels: {analog_labels}")
 
@@ -1459,7 +1455,7 @@ def print_c3d_info(datac3d):
         )
 
         print("\nAnalog channels and units:")
-        for label, unit in zip(analog_labels, analog_units):
+        for label, unit in zip(analog_labels, analog_units, strict=True):
             print(f"  {label}: {unit}")
 
         # Force platform information
@@ -1808,9 +1804,13 @@ def detect_sit_to_stand_phases(
                     onset_threshold = detected_threshold
                     print(f"Auto-detected onset threshold: {onset_threshold:.2f} N")
                 else:
-                    print(f"Auto-detected threshold too high ({detected_threshold:.2f} N), using config value ({onset_threshold:.2f} N)")
+                    print(
+                        f"Auto-detected threshold too high ({detected_threshold:.2f} N), using config value ({onset_threshold:.2f} N)"
+                    )
             else:
-                print(f"Auto-detection failed, using config onset threshold: {onset_threshold:.2f} N")
+                print(
+                    f"Auto-detection failed, using config onset threshold: {onset_threshold:.2f} N"
+                )
         else:
             print(f"Using config onset threshold: {onset_threshold:.2f} N")
 
@@ -2254,7 +2254,7 @@ def calculate_energy_expenditure(force_data, time_data, phases, config):
         gravity = 9.81  # m/s²
 
         # Calculate body weight in Newtons
-        body_weight_N = body_weight * gravity
+        body_weight_N = body_weight * gravity  # noqa: N806 - Scientific notation convention
 
         energy_metrics = {
             "body_weight_kg": body_weight,
@@ -2453,7 +2453,8 @@ def calculate_stability_index(force_data, time_data, reference_peak_time, config
 
         # Calculate RFD to find when standing phase actually starts
         # Standing phase = when RFD approaches zero (movement finished)
-        force_rate = np.gradient(stability_forces, stability_times)
+        # Note: force_rate calculated but not used in current implementation
+        _force_rate = np.gradient(stability_forces, stability_times)
 
         # Find where RFD stabilizes (approaches zero)
         # Use baseline_window to skip initial transition period
@@ -2682,7 +2683,6 @@ def calculate_detailed_symmetry(all_peaks, forces, times):
         # Time distribution of peaks
         time_range = max(peak_times) - min(peak_times)
         if time_range > 0 and len(peak_times) > 1:
-            expected_spacing = time_range / (len(peak_times) - 1)
             actual_spacings = [
                 peak_times[i + 1] - peak_times[i] for i in range(len(peak_times) - 1)
             ]
@@ -2726,22 +2726,6 @@ def calculate_detailed_symmetry(all_peaks, forces, times):
         print(f"Error calculating detailed symmetry: {str(e)}")
 
     return metrics
-
-
-def find_peaks_in_segment(forces, times):
-    """Legacy function - kept for compatibility. Use detect_all_peaks_in_segment for new code."""
-    try:
-        # Simple peak detection - find local maxima
-        peaks = []
-        for i in range(1, len(forces) - 1):
-            if forces[i] > forces[i - 1] and forces[i] > forces[i + 1]:
-                peaks.append({"time": times[i], "force": forces[i], "index": i})
-
-        return sorted(peaks, key=lambda x: x["force"], reverse=True)
-
-    except Exception as e:
-        print(f"Error finding peaks in segment: {str(e)}")
-        return []
 
 
 def calculate_symmetry(peaks):
@@ -2826,9 +2810,6 @@ def calculate_movement_metrics(data, phases):
         # Time to peak metrics (handle both new and legacy format)
         time_to_max = [
             phase.get("time_to_max_force", phase.get("time_to_peak", 0)) for phase in phases
-        ]
-        time_to_first = [
-            phase.get("time_to_first_peak", phase.get("time_to_peak", 0)) for phase in phases
         ]
 
         peak_forces = [phase["peak_force"] for phase in phases]
@@ -3031,7 +3012,7 @@ def save_force_plot_png(
     """
     try:
         # Create figure with subplots - make room for legend on the right
-        fig = plt.figure(figsize=(22, 12))
+        plt.figure(figsize=(22, 12))
 
         # Main plot (force vs time) - RAW SIGNAL
         ax1 = plt.subplot(2, 1, 1)
@@ -3101,7 +3082,7 @@ def save_force_plot_png(
                             textcoords="offset points",
                             fontsize=9,
                             fontweight="bold",
-                            bbox=dict(boxstyle="round,pad=0.3", facecolor=color, alpha=0.8),
+                            bbox={"boxstyle": "round,pad=0.3", "facecolor": color, "alpha": 0.8},
                         )
 
             # Mark phase end
@@ -3148,18 +3129,18 @@ def save_force_plot_png(
                     fontsize=7,
                     fontweight="bold",
                     ha="center",
-                    bbox=dict(
-                        boxstyle="round,pad=0.2",
-                        facecolor="yellow",
-                        edgecolor="orange",
-                        alpha=0.9,
-                    ),
-                    arrowprops=dict(
-                        arrowstyle="->",
-                        connectionstyle="arc3,rad=0",
-                        color="orange",
-                        lw=1,
-                    ),
+                    bbox={
+                        "boxstyle": "round,pad=0.2",
+                        "facecolor": "yellow",
+                        "edgecolor": "orange",
+                        "alpha": 0.9,
+                    },
+                    arrowprops={
+                        "arrowstyle": "->",
+                        "connectionstyle": "arc3,rad=0",
+                        "color": "orange",
+                        "lw": 1,
+                    },
                 )
 
         # Mark standing baseline peaks if available (these are AFTER stabilization)
@@ -3193,18 +3174,18 @@ def save_force_plot_png(
                         fontsize=8,
                         fontweight="bold",
                         ha="center",
-                        bbox=dict(
-                            boxstyle="round,pad=0.3",
-                            facecolor="lightblue",
-                            edgecolor="darkblue",
-                            alpha=0.8,
-                        ),
-                        arrowprops=dict(
-                            arrowstyle="->",
-                            connectionstyle="arc3,rad=0",
-                            color="darkblue",
-                            lw=1.5,
-                        ),
+                        bbox={
+                            "boxstyle": "round,pad=0.3",
+                            "facecolor": "lightblue",
+                            "edgecolor": "darkblue",
+                            "alpha": 0.8,
+                        },
+                        arrowprops={
+                            "arrowstyle": "->",
+                            "connectionstyle": "arc3,rad=0",
+                            "color": "darkblue",
+                            "lw": 1.5,
+                        },
                     )
 
         # Add reference lines for context
@@ -3605,51 +3586,6 @@ class SitToStandGUI:
     def run(self):
         """Runs the GUI main loop."""
         self.root.mainloop()
-
-
-def main():
-    """Main function - launches GUI by default, CLI mode with arguments."""
-    import sys
-
-    # Check if running with command line arguments
-    if len(sys.argv) > 1:
-        # CLI mode with arguments
-        import argparse
-
-        parser = argparse.ArgumentParser(description="Sit-to-Stand Analysis Tool")
-        parser.add_argument(
-            "--input_dir", type=str, help="Input directory containing CSV/C3D files"
-        )
-        parser.add_argument("--config", type=str, help="TOML configuration file")
-        parser.add_argument("--output_dir", type=str, help="Output directory for results")
-        parser.add_argument(
-            "--format",
-            type=str,
-            choices=["csv", "c3d", "both"],
-            default="both",
-            help="File format to process",
-        )
-
-        args = parser.parse_args()
-
-        if args.input_dir:
-            run_cli_mode(args)
-        else:
-            print("Sit-to-Stand Analysis Tool")
-            print(
-                "Usage: python sit2stand.py --input_dir <path> [--config <config.toml>] [--output_dir <path>]"
-            )
-    else:
-        # No arguments - launch GUI
-        print("Launching Sit-to-Stand Analysis GUI...")
-        try:
-            gui = SitToStandGUI()
-            gui.run()
-        except Exception as e:
-            print(f"Error launching GUI: {e}")
-            import traceback
-
-            traceback.print_exc()
 
 
 if __name__ == "__main__":
