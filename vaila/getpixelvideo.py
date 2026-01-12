@@ -54,6 +54,12 @@ Options:
   -h, --help            show this help message and exit
   -v, --version         show version information and exit
 
+License:
+--------
+This program is licensed under the GNU Affero General Public License v3.0.
+For more details, visit: https://www.gnu.org/licenses/agpl-3.0.html
+Visit the project repository: https://github.com/vaila-multimodaltoolbox
+
 ================================================================================
 """
 

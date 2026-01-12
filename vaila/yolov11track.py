@@ -32,7 +32,7 @@ Requirements:
     - Additional dependencies as imported (numpy, csv, etc.)
 
 License:
-    This project is licensed under the terms of the MIT License (or another applicable license).
+    This project is licensed under the terms of the AGPL-3.0 License.
 
 Change History:
     - 2026-01: Added ROI selection with improved visibility on macOS.
@@ -45,6 +45,12 @@ Notes:
     - Ensure that all dependencies are installed.
     - Since the script uses a graphical interface (Tkinter) for model selection and configuration, a GUI-enabled environment is required.
     - If the ReID model is not found, the script will download it from the internet.
+
+License:
+--------
+This program is licensed under the GNU Affero General Public License v3.0.
+For more details, visit: https://www.gnu.org/licenses/agpl-3.0.html
+Visit the project repository: https://github.com/vaila-multimodaltoolbox
 
 """
 
