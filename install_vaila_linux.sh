@@ -21,8 +21,8 @@
 #                                                                                       #
 # Author: Prof. Dr. Paulo R. P. Santiago                                                #
 # Creation: September 17, 2024                                                          #
-# Updated: 11 January 2026                                                              #
-# Version: 0.3.0                                                                        #
+# Updated: 12 January 2026                                                              #
+# Version: 0.3.1                                                                        #
 # OS: Ubuntu, Kubuntu, Linux Mint, Pop_OS!, Zorin OS, etc. (Debian-based)             #
 #########################################################################################
 
@@ -73,27 +73,132 @@ fi
 create_desktop_entry() {
     # Create a desktop entry for the application
     echo "Creating a desktop entry for vaila..."
+    
+    # Find the best available icon
+    ICON_SOURCE=""
+    
+    # First, try to find icons in the iconset directory (preferred location)
+    ICONSET_DIRS=(
+        "$PROJECT_DIR/docs/images/vaila.iconset"
+        "$VAILA_HOME/docs/images/vaila.iconset"
+        "$PROJECT_DIR/vaila/images/vaila.iconset"
+        "$VAILA_HOME/vaila/images/vaila.iconset"
+    )
+    
+    ICONSET_DIR=""
+    for iconset_dir in "${ICONSET_DIRS[@]}"; do
+        if [ -d "$iconset_dir" ]; then
+            ICONSET_DIR="$iconset_dir"
+            echo "Found iconset directory at: $ICONSET_DIR"
+            break
+        fi
+    done
+    
+    # If iconset directory found, use appropriate size for Linux (256x256 or 512x512)
+    if [ -n "$ICONSET_DIR" ]; then
+        # Try 256x256 first (good balance for dock icons)
+        if [ -f "$ICONSET_DIR/icon_256x256.png" ]; then
+            ICON_SOURCE="$ICONSET_DIR/icon_256x256.png"
+            echo "Using icon from iconset: $ICON_SOURCE"
+        # Fallback to 512x512 if 256x256 not available
+        elif [ -f "$ICONSET_DIR/icon_512x512.png" ]; then
+            ICON_SOURCE="$ICONSET_DIR/icon_512x512.png"
+            echo "Using icon from iconset: $ICON_SOURCE"
+        # Fallback to 128x128
+        elif [ -f "$ICONSET_DIR/icon_128x128.png" ]; then
+            ICON_SOURCE="$ICONSET_DIR/icon_128x128.png"
+            echo "Using icon from iconset: $ICON_SOURCE"
+        fi
+    fi
+    
+    # If no icon found in iconset, try other locations
+    if [ -z "$ICON_SOURCE" ]; then
+        POSSIBLE_ICON_PATHS=(
+            "$VAILA_HOME/vaila/images/vaila_ico.png"
+            "$VAILA_HOME/vaila/images/vaila_ico_trans.ico"
+            "$VAILA_HOME/vaila/images/vaila_logo.png"
+            "$VAILA_HOME/docs/images/vaila_ico.png"
+            "$VAILA_HOME/docs/images/vaila_logo.png"
+            "$PROJECT_DIR/vaila/images/vaila_ico.png"
+            "$PROJECT_DIR/docs/images/vaila_ico.png"
+        )
+        
+        for icon_path in "${POSSIBLE_ICON_PATHS[@]}"; do
+            if [ -f "$icon_path" ]; then
+                ICON_SOURCE="$icon_path"
+                echo "Found icon at: $ICON_SOURCE"
+                break
+            fi
+        done
+    fi
+    
+    # If still no icon found, use a default path
+    if [ -z "$ICON_SOURCE" ]; then
+        ICON_SOURCE="$VAILA_HOME/vaila/images/vaila_ico.png"
+        echo "Warning: Icon not found. Using default path: $ICON_SOURCE"
+    fi
+    
+    # Create icons directory in user's local share
+    ICONS_DIR="$HOME/.local/share/icons"
+    mkdir -p "$ICONS_DIR"
+    
+    # Copy icon to user's icons directory with a standard name
+    ICON_NAME="vaila"
+    ICON_DEST="$ICONS_DIR/${ICON_NAME}.png"
+    
+    # If source is PNG, copy directly; if ICO, try to convert or use as-is
+    if [ -f "$ICON_SOURCE" ]; then
+        if [[ "$ICON_SOURCE" == *.png ]]; then
+            cp "$ICON_SOURCE" "$ICON_DEST" 2>/dev/null || true
+            echo "Icon copied to: $ICON_DEST"
+        elif [[ "$ICON_SOURCE" == *.ico ]]; then
+            # Try to convert ICO to PNG using ImageMagick if available
+            if command -v convert &> /dev/null; then
+                convert "$ICON_SOURCE" "$ICON_DEST" 2>/dev/null && echo "Icon converted and copied to: $ICON_DEST" || cp "$ICON_SOURCE" "$ICON_DEST" 2>/dev/null || true
+            else
+                # If no convert, try to use the ICO directly (some systems support it)
+                cp "$ICON_SOURCE" "$ICON_DEST" 2>/dev/null || true
+            fi
+        else
+            # For other formats, try to copy or convert
+            cp "$ICON_SOURCE" "$ICON_DEST" 2>/dev/null || true
+        fi
+    fi
+    
+    # Use icon name without path for desktop entry (system will search in standard locations)
+    ICON_NAME_FOR_DESKTOP="vaila"
+    
     cat <<EOF > "$DESKTOP_ENTRY_PATH"
 [Desktop Entry]
 Version=1.0
+Type=Application
 Name=vaila
 GenericName=Multimodal Toolbox
 Comment=Multimodal Toolbox for Biomechanics and Motion Analysis
 Exec=$RUN_SCRIPT
-Icon=$VAILA_HOME/vaila/images/vaila_ico.png
+Icon=$ICON_NAME_FOR_DESKTOP
 Terminal=true
-Type=Application
 Categories=Science;Education;Utility;
 Keywords=biomechanics;motion;analysis;multimodal;
 StartupNotify=true
 StartupWMClass=vaila
+MimeType=
 EOF
 
     # Update desktop database for all desktop environments
     echo "Updating desktop database..."
     if command -v update-desktop-database &> /dev/null; then
-        update-desktop-database "$HOME/.local/share/applications"
+        update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
     fi
+    
+    # Update icon cache
+    if command -v gtk-update-icon-cache &> /dev/null; then
+        echo "Updating icon cache..."
+        gtk-update-icon-cache -f -t "$ICONS_DIR" 2>/dev/null || true
+    fi
+    
+    # Make desktop entry executable (required for some desktop environments)
+    chmod +x "$DESKTOP_ENTRY_PATH" 2>/dev/null || true
 
     # For KDE Plasma, also create a .desktop file in the system applications directory
     if [ -d "/usr/share/applications" ]; then
@@ -101,19 +206,20 @@ EOF
         sudo tee "/usr/share/applications/vaila.desktop" > /dev/null <<EOF
 [Desktop Entry]
 Version=1.0
+Type=Application
 Name=vaila
 GenericName=Multimodal Toolbox
 Comment=Multimodal Toolbox for Biomechanics and Motion Analysis
 Exec=$RUN_SCRIPT
-Icon=$VAILA_HOME/vaila/images/vaila_ico.png
+Icon=$ICON_NAME_FOR_DESKTOP
 Terminal=true
-Type=Application
 Categories=Science;Education;Utility;
 Keywords=biomechanics;motion;analysis;multimodal;
 StartupNotify=true
 StartupWMClass=vaila
+MimeType=
 EOF
-        sudo update-desktop-database
+        sudo update-desktop-database 2>/dev/null || true
     fi
 
     # For XFCE, ensure the desktop entry is properly registered
@@ -139,6 +245,22 @@ EOF
         echo "GNOME detected. Updating icon cache..."
         gtk-update-icon-cache -f -t "$HOME/.local/share/icons" 2>/dev/null || true
     fi
+    
+    # For Ubuntu/GNOME Shell, try to restart the dock (if running)
+    if command -v gnome-shell &> /dev/null; then
+        echo "GNOME Shell detected. Refreshing application menu..."
+        # Try to reload the shell (non-destructive)
+        dbus-send --type=method_call --dest=org.gnome.Shell /org/gnome/Shell org.gnome.Shell.Eval string:'global.reexec_self()' 2>/dev/null || true
+    fi
+    
+    echo ""
+    echo "Desktop entry created successfully!"
+    echo "Location: $DESKTOP_ENTRY_PATH"
+    echo "Icon location: $ICON_DEST"
+    echo ""
+    echo "Note: You may need to log out and log back in, or restart your desktop"
+    echo "      environment for the icon to appear in the dock/launcher."
+    echo "      Alternatively, you can search for 'vaila' in the application menu."
 }
 
 setup_ssh() {
