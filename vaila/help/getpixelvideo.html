@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>vailá - getpixelvideo Tool</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            line-height: 1.6;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 15px;
+            margin-bottom: 30px;
+        }
+
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+            border-left: 5px solid #3498db;
+            padding-left: 15px;
+        }
+
+        h3 {
+            color: #2c3e50;
+            margin-top: 25px;
+        }
+
+        .module-info {
+            background: #ecf0f1;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+            border-left: 5px solid #95a5a6;
+        }
+
+        .description-box {
+            background: #e8f6f3;
+            padding: 20px;
+            border-radius: 5px;
+            border-left: 5px solid #1abc9c;
+            margin: 20px 0;
+        }
+
+        .usage-box {
+            background: #fdf2e9;
+            padding: 20px;
+            border-radius: 5px;
+            border-left: 5px solid #e67e22;
+            margin: 20px 0;
+        }
+
+        code {
+            background: #e9ecef;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: Consolas, monospace;
+            color: #c0392b;
+        }
+
+        pre {
+            background: #2c3e50;
+            color: #ecf0f1;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            font-family: Consolas, monospace;
+        }
+
+        ul {
+            margin-left: 20px;
+        }
+
+        li {
+            margin-bottom: 8px;
+        }
+
+        .footer {
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 1px solid #dee2e6;
+            color: #7f8c8d;
+            font-size: 0.9em;
+            text-align: center;
+        }
+
+        a {
+            color: #3498db;
+            text-decoration: none;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>🔍 vailá - getpixelvideo Tool</h1>
+
+        <div class="module-info">
+            <h2>📋 Module Information</h2>
+            <ul>
+                <li><strong>Category:</strong> Tools</li>
+                <li><strong>File:</strong> <code>vaila/getpixelvideo.py</code></li>
+                <li><strong>Version:</strong> 0.3.3 (Updated: 11 January 2026)</li>
+                <li><strong>Author:</strong> Prof. Dr. Paulo R. P. Santiago</li>
+                <li><strong>GUI Interface:</strong> ✅ Yes (Pygame based)</li>
+            </ul>
+        </div>
+
+        <div class="description-box">
+            <h2>📖 Description</h2>
+            <p>
+                This tool enables marking and saving pixel coordinates in video frames, with zoom functionality for
+                precise annotations.
+                The window can be resized dynamically, and all UI elements adjust accordingly.
+                Users can navigate the video frames, mark points, label images for machine learning tasks,
+                visualize YOLO tracking results, and save all data in CSV format.
+            </p>
+
+            <h3>New Features in Version 0.3.3:</h3>
+            <ul>
+                <li><strong>GUI Pygame in Linux:</strong> Uses Pygame for the GUI on Linux systems to avoid conflicts
+                    with Tkinter, ensuring smoother operation.</li>
+            </ul>
+
+            <h3>New Features in Version 0.3.2:</h3>
+            <ul>
+                <li><strong>Labeling Mode:</strong> A new "Labeling" button allows for labeling images in video frames
+                    specifically for Machine Learning training.</li>
+                <li><strong>YOLO Dataset Support:</strong> Support for YOLO dataset directory structures.</li>
+                <li><strong>YOLO Tracking Visualization:</strong> Visualize tracking data from CSV files (in
+                    <code>all_id_detection.csv</code> format) with bounding box overlays directly on the video.</li>
+            </ul>
+        </div>
+
+        <div class="usage-box">
+            <h2>🚀 How to Use</h2>
+            <ol>
+                <li><strong>Select Video:</strong> Choose the video file you wish to process.</li>
+                <li><strong>Load Keypoints (Optional):</strong> Select a keypoint file to load existing data if
+                    available.</li>
+                <li><strong>Mark Points:</strong> Use the mouse to mark points on the video frames. You can zoom in for
+                    better precision.</li>
+                <li><strong>Label Images (Optional):</strong> Use the labeling mode to creating bounding boxes for
+                    object detection datasets.</li>
+                <li><strong>Save Results:</strong> Save your marked coordinates or labeled data to a CSV file.</li>
+            </ol>
+        </div>
+
+        <h2>⌨️ Command Line Usage</h2>
+        <pre>python getpixelvideo.py [options]</pre>
+
+        <h3>Options:</h3>
+        <ul>
+            <li><code>-h, --help</code>: Show this help message and exit.</li>
+            <li><code>-v, --version</code>: Show version information and exit.</li>
+            <li><code>-f FILE, --file FILE</code>: Specify the video file to process.</li>
+            <li><code>-k KEYPOINT, --keypoint KEYPOINT</code>: Specify the keypoint file to load.</li>
+            <li><code>-l, --labeling</code>: Start in labeling mode to label images for ML training.</li>
+            <li><code>-s, --save</code>: Save the results in CSV format.</li>
+            <li><code>-p, --persistence</code>: Show persistence mode (visualize points from previous frames).</li>
+            <li><code>-a, --auto</code>: Show auto-marking mode.</li>
+            <li><code>-c, --sequential</code>: Show sequential mode.</li>
+        </ul>
+
+        <h2>🔧 Main Functions</h2>
+        <ul>
+            <li><code>get_color_for_id</code>: Generates consistent colors for markers.</li>
+            <li><code>play_video_with_controls</code>: Main function handling video playback and user interaction.</li>
+            <li><code>pygame_file_dialog</code>: Native Pygame file dialog for selecting files without Tkinter
+                conflicts.</li>
+            <li><code>export_video_with_annotations</code>: Exports the video with markers and bounding boxes burned in.
+            </li>
+            <li><code>load_coordinates_from_file</code>: Loads existing coordinate data.</li>
+            <li><code>save_coordinates</code>: Saves current markings to CSV.</li>
+            <li><code>save_labeling_project</code>: Saves bounding box data for ML.</li>
+        </ul>
+
+        <hr>
+
+        <h2>📜 License</h2>
+        <p>This program is licensed under the <strong>GNU Affero General Public License v3.0</strong>.</p>
+        <p>For more details, visit: <a href="https://www.gnu.org/licenses/agpl-3.0.html"
+                target="_blank">https://www.gnu.org/licenses/agpl-3.0.html</a></p>
+
+        <div class="footer">
+            <p>📅 <strong>Last Updated:</strong> 11 January 2026</p>
+            <p>🔗 <strong>Part of vailá - Multimodal Toolbox</strong></p>
+            <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila" target="_blank">GitHub Repository</a></p>
+        </div>
+    </div>
+</body>
+
+</html>

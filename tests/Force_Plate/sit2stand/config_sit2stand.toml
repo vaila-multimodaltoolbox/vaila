@@ -2,7 +2,7 @@
 [analysis]
 force_column = "Force.Fz3"
 fps = 2000.0        # Default Frame Rate
-body_weight = 70.0  # Default Weight (fallback)
+body_weight = 15.0  # Default Weight (fallback)
 
 [filtering]
 enabled = false
@@ -27,26 +27,3 @@ baseline_window = 0.5
 stability_threshold = 10.0
 noise_analysis = true
 rolling_window = 0.1
-
-# === SPECIFIC PROFILES (Overrides based on filename) ===
-
-# Configuration for Baseline files (files containing "B" or "Baseline")
-[profiles.baseline]
-pattern = ["_B_", "_Baseline_", "Subject_B"]  # Patterns to look for in filename
-body_weight = 11.97           # Specific weight for baseline
-fps = 2000.0                 # Specific frequency
-sampling_frequency = 2000.0  # Filter frequency
-
-# Configuration for Pre files (files containing "pre")
-[profiles.pre]
-pattern = ["_pre_", "Pre"]
-body_weight = 13.4
-fps = 1000.0                 # Example: Different frequency for pre
-sampling_frequency = 1000.0
-
-# Configuration for Post files (files containing "post")
-[profiles.post]
-pattern = ["_post_", "Post"]
-body_weight = 13.6
-fps = 2000.0
-sampling_frequency = 2000.0

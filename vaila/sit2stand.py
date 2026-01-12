@@ -5,7 +5,7 @@ sit2stand.py - Sit to Stand Analysis Module
 Author: Prof. Paulo Santiago
 Create: 10 October 2025
 Update: 12 January 2026
-Version: 0.0.5
+Version: 0.0.6
 
 Description:
 ------------
@@ -104,9 +104,18 @@ This module is part of the VAILA toolbox and follows the same MIT License.
 """
 
 import os
+import sys
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
+
+# Set UTF-8 encoding for stdout/stderr to avoid encoding errors
+if sys.stdout.encoding != "utf-8":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except AttributeError:
+        # Python < 3.7 - set environment variable instead
+        os.environ["PYTHONIOENCODING"] = "utf-8"
 
 import numpy as np
 import pandas as pd
@@ -144,8 +153,8 @@ except ImportError:
 
 def main(cli_args=None):
     """
-    Main function to run the sit-to-stand analysis in batch mode or GUI mode.
-    Processes multiple C3D and CSV files automatically using TOML configuration.
+    Main function to run the sit-to-stand analysis in batch mode.
+    Processes multiple C3D and CSV files using the same TOML configuration.
 
     Parameters:
     -----------
@@ -172,25 +181,27 @@ def main(cli_args=None):
 
 def run_cli_mode(cli_args):
     """
-    Runs the analysis in CLI mode with command line arguments.
+    Runs the analysis in CLI mode with command line arguments for batch processing.
+    Uses the same TOML configuration for all files.
 
     Parameters:
     -----------
     cli_args : list
         Command line arguments [config_file, input_directory, output_directory, file_format]
     """
-    if len(cli_args) < 3:
+    if len(cli_args) < 2:
         print(
-            "Usage: python sit2stand.py <config.toml> <input_directory> [output_directory] [file_format]"
+            "Usage: python sit2stand.py <config.toml> <input_directory> [output_directory]"
         )
-        print("Example: python sit2stand.py config.toml /path/to/files /path/to/output auto")
-        print("File format: auto, c3d, csv")
+        print("Example: python sit2stand.py config.toml /path/to/files /path/to/output")
+        print("Note: Automatically processes all .c3d and .csv files in the input directory")
         return
 
     config_file = cli_args[0]
     input_dir = cli_args[1]
     output_dir = cli_args[2] if len(cli_args) > 2 else None
-    file_format = cli_args[3] if len(cli_args) > 3 else "auto"
+    # Always process both C3D and CSV files automatically
+    file_format = "auto"
 
     try:
         # Handle empty config file (use defaults)
@@ -198,7 +209,7 @@ def run_cli_mode(cli_args):
             config = get_default_config()
             print("Using default configuration")
         else:
-            # Step 1: Load TOML configuration
+            # Step 1: Load TOML configuration (same for all files)
             config = load_toml_config(config_file)
             if not config:
                 print(f"Failed to load configuration from {config_file}")
@@ -210,17 +221,17 @@ def run_cli_mode(cli_args):
         os.makedirs(output_dir, exist_ok=True)
         print(f"Output directory: {output_dir}")
 
-        # Step 3: Find files based on format
+        # Step 3: Find all C3D and CSV files automatically
         files = find_analysis_files(input_dir, file_format)
         if not files:
-            print(f"No files found in {input_dir} with format {file_format}")
+            print(f"No .c3d or .csv files found in {input_dir}")
             return
 
         print(f"Found {len(files)} files to process:")
         for file_path in files:
             print(f"  - {os.path.basename(file_path)}")
 
-        # Step 4: Run batch analysis
+        # Step 4: Run batch analysis with same config for all files
         results = run_batch_analysis(files, config, output_dir)
 
         # Step 5: Generate comprehensive report
@@ -241,7 +252,7 @@ def get_default_config():
         "analysis": {
             "force_column": "Force.Fz3",
             "fps": 2000.0,  # Frames per second for time vector generation
-            "body_weight": 18.36,  # Body weight in kg for energy calculations
+            "body_weight": 70.0,  # Body weight in kg for energy calculations
         },
         "filtering": {
             "enabled": False,
@@ -309,14 +320,18 @@ def load_toml_config(config_file):
             print(f"Configuration file not found: {config_file}")
             return None
 
-        # Load TOML file - handle different library APIs
+        # Load TOML file - handle different library APIs and encoding
         try:
             # Try toml library (most common)
-            with open(config_file) as f:
+            with open(config_file, encoding="utf-8") as f:
                 config = toml.load(f)
         except AttributeError:
             # Try tomllib (Python 3.11+ built-in, binary mode)
             with open(config_file, "rb") as f:
+                config = toml.load(f)
+        except UnicodeDecodeError:
+            # Fallback: try with latin-1 encoding
+            with open(config_file, encoding="latin-1") as f:
                 config = toml.load(f)
 
         print(f"Loaded configuration from: {config_file}")
@@ -340,14 +355,15 @@ def load_toml_config(config_file):
 
 def find_analysis_files(input_dir, file_format="auto"):
     """
-    Finds files in the input directory based on specified format.
+    Finds all C3D and CSV files in the input directory automatically.
+    Processes both formats in batch.
 
     Parameters:
     -----------
     input_dir : str
         Input directory path
     file_format : str
-        File format to search for: 'auto', 'c3d', 'csv'
+        Ignored - always processes both .c3d and .csv files
 
     Returns:
     --------
@@ -362,16 +378,8 @@ def find_analysis_files(input_dir, file_format="auto"):
         print(f"Input directory not found: {input_dir}")
         return files
 
-    # Determine extensions based on format
-    if file_format == "auto":
-        extensions = [".c3d", ".csv"]
-    elif file_format == "c3d":
-        extensions = [".c3d"]
-    elif file_format == "csv":
-        extensions = [".csv"]
-    else:
-        print(f"Unknown file format: {file_format}")
-        return files
+    # Always search for both C3D and CSV files
+    extensions = [".c3d", ".csv"]
 
     for ext in extensions:
         pattern = os.path.join(input_dir, f"*{ext}")
@@ -438,7 +446,11 @@ def auto_detect_force_column(sample_file):
     """
     try:
         # Read CSV file header to check available columns
-        df_header = pd.read_csv(sample_file, nrows=0)
+        try:
+            df_header = pd.read_csv(sample_file, nrows=0, encoding="utf-8")
+        except UnicodeDecodeError:
+            # Try with latin-1 if UTF-8 fails
+            df_header = pd.read_csv(sample_file, nrows=0, encoding="latin-1")
         columns = list(df_header.columns)
 
         print(f"Auto-detecting force column from: {columns}")
@@ -564,16 +576,134 @@ def butterworth_filter(data, fs, cutoff, order=4):
 # configure_filtering_parameters and configure_detection_parameters functions removed - not needed in batch mode
 
 
+def process_single_file(file_path, config, output_dir):
+    """
+    Processes a single file for sit-to-stand analysis.
+
+    Parameters:
+    -----------
+    file_path : str
+        Path to the file to analyze
+    config : dict
+        Complete configuration dictionary
+    output_dir : str
+        Output directory for results
+
+    Returns:
+    --------
+    dict
+        Analysis result for the file
+    """
+    try:
+        print(f"Processing file: {os.path.basename(file_path)}")
+
+        # Auto-detect or use configured column
+        column_name = config.get("analysis", {}).get("force_column", "Force.Fz3")
+        
+        # For C3D files, column detection is handled in read_c3d_file
+        # For CSV files, verify and auto-detect if needed
+        if file_path.lower().endswith(".csv"):
+            if not column_name or not verify_column_exists(file_path, column_name):
+                print(f"Column '{column_name}' not found, attempting auto-detection...")
+                column_name = select_or_confirm_column(file_path, config)
+                if not column_name:
+                    return {
+                        "file": file_path,
+                        "filename": os.path.basename(file_path),
+                        "error": "Could not determine force column",
+                    }
+        # For C3D files, column_name will be handled/validated in read_c3d_file
+
+        # Read file data
+        if file_path.lower().endswith(".c3d"):
+            data = read_c3d_file(file_path, column_name)
+        else:
+            data = read_csv_file(file_path, column_name, config)
+
+        if data is None:
+            print(f"  Skipping {file_path} - could not read data")
+            return {
+                "file": file_path,
+                "filename": os.path.basename(file_path),
+                "error": "Could not read data",
+            }
+
+        # Apply Butterworth filtering if enabled
+        if config.get("filtering", {}).get("enabled", False):
+            print("  Applying Butterworth filter...")
+            filtered_force = butterworth_filter(
+                data["Force"].values,
+                fs=config["filtering"]["sampling_frequency"],
+                cutoff=config["filtering"]["cutoff_frequency"],
+                order=config["filtering"]["order"],
+            )
+            data = data.copy()
+            data["Force"] = filtered_force
+            print(f"  Filtered with cutoff {config['filtering']['cutoff_frequency']} Hz")
+
+        # Analyze sit-to-stand movement
+        analysis_result = analyze_sit_to_stand(data, config)
+
+        # Create individual file directory inside sit2stand_results
+        file_base_name = Path(file_path).stem
+        main_results_dir = Path(output_dir) / "sit2stand_results"
+        file_results_dir = main_results_dir / file_base_name
+        file_results_dir.mkdir(parents=True, exist_ok=True)
+
+        # Save force plot as PNG in the individual file directory
+        plot_filename = f"{file_base_name}_force_plot.png"
+        plot_path = file_results_dir / plot_filename
+        save_force_plot_png(
+            data,
+            analysis_result["sit_to_stand_phases"],
+            str(plot_path),
+            config,
+            analysis_result.get("stability_metrics", {}),
+            analysis_result.get("all_peaks_global", []),
+        )
+
+        # Store results with file information
+        result = {
+            "file": file_path,
+            "filename": os.path.basename(file_path),
+            "analysis": analysis_result,
+            "configuration": config.copy(),
+            "plot_path": str(plot_path),
+            "results_dir": str(file_results_dir),
+        }
+
+        # Generate individual report
+        generate_individual_report(result, config, output_dir)
+
+        # Generate animated HTML report
+        html_path = file_results_dir / f"{file_base_name}_animated_report.html"
+        generate_animated_html_report(data, analysis_result, config, str(html_path), result)
+
+        print(f"  [OK] Completed: {os.path.basename(file_path)}")
+        return result
+
+    except Exception as e:
+        print(f"Error processing {file_path}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "file": file_path,
+            "filename": os.path.basename(file_path),
+            "error": str(e),
+        }
+
+
 def run_batch_analysis(files, config, output_dir):
     """
-    Runs the sit-to-stand analysis on multiple files using configuration.
+    Runs the sit-to-stand analysis on multiple files using the same TOML configuration.
+    All files are processed with identical analysis parameters.
 
     Parameters:
     -----------
     files : list
         List of file paths to analyze
     config : dict
-        Complete configuration dictionary
+        Complete configuration dictionary (same for all files)
     output_dir : str
         Output directory for results
 
@@ -583,81 +713,35 @@ def run_batch_analysis(files, config, output_dir):
         List of analysis results for each file
     """
     results = []
-    column_name = config["analysis"]["force_column"]
 
-    # Create main results directory if it doesn't exist
-    main_results_dir = Path(output_dir) / "sit2stand_results"
-    main_results_dir.mkdir(parents=True, exist_ok=True)
+    print(f"\nUsing the same TOML configuration for all {len(files)} files:")
+    print(f"  Force column: {config.get('analysis', {}).get('force_column', 'Force.Fz3')}")
+    print(f"  FPS: {config.get('analysis', {}).get('fps', 2000.0)}")
+    print(f"  Body weight: {config.get('analysis', {}).get('body_weight', 70.0)} kg")
+    print(f"  Filter enabled: {config.get('filtering', {}).get('enabled', False)}")
+    print()
 
     for i, file_path in enumerate(files):
         try:
             print(f"Processing file {i + 1}/{len(files)}: {os.path.basename(file_path)}")
-
-            # Read file data
-            if file_path.lower().endswith(".c3d"):
-                data = read_c3d_file(file_path, column_name)
+            
+            # Use process_single_file to maintain consistency
+            # All files use the same config
+            result = process_single_file(file_path, config, output_dir)
+            
+            if result:
+                results.append(result)
             else:
-                data = read_csv_file(file_path, column_name, config)
-
-            if data is None:
-                print(f"  Skipping {file_path} - could not read data")
-                results.append(
-                    {
-                        "file": file_path,
-                        "filename": os.path.basename(file_path),
-                        "error": "Could not read data",
-                    }
-                )
-                continue
-
-            # Apply Butterworth filtering if enabled
-            if config.get("filtering", {}).get("enabled", False):
-                print("  Applying Butterworth filter...")
-                filtered_force = butterworth_filter(
-                    data["Force"].values,
-                    fs=config["filtering"]["sampling_frequency"],
-                    cutoff=config["filtering"]["cutoff_frequency"],
-                    order=config["filtering"]["order"],
-                )
-                data = data.copy()
-                data["Force"] = filtered_force
-                print(f"  Filtered with cutoff {config['filtering']['cutoff_frequency']} Hz")
-
-            # Analyze sit-to-stand movement
-            analysis_result = analyze_sit_to_stand(data, config)
-
-            # Create individual file directory
-            file_base_name = Path(file_path).stem
-            file_results_dir = main_results_dir / file_base_name
-            file_results_dir.mkdir(exist_ok=True)
-
-            # Save force plot as PNG in the individual file directory
-            plot_filename = f"{file_base_name}_force_plot.png"
-            plot_path = file_results_dir / plot_filename
-            save_force_plot_png(
-                data,
-                analysis_result["sit_to_stand_phases"],
-                str(plot_path),
-                config,
-                analysis_result.get("stability_metrics", {}),
-                analysis_result.get("all_peaks_global", []),
-            )
-
-            # Store results with file information
-            result = {
-                "file": file_path,
-                "filename": os.path.basename(file_path),
-                "analysis": analysis_result,
-                "configuration": config.copy(),
-                "plot_path": str(plot_path),
-                "results_dir": str(file_results_dir),
-            }
-
-            results.append(result)
-            print(f"  [OK] Completed: {os.path.basename(file_path)}")
+                results.append({
+                    "file": file_path,
+                    "filename": os.path.basename(file_path),
+                    "error": "Processing returned no result",
+                })
 
         except Exception as e:
             print(f"Error processing {file_path}: {str(e)}")
+            import traceback
+            traceback.print_exc()
             results.append(
                 {
                     "file": file_path,
@@ -687,14 +771,20 @@ def generate_individual_report(result, config, output_dir):
         base_name = Path(filename).stem
         analysis = result["analysis"]
 
-        # Create individual file directory path
-        main_results_dir = Path(output_dir) / "sit2stand_results"
-        file_results_dir = main_results_dir / base_name
+        # Use the results directory from the result dict (created in process_single_file)
+        if "results_dir" in result:
+            file_results_dir = Path(result["results_dir"])
+        else:
+            # Fallback: create individual file directory path
+            file_results_dir = Path(output_dir) / base_name
+        
+        # Ensure directory exists
+        file_results_dir.mkdir(parents=True, exist_ok=True)
 
         # Generate individual text report
         txt_path = file_results_dir / f"{base_name}_analysis_report.txt"
 
-        with open(txt_path, "w", encoding="utf-8") as f:
+        with open(txt_path, "w", encoding="utf-8", errors="replace") as f:
             f.write(f"Sit-to-Stand Analysis Report: {filename}\n")
             f.write("=" * 60 + "\n\n")
 
@@ -928,7 +1018,7 @@ def generate_individual_report(result, config, output_dir):
 
         # Save CSV
         df = pd.DataFrame(csv_data)
-        df.to_csv(csv_path, index=False)
+        df.to_csv(csv_path, index=False, encoding="utf-8")
 
         # print(f"  Individual reports saved: {os.path.basename(txt_path)}, {os.path.basename(csv_path)}")
 
@@ -963,10 +1053,18 @@ def generate_batch_report(results, config, output_dir):
         total_files = len(results)
 
         # Generate batch summary text report in main results directory
-        main_results_dir = Path(output_dir) / "sit2stand_results"
+        # Use the first result's directory structure to determine main results dir
+        if results and "results_dir" in results[0]:
+            # Extract main results dir from first result
+            first_result_dir = Path(results[0]["results_dir"])
+            main_results_dir = first_result_dir.parent
+        else:
+            main_results_dir = Path(output_dir) / "sit2stand_results"
+        
+        main_results_dir.mkdir(parents=True, exist_ok=True)
         report_path = main_results_dir / "batch_analysis_summary.txt"
 
-        with open(report_path, "w", encoding="utf-8") as f:
+        with open(report_path, "w", encoding="utf-8", errors="replace") as f:
             f.write("Sit-to-Stand Batch Analysis Report\n")
             f.write("=" * 60 + "\n\n")
 
@@ -1341,7 +1439,9 @@ def generate_batch_report(results, config, output_dir):
         if csv_data:
             df = pd.DataFrame(csv_data)
             csv_path = main_results_dir / "batch_analysis_summary.csv"
-            df.to_csv(csv_path, index=False)
+            df.to_csv(csv_path, index=False, encoding="utf-8")
+        else:
+            csv_path = None
 
         print("\nBatch report generated:")
         print(f"  Batch summary report: {report_path}")
@@ -1372,15 +1472,39 @@ def read_c3d_file(file_path, column_name):
 
         # Get analog data and labels
         analogs = datac3d["data"]["analogs"]
-        analog_labels = datac3d["parameters"]["ANALOG"]["LABELS"]["value"]
+        analog_labels_raw = datac3d["parameters"]["ANALOG"]["LABELS"]["value"]
+        
+        # Handle different label formats (list of strings or list of lists)
+        if analog_labels_raw:
+            if isinstance(analog_labels_raw[0], list):
+                analog_labels = [label[0] if isinstance(label, list) else str(label) for label in analog_labels_raw]
+            else:
+                analog_labels = [str(label) for label in analog_labels_raw]
+        else:
+            analog_labels = []
 
-        print(f"Available analog channels: {analog_labels}")
+        # Print available channels safely (handle encoding issues)
+        try:
+            if len(analog_labels) > 10:
+                labels_str = ", ".join([str(l).encode('utf-8', errors='replace').decode('utf-8', errors='replace') for l in analog_labels[:10]])
+                print(f"Available analog channels ({len(analog_labels)}): {labels_str}...")
+            else:
+                labels_str = ", ".join([str(l).encode('utf-8', errors='replace').decode('utf-8', errors='replace') for l in analog_labels])
+                print(f"Available analog channels: {labels_str}")
+        except Exception:
+            print(f"Available analog channels: {len(analog_labels)} channels found")
 
-        # Check if requested column exists
-        if column_name not in analog_labels:
+        # Check if requested column exists (case-insensitive search)
+        column_name_lower = column_name.lower()
+        matching_labels = [label for label in analog_labels if label.lower() == column_name_lower]
+        
+        if matching_labels:
+            # Use the exact match
+            column_name = matching_labels[0]
+            print(f"Found exact match for '{column_name}'")
+        else:
             print(f"Column '{column_name}' not found in analog channels")
-            print(f"Available analog channels: {analog_labels}")
-
+            
             # Try to find a suitable force column automatically
             suggested_column = suggest_force_column(analog_labels)
             if suggested_column:
@@ -1388,21 +1512,58 @@ def read_c3d_file(file_path, column_name):
                 column_name = suggested_column
             else:
                 print("No suitable force column found")
-                return None
+                print(f"Looking for patterns containing 'Fz' or 'Force'...")
+                # Last resort: find any column with Fz or Force in the name
+                fz_labels = [label for label in analog_labels if 'fz' in label.lower() or 'force' in label.lower()]
+                if fz_labels:
+                    # Prefer Force.Fz3, Force.Fz2, etc.
+                    preferred = [l for l in fz_labels if 'force.fz' in l.lower()]
+                    if preferred:
+                        column_name = preferred[0]
+                        print(f"Using: {column_name}")
+                    else:
+                        column_name = fz_labels[0]
+                        print(f"Using first Fz/Force column found: {column_name}")
+                else:
+                    return None
 
         # Find the index of the requested column
-        column_index = analog_labels.index(column_name)
+        try:
+            column_index = analog_labels.index(column_name)
+        except ValueError:
+            # Try case-insensitive search
+            column_index = next((i for i, label in enumerate(analog_labels) if label.lower() == column_name.lower()), None)
+            if column_index is None:
+                print(f"Could not find column '{column_name}' in analog labels")
+                return None
 
         # Extract the analog data for this channel
-        # analogs shape is typically (1, num_channels, num_frames) for single analog frame
-        # or (num_frames, num_channels) depending on the data structure
-        analog_data = analogs.squeeze(axis=0)  # Remove first dimension if it's 1
-
-        if analog_data.ndim == 2:
-            # Shape is (num_channels, num_frames)
-            force_values = analog_data[column_index, :]
+        # analogs shape can be (1, num_channels, num_frames) or (num_frames, num_channels)
+        print(f"Analog data shape: {analogs.shape}")
+        
+        # Handle different analog data structures
+        if analogs.ndim == 3:
+            # Shape is (1, num_channels, num_frames) - squeeze first dimension
+            analog_data = analogs.squeeze(axis=0)
+            if analog_data.ndim == 2:
+                # Shape is (num_channels, num_frames)
+                force_values = analog_data[column_index, :]
+            else:
+                print(f"Unexpected analog data shape after squeeze: {analog_data.shape}")
+                return None
+        elif analogs.ndim == 2:
+            # Shape is (num_channels, num_frames) or (num_frames, num_channels)
+            if analogs.shape[0] == len(analog_labels):
+                # Shape is (num_channels, num_frames)
+                force_values = analogs[column_index, :]
+            elif analogs.shape[1] == len(analog_labels):
+                # Shape is (num_frames, num_channels) - transpose
+                force_values = analogs[:, column_index]
+            else:
+                print(f"Unexpected analog data shape: {analogs.shape}")
+                return None
         else:
-            print(f"Unexpected analog data shape: {analog_data.shape}")
+            print(f"Unexpected analog data dimensions: {analogs.ndim}")
             return None
 
         # Get timing information
@@ -1456,7 +1617,13 @@ def print_c3d_info(datac3d):
 
         print("\nAnalog channels and units:")
         for label, unit in zip(analog_labels, analog_units, strict=True):
-            print(f"  {label}: {unit}")
+            try:
+                # Handle encoding issues with special characters
+                label_str = str(label).encode('utf-8', errors='replace').decode('utf-8', errors='replace')
+                unit_str = str(unit).encode('utf-8', errors='replace').decode('utf-8', errors='replace')
+                print(f"  {label_str}: {unit_str}")
+            except Exception:
+                print(f"  [Label {analog_labels.index(label)}]: {unit}")
 
         # Force platform information
         if "platform" in datac3d["data"] and datac3d["data"]["platform"]:
@@ -3321,6 +3488,594 @@ def save_force_plot_png(
 # display_results function removed - not needed in batch mode, results are saved automatically
 
 
+def generate_animated_html_report(data, analysis_result, config, output_path, result):
+    """
+    Generates an interactive HTML report with animated chart using Plotly.js.
+    
+    Parameters:
+    -----------
+    data : pandas.DataFrame
+        DataFrame with Time and Force columns
+    analysis_result : dict
+        Analysis results dictionary
+    config : dict
+        Configuration dictionary
+    output_path : str
+        Path to save the HTML file
+    result : dict
+        Result dictionary with file information
+    """
+    try:
+        import base64
+        import json
+        from datetime import datetime
+        
+        # Try to load VAILA logo
+        logo_b64 = ""
+        try:
+            current_file = Path(__file__).resolve()
+            project_root = current_file.parent.parent
+            logo_path = project_root / "docs" / "images" / "vaila_logo.png"
+            
+            if not logo_path.exists():
+                logo_path = project_root / "docs" / "images" / "vaila.png"
+            
+            if logo_path.exists():
+                with open(logo_path, "rb") as img_file:
+                    logo_data = img_file.read()
+                    logo_b64 = base64.b64encode(logo_data).decode("utf-8")
+        except Exception as e:
+            print(f"Warning: Could not load logo: {e}")
+        
+        # Extract data for JavaScript - convert to JSON-safe format
+        time_data = [float(x) for x in data["Time"].tolist()]
+        force_data = [float(x) for x in data["Force"].tolist()]
+        
+        # Extract phases information
+        phases = analysis_result.get("sit_to_stand_phases", [])
+        phases_data = []
+        for phase in phases:
+            phases_data.append({
+                "start_time": float(phase.get("start_time", 0)),
+                "end_time": float(phase.get("end_time", 0)),
+                "peak_time": float(phase.get("peak_time", 0)),
+                "peak_force": float(phase.get("peak_force", 0)),
+                "duration": float(phase.get("duration", 0)),
+            })
+        
+        # Extract peaks
+        all_peaks = analysis_result.get("all_peaks_global", [])
+        peaks_data = [{"time": float(p.get("time", 0)), "force": float(p.get("force", 0))} for p in all_peaks]
+        
+        # Extract stability metrics
+        stability = analysis_result.get("stability_metrics", {})
+        stability_data = {
+            "reference_peak_force": float(stability.get("first_peak_force", 0)),
+            "stability_index": float(stability.get("stability_index", 0)),
+            "mean_deviation": float(stability.get("mean_deviation", 0)),
+        }
+        
+        # Extract movement metrics
+        movement = analysis_result.get("movement_metrics", {})
+        energy = analysis_result.get("energy_metrics", {})
+        
+        # Prepare data for table
+        table_data = []
+        # Basic metrics
+        table_data.append(["Duration", f"{analysis_result.get('duration', 0):.2f}", "s"])
+        table_data.append(["Mean Force", f"{analysis_result.get('mean_force', 0):.2f}", "N"])
+        table_data.append(["Max Force", f"{analysis_result.get('max_force', 0):.2f}", "N"])
+        table_data.append(["Min Force", f"{analysis_result.get('min_force', 0):.2f}", "N"])
+        
+        # Movement metrics
+        table_data.append(["Phases Detected", f"{movement.get('num_phases', 0)}", "count"])
+        table_data.append(["Total Movement Time", f"{movement.get('total_movement_time', 0):.2f}", "s"])
+        table_data.append(["Average Phase Duration", f"{movement.get('average_phase_duration', 0):.2f}", "s"])
+        
+        # Time to peak
+        time_to_peak = analysis_result.get("time_to_peak_metrics", {})
+        if time_to_peak.get("time_to_first_peak"):
+            table_data.append(["Time to First Peak", f"{time_to_peak.get('time_to_first_peak', 0):.3f}", "s"])
+        if time_to_peak.get("time_to_max_force"):
+            table_data.append(["Time to Max Force", f"{time_to_peak.get('time_to_max_force', 0):.3f}", "s"])
+        
+        # Impulse metrics
+        impulse = analysis_result.get("impulse_metrics", {})
+        table_data.append(["Total Impulse", f"{impulse.get('total_impulse', 0):.2f}", "N⋅s"])
+        table_data.append(["Peak Power", f"{impulse.get('peak_power', 0):.2f}", "W"])
+        
+        # Stability metrics
+        table_data.append(["Stability Index", f"{stability_data.get('stability_index', 0):.3f}", "(0-1)"])
+        table_data.append(["Mean Deviation from Peak", f"{stability_data.get('mean_deviation', 0):.2f}", "N"])
+        
+        # Energy metrics
+        if energy:
+            table_data.append(["Body Weight", f"{energy.get('body_weight_kg', 0):.1f}", "kg"])
+            table_data.append(["Total Metabolic Energy", f"{energy.get('total_metabolic_energy_kcal', 0):.3f}", "kcal"])
+            table_data.append(["Energy Efficiency", f"{energy.get('energy_efficiency', 0):.1f}", "%"])
+        
+        # Create HTML content
+        html_content = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sit-to-Stand Analysis Report - {result.get('filename', 'Analysis')}</title>
+    <script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>
+    <style>
+        * {{
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }}
+        
+        body {{
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }}
+        
+        .container {{
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }}
+        
+        .header {{
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }}
+        
+        .header h1 {{
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }}
+        
+        .header p {{
+            font-size: 1.1em;
+            opacity: 0.9;
+        }}
+        
+        .content {{
+            padding: 30px;
+        }}
+        
+        .metrics-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }}
+        
+        .metric-card {{
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: transform 0.3s;
+        }}
+        
+        .metric-card:hover {{
+            transform: translateY(-5px);
+        }}
+        
+        .metric-label {{
+            font-size: 0.9em;
+            color: #666;
+            margin-bottom: 10px;
+        }}
+        
+        .metric-value {{
+            font-size: 2em;
+            font-weight: bold;
+            color: #667eea;
+        }}
+        
+        .metric-unit {{
+            font-size: 0.8em;
+            color: #999;
+        }}
+        
+        .chart-container {{
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }}
+        
+        .chart-title {{
+            font-size: 1.5em;
+            color: #333;
+            margin-bottom: 15px;
+            text-align: center;
+        }}
+        
+        #animatedChart {{
+            width: 100%;
+            height: 600px;
+        }}
+        
+        .controls {{
+            text-align: center;
+            margin: 20px 0;
+        }}
+        
+        .btn {{
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 25px;
+            font-size: 1em;
+            cursor: pointer;
+            margin: 0 10px;
+            transition: all 0.3s;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }}
+        
+        .btn:hover {{
+            background: #764ba2;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 8px rgba(0,0,0,0.2);
+        }}
+        
+        .btn:active {{
+            transform: translateY(0);
+        }}
+        
+        .phases-section {{
+            margin-top: 30px;
+        }}
+        
+        .phase-card {{
+            background: white;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }}
+        
+        .phase-title {{
+            font-size: 1.2em;
+            color: #667eea;
+            margin-bottom: 10px;
+        }}
+        
+        .phase-details {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            font-size: 0.9em;
+        }}
+        
+        .phase-detail {{
+            color: #666;
+        }}
+        
+        .phase-detail strong {{
+            color: #333;
+        }}
+        
+        .footer {{
+            background: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            color: #666;
+            border-top: 1px solid #ddd;
+        }}
+        
+        .data-table {{
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }}
+        
+        .data-table th {{
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-weight: bold;
+        }}
+        
+        .data-table td {{
+            padding: 12px 15px;
+            border-bottom: 1px solid #ddd;
+        }}
+        
+        .data-table tr:nth-child(even) {{
+            background: #f8f9fa;
+        }}
+        
+        .data-table tr:hover {{
+            background: #e9ecef;
+        }}
+        
+        .table-container {{
+            margin: 30px 0;
+            overflow-x: auto;
+        }}
+        
+        .table-title {{
+            font-size: 1.5em;
+            color: #667eea;
+            margin-bottom: 15px;
+        }}
+    </style>
+</head>
+    <body>
+    <div class="container">
+        <div class="header">
+            {f'<div style="text-align: center; margin-bottom: 20px;"><img src="data:image/png;base64,{logo_b64}" style="max-width: 200px; height: auto;" alt="vailá Logo"></div>' if logo_b64 else ''}
+            <h1>🚶 Sit-to-Stand Analysis Report</h1>
+            <p>{result.get('filename', 'Analysis File')}</p>
+        </div>
+        
+        <div class="content">
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-label">Duration</div>
+                    <div class="metric-value">{analysis_result.get('duration', 0):.2f}<span class="metric-unit">s</span></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Max Force</div>
+                    <div class="metric-value">{analysis_result.get('max_force', 0):.1f}<span class="metric-unit">N</span></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Phases Detected</div>
+                    <div class="metric-value">{movement.get('num_phases', 0)}<span class="metric-unit">movements</span></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Stability Index</div>
+                    <div class="metric-value">{stability_data.get('stability_index', 0):.3f}<span class="metric-unit">(0-1)</span></div>
+                </div>
+                {f'''
+                <div class="metric-card">
+                    <div class="metric-label">Total Energy</div>
+                    <div class="metric-value">{energy.get('total_metabolic_energy_kcal', 0):.3f}<span class="metric-unit">kcal</span></div>
+                </div>
+                ''' if energy else ''}
+            </div>
+            
+            <div class="chart-container">
+                <div class="chart-title">📊 Animated Force Analysis</div>
+                <div class="controls">
+                    <button class="btn" onclick="playAnimation()">▶️ Play Animation</button>
+                    <button class="btn" onclick="resetAnimation()">⏮️ Reset</button>
+                    <button class="btn" onclick="togglePause()">⏸️ Pause</button>
+                </div>
+                <div id="animatedChart"></div>
+            </div>
+            
+            <div class="table-container">
+                <div class="table-title">📋 Analysis Data Summary</div>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Metric</th>
+                            <th>Value</th>
+                            <th>Unit</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {''.join([f'''
+                        <tr>
+                            <td>{row[0]}</td>
+                            <td>{row[1]}</td>
+                            <td>{row[2]}</td>
+                        </tr>
+                        ''' for row in table_data])}
+                    </tbody>
+                </table>
+            </div>
+            
+            {f'''
+            <div class="phases-section">
+                <h2 style="color: #667eea; margin-bottom: 20px;">Movement Phases</h2>
+                {''.join([f'''
+                <div class="phase-card">
+                    <div class="phase-title">Phase {i+1}</div>
+                    <div class="phase-details">
+                        <div class="phase-detail"><strong>Duration:</strong> {p.get('duration', 0):.3f} s</div>
+                        <div class="phase-detail"><strong>Peak Force:</strong> {p.get('peak_force', 0):.1f} N</div>
+                        <div class="phase-detail"><strong>Time to Peak:</strong> {p.get('time_to_max_force', 0):.3f} s</div>
+                        <div class="phase-detail"><strong>RFD:</strong> {p.get('overall_rfd', 0):.1f} N/s</div>
+                    </div>
+                </div>
+                ''' for i, p in enumerate(phases)])}
+            </div>
+            ''' if phases else ''}
+        </div>
+        
+        <div class="footer">
+            <p>Report generated by <i>vailá</i> - Multimodal Toolbox</p>
+            <p>Date: {datetime.now().strftime("%d/%m/%Y %H:%M:%S")}</p>
+        </div>
+    </div>
+    
+    <script>
+        // Data - properly formatted as JSON
+        const timeData = {json.dumps(time_data)};
+        const forceData = {json.dumps(force_data)};
+        const phases = {json.dumps(phases_data)};
+        const peaks = {json.dumps(peaks_data)};
+        const stabilityRef = {stability_data.get('reference_peak_force', 0)};
+        
+        let animationFrame = 0;
+        let isPlaying = false;
+        let animationId = null;
+        const animationSpeed = 2; // frames per update
+        
+        // Create initial trace
+        const trace = {{
+            x: [],
+            y: [],
+            type: 'scatter',
+            mode: 'lines',
+            name: 'Force',
+            line: {{
+                color: '#667eea',
+                width: 2
+            }}
+        }};
+        
+        // Add phase regions
+        const phaseShapes = phases.map((phase, phaseIdx) => ({{
+            type: 'rect',
+            xref: 'x',
+            yref: 'paper',
+            x0: phase.start_time,
+            y0: 0,
+            x1: phase.end_time,
+            y1: 1,
+            fillcolor: 'rgba(102, 126, 234, ' + (0.1 + phaseIdx * 0.05) + ')',
+            line: {{
+                width: 0
+            }},
+            layer: 'below'
+        }}));
+        
+        // Add peak markers
+        const peakTrace = {{
+            x: peaks.map(p => p.time),
+            y: peaks.map(p => p.force),
+            type: 'scatter',
+            mode: 'markers',
+            name: 'Peaks',
+            marker: {{
+                color: '#e74c3c',
+                size: 10,
+                symbol: 'diamond'
+            }}
+        }};
+        
+        // Add stability reference line
+        const stabilityLine = {{
+            x: [timeData[0], timeData[timeData.length - 1]],
+            y: [stabilityRef, stabilityRef],
+            type: 'scatter',
+            mode: 'lines',
+            name: 'Reference Peak',
+            line: {{
+                color: '#f39c12',
+                width: 2,
+                dash: 'dash'
+            }}
+        }};
+        
+        const layout = {{
+            title: {{
+                text: 'Sit-to-Stand Force Analysis (Animated)',
+                font: {{ size: 20 }}
+            }},
+            xaxis: {{
+                title: 'Time (s)',
+                range: [timeData[0], timeData[timeData.length - 1]]
+            }},
+            yaxis: {{
+                title: 'Force (N)'
+            }},
+            shapes: phaseShapes,
+            hovermode: 'closest',
+            showlegend: true,
+            legend: {{
+                x: 0.02,
+                y: 0.98
+            }}
+        }};
+        
+        const config = {{
+            responsive: true,
+            displayModeBar: true
+        }};
+        
+        // Initialize plot
+        Plotly.newPlot('animatedChart', [trace, peakTrace, stabilityLine], layout, config);
+        
+        function playAnimation() {{
+            if (isPlaying) return;
+            isPlaying = true;
+            animate();
+        }}
+        
+        function animate() {{
+            if (!isPlaying || animationFrame >= timeData.length) {{
+                isPlaying = false;
+                return;
+            }}
+            
+            const endFrame = Math.min(animationFrame + animationSpeed, timeData.length);
+            const xData = timeData.slice(0, endFrame);
+            const yData = forceData.slice(0, endFrame);
+            
+            Plotly.update('animatedChart', {{
+                x: [xData],
+                y: [yData]
+            }}, {{}}, [0]);
+            
+            animationFrame = endFrame;
+            
+            if (animationFrame < timeData.length) {{
+                animationId = setTimeout(animate, 50);
+            }} else {{
+                isPlaying = false;
+            }}
+        }}
+        
+        function resetAnimation() {{
+            isPlaying = false;
+            if (animationId) {{
+                clearTimeout(animationId);
+            }}
+            animationFrame = 0;
+            Plotly.update('animatedChart', {{
+                x: [[]],
+                y: [[]]
+            }}, {{}}, [0]);
+        }}
+        
+        function togglePause() {{
+            isPlaying = !isPlaying;
+            if (isPlaying) {{
+                animate();
+            }} else {{
+                if (animationId) {{
+                    clearTimeout(animationId);
+                }}
+            }}
+        }}
+        
+        // Auto-play on load
+        setTimeout(() => {{
+            playAnimation();
+        }}, 1000);
+    </script>
+</body>
+</html>"""
+        
+        # Write HTML file
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write(html_content)
+        
+        print(f"  Animated HTML report saved: {Path(output_path).name}")
+        
+    except Exception as e:
+        print(f"Error generating animated HTML report: {str(e)}")
+        import traceback
+        traceback.print_exc()
+
+
 class SitToStandGUI:
     """
     Simple GUI for sit-to-stand analysis configuration using basic tkinter.
@@ -3330,14 +4085,13 @@ class SitToStandGUI:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("Sit-to-Stand Analysis")
-        self.root.geometry("500x300")
+        self.root.geometry("550x350")
         self.root.resizable(True, True)
 
         # Variables for storing user selections
         self.config_file = ""
         self.input_dir = ""
         self.output_dir = ""
-        self.file_format = tk.StringVar(value="auto")  # auto, c3d, csv
 
         # Use defaults by default
         self.use_defaults = True
@@ -3379,6 +4133,15 @@ class SitToStandGUI:
 
         input_btn = tk.Button(input_frame, text="Browse", command=self.browse_input_dir, width=8)
         input_btn.pack(side=tk.LEFT)
+        
+        # Info label about automatic file detection
+        info_label = tk.Label(
+            main_frame, 
+            text="Note: Automatically processes all .c3d and .csv files in the directory",
+            font=("Arial", 8),
+            fg="gray"
+        )
+        info_label.pack(pady=(0, 10))
 
         # Output directory row
         output_frame = tk.Frame(main_frame)
@@ -3390,21 +4153,6 @@ class SitToStandGUI:
 
         output_btn = tk.Button(output_frame, text="Browse", command=self.browse_output_dir, width=8)
         output_btn.pack(side=tk.LEFT)
-
-        # File format selection
-        format_frame = tk.Frame(main_frame)
-        format_frame.pack(fill=tk.X, pady=(0, 10))
-
-        tk.Label(format_frame, text="File format:").pack(side=tk.LEFT)
-        format_combo = ttk.Combobox(
-            format_frame,
-            textvariable=self.file_format,
-            values=["auto", "c3d", "csv"],
-            state="readonly",
-            width=10,
-        )
-        format_combo.pack(side=tk.LEFT, padx=(10, 5))
-        format_combo.set("auto")
 
         # Options frame
         options_frame = tk.Frame(main_frame)
@@ -3483,6 +4231,10 @@ class SitToStandGUI:
             self.input_dir = dirname
             self.input_entry.delete(0, tk.END)
             self.input_entry.insert(0, dirname)
+            # Auto-set output directory if not set
+            if not self.output_entry.get():
+                default_output = os.path.join(dirname, "sit2stand_analysis")
+                self.output_entry.insert(0, default_output)
 
     def browse_output_dir(self):
         """Opens directory dialog for output directory selection."""
@@ -3507,7 +4259,7 @@ class SitToStandGUI:
             try:
                 import toml
 
-                with open(filename, "w") as f:
+                with open(filename, "w", encoding="utf-8") as f:
                     toml.dump(default_config, f)
 
                 self.status_label.config(text=f"Default config saved to: {filename}", fg="green")
@@ -3532,11 +4284,14 @@ class SitToStandGUI:
         config_file = self.config_entry.get().strip() if not self.use_defaults else ""
         input_dir = self.input_entry.get().strip()
         output_dir = self.output_entry.get().strip()
-        file_format = self.file_format.get()
 
         # Validation
         if not input_dir:
             self.status_label.config(text="Error: Please select input directory", fg="red")
+            return
+
+        if not os.path.exists(input_dir):
+            self.status_label.config(text="Error: Input directory does not exist", fg="red")
             return
 
         if not self.use_defaults and not config_file:
@@ -3561,9 +4316,6 @@ class SitToStandGUI:
         if output_dir:
             cli_args.append(output_dir)
 
-        # Add file format
-        cli_args.append(file_format)
-
         # Update status
         self.status_label.config(text="Running analysis...", fg="orange")
         self.root.update()
@@ -3574,7 +4326,7 @@ class SitToStandGUI:
 
             if result is None:  # Success
                 self.status_label.config(text="Analysis completed successfully!", fg="green")
-                messagebox.showinfo("Success", "Sit-to-Stand analysis completed successfully!")
+                messagebox.showinfo("Success", "Sit-to-Stand batch analysis completed successfully!")
             else:
                 self.status_label.config(text="Analysis failed", fg="red")
                 messagebox.showerror("Error", "Analysis failed. Check console for details.")
