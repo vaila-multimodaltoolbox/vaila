@@ -366,9 +366,9 @@ mpangles.run_mp_angles()
 
 ## 🔗 Related Documentation
 
-- **[MP Angles Button Documentation](../../../docs/vaila_buttons/mp-angles-calculation.md)** - GUI button documentation
-- **[Markerless 2D Analysis Help](../analysis/markerless_2d_analysis.md)** - Input data source
-- **[vailá Main Documentation](../../../docs/index.md)** - Complete toolbox documentation
+- **[MP Angles Button Documentation](../../docs/vaila_buttons/mp-angles-calculation.md)** - GUI button documentation
+- **[Markerless 2D Analysis Help](markerless_2d_analysis.md)** - Input data source
+- **[vailá Main Documentation](../../docs/index.md)** - Complete toolbox documentation
 
 ## 📄 License
 

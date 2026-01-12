@@ -311,7 +311,7 @@ Contains segment angles in degrees (format depends on user selection):
 
 ## Related Documentation
 
-- **[Script Help](../../vaila/help/utils/mpangles.md)** - Detailed script documentation
+- **[Script Help](../../vaila/help/mpangles.md)** - Detailed script documentation
 - **[Markerless 2D Analysis Button](markerless-2d-button.md)** - Input data source
 - **[vailá Main Documentation](../index.md)** - Complete toolbox documentation
 

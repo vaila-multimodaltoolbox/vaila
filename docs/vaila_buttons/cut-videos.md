@@ -86,5 +86,5 @@ The **Cut Videos** tool (`cutvideo.py`) provides an interactive video cutting in
 ## Documentation
 
 For complete documentation, see:
-- [Full Help Documentation](../../../vaila/help/tools/cutvideo.html)
-- [Markdown Documentation](../../../vaila/help/tools/cutvideo.md)
+- [Full Help Documentation](../../vaila/help/cutvideo.html)
+- [Markdown Documentation](../../vaila/help/cutvideo.md)

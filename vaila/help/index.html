@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="en">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>vailá - Documentação de Help</title>
+    <title>vailá - Help Index</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -34,1058 +34,472 @@
             margin-top: 40px;
             border-left: 5px solid #3498db;
             padding-left: 15px;
+            background-color: #e8f4f8;
+            padding: 10px;
+            border-radius: 0 5px 5px 0;
         }
 
-        .category {
-            margin: 20px 0;
+        h3 {
+            color: #2c3e50;
+            margin-top: 20px;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 5px;
         }
 
-        .module-list {
+        .grid-container {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
             gap: 15px;
             margin: 15px 0;
         }
 
-        .module-card {
+        .tool-card {
             border: 1px solid #ddd;
-            border-radius: 8px;
-            padding: 15px;
-            background: #f8f9fa;
-            transition: box-shadow 0.3s;
+            border-radius: 5px;
+            padding: 10px;
+            background: #fff;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
         }
 
-        .module-card:hover {
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        .tool-card:hover {
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
         }
 
-        .module-name {
+        .tool-title {
             font-weight: bold;
-            color: #2c3e50;
-            margin-bottom: 10px;
+            color: #333;
+            margin-bottom: 5px;
         }
 
-        .module-links {
-            margin-top: 10px;
-        }
-
-        .module-links a {
-            margin-right: 15px;
+        .tool-links a {
+            font-size: 0.85em;
+            margin-right: 10px;
             text-decoration: none;
-            padding: 5px 10px;
-            border-radius: 3px;
+            color: #3498db;
         }
 
-        .html-link {
-            background: #007bff;
-            color: white;
+        .tool-links a:hover {
+            text-decoration: underline;
         }
 
-        .md-link {
-            background: #28a745;
-            color: white;
+        .ascii-art {
+            font-family: monospace;
+            white-space: pre;
+            background: #2c3e50;
+            color: #ecf0f1;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 30px;
+            overflow-x: auto;
+            font-size: 0.8em;
         }
 
-        .footer {
-            margin-top: 50px;
-            padding-top: 20px;
-            border-top: 1px solid #dee2e6;
-            text-align: center;
-            color: #6c757d;
+        .section-header {
+            margin-top: 40px;
         }
     </style>
 </head>
 
 <body>
     <div class="container">
-        <h1>📚 vailá - Help Documentation</h1>
-        <p style="text-align: center; font-size: 1.1em; color: #666; margin-bottom: 40px;">
-            Automatically generated documentation for all Python modules in vailá Multimodal Toolbox
-        </p>
-        <p style="text-align: center; font-size: 1.1em; color: #3498db; margin-bottom: 40px;">
-            <a href="../../docs/index.md" style="text-decoration: none; font-weight: bold;">📂 Open Project
-                Documentation (./docs)</a>
+        <h1>📚 <i>vailá</i> - Multimodal Toolbox Help</h1>
+
+        <p style="text-align: center; margin-bottom: 30px;">
+            <a href="../../docs/index.md" style="font-weight: bold;">📂 Open Project Documentation</a>
         </p>
 
-        <div style="text-align: center; margin: 30px 0;">
-            <strong>Total documented modules:</strong> 113 |
-            <strong>Categories:</strong> 7 |
-            <strong>Generated on:</strong> 12/01/2026
-        </div>
+        <!-- ASCII Art Header -->
+        <div class="ascii-art">
+            <i>vailá</i> - 12.January.2026 v0.3.9 (Python 3.12.12)
+            <div class="section-header">
+                <h2>============================ File Manager (Frame A) ========================</h2>
+                <div class="grid-container">
+                    <div class="tool-card">
+                        <div class="tool-title">A_r1_c1 - Rename</div>
+                        <div class="tool-links"><a href="filemanager.html">HTML</a> | <a href="filemanager.md">MD</a>
+                        </div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">A_r1_c2 - Import</div>
+                        <div class="tool-links"><a href="filemanager.html">HTML</a> | <a href="filemanager.md">MD</a>
+                        </div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">A_r1_c3 - Export</div>
+                        <div class="tool-links"><a href="filemanager.html">HTML</a> | <a href="filemanager.md">MD</a>
+                        </div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">A_r1_c4 - Copy</div>
+                        <div class="tool-links"><a href="filemanager.html">HTML</a> | <a href="filemanager.md">MD</a>
+                        </div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">A_r1_c5 - Move</div>
+                        <div class="tool-links"><a href="filemanager.html">HTML</a> | <a href="filemanager.md">MD</a>
+                        </div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">A_r1_c6 - Remove</div>
+                        <div class="tool-links"><a href="filemanager.html">HTML</a> | <a href="filemanager.md">MD</a>
+                        </div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">A_r1_c7 - Tree</div>
+                        <div class="tool-links"><a href="filemanager.html">HTML</a> | <a href="filemanager.md">MD</a>
+                        </div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">A_r1_c8 - Find</div>
+                        <div class="tool-links"><a href="filemanager.html">HTML</a> | <a href="filemanager.md">MD</a>
+                        </div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">A_r1_c9 - Transfer</div>
+                        <div class="tool-links"><a href="filemanager.html">HTML</a> | <a href="filemanager.md">MD</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
-        <div class="category">
-            <h2>Analysis (14 modules)</h2>
-            <div class="module-list">
+            <div class="section-header">
+                <h2>========================== Multimodal Analysis (Frame B) ===================</h2>
+                <div class="grid-container">
+                    <div class="tool-card">
+                        <div class="tool-title">B1_r1_c1 - IMU Analysis</div>
+                        <div class="tool-links"><a href="imu_analysis.html">HTML</a> | <a href="imu_analysis.md">MD</a>
+                        </div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">B1_r1_c2 - MoCap Cluster</div>
+                        <div class="tool-links"><a href="cluster_analysis.html">HTML</a> | <a
+                                href="cluster_analysis.md">MD</a></div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">B1_r1_c3 - MoCap Full Body</div>
+                        <div class="tool-links"><a href="mocap_analysis.html">HTML</a> | <a
+                                href="mocap_analysis.md">MD</a></div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">B1_r1_c4 - Markerless 2D</div>
+                        <div class="tool-links"><a href="markerless_2d_analysis.html">HTML</a> | <a
+                                href="markerless_2d_analysis.md">MD</a></div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">B1_r1_c5 - Markerless 3D</div>
+                        <div class="tool-links"><a href="markerless_3d_analysis.html">HTML</a> | <a
+                                href="markerless_3d_analysis.md">MD</a></div>
+                    </div>
 
-                <div class="module-card">
-                    <div class="module-name">animal_open_field</div>
-                    <div class="module-links">
-                        <a href="analysis/animal_open_field.html" class="html-link">📄 HTML</a>
-                        <a href="analysis/animal_open_field.md" class="md-link">📝 Markdown</a>
+                    <div class="tool-card">
+                        <div class="tool-title">B2_r2_c1 - Vector Coding</div>
+                        <div class="tool-links"><a href="run_vector_coding.html">HTML</a> | <a
+                                href="run_vector_coding.md">MD</a></div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">B2_r2_c2 - EMG</div>
+                        <div class="tool-links"><a href="emg_labiocom.html">HTML</a> | <a href="emg_labiocom.md">MD</a>
+                        </div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">B2_r2_c3 - Force Plate</div>
+                        <div class="tool-links"><a href="forceplate_analysis.html">HTML</a> | <a
+                                href="forceplate_analysis.md">MD</a></div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">B2_r2_c4 - GNSS/GPS</div>
+                        <div class="tool-links"><a href="gnss_analysis.html">HTML</a> | <a
+                                href="gnss_analysis.md">MD</a></div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">B2_r2_c5 - MEG/EEG</div>
+                        <div class="tool-links"><span>(Coming Soon)</span></div>
+                    </div>
+
+                    <div class="tool-card">
+                        <div class="tool-title">B3_r3_c1 - HR/ECG</div>
+                        <div class="tool-links"><span>(Coming Soon)</span></div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">B3_r3_c2 - MP Yolo</div>
+                        <div class="tool-links"><a href="markerless_2d_analysis_nvidia.html">HTML</a> |
+                            <a href="markerless_2d_analysis_nvidia.md">MD</a>
+                        </div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">B3_r3_c3 - <i>vailá</i>_and_jump</div>
+                        <div class="tool-links"><a href="vaila_and_jump.html">HTML</a> | <a
+                                href="vaila_and_jump.md">MD</a></div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">B3_r3_c4 - Cube2D</div>
+                        <div class="tool-links"><a href="cube2d_kinematics.html">HTML</a> | <a
+                                href="cube2d_kinematics.md">MD</a></div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">B3_r3_c5 - Animal Open Field</div>
+                        <div class="tool-links"><a href="animal_open_field.html">HTML</a> | <a
+                                href="animal_open_field.md">MD</a></div>
+                    </div>
+
+                    <div class="tool-card">
+                        <div class="tool-title">B4_r4_c1 - Tracker</div>
+                        <div class="tool-links"><a href="reid_yolotrack.html">HTML</a> | <a
+                                href="reid_yolotrack.md">MD</a></div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">B4_r4_c2 - ML Walkway</div>
+                        <div class="tool-links"><a href="ml_models_training.html">HTML</a> | <a
+                                href="ml_models_training.md">MD</a></div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">B4_r4_c3 - Markerless Hands</div>
+                        <div class="tool-links"><a href="mphands.html">HTML</a> | <a href="mphands.md">MD</a></div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">B4_r4_c4 - MP Angles</div>
+                        <div class="tool-links"><a href="mpangles.html">HTML</a> | <a href="mpangles.md">MD</a></div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">B4_r4_c5 - Markerless Live</div>
+                        <div class="tool-links"><a href="markerless_live.html">HTML</a> | <a
+                                href="markerless_live.md">MD</a></div>
+                    </div>
+
+                    <div class="tool-card">
+                        <div class="tool-title">B4_r5_c1 - Ultrasound</div>
+                        <div class="tool-links"><a href="usvideoia.html">HTML</a> | <a href="usvideoia.md">MD</a></div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">B4_r5_c2 - Brainstorm</div>
+                        <div class="tool-links"><a href="brainstorm.html">HTML</a> | <a href="brainstorm.md">MD</a>
+                        </div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">B4_r5_c3 - Scout</div>
+                        <div class="tool-links"><a href="scout_vaila.html">HTML</a> | <a href="scout_vaila.md">MD</a>
+                        </div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">B4_r5_c4 - StartBlock</div>
+                        <div class="tool-links"><a href="force_cube_fig.html">HTML</a> | <a
+                                href="force_cube_fig.md">MD</a></div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">B4_r5_c5 - Pynalty</div>
+                        <div class="tool-links"><a href="pynalty_help.html">HTML</a> | <a href="pynalty_help.md">MD</a>
+                        </div>
+                    </div>
+
+                    <div class="tool-card">
+                        <div class="tool-title">B5_r6_c1 - Sprint</div>
+                        <div class="tool-links"><a href="vailasprint_help.html">HTML</a> | <a
+                                href="vailasprint_help.md">MD</a></div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">B5_r6_c2 - <i>vailá</i></div>
+                        <div class="tool-links"><a href="#">-</a></div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">B5_r6_c3 - <i>vailá</i></div>
+                        <div class="tool-links"><a href="#">-</a></div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">B5_r6_c4 - <i>vailá</i></div>
+                        <div class="tool-links"><a href="#">-</a></div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">B5_r6_c5 - <i>vailá</i></div>
+                        <div class="tool-links"><a href="#">-</a></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section-header">
+                <h2>============================== Tools Available (Frame C) ===================</h2>
+
+                <h3>-> C_A: Data Files</h3>
+                <div class="grid-container">
+                    <div class="tool-card">
+                        <div class="tool-title">C_A_r1_c1 - Edit CSV</div>
+                        <div class="tool-links"><a href="readcsv.html">HTML</a> | <a href="readcsv.md">MD</a></div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">C_A_r1_c2 - C3D <--> CSV</div>
+                        <div class="tool-links"><a href="vpython_c3d.html">HTML</a> | <a href="vpython_c3d.md">MD</a>
+                        </div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">C_A_r1_c3 - Smooth_Fill_Split</div>
+                        <div class="tool-links"><a href="interp_smooth_split.html">HTML</a> | <a
+                                href="interp_smooth_split.md">MD</a></div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">C_A_r2_c1 - Make DLT2D</div>
+                        <div class="tool-links"><a href="dlt2d.html">HTML</a> | <a href="dlt2d.md">MD</a></div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">C_A_r2_c2 - Rec2D 1DLT</div>
+                        <div class="tool-links"><a href="rec2d_one_dlt_2d.html">HTML</a> | <a
+                                href="rec2d_one_dlt_2d.md">MD</a></div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">C_A_r2_c3 - Rec2D MultiDLT</div>
+                        <div class="tool-links"><a href="rec2d.html">HTML</a> | <a href="rec2d.md">MD</a></div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">C_A_r3_c1 - Make DLT3D</div>
+                        <div class="tool-links"><a href="dlt3d.html">HTML</a> | <a href="dlt3d.md">MD</a></div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">C_A_r3_c2 - Rec3D 1DLT</div>
+                        <div class="tool-links"><a href="rec3d_one_dlt3d.html">HTML</a> | <a
+                                href="rec3d_one_dlt3d.md">MD</a></div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">C_A_r3_c3 - Rec3D MultiDLT</div>
+                        <div class="tool-links"><a href="rec3d.html">HTML</a> | <a href="rec3d.md">MD</a></div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">C_A_r4_c1 - ReID Marker</div>
+                        <div class="tool-links"><a href="reid_markers.html">HTML</a> | <a href="reid_markers.md">MD</a>
+                        </div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">C_A_r4_c2 - <i>vailá</i></div>
+                        <div class="tool-links"><a href="#">-</a></div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">C_A_r4_c3 - <i>vailá</i></div>
+                        <div class="tool-links"><a href="#">-</a></div>
                     </div>
                 </div>
 
-                <div class="module-card">
-                    <div class="module-name">cluster_analysis</div>
-                    <div class="module-links">
-                        <a href="analysis/cluster_analysis.html" class="html-link">📄 HTML</a>
-                        <a href="analysis/cluster_analysis.md" class="md-link">📝 Markdown</a>
+                <h3>-> C_B: Video and Image</h3>
+                <div class="grid-container">
+                    <div class="tool-card">
+                        <div class="tool-title">C_B_r1_c1 - Video<-->PNG</div>
+                        <div class="tool-links"><a href="extractpng.html">HTML</a> | <a href="extractpng.md">MD</a>
+                        </div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">C_B_r1_c2 - <i>vailá</i></div>
+                        <div class="tool-links"><a href="#">-</a></div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">C_B_r1_c3 - Draw Box</div>
+                        <div class="tool-links"><a href="drawboxe.html">HTML</a> | <a href="drawboxe.md">MD</a></div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">C_B_r2_c1 - Compress</div>
+                        <div class="tool-links"><a href="compressvideo.html">HTML</a> | <a
+                                href="compressvideo.md">MD</a></div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">C_B_r2_c2 - <i>vailá</i></div>
+                        <div class="tool-links"><a href="#">-</a></div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">C_B_r2_c3 - Make Sync file</div>
+                        <div class="tool-links"><a href="sync_flash.html">HTML</a> | <a href="sync_flash.md">MD</a>
+                        </div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">C_B_r3_c1 - GetPixelCoord</div>
+                        <div class="tool-links"><a href="getpixelvideo.html">HTML</a> | <a
+                                href="getpixelvideo.md">MD</a></div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">C_B_r3_c2 - Metadata info</div>
+                        <div class="tool-links"><a href="numberframes.html">HTML</a> | <a href="numberframes.md">MD</a>
+                        </div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">C_B_r3_c3 - Merge Videos</div>
+                        <div class="tool-links"><a href="merge_multivideos.html">HTML</a> | <a
+                                href="merge_multivideos.md">MD</a></div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">C_B_r4_c1 - Distort video</div>
+                        <div class="tool-links"><a href="vaila_distortvideo_gui.html">HTML</a> | <a
+                                href="vaila_distortvideo_gui.md">MD</a></div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">C_B_r4_c2 - Cut Video</div>
+                        <div class="tool-links"><a href="cutvideo.html">HTML</a> | <a href="cutvideo.md">MD</a></div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">C_B_r4_c3 - Resize Video</div>
+                        <div class="tool-links"><a href="resize_video.html">HTML</a> | <a href="resize_video.md">MD</a>
+                        </div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">C_B_r5_c1 - YT Downloader</div>
+                        <div class="tool-links"><a href="vaila_ytdown.html">HTML</a> | <a href="vaila_ytdown.md">MD</a>
+                        </div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">C_B_r5_c2 - Insert Audio</div>
+                        <div class="tool-links"><a href="vaila_iaudiovid.html">HTML</a> | <a
+                                href="vaila_iaudiovid.md">MD</a></div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">C_B_r5_c3 - rm Dup PNG</div>
+                        <div class="tool-links"><a href="rm_duplicateframes.html">HTML</a> | <a
+                                href="rm_duplicateframes.md">MD</a></div>
                     </div>
                 </div>
 
-                <div class="module-card">
-                    <div class="module-name">cube2d_kinematics</div>
-                    <div class="module-links">
-                        <a href="analysis/cube2d_kinematics.html" class="html-link">📄 HTML</a>
-                        <a href="analysis/cube2d_kinematics.md" class="md-link">📝 Markdown</a>
+                <h3>-> C_C: Visualization</h3>
+                <div class="grid-container">
+                    <div class="tool-card">
+                        <div class="tool-title">C_C_r1_c1 - Show C3D</div>
+                        <div class="tool-links"><a href="viewc3d.html">HTML</a> | <a href="viewc3d.md">MD</a></div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">C_C_r1_c2 - Show CSV</div>
+                        <div class="tool-links"><a href="readcsv.html">HTML</a> | <a href="readcsv.md">MD</a></div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">C_C_r2_c1 - Plot 2D</div>
+                        <div class="tool-links"><a href="vailaplot2d.html">HTML</a> | <a href="vailaplot2d.md">MD</a>
+                        </div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">C_C_r2_c2 - Plot 3D</div>
+                        <div class="tool-links"><a href="vailaplot3d.html">HTML</a> | <a href="vailaplot3d.md">MD</a>
+                        </div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">C_C_r3_c1 - Soccer Field</div>
+                        <div class="tool-links"><a href="soccerfield.html">HTML</a> | <a href="soccerfield.md">MD</a>
+                        </div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">C_C_r3_c2 - <i>vailá</i></div>
+                        <div class="tool-links"><a href="#">-</a></div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">C_C_r4_c1 - <i>vailá</i></div>
+                        <div class="tool-links"><a href="#">-</a></div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">C_C_r4_c2 - <i>vailá</i></div>
+                        <div class="tool-links"><a href="#">-</a></div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">C_C_r4_c3 - <i>vailá</i></div>
+                        <div class="tool-links"><a href="#">-</a></div>
                     </div>
                 </div>
+            </div>
 
-                <div class="module-card">
-                    <div class="module-name">emg_labiocom</div>
-                    <div class="module-links">
-                        <a href="analysis/emg_labiocom.html" class="html-link">📄 HTML</a>
-                        <a href="analysis/emg_labiocom.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">forceplate_analysis</div>
-                    <div class="module-links">
-                        <a href="analysis/forceplate_analysis.html" class="html-link">📄 HTML</a>
-                        <a href="analysis/forceplate_analysis.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">gnss_analysis</div>
-                    <div class="module-links">
-                        <a href="analysis/gnss_analysis.html" class="html-link">📄 HTML</a>
-                        <a href="analysis/gnss_analysis.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">imu_analysis</div>
-                    <div class="module-links">
-                        <a href="analysis/imu_analysis.html" class="html-link">📄 HTML</a>
-                        <a href="analysis/imu_analysis.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">markerless_2d_analysis</div>
-                    <div class="module-links">
-                        <a href="analysis/markerless_2d_analysis.html" class="html-link">📄 HTML</a>
-                        <a href="analysis/markerless_2d_analysis.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">markerless_3d_analysis</div>
-                    <div class="module-links">
-                        <a href="analysis/markerless_3d_analysis.html" class="html-link">📄 HTML</a>
-                        <a href="analysis/markerless_3d_analysis.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">markerless_live</div>
-                    <div class="module-links">
-                        <a href="analysis/markerless_live.html" class="html-link">📄 HTML</a>
-                        <a href="analysis/markerless_live.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">mocap_analysis</div>
-                    <div class="module-links">
-                        <a href="analysis/mocap_analysis.html" class="html-link">📄 HTML</a>
-                        <a href="analysis/mocap_analysis.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">run_vector_coding</div>
-                    <div class="module-links">
-                        <a href="analysis/run_vector_coding.html" class="html-link">📄 HTML</a>
-                        <a href="analysis/run_vector_coding.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">vaila_and_jump</div>
-                    <div class="module-links">
-                        <a href="analysis/vaila_and_jump.html" class="html-link">📄 HTML</a>
-                        <a href="analysis/vaila_and_jump.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">vailasprint (Sprint 20m)</div>
-                    <div class="module-links">
-                        <b>EN:</b>
-                        <a href="vailasprint_help.html" class="html-link">📄 HTML</a>
-                        <a href="vailasprint_help.md" class="md-link">📝 Markdown</a>
-                        <br><br>
-                        <b>PT:</b>
-                        <a href="vailasprint_br_help.html" class="html-link">📄 HTML</a>
-                        <a href="vailasprint_br_help.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">pynalty</div>
-                    <div class="module-links">
-                        <a href="pynalty_help.html" class="html-link">📄 HTML</a>
-                        <a href="pynalty_help.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">mp_facemesh (Face Mesh Analysis)</div>
-                    <div class="module-links">
-                        <a href="mp_facemesh_help.html" class="html-link">📄 HTML</a>
-                        <a href="mp_facemesh_help.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
+            <div style="margin-top: 50px; text-align: center; color: #888; font-size: 0.9em;">
+                <p>Generated based on <i>vailá</i> v0.3.9 layout.</p>
             </div>
         </div>
-
-        <div class="category">
-            <h2>Utils (19 modules)</h2>
-            <div class="module-list">
-
-                <div class="module-card">
-                    <div class="module-name">backup_markerless</div>
-                    <div class="module-links">
-                        <a href="utils/backup_markerless.html" class="html-link">📄 HTML</a>
-                        <a href="utils/backup_markerless.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">common_utils</div>
-                    <div class="module-links">
-                        <a href="utils/common_utils.html" class="html-link">📄 HTML</a>
-                        <a href="utils/common_utils.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">compressvideo</div>
-                    <div class="module-links">
-                        <a href="utils/compressvideo.html" class="html-link">📄 HTML</a>
-                        <a href="utils/compressvideo.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">dialogsuser</div>
-                    <div class="module-links">
-                        <a href="utils/dialogsuser.html" class="html-link">📄 HTML</a>
-                        <a href="utils/dialogsuser.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">dialogsuser_cluster</div>
-                    <div class="module-links">
-                        <a href="utils/dialogsuser_cluster.html" class="html-link">📄 HTML</a>
-                        <a href="utils/dialogsuser_cluster.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">dlc2vaila</div>
-                    <div class="module-links">
-                        <a href="utils/dlc2vaila.html" class="html-link">📄 HTML</a>
-                        <a href="utils/dlc2vaila.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">example_batch_usage</div>
-                    <div class="module-links">
-                        <a href="utils/example_batch_usage.html" class="html-link">📄 HTML</a>
-                        <a href="utils/example_batch_usage.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">listjointsnames</div>
-                    <div class="module-links">
-                        <a href="utils/listjointsnames.html" class="html-link">📄 HTML</a>
-                        <a href="utils/listjointsnames.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">markerless_2d_analysis_nvidia</div>
-                    <div class="module-links">
-                        <a href="utils/markerless_2d_analysis_nvidia.html" class="html-link">📄 HTML</a>
-                        <a href="utils/markerless_2d_analysis_nvidia.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">modifylabref_cli</div>
-                    <div class="module-links">
-                        <a href="utils/modifylabref_cli.html" class="html-link">📄 HTML</a>
-                        <a href="utils/modifylabref_cli.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">mpangles</div>
-                    <div class="module-links">
-                        <a href="utils/mpangles.html" class="html-link">📄 HTML</a>
-                        <a href="utils/mpangles.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">mphands</div>
-                    <div class="module-links">
-                        <a href="utils/mphands.html" class="html-link">📄 HTML</a>
-                        <a href="utils/mphands.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">native_file_dialog</div>
-                    <div class="module-links">
-                        <a href="utils/native_file_dialog.html" class="html-link">📄 HTML</a>
-                        <a href="utils/native_file_dialog.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">reid_yolotrack</div>
-                    <div class="module-links">
-                        <a href="utils/reid_yolotrack.html" class="html-link">📄 HTML</a>
-                        <a href="utils/reid_yolotrack.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">reidmplrswap</div>
-                    <div class="module-links">
-                        <a href="utils/reidmplrswap.html" class="html-link">📄 HTML</a>
-                        <a href="utils/reidmplrswap.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">reidvideogui</div>
-                    <div class="module-links">
-                        <a href="utils/reidvideogui.html" class="html-link">📄 HTML</a>
-                        <a href="utils/reidvideogui.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">utils</div>
-                    <div class="module-links">
-                        <a href="utils/utils.html" class="html-link">📄 HTML</a>
-                        <a href="utils/utils.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">vaila_manifest</div>
-                    <div class="module-links">
-                        <a href="utils/vaila_manifest.html" class="html-link">📄 HTML</a>
-                        <a href="utils/vaila_manifest.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">vpython_c3d</div>
-                    <div class="module-links">
-                        <a href="utils/vpython_c3d.html" class="html-link">📄 HTML</a>
-                        <a href="utils/vpython_c3d.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-            </div>
-        </div>
-
-        <div class="category">
-            <h2>Tools (46 modules)</h2>
-            <div class="module-list">
-
-                <div class="module-card">
-                    <div class="module-name">batchcut</div>
-                    <div class="module-links">
-                        <a href="tools/batchcut.html" class="html-link">📄 HTML</a>
-                        <a href="tools/batchcut.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">brainstorm</div>
-                    <div class="module-links">
-                        <a href="tools/brainstorm.html" class="html-link">📄 HTML</a>
-                        <a href="tools/brainstorm.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">compress_videos_h264</div>
-                    <div class="module-links">
-                        <a href="tools/compress_videos_h264.html" class="html-link">📄 HTML</a>
-                        <a href="tools/compress_videos_h264.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">compress_videos_h265</div>
-                    <div class="module-links">
-                        <a href="tools/compress_videos_h265.html" class="html-link">📄 HTML</a>
-                        <a href="tools/compress_videos_h265.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">compress_videos_h266</div>
-                    <div class="module-links">
-                        <a href="tools/compress_videos_h266.html" class="html-link">📄 HTML</a>
-                        <a href="tools/compress_videos_h266.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">convert_videos_ts_to_mp4</div>
-                    <div class="module-links">
-                        <a href="tools/convert_videos_ts_to_mp4.html" class="html-link">📄 HTML</a>
-                        <a href="tools/convert_videos_ts_to_mp4.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">cop_analysis</div>
-                    <div class="module-links">
-                        <a href="tools/cop_analysis.html" class="html-link">📄 HTML</a>
-                        <a href="tools/cop_analysis.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">cop_calculate</div>
-                    <div class="module-links">
-                        <a href="tools/cop_calculate.html" class="html-link">📄 HTML</a>
-                        <a href="tools/cop_calculate.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">cutvideo</div>
-                    <div class="module-links">
-                        <a href="tools/cutvideo.html" class="html-link">📄 HTML</a>
-                        <a href="tools/cutvideo.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">drawboxe</div>
-                    <div class="module-links">
-                        <a href="tools/drawboxe.html" class="html-link">📄 HTML</a>
-                        <a href="tools/drawboxe.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">ellipse</div>
-                    <div class="module-links">
-                        <a href="tools/ellipse.html" class="html-link">📄 HTML</a>
-                        <a href="tools/ellipse.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">extractpng</div>
-                    <div class="module-links">
-                        <a href="tools/extractpng.html" class="html-link">📄 HTML</a>
-                        <a href="tools/extractpng.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">filemanager</div>
-                    <div class="module-links">
-                        <a href="tools/filemanager.html" class="html-link">📄 HTML</a>
-                        <a href="tools/filemanager.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">fixnoise</div>
-                    <div class="module-links">
-                        <a href="tools/fixnoise.html" class="html-link">📄 HTML</a>
-                        <a href="tools/fixnoise.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">force_cmj</div>
-                    <div class="module-links">
-                        <a href="tools/force_cmj.html" class="html-link">📄 HTML</a>
-                        <a href="tools/force_cmj.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">force_cube_fig</div>
-                    <div class="module-links">
-                        <a href="tools/force_cube_fig.html" class="html-link">📄 HTML</a>
-                        <a href="tools/force_cube_fig.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">getcampardistortlens</div>
-                    <div class="module-links">
-                        <a href="tools/getcampardistortlens.html" class="html-link">📄 HTML</a>
-                        <a href="tools/getcampardistortlens.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">getpixelvideo</div>
-                    <div class="module-links">
-                        <a href="tools/getpixelvideo.html" class="html-link">📄 HTML</a>
-                        <a href="tools/getpixelvideo.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">grf_gait</div>
-                    <div class="module-links">
-                        <a href="tools/grf_gait.html" class="html-link">📄 HTML</a>
-                        <a href="tools/grf_gait.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">join2dataset</div>
-                    <div class="module-links">
-                        <a href="tools/join2dataset.html" class="html-link">📄 HTML</a>
-                        <a href="tools/join2dataset.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">linear_interpolation_split</div>
-                    <div class="module-links">
-                        <a href="tools/linear_interpolation_split.html" class="html-link">📄 HTML</a>
-                        <a href="tools/linear_interpolation_split.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">load_vicon_csv_split_batch</div>
-                    <div class="module-links">
-                        <a href="tools/load_vicon_csv_split_batch.html" class="html-link">📄 HTML</a>
-                        <a href="tools/load_vicon_csv_split_batch.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">merge_multivideos</div>
-                    <div class="module-links">
-                        <a href="tools/merge_multivideos.html" class="html-link">📄 HTML</a>
-                        <a href="tools/merge_multivideos.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">mergestack</div>
-                    <div class="module-links">
-                        <a href="tools/mergestack.html" class="html-link">📄 HTML</a>
-                        <a href="tools/mergestack.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">numberframes</div>
-                    <div class="module-links">
-                        <a href="tools/numberframes.html" class="html-link">📄 HTML</a>
-                        <a href="tools/numberframes.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">numstepsmp</div>
-                    <div class="module-links">
-                        <a href="tools/numstepsmp.html" class="html-link">📄 HTML</a>
-                        <a href="tools/numstepsmp.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">process_gait_features</div>
-                    <div class="module-links">
-                        <a href="tools/process_gait_features.html" class="html-link">📄 HTML</a>
-                        <a href="tools/process_gait_features.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">resize_video</div>
-                    <div class="module-links">
-                        <a href="tools/resize_video.html" class="html-link">📄 HTML</a>
-                        <a href="tools/resize_video.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">rm_duplicateframes</div>
-                    <div class="module-links">
-                        <a href="tools/rm_duplicateframes.html" class="html-link">📄 HTML</a>
-                        <a href="tools/rm_duplicateframes.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">rotation</div>
-                    <div class="module-links">
-                        <a href="tools/rotation.html" class="html-link">📄 HTML</a>
-                        <a href="tools/rotation.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">scout_vaila</div>
-                    <div class="module-links">
-                        <a href="tools/scout_vaila.html" class="html-link">📄 HTML</a>
-                        <a href="tools/scout_vaila.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">skout_bundle</div>
-                    <div class="module-links">
-                        <a href="tools/skout_bundle.html" class="html-link">📄 HTML</a>
-                        <a href="tools/skout_bundle.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">spectral_features</div>
-                    <div class="module-links">
-                        <a href="tools/spectral_features.html" class="html-link">📄 HTML</a>
-                        <a href="tools/spectral_features.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">stabilogram_analysis</div>
-                    <div class="module-links">
-                        <a href="tools/stabilogram_analysis.html" class="html-link">📄 HTML</a>
-                        <a href="tools/stabilogram_analysis.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">standardize_header</div>
-                    <div class="module-links">
-                        <a href="tools/standardize_header.html" class="html-link">📄 HTML</a>
-                        <a href="tools/standardize_header.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">sync_flash</div>
-                    <div class="module-links">
-                        <a href="tools/sync_flash.html" class="html-link">📄 HTML</a>
-                        <a href="tools/sync_flash.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">syncvid</div>
-                    <div class="module-links">
-                        <a href="tools/syncvid.html" class="html-link">📄 HTML</a>
-                        <a href="tools/syncvid.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">usound_biomec1</div>
-                    <div class="module-links">
-                        <a href="tools/usound_biomec1.html" class="html-link">📄 HTML</a>
-                        <a href="tools/usound_biomec1.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">usvideoia</div>
-                    <div class="module-links">
-                        <a href="tools/usvideoia.html" class="html-link">📄 HTML</a>
-                        <a href="tools/usvideoia.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">vaila_datdistort</div>
-                    <div class="module-links">
-                        <a href="tools/vaila_datdistort.html" class="html-link">📄 HTML</a>
-                        <a href="tools/vaila_datdistort.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">vaila_distortvideo_gui</div>
-                    <div class="module-links">
-                        <a href="tools/vaila_distortvideo_gui.html" class="html-link">📄 HTML</a>
-                        <a href="tools/vaila_distortvideo_gui.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">vaila_iaudiovid</div>
-                    <div class="module-links">
-                        <a href="tools/vaila_iaudiovid.html" class="html-link">📄 HTML</a>
-                        <a href="tools/vaila_iaudiovid.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">vaila_lensdistortvideo</div>
-                    <div class="module-links">
-                        <a href="tools/vaila_lensdistortvideo.html" class="html-link">📄 HTML</a>
-                        <a href="tools/vaila_lensdistortvideo.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">vaila_upscaler</div>
-                    <div class="module-links">
-                        <a href="tools/vaila_upscaler.html" class="html-link">📄 HTML</a>
-                        <a href="tools/vaila_upscaler.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">vaila_ytdown</div>
-                    <div class="module-links">
-                        <a href="tools/vaila_ytdown.html" class="html-link">📄 HTML</a>
-                        <a href="tools/vaila_ytdown.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">videoprocessor</div>
-                    <div class="module-links">
-                        <a href="tools/videoprocessor.html" class="html-link">📄 HTML</a>
-                        <a href="tools/videoprocessor.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-            </div>
-        </div>
-
-        <div class="category">
-            <h2>Processing (16 modules)</h2>
-            <div class="module-list">
-
-                <div class="module-card">
-                    <div class="module-name">data_processing</div>
-                    <div class="module-links">
-                        <a href="processing/data_processing.html" class="html-link">📄 HTML</a>
-                        <a href="processing/data_processing.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">dlt2d</div>
-                    <div class="module-links">
-                        <a href="processing/dlt2d.html" class="html-link">📄 HTML</a>
-                        <a href="processing/dlt2d.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">dlt3d</div>
-                    <div class="module-links">
-                        <a href="processing/dlt3d.html" class="html-link">📄 HTML</a>
-                        <a href="processing/dlt3d.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">filter_utils</div>
-                    <div class="module-links">
-                        <a href="processing/filter_utils.html" class="html-link">📄 HTML</a>
-                        <a href="processing/filter_utils.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">filtering</div>
-                    <div class="module-links">
-                        <a href="processing/filtering.html" class="html-link">📄 HTML</a>
-                        <a href="processing/filtering.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">interp_smooth_split</div>
-                    <div class="module-links">
-                        <a href="processing/interp_smooth_split.html" class="html-link">📄 HTML</a>
-                        <a href="processing/interp_smooth_split.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">modifylabref</div>
-                    <div class="module-links">
-                        <a href="processing/modifylabref.html" class="html-link">📄 HTML</a>
-                        <a href="processing/modifylabref.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">readc3d_export</div>
-                    <div class="module-links">
-                        <a href="processing/readc3d_export.html" class="html-link">📄 HTML</a>
-                        <a href="processing/readc3d_export.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">readcsv</div>
-                    <div class="module-links">
-                        <a href="processing/readcsv.html" class="html-link">📄 HTML</a>
-                        <a href="processing/readcsv.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">readcsv_export</div>
-                    <div class="module-links">
-                        <a href="processing/readcsv_export.html" class="html-link">📄 HTML</a>
-                        <a href="processing/readcsv_export.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">rearrange_data</div>
-                    <div class="module-links">
-                        <a href="processing/rearrange_data.html" class="html-link">📄 HTML</a>
-                        <a href="processing/rearrange_data.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">rec2d</div>
-                    <div class="module-links">
-                        <a href="processing/rec2d.html" class="html-link">📄 HTML</a>
-                        <a href="processing/rec2d.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">rec2d_one_dlt2d</div>
-                    <div class="module-links">
-                        <a href="processing/rec2d_one_dlt2d.html" class="html-link">📄 HTML</a>
-                        <a href="processing/rec2d_one_dlt2d.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">rec3d</div>
-                    <div class="module-links">
-                        <a href="processing/rec3d.html" class="html-link">📄 HTML</a>
-                        <a href="processing/rec3d.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">rec3d_one_dlt3d</div>
-                    <div class="module-links">
-                        <a href="processing/rec3d_one_dlt3d.html" class="html-link">📄 HTML</a>
-                        <a href="processing/rec3d_one_dlt3d.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">reid_markers</div>
-                    <div class="module-links">
-                        <a href="processing/reid_markers.html" class="html-link">📄 HTML</a>
-                        <a href="processing/reid_markers.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-            </div>
-        </div>
-
-        <div class="category">
-            <h2>Ml (10 modules)</h2>
-            <div class="module-list">
-
-                <div class="module-card">
-                    <div class="module-name">markerless2d_analysis_v2</div>
-                    <div class="module-links">
-                        <a href="ml/markerless2d_analysis_v2.html" class="html-link">📄 HTML</a>
-                        <a href="ml/markerless2d_analysis_v2.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">markerless2d_mpyolo</div>
-                    <div class="module-links">
-                        <a href="ml/markerless2d_mpyolo.html" class="html-link">📄 HTML</a>
-                        <a href="ml/markerless2d_mpyolo.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">markerless3d_analysis_v2</div>
-                    <div class="module-links">
-                        <a href="ml/markerless3d_analysis_v2.html" class="html-link">📄 HTML</a>
-                        <a href="ml/markerless3d_analysis_v2.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">ml_models_training</div>
-                    <div class="module-links">
-                        <a href="ml/ml_models_training.html" class="html-link">📄 HTML</a>
-                        <a href="ml/ml_models_training.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">ml_valid_models</div>
-                    <div class="module-links">
-                        <a href="ml/ml_valid_models.html" class="html-link">📄 HTML</a>
-                        <a href="ml/ml_valid_models.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">vaila_mlwalkway</div>
-                    <div class="module-links">
-                        <a href="ml/vaila_mlwalkway.html" class="html-link">📄 HTML</a>
-                        <a href="ml/vaila_mlwalkway.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">walkway_ml_prediction</div>
-                    <div class="module-links">
-                        <a href="ml/walkway_ml_prediction.html" class="html-link">📄 HTML</a>
-                        <a href="ml/walkway_ml_prediction.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">yolotrain</div>
-                    <div class="module-links">
-                        <a href="ml/yolotrain.html" class="html-link">📄 HTML</a>
-                        <a href="ml/yolotrain.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">yolov11track</div>
-                    <div class="module-links">
-                        <a href="ml/yolov11track.html" class="html-link">📄 HTML</a>
-                        <a href="ml/yolov11track.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">yolov12track</div>
-                    <div class="module-links">
-                        <a href="ml/yolov12track.html" class="html-link">📄 HTML</a>
-                        <a href="ml/yolov12track.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-            </div>
-        </div>
-
-        <div class="category">
-            <h2>Visualization (6 modules)</h2>
-            <div class="module-list">
-
-                <div class="module-card">
-                    <div class="module-name">plotting</div>
-                    <div class="module-links">
-                        <a href="visualization/plotting.html" class="html-link">📄 HTML</a>
-                        <a href="visualization/plotting.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">showc3d</div>
-                    <div class="module-links">
-                        <a href="visualization/showc3d.html" class="html-link">📄 HTML</a>
-                        <a href="visualization/showc3d.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">soccerfield</div>
-                    <div class="module-links">
-                        <a href="visualization/soccerfield.html" class="html-link">📄 HTML</a>
-                        <a href="visualization/soccerfield.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">vailaplot2d</div>
-                    <div class="module-links">
-                        <a href="visualization/vailaplot2d.html" class="html-link">📄 HTML</a>
-                        <a href="visualization/vailaplot2d.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">vailaplot3d</div>
-                    <div class="module-links">
-                        <a href="visualization/vailaplot3d.html" class="html-link">📄 HTML</a>
-                        <a href="visualization/vailaplot3d.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-                <div class="module-card">
-                    <div class="module-name">viewc3d</div>
-                    <div class="module-links">
-                        <a href="visualization/viewc3d.html" class="html-link">📄 HTML</a>
-                        <a href="visualization/viewc3d.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-            </div>
-        </div>
-
-        <div class="category">
-            <h2>Uncategorized (2 modules)</h2>
-            <div class="module-list">
-
-
-
-                <div class="module-card">
-                    <div class="module-name">sit2stand</div>
-                    <div class="module-links">
-                        <a href="uncategorized/sit2stand.html" class="html-link">📄 HTML</a>
-                        <a href="uncategorized/sit2stand.md" class="md-link">📝 Markdown</a>
-                    </div>
-                </div>
-
-            </div>
-        </div>
-
-        <div class="footer">
-            <p>🔗 <a href="https://github.com/vaila-multimodaltoolbox/vaila">vailá - Multimodal Toolbox</a></p>
-            <p>📧 For questions or suggestions, contact the development team</p>
-        </div>
-    </div>
 </body>
 
 </html>
