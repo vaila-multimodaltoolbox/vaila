@@ -1,437 +1,98 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>vailá Scout - Sports Scouting Tool</title>
+    <title>vailá - scout_vaila</title>
     <style>
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: Arial, sans-serif;
+            margin: 40px;
             line-height: 1.6;
-            margin: 0;
-            padding: 20px;
             background-color: #f5f5f5;
-            color: #333;
         }
         .container {
-            max-width: 1200px;
+            max-width: 800px;
             margin: 0 auto;
-            background-color: white;
+            background: white;
             padding: 30px;
-            border-radius: 10px;
+            border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
-        h1 {
-            color: #2c3e50;
-            border-bottom: 3px solid #3498db;
-            padding-bottom: 10px;
-            margin-bottom: 30px;
-        }
-        h2 {
-            color: #34495e;
-            margin-top: 40px;
-            margin-bottom: 20px;
-            border-left: 4px solid #3498db;
-            padding-left: 15px;
-        }
-        h3 {
-            color: #2c3e50;
-            margin-top: 30px;
-            margin-bottom: 15px;
-        }
-        h4 {
-            color: #34495e;
-            margin-top: 25px;
-            margin-bottom: 10px;
-        }
-        code {
-            background-color: #f8f9fa;
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-family: 'Courier New', monospace;
-            color: #e74c3c;
-        }
-        pre {
-            background-color: #f8f9fa;
-            padding: 15px;
-            border-radius: 5px;
-            overflow-x: auto;
-            border-left: 4px solid #3498db;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 20px 0;
-        }
-        th, td {
-            border: 1px solid #ddd;
-            padding: 12px;
-            text-align: left;
-        }
-        th {
-            background-color: #3498db;
-            color: white;
-        }
-        tr:nth-child(even) {
-            background-color: #f2f2f2;
-        }
-        .feature-list {
-            background-color: #e8f4fd;
-            padding: 20px;
-            border-radius: 5px;
-            margin: 20px 0;
-        }
-        .feature-list ul {
-            margin: 0;
-            padding-left: 20px;
-        }
-        .feature-list li {
-            margin-bottom: 8px;
-        }
-        .warning {
-            background-color: #fff3cd;
-            border: 1px solid #ffeaa7;
-            color: #856404;
-            padding: 15px;
-            border-radius: 5px;
-            margin: 20px 0;
-        }
-        .info {
-            background-color: #d1ecf1;
-            border: 1px solid #bee5eb;
-            color: #0c5460;
-            padding: 15px;
-            border-radius: 5px;
-            margin: 20px 0;
-        }
-        .success {
-            background-color: #d4edda;
-            border: 1px solid #c3e6cb;
-            color: #155724;
-            padding: 15px;
-            border-radius: 5px;
-            margin: 20px 0;
-        }
-        .file-structure {
-            background-color: #f8f9fa;
-            padding: 20px;
-            border-radius: 5px;
-            font-family: 'Courier New', monospace;
-            white-space: pre;
-            overflow-x: auto;
-        }
-        .footer {
-            margin-top: 50px;
-            padding-top: 20px;
-            border-top: 1px solid #ddd;
-            text-align: center;
-            color: #666;
-        }
+        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 30px; }
+        .module-info { background: #ecf0f1; padding: 15px; border-radius: 5px; margin: 20px 0; }
+        .functions { background: #f8f9fa; padding: 15px; border-left: 4px solid #28a745; margin: 15px 0; }
+        .docstring { background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 15px 0; }
+        .errorr { background: #f8d7da; padding: 15px; border-left: 4px solid #dc3545; margin: 15px 0; }
+        code { background: #e9ecef; padding: 2px 6px; border-radius: 3px; }
+        pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; }
+        .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #6c757d; font-size: 0.9em; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>vailá Scout - Sports Scouting Tool</h1>
+        <h1>vailá - scout_vaila</h1>
 
-        <h2>Overview</h2>
-        <p>vailá Scout is an integrated GUI application for annotating sports events on a virtual soccer field and generating quick analyses (e.g., heatmaps). It's designed to fit the vailá project style and doesn't require external field images - the field is drawn to scale using standard FIFA dimensions (105m x 68m).</p>
-
-        <h2>Features</h2>
-
-        <h3>Core Functionality</h3>
-        <div class="feature-list">
-            <ul>
-                <li><strong>Real-time annotation</strong>: Click on the field to mark player actions</li>
-                <li><strong>Timer control</strong>: Built-in timer with start/pause/reset functionality</li>
-                <li><strong>Team management</strong>: Support for home and away teams with player rosters</li>
-                <li><strong>Action tracking</strong>: Customizable action types with visual symbols</li>
-                <li><strong>Result tracking</strong>: Success/fail/neutral outcomes for each action</li>
-                <li><strong>Heatmap generation</strong>: Visual analysis of player movement patterns</li>
-		<li><strong>Scout visualization</strong>: Visual analysis of player actions</li>
-            </ul>
+        <div class="module-info">
+            <h3>📋 Module Information</h3>
+            <p><strong>Category:</strong> Tools</p>
+            <p><strong>File:</strong> vaila\scout_vaila.py</p>
+            <p><strong>Lines:</strong> 2510</p>
+            <p><strong>Size:</strong> 95343 characters</p>
+            <p><strong>Version:</strong> 0.1.5</p>
+            <p><strong>Author:</strong> Paulo Roberto Pereira Santiago and Rafael Luiz Martins Montero</p>
+            <p><strong>GUI Interface:</strong> ✅ Yes</p>
         </div>
 
-        <h3>Data Management</h3>
-        <div class="feature-list">
-            <ul>
-                <li><strong>CSV import/export</strong>: Load and save event data in CSV format</li>
-                <li><strong>TOML configuration</strong>: Flexible configuration system for teams, actions, and field settings</li>
-                <li><strong>Skout conversion</strong>: Convert data from Skout.exe ASCII export format</li>
-            </ul>
+        
+
+        <div class="docstring">
+            <h3>📖 Description</h3>
+            <pre>
+Project: vailá Multimodal Toolbox
+Script: scout_vaila.py - Integrated Sports Scouting (Annotation + Analysis)
+
+Author: Paulo Roberto Pereira Santiago and Rafael Luiz Martins Montero
+Email: paulosantiago@usp.br and rafaell_mmonteiro@usp.br
+GitHub: https://github.com/vaila-multimodaltoolbox/vaila
+Creation Date: 12 August 2025
+Update Date: 22 August 2025
+Version: 0.1.5
+
+Description:
+    Integrated GUI to annotate sports events on a virtual soccer field and generate
+    quick analyses (e.g., heatmaps). Inspired by manual scouting tools and designed
+    to fit the vailá project style. No external field image is required; the field is
+    drawn to scale using standard FIFA dimensions (105m x 68m).
+
+Usage:
+    Click in button Scout in the vaila GUI
+    python vaila.py
+    or
+    Run from the command line:
+        python -m vaila.scout_vaila
+    or enter the vaila directory and run:
+        python scout_vaila.py
+
+
+Requirements:
+    - Python 3.x
+    - tkinter (GUI)
+    - matplotlib
+    - seabo...</pre>
         </div>
 
-        <h3>User Interface</h3>
-        <div class="feature-list">
-            <ul>
-                <li><strong>Responsive design</strong>: Adapts to different screen sizes</li>
-                <li><strong>Keyboard shortcuts</strong>: Quick access to common functions</li>
-                <li><strong>Visual feedback</strong>: Color-coded events and player markers</li>
-                <li><strong>Roster management</strong>: Easy player selection and team switching</li>
-            </ul>
+        <div class="functions">
+            <h3>🔧 Main Functions</h3>
+            <p><strong>Total functions found:</strong> 20</p>
+            <ul><li><code>read_toml_config</code></li><li><code>write_toml_config</code></li><li><code>write_toml_template</code></li><li><code>draw_soccer_field</code></li><li><code>run_scout</code></li><li><code>to_row</code></li><li><code>destroy</code></li><li><code>start_timer</code></li><li><code>pause_timer</code></li><li><code>reset_timer</code></li><li><code>clear_events</code></li><li><code>save_csv</code></li><li><code>load_csv</code></li><li><code>draw_action_view</code></li><li><code>draw_heatmap</code></li><li><code>load_config</code></li><li><code>save_config</code></li><li><code>edit_config</code></li><li><code>open_help</code></li><li><code>open_shortcuts</code></li></ul>
         </div>
-
-        <h2>Installation</h2>
-
-        <h3>Requirements</h3>
-        <ul>
-            <li>Python 3.x</li>
-            <li>tkinter (GUI)</li>
-            <li>matplotlib</li>
-            <li>seaborn</li>
-            <li>pandas</li>
-            <li>rich (for console prints)</li>
-            <li>toml (for writing config) and tomllib/tomli (for reading config)</li>
-        </ul>
-
-        <h3>Running the Application</h3>
-
-        <h4>Option 1: From vailá GUI</h4>
-        <p>Click the "Scout" button in the main vailá interface.</p>
-
-        <h4>Option 2: Command Line</h4>
-        <pre><code>python vaila.py</code></pre>
-
-        <h4>Option 3: Direct Module</h4>
-        <pre><code>python -m vaila.scout_vaila</code></pre>
-
-        <h4>Option 4: Direct Script</h4>
-        <pre><code>cd vaila
-python scout_vaila.py</code></pre>
-
-        <h2>Usage Guide</h2>
-
-        <h3>Getting Started</h3>
-        <ol>
-            <li><strong>Launch the application</strong> using any of the methods above</li>
-            <li><strong>Load or create a configuration</strong> (TOML file) with your teams and actions</li>
-            <li><strong>Select your team</strong> (use 'T' key to toggle between home/away)</li>
-            <li><strong>Choose an action</strong> from the dropdown menu</li>
-            <li><strong>Set the result</strong> (success/fail/neutral)</li>
-            <li><strong>Click on the field</strong> to mark player actions</li>
-            <li><strong>Use the timer</strong> to track game time</li>
-        </ol>
-
-        <h3>Basic Workflow</h3>
-        <ol>
-            <li><strong>Configure Teams</strong>: Set up home and away teams with player rosters</li>
-            <li><strong>Define Actions</strong>: Create custom action types (pass, shot, tackle, etc.)</li>
-            <li><strong>Annotate Events</strong>: Click on the field to mark player actions</li>
-            <li><strong>Track Time</strong>: Use the built-in timer or manual time entry</li>
-            <li><strong>Save Data</strong>: Export your annotations to CSV format</li>
-            <li><strong>Analyze</strong>: Generate heatmaps and other visualizations</li>
-        </ol>
-
-        <h3>Field Interaction</h3>
-        <ul>
-            <li><strong>Left Click</strong>: Mark action with "success" result</li>
-            <li><strong>Right Click</strong>: Mark action with "fail" result</li>
-            <li><strong>Middle Click</strong>: Mark action with "neutral" result</li>
-            <li><strong>Ctrl + Click</strong>: Remove events near clicked position</li>
-            <li><strong>Shift + Click</strong>: Mark action with "fail" result (touchpad alternative)</li>
-            <li><strong>Alt + Click</strong>: Mark action with "neutral" result (touchpad alternative)</li>
-        </ul>
-
-        <h2>Configuration</h2>
-
-        <h3>TOML Configuration File</h3>
-        <p>The application uses TOML configuration files to store:</p>
-        <ul>
-            <li>Team information (names, colors, players)</li>
-            <li>Action definitions (names, codes, symbols, colors)</li>
-            <li>Field settings (dimensions, units)</li>
-            <li>Visual preferences (marker sizes, colors)</li>
-        </ul>
-
-        <h3>Default Configuration</h3>
-        <p>When first launched, the application creates a default configuration with:</p>
-        <ul>
-            <li>FIFA standard field (105m x 68m)</li>
-            <li>Two teams (HOME/AWAY) with sample players</li>
-            <li>Common soccer actions (pass, shot, tackle, etc.)</li>
-            <li>Standard visual settings</li>
-        </ul>
-
-        <h3>Creating Custom Configurations</h3>
-        <ol>
-            <li>Use "Create Template" to generate a base configuration</li>
-            <li>Edit the TOML file manually or use the configuration tools</li>
-            <li>Load your custom configuration</li>
-            <li>Save changes as needed</li>
-        </ol>
-
-        <h2>Data Format</h2>
-
-        <h3>CSV Export Format</h3>
-        <p>Events are exported in CSV format with the following columns:</p>
-        <pre><code>timestamp_s, team, player_name, player, action, action_code, result, pos_x_m, pos_y_m</code></pre>
-
-        <h4>Column Descriptions:</h4>
-        <ul>
-            <li><code>timestamp_s</code>: Time in seconds from game start</li>
-            <li><code>team</code>: Team name (HOME/AWAY or custom)</li>
-            <li><code>player_name</code>: Player's full name</li>
-            <li><code>player</code>: Player number</li>
-            <li><code>action</code>: Action name (pass, shot, etc.)</li>
-            <li><code>action_code</code>: Numeric action code</li>
-            <li><code>result</code>: success/fail/neutral</li>
-            <li><code>pos_x_m</code>: X position in meters (0-105)</li>
-            <li><code>pos_y_m</code>: Y position in meters (0-68)</li>
-        </ul>
-
-        <h3>Coordinate System</h3>
-        <ul>
-            <li><strong>Origin</strong>: Bottom-left corner (0,0)</li>
-            <li><strong>X-axis</strong>: Left to right (0-105m)</li>
-            <li><strong>Y-axis</strong>: Bottom to top (0-68m)</li>
-            <li><strong>Units</strong>: Meters (FIFA standard)</li>
-        </ul>
-
-        <h2>Keyboard Shortcuts</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>Shortcut</th>
-                    <th>Action</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr><td><code>Ctrl+S</code></td><td>Save CSV</td></tr>
-                <tr><td><code>Ctrl+O</code></td><td>Load CSV</td></tr>
-                <tr><td><code>Ctrl+K</code></td><td>Clear events</td></tr>
-                <tr><td><code>H</code></td><td>Show heatmap</td></tr>
-                <tr><td><code>V</code></td><td>Scout visualization</td></tr>
-                <tr><td><code>R</code></td><td>Reset timer</td></tr>
-                <tr><td><code>Space</code></td><td>Start/Pause clock</td></tr>
-                <tr><td><code>?</code></td><td>Open help</td></tr>
-                <tr><td><code>T</code></td><td>Toggle current team (home/away)</td></tr>
-                <tr><td><code>Ctrl+L</code></td><td>Load config</td></tr>
-                <tr><td><code>Ctrl+Shift+S</code></td><td>Save config</td></tr>
-                <tr><td><code>Ctrl+T</code></td><td>Rename teams</td></tr>
-                <tr><td><code>Digits 0–9</code></td><td>Enter action code; Enter apply; Backspace edit; Esc clear</td></tr>
-                <tr><td><code>Mouse</code></td><td>Left=success, Right=fail, Middle=neutral</td></tr>
-                <tr><td><code>Ctrl+Right Click</code></td><td>Remove events near clicked position</td></tr>
-            </tbody>
-        </table>
-
-        <h2>Advanced Features</h2>
-
-        <h3>Heatmap Generation</h3>
-        <ol>
-            <li>Click "Heatmap" button or press 'H'</li>
-            <li>Select team and/or player filters</li>
-            <li>View density plot of player actions</li>
-            <li>Analyze movement patterns and hot zones</li>
-        </ol>
-
-        <h3>Scout visualization</h3>
-        <ol>
-            <li>Click "Scout visualization" button or press 'V'</li>
-            <li>Select action and/or success/fail filters</li>
-            <li>View plot of actions on the field</li>
-        </ol>
-
-        <h3>Skout Data Conversion</h3>
-        <p>Convert data from Skout.exe ASCII export format:</p>
-        <ol>
-            <li>Go to <strong>Tools</strong> → <strong>Convert Skout to vailá</strong></li>
-            <li>Select your Skout .txt file</li>
-            <li>Choose output directory</li>
-            <li>Enter team name</li>
-            <li>Get both CSV and TOML configuration files</li>
-        </ol>
-
-        <h3>Player Management</h3>
-        <ul>
-            <li><strong>Roster View</strong>: See all players for both teams</li>
-            <li><strong>Quick Selection</strong>: Click on player names to select them</li>
-            <li><strong>Auto-numbering</strong>: Automatic player assignment options</li>
-            <li><strong>Name Mapping</strong>: Link player numbers to full names</li>
-        </ul>
-
-        <h3>Timer Features</h3>
-        <ul>
-            <li><strong>Live Timer</strong>: Real-time game clock</li>
-            <li><strong>Manual Entry</strong>: Set specific timestamps</li>
-            <li><strong>Pause/Resume</strong>: Control timing during breaks</li>
-            <li><strong>Reset</strong>: Start over with clean timing</li>
-        </ul>
-
-        <h2>Troubleshooting</h2>
-
-        <h3>Common Issues</h3>
-
-        <div class="warning">
-            <h4>Application won't start:</h4>
-            <ul>
-                <li>Check Python version (3.x required)</li>
-                <li>Verify all dependencies are installed</li>
-                <li>Ensure tkinter is available</li>
-            </ul>
-        </div>
-
-        <div class="warning">
-            <h4>Configuration not loading:</h4>
-            <ul>
-                <li>Check TOML file syntax</li>
-                <li>Verify file permissions</li>
-                <li>Use "Create Template" to generate valid config</li>
-            </ul>
-        </div>
-
-        <div class="warning">
-            <h4>Field not displaying:</h4>
-            <ul>
-                <li>Check matplotlib installation</li>
-                <li>Verify display settings</li>
-                <li>Try resizing the window</li>
-            </ul>
-        </div>
-
-        <div class="warning">
-            <h4>Data not saving:</h4>
-            <ul>
-                <li>Check write permissions in target directory</li>
-                <li>Verify CSV format compatibility</li>
-                <li>Ensure sufficient disk space</li>
-            </ul>
-        </div>
-
-        <h3>Performance Tips</h3>
-        <div class="info">
-            <ul>
-                <li>Close other applications when working with large datasets</li>
-                <li>Use appropriate field dimensions for your analysis</li>
-                <li>Limit the number of simultaneous events for better performance</li>
-                <li>Save work frequently to avoid data loss</li>
-            </ul>
-        </div>
-
-        <h2>File Structure</h2>
-        <div class="file-structure">vaila/
-├── scout_vaila.py          # Main application
-├── help/
-│   ├── scout_vaila.md      # This documentation
-│   ├── scout_vaila.html    # HTML version
-│   ├── scout_vaila_pt.md   # Portuguese documentation
-│   └── scout_vaila_pt.html # Portuguese HTML version
-└── models/
-    └── vaila_scout_config.toml  # Default configuration</div>
-
-        <h2>License</h2>
-        <p>This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.</p>
-
-        <h2>Support</h2>
-        <p>For issues, questions, or contributions:</p>
-        <ul>
-            <li><strong>Email</strong>: paulosantiago@usp.br</li>
-            <li><strong>GitHub</strong>: <a href="https://github.com/vaila-multimodaltoolbox/vaila">https://github.com/vaila-multimodaltoolbox/vaila</a></li>
-            <li><strong>Documentation</strong>: See help files in the vaila/help directory</li>
-        </ul>
 
         <div class="footer">
-            <p><strong>Version</strong>: 0.1.5<br>
-            <strong>Last Updated</strong>: August 22, 2025<br>
-            <strong>Author</strong>: Paulo Roberto Pereira Santiago and Rafael Luiz Martins Monteiro</p>
+            <p>📅 Generated automatically on: 15/10/2025 08:04:44</p>
+            <p>🔗 Part of vailá - Multimodal Toolbox</p>
+            <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
         </div>
     </div>
 </body>
