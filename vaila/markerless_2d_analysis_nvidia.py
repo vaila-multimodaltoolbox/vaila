@@ -728,6 +728,7 @@ def save_config_to_toml(config, filepath):
                 "bbox_y_max": config.get("bbox_y_max", 1080),
                 "enable_resize_crop": config.get("enable_resize_crop", False),
                 "resize_crop_scale": config.get("resize_crop_scale", 2),
+                "roi_polygon_points": config.get("roi_polygon_points"),
             },
         }
 
@@ -1222,6 +1223,7 @@ def load_config_from_toml(filepath):
                     "bbox_y_max": bbox_y_max,
                     "enable_resize_crop": bool(bb.get("enable_resize_crop", False)),
                     "resize_crop_scale": int(bb.get("resize_crop_scale", 2)),
+                    "roi_polygon_points": bb.get("roi_polygon_points"),  # Load polygon ROI if available
                 }
             )
         else:
@@ -1269,6 +1271,7 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
         self.use_toml = False
         self.toml_path = None
         self.input_dir = input_dir
+        self.roi_polygon_points = None  # Initialize polygon ROI points
         super().__init__(parent, title="MediaPipe and Resize Configuration (or TOML)")
 
     def body(self, master):
@@ -1370,15 +1373,31 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
         self.norm_coords_label = tk.Label(bbox_frame, text="(0.0, 0.0) to (1.0, 1.0)", fg="gray")
         self.norm_coords_label.grid(row=5, column=1, sticky="w", padx=5, pady=(5, 0))
 
-        # Select ROI button
-        select_roi_btn = tk.Button(
-            bbox_frame,
-            text="Select ROI from Video",
+        # ROI selection buttons frame
+        roi_buttons_frame = tk.Frame(bbox_frame)
+        roi_buttons_frame.grid(row=6, column=0, columnspan=2, pady=10)
+
+        # Select BBox ROI button
+        select_bbox_roi_btn = tk.Button(
+            roi_buttons_frame,
+            text="Select BBox ROI",
             command=self.select_roi_from_video,
-            bg="#4CAF50",
-            fg="white",
+            bg="#FF9800",
+            fg="black",
+            width=18,
         )
-        select_roi_btn.grid(row=6, column=0, columnspan=2, pady=10)
+        select_bbox_roi_btn.pack(side="left", padx=5)
+
+        # Select Polygon ROI button
+        select_polygon_roi_btn = tk.Button(
+            roi_buttons_frame,
+            text="Select Polygon ROI",
+            command=self.select_polygon_roi_from_video,
+            bg="#4CAF50",
+            fg="black",
+            width=18,
+        )
+        select_polygon_roi_btn.pack(side="left", padx=5)
 
         # Resize crop options
         self.enable_resize_crop_var = tk.BooleanVar(value=False)
@@ -1840,6 +1859,64 @@ For more information, visit: https://github.com/vaila-multimodaltoolbox/vaila
         cv2.destroyAllWindows()
         print(f"ROI selected: ({x_min}, {y_min}) to ({x_max}, {y_max})")
 
+    def select_polygon_roi_from_video(self):
+        """Open first video and let user select polygon ROI"""
+        if not self.input_dir:
+            messagebox.showerror(
+                "Error", "No input directory specified. Please select input directory first."
+            )
+            return
+
+        # Find first video file
+        video_files = [
+            f
+            for f in Path(self.input_dir).glob("*.*")
+            if f.suffix.lower() in [".mp4", ".avi", ".mov"]
+        ]
+
+        if not video_files:
+            messagebox.showerror("Error", "No video files found in input directory.")
+            return
+
+        first_video = video_files[0]
+        roi_poly = select_free_polygon_roi(str(first_video))
+
+        if roi_poly is not None and len(roi_poly) >= 3:
+            # Calculate bounding box from polygon for display
+            x_coords = [pt[0] for pt in roi_poly]
+            y_coords = [pt[1] for pt in roi_poly]
+            x_min = min(x_coords)
+            y_min = min(y_coords)
+            x_max = max(x_coords)
+            y_max = max(y_coords)
+
+            # Update entry fields with bounding box (for compatibility)
+            self.bbox_x_min_entry.delete(0, tk.END)
+            self.bbox_x_min_entry.insert(0, str(x_min))
+            self.bbox_y_min_entry.delete(0, tk.END)
+            self.bbox_y_min_entry.insert(0, str(y_min))
+            self.bbox_x_max_entry.delete(0, tk.END)
+            self.bbox_x_max_entry.insert(0, str(x_max))
+            self.bbox_y_max_entry.delete(0, tk.END)
+            self.bbox_y_max_entry.insert(0, str(y_max))
+
+            # Store polygon points in config (will be saved to TOML)
+            self.roi_polygon_points = roi_poly.tolist() if hasattr(roi_poly, "tolist") else roi_poly
+
+            # Update normalized coordinates display
+            self.update_normalized_coords()
+
+            # Enable crop checkbox
+            self.enable_crop_var.set(True)
+
+            print(f"Polygon ROI selected with {len(roi_poly)} points")
+            messagebox.showinfo(
+                "ROI Selected",
+                f"Polygon ROI selected with {len(roi_poly)} points.\nBounding box: ({x_min}, {y_min}) to ({x_max}, {y_max})",
+            )
+        else:
+            print("Polygon ROI selection cancelled or invalid")
+
     def populate_fields_from_config(self, config):
         """Populate GUI fields with values from loaded TOML config"""
         # MediaPipe parameters
@@ -1904,6 +1981,11 @@ For more information, visit: https://github.com/vaila-multimodaltoolbox/vaila
         self.resize_crop_scale_entry.delete(0, tk.END)
         self.resize_crop_scale_entry.insert(0, str(config.get("resize_crop_scale", 2)))
 
+        # Load polygon ROI if available
+        roi_polygon = config.get("roi_polygon_points")
+        if roi_polygon:
+            self.roi_polygon_points = roi_polygon
+
         # Update normalized coordinates display
         self.update_normalized_coords()
 
@@ -1938,7 +2020,203 @@ For more information, visit: https://github.com/vaila-multimodaltoolbox/vaila
                 "bbox_y_max": int(self.bbox_y_max_entry.get() or 1080),
                 "enable_resize_crop": self.enable_resize_crop_var.get(),
                 "resize_crop_scale": int(self.resize_crop_scale_entry.get() or 2),
+                "roi_polygon_points": getattr(self, "roi_polygon_points", None),  # Store polygon points if selected
             }
+
+
+def select_free_polygon_roi(video_path):
+    """
+    Let the user draw a free polygon ROI on the first frame of the video.
+    Left click adds points, right click removes the last point, Enter confirms,
+    Esc skips, and 'r' resets. Returns a numpy array of int32 points or None.
+    """
+    cap = None
+    window_name = None
+    try:
+        # Extract first frame from video
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            print(f"Error: Could not open video file: {video_path}")
+            return None
+
+        # Read first frame
+        ret, frame = cap.read()
+        cap.release()
+        cap = None
+
+        if not ret or frame is None:
+            print("Error: Could not read first frame from video for ROI selection.")
+            return None
+
+        # Scale frame to reasonable size for display
+        scale = 1.0
+        h, w = frame.shape[:2]
+        max_h = 1800
+        max_w = 2400
+        if h > max_h or w > max_w:
+            scale_h = max_h / h if h > max_h else 1.0
+            scale_w = max_w / w if w > max_w else 1.0
+            scale = min(scale_h, scale_w)
+            frame = cv2.resize(frame, (int(w * scale), int(h * scale)))
+
+        roi_points = []
+        mouse_clicked = False
+
+        def mouse_callback(event, x, y, flags, param):
+            nonlocal mouse_clicked
+            if event == cv2.EVENT_LBUTTONDOWN:
+                roi_points.append((x, y))
+                mouse_clicked = True
+                print(f"Point added: ({x}, {y}) - Total points: {len(roi_points)}")
+            elif event == cv2.EVENT_RBUTTONDOWN and roi_points:
+                removed = roi_points.pop()
+                mouse_clicked = True
+                print(f"Point removed: {removed} - Total points: {len(roi_points)}")
+
+        window_name = "Select ROI (Left: add, Right: undo, Enter: confirm, Esc: skip, r: reset)"
+
+        # Create window with WINDOW_NORMAL flag for resizability
+        if platform.system() == "Darwin":
+            window_flags = cv2.WINDOW_GUI_NORMAL | cv2.WINDOW_KEEPRATIO
+        else:
+            window_flags = cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO
+
+        cv2.namedWindow(window_name, window_flags)
+
+        # Set mouse callback BEFORE showing window
+        cv2.setMouseCallback(window_name, mouse_callback)
+
+        # Show window first to ensure it exists
+        cv2.imshow(window_name, frame)
+        cv2.waitKey(1)
+
+        # Set window size after showing
+        try:
+            h_scaled, w_scaled = frame.shape[:2]
+            desired_w = max(1200, min(w_scaled, 2400))
+            desired_h = max(900, min(h_scaled, 1800))
+            cv2.resizeWindow(window_name, desired_w, desired_h)
+            if platform.system() == "Darwin":
+                cv2.waitKey(10)
+                cv2.resizeWindow(window_name, desired_w, desired_h)
+                cv2.waitKey(10)
+        except Exception:
+            pass
+
+        # Colors for polygon
+        polygon_color = (255, 255, 0)  # Cyan (BGR)
+        point_color = (0, 255, 255)  # Yellow (BGR)
+        closing_line_color = (255, 0, 255)  # Magenta (BGR)
+
+        # Help text
+        help_text = [
+            "Left Click: Add point",
+            "Right Click: Remove last point",
+            "Enter: Confirm selection",
+            "Esc: Cancel",
+            "R: Reset all points",
+        ]
+
+        loop_count = 0
+        while True:
+            display_img = frame.copy()
+
+            # Draw help text
+            if loop_count < 100 or len(roi_points) == 0:
+                y_offset = 10
+                for i, text in enumerate(help_text):
+                    y_pos = y_offset + i * 25
+                    cv2.putText(
+                        display_img, text, (10, y_pos), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 3
+                    )
+                    cv2.putText(
+                        display_img,
+                        text,
+                        (10, y_pos),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.6,
+                        (255, 255, 255),
+                        2,
+                    )
+
+            if roi_points:
+                pts = np.array(roi_points, np.int32).reshape((-1, 1, 2))
+                cv2.polylines(display_img, [pts], False, polygon_color, 3)
+                for pt in roi_points:
+                    cv2.circle(display_img, pt, 5, point_color, -1)
+                    cv2.circle(display_img, pt, 5, (0, 0, 0), 1)
+                if len(roi_points) > 1:
+                    cv2.line(display_img, roi_points[-1], roi_points[0], closing_line_color, 2)
+                point_text = f"Points: {len(roi_points)} (min 3 required)"
+                text_y = display_img.shape[0] - 20
+                cv2.putText(
+                    display_img,
+                    point_text,
+                    (10, text_y),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.8,
+                    (0, 0, 0),
+                    3,
+                )
+                cv2.putText(
+                    display_img,
+                    point_text,
+                    (10, text_y),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.8,
+                    (255, 255, 255),
+                    2,
+                )
+
+            if mouse_clicked:
+                mouse_clicked = False
+
+            cv2.imshow(window_name, display_img)
+            key = cv2.waitKey(30) & 0xFF
+            loop_count += 1
+
+            if key == 13 or key == 10:  # Enter
+                if len(roi_points) >= 3:
+                    print(f"ROI confirmed with {len(roi_points)} points")
+                    break
+                else:
+                    print(f"Need at least 3 points. Currently have {len(roi_points)}")
+            elif key == 27:  # Esc
+                print("ROI selection cancelled")
+                roi_points = []
+                break
+            elif key == ord("r") or key == ord("R"):  # Reset
+                print("ROI points reset")
+                roi_points = []
+
+        if window_name:
+            cv2.destroyWindow(window_name)
+            cv2.waitKey(1)
+
+        if len(roi_points) < 3:
+            print("ROI selection requires at least 3 points.")
+            return None
+
+        # Scale points back to original resolution
+        final_points = (np.array(roi_points, dtype=np.float32) / scale).astype(np.int32)
+        print(f"ROI selection completed with {len(final_points)} points")
+        return final_points
+
+    except Exception as e:
+        print(f"Error in ROI selection: {e}")
+        import traceback
+
+        traceback.print_exc()
+        if cap is not None:
+            cap.release()
+        if window_name:
+            try:
+                cv2.destroyWindow(window_name)
+                cv2.waitKey(1)
+            except Exception:
+                pass
+        cv2.destroyAllWindows()
+        return None
 
 
 def get_pose_config(existing_root=None, input_dir=None):
@@ -2717,6 +2995,7 @@ def process_video_batch(
         "bbox_y_min": pose_config.get("bbox_y_min", 0),
         "bbox_x_max": pose_config.get("bbox_x_max", width),
         "bbox_y_max": pose_config.get("bbox_y_max", height),
+        "roi_polygon_points": pose_config.get("roi_polygon_points"),
     }
 
     batch_landmarks = []
@@ -2855,20 +3134,62 @@ def process_frame_with_tasks_api(
     """
     Process a single frame using MediaPipe Tasks API.
     Returns landmarks in normalized coordinates (mapped to full frame if cropping was used).
+    Supports both bounding box and polygon ROI.
     """
-    # Apply bounding box cropping if enabled
+    # Apply bounding box or polygon cropping if enabled
     process_frame = frame
     actual_process_width = process_width
     actual_process_height = process_height
 
     if enable_crop:
-        x_min = max(0, min(bbox_config["bbox_x_min"], process_width - 1))
-        y_min = max(0, min(bbox_config["bbox_y_min"], process_height - 1))
-        x_max = max(x_min + 1, min(bbox_config["bbox_x_max"], process_width))
-        y_max = max(y_min + 1, min(bbox_config["bbox_y_max"], process_height))
-        process_frame = frame[y_min:y_max, x_min:x_max]
-        actual_process_width = x_max - x_min
-        actual_process_height = y_max - y_min
+        # Check if polygon ROI is available
+        roi_polygon_points = bbox_config.get("roi_polygon_points")
+
+        if roi_polygon_points and len(roi_polygon_points) >= 3:
+            # Polygon ROI: create mask and apply it
+            # Scale polygon points if video was resized
+            if bbox_config.get("video_resized", False):
+                resize_scale = bbox_config.get("resize_scale", 1.0)
+                scaled_polygon = [
+                    [int(pt[0] * resize_scale), int(pt[1] * resize_scale)]
+                    for pt in roi_polygon_points
+                ]
+            else:
+                scaled_polygon = [[int(pt[0]), int(pt[1])] for pt in roi_polygon_points]
+
+            # Create mask for polygon ROI
+            mask = np.zeros((process_height, process_width), dtype=np.uint8)
+            polygon_pts = np.array(scaled_polygon, dtype=np.int32)
+            cv2.fillPoly(mask, [polygon_pts], 255)
+
+            # Apply mask to frame
+            process_frame = cv2.bitwise_and(frame, frame, mask=mask)
+
+            # Get bounding box of polygon for actual_process dimensions
+            x_coords = [pt[0] for pt in scaled_polygon]
+            y_coords = [pt[1] for pt in scaled_polygon]
+            x_min = max(0, min(x_coords))
+            y_min = max(0, min(y_coords))
+            x_max = min(process_width, max(x_coords))
+            y_max = min(process_height, max(y_coords))
+
+            # Crop to bounding box for processing efficiency
+            process_frame = process_frame[y_min:y_max, x_min:x_max]
+            actual_process_width = x_max - x_min
+            actual_process_height = y_max - y_min
+
+            # Store polygon offset for coordinate mapping
+            bbox_config["polygon_offset_x"] = x_min
+            bbox_config["polygon_offset_y"] = y_min
+        else:
+            # Bounding box ROI (original behavior)
+            x_min = max(0, min(bbox_config["bbox_x_min"], process_width - 1))
+            y_min = max(0, min(bbox_config["bbox_y_min"], process_height - 1))
+            x_max = max(x_min + 1, min(bbox_config["bbox_x_max"], process_width))
+            y_max = max(y_min + 1, min(bbox_config["bbox_y_max"], process_height))
+            process_frame = frame[y_min:y_max, x_min:x_max]
+            actual_process_width = x_max - x_min
+            actual_process_height = y_max - y_min
 
         if (
             bbox_config.get("enable_resize_crop", False)
@@ -2897,17 +3218,62 @@ def process_frame_with_tasks_api(
 
         # Map coordinates to full frame if cropping was used
         if enable_crop:
-            # Pass processing dimensions (may be resized) and original dimensions
-            landmarks = map_landmarks_to_full_frame(
-                landmarks,
-                bbox_config,
-                actual_process_width,
-                actual_process_height,
-                process_width,
-                process_height,  # Processing frame dimensions (may be resized)
-                original_width,
-                original_height,  # Original video dimensions
-            )
+            # For polygon ROI, adjust coordinates for the offset
+            if bbox_config.get("roi_polygon_points") and len(bbox_config.get("roi_polygon_points", [])) >= 3:
+                # Polygon ROI: landmarks are in cropped bounding box coordinates (normalized 0-1)
+                # Need to map back to full frame coordinates
+                offset_x = bbox_config.get("polygon_offset_x", 0)
+                offset_y = bbox_config.get("polygon_offset_y", 0)
+                enable_resize_crop = bbox_config.get("enable_resize_crop", False)
+                resize_crop_scale = bbox_config.get("resize_crop_scale", 1)
+
+                # Step 1: Convert from normalized crop space (0-1) to pixel crop space
+                # If resize_crop is enabled, landmarks are in resized crop space
+                # Step 2: If resize_crop enabled, convert from resized crop to original crop
+                # Step 3: Add offset to get coordinates in full processing frame
+                # Step 4: If video was resized, convert to original dimensions
+                # Step 5: Normalize to original video dimensions
+                for lm in landmarks:
+                    # Convert normalized crop to pixel crop (may be resized crop)
+                    x_px_crop_resized = lm[0] * actual_process_width
+                    y_px_crop_resized = lm[1] * actual_process_height
+
+                    # If resize_crop is enabled, convert from resized crop to original crop
+                    if enable_resize_crop and resize_crop_scale > 1:
+                        x_px_crop = x_px_crop_resized / resize_crop_scale
+                        y_px_crop = y_px_crop_resized / resize_crop_scale
+                    else:
+                        x_px_crop = x_px_crop_resized
+                        y_px_crop = y_px_crop_resized
+
+                    # Add offset to get coordinates in full processing frame
+                    x_px_full_processing = x_px_crop + offset_x
+                    y_px_full_processing = y_px_crop + offset_y
+
+                    # If video was resized, convert from processing to original dimensions
+                    if bbox_config.get("video_resized", False):
+                        resize_scale = bbox_config.get("resize_scale", 1.0)
+                        x_px_full_original = x_px_full_processing / resize_scale
+                        y_px_full_original = y_px_full_processing / resize_scale
+                    else:
+                        x_px_full_original = x_px_full_processing
+                        y_px_full_original = y_px_full_processing
+
+                    # Normalize to original video dimensions
+                    lm[0] = x_px_full_original / original_width if original_width > 0 else 0.0
+                    lm[1] = y_px_full_original / original_height if original_height > 0 else 0.0
+            else:
+                # Bounding box ROI: use existing mapping function
+                landmarks = map_landmarks_to_full_frame(
+                    landmarks,
+                    bbox_config,
+                    actual_process_width,
+                    actual_process_height,
+                    process_width,
+                    process_height,  # Processing frame dimensions (may be resized)
+                    original_width,
+                    original_height,  # Original video dimensions
+                )
 
         # Apply occluded landmark estimation if enabled
         if pose_config.get("estimate_occluded", False):
@@ -3137,6 +3503,7 @@ def process_video(video_path, output_dir, pose_config, use_gpu=True):
         "resize_scale": resize_metadata["scale_factor"]
         if (enable_resize and resize_metadata)
         else 1.0,
+        "roi_polygon_points": pose_config.get("roi_polygon_points"),  # Store polygon ROI if available
     }
 
     # Check if batch processing should be used
