@@ -255,9 +255,9 @@ def generate_landmark_mapping():
 def generate_csv_header():
     """Generate CSV header with all face landmarks"""
     landmark_map = generate_landmark_mapping()
-    header = ["frame_index"]
+    header = ["frame_index", "face_idx"]  # Include face_idx to match row structure
 
-    # Include all landmarks from 0 to 467
+    # Include all landmarks from 0 to NUM_FACE_LANDMARKS-1
     indices_sorted = list(range(NUM_FACE_LANDMARKS))
 
     for idx in indices_sorted:
@@ -2189,9 +2189,6 @@ def process_video(video_path, output_dir, face_config):
         output_face_blendshapes=face_config.get("refine_landmarks", True),
     )
 
-    # Generate CSV headers
-    header, indices = generate_csv_header()
-
     # Lists to store landmarks
     all_frames_data = []  # List of dicts: {frame_idx: int, faces: list of face data}
     frames_with_missing_data = []
@@ -2337,6 +2334,30 @@ def process_video(video_path, output_dir, face_config):
     norm_rows = []
     pixel_rows = []
 
+    # Generate CSV headers (will be adjusted if actual landmark count differs)
+    header, indices = generate_csv_header()
+
+    # Determine actual number of landmarks from first frame with faces
+    actual_num_landmarks = NUM_FACE_LANDMARKS
+    for frame_data in all_frames_data:
+        faces = frame_data["faces"]
+        if faces and len(faces) > 0:
+            # Get number of landmarks from first face
+            first_face_landmarks = faces[0][1]  # faces[0] is (face_idx, landmarks)
+            if len(first_face_landmarks) != NUM_FACE_LANDMARKS:
+                actual_num_landmarks = len(first_face_landmarks)
+                print(f"Warning: FaceLandmarker returned {actual_num_landmarks} landmarks, expected {NUM_FACE_LANDMARKS}")
+                print(f"Adjusting CSV header to match actual landmark count")
+                # Regenerate header with correct number of landmarks
+                header = ["frame_index", "face_idx"]  # Include face_idx to match row structure
+                for idx in range(actual_num_landmarks):
+                    name = LANDMARK_NAMES.get(idx, f"landmark_{idx}")
+                    header.extend([f"{name}_x", f"{name}_y", f"{name}_z"])
+                break
+    
+    # If header was adjusted, we need to ensure all rows match
+    expected_cols = len(header)
+
     for frame_data in all_frames_data:
         frame_idx = frame_data["frame_idx"]
         faces = frame_data["faces"]
@@ -2346,13 +2367,40 @@ def process_video(video_path, output_dir, face_config):
                 norm_row = [frame_idx, face_idx]
                 pixel_row = [frame_idx, face_idx]
 
+                # Ensure we have the correct number of landmarks
+                if len(landmarks) != actual_num_landmarks:
+                    # Pad or truncate to match expected count
+                    if len(landmarks) < actual_num_landmarks:
+                        # Pad with NaN
+                        landmarks = landmarks + [[np.nan, np.nan, np.nan]] * (actual_num_landmarks - len(landmarks))
+                    else:
+                        # Truncate
+                        landmarks = landmarks[:actual_num_landmarks]
+
+                # Add landmarks to rows (each landmark has 3 values: x, y, z)
                 for landmark in landmarks:
-                    norm_row.extend(landmark)  # Already normalized
-                    pixel_row.extend([
-                        int(landmark[0] * original_width),
-                        int(landmark[1] * original_height),
-                        landmark[2]
-                    ])
+                    if isinstance(landmark, (list, tuple)) and len(landmark) >= 3:
+                        norm_row.extend([landmark[0], landmark[1], landmark[2]])  # Already normalized
+                        pixel_row.extend([
+                            int(landmark[0] * original_width) if not (np.isnan(landmark[0]) if hasattr(np, 'isnan') else landmark[0] != landmark[0]) else np.nan,
+                            int(landmark[1] * original_height) if not (np.isnan(landmark[1]) if hasattr(np, 'isnan') else landmark[1] != landmark[1]) else np.nan,
+                            landmark[2] if not (np.isnan(landmark[2]) if hasattr(np, 'isnan') else landmark[2] != landmark[2]) else np.nan
+                        ])
+                    else:
+                        # Invalid landmark format, add NaN
+                        norm_row.extend([np.nan, np.nan, np.nan])
+                        pixel_row.extend([np.nan, np.nan, np.nan])
+                
+                # Verify row length matches header
+                if len(norm_row) != expected_cols:
+                    print(f"Warning: Row length mismatch for frame {frame_idx}, face {face_idx}: expected {expected_cols}, got {len(norm_row)}")
+                    # Adjust row to match header
+                    if len(norm_row) < expected_cols:
+                        norm_row.extend([np.nan] * (expected_cols - len(norm_row)))
+                        pixel_row.extend([np.nan] * (expected_cols - len(pixel_row)))
+                    else:
+                        norm_row = norm_row[:expected_cols]
+                        pixel_row = pixel_row[:expected_cols]
 
                 norm_rows.append(norm_row)
                 pixel_rows.append(pixel_row)
@@ -2360,7 +2408,7 @@ def process_video(video_path, output_dir, face_config):
             # No face detected - add row with NaN values
             norm_row = [frame_idx, 0]
             pixel_row = [frame_idx, 0]
-            for _ in range(NUM_FACE_LANDMARKS):
+            for _ in range(actual_num_landmarks):
                 norm_row.extend([np.nan, np.nan, np.nan])
                 pixel_row.extend([np.nan, np.nan, np.nan])
             norm_rows.append(norm_row)
