@@ -260,6 +260,14 @@ class Vaila(tk.Tk):
         super().__init__()
         self.title("vailá - 12.January.2026 v0.3.9 (Python 3.12.12)")
 
+        # Set WM_CLASS for Linux (needed for proper icon in taskbar/dock)
+        if platform.system() == "Linux":
+            try:
+                # Set both class name and instance name to 'vaila' for proper desktop integration
+                self.wm_class("vaila", "vaila")
+            except Exception as e:
+                print(f"Could not set WM_CLASS: {e}")
+
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
 
@@ -866,12 +874,12 @@ class Vaila(tk.Tk):
             command=self.sprint,
         )
 
-        # B5_r6_c2 - vailá
-        vaila_btn_sprint1 = tk.Button(
+        # B5_r6_c2 - Face Mesh
+        face_mesh_btn = tk.Button(
             row6_frame,
-            text="vailá",
-            command=self.show_vaila_message,
+            text="Face Mesh",
             width=button_width,
+            command=self.face_mesh_analysis,
         )
 
         # B5_r6_c3 - vailá
@@ -900,7 +908,7 @@ class Vaila(tk.Tk):
 
         # Pack row6 buttons
         sprint_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
-        vaila_btn_sprint1.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        face_mesh_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         vaila_btn_sprint2.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         vaila_btn_sprint3.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         vaila_btn_sprint4.pack(side="left", expand=True, fill="x", padx=2, pady=2)
@@ -2703,6 +2711,120 @@ class Vaila(tk.Tk):
     def sprint(self):
         """Runs the Sprint analysis tool."""
         run_vaila_module("vaila.vailasprint", "vaila/vailasprint.py")
+
+    # B5_r6_c2 - Face Mesh
+    def face_mesh_analysis(self):
+        """Runs the Face Mesh analysis tool."""
+        # Create a dialog window for device selection
+        dialog = Toplevel(self)
+        dialog.title("Face Mesh Analysis - Select Device")
+        dialog.geometry("600x400")
+        dialog.transient(self)
+        dialog.grab_set()
+        # Center the dialog
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
+        y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
+        dialog.geometry(f"+{x}+{y}")
+
+        # Create main frame
+        main_frame = tk.Frame(dialog, padx=20, pady=20)
+        main_frame.pack(fill="both", expand=True)
+
+        # Title
+        title_label = Label(
+            main_frame,
+            text="Select Face Mesh Analysis Device",
+            font=("Arial", 12, "bold"),
+        )
+        title_label.pack(pady=(0, 20))
+
+        # Device selection variable
+        device_var = tk.StringVar(value="cpu")
+
+        # CPU option
+        cpu_frame = tk.Frame(main_frame, relief="raised", borderwidth=2, padx=10, pady=10)
+        cpu_frame.pack(fill="x", pady=5)
+        cpu_radio = tk.Radiobutton(
+            cpu_frame,
+            text="CPU Processing",
+            variable=device_var,
+            value="cpu",
+            font=("Arial", 10),
+        )
+        cpu_radio.pack(anchor="w")
+        cpu_desc = Label(
+            cpu_frame,
+            text="Standard CPU processing (MediaPipe FaceMesh)",
+            font=("Arial", 9),
+            fg="gray",
+        )
+        cpu_desc.pack(anchor="w", padx=(25, 0))
+
+        # GPU NVIDIA option
+        gpu_frame = tk.Frame(main_frame, relief="raised", borderwidth=2, padx=10, pady=10)
+        gpu_frame.pack(fill="x", pady=5)
+        gpu_radio = tk.Radiobutton(
+            gpu_frame,
+            text="GPU NVIDIA Processing",
+            variable=device_var,
+            value="nvidia",
+            font=("Arial", 10),
+        )
+        gpu_radio.pack(anchor="w")
+        gpu_desc = Label(
+            gpu_frame,
+            text="NVIDIA GPU accelerated processing (Note: FaceMesh currently uses CPU, GPU support may be available in future MediaPipe versions)",
+            font=("Arial", 9),
+            fg="gray",
+        )
+        gpu_desc.pack(anchor="w", padx=(25, 0))
+
+        # Buttons frame
+        buttons_frame = tk.Frame(main_frame)
+        buttons_frame.pack(pady=(20, 0))
+
+        def launch_face_mesh():
+            device_choice = device_var.get()
+            dialog.destroy()
+
+            try:
+                if device_choice == "cpu":
+                    print("\n" + "=" * 60)
+                    print("Face Mesh Analysis - Device Selected: CPU")
+                    print("=" * 60)
+                    print("Launching: vaila.mp_facemesh")
+                    print("Features: MediaPipe FaceMesh, CPU processing")
+                    print("=" * 60 + "\n")
+                    run_vaila_module("vaila.mp_facemesh", "vaila/mp_facemesh.py")
+                elif device_choice == "nvidia":
+                    print("\n" + "=" * 60)
+                    print("Face Mesh Analysis - Device Selected: GPU NVIDIA")
+                    print("=" * 60)
+                    print("Launching: vaila.mp_facemesh_nvidia")
+                    print("Features: MediaPipe FaceMesh with NVIDIA GPU support")
+                    print("Note: FaceMesh currently uses CPU, GPU acceleration may be available in future versions")
+                    print("=" * 60 + "\n")
+                    run_vaila_module("vaila.mp_facemesh_nvidia", "vaila/mp_facemesh_nvidia.py")
+            except Exception as e:
+                print(f"\nERROR: Failed to launch face mesh analysis: {e}\n")
+                messagebox.showerror("Error", f"Failed to launch face mesh analysis: {e}")
+
+        def cancel():
+            dialog.destroy()
+
+        # OK and Cancel buttons
+        ok_button = Button(buttons_frame, text="OK", command=launch_face_mesh, width=10)
+        ok_button.pack(side="left", padx=5)
+        cancel_button = Button(buttons_frame, text="Cancel", command=cancel, width=10)
+        cancel_button.pack(side="left", padx=5)
+
+        # Make Enter key trigger OK
+        dialog.bind("<Return>", lambda e: launch_face_mesh())
+        dialog.bind("<Escape>", lambda e: cancel())
+
+        # Focus on dialog
+        dialog.focus_set()
 
 
 if __name__ == "__main__":

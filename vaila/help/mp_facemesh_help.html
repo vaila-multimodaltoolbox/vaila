@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Face Mesh Analysis - Complete Documentation</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+        }
+        h2 {
+            color: #34495e;
+            border-left: 4px solid #3498db;
+            padding-left: 15px;
+            margin-top: 30px;
+        }
+        h3 {
+            color: #2980b9;
+            margin-top: 25px;
+        }
+        .version-info {
+            background-color: #ecf0f1;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .feature-box {
+            background-color: #e8f4fd;
+            border: 1px solid #3498db;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        .warning {
+            background-color: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        .code {
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 3px;
+            padding: 10px;
+            font-family: 'Courier New', monospace;
+            overflow-x: auto;
+        }
+        .parameter {
+            background-color: #e9ecef;
+            border: 1px solid #adb5bd;
+            border-radius: 3px;
+            padding: 2px 6px;
+            font-family: monospace;
+            font-weight: bold;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+        }
+        .output-example {
+            background-color: #f8f9fa;
+            border-left: 4px solid #28a745;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        .iris-highlight {
+            background-color: #d4edda;
+            border: 1px solid #28a745;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        .gpu-warning {
+            background-color: #f8d7da;
+            border: 1px solid #dc3545;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Face Mesh Analysis - Complete Documentation</h1>
+        
+        <div class="version-info">
+            <strong>Script:</strong> mp_facemesh.py / mp_facemesh_nvidia.py<br>
+            <strong>Version:</strong> 0.1.0<br>
+            <strong>Last Updated:</strong> 12 January 2026<br>
+            <strong>Author:</strong> Abel Gonçalves Chinaglia
+        </div>
+
+        <h2>Overview</h2>
+        <p>
+            The Face Mesh Analysis module performs batch processing of videos for 2D face mesh detection using MediaPipe's FaceMesh model. 
+            It processes videos from a specified input directory, overlays face landmarks on each video frame, and exports both normalized 
+            and pixel-based landmark coordinates to CSV files. The module includes support for iris landmark detection (468-477), which is 
+            essential for gaze and attention analysis in sports applications.
+        </p>
+
+        <div class="iris-highlight">
+            <strong>🎯 Key Feature - Iris Landmarks:</strong> This module collects 478 face landmarks including 10 iris landmarks (468-477) 
+            that are critical for gaze/attention analysis in projects like UPro_Soccer. The iris data enables precise tracking of eye movement 
+            and attention patterns.
+        </div>
+
+        <h2>Features</h2>
+        <div class="feature-box">
+            <ul>
+                <li><strong>478 Face Landmarks:</strong> Complete face mesh including 468 standard landmarks + 10 iris landmarks</li>
+                <li><strong>ROI Selection:</strong> Bounding box and polygon ROI for focused processing</li>
+                <li><strong>Video Resize:</strong> Optional upscaling for better face detection</li>
+                <li><strong>Advanced Filtering:</strong> Multiple smoothing and interpolation methods</li>
+                <li><strong>TOML Configuration:</strong> Save and load configuration files</li>
+                <li><strong>GPU Support:</strong> NVIDIA GPU acceleration (when available)</li>
+                <li><strong>Batch Processing:</strong> Process multiple videos in a directory</li>
+                <li><strong>Dual Output:</strong> Normalized (0-1) and pixel coordinates</li>
+            </ul>
+        </div>
+
+        <h2>Workflow</h2>
+        <ol>
+            <li><strong>Launch:</strong> Open <code>vaila.py</code> and click the <strong>Face Mesh</strong> button (B5_r6_c2)</li>
+            <li><strong>Select Device:</strong> Choose between CPU or NVIDIA GPU processing</li>
+            <li><strong>Select Input Directory:</strong> Choose the folder containing video files (.mp4, .avi, .mov)</li>
+            <li><strong>Select Output Directory:</strong> Choose where to save processed results</li>
+            <li><strong>Configure Parameters:</strong> Set MediaPipe parameters via GUI or load TOML configuration</li>
+            <li><strong>Optional ROI Selection:</strong> Select bounding box or polygon ROI for focused processing</li>
+            <li><strong>Process:</strong> The script processes all videos in the input directory</li>
+            <li><strong>Output:</strong> Results are saved in timestamped folders</li>
+        </ol>
+
+        <h2>GPU Support and Limitations</h2>
+        <div class="gpu-warning">
+            <strong>⚠️ Important Note - GPU Limitations:</strong>
+            <p>MediaPipe FaceLandmarker currently has <strong>limited GPU delegate support</strong>. Even when GPU is selected and configured, 
+            the processing typically occurs on CPU (XNNPACK delegate). This is a known limitation of MediaPipe FaceLandmarker, not a bug in 
+            our implementation.</p>
+            <p><strong>Current Status:</strong></p>
+            <ul>
+                <li>✅ GPU detection works correctly</li>
+                <li>✅ CUDA_VISIBLE_DEVICES is configured properly</li>
+                <li>✅ GPU delegate can be created</li>
+                <li>⚠️ FaceLandmarker uses CPU internally (MediaPipe limitation)</li>
+                <li>✅ Code is prepared for when MediaPipe adds full GPU support</li>
+            </ul>
+            <p><strong>Recommendation:</strong> Use CPU mode for now. GPU acceleration may be available in future MediaPipe versions.</p>
+        </div>
+
+        <h3>GPU Requirements (For Future Support)</h3>
+        <p>When MediaPipe implements full GPU support for FaceLandmarker, you will need:</p>
+        <ul>
+            <li><strong>NVIDIA GPU:</strong> Any CUDA-capable NVIDIA GPU</li>
+            <li><strong>NVIDIA Drivers:</strong> Latest drivers installed (<code>nvidia-smi</code> to verify)</li>
+            <li><strong>CUDA Toolkit:</strong> Required for MediaPipe GPU delegate
+                <ul>
+                    <li>Linux: Install via NVIDIA website or <code>conda install -c nvidia cuda-toolkit</code></li>
+                    <li>Windows: Download from NVIDIA Developer website</li>
+                    <li>macOS: Not supported (no CUDA NVIDIA support)</li>
+                </ul>
+            </li>
+            <li><strong>cuDNN:</strong> CUDA Deep Neural Network Library
+                <ul>
+                    <li>Usually included with CUDA Toolkit installation</li>
+                    <li>Or install via: <code>conda install -c nvidia cudnn</code></li>
+                </ul>
+            </li>
+            <li><strong>MediaPipe:</strong> Version with GPU delegate support (<code>pip install --upgrade mediapipe</code>)</li>
+        </ul>
+
+        <h2>Configuration Parameters</h2>
+        
+        <h3>MediaPipe FaceMesh Settings</h3>
+        <table>
+            <tr>
+                <th>Parameter</th>
+                <th>Range</th>
+                <th>Default</th>
+                <th>Description</th>
+            </tr>
+            <tr>
+                <td><span class="parameter">min_detection_confidence</span></td>
+                <td>0.0 - 1.0</td>
+                <td>0.25</td>
+                <td>Minimum confidence for face detection</td>
+            </tr>
+            <tr>
+                <td><span class="parameter">min_tracking_confidence</span></td>
+                <td>0.0 - 1.0</td>
+                <td>0.25</td>
+                <td>Minimum confidence for face tracking</td>
+            </tr>
+            <tr>
+                <td><span class="parameter">max_num_faces</span></td>
+                <td>1, 2, ...</td>
+                <td>1</td>
+                <td>Maximum number of faces to detect</td>
+            </tr>
+            <tr>
+                <td><span class="parameter">refine_landmarks</span></td>
+                <td>True/False</td>
+                <td>True</td>
+                <td>Enable refined landmark detection (includes iris)</td>
+            </tr>
+            <tr>
+                <td><span class="parameter">apply_filtering</span></td>
+                <td>True/False</td>
+                <td>True</td>
+                <td>Apply basic filtering to landmarks</td>
+            </tr>
+        </table>
+
+        <h3>Video Processing Settings</h3>
+        <table>
+            <tr>
+                <th>Parameter</th>
+                <th>Options</th>
+                <th>Default</th>
+                <th>Description</th>
+            </tr>
+            <tr>
+                <td><span class="parameter">enable_resize</span></td>
+                <td>True/False</td>
+                <td>False</td>
+                <td>Resize video for better detection</td>
+            </tr>
+            <tr>
+                <td><span class="parameter">resize_scale</span></td>
+                <td>2, 3, ...</td>
+                <td>2</td>
+                <td>Scale factor for video resize</td>
+            </tr>
+            <tr>
+                <td><span class="parameter">enable_padding</span></td>
+                <td>True/False</td>
+                <td>True</td>
+                <td>Enable initial frame padding for stabilization</td>
+            </tr>
+            <tr>
+                <td><span class="parameter">pad_start_frames</span></td>
+                <td>1, 2, ...</td>
+                <td>30</td>
+                <td>Number of padding frames at start</td>
+            </tr>
+        </table>
+
+        <h3>ROI (Region of Interest) Settings</h3>
+        <table>
+            <tr>
+                <th>Parameter</th>
+                <th>Type</th>
+                <th>Description</th>
+            </tr>
+            <tr>
+                <td><span class="parameter">enable_crop</span></td>
+                <td>Boolean</td>
+                <td>Enable ROI cropping</td>
+            </tr>
+            <tr>
+                <td><span class="parameter">bbox_x_min, bbox_y_min</span></td>
+                <td>Integer (pixels)</td>
+                <td>Top-left corner of bounding box</td>
+            </tr>
+            <tr>
+                <td><span class="parameter">bbox_x_max, bbox_y_max</span></td>
+                <td>Integer (pixels)</td>
+                <td>Bottom-right corner of bounding box</td>
+            </tr>
+            <tr>
+                <td><span class="parameter">roi_polygon_points</span></td>
+                <td>Array of [x, y]</td>
+                <td>Polygon ROI points (minimum 3)</td>
+            </tr>
+            <tr>
+                <td><span class="parameter">enable_resize_crop</span></td>
+                <td>Boolean</td>
+                <td>Upscale cropped region</td>
+            </tr>
+            <tr>
+                <td><span class="parameter">resize_crop_scale</span></td>
+                <td>Integer</td>
+                <td>Scale factor for cropped region</td>
+            </tr>
+        </table>
+
+        <h2>Output Files</h2>
+        <p>For each processed video, the following files are generated:</p>
+        
+        <div class="output-example">
+            <strong>1. Processed Video:</strong> <code>{video_name}_facemesh.mp4</code><br>
+            Video with face landmarks overlaid on original frames. Uses H.264 codec (avc1) for better compatibility with QuickTime and web browsers.
+        </div>
+
+        <div class="output-example">
+            <strong>2. Normalized CSV:</strong> <code>{video_name}_facemesh_norm.csv</code><br>
+            Landmark coordinates normalized to 0-1 scale. Columns include:
+            <ul>
+                <li><code>frame_index</code>: Frame number</li>
+                <li><code>face_idx</code>: Face index (for multi-face detection)</li>
+                <li><code>{landmark_name}_x, {landmark_name}_y, {landmark_name}_z</code>: For each of 478 landmarks</li>
+            </ul>
+        </div>
+
+        <div class="output-example">
+            <strong>3. Pixel CSV:</strong> <code>{video_name}_facemesh_pixel.csv</code><br>
+            Landmark coordinates in pixel values. Same structure as normalized CSV.
+        </div>
+
+        <div class="output-example">
+            <strong>4. Configuration File:</strong> <code>configuration_used.toml</code><br>
+            TOML file containing all parameters used for processing. Can be reused for batch processing.
+        </div>
+
+        <div class="output-example">
+            <strong>5. Log File:</strong> <code>log_info.txt</code><br>
+            Processing metadata including execution time, frame count, and configuration.
+        </div>
+
+        <h2>Iris Landmarks (468-477)</h2>
+        <div class="iris-highlight">
+            <p>The module collects 10 iris landmarks that are essential for gaze analysis:</p>
+            <ul>
+                <li><strong>Right Iris:</strong> 468 (center), 469-472 (peripheral points)</li>
+                <li><strong>Left Iris:</strong> 473 (center), 474-477 (peripheral points)</li>
+            </ul>
+            <p>These landmarks enable precise tracking of eye movement, attention direction, and gaze patterns - critical for sports performance analysis, particularly in projects like UPro_Soccer.</p>
+        </div>
+
+        <h2>Advanced Filtering</h2>
+        <p>The module supports multiple filtering and smoothing methods:</p>
+        <ul>
+            <li><strong>Interpolation:</strong> Linear, Cubic, Nearest</li>
+            <li><strong>Smoothing:</strong> Savitzky-Golay, LOWESS, Kalman, Butterworth, Splines, ARIMA</li>
+        </ul>
+        <p>Configure these via the TOML file or GUI advanced settings.</p>
+
+        <h2>Troubleshooting</h2>
+        <h3>No faces detected</h3>
+        <ul>
+            <li>Lower <code>min_detection_confidence</code> (try 0.1-0.2)</li>
+            <li>Enable video resize to improve detection</li>
+            <li>Check video quality and lighting conditions</li>
+        </ul>
+
+        <h3>Poor landmark accuracy</h3>
+        <ul>
+            <li>Enable <code>refine_landmarks</code> for better accuracy</li>
+            <li>Use ROI to focus on face region</li>
+            <li>Increase video resolution or enable resize</li>
+        </ul>
+
+        <h3>Video codec issues</h3>
+        <ul>
+            <li>The module attempts H.264 (avc1) first, falls back to mp4v</li>
+            <li>If video won't play, try converting with ffmpeg</li>
+        </ul>
+
+        <h3>GPU not being used</h3>
+        <ul>
+            <li>This is expected - MediaPipe FaceLandmarker currently uses CPU processing</li>
+            <li>GPU acceleration may be available in future MediaPipe versions</li>
+            <li>Use CPU mode for now - it's optimized and efficient</li>
+            <li>If you want to prepare for future GPU support, install CUDA Toolkit and cuDNN</li>
+        </ul>
+
+        <h2>Dependencies</h2>
+        <div class="code">
+            <strong>Required:</strong><br>
+            - opencv-python (cv2)<br>
+            - mediapipe<br>
+            - pandas<br>
+            - numpy<br>
+            - tkinter<br>
+            - toml<br>
+            <br>
+            <strong>Optional (for advanced filtering):</strong><br>
+            - scipy<br>
+            - pykalman<br>
+            - statsmodels
+        </div>
+
+        <h2>Use Cases</h2>
+        <ul>
+            <li><strong>Sports Performance:</strong> Gaze and attention analysis in team sports (e.g., UPro_Soccer project)</li>
+            <li><strong>Biomechanics:</strong> Facial expression and movement analysis</li>
+            <li><strong>Research:</strong> Behavioral studies requiring precise face tracking</li>
+            <li><strong>Training:</strong> Visual attention and focus assessment</li>
+        </ul>
+
+        <div class="footer" style="margin-top: 50px; padding-top: 20px; border-top: 1px solid #dee2e6; text-align: center; color: #6c757d;">
+            <p>For more information, visit: <a href="https://github.com/vaila-multimodaltoolbox/vaila">vailá Multimodal Toolbox</a></p>
+        </div>
+    </div>
+</body>
+</html>
