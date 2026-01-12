@@ -6,8 +6,8 @@ Author: Prof. Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 05 December 2025
-Update Date: 05 December 2025
-Version: 0.1.0
+Update Date: 12 January 2026
+Version: 0.1.1
 Python Version: 3.12.12
 
 Description:
@@ -216,10 +216,7 @@ def spectral_analysis_baseline(signal_data, time_data, fs, last_second=1.0):
 
     # Calculate mean frequency (weighted by power)
     total_power = np.sum(psd_analysis)
-    if total_power > 0:
-        mean_frequency = np.sum(freqs_analysis * psd_analysis) / total_power
-    else:
-        mean_frequency = 0.0
+    mean_frequency = np.sum(freqs_analysis * psd_analysis) / total_power if total_power > 0 else 0.0
 
     # Find dominant frequency (highest peak above a threshold)
     # Use 95th percentile of PSD as threshold to find significant peaks
@@ -458,19 +455,19 @@ def process_single_file(
     # Search from end to beginning for maximum positive value
     # Track the maximum positive value found when searching backwards
     for i in range(len(y_data) - 1, -1, -1):
-        if y_data[i] > baseline_initial:  # Only consider positive values above baseline
-            # Track the maximum positive value found so far (going backwards)
-            if positive_peak_idx is None or y_data[i] > positive_peak_value:
-                positive_peak_idx = i
-                positive_peak_value = y_data[i]
-                positive_peak_time = x[i]
+        # Only consider positive values above baseline
+        # Track the maximum positive value found so far (going backwards)
+        if y_data[i] > baseline_initial and (positive_peak_idx is None or y_data[i] > positive_peak_value):
+            positive_peak_idx = i
+            positive_peak_value = y_data[i]
+            positive_peak_time = x[i]
 
     if positive_peak_idx is None:
         # Fallback: find maximum in entire signal
         positive_peak_idx = np.argmax(y_data)
         positive_peak_value = y_data[positive_peak_idx]
         positive_peak_time = x[positive_peak_idx]
-        print("  ⚠️  No positive value above baseline found, using global maximum")
+        print("   No positive value above baseline found, using global maximum")
 
     print("\nPositive peak detected (from back to front):")
     print(f"  Index: {positive_peak_idx}")
@@ -509,7 +506,7 @@ def process_single_file(
         surge_start_idx = 0
         surge_start_time = x[0]
         surge_start_derivative = derivative[0]
-        print("  ⚠️  Using first point as surge start")
+        print("  Using first point as surge start")
 
     print("\nSurge start (maximum negative derivative) detected:")
     print(f"  Index: {surge_start_idx}")
@@ -567,7 +564,7 @@ def process_single_file(
         end_surge_idx = min(minimum_idx + 1, len(y_data) - 1)
         end_surge_time = x[end_surge_idx]
         end_surge_derivative = derivative[end_surge_idx]
-        print("  ⚠️  Using point after minimum as end surge")
+        print("  Using point after minimum as end surge")
 
     print("\nEnd of negative surge (maximum positive derivative after minimum) detected:")
     print(f"  Index: {end_surge_idx}")
@@ -667,7 +664,7 @@ def process_single_file(
         transform=ax1.transAxes,
         fontsize=11,
         verticalalignment="bottom",
-        bbox=dict(boxstyle="round", facecolor="yellow", alpha=0.7),
+        bbox={"boxstyle": "round", "facecolor": "yellow", "alpha": 0.7},
     )
     ax1.set_xlabel(df.columns[0] if len(df.columns) > 0 else "Time (ms)", fontsize=12)
     ax1.set_ylabel(df.columns[1] + " (kg)" if len(df.columns) > 1 else "Force (kg)", fontsize=12)
@@ -790,7 +787,7 @@ def process_single_file(
             transform=ax3.transAxes,
             fontsize=10,
             verticalalignment="top",
-            bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
+            bbox={"boxstyle": "round", "facecolor": "wheat", "alpha": 0.5},
         )
 
         print("\nPositive Force Statistics:")
@@ -1065,12 +1062,12 @@ def generate_html_report(fig, csv_file, results_dict, output_file, baseline_init
                     </div>
                 </div>
             </div>
-            
+
             <div class="info-section">
                 <h2>📈 Main Statistics</h2>
                 {stats_html}
             </div>
-            
+
             <div class="info-section">
                 <h2>🔍 Analysis Details</h2>
                 <div class="info-grid">
@@ -1091,13 +1088,13 @@ def generate_html_report(fig, csv_file, results_dict, output_file, baseline_init
                         {baseline_initial:.2f} kg
                     </div>
                     <div class="info-item" style="background: #fff3cd; border-left-color: #ffc107;">
-                        <strong>⚠️ Reaction Times:</strong>
+                        <strong> Reaction Times:</strong>
                         <br>Surge Start → Peak: {results_dict["reaction_time_surge_to_peak"]:.2f} ms ({results_dict["reaction_time_surge_to_peak"] / 1000:.3f} s)
                         <br>End Surge → Peak: {results_dict["reaction_time_end_surge_to_peak"]:.2f} ms ({results_dict["reaction_time_end_surge_to_peak"] / 1000:.3f} s)
                     </div>
                 </div>
             </div>
-            
+
             <div class="plot-section">
                 <h2 style="color: #667eea; margin-bottom: 20px;">📉 Analysis Plots</h2>
                 <img src="data:image/png;base64,{plot_data}" alt="Analysis Plots">
