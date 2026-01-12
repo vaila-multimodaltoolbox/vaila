@@ -1,50 +1,66 @@
-# Which conversion would you like to perform? - Button B_r4_c2
+# 🤖 ML Walkway - Machine Learning for Gait Analysis
 
-## Overview
+The **ML Walkway** is a comprehensive machine learning system designed for advanced gait analysis using computer vision and deep learning techniques. This module provides a complete pipeline from data collection to prediction, making biomechanical analysis more accessible and automated.
 
-**Button Position:** B_r4_c2  
-**Method Name:** `ml_walkway`  
-**Button Text:** Which conversion would you like to perform?
+## 🎯 Overview
 
-## Description
+The ML Walkway system integrates multiple components:
 
-Invokes the vaila_mlwalkway module.
+- **Data Collection**: Automated video processing and feature extraction
+- **Model Training**: Custom deep learning models for gait parameters
+- **Model Validation**: Comprehensive validation and testing frameworks
+- **Real-time Prediction**: Live analysis capabilities
+- **YOLO Integration**: State-of-the-art object detection for tracking
 
-## Usage
+## 🛠️ Available Tools
 
-1. Click the **Which conversion would you like to perform?** button in the vailá GUI
-2. Follow the prompts in the dialog windows
-3. Select input files/directories as requested
-4. Configure parameters if needed
-5. Review the output files
+# vaila_mlwalkway
 
-## Related Scripts
+## 📋 Module Information
 
-This button launches one or more Python scripts from the `vaila/` directory. For detailed script documentation, see:
-- `vaila/help/` - Script-specific help files
+- **Category:** Ml
+- **File:** `vaila\vaila_mlwalkway.py`
+- **Lines:** 104
+- **Size:** 2844 characters
 
-## Integration
 
-This button integrates with other vailá modules:
-- Check related buttons in the same frame/section
-- Output files can be used as input for other modules
+- **GUI Interface:** ✅ Yes
 
-## Troubleshooting
+## 📖 Description
 
-### Common Issues
 
-- **Module not found**: Ensure all dependencies are installed
-- **File not found**: Check that input files exist in the specified directory
-- **Permission errors**: Ensure write permissions for output directory
+vaila_mlwalkway.py
 
-### Getting Help
+Create by: Abel G. Chinaglia & Paulo R. P. Santiago
+LaBioCoM - Laboratory of Biomechanics and Motor Control
+Date: 10.Feb.2025
+Update: 24.Feb.2025
 
-- Check the script-specific help in `vaila/help/`
-- Review the main documentation in `docs/`
-- Open an issue on GitHub if problems persist
+This module provides a graphical user interface (GUI) for executing various machine learning (ML) tasks related to gait analysis using the VAILA system. The GUI includes buttons for:
+1. Processing gait features from MediaPipe data (use pixel data from MediaPipe in button vailá -> Makerless 2D).
+2. Training ML models (use features in extract  -> ).
+3. Validating trained ML models.
+4. Running ML predictions using pre-trained models.
+
+Each button triggers the respective function that executes the corresponding ML pipeline.
+
+
+
+## 🔧 Main Functions
+
+**Total functions found:** 5
+
+- `run_process_gait_features`
+- `run_ml_models_training`
+- `run_ml_valid_models`
+- `run_walkway_ml_prediction`
+- `run_vaila_mlwalkway_gui`
+
+
+
 
 ---
 
-**Last Updated:** November 2025  
-**Part of vailá - Multimodal Toolbox**  
-**License:** AGPLv3.0
+📅 **Gerado automaticamente em:** 08/10/2025 10:07:00  
+🔗 **Part of vailá - Multimodal Toolbox**  
+🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

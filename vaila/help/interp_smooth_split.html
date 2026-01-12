@@ -1,661 +1,94 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Interpolation and Smoothing Tool - Help Guide</title>
+    <title>vailá - interp_smooth_split</title>
     <style>
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: Arial, sans-serif;
+            margin: 40px;
             line-height: 1.6;
-            margin: 0;
-            padding: 20px;
             background-color: #f5f5f5;
-            color: #333;
         }
         .container {
-            max-width: 1200px;
+            max-width: 800px;
             margin: 0 auto;
             background: white;
             padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 0 20px rgba(0,0,0,0.1);
-        }
-        h1 {
-            color: #2E7D32;
-            border-bottom: 3px solid #4CAF50;
-            padding-bottom: 10px;
-            margin-bottom: 30px;
-        }
-        h2 {
-            color: #1976D2;
-            margin-top: 30px;
-            margin-bottom: 15px;
-            border-left: 4px solid #2196F3;
-            padding-left: 15px;
-        }
-        h3 {
-            color: #388E3C;
-            margin-top: 25px;
-            margin-bottom: 10px;
-        }
-        h4 {
-            color: #F57C00;
-            margin-top: 20px;
-            margin-bottom: 8px;
-        }
-        .highlight {
-            background-color: #E8F5E8;
-            padding: 15px;
-            border-left: 4px solid #4CAF50;
-            margin: 15px 0;
-            border-radius: 0 5px 5px 0;
-        }
-        .warning {
-            background-color: #FFF3E0;
-            padding: 15px;
-            border-left: 4px solid #FF9800;
-            margin: 15px 0;
-            border-radius: 0 5px 5px 0;
-        }
-        .info {
-            background-color: #E3F2FD;
-            padding: 15px;
-            border-left: 4px solid #2196F3;
-            margin: 15px 0;
-            border-radius: 0 5px 5px 0;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 20px 0;
-            background: white;
-        }
-        th, td {
-            border: 1px solid #ddd;
-            padding: 12px;
-            text-align: left;
-        }
-        th {
-            background-color: #4CAF50;
-            color: white;
-            font-weight: bold;
-        }
-        tr:nth-child(even) {
-            background-color: #f9f9f9;
-        }
-        tr:hover {
-            background-color: #f5f5f5;
-        }
-        code {
-            background-color: #f4f4f4;
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-family: 'Courier New', monospace;
-            color: #d63384;
-        }
-        pre {
-            background-color: #f8f9fa;
-            padding: 15px;
-            border-radius: 5px;
-            border-left: 4px solid #6c757d;
-            overflow-x: auto;
-        }
-        .method-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 20px;
-            margin: 20px 0;
-        }
-        .method-card {
-            background: #f8f9fa;
-            padding: 20px;
             border-radius: 8px;
-            border-left: 4px solid #4CAF50;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
-        .method-card h4 {
-            margin-top: 0;
-            color: #2E7D32;
-        }
-        .parameter-table {
-            background: #f8f9fa;
-            padding: 15px;
-            border-radius: 5px;
-            margin: 10px 0;
-        }
-        .tip {
-            background-color: #E8F5E8;
-            padding: 10px;
-            border-radius: 5px;
-            margin: 10px 0;
-            border-left: 3px solid #4CAF50;
-        }
-        .tip::before {
-            content: "💡 ";
-            font-weight: bold;
-        }
-        .workflow-step {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 15px;
-            margin: 10px 0;
-            border-radius: 8px;
-            position: relative;
-        }
-        .workflow-step::before {
-            content: counter(step-counter);
-            counter-increment: step-counter;
-            background: rgba(255,255,255,0.2);
-            width: 30px;
-            height: 30px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            position: absolute;
-            left: -15px;
-            top: 50%;
-            transform: translateY(-50%);
-            font-weight: bold;
-        }
-        .workflow {
-            counter-reset: step-counter;
-            margin: 20px 0;
-        }
-        .contact-info {
-            background: linear-gradient(135deg, #2E7D32 0%, #4CAF50 100%);
-            color: white;
-            padding: 20px;
-            border-radius: 10px;
-            margin-top: 30px;
-            text-align: center;
-        }
-        .contact-info a {
-            color: #E8F5E8;
-            text-decoration: none;
-        }
-        .contact-info a:hover {
-            text-decoration: underline;
-        }
-        .toc {
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 8px;
-            margin: 20px 0;
-        }
-        .toc h3 {
-            margin-top: 0;
-            color: #2E7D32;
-        }
-        .toc ul {
-            list-style-type: none;
-            padding-left: 0;
-        }
-        .toc li {
-            margin: 8px 0;
-        }
-        .toc a {
-            color: #1976D2;
-            text-decoration: none;
-        }
-        .toc a:hover {
-            text-decoration: underline;
-        }
-        .contact-separator {
-            border: 1px solid rgba(255,255,255,0.3);
-            margin: 20px 0;
-        }
+        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 30px; }
+        .module-info { background: #ecf0f1; padding: 15px; border-radius: 5px; margin: 20px 0; }
+        .functions { background: #f8f9fa; padding: 15px; border-left: 4px solid #28a745; margin: 15px 0; }
+        .docstring { background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 15px 0; }
+        .errorr { background: #f8d7da; padding: 15px; border-left: 4px solid #dc3545; margin: 15px 0; }
+        code { background: #e9ecef; padding: 2px 6px; border-radius: 3px; }
+        pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; }
+        .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #6c757d; font-size: 0.9em; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Interpolation and Smoothing Tool - Help Guide</h1>
-        <div class="toc">
-            <h3>Table of Contents</h3>
-            <ul>
-                <li><a href="#overview">Overview</a></li>
-                <li><a href="#features">Key Features</a></li>
-                <li><a href="#getting-started">Getting Started</a></li>
-                <li><a href="#configuration">Configuration Options</a></li>
-                <li><a href="#parameters">Parameter Reference Guide</a></li>
-                <li><a href="#quality-analysis">Quality Analysis Features</a></li>
-                <li><a href="#file-processing">File Processing</a></li>
-                <li><a href="#best-practices">Best Practices</a></li>
-                <li><a href="#troubleshooting">Troubleshooting</a></li>
-                <li><a href="#support">Support and Contact</a></li>
-            </ul>
-        </div>
+        <h1>vailá - interp_smooth_split</h1>
 
-        <h2 id="overview">Overview</h2>
-        <p>The <strong>Interpolation and Smoothing Tool</strong> (<code>interp_smooth_split.py</code>) is a comprehensive data processing module designed for biomechanical and time-series data analysis. It provides advanced gap filling and smoothing capabilities to clean and process your CSV data files.</p>
-
-        <h2 id="features">Key Features</h2>
-        <div class="method-grid">
-            <div class="method-card">
-                <h4>Gap Filling</h4>
-                <p>Fill missing data points using various interpolation methods</p>
-            </div>
-            <div class="method-card">
-                <h4>Data Smoothing</h4>
-                <p>Apply advanced smoothing filters to reduce noise</p>
-            </div>
-            <div class="method-card">
-                <h4>Quality Analysis</h4>
-                <p>Visualize data quality with comprehensive plots</p>
-            </div>
-            <div class="method-card">
-                <h4>Batch Processing</h4>
-                <p>Process multiple CSV files simultaneously</p>
-            </div>
-            <div class="method-card">
-                <h4>Configuration Management</h4>
-                <p>Save and load processing configurations</p>
-            </div>
-        </div>
-
-        <h2 id="getting-started">Getting Started</h2>
-        <h3>1. Launching the Tool</h3>
-        <p>The tool can be launched in two ways:</p>
-        <div class="highlight">
-            <strong>From VAILA Main Interface:</strong><br>
-            Click on "Smooth_Fill_Split" button in the main VAILA interface
-        </div>
-        <div class="highlight">
-            <strong>Direct Execution:</strong><br>
-            <code>python vaila/interp_smooth_split.py</code>
-        </div>
-
-        <h3>2. Basic Workflow</h3>
-        <div class="workflow">
-            <div class="workflow-step">
-                <strong>Configure Parameters</strong><br>
-                Set interpolation and smoothing methods
-            </div>
-            <div class="workflow-step">
-                <strong>Load Test Data</strong> (Optional)<br>
-                Test your configuration with sample data
-            </div>
-            <div class="workflow-step">
-                <strong>Analyze Quality</strong> (Optional)<br>
-                Visualize the effects of your settings
-            </div>
-            <div class="workflow-step">
-                <strong>Select Source Directory</strong><br>
-                Choose folder containing CSV files to process
-            </div>
-            <div class="workflow-step">
-                <strong>Process Files</strong><br>
-                Apply settings to all CSV files in the directory
-            </div>
-        </div>
-
-        <h2 id="configuration">Configuration Options</h2>
-
-        <h3>Gap Filling Methods</h3>
-        <table>
-            <thead>
-                <tr>
-                    <th>Method</th>
-                    <th>Description</th>
-                    <th>Best For</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td><strong>1 - Linear Interpolation</strong></td>
-                    <td>Straight lines between points</td>
-                    <td>Most general cases, smooth data</td>
-                </tr>
-                <tr>
-                    <td><strong>2 - Cubic Spline</strong></td>
-                    <td>Smooth curves between points</td>
-                    <td>Natural-looking transitions</td>
-                </tr>
-                <tr>
-                    <td><strong>3 - Nearest Value</strong></td>
-                    <td>Copy closest available value</td>
-                    <td>Categorical or discrete data</td>
-                </tr>
-                <tr>
-                    <td><strong>4 - Kalman Filter</strong></td>
-                    <td>Predictive filling with physics modeling</td>
-                    <td>Movement data, tracking</td>
-                </tr>
-                <tr>
-                    <td><strong>5 - None</strong></td>
-                    <td>Leave gaps as NaN</td>
-                    <td>When gaps should remain</td>
-                </tr>
-                <tr>
-                    <td><strong>6 - Skip</strong></td>
-                    <td>Keep original data, apply only smoothing</td>
-                    <td>When interpolation is not needed</td>
-                </tr>
-            </tbody>
-        </table>
-
-        <h3>Smoothing Methods</h3>
-        <table>
-            <thead>
-                <tr>
-                    <th>Method</th>
-                    <th>Description</th>
-                    <th>Best For</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td><strong>1 - None</strong></td>
-                    <td>No smoothing applied</td>
-                    <td>When data is already clean</td>
-                </tr>
-                <tr>
-                    <td><strong>2 - Savitzky-Golay</strong></td>
-                    <td>Preserves peaks and valleys</td>
-                    <td>Biomechanical data, preserving features</td>
-                </tr>
-                <tr>
-                    <td><strong>3 - LOWESS</strong></td>
-                    <td>Local regression, adapts to trends</td>
-                    <td>Noisy data, non-linear trends</td>
-                </tr>
-                <tr>
-                    <td><strong>4 - Kalman Filter</strong></td>
-                    <td>State estimation with noise reduction</td>
-                    <td>Tracking data, real-time processing</td>
-                </tr>
-                <tr>
-                    <td><strong>5 - Butterworth</strong></td>
-                    <td>Frequency domain filtering</td>
-                    <td>Biomechanics standard, remove high frequencies</td>
-                </tr>
-                <tr>
-                    <td><strong>6 - Spline Smoothing</strong></td>
-                    <td>Flexible curve fitting</td>
-                    <td>Very smooth curves, artistic smoothing</td>
-                </tr>
-                <tr>
-                    <td><strong>7 - ARIMA</strong></td>
-                    <td>Time series modeling</td>
-                    <td>Complex temporal patterns</td>
-                </tr>
-            </tbody>
-        </table>
-
-        <h2 id="parameters">Parameter Reference Guide</h2>
-
-        <h3>Savitzky-Golay Filter</h3>
-        <div class="parameter-table">
-            <h4>Window Length (must be odd)</h4>
-            <ul>
-                <li><strong>Range:</strong> 5-31</li>
-                <li><strong>Smooth data:</strong> 5-15</li>
-                <li><strong>Noisy data:</strong> 15-31</li>
-            </ul>
-            <div class="tip">Must be odd number, larger = more smoothing</div>
-        </div>
-
-        <div class="parameter-table">
-            <h4>Polynomial Order</h4>
-            <ul>
-                <li><strong>Range:</strong> 2-5</li>
-                <li><strong>Most cases:</strong> 2-3</li>
-            </ul>
-            <div class="tip">Must be &lt; window length, higher = more flexible</div>
-        </div>
-
-        <h3>LOWESS (Locally Weighted Scatterplot Smoothing)</h3>
-        <div class="parameter-table">
-            <h4>Fraction (0-1)</h4>
-            <ul>
-                <li><strong>Smooth data:</strong> 0.1-0.3</li>
-                <li><strong>Noisy data:</strong> 0.3-0.5</li>
-            </ul>
-            <div class="tip">Higher values = smoother results</div>
-        </div>
-
-        <div class="parameter-table">
-            <h4>Iterations</h4>
-            <ul>
-                <li><strong>Range:</strong> 2-4</li>
-                <li><strong>Most cases:</strong> 3</li>
-            </ul>
-            <div class="tip">More iterations = more robust to outliers</div>
-        </div>
-
-        <h3>Butterworth Filter</h3>
-        <div class="parameter-table">
-            <h4>Cutoff Frequency (Hz)</h4>
-            <ul>
-                <li><strong>Biomechanics:</strong> 4-10 Hz</li>
-                <li><strong>Slow movements:</strong> 1-5 Hz</li>
-            </ul>
-            <div class="tip">Must be &lt; sampling frequency/2 (Nyquist frequency)</div>
-        </div>
-
-        <div class="parameter-table">
-            <h4>Sampling Frequency (Hz)</h4>
-            <ul>
-                <li><strong>Video data:</strong> 30 Hz</li>
-                <li><strong>Motion capture:</strong> 100-1000 Hz</li>
-            </ul>
-            <div class="tip">Must be &gt; 2×cutoff frequency</div>
-        </div>
-
-        <h3>Kalman Filter</h3>
-        <div class="parameter-table">
-            <h4>EM Iterations</h4>
-            <ul>
-                <li><strong>Range:</strong> 3-10</li>
-                <li><strong>Most cases:</strong> 5</li>
-            </ul>
-            <div class="tip">More iterations = better parameter estimation but slower</div>
-        </div>
-
-        <div class="parameter-table">
-            <h4>Processing Mode</h4>
-            <ul>
-                <li><strong>1:</strong> Process each column independently</li>
-                <li><strong>2:</strong> Process x,y pairs together</li>
-            </ul>
-            <div class="tip">Use mode 2 for coordinate data</div>
-        </div>
-
-        <h3>Spline Smoothing</h3>
-        <div class="parameter-table">
-            <h4>Smoothing Factor (s)</h4>
-            <ul>
-                <li><strong>Light smoothing:</strong> 0.1-1.0</li>
-                <li><strong>Moderate smoothing:</strong> 1.0-10</li>
-                <li><strong>Strong smoothing:</strong> 10+</li>
-            </ul>
-            <div class="tip">Higher values = more smoothing</div>
-        </div>
-
-        <h3>ARIMA (AutoRegressive Integrated Moving Average)</h3>
-        <div class="parameter-table">
-            <h4>AR Order (p)</h4>
-            <ul>
-                <li><strong>Most cases:</strong> 1-3</li>
-                <li><strong>Complex patterns:</strong> Higher values</li>
-            </ul>
-            <div class="tip">Autoregressive terms</div>
-        </div>
-
-        <div class="parameter-table">
-            <h4>Difference Order (d)</h4>
-            <ul>
-                <li><strong>Stationary data:</strong> 0</li>
-                <li><strong>Trending data:</strong> 1-2</li>
-            </ul>
-            <div class="tip">Makes data stationary</div>
-        </div>
-
-        <div class="parameter-table">
-            <h4>MA Order (q)</h4>
-            <ul>
-                <li><strong>Most cases:</strong> 0-2</li>
-                <li><strong>Complex noise:</strong> Higher values</li>
-            </ul>
-            <div class="tip">Moving average terms</div>
-        </div>
-
-        <h2 id="quality-analysis">Quality Analysis Features</h2>
-        <p>The tool includes a comprehensive quality analysis system:</p>
-
-        <h3>1. Load Test Data</h3>
-        <div class="info">
-            Load a CSV file to test your configuration and preview how your settings will affect the data.
-        </div>
-
-        <h3>2. Analyze Quality</h3>
-        <ul>
-            <li><strong>Original vs Processed:</strong> Compare before and after</li>
-            <li><strong>Residuals Analysis:</strong> Check for remaining patterns</li>
-            <li><strong>Derivatives:</strong> First and second derivatives</li>
-            <li><strong>Distribution:</strong> Histogram of residuals</li>
-            <li><strong>Frequency Spectrum:</strong> FFT analysis</li>
-        </ul>
-
-        <h3>3. Residual Filtering</h3>
-        <div class="highlight">
-            Apply the same smoothing method to residuals to detect if signal remains in the residuals and verify filtering effectiveness.
-        </div>
-
-        <h2 id="file-processing">File Processing</h2>
-
-        <h3>Input Requirements</h3>
-        <ul>
-            <li><strong>Format:</strong> CSV files</li>
-            <li><strong>Structure:</strong> First column should be frame numbers or time</li>
-            <li><strong>Data:</strong> Numeric columns for processing</li>
-        </ul>
-
-        <h3>Output Structure</h3>
-        <ul>
-            <li><strong>Directory:</strong> Created with descriptive name including methods and timestamp</li>
-            <li><strong>Files:</strong> Processed files with method suffix</li>
-            <li><strong>Report:</strong> Detailed processing report (processing_report.txt)</li>
-        </ul>
-
-        <h3>Output Naming Convention</h3>
-        <pre>original_filename_method_timestamp.csv</pre>
-        <p><strong>Examples:</strong></p>
-        <ul>
-            <li><code>data_savgol_20241216_143022.csv</code></li>
-            <li><code>motion_butterworth_cut4_20241216_143022.csv</code></li>
-            <li><code>tracking_lowess_frac30_it3_20241216_143022.csv</code></li>
-        </ul>
-
-        <h2 id="best-practices">Best Practices</h2>
-
-        <h3>1. Data Preparation</h3>
-        <ul>
-            <li>Ensure first column contains frame numbers or time</li>
-            <li>Check for consistent sampling rates</li>
-            <li>Identify expected data ranges</li>
-        </ul>
-
-        <h3>2. Method Selection</h3>
-        <ul>
-            <li><strong>Start with Linear Interpolation</strong> for most cases</li>
-            <li><strong>Use Savitzky-Golay</strong> for biomechanical data</li>
-            <li><strong>Apply Butterworth</strong> for standard biomechanics filtering</li>
-            <li><strong>Try LOWESS</strong> for noisy data</li>
-        </ul>
-
-        <h3>3. Parameter Tuning</h3>
-        <ul>
-            <li><strong>Test with Quality Analysis</strong> before batch processing</li>
-            <li><strong>Start with default values</strong> and adjust gradually</li>
-            <li><strong>Use padding</strong> to avoid edge effects</li>
-            <li><strong>Set reasonable gap limits</strong> to avoid over-interpolation</li>
-        </ul>
-
-        <h3>4. Quality Control</h3>
-        <ul>
-            <li><strong>Always use Quality Analysis</strong> for new data types</li>
-            <li><strong>Check residuals</strong> for remaining patterns</li>
-            <li><strong>Verify frequency content</strong> with FFT</li>
-            <li><strong>Compare derivatives</strong> for smoothness</li>
-        </ul>
-
-        <h2 id="troubleshooting">Troubleshooting</h2>
-
-        <h3>Common Issues</h3>
-
-        <h4>1. GUI Not Opening</h4>
-        <div class="warning">
-            <ul>
-                <li>Ensure VAILA environment is activated</li>
-                <li>Check for Tkinter conflicts</li>
-                <li>Try running directly: <code>python vaila/interp_smooth_split.py</code></li>
-            </ul>
-        </div>
-
-        <h4>2. Processing Errors</h4>
-        <div class="warning">
-            <ul>
-                <li>Check CSV file format</li>
-                <li>Verify numeric columns</li>
-                <li>Ensure sufficient data points</li>
-            </ul>
-        </div>
-
-        <h4>3. Poor Results</h4>
-        <div class="warning">
-            <ul>
-                <li>Adjust smoothing parameters</li>
-                <li>Try different interpolation methods</li>
-                <li>Use Quality Analysis to diagnose issues</li>
-            </ul>
-        </div>
-
-        <h4>4. Memory Issues</h4>
-        <div class="warning">
-            <ul>
-                <li>Process smaller batches</li>
-                <li>Reduce padding percentage</li>
-                <li>Use simpler smoothing methods</li>
-            </ul>
-        </div>
-
-        <h3>Error Messages</h3>
-        <table>
-            <thead>
-                <tr>
-                    <th>Error Message</th>
-                    <th>Solution</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>"Window length must be odd"</td>
-                    <td>Use odd numbers: 5, 7, 9, 11, 13, etc.</td>
-                </tr>
-                <tr>
-                    <td>"Cutoff frequency must be less than half of sampling frequency"</td>
-                    <td>Reduce cutoff frequency or increase sampling frequency</td>
-                </tr>
-                <tr>
-                    <td>"Polynomial order must be less than window length"</td>
-                    <td>Reduce polynomial order or increase window length</td>
-                </tr>
-            </tbody>
-        </table>
-
-        <h2 id="support">Support and Contact</h2>
-        <div class="contact-info">
-            <h3>Get Help</h3>
-            <p>For questions, issues, or feature requests:</p>
-            <p><strong>Email:</strong> <a href="mailto:paulosantiago@usp.br">paulosantiago@usp.br</a></p>
-            <p><strong>GitHub:</strong> <a href="https://github.com/vaila-multimodaltoolbox/vaila" target="_blank">https://github.com/vaila-multimodaltoolbox/vaila</a></p>
-            <p><strong>Documentation:</strong> Check VAILA documentation for updates</p>
-            <hr class="contact-separator">
-            <h4>Version Information</h4>
-            <p><strong>Version:</strong> 0.0.7 | <strong>Python:</strong> 3.12.9 | <strong>Last Updated:</strong> 16 September 2025</p>
+        <div class="module-info">
+            <h3>📋 Module Information</h3>
+            <p><strong>Category:</strong> Processing</p>
+            <p><strong>File:</strong> vaila\interp_smooth_split.py</p>
+            <p><strong>Lines:</strong> 3283</p>
+            <p><strong>Size:</strong> 131102 characters</p>
+            <p><strong>Version:</strong> 0.0.7</p>
             <p><strong>Author:</strong> Paulo R. P. Santiago</p>
-            <p><em>This tool is part of the VAILA (Video Analysis and Interactive Learning Application) multimodal toolbox for biomechanical data analysis.</em></p>
+            <p><strong>GUI Interface:</strong> ✅ Yes</p>
+        </div>
+
+        
+
+        <div class="docstring">
+            <h3>📖 Description</h3>
+            <pre>
+===============================================================================
+interp_smooth_split.py
+===============================================================================
+Author: Paulo R. P. Santiago
+Email: paulosantiago@usp.br
+GitHub: https://github.com/vaila-multimodaltoolbox/vaila
+Creation Date: 14 October 2024
+Update Date: 16 September 2025
+Version: 0.0.7
+Python Version: 3.12.9
+
+Description:
+------------
+This script provides functionality to fill missing data in CSV files using
+linear interpolation, Kalman filter, Savitzky-Golay filter, nearest value fill,
+or to split data into a separate CSV file. It is intended for use in biomechanical
+data analysis, where gaps in time-series data can be filled and datasets can be
+split for further analysis.
+
+Key Features:
+-------------
+1. **Data Splitting**:
+   - Splits CSV files into two halves for easier data management and analysis.
+2. **Padding**:
+   - Pads the data with the last valid value to avoid edge effects.
+
+    padding_l...</pre>
+        </div>
+
+        <div class="functions">
+            <h3>🔧 Main Functions</h3>
+            <p><strong>Total functions found:</strong> 20</p>
+            <ul><li><code>save_config_to_toml</code></li><li><code>load_config_from_toml</code></li><li><code>generate_report</code></li><li><code>detect_float_format</code></li><li><code>savgol_smooth</code></li><li><code>lowess_smooth</code></li><li><code>spline_smooth</code></li><li><code>kalman_smooth</code></li><li><code>arima_smooth</code></li><li><code>process_file</code></li><li><code>run_fill_split_dialog</code></li><li><code>setup_variables</code></li><li><code>center_window</code></li><li><code>on_window_resize</code></li><li><code>create_dialog_content</code></li><li><code>create_interpolation_section</code></li><li><code>create_smoothing_section</code></li><li><code>create_split_section</code></li><li><code>create_parameters_section</code></li><li><code>create_padding_section</code></li></ul>
+        </div>
+
+        <div class="footer">
+            <p>📅 Generated automatically on: 15/10/2025 08:04:44</p>
+            <p>🔗 Part of vailá - Multimodal Toolbox</p>
+            <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
         </div>
     </div>
 </body>

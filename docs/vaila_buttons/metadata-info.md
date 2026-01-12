@@ -102,5 +102,5 @@ All frame rates and durations are stored with **9 decimal places**:
 ## Documentation
 
 For complete documentation, see:
-- [Full Help Documentation](../../../vaila/help/tools/numberframes.html)
-- [Markdown Documentation](../../../vaila/help/tools/numberframes.md)
+- [Full Help Documentation](../../vaila/help/numberframes.html)
+- [Markdown Documentation](../../vaila/help/numberframes.md)
