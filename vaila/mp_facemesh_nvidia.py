@@ -2556,10 +2556,6 @@ def process_video(video_path, output_dir, face_config, use_gpu=False, gpu_type="
         else:
             raise
 
-    # Generate CSV headers (will be adjusted if actual landmark count differs)
-    header, indices = generate_csv_header()
-    original_header = header.copy()
-
     # Lists to store landmarks
     all_frames_data = []  # List of dicts: {frame_idx: int, faces: list of face data}
     frames_with_missing_data = []
@@ -2717,6 +2713,9 @@ def process_video(video_path, output_dir, face_config, use_gpu=False, gpu_type="
 
     norm_rows = []
     pixel_rows = []
+
+    # Generate CSV headers (will be adjusted if actual landmark count differs)
+    header, indices = generate_csv_header()
 
     # Determine actual number of landmarks from first frame with faces
     actual_num_landmarks = NUM_FACE_LANDMARKS
