@@ -255,35 +255,6 @@ function Setup-WindowsTerminalProfile {
     }
 }
 
-function Show-AnyLabelingInfo {
-    Write-Host ""
-    Write-Host "============================================================" -ForegroundColor Cyan
-    Write-Host "IMPORTANT INFORMATION FOR YOLO TRAINING" -ForegroundColor Cyan
-    Write-Host "============================================================" -ForegroundColor Cyan
-    Write-Host ""
-    Write-Host "To use YOLO training resources in vaila, you need AnyLabeling."
-    Write-Host ""
-    Write-Host "AnyLabeling is a free tool for training data annotation."
-    Write-Host ""
-    Write-Host "Opening AnyLabeling download page in your default browser..."
-    Write-Host ""
-
-    Try {
-        Start-Process "https://github.com/vietanhdev/anylabeling/releases"
-        Write-Host "AnyLabeling download page opened in your browser."
-        Write-Host ""
-        Write-Host "INSTRUCTIONS:"
-        Write-Host "1. Download the latest AnyLabeling for Windows"
-        Write-Host "2. Install AnyLabeling on your computer"
-        Write-Host "3. Use AnyLabeling to create training annotations"
-        Write-Host "4. Import the annotations into vaila to train YOLO networks"
-        Write-Host ""
-    } Catch {
-        Write-Warning "Unable to open the browser automatically."
-        Write-Host "Please access manually: https://github.com/vietanhdev/anylabeling/releases"
-        Write-Host ""
-    }
-}
 
 # ============================================================================
 # UV INSTALLATION METHOD
@@ -954,8 +925,6 @@ Try {
     Write-Warning "Failed to set permissions. Continuing anyway."
 }
 
-# Show AnyLabeling information
-Show-AnyLabelingInfo
 
 Write-Host ""
 Write-Host "============================================================" -ForegroundColor Green
