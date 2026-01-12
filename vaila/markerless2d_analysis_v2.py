@@ -382,6 +382,7 @@ def get_pose_config(existing_root=None):
     except Exception as e:
         print(f"Error in pose configuration dialog: {e}")
         import traceback
+
         traceback.print_exc()
         if existing_root is None:
             try:
@@ -1520,6 +1521,7 @@ def process_videos_in_directory(existing_root=None):
             print(f"CRITICAL ERROR: Failed to initialize Tkinter: {e}")
             print("This usually indicates an issue with the graphical environment.")
             import traceback
+
             traceback.print_exc()
             return
 
@@ -1564,6 +1566,7 @@ def process_videos_in_directory(existing_root=None):
     except Exception as e:
         print(f"Error opening directory dialog: {e}")
         import traceback
+
         traceback.print_exc()
         try:
             messagebox.showerror("Error", f"Failed to open directory dialog: {e}")
@@ -1608,6 +1611,7 @@ def process_videos_in_directory(existing_root=None):
     except Exception as e:
         print(f"Error opening output directory dialog: {e}")
         import traceback
+
         traceback.print_exc()
         try:
             messagebox.showerror("Error", f"Failed to open output directory dialog: {e}")

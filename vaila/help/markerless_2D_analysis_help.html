@@ -142,8 +142,8 @@
         <h1>markerless_2D_analysis.py - Complete Documentation</h1>
         
         <div class="version-info">
-            <strong>Version:</strong> 0.5.0<br>
-            <strong>Date:</strong> 25 July 2025<br>
+            <strong>Version:</strong> 0.7.3<br>
+            <strong>Date:</strong> January 2026<br>
             <strong>Author:</strong> Paulo Roberto Pereira Santiago<br>
             <strong>Project:</strong> vailá - Multimodal Toolbox<br>
             <strong>Email:</strong> paulosantiago@usp.br
@@ -238,7 +238,7 @@ python vaila/markerless_2D_analysis.py
             </ol>
 
             <div class="new-feature">
-                <strong>New in v0.5.0:</strong> Video resize functionality for improved pose detection on small or distant subjects.
+                <strong>New in v0.7.3:</strong> Polygon ROI selection, improved BBox ROI, and initial frame padding for better pose detection stability.
             </div>
         </section>
 
@@ -367,7 +367,7 @@ python vaila/markerless_2D_analysis.py
         </section>
 
         <section id="video-resize">
-            <h2>6. Video Resize Feature</h2>
+            <h2>7. Video Resize Feature</h2>
             
             <div class="new-feature">
                 <strong>New Feature:</strong> Video resize functionality to improve pose detection for small or distant subjects.
@@ -416,7 +416,7 @@ python vaila/markerless_2D_analysis.py
         </section>
 
         <section id="filtering">
-            <h2>7. Filtering & Smoothing</h2>
+            <h2>8. Filtering & Smoothing</h2>
             
             <h3>Available Filtering Methods:</h3>
             
@@ -474,7 +474,7 @@ smooth_method = "savgol"  # or "kalman", "lowess", "spline", "arima"
         </section>
 
         <section id="output">
-            <h2>8. Output Files</h2>
+            <h2>9. Output Files</h2>
             
             <h3>Generated Files for Each Video:</h3>
             
@@ -504,13 +504,23 @@ frame,landmark_0_x,landmark_0_y,landmark_0_z,landmark_1_x,landmark_1_y,landmark_
             </div>
 
             <div class="output-example">
-                <h4>4. Original Coordinates (<code>*_mp_original.csv</code>)</h4>
-                <p>If video resize was used, coordinates converted back to original video dimensions.</p>
+                <h4>4. vailá Format (<code>*_mp_vaila.csv</code>)</h4>
+                <p>Format compatible with vailá analysis tools: <code>frame, p1_x, p1_y, p2_x, p2_y, ...</code></p>
             </div>
 
             <div class="output-example">
-                <h4>5. Log File (<code>log_info.txt</code>)</h4>
+                <h4>5. vailá RAW Format (<code>*_mp_vaila_raw.csv</code>)</h4>
+                <p>Unfiltered version (only generated if advanced filtering was enabled).</p>
+            </div>
+
+            <div class="output-example">
+                <h4>6. Log File (<code>log_info.txt</code>)</h4>
                 <p>Detailed processing information including video metadata, processing parameters, and performance statistics.</p>
+            </div>
+
+            <div class="output-example">
+                <h4>7. Configuration File (<code>configuration_used.toml</code>)</h4>
+                <p>All parameters used for processing, including ROI settings (BBox or Polygon).</p>
             </div>
 
             <h3>File Naming Convention:</h3>
@@ -523,7 +533,7 @@ input_video.mp4 → input_video_mp_original.csv (original coordinates)
         </section>
 
         <section id="performance">
-            <h2>9. Performance Optimization</h2>
+            <h2>10. Performance Optimization</h2>
             
             <h3>Memory Management:</h3>
             <ul>
@@ -573,7 +583,7 @@ input_video.mp4 → input_video_mp_original.csv (original coordinates)
         </section>
 
         <section id="troubleshooting">
-            <h2>10. Troubleshooting</h2>
+            <h2>11. Troubleshooting</h2>
             
             <h3>Common Issues:</h3>
             
@@ -586,7 +596,13 @@ input_video.mp4 → input_video_mp_original.csv (original coordinates)
             <h4>Poor Pose Detection</h4>
             <ul>
                 <li><strong>Symptom:</strong> Missing or inaccurate landmarks</li>
-                <li><strong>Solution:</strong> Enable video resize, adjust confidence thresholds, improve lighting</li>
+                <li><strong>Solution:</strong> Enable video resize, use ROI selection, adjust confidence thresholds, improve lighting</li>
+            </ul>
+
+            <h4>Landmarks in Wrong Location</h4>
+            <ul>
+                <li><strong>Symptom:</strong> Landmarks appear offset or in wrong position</li>
+                <li><strong>Solution:</strong> Check ROI coordinates, ensure polygon points are correct, verify video resize settings</li>
             </ul>
 
             <h4>Slow Processing</h4>

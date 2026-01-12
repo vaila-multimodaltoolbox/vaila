@@ -136,6 +136,7 @@ _parent_dir = _script_dir.parent
 if str(_parent_dir) not in sys.path:
     sys.path.insert(0, str(_parent_dir))
 
+from itertools import cycle
 from tkinter import (
     BooleanVar,
     Button,
@@ -154,12 +155,11 @@ from tkinter import (
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from itertools import cycle
+from matplotlib.colors import LinearSegmentedColormap, Normalize
 from scipy import stats
 from scipy.interpolate import griddata
 from scipy.signal import butter, find_peaks, savgol_filter, sosfiltfilt, welch
 from sklearn.decomposition import PCA
-from matplotlib.colors import LinearSegmentedColormap, Normalize
 
 # ============================================================================
 # FILTER UTILITIES (from filter_utils.py - integrated)
@@ -453,9 +453,7 @@ def choose_analysis_type():
     )
     btn_force_cube.pack(pady=5)
 
-    btn_cop_balance = Button(
-        choice_window, text="CoP Balance Analysis", command=select_cop_balance
-    )
+    btn_cop_balance = Button(choice_window, text="CoP Balance Analysis", command=select_cop_balance)
     btn_cop_balance.pack(pady=5)
 
     btn_force_cmj = Button(choice_window, text="Force CMJ Analysis", command=select_force_cmj)
@@ -949,7 +947,9 @@ def plot_heatmap_kde(cop_x, cop_y, output_path, title="CoP Density Heatmap (KDE)
     plt.close()
 
 
-def plot_heatmap_histogram(cop_x, cop_y, output_path, title="CoP Density Heatmap (Histogram)", bins=50):
+def plot_heatmap_histogram(
+    cop_x, cop_y, output_path, title="CoP Density Heatmap (Histogram)", bins=50
+):
     """Creates a heatmap using 2D histogram for discrete density bins visualization."""
     hist, x_edges, y_edges = np.histogram2d(cop_x, cop_y, bins=bins)
     x_centers = (x_edges[:-1] + x_edges[1:]) / 2
@@ -974,7 +974,16 @@ def plot_heatmap_histogram(cop_x, cop_y, output_path, title="CoP Density Heatmap
     plt.close()
 
 
-def plot_heatmap_with_contours(cop_x, cop_y, output_path, method="kde", title="CoP Density Heatmap with Topographic Contours", bins=50, bandwidth=None, contour_levels=10):
+def plot_heatmap_with_contours(
+    cop_x,
+    cop_y,
+    output_path,
+    method="kde",
+    title="CoP Density Heatmap with Topographic Contours",
+    bins=50,
+    bandwidth=None,
+    contour_levels=10,
+):
     """Creates a heatmap with topographic contour lines overlay showing density levels."""
     x_min, x_max = np.min(cop_x) - 0.5, np.max(cop_x) + 0.5
     y_min, y_max = np.min(cop_y) - 0.5, np.max(cop_y) + 0.5
@@ -1010,7 +1019,9 @@ def plot_heatmap_with_contours(cop_x, cop_y, output_path, method="kde", title="C
     cf = plt.contourf(X_grid, Y_grid, density, levels=50, cmap="hot", alpha=0.8)
     plt.colorbar(cf, label=density_label)
 
-    contours = plt.contour(X_grid, Y_grid, density, levels=contour_levels, colors="white", linewidths=1.5, alpha=0.7)
+    contours = plt.contour(
+        X_grid, Y_grid, density, levels=contour_levels, colors="white", linewidths=1.5, alpha=0.7
+    )
     plt.clabel(contours, inline=True, fontsize=8, fmt="%1.2f")
 
     plt.plot(cop_x, cop_y, "cyan", linewidth=0.5, alpha=0.6, label="CoP Pathway")
@@ -1036,6 +1047,7 @@ def plot_heatmap_with_contours(cop_x, cop_y, output_path, method="kde", title="C
 
 def select2headers(file_path):
     """Displays a GUI to select two (2) headers for force plate data analysis."""
+
     def get_csv_headers(file_path):
         """Reads the headers from a CSV file."""
         df = pd.read_csv(file_path)
@@ -1046,7 +1058,9 @@ def select2headers(file_path):
 
     def on_select():
         nonlocal selected_headers
-        selected_headers = [header for header, var in zip(headers, header_vars, strict=True) if var.get()]
+        selected_headers = [
+            header for header, var in zip(headers, header_vars, strict=True) if var.get()
+        ]
         if len(selected_headers) != 2:
             messagebox.showinfo("Info", "Please select exactly two (2) headers for analysis.")
             return
@@ -1137,7 +1151,9 @@ def checklist_select_files(file_paths, title="Select files to process"):
     scrollbar = Scrollbar(win, orient="vertical", command=canvas.yview)
     scrollable_frame = Frame(canvas)
 
-    scrollable_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+    scrollable_frame.bind(
+        "<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+    )
     canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
     canvas.configure(yscrollcommand=scrollbar.set)
 
@@ -1201,7 +1217,9 @@ def select_inputs():
             return []
         all_csvs = discover_csvs_recursive(folder)
         if not all_csvs:
-            messagebox.showerror("No CSV files", "No .csv files found in selected folder (including subfolders).")
+            messagebox.showerror(
+                "No CSV files", "No .csv files found in selected folder (including subfolders)."
+            )
             return []
         # Let user optionally pick subset
         return checklist_select_files(all_csvs, title="Select CSV files from folder tree")
@@ -1243,7 +1261,9 @@ def plot_final_figure(  # noqa: N803
     ax1.legend()
 
     ax2 = fig.add_subplot(2, 2, 3)
-    ax2.plot(X_n, Y_n, label="CoP Pathway", color="blue", marker=".", markersize=3, linestyle="None")
+    ax2.plot(
+        X_n, Y_n, label="CoP Pathway", color="blue", marker=".", markersize=3, linestyle="None"
+    )
 
     ellipse_x, ellipse_y = ellipse_data[0], ellipse_data[1]
     eigvecs, scaled_eigvals, pca_mean = (
@@ -1252,7 +1272,9 @@ def plot_final_figure(  # noqa: N803
         ellipse_data[4],
     )
 
-    ax2.plot(ellipse_x, ellipse_y, color="red", linestyle="--", linewidth=2, label="Confidence Ellipse")
+    ax2.plot(
+        ellipse_x, ellipse_y, color="red", linestyle="--", linewidth=2, label="Confidence Ellipse"
+    )
 
     major_axis_start = pca_mean - eigvecs[0] * scaled_eigvals[0]
     major_axis_end = pca_mean + eigvecs[0] * scaled_eigvals[0]
@@ -1300,7 +1322,15 @@ def plot_final_figure(  # noqa: N803
     ax3 = fig.add_subplot(1, 2, 2)
     ax3.axis("off")
     text_str = "\n".join([f"{key}: {value}" for key, value in metrics.items()])
-    ax3.text(0.05, 0.5, text_str, fontsize=10, verticalalignment="center", transform=ax3.transAxes, wrap=True)
+    ax3.text(
+        0.05,
+        0.5,
+        text_str,
+        fontsize=10,
+        verticalalignment="center",
+        transform=ax3.transAxes,
+        wrap=True,
+    )
 
     plt.tight_layout()
     plt.savefig(f"{output_path}_final_figure.png", dpi=300, format="png")
@@ -1322,7 +1352,7 @@ def save_legend_only_from_items(labels, colors, output_path, ncol=1):
     # dummy handles
     handles = []
     for lab, col in zip(labels, colors, strict=False):
-        h, = plt.plot([], [], label=lab, linewidth=3, color=col)
+        (h,) = plt.plot([], [], label=lab, linewidth=3, color=col)
         handles.append(h)
 
     fig_legend = plt.figure(figsize=(8, 0.5 + 0.3 * len(labels)))
@@ -1335,18 +1365,28 @@ def save_legend_only_from_items(labels, colors, output_path, ncol=1):
 
 def plot_combined_figure_no_legends(all_data, file_names, output_base, fs):
     """Plot combined figure with all trials overlaid, NO legends in main figure."""
-    fig, axs = plt.subplots(
-        3, 2, figsize=(16, 13), gridspec_kw={"height_ratios": [1, 1, 1.6]}
-    )
+    fig, axs = plt.subplots(3, 2, figsize=(16, 13), gridspec_kw={"height_ratios": [1, 1, 1.6]})
     ax1, ax2 = axs[0, 0], axs[0, 1]
     ax3, ax4 = axs[1, 0], axs[1, 1]
     ax5, ax6 = axs[2, 0], axs[2, 1]
 
     vivid_colors = [
-        "#e6194b", "#3cb44b", "#ffe119", "#4363d8",
-        "#f58231", "#911eb4", "#46f0f0", "#f032e6",
-        "#bcf60c", "#fabebe", "#008080", "#e6beff",
-        "#9a6324", "#fffac8", "#800000", "#aaffc3",
+        "#e6194b",
+        "#3cb44b",
+        "#ffe119",
+        "#4363d8",
+        "#f58231",
+        "#911eb4",
+        "#46f0f0",
+        "#f032e6",
+        "#bcf60c",
+        "#fabebe",
+        "#008080",
+        "#e6beff",
+        "#9a6324",
+        "#fffac8",
+        "#800000",
+        "#aaffc3",
     ]
     # consistent color per trial
     color_cycle = cycle(vivid_colors)
@@ -1390,8 +1430,12 @@ def plot_combined_figure_no_legends(all_data, file_names, output_base, fs):
 
     # Spectral density
     for trial, ds in zip(file_names, all_data, strict=False):
-        ax5.semilogy(ds["freqs_ml"], ds["psd_ml"], color=trial_to_color[trial], linewidth=1, alpha=0.9)
-        ax5.semilogy(ds["freqs_ap"], ds["psd_ap"], color=trial_to_color[trial], linewidth=1, alpha=0.5)
+        ax5.semilogy(
+            ds["freqs_ml"], ds["psd_ml"], color=trial_to_color[trial], linewidth=1, alpha=0.9
+        )
+        ax5.semilogy(
+            ds["freqs_ap"], ds["psd_ap"], color=trial_to_color[trial], linewidth=1, alpha=0.5
+        )
     ax5.set_title("Spectral Density (ML solid / AP faint)")
     ax5.set_xlabel("Frequency (Hz)")
     ax5.set_ylabel("Power Spectrum")
@@ -1457,6 +1501,7 @@ def find_metrics_csvs_recursive(root_dir):
 def normalize_metrics_filename(path):
     """If a file ends with '_metrics.csv_metrics.csv', rename to '_metrics.csv'."""
     import re
+
     dirn, fn = os.path.split(path)
     if fn.lower().endswith("_metrics.csv_metrics.csv"):
         new_fn = re.sub(r"_metrics\.csv_metrics\.csv$", r"_metrics.csv", fn, flags=re.IGNORECASE)
@@ -1594,7 +1639,9 @@ def analyze_data_2d(data, output_dir, file_name, fs, plate_width, plate_height, 
     _ = compute_sway_density(Y_n, fs, radius=0.3)
 
     print("Calculating confidence ellipse...")
-    area, angle, bounds, ellipse_data = plot_ellipse_pca(np.column_stack((X_n, Y_n)), confidence=0.95)
+    area, angle, bounds, ellipse_data = plot_ellipse_pca(
+        np.column_stack((X_n, Y_n)), confidence=0.95
+    )
 
     metrics = {
         "Total_Duration_s": T,
@@ -1663,8 +1710,19 @@ def analyze_data_2d(data, output_dir, file_name, fs, plate_width, plate_height, 
     print("Creating final figure...")
     final_figure_file = os.path.join(output_dir, f"{file_name}_final_figure.png")
     plot_final_figure(
-        time, X_n, Y_n, freqs_ml, psd_ml, freqs_ap, psd_ap, metrics,
-        final_figure_file, area, angle, bounds, ellipse_data,
+        time,
+        X_n,
+        Y_n,
+        freqs_ml,
+        psd_ml,
+        freqs_ap,
+        psd_ap,
+        metrics,
+        final_figure_file,
+        area,
+        angle,
+        bounds,
+        ellipse_data,
     )
 
     print("Generating heatmaps...")
@@ -1818,8 +1876,13 @@ def main_cop_balance():
         os.makedirs(file_output_dir, exist_ok=True)
 
         result = analyze_data_2d(
-            data, file_output_dir, file_stem,
-            fs, plate_width, plate_height, timestamp,
+            data,
+            file_output_dir,
+            file_stem,
+            fs,
+            plate_width,
+            plate_height,
+            timestamp,
         )
         if result is None:
             print(f"Analysis failed for {file_path}.")
@@ -1843,7 +1906,9 @@ def main_cop_balance():
         else:
             print("No metrics CSV files found to merge.")
 
-        messagebox.showinfo("Information", "Analysis complete! Outputs written to the timestamped output folder.")
+        messagebox.showinfo(
+            "Information", "Analysis complete! Outputs written to the timestamped output folder."
+        )
     else:
         messagebox.showwarning("No results", "No files were successfully processed.")
 
@@ -1857,6 +1922,7 @@ def main_cop_balance():
 
 def select_headers_calculate(file_path):
     """Displays a GUI to select six (6) headers for force plate data analysis."""
+
     def get_csv_headers(file_path):
         df = pd.read_csv(file_path)
         return list(df.columns), df
@@ -1866,7 +1932,9 @@ def select_headers_calculate(file_path):
 
     def on_select():
         nonlocal selected_headers
-        selected_headers = [header for header, var in zip(headers, header_vars, strict=True) if var.get()]
+        selected_headers = [
+            header for header, var in zip(headers, header_vars, strict=True) if var.get()
+        ]
         if len(selected_headers) != 6:
             messagebox.showinfo("Info", "Please select exactly six (6) headers for analysis.")
             return
@@ -2107,15 +2175,15 @@ def run_force_cmj_analysis():
             from . import force_cmj
         except ImportError:
             from vaila import force_cmj
-        
+
         # Check if the module has a main function
-        if hasattr(force_cmj, 'main'):
+        if hasattr(force_cmj, "main"):
             force_cmj.main()
         else:
             messagebox.showinfo(
                 "Not Available",
                 "Force CMJ Analysis module is not yet implemented.\n\n"
-                "This feature is planned for a future release."
+                "This feature is planned for a future release.",
             )
             print("Force CMJ Analysis module is not yet implemented.")
     except ImportError as e:
@@ -2156,6 +2224,7 @@ def run_sit_to_stand():
     """Runs the Sit to Stand."""
     try:
         from vaila import sit2stand
+
         sit2stand.main()
     except ImportError as e:
         print(f"Error importing sit2stand: {e}")
