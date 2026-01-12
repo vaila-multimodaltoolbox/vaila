@@ -105,6 +105,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import toml
+from rich import print
 
 try:
     import cv2
@@ -275,7 +276,7 @@ def create_dumbbell_chart(run_stats, output_dir):
     ax.legend(handles=legend_elements, loc="lower right", fontsize=10, framealpha=0.9)
 
     # Add ranking numbers on the left
-    for idx, row in pivot_df.iterrows():
+    for idx, _row in pivot_df.iterrows():
         rank = len(pivot_df) - idx  # Reverse ranking (top = 1)
         ax.annotate(
             f"#{rank}",
@@ -389,7 +390,7 @@ def create_improvement_scatter(run_stats, output_dir):
             colors.append((0.58, 0.65, 0.65))  # Gray for no change
 
     # Plot scatter points
-    scatter = ax.scatter(
+    ax.scatter(
         complete_df["run1_speed"],
         complete_df["run2_speed"],
         s=200,
@@ -401,7 +402,7 @@ def create_improvement_scatter(run_stats, output_dir):
     )
 
     # Add athlete name annotations
-    for idx, row in complete_df.iterrows():
+    for _idx, row in complete_df.iterrows():
         # Position text slightly above and to the right of the point
         offset_x = 0.3
         offset_y = 0.3
@@ -422,7 +423,7 @@ def create_improvement_scatter(run_stats, output_dir):
             color="#2c3e50",
             ha="left",
             va=va,
-            arrowprops=dict(arrowstyle="-", color="#95a5a6", alpha=0.5, lw=0.5),
+            arrowprops={"arrowstyle": "-", "color": "#95a5a6", "alpha": 0.5, "lw": 0.5},
         )
 
     # Add reference lines for Usain Bolt
@@ -481,7 +482,6 @@ def create_improvement_scatter(run_stats, output_dir):
     # Add statistics text box
     n_improved = (complete_df["improvement"] > 0).sum()
     n_declined = (complete_df["improvement"] < 0).sum()
-    n_same = (complete_df["improvement"] == 0).sum()
     avg_improvement = complete_df["improvement"].mean()
 
     stats_text = f"Athletes: {len(complete_df)}\n"
@@ -489,7 +489,7 @@ def create_improvement_scatter(run_stats, output_dir):
     stats_text += f"Declined: {n_declined} ({n_declined / len(complete_df) * 100:.1f}%)\n"
     stats_text += f"Avg Change: {avg_improvement:+.2f} km/h"
 
-    props = dict(boxstyle="round,pad=0.5", facecolor="white", alpha=0.9, edgecolor="#bdc3c7")
+    props = {"boxstyle": "round,pad=0.5", "facecolor": "white", "alpha": 0.9, "edgecolor": "#bdc3c7"}
     ax.text(
         0.02,
         0.98,
@@ -583,14 +583,7 @@ def create_performance_heatmap(run_stats, output_dir):
 
     # Normalize data for coloring (separate normalization for different metrics)
     # Speed columns use one colormap, time columns use reverse
-    speed_cols = [
-        "Run 1\nSpeed\n(km/h)",
-        "Run 2\nSpeed\n(km/h)",
-        "Average\nSpeed\n(km/h)",
-        "Best\nSpeed\n(km/h)",
-    ]
     change_col = "Speed\nChange\n(km/h)"
-    time_cols = ["Run 1\nTime\n(s)", "Run 2\nTime\n(s)", "Best\nTime\n(s)"]
 
     # Create custom annotation array with formatted values
     annot_array = heatmap_df.copy()
@@ -602,7 +595,7 @@ def create_performance_heatmap(run_stats, output_dir):
         warnings.simplefilter("ignore")
 
         # Create a custom colormap that handles the change column differently
-        hm = sns.heatmap(
+        sns.heatmap(
             heatmap_df,
             annot=annot_array,
             fmt="",
@@ -637,7 +630,7 @@ def create_performance_heatmap(run_stats, output_dir):
     # Color the change column cells based on positive/negative
     # Find the column index for the change column
     col_idx = list(heatmap_df.columns).index(change_col)
-    for row_idx, (athlete, row) in enumerate(heatmap_df.iterrows()):
+    for row_idx, (_athlete, row) in enumerate(heatmap_df.iterrows()):
         change_val = row[change_col]
         if pd.notna(change_val):
             if change_val > 0:
@@ -1184,14 +1177,14 @@ def process_sprint_file(filepath, output_base_dir, logo_b64, mode="sprint"):
         os.makedirs(output_dir, exist_ok=True)
 
         # --- Calculations ---
-        SECTION_DISTANCE = 5.0  # meters
-        CUTS_PER_RUN = 4
+        section_distance = 5.0  # meters
+        cuts_per_run = 4
 
-        df["run_id"] = ((df["index"] - 1) // CUTS_PER_RUN) + 1
+        df["run_id"] = ((df["index"] - 1) // cuts_per_run) + 1
         df["distance_cumulative"] = (
-            df.groupby("run_id").cumcount() * SECTION_DISTANCE + SECTION_DISTANCE
+            df.groupby("run_id").cumcount() * section_distance + section_distance
         )
-        df["speed_ms"] = SECTION_DISTANCE / df["duration"]
+        df["speed_ms"] = section_distance / df["duration"]
         df["speed_kmh"] = df["speed_ms"] * 3.6
         df["prev_speed_ms"] = df.groupby("run_id")["speed_ms"].shift(1).fillna(0)
         df["acceleration_ms2"] = (df["speed_ms"] - df["prev_speed_ms"]) / df["duration"]
@@ -1251,8 +1244,8 @@ def process_sprint_file(filepath, output_base_dir, logo_b64, mode="sprint"):
                 # 2. Ends (5m, 10m, 15m, 20m...)
                 # Aggregating based on cuts in the run
                 current_dist = 0
-                for idx_in_run, cut_idx in enumerate(df_run.index):
-                    current_dist += SECTION_DISTANCE
+                for _idx_in_run, cut_idx in enumerate(df_run.index):
+                    current_dist += section_distance
                     frames_to_extract.append(
                         {
                             "dist_label": labels_map.get(
@@ -1315,7 +1308,7 @@ def process_sprint_file(filepath, output_base_dir, logo_b64, mode="sprint"):
                 f"Max: {max_v_y:.1f} km/h",
                 xy=(max_v_x, max_v_y),
                 xytext=(max_v_x, max_v_y + 2),
-                arrowprops=dict(facecolor="black", shrink=0.05),
+                arrowprops={"facecolor": "black", "shrink": 0.05},
             )
 
             plt.title(
@@ -1383,7 +1376,7 @@ def process_sprint_file(filepath, output_base_dir, logo_b64, mode="sprint"):
             html_sections.append(f"""
             <div class="run-section">
                 <h2 style="color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px;">Run {rid} Analysis</h2>
-                
+
                 <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; background: #ecf0f1; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
                     <div style="text-align: center;">
                         <div style="font-size: 0.9em; color: #7f8c8d;">Total Time (20m)</div>
@@ -1408,7 +1401,7 @@ def process_sprint_file(filepath, output_base_dir, logo_b64, mode="sprint"):
                     <img src="{os.path.basename(vel_plot_path)}" width="45%" style="box-shadow: 0 4px 8px rgba(0,0,0,0.1); border-radius: 8px;">
                     <img src="{os.path.basename(acc_plot_path)}" width="45%" style="box-shadow: 0 4px 8px rgba(0,0,0,0.1); border-radius: 8px;">
                 </div>
-                
+
                 <h3 style="margin-top: 30px; color: #34495e;">Interval Data</h3>
                 {df_run[cols_export].to_html(classes="data-table", float_format="%.3f", index=False)}
                 <br>
@@ -1416,7 +1409,7 @@ def process_sprint_file(filepath, output_base_dir, logo_b64, mode="sprint"):
             """)
 
             # Database Record
-            for idx, row in df_run.iterrows():
+            for _idx, row in df_run.iterrows():
                 cut_row = {
                     "file_name": file_basename,
                     "athlete_name": athlete_name,
@@ -1451,7 +1444,7 @@ def process_sprint_file(filepath, output_base_dir, logo_b64, mode="sprint"):
                 .data-table tr:nth-child(even) {{ background-color: #f8f9fa; }}
                 .data-table tr:hover {{ background-color: #f1f1f1; }}
                 hr {{ border: 0; height: 1px; background: #e0e0e0; margin: 40px 0; }}
-                
+
                 /* Lightbox Modal */
                 .modal {{ display: none; position: fixed; z-index: 1000; padding-top: 50px; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.9); }}
                 .modal-content {{ margin: auto; display: block; max-width: 90%; max-height: 90%; animation-name: zoom; animation-duration: 0.6s; }}
@@ -1469,7 +1462,7 @@ def process_sprint_file(filepath, output_base_dir, logo_b64, mode="sprint"):
                 function closeModal() {{
                     document.getElementById("myModal").style.display = "none";
                 }}
-                
+
                 // Close on Escape key
                 document.addEventListener('keydown', function(event) {{
                     if (event.key === "Escape") {{
@@ -1485,13 +1478,13 @@ def process_sprint_file(filepath, output_base_dir, logo_b64, mode="sprint"):
                 <div class="meta-info">
                     <p><strong>File:</strong> {file_basename} | <strong>Date:</strong> {datetime.now().strftime("%d/%m/%Y %H:%M:%S")}</p>
                 </div>
-                
+
                 {"".join(html_sections)}
-                
+
                 <h2>Reference Values</h2>
                 {get_reference_data().to_html(classes="data-table", index=False)}
             </div>
-            
+
             <!-- Lightbox Modal -->
             <div id="myModal" class="modal" onclick="closeModal()">
               <span class="close">&times;</span>
@@ -1745,54 +1738,54 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
                 --bg-color: #f8f9fa;
                 --card-shadow: 0 4px 15px rgba(0,0,0,0.08);
             }}
-            
-            body {{ 
-                font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif; 
-                margin: 0; 
-                padding: 40px; 
+
+            body {{
+                font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+                margin: 0;
+                padding: 40px;
                 background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%);
-                color: #333; 
+                color: #333;
                 min-height: 100vh;
             }}
-            
-            .container {{ 
-                max-width: 1400px; 
-                margin: 0 auto; 
-                background: white; 
-                padding: 50px; 
-                box-shadow: var(--card-shadow); 
-                border-radius: 16px; 
+
+            .container {{
+                max-width: 1400px;
+                margin: 0 auto;
+                background: white;
+                padding: 50px;
+                box-shadow: var(--card-shadow);
+                border-radius: 16px;
             }}
-            
-            h1 {{ 
-                text-align: center; 
-                color: var(--primary-color); 
+
+            h1 {{
+                text-align: center;
+                color: var(--primary-color);
                 font-size: 2.2em;
                 margin-bottom: 10px;
                 letter-spacing: -0.5px;
             }}
-            
-            h2 {{ 
-                color: var(--primary-color); 
+
+            h2 {{
+                color: var(--primary-color);
                 border-bottom: 3px solid var(--accent-color);
                 padding-bottom: 12px;
                 margin-top: 50px;
                 font-size: 1.5em;
             }}
-            
+
             h3 {{
                 color: var(--primary-color);
                 margin: 0 0 8px 0;
                 font-size: 1.2em;
             }}
-            
+
             .meta-info {{
                 text-align: center;
                 color: #7f8c8d;
                 margin-bottom: 30px;
                 font-size: 1.1em;
             }}
-            
+
             .stats-banner {{
                 display: grid;
                 grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -1802,64 +1795,64 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
                 background: linear-gradient(135deg, var(--primary-color) 0%, #34495e 100%);
                 border-radius: 12px;
             }}
-            
+
             .stat-item {{
                 text-align: center;
                 color: white;
             }}
-            
+
             .stat-value {{
                 font-size: 2.5em;
                 font-weight: bold;
                 display: block;
             }}
-            
+
             .stat-label {{
                 font-size: 0.9em;
                 opacity: 0.85;
                 text-transform: uppercase;
                 letter-spacing: 1px;
             }}
-            
+
             .btn-group {{
                 text-align: center;
                 margin: 30px 0;
             }}
-            
-            .btn {{ 
-                display: inline-block; 
-                padding: 14px 28px; 
-                background: var(--success-color); 
-                color: white; 
-                text-decoration: none; 
-                border-radius: 8px; 
+
+            .btn {{
+                display: inline-block;
+                padding: 14px 28px;
+                background: var(--success-color);
+                color: white;
+                text-decoration: none;
+                border-radius: 8px;
                 margin: 8px;
                 font-weight: 600;
                 transition: all 0.3s ease;
                 box-shadow: 0 2px 8px rgba(39, 174, 96, 0.3);
             }}
-            
+
             .btn:hover {{
                 transform: translateY(-2px);
                 box-shadow: 0 4px 12px rgba(39, 174, 96, 0.4);
             }}
-            
+
             .btn-secondary {{
                 background: var(--accent-color);
                 box-shadow: 0 2px 8px rgba(52, 152, 219, 0.3);
             }}
-            
+
             .btn-secondary:hover {{
                 box-shadow: 0 4px 12px rgba(52, 152, 219, 0.4);
             }}
-            
+
             .charts-grid {{
                 display: grid;
                 grid-template-columns: repeat(2, 1fr);
                 gap: 30px;
                 margin: 40px 0;
             }}
-            
+
             .chart-card {{
                 background: white;
                 border: 1px solid #e0e0e0;
@@ -1868,45 +1861,45 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
                 box-shadow: var(--card-shadow);
                 transition: transform 0.3s ease, box-shadow 0.3s ease;
             }}
-            
+
             .chart-card:hover {{
                 transform: translateY(-5px);
                 box-shadow: 0 8px 25px rgba(0,0,0,0.12);
             }}
-            
+
             .chart-card.full-width {{
                 grid-column: 1 / -1;
             }}
-            
+
             .chart-description {{
                 color: #7f8c8d;
                 font-size: 0.95em;
                 margin: 0 0 20px 0;
             }}
-            
+
             .chart-img {{
                 width: 100%;
                 border-radius: 8px;
                 border: 1px solid #eee;
             }}
-            
-            .data-table {{ 
-                border-collapse: collapse; 
-                width: 100%; 
-                margin: 25px 0; 
+
+            .data-table {{
+                border-collapse: collapse;
+                width: 100%;
+                margin: 25px 0;
                 font-size: 0.95em;
                 border-radius: 8px;
                 overflow: hidden;
                 box-shadow: 0 2px 8px rgba(0,0,0,0.06);
             }}
-            
-            .data-table th, .data-table td {{ 
-                border: 1px solid #e8e8e8; 
-                padding: 14px 18px; 
-                text-align: center; 
+
+            .data-table th, .data-table td {{
+                border: 1px solid #e8e8e8;
+                padding: 14px 18px;
+                text-align: center;
             }}
-            
-            .data-table th {{ 
+
+            .data-table th {{
                 background: linear-gradient(135deg, var(--accent-color) 0%, #2980b9 100%);
                 color: white;
                 font-weight: 600;
@@ -1914,36 +1907,36 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
                 letter-spacing: 0.5px;
                 font-size: 0.85em;
             }}
-            
-            .data-table tr:nth-child(even) {{ 
-                background-color: #f8f9fa; 
+
+            .data-table tr:nth-child(even) {{
+                background-color: #f8f9fa;
             }}
-            
+
             .data-table tr:hover {{
                 background-color: #eef6fc;
             }}
-            
+
             .rankings-grid {{
                 display: grid;
                 grid-template-columns: repeat(2, 1fr);
                 gap: 40px;
                 margin-top: 30px;
             }}
-            
+
             @media (max-width: 1000px) {{
                 .charts-grid, .rankings-grid {{
                     grid-template-columns: 1fr;
                 }}
-                
+
                 body {{
                     padding: 20px;
                 }}
-                
+
                 .container {{
                     padding: 25px;
                 }}
             }}
-            
+
             .section-intro {{
                 text-align: center;
                 color: #666;
@@ -1951,7 +1944,7 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
                 margin: 0 auto 30px;
                 line-height: 1.6;
             }}
-            
+
             /* Team Statistics Styles */
             .team-stats-grid {{
                 display: grid;
@@ -1959,7 +1952,7 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
                 gap: 20px;
                 margin: 30px 0;
             }}
-            
+
             .team-stat-card {{
                 background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
                 border-radius: 10px;
@@ -1967,10 +1960,10 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
                 text-align: center;
                 border-left: 4px solid var(--accent-color);
             }}
-            
+
             .team-stat-card.speed {{ border-left-color: var(--danger-color); }}
             .team-stat-card.time {{ border-left-color: var(--success-color); }}
-            
+
             .team-stat-title {{
                 font-size: 0.85em;
                 color: #7f8c8d;
@@ -1978,31 +1971,31 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
                 letter-spacing: 1px;
                 margin-bottom: 8px;
             }}
-            
+
             .team-stat-value {{
                 font-size: 1.8em;
                 font-weight: bold;
                 color: var(--primary-color);
             }}
-            
+
             .team-stat-sub {{
                 font-size: 0.8em;
                 color: #95a5a6;
                 margin-top: 4px;
             }}
-            
+
             /* Cluster Styles */
             .cluster-summary {{
                 margin: 30px 0;
             }}
-            
+
             .cluster-cards {{
                 display: grid;
                 grid-template-columns: repeat(3, 1fr);
                 gap: 25px;
                 margin-top: 20px;
             }}
-            
+
             .cluster-card {{
                 padding: 25px;
                 border-radius: 12px;
@@ -2010,19 +2003,19 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
                 color: white;
                 box-shadow: 0 4px 15px rgba(0,0,0,0.15);
             }}
-            
+
             .cluster-card.high {{
                 background: linear-gradient(135deg, #27ae60 0%, #1e8449 100%);
             }}
-            
+
             .cluster-card.medium {{
                 background: linear-gradient(135deg, #f39c12 0%, #d68910 100%);
             }}
-            
+
             .cluster-card.low {{
                 background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
             }}
-            
+
             .cluster-title {{
                 font-size: 1.2em;
                 font-weight: bold;
@@ -2030,13 +2023,13 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
                 text-transform: uppercase;
                 letter-spacing: 1px;
             }}
-            
+
             .cluster-stat {{
                 font-size: 0.95em;
                 margin: 8px 0;
                 opacity: 0.95;
             }}
-            
+
             .cluster-table {{
                 border-collapse: collapse;
                 width: 100%;
@@ -2046,23 +2039,23 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
                 overflow: hidden;
                 box-shadow: 0 2px 8px rgba(0,0,0,0.06);
             }}
-            
+
             .cluster-table th, .cluster-table td {{
                 border: 1px solid #e8e8e8;
                 padding: 12px 15px;
                 text-align: center;
             }}
-            
+
             .cluster-table th {{
                 background: linear-gradient(135deg, var(--primary-color) 0%, #34495e 100%);
                 color: white;
                 font-weight: 600;
             }}
-            
+
             .cluster-table tr:nth-child(even) {{
                 background-color: #f8f9fa;
             }}
-            
+
             .cluster-badge {{
                 display: inline-block;
                 padding: 4px 12px;
@@ -2071,7 +2064,7 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
                 font-size: 0.85em;
                 font-weight: 600;
             }}
-            
+
             /* Z-Score Table Styles */
             .zscore-table {{
                 border-collapse: collapse;
@@ -2082,23 +2075,23 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
                 overflow: hidden;
                 box-shadow: 0 2px 8px rgba(0,0,0,0.06);
             }}
-            
+
             .zscore-table th, .zscore-table td {{
                 border: 1px solid #e8e8e8;
                 padding: 12px 15px;
                 text-align: center;
             }}
-            
+
             .zscore-table th {{
                 background: linear-gradient(135deg, #8e44ad 0%, #6c3483 100%);
                 color: white;
                 font-weight: 600;
             }}
-            
+
             .zscore-table tr:nth-child(even) {{
                 background-color: #f8f9fa;
             }}
-            
+
             .zscore-legend {{
                 display: flex;
                 justify-content: center;
@@ -2106,27 +2099,27 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
                 margin: 15px 0;
                 flex-wrap: wrap;
             }}
-            
+
             .zscore-legend-item {{
                 display: flex;
                 align-items: center;
                 gap: 8px;
                 font-size: 0.9em;
             }}
-            
+
             .zscore-color-box {{
                 width: 20px;
                 height: 20px;
                 border-radius: 4px;
             }}
-            
+
             .stat-athlete {{
                 font-size: 0.75em;
                 opacity: 0.9;
                 margin-top: 4px;
                 font-weight: normal;
             }}
-            
+
             @media (max-width: 1000px) {{
                 .team-stats-grid {{
                     grid-template-columns: repeat(2, 1fr);
@@ -2142,7 +2135,7 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
             {logo_html}
             <h1><i>vaila</i> {report_title}</h1>
             <p class="meta-info">General Report - Generated on {datetime.now().strftime("%d/%m/%Y at %H:%M:%S")}</p>
-            
+
             <div class="stats-banner">
                 <div class="stat-item">
                     <span class="stat-value">{len(set(run_stats["athlete_name"]))}</span>
@@ -2163,12 +2156,12 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
                     <span class="stat-athlete">{best_time_athlete} (Run {best_time_run})</span>
                 </div>
             </div>
-            
+
             <div class="btn-group">
                 <a href="{profiling_filename}" class="btn btn-secondary" target="_blank">View Statistical Profiling</a>
                 <a href="{db_filename}" class="btn">Download Database CSV</a>
             </div>
-            
+
             <h2>Team Statistics</h2>
             <p class="section-intro">
                 Comprehensive team performance metrics including mean, standard deviation, minimum and maximum values.
@@ -2198,36 +2191,36 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
 
             <h2>Visual Performance Analysis</h2>
             <p class="section-intro">
-                Complementary visualizations to understand sprint performance: 
+                Complementary visualizations to understand sprint performance:
                 ranking comparison, improvement patterns, and performance matrix.
             </p>
-            
+
             <div class="charts-grid">
                 {dumbbell_html}
                 {scatter_html}
                 {heatmap_html}
             </div>
-            
+
             <h2>K-Means Cluster Analysis (3 Levels)</h2>
             <p class="section-intro">
                 Athletes classified into 3 performance levels using K-means clustering based on max speed and total time.
             </p>
-            
+
             {cluster_summary_html}
-            
+
             <div class="charts-grid">
                 {beeswarm_html}
             </div>
-            
+
             <h3>Cluster Assignments</h3>
             {cluster_table_html}
-            
+
             <h2>Z-Score Analysis</h2>
             <p class="section-intro">
-                Standardized scores showing how each athlete compares to the group average. 
+                Standardized scores showing how each athlete compares to the group average.
                 Positive values (green) = above average, Negative values (red) = below average.
             </p>
-            
+
             <div class="zscore-legend">
                 <div class="zscore-legend-item">
                     <div class="zscore-color-box" style="background-color: #1e8449;"></div>
@@ -2250,7 +2243,7 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
                     <span>Low (Z < -1.5)</span>
                 </div>
             </div>
-            
+
             {zscore_table_html}
 
             <h2>Performance Rankings</h2>
@@ -2264,7 +2257,7 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
                     {ranking_time[["athlete_name", "run_id", "total_time_s", "max_speed_kmh"]].to_html(classes="data-table", float_format="%.3f")}
                 </div>
             </div>
-            
+
         </div>
     </body>
     </html>
@@ -2294,6 +2287,16 @@ def main():
     The function uses tkinter dialogs for user interaction and
     processes data from vaila Tracker TOML files.
     """
+    print("Running vailasprint.py...")
+    print("-" * 80)
+    print("Script directory: {Path(__file__).parent}")
+    print("Script name: {Path(__file__).name}")
+    print("Script version: {Path(__file__).stem}")
+    print("Script path: {Path(__file__).resolve()}")
+    print("Script exists: {Path(__file__).exists()}")
+    print("Script is file: {Path(__file__).is_file()}")
+    print("Script is directory: {Path(__file__).is_dir()}")
+
     root = tk.Tk()
     root.withdraw()
 
@@ -2355,10 +2358,7 @@ def main():
         messagebox.showinfo("vailá Sprint", "No .toml files found in the selected directory.")
         return
 
-    if mode == "cod":
-        dir_name = "vaila_cod180_reports"
-    else:
-        dir_name = "vaila_sprint_reports"
+    dir_name = "vaila_cod180_reports" if mode == "cod" else "vaila_sprint_reports"
 
     output_base_dir = os.path.join(input_dir, dir_name)
     os.makedirs(output_base_dir, exist_ok=True)

@@ -142,8 +142,8 @@
         <h1>markerless_2D_analysis.py - Documentação Completa</h1>
         
         <div class="version-info">
-            <strong>Version:</strong> 0.5.0<br>
-            <strong>Data:</strong> 25 de Julho de 2025<br>
+            <strong>Versão:</strong> 0.7.3<br>
+            <strong>Data:</strong> Janeiro de 2026<br>
             <strong>Author:</strong> Paulo Roberto Pereira Santiago<br>
             <strong>Projeto:</strong> vailá - Multimodal Toolbox<br>
             <strong>Email:</strong> paulosantiago@usp.br
@@ -156,12 +156,13 @@
                 <li><a href="#installation">2. Instalação e Requisitos</a></li>
                 <li><a href="#usage">3. Uso Básico</a></li>
                 <li><a href="#features">4. Recursos Principais</a></li>
-                <li><a href="#configuration">5. Parâmetros de Configuração</a></li>
-                <li><a href="#video-resize">6. Recurso de Redimensionamento de Vídeo</a></li>
-                <li><a href="#filtering">7. Filtragem e Suavização</a></li>
-                <li><a href="#output">8. Arquivos de Saída</a></li>
-                <li><a href="#performance">9. Otimização de Performance</a></li>
-                <li><a href="#troubleshooting">10. Solução de Problemas</a></li>
+                <li><a href="#roi-selection">5. Seleção de ROI (BBox e Polígono)</a></li>
+                <li><a href="#configuration">6. Parâmetros de Configuração</a></li>
+                <li><a href="#video-resize">7. Recurso de Redimensionamento de Vídeo</a></li>
+                <li><a href="#filtering">8. Filtragem e Suavização</a></li>
+                <li><a href="#output">9. Arquivos de Saída</a></li>
+                <li><a href="#performance">10. Otimização de Performance</a></li>
+                <li><a href="#troubleshooting">11. Solução de Problemas</a></li>
             </ul>
         </div>
 
@@ -238,7 +239,7 @@ python vaila/markerless_2D_analysis.py
             </ol>
 
             <div class="new-feature">
-                <strong>Novo na v0.5.0:</strong> Funcionalidade de redimensionamento de vídeo para melhorar detecção de pose em sujeitos pequenos ou distantes.
+                <strong>Novo na v0.7.3:</strong> Seleção de ROI Poligonal, melhorias na ROI BBox, e padding de frames iniciais para melhor estabilidade na detecção de pose.
             </div>
         </section>
 
@@ -288,8 +289,52 @@ python vaila/markerless_2D_analysis.py
             </div>
         </section>
 
+        <section id="roi-selection">
+            <h2>5. Seleção de ROI (BBox e Polígono)</h2>
+            
+            <div class="new-feature">
+                <strong>Novo Recurso:</strong> Dois métodos para selecionar regiões de interesse (ROI) para focar a detecção de pose em áreas específicas.
+            </div>
+
+            <h3>ROI Bounding Box (BBox)</h3>
+            <p>Selecione uma região retangular de interesse a partir do primeiro frame do vídeo.</p>
+            <ul>
+                <li><strong>Como usar:</strong> Clique no botão "Select BBox ROI" na interface</li>
+                <li><strong>Seleção:</strong> Arraste para selecionar uma região retangular</li>
+                <li><strong>Confirmar:</strong> Pressione ESPAÇO ou ENTER para confirmar</li>
+                <li><strong>Cancelar:</strong> Pressione ESC para cancelar</li>
+                <li><strong>Janela:</strong> Janela redimensionável para melhor visibilidade</li>
+                <li><strong>Melhor para:</strong> Regiões retangulares, recorte simples, excluir bordas</li>
+            </ul>
+
+            <h3>ROI Polígono</h3>
+            <p>Selecione uma região poligonal de forma livre para formas irregulares.</p>
+            <ul>
+                <li><strong>Como usar:</strong> Clique no botão "Select Polygon ROI" na interface</li>
+                <li><strong>Adicionar pontos:</strong> Clique esquerdo para adicionar vértices do polígono</li>
+                <li><strong>Remover ponto:</strong> Clique direito para remover o último ponto</li>
+                <li><strong>Resetar:</strong> Pressione 'R' para resetar todos os pontos</li>
+                <li><strong>Confirmar:</strong> Pressione ENTER para confirmar (mínimo 3 pontos necessários)</li>
+                <li><strong>Cancelar:</strong> Pressione ESC para cancelar</li>
+                <li><strong>Melhor para:</strong> Formas irregulares, regiões complexas, excluir objetos de fundo</li>
+            </ul>
+
+            <h3>Recursos de ROI</h3>
+            <ul>
+                <li><strong>Redimensionamento de Crop:</strong> Ative "Resize cropped region" para ampliar a ROI (2x-8x) para melhor detecção</li>
+                <li><strong>Mapeamento de Coordenadas:</strong> Coordenadas são automaticamente mapeadas de volta para as dimensões originais do vídeo</li>
+                <li><strong>Suporte TOML:</strong> Configurações de ROI (BBox e Polígono) são salvas em arquivos de configuração TOML</li>
+                <li><strong>Quando usar:</strong> Cenários com múltiplas pessoas, sujeitos pequenos, excluir fundo, focar em áreas específicas</li>
+            </ul>
+
+            <div class="warning">
+                <strong>Nota:</strong> Se tanto as coordenadas BBox quanto os pontos do Polígono estiverem definidos, o ROI Polígono tem precedência. 
+                Certifique-se de selecionar apenas um tipo de ROI para melhores resultados.
+            </div>
+        </section>
+
         <section id="configuration">
-            <h2>5. Parâmetros de Configuração</h2>
+            <h2>6. Parâmetros de Configuração</h2>
             
             <h3>Parâmetros do MediaPipe Pose</h3>
             <table>
@@ -367,7 +412,7 @@ python vaila/markerless_2D_analysis.py
         </section>
 
         <section id="video-resize">
-            <h2>6. Recurso de Redimensionamento de Vídeo</h2>
+            <h2>7. Recurso de Redimensionamento de Vídeo</h2>
             
             <div class="new-feature">
                 <strong>Novo Recurso:</strong> Funcionalidade de redimensionamento de vídeo para melhorar detecção de pose em sujeitos pequenos ou distantes.
@@ -416,7 +461,7 @@ python vaila/markerless_2D_analysis.py
         </section>
 
         <section id="filtering">
-            <h2>7. Filtragem e Suavização</h2>
+            <h2>8. Filtragem e Suavização</h2>
             
             <h3>Métodos de Filtragem Disponíveis:</h3>
             
@@ -474,7 +519,7 @@ smooth_method = "savgol"  # ou "kalman", "lowess", "spline", "arima"
         </section>
 
         <section id="output">
-            <h2>8. Arquivos de Saída</h2>
+            <h2>9. Arquivos de Saída</h2>
             
             <h3>Arquivos Gerados para Cada Vídeo:</h3>
             
@@ -504,13 +549,23 @@ frame,landmark_0_x,landmark_0_y,landmark_0_z,landmark_1_x,landmark_1_y,landmark_
             </div>
 
             <div class="output-example">
-                <h4>4. Coordenadas Originais (<code>*_mp_original.csv</code>)</h4>
-                <p>Se o redimensionamento de vídeo foi usado, coordenadas convertidas de volta às dimensões originais do vídeo.</p>
+                <h4>4. Formato vailá (<code>*_mp_vaila.csv</code>)</h4>
+                <p>Formato compatível com ferramentas de análise vailá: <code>frame, p1_x, p1_y, p2_x, p2_y, ...</code></p>
             </div>
 
             <div class="output-example">
-                <h4>5. Arquivo de Log (<code>log_info.txt</code>)</h4>
+                <h4>5. Formato vailá RAW (<code>*_mp_vaila_raw.csv</code>)</h4>
+                <p>Versão não filtrada (apenas gerado se filtragem avançada foi habilitada).</p>
+            </div>
+
+            <div class="output-example">
+                <h4>6. Arquivo de Log (<code>log_info.txt</code>)</h4>
                 <p>Informações detalhadas de processamento incluindo metadados do vídeo, parâmetros de processamento e estatísticas de performance.</p>
+            </div>
+
+            <div class="output-example">
+                <h4>7. Arquivo de Configuração (<code>configuration_used.toml</code>)</h4>
+                <p>Todos os parâmetros usados para processamento, incluindo configurações de ROI (BBox ou Polígono).</p>
             </div>
 
             <h3>Convenção de Nomenclatura de Arquivos:</h3>
@@ -523,7 +578,7 @@ input_video.mp4 → input_video_mp_original.csv (coordenadas originais)
         </section>
 
         <section id="performance">
-            <h2>9. Otimização de Performance</h2>
+            <h2>10. Otimização de Performance</h2>
             
             <h3>Gerenciamento de Memória:</h3>
             <ul>
@@ -573,7 +628,7 @@ input_video.mp4 → input_video_mp_original.csv (coordenadas originais)
         </section>
 
         <section id="troubleshooting">
-            <h2>10. Solução de Problemas</h2>
+            <h2>11. Solução de Problemas</h2>
             
             <h3>Problemas Comuns:</h3>
             
@@ -586,7 +641,13 @@ input_video.mp4 → input_video_mp_original.csv (coordenadas originais)
             <h4>Detecção de Pose Ruim</h4>
             <ul>
                 <li><strong>Sintoma:</strong> Landmarks ausentes ou imprecisos</li>
-                <li><strong>Solução:</strong> Habilite redimensionamento de vídeo, ajuste limiares de confiança, melhore iluminação</li>
+                <li><strong>Solução:</strong> Habilite redimensionamento de vídeo, use seleção de ROI, ajuste limiares de confiança, melhore iluminação</li>
+            </ul>
+
+            <h4>Landmarks em Local Errado</h4>
+            <ul>
+                <li><strong>Sintoma:</strong> Landmarks aparecem deslocados ou em posição errada</li>
+                <li><strong>Solução:</strong> Verifique coordenadas da ROI, certifique-se de que os pontos do polígono estão corretos, verifique configurações de redimensionamento de vídeo</li>
             </ul>
 
             <h4>Processamento Lento</h4>

@@ -3956,7 +3956,12 @@ def load_coordinates_from_file(total_frames, video_width=None, video_height=None
     input_path = input(f"File/Folder path {default_hint}: ").strip()
 
     # Remove quotes if user dragged and dropped 'filename'
-    if input_path.startswith("'") and input_path.endswith("'") or input_path.startswith('"') and input_path.endswith('"'):
+    if (
+        input_path.startswith("'")
+        and input_path.endswith("'")
+        or input_path.startswith('"')
+        and input_path.endswith('"')
+    ):
         input_path = input_path[1:-1]
 
     input_path = input_path.strip()

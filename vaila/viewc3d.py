@@ -12,7 +12,7 @@ Please see AUTHORS for contributors.
 Author: Paulo Santiago
 Version: 0.1.0
 Created: 06 February 2025
-Last Updated: 11 January 2026
+Last Updated: 12 January 2026
 
 To run:
 uv run viewc3d.py
@@ -31,7 +31,6 @@ Features soccer field lines and penalty areas.
     - Real-time marker labels with color coding
     - Ground grid toggle and field line customization
     - Matplotlib fallback for systems without OpenGL support
-    
 
     Keyboard Shortcuts:
     Navigation:
@@ -101,14 +100,17 @@ from rich import print
 # TOML support with fallback
 try:
     import toml
+
     TOML_SUPPORT = True
 except ImportError:
     try:
-        import tomli as toml
+        import tomli as toml  # pyright: ignore[reportMissingImports]
+
         TOML_SUPPORT = True
     except ImportError:
         try:
             import tomllib as toml
+
             TOML_SUPPORT = True
         except ImportError:
             TOML_SUPPORT = False
@@ -397,10 +399,9 @@ def load_c3d_file():
         try:
             residuals = c3d["data"]["meta_points"]["residuals"]
             # residuals shape is typically (num_frames, num_markers)
-            if residuals.shape != pts.shape[:2]:
-                # Try to transpose if needed
-                if residuals.shape == (pts.shape[1], pts.shape[0]):
-                    residuals = residuals.T
+            # Try to transpose if needed
+            if residuals.shape != pts.shape[:2] and residuals.shape == (pts.shape[1], pts.shape[0]):
+                residuals = residuals.T
             print(f"Residuals data loaded: {residuals.shape}")
         except (KeyError, AttributeError):
             print("No residuals data found in C3D file")
@@ -1340,7 +1341,9 @@ def run_viewc3d():
     print("-" * 80)
 
     # Load data from the C3D file, including FPS and marker labels
-    points, filepath, fps, marker_labels, residuals, events, analog_info, c3d_object = load_c3d_file()
+    points, filepath, fps, marker_labels, residuals, events, analog_info, c3d_object = (
+        load_c3d_file()
+    )
     num_frames, total_markers, _ = points.shape
 
     # Let user select which markers to display - passar o filepath
@@ -1384,16 +1387,15 @@ def run_viewc3d():
 
     # Create editable copy for modifications
     import copy
+
     edited_c3d_object = copy.deepcopy(c3d_object)
 
     # Store original data before filtering (for analysis functions)
     original_points = points.copy()
     original_residuals = residuals.copy() if residuals is not None else None
-    
     # Filter the points array to only the selected markers
     points = points[:, selected_indices, :]
     num_markers = len(selected_indices)
-    
     # Get selected marker names for labeling and analysis
     selected_marker_names = [marker_labels[i] for i in selected_indices]
 
@@ -2000,46 +2002,44 @@ def run_viewc3d():
         if edited_c3d_object is None:
             print("\n[red]Error: No C3D object loaded[/red]")
             return False
-        
+
         root = _create_centered_tk_root()
         swap_file = filedialog.askopenfilename(
             title="Select swap corrections file (CSV or TOML)",
-            filetypes=[
-                ("CSV Files", "*.csv"),
-                ("TOML Files", "*.toml"),
-                ("All Files", "*.*")
-            ],
+            filetypes=[("CSV Files", "*.csv"), ("TOML Files", "*.toml"), ("All Files", "*.*")],
         )
         root.destroy()
-        
+
         if not swap_file:
             return False
-        
+
         try:
             # Get all marker labels from C3D (not just selected ones)
             all_marker_labels = list(edited_c3d_object["parameters"]["POINT"]["LABELS"]["value"])
             if isinstance(all_marker_labels[0], list):
                 all_marker_labels = all_marker_labels[0]
             label_to_idx = {label: idx for idx, label in enumerate(all_marker_labels)}
-            
+
             swaps_applied = 0
             swaps_log = []
-            
+
             # Load swaps from CSV or TOML
-            if swap_file.endswith('.toml') or swap_file.endswith('.TOML'):
+            if swap_file.endswith(".toml") or swap_file.endswith(".TOML"):
                 if not TOML_SUPPORT:
-                    print("\n[red]Error: TOML support not available. Install toml or tomli library.[/red]")
+                    print(
+                        "\n[red]Error: TOML support not available. Install toml or tomli library.[/red]"
+                    )
                     return False
                 try:
                     # Try binary mode first (for tomllib/tomli), then text mode (for toml library)
                     try:
-                        with open(swap_file, 'rb') as f:
+                        with open(swap_file, "rb") as f:
                             swap_data = toml.load(f)
                     except (TypeError, AttributeError):
                         # Fallback to text mode for 'toml' library
-                        with open(swap_file, 'r') as f:
+                        with open(swap_file) as f:
                             swap_data = toml.load(f)
-                    swaps_list = swap_data.get('swaps', [])
+                    swaps_list = swap_data.get("swaps", [])
                 except Exception as e:
                     print(f"\n[red]Error loading TOML file: {e}[/red]")
                     return False
@@ -2047,83 +2047,91 @@ def run_viewc3d():
                 # Load from CSV
                 try:
                     df = pd.read_csv(swap_file)
-                    required_cols = ['marker_a', 'marker_b', 'start_frame', 'end_frame']
+                    required_cols = ["marker_a", "marker_b", "start_frame", "end_frame"]
                     if not all(col in df.columns for col in required_cols):
                         print(f"\n[red]Error: CSV must have columns: {required_cols}[/red]")
                         return False
-                    swaps_list = df.to_dict('records')
+                    swaps_list = df.to_dict("records")
                 except Exception as e:
                     print(f"\n[red]Error loading CSV file: {e}[/red]")
                     return False
-            
+
             # Apply swaps
             c3d_data = edited_c3d_object["data"]["points"]  # Shape: [4, n_markers, n_frames]
-            
+
             for swap in swaps_list:
                 if isinstance(swap, dict):
-                    marker_a = swap.get('marker_a', '')
-                    marker_b = swap.get('marker_b', '')
-                    start_frame = int(swap.get('start_frame', 0))
-                    end_frame = int(swap.get('end_frame', start_frame))
+                    marker_a = swap.get("marker_a", "")
+                    marker_b = swap.get("marker_b", "")
+                    start_frame = int(swap.get("start_frame", 0))
+                    end_frame = int(swap.get("end_frame", start_frame))
                 else:
-                    marker_a = swap['marker_a']
-                    marker_b = swap['marker_b']
-                    start_frame = int(swap['start_frame'])
-                    end_frame = int(swap['end_frame'])
-                
+                    marker_a = swap["marker_a"]
+                    marker_b = swap["marker_b"]
+                    start_frame = int(swap["start_frame"])
+                    end_frame = int(swap["end_frame"])
+
                 if marker_a not in label_to_idx or marker_b not in label_to_idx:
-                    print(f"\n[yellow]Warning: Marker(s) not found: {marker_a}, {marker_b}[/yellow]")
+                    print(
+                        f"\n[yellow]Warning: Marker(s) not found: {marker_a}, {marker_b}[/yellow]"
+                    )
                     continue
-                
+
                 idx_a = label_to_idx[marker_a]
                 idx_b = label_to_idx[marker_b]
-                
+
                 # Convert to 0-based indexing (user may use 1-based)
                 frame_start = max(0, start_frame - 1) if start_frame > 0 else start_frame
                 frame_end = end_frame  # ezc3d uses 0-based
                 if frame_start > frame_end:
                     frame_start, frame_end = frame_end, frame_start
-                
+
                 # Ensure frame range is valid
                 num_frames_c3d = c3d_data.shape[2]
                 frame_end = min(frame_end, num_frames_c3d - 1)
                 if frame_start < 0 or frame_end >= num_frames_c3d:
-                    print(f"\n[yellow]Warning: Invalid frame range: {frame_start}-{frame_end} (valid: 0-{num_frames_c3d-1})[/yellow]")
+                    print(
+                        f"\n[yellow]Warning: Invalid frame range: {frame_start}-{frame_end} (valid: 0-{num_frames_c3d - 1})[/yellow]"
+                    )
                     continue
-                
+
                 # Swap data (X, Y, Z, and Residual/Occlusion)
-                temp = c3d_data[:, idx_a, frame_start:frame_end+1].copy()
-                c3d_data[:, idx_a, frame_start:frame_end+1] = c3d_data[:, idx_b, frame_start:frame_end+1]
-                c3d_data[:, idx_b, frame_start:frame_end+1] = temp
-                
+                temp = c3d_data[:, idx_a, frame_start : frame_end + 1].copy()
+                c3d_data[:, idx_a, frame_start : frame_end + 1] = c3d_data[
+                    :, idx_b, frame_start : frame_end + 1
+                ]
+                c3d_data[:, idx_b, frame_start : frame_end + 1] = temp
+
                 swaps_applied += 1
                 swaps_log.append(f"  {marker_a} <-> {marker_b} (frames {frame_start}-{frame_end})")
-                print(f"\nApplied swap: {marker_a} <-> {marker_b} (frames {frame_start}-{frame_end})")
-            
+                print(
+                    f"\nApplied swap: {marker_a} <-> {marker_b} (frames {frame_start}-{frame_end})"
+                )
+
             # Reload points data from modified C3D
             pts = edited_c3d_object["data"]["points"]
             pts = pts[:3, :, :]  # use only x, y, z coordinates
             pts = np.transpose(pts, (2, 1, 0))  # shape (num_frames, num_markers, 3)
-            
+
             # Convert units if needed (check if conversion was applied)
             # For now, we'll assume the data is already in meters (as loaded)
             # If conversion was applied, we'd need to track that
-            
+
             # Update points array
             original_points = pts.copy()
             points = pts[:, selected_indices, :]
-            
+
             # Update visualization
             update_spheres(points[current_frame])
             if marker_labels_visible[0]:
                 update_marker_labels()
-            
+
             print(f"\n[green]Successfully applied {swaps_applied} swap(s)[/green]")
             if swaps_log:
                 print("\nSwaps applied:")
                 for log_entry in swaps_log:
                     print(log_entry)
-            
+
             # Reload points data from modified C3D
             pts = edited_c3d_object["data"]["points"]
             pts = pts[:3, :, :]  # use only x, y, z coordinates
@@ -2147,27 +2155,33 @@ def run_viewc3d():
         except Exception as e:
             print(f"\n[red]Error applying swaps: {e}[/red]")
             import traceback
+
             traceback.print_exc()
-        
+
         return False
 
     def manual_swap_markers(_vis_obj):
         """Create swap CSV file - select markers via GUI list and generate CSV entry for swaps"""
         nonlocal original_c3d_object, filepath
-        
+
         if original_c3d_object is None:
             print("\n[red]Error: No C3D object loaded[/red]")
             return False
-        
+
         # Get all marker labels from C3D (not just selected ones)
         all_marker_labels = list(original_c3d_object["parameters"]["POINT"]["LABELS"]["value"])
         if isinstance(all_marker_labels[0], list):
             all_marker_labels = all_marker_labels[0]
-        
+
         # Create GUI for marker selection using modal dialog approach
         def create_swap_dialog():
             """Create and show marker swap dialog"""
-            dialog_result = {"marker_a": None, "marker_b": None, "swap_range": None, "cancelled": True}
+            dialog_result = {
+                "marker_a": None,
+                "marker_b": None,
+                "swap_range": None,
+                "cancelled": True,
+            }
 
             def show_dialog():
                 root = tk.Tk()
@@ -2180,7 +2194,9 @@ def run_viewc3d():
                 main_frame.pack(fill=tk.BOTH, expand=True)
 
                 # Title
-                title_label = tk.Label(main_frame, text="Create Swap CSV Entry", font=("Arial", 14, "bold"))
+                title_label = tk.Label(
+                    main_frame, text="Create Swap CSV Entry", font=("Arial", 14, "bold")
+                )
                 title_label.pack(pady=(0, 10))
 
                 # Info label
@@ -2218,9 +2234,13 @@ def run_viewc3d():
                 selected_frame = tk.Frame(main_frame)
                 selected_frame.pack(pady=10, fill=tk.X)
 
-                selected_a_label = tk.Label(selected_frame, text="Marker A: None", font=("Arial", 10), fg="blue")
+                selected_a_label = tk.Label(
+                    selected_frame, text="Marker A: None", font=("Arial", 10), fg="blue"
+                )
                 selected_a_label.pack(anchor=tk.W)
-                selected_b_label = tk.Label(selected_frame, text="Marker B: None", font=("Arial", 10), fg="red")
+                selected_b_label = tk.Label(
+                    selected_frame, text="Marker B: None", font=("Arial", 10), fg="red"
+                )
                 selected_b_label.pack(anchor=tk.W)
 
                 selected_markers = [None, None]  # [marker_a, marker_b]
@@ -2240,7 +2260,9 @@ def run_viewc3d():
                     elif selected_markers[1] is None:
                         # Select second marker (but not the same as first)
                         if selected_name == selected_markers[0]:
-                            tk.messagebox.showwarning("Warning", "Cannot select the same marker twice!", parent=root)
+                            tk.messagebox.showwarning(
+                                "Warning", "Cannot select the same marker twice!", parent=root
+                            )
                             listbox.selection_clear(0, tk.END)
                             return
                         selected_markers[1] = selected_name
@@ -2262,7 +2284,9 @@ def run_viewc3d():
                 range_frame.pack(pady=10, fill=tk.X)
 
                 range_var = tk.StringVar(value="current")
-                tk.Label(range_frame, text="Swap range:", font=("Arial", 10, "bold")).pack(anchor=tk.W)
+                tk.Label(range_frame, text="Swap range:", font=("Arial", 10, "bold")).pack(
+                    anchor=tk.W
+                )
                 tk.Radiobutton(
                     range_frame,
                     text=f"Current frame only ({current_frame + 1})",
@@ -2284,7 +2308,9 @@ def run_viewc3d():
 
                 def on_swap():
                     if selected_markers[0] is None or selected_markers[1] is None:
-                        tk.messagebox.showwarning("Warning", "Please select two markers!", parent=root)
+                        tk.messagebox.showwarning(
+                            "Warning", "Please select two markers!", parent=root
+                        )
                         return
                     dialog_result["marker_a"] = selected_markers[0]
                     dialog_result["marker_b"] = selected_markers[1]
@@ -2346,12 +2372,13 @@ def run_viewc3d():
         marker_a = result["marker_a"]
         marker_b = result["marker_b"]
         swap_range = result["swap_range"]
-        
-        # Validate marker names
+
+        # Validate marker names (ensure they exist in the C3D file)
         label_to_idx = {label: idx for idx, label in enumerate(all_marker_labels)}
-        idx_a = label_to_idx[marker_a]
-        idx_b = label_to_idx[marker_b]
-        
+        if marker_a not in label_to_idx or marker_b not in label_to_idx:
+            print(f"\n[red]Error: One or both markers not found: {marker_a}, {marker_b}[/red]")
+            return False
+
         # Determine frame range
         if swap_range == "current":
             frame_start = current_frame
@@ -2359,7 +2386,7 @@ def run_viewc3d():
         else:  # to_end
             frame_start = current_frame
             frame_end = num_frames - 1
-        
+
         # Create CSV file with swap entry
         try:
             # Determine output filename
@@ -2385,50 +2412,64 @@ def run_viewc3d():
             if os.path.exists(csv_path):
                 # Load existing CSV and append
                 df_existing = pd.read_csv(csv_path)
-                if not all(col in df_existing.columns for col in ['marker_a', 'marker_b', 'start_frame', 'end_frame']):
+                if not all(
+                    col in df_existing.columns
+                    for col in ["marker_a", "marker_b", "start_frame", "end_frame"]
+                ):
                     # File exists but doesn't have the right format, create new
                     swap_data = {
-                        'marker_a': [marker_a],
-                        'marker_b': [marker_b],
-                        'start_frame': [frame_start + 1],  # 1-based for user
-                        'end_frame': [frame_end + 1],  # 1-based for user
+                        "marker_a": [marker_a],
+                        "marker_b": [marker_b],
+                        "start_frame": [frame_start + 1],  # 1-based for user
+                        "end_frame": [frame_end + 1],  # 1-based for user
                     }
                     df = pd.DataFrame(swap_data)
                 else:
                     # Append to existing
-                    new_row = pd.DataFrame({
-                        'marker_a': [marker_a],
-                        'marker_b': [marker_b],
-                        'start_frame': [frame_start + 1],  # 1-based for user
-                        'end_frame': [frame_end + 1],  # 1-based for user
-                    })
+                    new_row = pd.DataFrame(
+                        {
+                            "marker_a": [marker_a],
+                            "marker_b": [marker_b],
+                            "start_frame": [frame_start + 1],  # 1-based for user
+                            "end_frame": [frame_end + 1],  # 1-based for user
+                        }
+                    )
                     df = pd.concat([df_existing, new_row], ignore_index=True)
             else:
                 # Create new CSV
                 swap_data = {
-                    'marker_a': [marker_a],
-                    'marker_b': [marker_b],
-                    'start_frame': [frame_start + 1],  # 1-based for user
-                    'end_frame': [frame_end + 1],  # 1-based for user
+                    "marker_a": [marker_a],
+                    "marker_b": [marker_b],
+                    "start_frame": [frame_start + 1],  # 1-based for user
+                    "end_frame": [frame_end + 1],  # 1-based for user
                 }
                 df = pd.DataFrame(swap_data)
 
             # Save CSV
             df.to_csv(csv_path, index=False)
 
-            range_str = f"frame {frame_start + 1}" if frame_start == frame_end else f"frames {frame_start + 1}-{frame_end + 1}"
-            print(f"\n[green]Swap CSV entry created: {marker_a} <-> {marker_b} at {range_str}[/green]")
+            range_str = (
+                f"frame {frame_start + 1}"
+                if frame_start == frame_end
+                else f"frames {frame_start + 1}-{frame_end + 1}"
+            )
+            print(
+                f"\n[green]Swap CSV entry created: {marker_a} <-> {marker_b} at {range_str}[/green]"
+            )
             print(f"[green]CSV saved to: {csv_path}[/green]")
-            print(f"[cyan]Use 'N' key to apply swaps from this CSV file[/cyan]")
+            print("[cyan]Use 'N' key to apply swaps from this CSV file[/cyan]")
 
         except Exception as e:
             print(f"\n[red]Error creating swap CSV: {e}[/red]")
             import traceback
+
             traceback.print_exc()
             # Create temporary root for error message
             error_root = tk.Tk()
             error_root.withdraw()
-            tk.messagebox.showerror("Error", f"Failed to create swap CSV:\n{str(e)}", parent=error_root)
+            tk.messagebox.showerror(
+                "Error", f"Failed to create swap CSV:\n{str(e)}", parent=error_root
+            )
             error_root.destroy()
 
         return False
@@ -2470,7 +2511,9 @@ def run_viewc3d():
                         # Can't convert to string - remove the parameter
                         try:
                             del analog_params["UNITS"]
-                            print("\n[yellow]Warning: Removed problematic ANALOG:UNITS parameter before saving[/yellow]")
+                            print(
+                                "\n[yellow]Warning: Removed problematic ANALOG:UNITS parameter before saving[/yellow]"
+                            )
                         except (KeyError, TypeError, AttributeError):
                             pass
             except (KeyError, AttributeError, TypeError):
@@ -2482,45 +2525,65 @@ def run_viewc3d():
         except ValueError as e:
             error_msg = str(e)
             if "ANALOG:UNITS" in error_msg:
-                print(f"\n[yellow]Warning: C3D file contains problematic ANALOG:UNITS parameter[/yellow]")
-                print(f"[yellow]This is a known issue with some C3D files from certain motion capture systems[/yellow]")
-                print(f"[cyan]Trying alternative save method...[/cyan]")
-                
+                print(
+                    "\n[yellow]Warning: C3D file contains problematic ANALOG:UNITS parameter[/yellow]"
+                )
+                print(
+                    "[yellow]This is a known issue with some C3D files from certain motion capture systems[/yellow]"
+                )
+                print("[cyan]Trying alternative save method...[/cyan]")
+
                 # Try to create a new C3D file with only essential data
                 try:
                     # Create a minimal C3D copy with just the points data
                     import ezc3d
+
                     new_c3d = ezc3d.c3d()
-                    
+
                     # Copy header
-                    new_c3d["header"]["points"]["frame_rate"] = edited_c3d_object["header"]["points"]["frame_rate"]
-                    new_c3d["header"]["points"]["first_frame"] = edited_c3d_object["header"]["points"]["first_frame"]
-                    new_c3d["header"]["points"]["last_frame"] = edited_c3d_object["header"]["points"]["last_frame"]
-                    
+                    new_c3d["header"]["points"]["frame_rate"] = edited_c3d_object["header"][
+                        "points"
+                    ]["frame_rate"]
+                    new_c3d["header"]["points"]["first_frame"] = edited_c3d_object["header"][
+                        "points"
+                    ]["first_frame"]
+                    new_c3d["header"]["points"]["last_frame"] = edited_c3d_object["header"][
+                        "points"
+                    ]["last_frame"]
+
                     # Copy point data
                     new_c3d["data"]["points"] = edited_c3d_object["data"]["points"]
-                    
+
                     # Copy point labels
                     point_labels = edited_c3d_object["parameters"]["POINT"]["LABELS"]["value"]
                     if isinstance(point_labels[0], list):
                         point_labels = point_labels[0]
                     new_c3d["parameters"]["POINT"]["LABELS"]["value"] = point_labels
-                    
+
                     new_c3d.write(out_path)
-                    print(f"\n[green]Successfully saved C3D file (minimal version): {out_path}[/green]")
-                    print(f"[yellow]Note: Some parameters (like ANALOG data) were not included due to compatibility issues[/yellow]")
+                    print(
+                        f"\n[green]Successfully saved C3D file (minimal version): {out_path}[/green]"
+                    )
+                    print(
+                        "[yellow]Note: Some parameters (like ANALOG data) were not included due to compatibility issues[/yellow]"
+                    )
                 except Exception as e2:
-                    print(f"\n[red]Error saving C3D file (alternative method also failed): {e2}[/red]")
+                    print(
+                        f"\n[red]Error saving C3D file (alternative method also failed): {e2}[/red]"
+                    )
                     print(f"[red]Original error: {error_msg}[/red]")
                     import traceback
+
                     traceback.print_exc()
             else:
                 print(f"\n[red]Error saving C3D file: {error_msg}[/red]")
                 import traceback
+
                 traceback.print_exc()
         except Exception as e:
             print(f"\n[red]Error saving C3D file: {e}[/red]")
             import traceback
+
             traceback.print_exc()
 
         return False
@@ -2630,17 +2693,17 @@ def run_viewc3d():
             all_marker_labels = list(edited_c3d_object["parameters"]["POINT"]["LABELS"]["value"])
             if isinstance(all_marker_labels[0], list):
                 all_marker_labels = all_marker_labels[0]
-            
+
             # Create template with example rows
             template_data = {
-                'marker_a': ['L_ANK', 'R_ANK', 'L_HEEL'],
-                'marker_b': ['R_ANK', 'L_ANK', 'R_HEEL'],
-                'start_frame': [150, 200, 300],
-                'end_frame': [150, 450, 800]
+                "marker_a": ["L_ANK", "R_ANK", "L_HEEL"],
+                "marker_b": ["R_ANK", "L_ANK", "R_HEEL"],
+                "start_frame": [150, 200, 300],
+                "end_frame": [150, 450, 800],
             }
-            
+
             template_df = pd.DataFrame(template_data)
-            
+
             # Add comments as header
             comments = [
                 "# Marker Label Swap Template",
@@ -2654,22 +2717,23 @@ def run_viewc3d():
             if len(all_marker_labels) > 20:
                 comments.append(f"#   ... and {len(all_marker_labels) - 20} more markers")
             comments.append("#")
-            
+
             # Write comments and data
-            with open(out_path, 'w', encoding='utf-8') as f:
+            with open(out_path, "w", encoding="utf-8") as f:
                 for comment in comments:
-                    f.write(comment + '\n')
+                    f.write(comment + "\n")
                 template_df.to_csv(f, index=False)
-            
+
             print(f"\n[green]Template CSV saved: {out_path}[/green]")
             print(f"  Example entries: {len(template_data['marker_a'])} rows")
             print(f"  Available markers: {len(all_marker_labels)}")
-            
+
         except Exception as e:
             print(f"\n[red]Error saving template CSV: {e}[/red]")
             import traceback
+
             traceback.print_exc()
-        
+
         return False
 
     def save_skeleton_template_json(_vis_obj):
@@ -2701,29 +2765,32 @@ def run_viewc3d():
                 ["p11", "p13"],
                 ["p12", "p14"],
                 ["p13", "p15"],
-                ["p14", "p16"]
+                ["p14", "p16"],
             ]
 
             template_data = {
                 "schema": "mediapipe_pose_33_pn",
                 "note": "pN is 1-based (p1=nose, p12=right_shoulder, p11=left_shoulder). Replace with your marker names.",
                 "available_markers": selected_marker_names[:30],  # Show first 30
-                "connections": template_connections
+                "connections": template_connections,
             }
 
             # Write JSON with indentation for readability
-            with open(out_path, 'w', encoding='utf-8') as f:
+            with open(out_path, "w", encoding="utf-8") as f:
                 json.dump(template_data, f, indent=2, ensure_ascii=False)
 
             print(f"\n[green]Template JSON saved: {out_path}[/green]")
             print(f"  Example connections: {len(template_connections)} pairs")
-            print(f"  Available markers: {len(selected_marker_names)} (showing first 30 in template)")
+            print(
+                f"  Available markers: {len(selected_marker_names)} (showing first 30 in template)"
+            )
 
         except Exception as e:
             print(f"\n[red]Error saving template JSON: {e}[/red]")
             import traceback
+
             traceback.print_exc()
-        
+
         return False
 
     def export_video_mp4(_vis_obj):
@@ -2886,8 +2953,12 @@ def run_viewc3d():
         for marker_name, marker_pos in zip(selected_marker_names, frame_data, strict=True):
             if not np.isnan(marker_pos).any():
                 color = get_marker_label_color(marker_name)
-                color_hex = f"#{int(color[0]*255):02x}{int(color[1]*255):02x}{int(color[2]*255):02x}"
-                print(f"  {marker_name:20s} | Pos: [{marker_pos[0]:8.4f}, {marker_pos[1]:8.4f}, {marker_pos[2]:8.4f}] | Color: {color_hex}")
+                color_hex = (
+                    f"#{int(color[0] * 255):02x}{int(color[1] * 255):02x}{int(color[2] * 255):02x}"
+                )
+                print(
+                    f"  {marker_name:20s} | Pos: [{marker_pos[0]:8.4f}, {marker_pos[1]:8.4f}, {marker_pos[2]:8.4f}] | Color: {color_hex}"
+                )
             else:
                 print(f"  {marker_name:20s} | Pos: [NaN, NaN, NaN]")
         print("=" * 60)
@@ -3582,7 +3653,7 @@ O - Manual swap markers (visual editing)
         if events:
             print(f"\nEvents: {len(events['times'])} events found")
             for i, (time, label, context) in enumerate(
-                zip(events["times"], events["labels"], events["contexts"])
+                zip(events["times"], events["labels"], events["contexts"], strict=True)
             ):
                 frame = int(round(time * fps))
                 print(f"  Event {i + 1}: {label} ({context}) at {time:.3f}s (frame {frame})")
@@ -3675,7 +3746,7 @@ O - Manual swap markers (visual editing)
     vis.register_key_callback(ord("N"), apply_swaps_from_file)  # Apply swaps from CSV/TOML
     vis.register_key_callback(ord("O"), manual_swap_markers)  # Manual swap markers
     vis.register_key_callback(ord("Z"), export_png_sequence)  # PNG sequence
-    
+
     # Register Ctrl+S for saving C3D file using register_key_action_callback (supports modifiers)
     def ctrl_s_key_action(vis, action, mods):
         # action: 0=RELEASE, 1=PRESS, 2=REPEAT
@@ -3683,7 +3754,7 @@ O - Manual swap markers (visual editing)
         if action == 1 and (mods & 2):  # PRESS with CTRL modifier
             return save_c3d_file(vis)
         return False
-    
+
     vis.register_key_action_callback(ord("S"), ctrl_s_key_action)  # Ctrl+S for save
     # Views (1,2,3,4) and template saves (9,0)
     vis.register_key_callback(ord("1"), view_front)  # Front view
