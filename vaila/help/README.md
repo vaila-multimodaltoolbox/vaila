@@ -93,6 +93,7 @@ Each script help should include:
 - `run_vector_coding.md/html` - Vector coding analysis
 - `vaila_and_jump.md/html` - Jump analysis
 - `animal_open_field.md/html` - Animal open field analysis
+- `mp_facemesh_help.md/html` - Face Mesh Analysis with iris landmarks (478 landmarks)
 
 ### Machine Learning Scripts
 - `markerless2d_analysis_v2.md/html` - Advanced YOLO+MediaPipe pose estimation
@@ -134,4 +135,4 @@ When adding help for a new script:
 
 ---
 
-**Last Updated:** November 2025
+**Last Updated:** January 2026

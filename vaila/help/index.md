@@ -4,11 +4,11 @@ Automatically generated documentation for all Python modules in vailá Multimoda
 
 [📂 Open Project Documentation (./docs)](../../docs/index.md)
 
-**Total documented modules:** 112 | **Categories:** 7 | **Generated on:** 15/10/2025 08:04:44
+**Total documented modules:** 113 | **Categories:** 7 | **Generated on:** 12/01/2026
 
 ---
 
-## Analysis (13 modules)
+## Analysis (14 modules)
 
 - **animal_open_field**
   - [📄 HTML](analysis/animal_open_field.html)
@@ -52,6 +52,9 @@ Automatically generated documentation for all Python modules in vailá Multimoda
 - **pynalty**
   - [📄 HTML](pynalty_help.html)
   - [📝 Markdown](pynalty_help.md)
+- **mp_facemesh (Face Mesh Analysis)**
+  - [📄 HTML](mp_facemesh_help.html)
+  - [📝 Markdown](mp_facemesh_help.md)
 
 ## Utils (19 modules)
 
