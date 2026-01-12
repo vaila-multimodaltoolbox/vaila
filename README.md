@@ -562,48 +562,43 @@ If you installed using the legacy Conda method (slower execution):
 
 ---
 
-#### From the Terminal If you prefer to run *vailá* from the terminal or if you encounter issues with the applications menu, you can use the provided launch scripts
+#### From the Terminal
 
-##### 🐧Linux and 🍎 macOS
+If you prefer to run *vailá* from the terminal or if you encounter issues with the applications menu, you can use the launch script created during installation.
 
-- **Make the script executable** (if you haven't already):
+##### 🐧 Linux and 🍎 macOS
 
-- 🐧 **Linux**
-  
-```bash
-sudo chmod +x ~/vaila/linux_launch_vaila.sh
-```
+The installation scripts automatically create a `run_vaila.sh` script in the installation directory (`~/vaila`).
 
 - **Run the script**:
   
 ```bash
-~/vaila/linux_launch_vaila.sh 
+~/vaila/run_vaila.sh
 ```
 
-- 🍎 **macOS**
+The script will automatically use the correct Python environment (uv or conda) based on your installation method.
+
+##### 🪟 Windows
+
+The installation script automatically creates `run_vaila.ps1` and `run_vaila.bat` scripts in the installation directory.
+
+- **Run using PowerShell**:
   
-```bash
-sudo chmod +x ~/vaila/mac_launch_vaila.sh
+```powershell
+.\run_vaila.ps1
 ```
 
-- **Run the script**:
+- **Or double-click**:
   
-```bash
-~/vaila/mac_launch_vaila.sh 
+```batch
+run_vaila.bat
 ```
 
-#### Notes for 🐧 Linux and 🍎 macOS
+#### Notes
 
-- **Ensure Conda is in the Correct Location**:
-  - The launch scripts assume that Conda is installed in `~/anaconda3` or `~/miniconda3`.
-  - If Conda is installed elsewhere, update the `source` command in the scripts to point to the correct location.
-
-- **Verify Paths**:
-  - Make sure that the path to `vaila.py` in the launch scripts matches where you have installed the program.
-  - By default, the scripts assume that `vaila.py` is located in `~/vaila`.
-
-- **Permissions**:
-  - Ensure you have execute permissions for the launch scripts and read permissions for the program files.
+- The launch scripts (`run_vaila.sh`, `run_vaila.ps1`, `run_vaila.bat`) are automatically created during installation.
+- These scripts work with both installation methods (uv and conda).
+- The scripts are located in the installation directory (`~/vaila` on Linux/macOS, or the Program Files/user directory on Windows).
 
 ---
 

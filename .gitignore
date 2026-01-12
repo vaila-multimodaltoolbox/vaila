@@ -6,6 +6,10 @@ vaila/models/
 .DS_Store
 .AppleDouble
 .LSOverride
+*.bak
+*.backup
+*.tmp
+*.temp
 
 # Ignore .app directories (macOS application bundles)
 *.app
@@ -63,6 +67,7 @@ pip-delete-this-directory.txt
 
 # Unit test / coverage reports
 htmlcov/
+coverage/
 .tox/
 .nox/
 .coverage
@@ -105,12 +110,20 @@ uv.lock
 .dmypy.json
 dmypy.json
 
+# Ruff (Python linter/formatter)
+.ruff_cache/
+
 # Pyre type checker
 .pyre/
 
 # IDEs and Editors
 # Cursor
 .cursor/
+
+# Claude
+CLAUDE.md
+CLAUDE.local.md
+.claude/
 
 # VSCode
 .vscode/
@@ -153,10 +166,6 @@ auto-save-list
 tramp
 .\#*
 
-# Temporary files created by editors
-*~
-*.swp
-
 # Logs
 *.log
 
@@ -167,6 +176,3 @@ hooks/*
 
 # Ignore all .pt files at root level
 *.pt
-
-# Test output directories
-tests/Force_Plate_CoP_Analysis_MULTIMODAL/

@@ -1800,8 +1800,19 @@ def detect_sit_to_stand_phases(
         if auto_threshold:
             detected_threshold = detect_ascending_threshold(force_data, time_data)
             if detected_threshold:
-                onset_threshold = detected_threshold
-                print(f"Auto-detected onset threshold: {onset_threshold:.2f} N")
+                # detected_threshold is already relative to baseline, so use it directly
+                # But validate it's reasonable (should be small relative to max force)
+                baseline_force_prelim = np.percentile(force_data, 10)
+                max_force = np.max(force_data)
+                if detected_threshold < (max_force - baseline_force_prelim) * 0.5:
+                    onset_threshold = detected_threshold
+                    print(f"Auto-detected onset threshold: {onset_threshold:.2f} N")
+                else:
+                    print(f"Auto-detected threshold too high ({detected_threshold:.2f} N), using config value ({onset_threshold:.2f} N)")
+            else:
+                print(f"Auto-detection failed, using config onset threshold: {onset_threshold:.2f} N")
+        else:
+            print(f"Using config onset threshold: {onset_threshold:.2f} N")
 
         # Find baseline (seated) force level - use 10th percentile for robustness
         baseline_force = np.percentile(force_data, 10)

@@ -1,11 +1,13 @@
 """
 ================================================================================
-forceplate_analysis.py
+forceplate_analysis.py - Force Plate Analysis Interface
 ================================================================================
-Author: Prof. Paulo Santiago
-Date: 9 September 2024
-Update: 11 January 2026
-Version: 2.0
+Author: Prof. Paulo R. P. Santiago
+Email: paulosantiago@usp.br
+GitHub: https://github.com/vaila-multimodaltoolbox/vaila
+Creation Date: 09 September 2024
+Update Date: 11 January 2026
+Version: 0.2.1
 
 Description:
 ------------
@@ -16,6 +18,25 @@ user interface (GUI) for selecting and executing various biomechanical analysis 
 The analyses offered in this toolbox support the study and evaluation of postural control,
 dynamic balance, gait data, and force measurements, which are critical in both clinical
 and research settings.
+
+This module unifies functionality previously distributed across multiple separate modules:
+- cop_analysis.py (now integrated)
+- cop_calculate.py (now integrated)
+- stabilogram_analysis.py (now integrated)
+- spectral_features.py (now integrated)
+
+All CoP-related analyses are now self-contained within this module.
+
+Features:
+---------
+- GUI for Analysis Selection: Utilizes Python's Tkinter library to present a straightforward
+  interface where users can choose their desired analysis with ease.
+- Self-Contained CoP Analysis: All CoP balance and calculation functions are integrated
+  directly into this module, providing a single-file solution for force plate analyses.
+- Dynamic Module Importing: For non-CoP analyses (force_cube_fig, force_cmj, etc.),
+  efficiently loads only the necessary module for the selected analysis.
+- Comprehensive Analysis Suite: Supports multiple force plate analysis types including
+  balance assessment, force cube analysis, jump analysis, and gait analysis.
 
 Key Analyses Supported:
 -----------------------
@@ -35,69 +56,60 @@ Key Analyses Supported:
 5. Calculate CoP: Executes a process to calculate the CoP data from force and moment data.
 6. Gait Analysis (Single Strike): Analyzes a single contact strike in gait data, calculating
    key metrics such as peak force, impulse, and rate of force development.
+7. Sit to Stand: Analyzes sit-to-stand movements for biomechanical assessment.
 
-This module unifies functionality previously distributed across multiple separate modules:
-- cop_analysis.py (now integrated)
-- cop_calculate.py (now integrated)
-- stabilogram_analysis.py (now integrated)
-- spectral_features.py (now integrated)
-
-All CoP-related analyses are now self-contained within this module.
-
-Functionalities:
-----------------
-1. GUI for Analysis Selection: Utilizes Python's Tkinter library to present a straightforward
-   interface where users can choose their desired analysis with ease.
-2. Self-Contained CoP Analysis: All CoP balance and calculation functions are integrated
-   directly into this module, providing a single-file solution for force plate analyses.
-3. Dynamic Module Importing: For non-CoP analyses (force_cube_fig, force_cmj, etc.),
-   efficiently loads only the necessary module for the selected analysis.
-4. Execution of Analysis: Automatically runs the selected analysis, guiding users through
-   any necessary data input or parameter settings.
-
-Modules and Packages Required:
-------------------------------
-- Python Standard Libraries: tkinter for GUI creation and management.
-- External Libraries: numpy, pandas, matplotlib, scipy, sklearn (for PCA in ellipse calculations)
-- VAILA Toolbox Modules (external, imported only when needed):
-  * force_cube_fig: For analyzing force cube data.
-  * force_cmj: For analyzing countermovement jump dynamics.
-  * fixnoise: For correcting noise in force data.
-  * grf_gait: For analyzing single strike gait data.
-  * sit2stand: For sit-to-stand analysis.
-- VAILA Toolbox Modules (internal, imported for CoP analysis):
-  * ellipse: For confidence ellipse calculations using PCA.
-  * filter_utils: For Butterworth filtering.
-
-How to Use:
------------
-1. Run the Script:
-   Execute the script from the terminal using:
+Usage:
+------
+1. Command Line:
    python -m vaila.forceplate_analysis
-   Alternatively, double-click the script file if your environment supports it.
 
-2. Select Analysis:
-   A GUI window will appear, prompting you to select the type of analysis to perform. Click on
-   the corresponding button for the desired analysis.
+2. From *vailá* GUI:
+   - Click "Force Plate Analysis" button in Multimodal Analysis section
+   - Select the desired analysis type from the menu
 
-3. Follow Instructions:
-   The selected analysis will start, and you will be guided through the necessary steps, such as
-   choosing data files or entering parameters. Follow the on-screen instructions to complete the
-   analysis.
+Input Format:
+-------------
+- CSV files containing force plate data (format varies by analysis type)
+- For CoP Balance Analysis: CSV with two columns (ML and AP CoP data)
+- For Calculate CoP: CSV with six columns (Fx, Fy, Fz, Mx, My, Mz)
+- For other analyses: Consult specific analysis documentation
+
+Output Files:
+-------------
+Output files vary by analysis type:
+- CoP Balance Analysis: Metrics CSV, stabilogram plots, power spectrum plots,
+  CoP pathway with ellipse, heatmaps, and comprehensive figures
+- Calculate CoP: CSV files with calculated CoP coordinates (AP, ML, Z)
+- Other analyses: Consult specific analysis documentation for output details
+
+Requirements:
+-------------
+- Python Standard Libraries: tkinter for GUI creation and management
+- External Libraries:
+  * numpy: For numerical computations
+  * pandas: For data handling and CSV processing
+  * matplotlib: For plotting and visualization
+  * scipy: For signal processing and statistical analysis
+  * sklearn: For PCA in ellipse calculations
+- VAILA Toolbox Modules (external, imported only when needed):
+  * force_cube_fig: For analyzing force cube data
+  * force_cmj: For analyzing countermovement jump dynamics
+  * fixnoise: For correcting noise in force data
+  * grf_gait: For analyzing single strike gait data
+  * sit2stand: For sit-to-stand analysis
 
 License:
 --------
-This script is licensed under the MIT License. For more details, please refer to the LICENSE file
-located in the project root.
-
-Disclaimer:
------------
-This script is provided "as is," without any warranty, express or implied. The authors are not
-liable for any damage or data loss resulting from the use of this script. It is intended solely for
-academic and research purposes.
+This program is licensed under the GNU Affero General Public License v3.0.
+For more details, visit: https://www.gnu.org/licenses/agpl-3.0.html
+Visit the project repository: https://github.com/vaila-multimodaltoolbox
 
 Changelog:
 ----------
+- 2026-01-11 (Version 2.0):
+  - Integrated ellipse.py and filter_utils.py functions directly into this module.
+  - Module is now fully self-contained for CoP analysis functionality.
+  - Removed dependencies on external ellipse and filter_utils modules.
 - 2025-12-30 (Version 2.0):
   - Unified cop_analysis.py, cop_calculate.py, stabilogram_analysis.py, and spectral_features.py
     into this single module.
@@ -114,6 +126,16 @@ Changelog:
 """
 
 import os
+import sys
+from pathlib import Path
+
+# Add parent directory to path for direct execution
+# This allows the script to work both as a module and when run directly
+_script_dir = Path(__file__).parent.absolute()
+_parent_dir = _script_dir.parent
+if str(_parent_dir) not in sys.path:
+    sys.path.insert(0, str(_parent_dir))
+
 from tkinter import (
     BooleanVar,
     Button,
@@ -132,12 +154,233 @@ from tkinter import (
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from itertools import cycle
 from scipy import stats
 from scipy.interpolate import griddata
-from scipy.signal import find_peaks, savgol_filter, welch
+from scipy.signal import butter, find_peaks, savgol_filter, sosfiltfilt, welch
+from sklearn.decomposition import PCA
+from matplotlib.colors import LinearSegmentedColormap, Normalize
 
-from .ellipse import plot_cop_pathway_with_ellipse, plot_ellipse_pca
-from .filter_utils import butter_filter
+# ============================================================================
+# FILTER UTILITIES (from filter_utils.py - integrated)
+# ============================================================================
+
+
+def butter_filter(
+    data,
+    fs,
+    filter_type="low",
+    cutoff=None,
+    lowcut=None,
+    highcut=None,
+    order=4,
+    padding=True,
+):
+    """
+    Applies a Butterworth filter (low-pass or band-pass) to the input data.
+
+    Parameters:
+    - data: array-like
+        The input signal to be filtered. Can be 1D or multidimensional. Filtering is applied along the first axis.
+    - fs: float
+        The sampling frequency of the signal.
+    - filter_type: str, default='low'
+        The type of filter to apply: 'low' for low-pass or 'band' for band-pass.
+    - cutoff: float, optional
+        The cutoff frequency for a low-pass filter.
+    - lowcut: float, optional
+        The lower cutoff frequency for a band-pass filter.
+    - highcut: float, optional
+        The upper cutoff frequency for a band-pass filter.
+    - order: int, default=4
+        The order of the Butterworth filter.
+    - padding: bool, default=True
+        Whether to pad the signal to mitigate edge effects.
+
+    Returns:
+    - filtered_data: array-like
+        The filtered signal.
+    """
+    # Check filter type and set parameters
+    nyq = 0.5 * fs  # Nyquist frequency
+    if filter_type == "low":
+        if cutoff is None:
+            raise ValueError("Cutoff frequency must be provided for low-pass filter.")
+        normal_cutoff = cutoff / nyq
+        sos = butter(order, normal_cutoff, btype="low", analog=False, output="sos")
+    elif filter_type == "band":
+        if lowcut is None or highcut is None:
+            raise ValueError(
+                "Lowcut and highcut frequencies must be provided for band-pass filter."
+            )
+        low = lowcut / nyq
+        high = highcut / nyq
+        sos = butter(order, [low, high], btype="band", analog=False, output="sos")
+    else:
+        raise ValueError("Unsupported filter type. Use 'low' for low-pass or 'band' for band-pass.")
+
+    data = np.asarray(data)
+    axis = 0  # Filtering along the first axis (rows)
+
+    # Apply padding if needed to handle edge effects
+    if padding:
+        data_len = data.shape[axis]
+        # Ensure padding length is suitable for data length
+        max_padlen = data_len - 1
+        padlen = min(int(fs), max_padlen, 15)
+
+        if data_len <= padlen:
+            raise ValueError(
+                f"The length of the input data ({data_len}) must be greater than the padding length ({padlen})."
+            )
+
+        # Pad the data along the specified axis
+        pad_width = [(0, 0)] * data.ndim
+        pad_width[axis] = (padlen, padlen)
+        padded_data = np.pad(data, pad_width=pad_width, mode="reflect")
+        filtered_padded_data = sosfiltfilt(sos, padded_data, axis=axis, padlen=0)
+        # Remove padding
+        idx = [slice(None)] * data.ndim
+        idx[axis] = slice(padlen, -padlen)
+        filtered_data = filtered_padded_data[tuple(idx)]
+    else:
+        filtered_data = sosfiltfilt(sos, data, axis=axis, padlen=0)
+
+    return filtered_data
+
+
+# ============================================================================
+# ELLIPSE FUNCTIONS (from ellipse.py - integrated)
+# ============================================================================
+
+
+def plot_ellipse_pca(data, confidence=0.95):
+    """Calculates the ellipse using PCA with a specified confidence level."""
+    pca = PCA(n_components=2)
+    pca.fit(data)
+
+    # Eigenvalues and eigenvectors
+    eigvals = np.sqrt(pca.explained_variance_)
+    eigvecs = pca.components_
+
+    # Scale factor for confidence level
+    chi2_val = np.sqrt(2) * np.sqrt(np.log(1 / (1 - confidence)))
+    scaled_eigvals = eigvals * chi2_val
+
+    # Ellipse parameters
+    theta = np.linspace(0, 2 * np.pi, 100)
+    ellipse = np.array([scaled_eigvals[0] * np.cos(theta), scaled_eigvals[1] * np.sin(theta)])
+    ellipse_rot = np.dot(eigvecs.T, ellipse)  # Adjustment for rotated ellipse
+
+    # Area and angle of the ellipse
+    area = np.pi * scaled_eigvals[0] * scaled_eigvals[1]
+    angle = np.arctan2(eigvecs[1, 0], eigvecs[0, 0]) * 180 / np.pi
+
+    # Calculate ellipse bounds
+    ellipse_x = ellipse_rot[0, :] + pca.mean_[0]
+    ellipse_y = ellipse_rot[1, :] + pca.mean_[1]
+    x_bounds = [min(ellipse_x), max(ellipse_x)]
+    y_bounds = [min(ellipse_y), max(ellipse_y)]
+
+    # Return the ellipse data as a tuple of all necessary elements
+    ellipse_data = (ellipse_x, ellipse_y, eigvecs, scaled_eigvals, pca.mean_)
+
+    return area, angle, x_bounds + y_bounds, ellipse_data
+
+
+def plot_cop_pathway_with_ellipse(cop_x, cop_y, area, angle, ellipse_data, title, output_path):
+    """Plots the CoP pathway along with the 95% confidence ellipse and saves the figure."""
+
+    # Unpack ellipse data
+    ellipse_x, ellipse_y = ellipse_data[0], ellipse_data[1]
+    eigvecs, scaled_eigvals, pca_mean = (
+        ellipse_data[2],
+        ellipse_data[3],
+        ellipse_data[4],
+    )
+
+    # Create colormap for CoP path
+    cmap = LinearSegmentedColormap.from_list("CoP_path", ["blue", "green", "yellow", "red"])
+
+    # Plot CoP pathway with color segments
+    # Plot CoP pathway with cross points using a loop
+    plt.figure(figsize=(10, 8))
+    plt.scatter(
+        cop_x,
+        cop_y,
+        c=np.arange(len(cop_x)),
+        cmap=cmap,
+        marker=".",
+        s=10,  # size of markers
+    )
+    # Plot start and end points
+    plt.plot(cop_x[0], cop_y[0], color="gray", marker=".", markersize=17, label="Start")
+    plt.plot(cop_x[-1], cop_y[-1], color="black", marker=".", markersize=17, label="End")
+
+    # Plot the ellipse
+    plt.plot(ellipse_x, ellipse_y, color="gray", linestyle="--", linewidth=2)
+
+    # Plot major and minor axes of the ellipse
+    major_axis_start = pca_mean - eigvecs[0] * scaled_eigvals[0]
+    major_axis_end = pca_mean + eigvecs[0] * scaled_eigvals[0]
+    plt.plot(
+        [major_axis_start[0], major_axis_end[0]],
+        [major_axis_start[1], major_axis_end[1]],
+        color="gray",
+        linestyle="--",
+        linewidth=1,
+    )
+
+    minor_axis_start = pca_mean - eigvecs[1] * scaled_eigvals[1]
+    minor_axis_end = pca_mean + eigvecs[1] * scaled_eigvals[1]
+    plt.plot(
+        [minor_axis_start[0], minor_axis_end[0]],
+        [minor_axis_start[1], minor_axis_end[1]],
+        color="gray",
+        linestyle="--",
+        linewidth=1,
+    )
+
+    # Add legend for Start and End points
+    plt.legend()
+
+    # Calculate margins to expand the xlim and ylim
+    x_margin = 0.02 * (
+        np.max([np.max(ellipse_x), np.max(cop_x)]) - np.min([np.min(ellipse_x), np.min(cop_x)])
+    )
+    y_margin = 0.02 * (
+        np.max([np.max(ellipse_y), np.max(cop_y)]) - np.min([np.min(ellipse_y), np.min(cop_y)])
+    )
+
+    # Adjust xlim and ylim based on ellipse bounds and add margin
+    plt.xlim(
+        min(np.min(ellipse_x), np.min(cop_x)) - x_margin,
+        max(np.max(ellipse_x), np.max(cop_x)) + x_margin,
+    )
+    plt.ylim(
+        min(np.min(ellipse_y), np.min(cop_y)) - y_margin,
+        max(np.max(ellipse_y), np.max(cop_y)) + y_margin,
+    )
+
+    plt.xlabel("Medio-Lateral (cm)")
+    plt.ylabel("Antero-Posterior (cm)")
+    plt.grid(True, linestyle=":", color="lightgray")
+    plt.gca().set_aspect("equal", adjustable="box")
+
+    # Add colorbar for time progression
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=Normalize(vmin=0, vmax=len(cop_x)))
+    sm.set_array([])
+    cbar = plt.colorbar(sm, ax=plt.gca(), orientation="vertical", fraction=0.046, pad=0.04)
+    cbar.set_label("Time Progression [%]", rotation=270, labelpad=15)
+
+    # Set the title of the plot
+    plt.title(f"{title}\n95% Ellipse (Area: {area:.2f} cm², Angle: {angle:.2f}°)", fontsize=12)
+
+    # Save the figure
+    plt.savefig(f"{output_path}.png")
+    plt.savefig(f"{output_path}.svg")
+    plt.close()  # Close the plot to free memory and prevent overlapping in subsequent plots
+
 
 # ============================================================================
 # GUI FUNCTIONS - Analysis Selection
@@ -148,42 +391,53 @@ def choose_analysis_type():
     """
     Opens a GUI to choose which analysis code to run.
     """
-    print(f"Running script: {os.path.basename(__file__)}")
-    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    # Print the script version and directory
+    print(f"Running script: {Path(__file__).name}")
+    print(f"Script directory: {Path(__file__).parent}")
+    print("Starting Force Plate Analysis...")
+    print("-" * 80)
+    print("Version: 0.2.1")
 
     choice = []
 
     def select_force_cube_fig():
+        print("→ Button selected: Force Cube Analysis")
         choice.append("force_cube_fig")
         choice_window.quit()
         choice_window.destroy()
 
     def select_cop_balance():
+        print("→ Button selected: CoP Balance Analysis")
         choice.append("cop_balance")
         choice_window.quit()
         choice_window.destroy()
 
     def select_force_cmj():
+        print("→ Button selected: Force CMJ Analysis")
         choice.append("force_cmj")
         choice_window.quit()
         choice_window.destroy()
 
     def select_fix_noise():
+        print("→ Button selected: Fix Noise Signal")
         choice.append("fix_noise")
         choice_window.quit()
         choice_window.destroy()
 
     def select_calculate_cop():
+        print("→ Button selected: Calculate CoP")
         choice.append("calculate_cop")
         choice_window.quit()
         choice_window.destroy()
 
     def select_gait_analysis():
+        print("→ Button selected: Gait Analysis (Fz vertical)")
         choice.append("gait_analysis")
         choice_window.quit()
         choice_window.destroy()
 
     def select_sit_to_stand():
+        print("→ Button selected: Sit to Stand")
         choice.append("sit_to_stand")
         choice_window.quit()
         choice_window.destroy()
@@ -851,6 +1105,116 @@ def select2headers(file_path):
     return selected_headers, selected_data
 
 
+# ============================================================================
+# IMPROVED INPUT SELECTION FUNCTIONS (from a3_BalanceAnalysisChanges.py)
+# ============================================================================
+
+
+def discover_csvs_recursive(root_dir):
+    """Recursively discover all CSV files in a directory tree."""
+    csvs = []
+    for dirpath, _, filenames in os.walk(root_dir):
+        for fn in filenames:
+            if fn.lower().endswith(".csv"):
+                csvs.append(os.path.join(dirpath, fn))
+    return sorted(csvs)
+
+
+def checklist_select_files(file_paths, title="Select files to process"):
+    """Scrollable checklist for potentially large file lists. Returns selected file paths."""
+    if not file_paths:
+        return []
+
+    chosen = []
+    root = Tk()
+    root.withdraw()
+
+    win = Toplevel(root)
+    win.title(title)
+    win.geometry(f"{win.winfo_screenwidth()}x{int(win.winfo_screenheight() * 0.8)}")
+
+    canvas = Canvas(win)
+    scrollbar = Scrollbar(win, orient="vertical", command=canvas.yview)
+    scrollable_frame = Frame(canvas)
+
+    scrollable_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+    canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+    canvas.configure(yscrollcommand=scrollbar.set)
+
+    vars_ = []
+    for i, fp in enumerate(file_paths):
+        v = BooleanVar(value=True)  # default: selected
+        vars_.append(v)
+        chk = Checkbutton(scrollable_frame, text=fp, variable=v)
+        chk.grid(row=i, column=0, sticky="w")
+
+    canvas.pack(side="left", fill="both", expand=True)
+    scrollbar.pack(side="right", fill="y")
+
+    btn_frame = Frame(win)
+    btn_frame.pack(side="right", padx=10, pady=10, anchor="center")
+
+    def select_all():
+        for v in vars_:
+            v.set(True)
+
+    def unselect_all():
+        for v in vars_:
+            v.set(False)
+
+    def confirm():
+        nonlocal chosen
+        chosen = [fp for fp, v in zip(file_paths, vars_) if v.get()]
+        win.quit()
+        win.destroy()
+
+    Button(btn_frame, text="Select All", command=select_all).pack(side="top", pady=5)
+    Button(btn_frame, text="Unselect All", command=unselect_all).pack(side="top", pady=5)
+    Button(btn_frame, text="Confirm", command=confirm).pack(side="top", pady=10)
+
+    win.mainloop()
+    root.destroy()
+    return chosen
+
+
+def select_inputs():
+    """
+    Returns a list of CSV file paths to process.
+    Modes:
+      - Individual files
+      - Folder recursive scan + optional selection
+    """
+    root = Tk()
+    root.withdraw()
+    choice = messagebox.askyesno(
+        "Selection Mode",
+        "Do you want to select a folder (recursive search)?\n\n"
+        "Yes: pick a folder, recursively find CSVs, then choose which to process.\n"
+        "No: pick CSV files individually.",
+        parent=root,
+    )
+
+    if choice:  # folder mode
+        folder = filedialog.askdirectory(title="Select root folder", parent=root)
+        root.destroy()
+        if not folder:
+            return []
+        all_csvs = discover_csvs_recursive(folder)
+        if not all_csvs:
+            messagebox.showerror("No CSV files", "No .csv files found in selected folder (including subfolders).")
+            return []
+        # Let user optionally pick subset
+        return checklist_select_files(all_csvs, title="Select CSV files from folder tree")
+    else:
+        files = filedialog.askopenfilenames(
+            title="Select CSV files",
+            filetypes=[("CSV files", "*.csv")],
+            parent=root,
+        )
+        root.destroy()
+        return list(files) if files else []
+
+
 def plot_final_figure(  # noqa: N803
     time,
     X_n,  # noqa: N803
@@ -944,8 +1308,211 @@ def plot_final_figure(  # noqa: N803
     plt.close()
 
 
+# ============================================================================
+# COMBINED PLOTTING AND METRICS AGGREGATION FUNCTIONS
+# (from a3_BalanceAnalysisChanges.py improvements)
+# ============================================================================
+
+
+def save_legend_only_from_items(labels, colors, output_path, ncol=1):
+    """Create a standalone legend figure for trial names."""
+    if not labels:
+        return
+
+    # dummy handles
+    handles = []
+    for lab, col in zip(labels, colors, strict=False):
+        h, = plt.plot([], [], label=lab, linewidth=3, color=col)
+        handles.append(h)
+
+    fig_legend = plt.figure(figsize=(8, 0.5 + 0.3 * len(labels)))
+    fig_legend.legend(handles, labels, loc="center", frameon=False, ncol=ncol)
+    plt.axis("off")
+    plt.tight_layout()
+    fig_legend.savefig(output_path, dpi=300, bbox_inches="tight")
+    plt.close(fig_legend)
+
+
+def plot_combined_figure_no_legends(all_data, file_names, output_base, fs):
+    """Plot combined figure with all trials overlaid, NO legends in main figure."""
+    fig, axs = plt.subplots(
+        3, 2, figsize=(16, 13), gridspec_kw={"height_ratios": [1, 1, 1.6]}
+    )
+    ax1, ax2 = axs[0, 0], axs[0, 1]
+    ax3, ax4 = axs[1, 0], axs[1, 1]
+    ax5, ax6 = axs[2, 0], axs[2, 1]
+
+    vivid_colors = [
+        "#e6194b", "#3cb44b", "#ffe119", "#4363d8",
+        "#f58231", "#911eb4", "#46f0f0", "#f032e6",
+        "#bcf60c", "#fabebe", "#008080", "#e6beff",
+        "#9a6324", "#fffac8", "#800000", "#aaffc3",
+    ]
+    # consistent color per trial
+    color_cycle = cycle(vivid_colors)
+    trial_to_color = {trial: next(color_cycle) for trial in file_names}
+
+    # ML stabilogram (time)
+    for trial, ds in zip(file_names, all_data, strict=False):
+        ax1.plot(ds["time"], ds["X_n"], color=trial_to_color[trial], linewidth=1)
+    ax1.set_title("ML Stabilogram (Time)")
+    ax1.set_xlabel("Time (s)")
+    ax1.set_ylabel("Displacement (cm)")
+    ax1.grid(True, linestyle=":", linewidth=0.5)
+
+    # AP stabilogram (time)
+    for trial, ds in zip(file_names, all_data, strict=False):
+        ax2.plot(ds["time"], ds["Y_n"], color=trial_to_color[trial], linewidth=1)
+    ax2.set_title("AP Stabilogram (Time)")
+    ax2.set_xlabel("Time (s)")
+    ax2.set_ylabel("Displacement (cm)")
+    ax2.grid(True, linestyle=":", linewidth=0.5)
+
+    # ML stabilogram (% task)
+    for trial, ds in zip(file_names, all_data, strict=False):
+        percent_time = np.linspace(0, 100, len(ds["X_n"]))
+        ax3.plot(percent_time, ds["X_n"], color=trial_to_color[trial], linewidth=1)
+        ax3.axvline(x=100, color=trial_to_color[trial], linestyle=":", linewidth=0.5, alpha=0.7)
+    ax3.set_title("ML Stabilogram (Task Completion)")
+    ax3.set_xlabel("Task Completion (%)")
+    ax3.set_ylabel("Displacement (cm)")
+    ax3.grid(True, linestyle=":", linewidth=0.5)
+
+    # AP stabilogram (% task)
+    for trial, ds in zip(file_names, all_data, strict=False):
+        percent_time = np.linspace(0, 100, len(ds["Y_n"]))
+        ax4.plot(percent_time, ds["Y_n"], color=trial_to_color[trial], linewidth=1)
+        ax4.axvline(x=100, color=trial_to_color[trial], linestyle=":", linewidth=0.5, alpha=0.7)
+    ax4.set_title("AP Stabilogram (Task Completion)")
+    ax4.set_xlabel("Task Completion (%)")
+    ax4.set_ylabel("Displacement (cm)")
+    ax4.grid(True, linestyle=":", linewidth=0.5)
+
+    # Spectral density
+    for trial, ds in zip(file_names, all_data, strict=False):
+        ax5.semilogy(ds["freqs_ml"], ds["psd_ml"], color=trial_to_color[trial], linewidth=1, alpha=0.9)
+        ax5.semilogy(ds["freqs_ap"], ds["psd_ap"], color=trial_to_color[trial], linewidth=1, alpha=0.5)
+    ax5.set_title("Spectral Density (ML solid / AP faint)")
+    ax5.set_xlabel("Frequency (Hz)")
+    ax5.set_ylabel("Power Spectrum")
+    ax5.grid(True, linestyle=":", linewidth=0.5)
+
+    # CoP pathways + ellipses
+    x_vals, y_vals = [], []
+    for trial, ds in zip(file_names, all_data, strict=False):
+        col = trial_to_color[trial]
+        ax6.plot(ds["X_n"], ds["Y_n"], color=col, linewidth=1, alpha=0.9)
+        ellipse_x, ellipse_y = ds["ellipse_data"][0], ds["ellipse_data"][1]
+        ax6.plot(ellipse_x, ellipse_y, color=col, linestyle="--", linewidth=0.6, alpha=0.7)
+
+        x_vals.extend([*ds["X_n"], *ellipse_x])
+        y_vals.extend([*ds["Y_n"], *ellipse_y])
+
+    ax6.set_title("CoP Pathways with Ellipses")
+    ax6.set_xlabel("CoP ML (cm)")
+    ax6.set_ylabel("CoP AP (cm)")
+    ax6.set_aspect("equal", adjustable="box")
+
+    if x_vals and y_vals:
+        x_margin = 0.15 * (max(x_vals) - min(x_vals))
+        y_margin = 0.15 * (max(y_vals) - min(y_vals))
+        ax6.set_xlim(min(x_vals) - x_margin, max(x_vals) + x_margin)
+        ax6.set_ylim(min(y_vals) - y_margin, max(y_vals) + y_margin)
+
+    # Ensure NO legends on the main figure
+    for ax in [ax1, ax2, ax3, ax4, ax5, ax6]:
+        leg = ax.get_legend()
+        if leg:
+            leg.remove()
+
+    plt.tight_layout()
+    fig.savefig(f"{output_base}_combined.png", dpi=300, bbox_inches="tight")
+    fig.savefig(f"{output_base}_combined.svg", format="svg", bbox_inches="tight")
+    plt.close(fig)
+
+    # One legend image for all trials
+    legend_labels = file_names
+    legend_colors = [trial_to_color[t] for t in legend_labels]
+    save_legend_only_from_items(
+        legend_labels,
+        legend_colors,
+        f"{output_base}_legend.png",
+        ncol=1,
+    )
+    print(f"Saved combined figure: {output_base}_combined.png")
+    print(f"Saved legend: {output_base}_legend.png")
+
+
+def find_metrics_csvs_recursive(root_dir):
+    """Find metrics CSVs recursively. Handles common naming issues."""
+    out = []
+    for dirpath, _, filenames in os.walk(root_dir):
+        for fn in filenames:
+            lfn = fn.lower()
+            if lfn.endswith(".csv") and "metrics" in lfn:
+                out.append(os.path.join(dirpath, fn))
+    return sorted(out)
+
+
+def normalize_metrics_filename(path):
+    """If a file ends with '_metrics.csv_metrics.csv', rename to '_metrics.csv'."""
+    import re
+    dirn, fn = os.path.split(path)
+    if fn.lower().endswith("_metrics.csv_metrics.csv"):
+        new_fn = re.sub(r"_metrics\.csv_metrics\.csv$", r"_metrics.csv", fn, flags=re.IGNORECASE)
+        new_path = os.path.join(dirn, new_fn)
+        try:
+            os.replace(path, new_path)
+            return new_path
+        except Exception:
+            return path
+    return path
+
+
+def merge_metrics_files(metrics_paths, output_csv_path):
+    """Merge multiple metrics CSV files into one, adding provenance columns."""
+    if not metrics_paths:
+        return None
+
+    frames = []
+    errors = []
+    for p in metrics_paths:
+        p2 = normalize_metrics_filename(p)
+        try:
+            df = pd.read_csv(p2)
+        except Exception as e:
+            errors.append(f"{os.path.basename(p2)}: {e}")
+            continue
+
+        # provenance columns
+        df.insert(0, "Source_File", os.path.basename(p2))
+        df.insert(1, "Source_Dir", os.path.dirname(p2))
+
+        # trial id: prefer folder name containing the metrics
+        trial_id = os.path.basename(os.path.dirname(p2))
+        df.insert(2, "Trial_ID", trial_id)
+
+        frames.append(df)
+
+    if not frames:
+        return None
+
+    merged = pd.concat(frames, ignore_index=True)
+    merged.to_csv(output_csv_path, index=False)
+
+    if errors:
+        print("Merged with warnings (some files failed to load):")
+        for e in errors[:10]:
+            print("  -", e)
+
+    return output_csv_path
+
+
 def analyze_data_2d(data, output_dir, file_name, fs, plate_width, plate_height, timestamp):
-    """Analyzes selected 2D data and saves the results."""
+    """
+    Analyzes selected 2D data and saves the results.
+    Returns dict with data for combined plotting, or None on error.
+    """
     print(f"Starting analysis for file: {file_name}")
 
     try:
@@ -953,7 +1520,7 @@ def analyze_data_2d(data, output_dir, file_name, fs, plate_width, plate_height, 
         dataf = butter_filter(data, fs, filter_type="low", cutoff=10, order=4, padding=True)
     except ValueError as e:
         print(f"Filtering error: {e}")
-        return
+        return None
 
     cop_x_f = dataf[:, 0]
     cop_y_f = dataf[:, 1]
@@ -1078,16 +1645,16 @@ def analyze_data_2d(data, output_dir, file_name, fs, plate_width, plate_height, 
     }
 
     print("Saving metrics to CSV...")
-    metrics_file = os.path.join(output_dir, f"{file_name}_metrics.csv")
-    save_metrics_to_csv(metrics, metrics_file)
+    # IMPORTANT: save_metrics_to_csv appends "_metrics.csv" itself
+    # so pass the base path WITHOUT suffix to avoid "..._metrics.csv_metrics.csv"
+    metrics_base = os.path.join(output_dir, file_name)
+    save_metrics_to_csv(metrics, metrics_base)
 
     print("Plotting stabilogram...")
-    stabilogram_file = os.path.join(output_dir, f"{file_name}_stabilogram.png")
-    plot_stabilogram(time, X_n, Y_n, stabilogram_file)
+    plot_stabilogram(time, X_n, Y_n, metrics_base)
 
     print("Plotting power spectrum...")
-    power_spectrum_file = os.path.join(output_dir, f"{file_name}_power_spectrum.png")
-    plot_power_spectrum(freqs_ml, psd_ml, freqs_ap, psd_ap, power_spectrum_file)
+    plot_power_spectrum(freqs_ml, psd_ml, freqs_ap, psd_ap, metrics_base)
 
     print("Plotting CoP pathway with ellipse...")
     cop_pathway_file = os.path.join(output_dir, f"{file_name}_cop_pathway.png")
@@ -1129,6 +1696,19 @@ def analyze_data_2d(data, output_dir, file_name, fs, plate_width, plate_height, 
 
     print(f"Analysis completed for file: {file_name}")
 
+    # Return data for combined plotting
+    return {
+        "file_stem": file_name,
+        "time": time,
+        "X_n": X_n,
+        "Y_n": Y_n,
+        "freqs_ml": freqs_ml,
+        "psd_ml": psd_ml,
+        "freqs_ap": freqs_ap,
+        "psd_ap": psd_ap,
+        "ellipse_data": ellipse_data,
+    }
+
 
 def main_cop_balance():
     """Main function to run the CoP Balance Analysis."""
@@ -1139,17 +1719,11 @@ def main_cop_balance():
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
     print("Starting CoP analysis...")
 
-    input_dir = filedialog.askdirectory(title="Select Input Directory")
-    if not input_dir:
-        print("No input directory selected.")
-        return
-
     output_dir = filedialog.askdirectory(title="Select Output Directory")
     if not output_dir:
         print("No output directory selected.")
         return
 
-    print(f"Input Directory: {input_dir}")
     print(f"Output Directory: {output_dir}")
 
     fs = simpledialog.askfloat(
@@ -1211,43 +1785,68 @@ def main_cop_balance():
 
     print(f"Main output directory created: {main_output_dir}")
 
-    for file_name in os.listdir(input_dir):
-        if file_name.endswith(".csv"):
-            print(f"Processing file: {file_name}")
-            file_path = os.path.join(input_dir, file_name)
+    # Use improved input selection (files OR folder recursive)
+    input_files = select_inputs()
+    if not input_files:
+        print("No input files selected.")
+        return
+
+    # Process files
+    all_data = []
+    file_names = []
+
+    for file_path in input_files:
+        try:
             df_full = read_csv_full(file_path)
-            if not all(header in df_full.columns for header in selected_headers):
-                messagebox.showerror(
-                    "Header Error", f"Selected headers not found in file {file_name}."
-                )
-                print(f"Error: Selected headers not found in file {file_name}. Skipping file.")
-                continue
-            data = df_full[selected_headers].to_numpy()
+        except Exception as e:
+            print(f"Failed to read {file_path}: {e}")
+            continue
 
-            try:
-                data = convert_to_cm(data, unit)
-            except ValueError as e:
-                print(e)
-                messagebox.showerror(
-                    "Unit Conversion Error",
-                    f"An error occurred during unit conversion:\n{e}",
-                )
-                print(f"Error converting units for file {file_name}. Skipping file.")
-                continue
+        if not all(h in df_full.columns for h in selected_headers):
+            print(f"Missing selected headers in {file_path}. Skipping.")
+            continue
 
-            file_name_without_extension = os.path.splitext(file_name)[0]
-            file_output_dir = os.path.join(main_output_dir, file_name_without_extension)
-            os.makedirs(file_output_dir, exist_ok=True)
+        data = df_full[selected_headers].to_numpy()
+        try:
+            data = convert_to_cm(data, unit)
+        except ValueError as e:
+            print(f"Unit conversion failed for {file_path}: {e}")
+            continue
 
-            analyze_data_2d(
-                data, file_output_dir, file_name_without_extension,
-                fs, plate_width, plate_height, timestamp,
-            )
+        file_stem = os.path.splitext(os.path.basename(file_path))[0]
+        file_output_dir = os.path.join(main_output_dir, file_stem)
+        os.makedirs(file_output_dir, exist_ok=True)
+
+        result = analyze_data_2d(
+            data, file_output_dir, file_stem,
+            fs, plate_width, plate_height, timestamp,
+        )
+        if result is None:
+            print(f"Analysis failed for {file_path}.")
+            continue
+
+        all_data.append(result)
+        file_names.append(file_stem)
+
+    if all_data:
+        # Combined plot (no legends) + one legend image
+        combined_base = os.path.join(main_output_dir, "combined")
+        plot_combined_figure_no_legends(all_data, file_names, combined_base, fs)
+
+        # Merge metrics files created in per-trial folders (recursive)
+        metrics_files = find_metrics_csvs_recursive(main_output_dir)
+        if metrics_files:
+            merged_metrics_out = os.path.join(main_output_dir, "merged_metrics_stack.csv")
+            out = merge_metrics_files(metrics_files, merged_metrics_out)
+            if out:
+                print(f"Merged metrics saved to: {out}")
         else:
-            print(f"Skipping non-CSV file: {file_name}")
+            print("No metrics CSV files found to merge.")
 
-    print("All files processed.")
-    messagebox.showinfo("Information", "Analysis complete! Close this window.")
+        messagebox.showinfo("Information", "Analysis complete! Outputs written to the timestamped output folder.")
+    else:
+        messagebox.showwarning("No results", "No files were successfully processed.")
+
     root.mainloop()
 
 
@@ -1487,7 +2086,10 @@ def main_calculate_cop():
 def run_force_cube_analysis():
     """Runs the Force Cube Analysis."""
     try:
-        from . import force_cube_fig
+        try:
+            from . import force_cube_fig
+        except ImportError:
+            from vaila import force_cube_fig
         force_cube_fig.run_force_cube_fig()
     except ImportError as e:
         print(f"Error importing force_cube_fig: {e}")
@@ -1501,16 +2103,33 @@ def run_cop_balance_analysis():
 def run_force_cmj_analysis():
     """Runs the Force CMJ Analysis."""
     try:
-        from . import force_cmj
-        force_cmj.main()
+        try:
+            from . import force_cmj
+        except ImportError:
+            from vaila import force_cmj
+        
+        # Check if the module has a main function
+        if hasattr(force_cmj, 'main'):
+            force_cmj.main()
+        else:
+            messagebox.showinfo(
+                "Not Available",
+                "Force CMJ Analysis module is not yet implemented.\n\n"
+                "This feature is planned for a future release."
+            )
+            print("Force CMJ Analysis module is not yet implemented.")
     except ImportError as e:
         print(f"Error importing force_cmj: {e}")
+        messagebox.showerror("Error", f"Error importing force_cmj module: {e}")
 
 
 def run_fix_noise():
     """Runs the Fix Noise Signal Analysis."""
     try:
-        from . import fixnoise
+        try:
+            from . import fixnoise
+        except ImportError:
+            from vaila import fixnoise
         fixnoise.main()
     except ImportError as e:
         print(f"Error importing fixnoise: {e}")
@@ -1524,7 +2143,10 @@ def run_calculate_cop():
 def run_gait_analysis():
     """Runs the Gait Analysis for a single strike."""
     try:
-        from . import grf_gait
+        try:
+            from . import grf_gait
+        except ImportError:
+            from vaila import grf_gait
         grf_gait.main()
     except ImportError as e:
         print(f"Error importing gait_analysis: {e}")
