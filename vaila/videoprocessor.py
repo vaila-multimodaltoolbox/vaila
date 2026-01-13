@@ -212,10 +212,21 @@ def check_video_size(video_path):
 
 
 def process_videos_merge(source_dir, target_dir, use_text_file=False, text_file_path=None):
+    print("\n" + "="*60)
+    print("METHOD: MERGE (original + reverse)")
+    print("="*60)
+    print(f"Source directory: {source_dir}")
+    print(f"Target directory: {target_dir}")
+    print(f"Using text file: {use_text_file}")
+    if use_text_file and text_file_path:
+        print(f"Text file path: {text_file_path}")
+    print("="*60 + "\n")
+    
     # Create a new directory with timestamp
     timestamp = time.strftime("%Y%m%d%H%M%S")
     output_dir = os.path.join(target_dir, f"mergedvid_{timestamp}")
     os.makedirs(output_dir, exist_ok=True)
+    print(f"Output directory created: {output_dir}")
 
     video_files = []
 
@@ -236,10 +247,29 @@ def process_videos_merge(source_dir, target_dir, use_text_file=False, text_file_
                     video_files.append(entry.path)
 
     # Detect hardware encoder and available presets - moved outside the loop
+    print("\nDetecting hardware encoder...")
     encoder_info = detect_hardware_encoder()
     encoder = encoder_info["encoder"]
     quality_param = encoder_info["quality_param"]
     quality_values = encoder_info["quality_values"]
+    print(f"Selected encoder: {encoder}")
+
+    # Ask user to choose reverse percentage
+    reverse_percent_msg = (
+        "Choose percentage of video to reverse:\n\n"
+        "Options: 10, 20, 30, 40, 50, 60, 70, 80, 90, 100\n\n"
+        "Example: 50 = reverse the first 50% of the video\n"
+        "The reversed portion will be concatenated with the full original video."
+    )
+    reverse_percent = simpledialog.askinteger(
+        "Reverse Percentage", reverse_percent_msg, minvalue=10, maxvalue=100, initialvalue=100
+    )
+
+    # Handle case where user cancels dialog
+    if reverse_percent is None:
+        reverse_percent = 100  # Default to full reverse (original behavior)
+    
+    print(f"Reverse percentage selected: {reverse_percent}%")
 
     # Ask user to choose quality by number (1-9) - moved outside the loop
     quality_msg = (
@@ -302,25 +332,11 @@ def process_videos_merge(source_dir, target_dir, use_text_file=False, text_file_
                     print(f"Skipping {video_path} (output exists)")
                     continue
 
-            # Prepare command
-            ffmpeg_command = [
-                "ffmpeg",
-                "-i",
-                video_path,
-                "-filter_complex",
-                "[0:v]reverse[r];[r][0:v]concat=n=2:v=1:a=0[out]",
-                "-map",
-                "[out]",
-                "-c:v",
-                encoder,
-                "-threads",
-                "4",
-                f"-{quality_param}",
-                preset_value,
-                output_video,
-            ]
-
-            # Then get metadata
+            # Initialize variables for logging
+            reverse_frames = 0
+            reverse_duration = 0
+            
+            # Get metadata first to calculate reverse duration
             try:
                 # 1. Obter duração do vídeo
                 duration_cmd = [
@@ -341,6 +357,53 @@ def process_videos_merge(source_dir, target_dir, use_text_file=False, text_file_
                         text=True,
                     ).stdout.strip()
                 )
+                
+                # Calculate reverse duration based on percentage
+                reverse_duration = duration * (reverse_percent / 100.0)
+                reverse_duration_str = f"{reverse_duration:.6f}"
+                total_duration_str = f"{duration:.6f}"
+                
+                print(f"Video duration: {duration:.2f}s | Reverse portion: {reverse_duration:.2f}s ({reverse_percent}%)")
+                
+            except Exception as e:
+                print(f"Warning: Could not get video duration: {e}")
+                # Fallback: use full video reverse (original behavior)
+                reverse_duration_str = None
+                total_duration_str = None
+                duration = 0
+
+            # Prepare command based on reverse percentage
+            if reverse_percent == 100 or reverse_duration_str is None:
+                # Full reverse (original behavior or fallback)
+                filter_complex = "[0:v]reverse[r];[r][0:v]concat=n=2:v=1:a=0[out]"
+            else:
+                # Partial reverse: trim first X% of video, reverse it, then concat with full original
+                # Part 1: First X% of video (reversed)
+                # Part 2: Full original video
+                filter_complex = (
+                    f"[0:v]trim=start=0:end={reverse_duration_str},reverse,setpts=PTS-STARTPTS[rev];"
+                    f"[rev][0:v]concat=n=2:v=1:a=0[out]"
+                )
+            
+            ffmpeg_command = [
+                "ffmpeg",
+                "-i",
+                video_path,
+                "-filter_complex",
+                filter_complex,
+                "-map",
+                "[out]",
+                "-c:v",
+                encoder,
+                "-threads",
+                "4",
+                f"-{quality_param}",
+                preset_value,
+                output_video,
+            ]
+
+            # Continue getting metadata for logging
+            try:
 
                 # 2. Obter resolução
                 resolution_cmd = [
@@ -409,13 +472,21 @@ def process_videos_merge(source_dir, target_dir, use_text_file=False, text_file_
                 ).stdout.strip()
                 frame_rate = eval(fps_str)  # Convert "30000/1001" to float
 
-                # Calcular informações do vídeo resultante
-                merged_frames = total_frames * 2
-                merged_duration = duration * 2
-                reverse_start_frame = total_frames
+                # Calcular informações do vídeo resultante baseado na porcentagem
+                reverse_frames = int(total_frames * (reverse_percent / 100.0))
+                if reverse_percent == 100:
+                    merged_frames = total_frames * 2
+                    merged_duration = duration * 2
+                else:
+                    merged_frames = reverse_frames + total_frames
+                    merged_duration = reverse_duration + duration
+                reverse_start_frame = reverse_frames
 
                 print(
                     f"Video info: {width}x{height}, {frame_rate} fps, {duration:.2f}s, {total_frames} frames"
+                )
+                print(
+                    f"Reverse: {reverse_frames} frames ({reverse_percent}%) | Merged: {merged_frames} frames, {merged_duration:.2f}s"
                 )
 
             except Exception as e:
@@ -427,6 +498,8 @@ def process_videos_merge(source_dir, target_dir, use_text_file=False, text_file_
                 merged_frames = 0
                 merged_duration = 0
                 reverse_start_frame = 0
+                reverse_frames = 0
+                reverse_duration = 0
 
             subprocess.run(ffmpeg_command, check=True)
 
@@ -451,15 +524,26 @@ def process_videos_merge(source_dir, target_dir, use_text_file=False, text_file_
 
                 log_file.write("MERGED VIDEO STRUCTURE\n")
                 log_file.write("---------------------\n")
-                log_file.write("Part 1 (Original Video):\n")
-                log_file.write("  - Start Frame: 0\n")
-                log_file.write(f"  - End Frame: {total_frames - 1}\n")
-                log_file.write(f"  - Duration: {duration:.2f} seconds\n\n")
-
-                log_file.write("Part 2 (Reversed Video):\n")
-                log_file.write(f"  - Start Frame: {reverse_start_frame}\n")
-                log_file.write(f"  - End Frame: {merged_frames - 1}\n")
-                log_file.write(f"  - Duration: {duration:.2f} seconds\n\n")
+                log_file.write(f"Reverse Percentage: {reverse_percent}%\n\n")
+                
+                if reverse_percent == 100 or reverse_duration == 0:
+                    log_file.write("Part 1 (Reversed Video - Full):\n")
+                    log_file.write("  - Start Frame: 0 (reversed to end)\n")
+                    log_file.write(f"  - End Frame: {total_frames - 1} (reversed to 0)\n")
+                    log_file.write(f"  - Duration: {duration:.2f} seconds\n\n")
+                    log_file.write("Part 2 (Original Video - Full):\n")
+                    log_file.write("  - Start Frame: 0\n")
+                    log_file.write(f"  - End Frame: {total_frames - 1}\n")
+                    log_file.write(f"  - Duration: {duration:.2f} seconds\n\n")
+                else:
+                    log_file.write("Part 1 (Reversed Video - First {}%):\n".format(reverse_percent))
+                    log_file.write(f"  - Start Frame: 0 (reversed to frame {reverse_frames - 1})\n")
+                    log_file.write(f"  - End Frame: {reverse_frames - 1} (reversed to 0)\n")
+                    log_file.write(f"  - Duration: {reverse_duration:.2f} seconds\n\n")
+                    log_file.write("Part 2 (Original Video - Full):\n")
+                    log_file.write("  - Start Frame: 0\n")
+                    log_file.write(f"  - End Frame: {total_frames - 1}\n")
+                    log_file.write(f"  - Duration: {duration:.2f} seconds\n\n")
 
                 log_file.write("MERGED VIDEO DETAILS\n")
                 log_file.write("-------------------\n")
@@ -491,10 +575,21 @@ def process_videos_merge(source_dir, target_dir, use_text_file=False, text_file_
 
 
 def process_videos_split(source_dir, target_dir, use_text_file=False, text_file_path=None):
+    print("\n" + "="*60)
+    print("METHOD: SPLIT (keep second half)")
+    print("="*60)
+    print(f"Source directory: {source_dir}")
+    print(f"Target directory: {target_dir}")
+    print(f"Using text file: {use_text_file}")
+    if use_text_file and text_file_path:
+        print(f"Text file path: {text_file_path}")
+    print("="*60 + "\n")
+    
     # Create a new directory with timestamp
     timestamp = time.strftime("%Y%m%d%H%M%S")
     output_dir = os.path.join(target_dir, f"splitvid_{timestamp}")
     os.makedirs(output_dir, exist_ok=True)
+    print(f"Output directory created: {output_dir}")
 
     video_files = []
 
@@ -721,6 +816,14 @@ def process_videos_gui():
             "Invalid operation selected. Please enter 'm', 's', or 'multi'.",
         )
         return
+
+    # Print selected operation method
+    operation_names = {
+        "m": "MERGE (original + reverse)",
+        "s": "SPLIT (keep second half)",
+        "multi": "MULTI-VIDEO MERGE"
+    }
+    print(f"Selected operation: '{operation}' - {operation_names.get(operation, 'UNKNOWN')}")
 
     # For multi-video merge, call the new module
     if operation == "multi":

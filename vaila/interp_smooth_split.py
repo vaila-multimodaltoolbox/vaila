@@ -6,8 +6,8 @@ Author: Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 14 October 2024
-Update Date: 17 November 2025
-Version: 0.0.9
+Update Date: 12 January 2026
+Version: 0.0.10
 Python Version: 3.12.12
 
 Description:
