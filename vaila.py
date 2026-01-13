@@ -264,9 +264,11 @@ class Vaila(tk.Tk):
         if platform.system() == "Linux":
             try:
                 # Set both class name and instance name to 'vaila' for proper desktop integration
-                self.wm_class("vaila", "vaila")
-            except Exception as e:
-                print(f"Could not set WM_CLASS: {e}")
+                # Use tk.call instead of wm_class method which may not exist in all Tkinter versions
+                self.tk.call('wm', 'class', self._w, 'vaila', 'vaila')
+            except (AttributeError, Exception) as e:
+                # Silently ignore if WM_CLASS setting fails (not critical for functionality)
+                pass
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
