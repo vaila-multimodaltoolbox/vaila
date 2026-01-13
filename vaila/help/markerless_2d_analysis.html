@@ -1,96 +1,1099 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>vailá - markerless_2d_analysis</title>
+    <title>vailá Manual | Markerless 2D Analysis</title>
     <style>
+        :root {
+            --primary: #2563eb;
+            --secondary: #475569;
+            --accent: #f59e0b;
+            --bg: #f8fafc;
+            --text: #1e293b;
+            --code-bg: #e2e8f0;
+            --success: #22c55e;
+            --warning: #facc15;
+            --danger: #ef4444;
+        }
+
         body {
-            font-family: Arial, sans-serif;
-            margin: 40px;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
             line-height: 1.6;
-            background-color: #f5f5f5;
+            color: var(--text);
+            background: var(--bg);
+            margin: 0;
+            padding: 0;
         }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            background: white;
-            padding: 30px;
+
+        /* Sidebar Navigation */
+        .sidebar {
+            width: 280px;
+            height: 100vh;
+            background: #fff;
+            position: fixed;
+            left: 0;
+            top: 0;
+            border-right: 1px solid #e2e8f0;
+            overflow-y: auto;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .sidebar h2 {
+            font-size: 1.2rem;
+            color: var(--primary);
+            margin-top: 0;
+        }
+
+        .sidebar ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .sidebar li {
+            margin: 8px 0;
+        }
+
+        .sidebar ul ul {
+            margin-left: 15px;
+        }
+
+        .sidebar a {
+            text-decoration: none;
+            color: var(--secondary);
+            font-weight: 500;
+            display: block;
+            padding: 5px 10px;
+            border-radius: 4px;
+            transition: all 0.2s;
+            font-size: 0.9rem;
+        }
+
+        .sidebar a:hover {
+            background: #f1f5f9;
+            color: var(--primary);
+        }
+
+        /* Main Content */
+        .main-content {
+            margin-left: 280px;
+            padding: 40px 60px;
+            max-width: 1100px;
+        }
+
+        /* Hero Header */
+        header {
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 20px;
+            margin-bottom: 40px;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            color: var(--primary);
+            margin: 0;
+        }
+
+        .version-badge {
+            background: var(--accent);
+            color: #fff;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.9rem;
+            vertical-align: middle;
+            margin-left: 10px;
+        }
+
+        h2 {
+            color: var(--primary);
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 10px;
+            margin-top: 40px;
+        }
+
+        h3 {
+            color: var(--secondary);
+            margin-top: 30px;
+        }
+
+        /* Interface Cards */
+        .interface-card {
+            background: #fff;
+            border: 1px solid #e2e8f0;
             border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 24px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         }
-        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
-        h2 { color: #34495e; margin-top: 30px; }
-        .module-info { background: #ecf0f1; padding: 15px; border-radius: 5px; margin: 20px 0; }
-        .functions { background: #f8f9fa; padding: 15px; border-left: 4px solid #28a745; margin: 15px 0; }
-        .docstring { background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 15px 0; }
-        .errorr { background: #f8d7da; padding: 15px; border-left: 4px solid #dc3545; margin: 15px 0; }
-        code { background: #e9ecef; padding: 2px 6px; border-radius: 3px; }
-        pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; }
-        .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #6c757d; font-size: 0.9em; }
+
+        .interface-card h3 {
+            margin-top: 0;
+            color: var(--secondary);
+            border-bottom: 1px solid #f1f5f9;
+            padding-bottom: 10px;
+        }
+
+        /* Parameter Table */
+        .param-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+
+        .param-table th,
+        .param-table td {
+            text-align: left;
+            padding: 12px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .param-table th {
+            background: #f8fafc;
+            color: var(--secondary);
+            font-weight: 600;
+        }
+
+        .param-name {
+            font-family: 'Consolas', monospace;
+            color: var(--primary);
+            font-weight: bold;
+        }
+
+        /* Buttons & Controls */
+        .control-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .bg-button {
+            background: #e0e7ff;
+            color: #3730a3;
+            border: 1px solid #c7d2fe;
+        }
+
+        .bg-input {
+            background: #ecfccb;
+            color: #365314;
+            border: 1px solid #bef264;
+        }
+
+        .bg-check {
+            background: #fef3c7;
+            color: #92400e;
+            border: 1px solid #fde68a;
+        }
+
+        .bg-gpu {
+            background: #dbeafe;
+            color: #1e40af;
+            border: 1px solid #93c5fd;
+        }
+
+        /* Workflow Steps */
+        .workflow-step {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 20px;
+        }
+
+        .step-number {
+            background: var(--primary);
+            color: white;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            margin-right: 15px;
+            flex-shrink: 0;
+        }
+
+        /* Callouts */
+        .callout {
+            padding: 16px;
+            border-radius: 6px;
+            margin: 20px 0;
+        }
+
+        .callout-info {
+            background: #eff6ff;
+            border-left: 4px solid var(--primary);
+        }
+
+        .callout-warning {
+            background: #fffbeb;
+            border-left: 4px solid var(--warning);
+        }
+
+        .callout-danger {
+            background: #fef2f2;
+            border-left: 4px solid var(--danger);
+        }
+
+        .callout-success {
+            background: #f0fdf4;
+            border-left: 4px solid var(--success);
+        }
+
+        /* Code blocks */
+        code {
+            background: var(--code-bg);
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Consolas', monospace;
+            font-size: 0.9em;
+        }
+
+        /* Landmark list */
+        .landmark-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 8px;
+            margin: 15px 0;
+        }
+
+        .landmark-item {
+            background: #f8fafc;
+            padding: 8px 12px;
+            border-radius: 4px;
+            border: 1px solid #e2e8f0;
+            font-size: 0.9rem;
+        }
+
+        /* Output files list */
+        .output-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .output-list li {
+            background: #fff;
+            padding: 12px;
+            margin: 8px 0;
+            border-left: 3px solid var(--primary);
+            border-radius: 4px;
+        }
+
+        .output-list li strong {
+            color: var(--primary);
+        }
     </style>
 </head>
+
 <body>
-    <div class="container">
-        <h1>vailá - markerless_2d_analysis</h1>
 
-        <div class="module-info">
-            <h3>📋 Module Information</h3>
-            <p><strong>Category:</strong> Analysis</p>
-            <p><strong>File:</strong> vaila\markerless_2d_analysis.py</p>
-            <p><strong>Lines:</strong> 3659</p>
-            <p><strong>Size:</strong> ~140000 characters</p>
-            <p><strong>Version:</strong> 0.7.1</p>
-            <p><strong>Author:</strong> Paulo Roberto Pereira Santiago</p>
-            <p><strong>GUI Interface:</strong> ✅ Yes</p>
-        </div>
+    <!-- Sidebar -->
+    <nav class="sidebar">
+        <h2>vailá Docs</h2>
+        <ul>
+            <li><a href="#intro">Introduction</a></li>
+            <li><a href="#device-selection">Device Selection</a></li>
+            <li><a href="#interface">GUI Reference</a>
+                <ul>
+                    <li><a href="#tab-mediapipe">MediaPipe &amp; Model</a></li>
+                    <li><a href="#tab-processing">Processing</a></li>
+                    <li><a href="#tab-roi">ROI / Recorte</a></li>
+                    <li><a href="#tab-filters">Filtros &amp; Config</a></li>
+                </ul>
+            </li>
+            <li><a href="#landmarks">33 Body Landmarks</a></li>
+            <li><a href="#workflow">Workflow Tutorial</a></li>
+            <li><a href="#output">Output Files</a></li>
+            <li><a href="#technical">Technical Details</a></li>
+            <li><a href="#examples">Practical Examples</a></li>
+            <li><a href="#troubleshooting">Troubleshooting</a></li>
+        </ul>
+    </nav>
 
-        
+    <!-- Main Content -->
+    <main class="main-content">
 
-        <div class="docstring">
-            <h3>📖 Description</h3>
-            <pre>
-Project: vailá Multimodal Toolbox
-Script: markerless_2D_analysis.py - Markerless 2D Analysis with Video Resize
+        <header id="intro">
+            <h1>Markerless 2D Analysis <span class="version-badge">v0.8.0</span></h1>
+            <p>Comprehensive technical documentation for the vailá pose estimation module using MediaPipe Tasks API.</p>
+        </header>
 
-Author: Paulo Roberto Pereira Santiago
-Email: paulosantiago@usp.br
-GitHub: https://github.com/vaila-multimodaltoolbox/vaila
-Creation Date: 29 July 2024
-Update Date: 06 January 2026
-Version: 0.7.1
+        <section>
+            <h2>Overview</h2>
+            <p>
+                The <code>markerless_2d_analysis.py</code> module is a high-performance tool for biomechanical analysis.
+                It utilizes Google's <strong>MediaPipe Tasks API (0.10.31+)</strong> to detect <strong>33 skeletal landmarks</strong> in video data,
+                converting them into scientific-grade tracking data with pixel-accurate coordinates.
+            </p>
+            <div class="callout callout-info">
+                <strong>Key Features:</strong>
+                <ul>
+                    <li>Multi-GPU backend support (NVIDIA/CUDA, AMD/ROCm, Apple Silicon/MPS)</li>
+                    <li>Advanced ROI system with inclusion/exclusion zones and multiple frame ranges</li>
+                    <li>Automatic coordinate mapping back to original video dimensions</li>
+                    <li>Batch processing with memory management</li>
+                    <li>Simple Median Filter for jitter reduction</li>
+                </ul>
+            </div>
+            <div class="callout callout-warning">
+                <strong>Simplified Pipeline (v0.8.0):</strong> We have removed complex, unreliable filters (Kalman, Optical Flow)
+                in favor of a robust, deterministic approach using Multi-ROI and simple Median Filtering.
+            </div>
+        </section>
 
-Description:
-This script performs batch processing of videos for 2D pose estimation using
-MediaPipe's Pose model (Tasks API 0.10.31+). It processes videos from a specified input directory,
-overlays pose landmarks on each video frame, and exports both normalized and
-pixel-based landmark coordinates to CSV files. The script also generates a
-video with the landmarks overlaid on the original frames.
+        <section id="device-selection">
+            <h2>🖥️ Device Selection (GPU/CPU)</h2>
+            <p>When you launch the script, it automatically detects available GPU backends and presents a device selection dialog.</p>
 
-NEW FEATURES (v0.7.1):
-- MediaPipe Tasks API (0.10.31+) migration
-- Bounding box (ROI) selection for small subjects or multi-person scenarios
-- Optional resize of cropped region for improved detection
-- TOML configuration with GUI auto-population
-- Portable debug logging system
-- Video resize functionality (2x-8x upscaling)
-- Advanced filtering algorithms
+            <div class="interface-card">
+                <h3>Available Backends</h3>
+                <table class="param-table">
+                    <thead>
+                        <tr>
+                            <th>Backend</th>
+                            <th>Platform</th>
+                            <th>Requirements</th>
+                            <th>Performance</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><span class="control-badge bg-gpu">CPU</span></td>
+                            <td>All</td>
+                            <td>None (always available)</td>
+                            <td>Standard speed</td>
+                        </tr>
+                        <tr>
+                            <td><span class="control-badge bg-gpu">NVIDIA CUDA</span></td>
+                            <td>Linux, Windows</td>
+                            <td>NVIDIA GPU + CUDA drivers + nvidia-smi</td>
+                            <td>Very Fast (3-5x faster)</td>
+                        </tr>
+                        <tr>
+                            <td><span class="control-badge bg-gpu">AMD ROCm</span></td>
+                            <td>Linux</td>
+                            <td>AMD GPU + ROCm installation + rocm-smi</td>
+                            <td>Very Fast (3-5x faster)</td>
+                        </tr>
+                        <tr>
+                            <td><span class="control-badge bg-gpu">Apple MPS</span></td>
+                            <td>macOS (arm64)</td>
+                            <td>Apple Silicon (M1/M2/M3)</td>
+                            <td>Fast (2-3x faster)</td>
+                        </tr>
+                    </tbody>
+                </table>
 
-The user can configure key MediaPipe parameters via a graphical interface,
-including detection confidence, tracking confidence, model...</pre>
-        </div>
+                <h4>How Device Selection Works</h4>
+                <ol>
+                    <li><strong>Detection Phase:</strong> Script checks for each backend using system commands (nvidia-smi, rocm-smi, system_profiler)</li>
+                    <li><strong>Testing Phase:</strong> For each detected GPU, MediaPipe is tested with a dummy image to verify the delegate works</li>
+                    <li><strong>Dialog:</strong> User selects CPU or an available GPU backend</li>
+                    <li><strong>Processing:</strong> All videos in the batch are processed with the selected device</li>
+                </ol>
 
-        <div class="functions">
-            <h3>🔧 Main Functions</h3>
-            <p><strong>Total functions found:</strong> 20</p>
-            <ul><li><code>butter_filter</code></li><li><code>savgol_smooth</code></li><li><code>lowess_smooth</code></li><li><code>spline_smooth</code></li><li><code>kalman_smooth</code></li><li><code>arima_smooth</code></li><li><code>get_default_config</code></li><li><code>save_config_to_toml</code></li><li><code>load_config_from_toml</code></li><li><code>get_config_filepath</code></li><li><code>get_pose_config</code></li><li><code>resize_video_opencv</code></li><li><code>convert_coordinates_to_original</code></li><li><code>apply_interpolation_and_smoothing</code></li><li><code>apply_temporal_filter</code></li><li><code>estimate_occluded_landmarks</code></li><li><code>pad_signal</code></li><li><code>is_linux_system</code></li><li><code>get_system_memory_info</code></li><li><code>should_use_batch_processing</code></li></ul>
-        </div>
+                <div class="callout callout-info">
+                    <strong>GPU Testing:</strong> The script performs a quick test before allowing GPU selection.
+                    If a GPU is detected but the test fails, it will be marked as unavailable and you'll need to use CPU.
+                </div>
+            </div>
+        </section>
 
-        <div class="footer">
-            <p>📅 Generated automatically on: 15/10/2025 08:04:44</p>
-            <p>🔗 Part of vailá - Multimodal Toolbox</p>
-            <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
-        </div>
-    </div>
+        <section id="interface">
+            <h2>🖥️ GUI Reference Guide</h2>
+            <p>Detailed explanation of every control available in the graphical interface.</p>
+
+            <!-- Tab 1: MediaPipe & Model -->
+            <div class="interface-card" id="tab-mediapipe">
+                <h3>Tab 1: MediaPipe &amp; Model</h3>
+                <p>Controls the core AI detection engine.</p>
+
+                <table class="param-table">
+                    <thead>
+                        <tr>
+                            <th>Parameter</th>
+                            <th>Type</th>
+                            <th>Default</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><span class="param-name">Detection Confidence</span></td>
+                            <td><span class="control-badge bg-input">Float (0-1)</span></td>
+                            <td>0.1</td>
+                            <td>Minimum confidence required to detect a person. <strong>Lower (0.1-0.3)</strong> is better for difficult videos (distant subjects, partial occlusion). <strong>Higher (0.5-0.9)</strong> reduces false positives but may miss people.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="param-name">Tracking Confidence</span></td>
+                            <td><span class="control-badge bg-input">Float (0-1)</span></td>
+                            <td>0.1</td>
+                            <td>Minimum confidence to keep tracking the same person across frames. Lower values maintain tracking longer but may switch between people. Higher values drop tracking more aggressively.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="param-name">Model Complexity</span></td>
+                            <td><span class="control-badge bg-input">Int (0-2)</span></td>
+                            <td>2</td>
+                            <td>
+                                <strong>0 (Lite):</strong> Fastest, least accurate. Good for real-time applications.<br>
+                                <strong>1 (Full):</strong> Balanced speed and accuracy.<br>
+                                <strong>2 (Heavy):</strong> Slowest, most accurate. <strong>Recommended for scientific analysis.</strong>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><span class="param-name">Enable Segmentation</span></td>
+                            <td><span class="control-badge bg-check">Boolean</span></td>
+                            <td>False</td>
+                            <td>If True, generates a segmentation mask (person silhouette/background removal). <strong>Significantly slower</strong> and usually not needed for pose estimation.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="param-name">Smooth Segmentation</span></td>
+                            <td><span class="control-badge bg-check">Boolean</span></td>
+                            <td>False</td>
+                            <td>Only works if Enable Segmentation is True. Smooths the segmentation mask across frames.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="param-name">Static Image Mode</span></td>
+                            <td><span class="control-badge bg-check">Boolean</span></td>
+                            <td>False</td>
+                            <td>If True, treats each frame independently (no temporal tracking). <strong>Slower</strong> but more robust for single images. Keep False for videos.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="param-name">Apply Internal Filtering</span></td>
+                            <td><span class="control-badge bg-check">Boolean</span></td>
+                            <td>True</td>
+                            <td>MediaPipe's built-in smoothing. Recommended to keep enabled for smoother results.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="param-name">Estimate Occluded</span></td>
+                            <td><span class="control-badge bg-check">Boolean</span></td>
+                            <td>True</td>
+                            <td>If True, MediaPipe uses anatomical constraints to guess the position of hidden body parts (e.g., foot behind leg, hand behind back). <strong>Recommended for biomechanical analysis.</strong></td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4>Post-Processing Options</h4>
+                <div class="callout callout-info">
+                    <span class="control-badge bg-check">Checkbox</span> <strong>Enable Median Filter</strong><br>
+                    Applies a simple temporal smoothing filter to reduce jitter in landmark coordinates.<br>
+                    <strong>Kernel Size:</strong> Number of frames to average (3, 5, or 7).
+                    <ul>
+                        <li><strong>3:</strong> Light smoothing, minimal lag</li>
+                        <li><strong>5:</strong> Moderate smoothing (recommended)</li>
+                        <li><strong>7:</strong> Heavy smoothing, more lag but very stable</li>
+                    </ul>
+                    <strong>Note:</strong> This is applied AFTER MediaPipe detection, to the coordinate time-series.
+                </div>
+            </div>
+
+            <!-- Tab 2: Processing -->
+            <div class="interface-card" id="tab-processing">
+                <h3>Tab 2: Processing</h3>
+                <p>Controls video manipulation prior to analysis.</p>
+
+                <table class="param-table">
+                    <thead>
+                        <tr>
+                            <th>Parameter</th>
+                            <th>Type</th>
+                            <th>Default</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><span class="param-name">Enable Resize</span></td>
+                            <td><span class="control-badge bg-check">Boolean</span></td>
+                            <td>False</td>
+                            <td>Upscales the <strong>entire video</strong> before processing. Use only if video resolution is very low (e.g., 360p, 480p). <strong>Warning:</strong> This is memory-intensive and slow. Prefer using ROI cropping with resize instead.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="param-name">Resize Scale</span></td>
+                            <td><span class="control-badge bg-input">Int (2-8)</span></td>
+                            <td>2</td>
+                            <td>Factor to multiply resolution (e.g., 2.0 turns 720p into 1440p). Higher values = better detection but much slower processing and higher memory usage.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="param-name">Enable Initial Padding</span></td>
+                            <td><span class="control-badge bg-check">Boolean</span></td>
+                            <td>True</td>
+                            <td>Repeats the first frame multiple times (default: 30 frames) at the start of processing. This lets MediaPipe "settle" and stabilize before motion starts. <strong>Recommended for all videos.</strong></td>
+                        </tr>
+                        <tr>
+                            <td><span class="param-name">Initial Padding Frames</span></td>
+                            <td><span class="control-badge bg-input">Int</span></td>
+                            <td>30</td>
+                            <td>Number of times to repeat the first frame. 30-60 frames is typical. More padding = more stabilization but longer processing.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="param-name">Enable Reverse Padding</span></td>
+                            <td><span class="control-badge bg-check">Boolean</span></td>
+                            <td>False</td>
+                            <td>Repeats the last frame multiple times at the end of processing. Useful for ensuring stable tracking at video end.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="param-name">Reverse Padding Frames</span></td>
+                            <td><span class="control-badge bg-input">Int</span></td>
+                            <td>0</td>
+                            <td>Number of times to repeat the last frame. Only used if Enable Reverse Padding is True.</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="callout callout-warning">
+                    <strong>Video Resize vs. ROI Resize:</strong><br>
+                    <strong>Video Resize</strong> (this tab): Upscales the entire video. Memory-intensive.<br>
+                    <strong>ROI Resize</strong> (ROI tab): Upscales only the cropped region. Much more efficient.<br>
+                    <strong>Recommendation:</strong> Use ROI Resize instead of Video Resize whenever possible.
+                </div>
+            </div>
+
+            <!-- Tab 3: ROI -->
+            <div class="interface-card" id="tab-roi">
+                <h3>Tab 3: ROI / Recorte (Critical)</h3>
+                <p>Tools to focus analysis on specific areas. <strong>Essential for small subjects or multi-person scenarios.</strong></p>
+
+                <h4>Basic ROI Selection</h4>
+                <table class="param-table">
+                    <tbody>
+                        <tr>
+                            <td><span class="param-name">Enable Cropping</span></td>
+                            <td><span class="control-badge bg-check">Checkbox</span></td>
+                            <td>False</td>
+                            <td>Enable ROI cropping. Must be checked for any ROI functionality to work.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="param-name">BBox Coordinates</span></td>
+                            <td><span class="control-badge bg-input">Int (pixels)</span></td>
+                            <td>0, 0, 1920, 1080</td>
+                            <td>Manual entry of bounding box: X_min, Y_min, X_max, Y_max. Coordinates are in pixels relative to video resolution.</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4>Interactive ROI Selection</h4>
+                <p>
+                    <span class="control-badge bg-button">Button</span> <strong>Select BBox from Video:</strong><br>
+                    Opens the first frame of the first video in your input directory.
+                    <strong>Click and drag</strong> to draw a rectangular box around the subject.
+                    The window is resizable - you can resize it to see the full frame better.
+                    Press <strong>SPACE</strong> or <strong>ENTER</strong> to confirm, <strong>ESC</strong> to cancel.
+                </p>
+                <p>
+                    <span class="control-badge bg-button">Button</span> <strong>Select Polygon (Free):</strong><br>
+                    Draw a custom polygonal shape for more precise ROI selection.
+                </p>
+                <ul>
+                    <li><strong>Left-click:</strong> Add point to polygon</li>
+                    <li><strong>Right-click:</strong> Remove last point</li>
+                    <li><strong>Enter:</strong> Confirm selection (requires at least 3 points)</li>
+                    <li><strong>ESC:</strong> Cancel</li>
+                    <li><strong>R:</strong> Reset all points</li>
+                </ul>
+                <p>Good for excluding bystanders or irregular shapes. The polygon is automatically converted to a bounding box for display, but the polygon shape is preserved in the TOML config.</p>
+
+                <h4>Resize Cropped Region</h4>
+                <p>
+                    <span class="control-badge bg-check">Checkbox</span> <strong>Resize Cropped Region:</strong><br>
+                    If enabled, the cropped area (ROI) is upscaled by <strong>Crop Scale</strong> (e.g. 2x, 3x, 4x) before being sent to MediaPipe.<br>
+                    <strong>Crucial for detecting people far away from the camera.</strong> This is much more efficient than resizing the entire video.
+                </p>
+                <p>
+                    <span class="control-badge bg-input">Crop Scale (2-8):</span><br>
+                    Factor to upscale the cropped region.
+                </p>
+                <ul>
+                    <li><strong>2x:</strong> Good for moderately distant subjects</li>
+                    <li><strong>3-4x:</strong> Better for very small subjects</li>
+                    <li><strong>5-8x:</strong> For extremely distant or tiny people (may introduce artifacts)</li>
+                </ul>
+
+                <h4>Multiple ROIs (Advanced)</h4>
+                <p>
+                    <span class="control-badge bg-button">Button</span> <strong>Setup Ranges:</strong><br>
+                    Configure different ROIs for different parts of the video. Essential when:
+                </p>
+                <ul>
+                    <li>Camera zooms in/out during recording</li>
+                    <li>Subject moves closer/farther from camera</li>
+                    <li>Different areas need different processing settings</li>
+                </ul>
+
+                <h5>How Multiple ROI Ranges Work</h5>
+                <ol>
+                    <li>Enter the number of ranges you want to configure</li>
+                    <li>For each range, specify:
+                        <ul>
+                            <li><strong>Start Frame:</strong> First frame of this range (0-based)</li>
+                            <li><strong>End Frame:</strong> Last frame (use "inf" for last frame of video)</li>
+                            <li><strong>ROI Type:</strong> "inclusion" (detect inside) or "exclusion" (ignore this area)</li>
+                            <li><strong>Resize Scale:</strong> For inclusion ROIs only</li>
+                        </ul>
+                    </li>
+                    <li>Visually select the ROI bounding box from the video frame at the start frame</li>
+                </ol>
+
+                <div class="callout callout-warning">
+                    <strong>Critical Rule: Ranges Must Be Sequential</strong><br>
+                    ✅ <strong>Correct:</strong> Range 1 (frames 0-300), Range 2 (frames 301-inf)<br>
+                    ❌ <strong>Wrong:</strong> Range 1 (frames 0-300), Range 2 (frames 0-inf) - overlapping<br>
+                    ❌ <strong>Wrong:</strong> Range 1 (frames 100-200), Range 2 (frames 50-150) - overlapping<br><br>
+                    The script sorts ranges by specificity (longest first, shortest last). The <strong>last matching range wins</strong>, so specific ranges override general ones.
+                </div>
+
+                <h5>Inclusion vs. Exclusion ROIs</h5>
+                <p>
+                    <strong>Inclusion ROI ("inclusion" or "1"):</strong> MediaPipe will only detect poses <strong>inside</strong> this region.
+                    Everything outside is ignored. Use this for focusing on a specific person or area.
+                </p>
+                <p>
+                    <strong>Exclusion ROI ("exclusion" or "0"):</strong> MediaPipe will <strong>ignore</strong> this region.
+                    Useful for masking out distracting elements (bystanders, equipment, etc.).
+                    Multiple exclusion ROIs can be active simultaneously.
+                </p>
+                <div class="callout callout-info">
+                    <strong>Example Use Case:</strong><br>
+                    You have a video where:
+                    <ul>
+                        <li>Frames 0-500: Subject is far away, needs large ROI with 4x resize</li>
+                        <li>Frames 501-inf: Subject moves closer, needs smaller ROI with 2x resize</li>
+                        <li>Frames 200-400: There's a bystander on the left side you want to exclude</li>
+                    </ul>
+                    <strong>Solution:</strong>
+                    <ul>
+                        <li>Range 1: 0-500, inclusion, large ROI, 4x resize</li>
+                        <li>Range 2: 200-400, exclusion, left side bounding box</li>
+                        <li>Range 3: 501-inf, inclusion, smaller ROI, 2x resize</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Tab 4: Filters -->
+            <div class="interface-card" id="tab-filters">
+                <h3>Tab 4: Filtros &amp; Config</h3>
+                <p>File management and configuration persistence.</p>
+
+                <h4>TOML Configuration Management</h4>
+                <ul>
+                    <li><span class="control-badge bg-button">Load TOML</span>: Load a previously saved configuration file. All GUI fields will be populated with the loaded values.</li>
+                    <li><span class="control-badge bg-button">Save Current</span>: Save current screen settings to a .toml file. This includes all parameters, ROI coordinates, and multiple ROI ranges.</li>
+                    <li><span class="control-badge bg-button">Create Template</span>: Create a default blank configuration file with all parameters set to defaults. Useful for starting fresh or sharing templates.</li>
+                    <li><span class="control-badge bg-button">Help</span>: Opens this help file in your browser.</li>
+                </ul>
+
+                <div class="callout callout-info">
+                    <strong>TOML File Format:</strong><br>
+                    Configuration files are saved in TOML format, which is human-readable and easy to edit manually if needed.
+                    The file includes detailed comments explaining each parameter.
+                </div>
+            </div>
+        </section>
+
+        <section id="landmarks">
+            <h2>📍 The 33 Body Landmarks</h2>
+            <p>MediaPipe detects 33 key points on the human body. Each landmark has X, Y, and Z coordinates (Z is depth, typically less accurate in 2D analysis).</p>
+
+            <div class="landmark-grid">
+                <div class="landmark-item">0. nose</div>
+                <div class="landmark-item">1. left_eye_inner</div>
+                <div class="landmark-item">2. left_eye</div>
+                <div class="landmark-item">3. left_eye_outer</div>
+                <div class="landmark-item">4. right_eye_inner</div>
+                <div class="landmark-item">5. right_eye</div>
+                <div class="landmark-item">6. right_eye_outer</div>
+                <div class="landmark-item">7. left_ear</div>
+                <div class="landmark-item">8. right_ear</div>
+                <div class="landmark-item">9. mouth_left</div>
+                <div class="landmark-item">10. mouth_right</div>
+                <div class="landmark-item">11. left_shoulder</div>
+                <div class="landmark-item">12. right_shoulder</div>
+                <div class="landmark-item">13. left_elbow</div>
+                <div class="landmark-item">14. right_elbow</div>
+                <div class="landmark-item">15. left_wrist</div>
+                <div class="landmark-item">16. right_wrist</div>
+                <div class="landmark-item">17. left_pinky</div>
+                <div class="landmark-item">18. right_pinky</div>
+                <div class="landmark-item">19. left_index</div>
+                <div class="landmark-item">20. right_index</div>
+                <div class="landmark-item">21. left_thumb</div>
+                <div class="landmark-item">22. right_thumb</div>
+                <div class="landmark-item">23. left_hip</div>
+                <div class="landmark-item">24. right_hip</div>
+                <div class="landmark-item">25. left_knee</div>
+                <div class="landmark-item">26. right_knee</div>
+                <div class="landmark-item">27. left_ankle</div>
+                <div class="landmark-item">28. right_ankle</div>
+                <div class="landmark-item">29. left_heel</div>
+                <div class="landmark-item">30. right_heel</div>
+                <div class="landmark-item">31. left_foot_index</div>
+                <div class="landmark-item">32. right_foot_index</div>
+            </div>
+
+            <div class="callout callout-info">
+                <strong>Coordinate Systems:</strong>
+                <ul>
+                    <li><strong>Normalized (0-1):</strong> Coordinates relative to video dimensions. X and Y range from 0.0 to 1.0.</li>
+                    <li><strong>Pixel:</strong> Absolute pixel coordinates in the original video resolution.</li>
+                    <li><strong>Z (Depth):</strong> Relative depth estimate. Less accurate than X/Y, but useful for some analyses.</li>
+                </ul>
+            </div>
+        </section>
+
+        <section id="workflow">
+            <h2>🚀 Workflow Tutorial: From Video to Data</h2>
+
+            <div class="workflow-step">
+                <div class="step-number">1</div>
+                <div>
+                    <strong>Launch and Select Device</strong>
+                    <p>Run the script. It will automatically detect available GPU backends and show a device selection dialog.</p>
+                    <p>Choose CPU (always available) or a GPU backend if available. GPU processing is 3-5x faster.</p>
+                </div>
+            </div>
+
+            <div class="workflow-step">
+                <div class="step-number">2</div>
+                <div>
+                    <strong>Select Input and Output Directories</strong>
+                    <p>The script will ask for:</p>
+                    <ul>
+                        <li><strong>Input Directory:</strong> Where your video files (.mp4, .avi, .mov) are located</li>
+                        <li><strong>Output Directory:</strong> Where processed files (CSVs, annotated videos) will be saved</li>
+                    </ul>
+                    <p>A timestamped subdirectory will be created in the output directory for this processing session.</p>
+                </div>
+            </div>
+
+            <div class="workflow-step">
+                <div class="step-number">3</div>
+                <div>
+                    <strong>Configure ROI (The Most Important Step)</strong>
+                    <p>Go to the <strong>ROI / Recorte</strong> tab.</p>
+                    <ol>
+                        <li>Click <strong>Select BBox from Video</strong></li>
+                        <li>Draw a box around the subject in the first frame. Allow margin for movement.</li>
+                        <li>Check <strong>Enable Cropping</strong></li>
+                        <li>Check <strong>Resize Cropped Region</strong> and set Scale to 2 or 3</li>
+                    </ol>
+                    <p><strong>Why ROI is critical:</strong> Focusing on the subject dramatically improves detection accuracy, especially for distant or small subjects.</p>
+                </div>
+            </div>
+
+            <div class="workflow-step">
+                <div class="step-number">4</div>
+                <div>
+                    <strong>Optional: Handle Dynamic Scenarios</strong>
+                    <p>If the camera zooms or the subject moves significantly:</p>
+                    <ol>
+                        <li>Click <strong>Setup Ranges</strong> in the ROI tab</li>
+                        <li>Define Range 1: Start frame 0, End frame X (for zoomed-in part)</li>
+                        <li>Define Range 2: Start frame X+1, End frame "inf" (for wide-angle part)</li>
+                        <li>Select appropriate ROI for each range</li>
+                    </ol>
+                </div>
+            </div>
+
+            <div class="workflow-step">
+                <div class="step-number">5</div>
+                <div>
+                    <strong>Save Configuration (Recommended)</strong>
+                    <p>Go to <strong>Filtros &amp; Config</strong> tab. Click <strong>Save Current</strong> to save your settings to a TOML file.</p>
+                    <p>This allows you to:</p>
+                    <ul>
+                        <li>Reuse settings for future videos</li>
+                        <li>Share configurations with collaborators</li>
+                        <li>Reproduce analyses exactly</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="workflow-step">
+                <div class="step-number">6</div>
+                <div>
+                    <strong>Start Processing</strong>
+                    <p>Click <strong>OK</strong> at the bottom of the configuration window.</p>
+                    <p>The script will:</p>
+                    <ul>
+                        <li>Process each video in the input directory</li>
+                        <li>Show progress in the console</li>
+                        <li>Generate output files (see Output Files section)</li>
+                        <li>Display ROI information every 500 frames</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <section id="output">
+            <h2>📁 Output Files</h2>
+            <p>For each processed video, the following files are generated in a subdirectory named after the video:</p>
+
+            <ul class="output-list">
+                <li>
+                    <strong>*_annotated.mp4</strong><br>
+                    The original video with pose landmarks overlaid. Green circles show landmark positions, yellow lines show skeleton connections.
+                    Red rectangles show active ROI boundaries (if cropping is enabled). Useful for visual verification of detection quality.
+                </li>
+                <li>
+                    <strong>*_mp_norm.csv</strong><br>
+                    Normalized landmark coordinates (0-1 scale). Each row is a frame. Columns: <code>frame_index</code>, then <code>{landmark_name}_x</code>, <code>{landmark_name}_y</code>, <code>{landmark_name}_z</code> for all 33 landmarks.
+                    Coordinates are relative to video dimensions (0.0 = left/top edge, 1.0 = right/bottom edge).
+                </li>
+                <li>
+                    <strong>*_mp_pixel.csv</strong><br>
+                    Pixel coordinates in original video resolution. Same structure as normalized CSV, but values are in absolute pixels.
+                    Useful for direct pixel-based analysis or integration with other tools.
+                </li>
+                <li>
+                    <strong>*_pixel_vaila.csv</strong><br>
+                    vailá format CSV: <code>frame, p1_x, p1_y, p2_x, p2_y, ...</code> (33 points = p1 to p33).
+                    This format is compatible with other vailá analysis tools. Z coordinates are excluded (2D only).
+                </li>
+                <li>
+                    <strong>configuration_used.toml</strong><br>
+                    A copy of the exact configuration used for this video. Includes all parameters, ROI settings, and multiple ROI ranges.
+                    Essential for reproducibility.
+                </li>
+                <li>
+                    <strong>log_info.txt</strong><br>
+                    Processing log with:
+                    <ul>
+                        <li>Video metadata (resolution, FPS, duration, frame count)</li>
+                        <li>Configuration used (model complexity, detection confidence, etc.)</li>
+                        <li>Processing time</li>
+                        <li>Output file locations</li>
+                    </ul>
+                </li>
+            </ul>
+
+            <div class="callout callout-info">
+                <strong>Coordinate Mapping:</strong><br>
+                If you used ROI cropping or video resizing, coordinates are automatically mapped back to the original video dimensions.
+                The pixel CSV always contains coordinates in the original video's coordinate system, regardless of any preprocessing.
+            </div>
+        </section>
+
+        <section id="technical">
+            <h2>🔬 Technical Details</h2>
+
+            <h3>The Processing Pipeline</h3>
+            <ol>
+                <li><strong>Video Loading:</strong> Video is opened using OpenCV. Metadata (FPS, resolution, frame count) is extracted.</li>
+                <li><strong>Frame-by-Frame Processing:</strong> Each frame is processed sequentially with monotonically increasing timestamps.</li>
+                <li><strong>ROI Selection:</strong> For each frame, the script checks <code>bounding_box_ranges</code> to determine which ROI applies:
+                    <ul>
+                        <li>Ranges are sorted by duration (longest first, shortest last)</li>
+                        <li>All matching ranges are evaluated</li>
+                        <li>Inclusion ROIs: Last match wins (specific overrides general)</li>
+                        <li>Exclusion ROIs: All matching exclusions are applied</li>
+                    </ul>
+                </li>
+                <li><strong>Exclusion Masking:</strong> If exclusion ROIs are active, a mask is created and applied to black out excluded regions.</li>
+                <li><strong>Inclusion Cropping:</strong> If an inclusion ROI is active, the frame is cropped to that region.</li>
+                <li><strong>Resize Crop:</strong> If enabled, the cropped region is upscaled using bicubic interpolation.</li>
+                <li><strong>MediaPipe Inference:</strong> The processed frame is sent to MediaPipe Tasks API for pose detection.</li>
+                <li><strong>Coordinate Mapping:</strong> Detected landmarks (in normalized crop coordinates) are mapped back through:
+                    <ul>
+                        <li>Crop resize scale (if enabled)</li>
+                        <li>ROI offset (to get full-frame coordinates)</li>
+                        <li>Video resize scale (if entire video was resized)</li>
+                        <li>Final normalization to original video dimensions</li>
+                    </ul>
+                </li>
+                <li><strong>Occluded Estimation:</strong> If enabled, anatomical constraints fill in missing landmarks.</li>
+                <li><strong>Median Filtering:</strong> If enabled, coordinates are smoothed using a temporal median filter.</li>
+                <li><strong>Visualization:</strong> Landmarks and skeleton are drawn on a copy of the original frame.</li>
+                <li><strong>CSV Export:</strong> Coordinates are written to CSV files in multiple formats.</li>
+            </ol>
+
+            <h3>Coordinate System Details</h3>
+            <p>The script handles multiple coordinate transformations automatically:</p>
+            <ol>
+                <li><strong>MediaPipe Output:</strong> Normalized coordinates (0-1) relative to the processed frame (may be cropped/resized)</li>
+                <li><strong>After Crop Resize:</strong> Converted from resized crop space to original crop space</li>
+                <li><strong>After ROI Offset:</strong> Converted from crop coordinates to full processing frame coordinates</li>
+                <li><strong>After Video Resize:</strong> Converted from processing frame to original video dimensions</li>
+                <li><strong>Final Output:</strong> Normalized (0-1) or pixel coordinates in original video space</li>
+            </ol>
+
+            <h3>Memory Management</h3>
+            <p>The script includes several memory optimization features:</p>
+            <ul>
+                <li><strong>Batch Processing:</strong> For very long videos, frames are processed in batches</li>
+                <li><strong>CPU Throttling:</strong> On Linux, CPU usage is monitored and throttled if it exceeds 150%</li>
+                <li><strong>Garbage Collection:</strong> Aggressive memory cleanup between videos</li>
+                <li><strong>Frame Sleep:</strong> Small delays between frames to prevent CPU overload</li>
+            </ul>
+
+            <h3>Model Download</h3>
+            <p>MediaPipe models are automatically downloaded on first use and cached in <code>vaila/models/</code>:</p>
+            <ul>
+                <li><strong>pose_landmarker_lite.task:</strong> Complexity 0 (fastest)</li>
+                <li><strong>pose_landmarker_full.task:</strong> Complexity 1 (balanced)</li>
+                <li><strong>pose_landmarker_heavy.task:</strong> Complexity 2 (most accurate, recommended)</li>
+            </ul>
+        </section>
+
+        <section id="examples">
+            <h2>💡 Practical Examples</h2>
+
+            <h3>Example 1: Distant Subject (Sports Field)</h3>
+            <div class="callout callout-info">
+                <strong>Scenario:</strong> Video of an athlete on a large field, subject is small in frame.<br>
+                <strong>Solution:</strong>
+                <ol>
+                    <li>Select ROI around the athlete (leave margin for movement)</li>
+                    <li>Enable Resize Cropped Region with Scale 3 or 4</li>
+                    <li>Set Detection Confidence to 0.1 (lower for distant subjects)</li>
+                    <li>Use Model Complexity 2 (Heavy) for best accuracy</li>
+                </ol>
+            </div>
+
+            <h3>Example 2: Multi-Person with Exclusion</h3>
+            <div class="callout callout-info">
+                <strong>Scenario:</strong> Video with main subject and bystanders. You want to track only the main subject.<br>
+                <strong>Solution:</strong>
+                <ol>
+                    <li>Set up Inclusion ROI around main subject</li>
+                    <li>Set up Exclusion ROI around bystander areas</li>
+                    <li>Use polygon ROI if bystanders are in irregular shapes</li>
+                </ol>
+            </div>
+
+            <h3>Example 3: Camera Zoom During Recording</h3>
+            <div class="callout callout-info">
+                <strong>Scenario:</strong> Camera starts zoomed in, then zooms out halfway through.<br>
+                <strong>Solution:</strong>
+                <ol>
+                    <li>Range 1: Frames 0-500, small ROI (zoomed-in area), 2x resize</li>
+                    <li>Range 2: Frames 501-inf, larger ROI (wide-angle), 3x resize</li>
+                    <li>Both ranges use inclusion type</li>
+                </ol>
+            </div>
+
+            <h3>Example 4: Low Resolution Video</h3>
+            <div class="callout callout-info">
+                <strong>Scenario:</strong> Video is 360p or 480p, subject is blurry.<br>
+                <strong>Solution:</strong>
+                <ol>
+                    <li>Enable Video Resize with Scale 2 (upscale entire video to 720p or 960p)</li>
+                    <li>OR use ROI cropping with Resize Crop Scale 3-4 (more efficient)</li>
+                    <li>Enable Median Filter with Kernel 5 to reduce jitter</li>
+                </ol>
+            </div>
+        </section>
+
+        <section id="troubleshooting">
+            <h2>❓ Troubleshooting</h2>
+
+            <div class="callout callout-danger">
+                <strong>Problem: "The video has a 'hole' (missing detections) at the start or in specific frame ranges."</strong><br>
+                <strong>Cause:</strong> Overlapping ROI ranges. You likely have overlapping inclusion ranges (e.g., Range 1: 0-300 and Range 2: 0-inf).<br>
+                <strong>Fix:</strong> Use sequential, non-overlapping ranges: Range 1 (0-300), Range 2 (301-inf). The script sorts ranges, but overlapping inclusion ranges can cause conflicts.
+            </div>
+
+            <div class="callout callout-warning">
+                <strong>Problem: "Detection is very jittery / noisy, landmarks jump around."</strong><br>
+                <strong>Causes:</strong>
+                <ul>
+                    <li><code>Resize Crop Scale</code> too high (6x or 8x) introduces pixel artifacts</li>
+                    <li>Low video quality or compression artifacts</li>
+                    <li>Fast motion with low FPS</li>
+                </ul>
+                <strong>Fixes:</strong>
+                <ul>
+                    <li>Reduce Resize Crop Scale to 2x or 3x</li>
+                    <li>Enable Median Filter with Kernel 5 or 7</li>
+                    <li>Increase Model Complexity to 2 (Heavy)</li>
+                </ul>
+            </div>
+
+            <div class="callout callout-warning">
+                <strong>Problem: "No detections at all, or detections stop after a few frames."</strong><br>
+                <strong>Causes:</strong>
+                <ul>
+                    <li>Detection Confidence too high (e.g., 0.7+)</li>
+                    <li>Subject too small or too far away</li>
+                    <li>ROI not covering the subject properly</li>
+                    <li>Exclusion ROI accidentally covering the subject</li>
+                </ul>
+                <strong>Fixes:</strong>
+                <ul>
+                    <li>Lower Detection Confidence to 0.1-0.3</li>
+                    <li>Increase Resize Crop Scale to 3x or 4x</li>
+                    <li>Verify ROI covers the subject with margin</li>
+                    <li>Check exclusion ROIs aren't blocking the subject</li>
+                </ul>
+            </div>
+
+            <div class="callout callout-info">
+                <strong>Problem: "TOML error: 'advanced_filtering' or other missing keys"</strong><br>
+                <strong>Cause:</strong> Using an old configuration file from a previous version of the script.<br>
+                <strong>Fix:</strong> Click <strong>Save Current</strong> in the new GUI to generate a fresh, compatible TOML file. Old config files may have removed parameters.
+            </div>
+
+            <div class="callout callout-warning">
+                <strong>Problem: "GPU selected but processing is slow / using CPU"</strong><br>
+                <strong>Causes:</strong>
+                <ul>
+                    <li>GPU test failed during initialization (check console for warnings)</li>
+                    <li>MediaPipe GPU delegate not properly installed</li>
+                    <li>GPU drivers outdated or incompatible</li>
+                </ul>
+                <strong>Fixes:</strong>
+                <ul>
+                    <li>Check console output for GPU test results</li>
+                    <li>Update GPU drivers (NVIDIA: latest CUDA, AMD: latest ROCm)</li>
+                    <li>Reinstall MediaPipe: <code>pip install --upgrade mediapipe</code></li>
+                    <li>Use CPU if GPU continues to fail (CPU is still functional)</li>
+                </ul>
+            </div>
+
+            <div class="callout callout-info">
+                <strong>Problem: "Memory error or script crashes on large videos"</strong><br>
+                <strong>Causes:</strong>
+                <ul>
+                    <li>Video Resize enabled on high-resolution videos (4K+)</li>
+                    <li>Very long videos (&gt;5000 frames)</li>
+                    <li>Multiple large ROI ranges</li>
+                </ul>
+                <strong>Fixes:</strong>
+                <ul>
+                    <li>Disable Video Resize, use ROI Resize instead</li>
+                    <li>Process videos in smaller batches</li>
+                    <li>Reduce Resize Crop Scale</li>
+                    <li>On Linux, the script automatically uses batch processing for large videos</li>
+                </ul>
+            </div>
+
+            <div class="callout callout-warning">
+                <strong>Problem: "Coordinates seem wrong / landmarks in wrong positions"</strong><br>
+                <strong>Causes:</strong>
+                <ul>
+                    <li>ROI coordinates not properly set</li>
+                    <li>Video was resized but coordinates not mapped correctly</li>
+                    <li>Polygon ROI offset calculation error</li>
+                </ul>
+                <strong>Fixes:</strong>
+                <ul>
+                    <li>Check the annotated video to verify landmark positions visually</li>
+                    <li>Verify ROI coordinates in the TOML file match the video</li>
+                    <li>If using polygon ROI, ensure at least 3 points were selected</li>
+                    <li>Check log_info.txt for coordinate mapping details</li>
+                </ul>
+            </div>
+        </section>
+
+        <footer>
+            <p>Generated for <i>vailá</i> Multimodal Toolbox | &copy; 2026</p>
+            <p>For more information, visit: <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
+        </footer>
+
+    </main>
+
 </body>
+
 </html>
