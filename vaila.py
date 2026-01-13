@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 12 January 2026
-Version: 0.3.9
+Update Date: 13 January 2026
+Version: 0.3.10
 
 Example of usage:
 uv run vaila.py (recommended)
@@ -152,7 +152,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 12.January.2026 v0.3.9 (Python 3.12.12)
+vailá - 13.January.2026 v0.3.10 (Python 3.12.12)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -258,7 +258,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 12.January.2026 v0.3.9 (Python 3.12.12)")
+        self.title("vailá - 13.January.2026 v0.3.10 (Python 3.12.12)")
 
         # Set WM_CLASS for Linux (needed for proper icon in taskbar/dock)
         if platform.system() == "Linux":
@@ -1537,43 +1537,31 @@ class Vaila(tk.Tk):
         # Version selection variable
         version_var = tk.StringVar(value="1")
 
-        # Version 1: Standard CPU
-        cpu_frame = tk.Frame(main_frame, relief="raised", borderwidth=2, padx=10, pady=10)
-        cpu_frame.pack(fill="x", pady=5)
-        cpu_radio = tk.Radiobutton(
-            cpu_frame,
-            text="Standard CPU",
+        # Version 1: Standard (CPU/GPU unified)
+        standard_frame = tk.Frame(main_frame, relief="raised", borderwidth=2, padx=10, pady=10)
+        standard_frame.pack(fill="x", pady=5)
+        standard_radio = tk.Radiobutton(
+            standard_frame,
+            text="Standard (CPU/GPU)",
             variable=version_var,
             value="1",
             font=("Arial", 10),
         )
-        cpu_radio.pack(anchor="w")
-        cpu_desc = Label(
-            cpu_frame,
-            text="MediaPipe only, single-person, CPU processing",
+        standard_radio.pack(anchor="w")
+        standard_desc = Label(
+            standard_frame,
+            text="MediaPipe only, single-person, automatic CPU/GPU detection",
             font=("Arial", 9),
             fg="gray",
         )
-        cpu_desc.pack(anchor="w", padx=(25, 0))
-
-        # Version 1 GPU: Standard GPU
-        gpu_frame = tk.Frame(main_frame, relief="raised", borderwidth=2, padx=10, pady=10)
-        gpu_frame.pack(fill="x", pady=5)
-        gpu_radio = tk.Radiobutton(
-            gpu_frame,
-            text="Standard GPU (NVIDIA)",
-            variable=version_var,
-            value="1gpu",
-            font=("Arial", 10),
-        )
-        gpu_radio.pack(anchor="w")
-        gpu_desc = Label(
-            gpu_frame,
-            text="MediaPipe only, single-person, GPU accelerated (2-5x faster)",
-            font=("Arial", 9),
+        standard_desc.pack(anchor="w", padx=(25, 0))
+        standard_gpu_desc = Label(
+            standard_frame,
+            text="GPU backends: NVIDIA/CUDA, ROCm/AMD, MPS/Apple Silicon",
+            font=("Arial", 8),
             fg="gray",
         )
-        gpu_desc.pack(anchor="w", padx=(25, 0))
+        standard_gpu_desc.pack(anchor="w", padx=(25, 0))
 
         # Version 2: Advanced
         advanced_frame = tk.Frame(main_frame, relief="raised", borderwidth=2, padx=10, pady=10)
@@ -1604,22 +1592,15 @@ class Vaila(tk.Tk):
 
             try:
                 # Launch in separate process (recommended - no Tkinter conflicts)
-                if version_choice == "1":
+                if version_choice == "1" or version_choice == "1gpu":
                     print("\n" + "=" * 60)
-                    print("Markerless 2D Analysis - Version Selected: Standard CPU")
+                    print("Markerless 2D Analysis - Version Selected: Standard (CPU/GPU)")
                     print("=" * 60)
                     print("Launching: vaila.markerless_2d_analysis")
-                    print("Features: MediaPipe only, single-person, CPU processing")
+                    print("Features: MediaPipe only, single-person, automatic CPU/GPU detection")
+                    print("GPU backends: NVIDIA/CUDA, ROCm/AMD, MPS/Apple Silicon")
                     print("=" * 60 + "\n")
                     run_vaila_module("vaila.markerless_2d_analysis")
-                elif version_choice == "1gpu":
-                    print("\n" + "=" * 60)
-                    print("Markerless 2D Analysis - Version Selected: Standard GPU (NVIDIA)")
-                    print("=" * 60)
-                    print("Launching: vaila.markerless_2d_analysis_nvidia")
-                    print("Features: MediaPipe only, single-person, GPU accelerated (2-5x faster)")
-                    print("=" * 60 + "\n")
-                    run_vaila_module("vaila.markerless_2d_analysis_nvidia")
                 elif version_choice == "2":
                     print("\n" + "=" * 60)
                     print("Markerless 2D Analysis - Version Selected: Advanced (YOLO + MediaPipe)")

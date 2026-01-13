@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 12 January 2026
-Version: 0.7.3
+Update Date: 13 January 2026
+Version: 0.7.4
 
 Example of usage:
 First activate the vaila environment:
@@ -22,26 +22,38 @@ overlays pose landmarks on each video frame, and exports both normalized and
 pixel-based landmark coordinates to CSV files. The script also generates a
 video with the landmarks overlaid on the original frames.
 
+The script supports multiple processing backends:
+- CPU: Standard processing (always available)
+- NVIDIA/CUDA: GPU acceleration for NVIDIA GPUs (requires CUDA drivers)
+- ROCm: GPU acceleration for AMD GPUs (requires ROCm installation)
+- MPS: GPU acceleration for Apple Silicon (macOS arm64)
+
 The user can configure key MediaPipe parameters via a graphical interface,
 including detection confidence, tracking confidence, model complexity, and
 whether to enable segmentation and smooth segmentation. The default settings
 prioritize the highest detection accuracy and tracking precision, which may
 increase computational cost.
 
-New Features (v0.7.2):
+New Features (v0.7.4):
+- Unified CPU and GPU processing in single script
+- Multi-GPU backend support (NVIDIA/CUDA, ROCm/AMD, MPS/Apple Silicon)
+- Automatic GPU detection and testing
+- Device selection dialog for choosing processing backend
 - Bounding box (ROI) selection for small subjects or multi-person scenarios with zoom and window resize capabilities
 
 Usage:
-- Run the script to open a graphical interface for selecting the input directory
-  containing video files (.mp4, .avi, .mov), the output directory, and for
-  specifying the MediaPipe configuration parameters.
+- Run the script to automatically detect available GPU backends (NVIDIA, ROCm, MPS)
+- Select processing device (CPU or GPU) via device selection dialog
+- Open a graphical interface for selecting the input directory containing video files
+  (.mp4, .avi, .mov), the output directory, and for specifying the MediaPipe
+  configuration parameters.
 - Choose whether to enable video resize for better pose detection
 - Optionally select a bounding box (ROI) from the first video frame for focused processing
 - Optionally resize the cropped region for better detection of small subjects
 - Load or save TOML configuration files for batch processing
-- The script processes each video, generating an output video with overlaid pose
-  landmarks, and CSV files containing both normalized and pixel-based landmark
-  coordinates in original video dimensions.
+- The script processes each video with the selected device, generating an output video
+  with overlaid pose landmarks, and CSV files containing both normalized and pixel-based
+  landmark coordinates in original video dimensions.
 
 Requirements:
 - Python 3.12.12
@@ -51,6 +63,11 @@ Requirements:
 - Pillow (if using image manipulation: `pip install Pillow`)
 - Pandas (for coordinate conversion: `pip install pandas`)
 - psutil (pip install psutil) - for memory monitoring
+
+GPU Acceleration (Optional):
+- NVIDIA/CUDA: NVIDIA GPU with CUDA Toolkit and drivers installed
+- ROCm: AMD GPU with ROCm installed (Linux)
+- MPS: Apple Silicon (arm64) on macOS (automatic)
 
 Output:
 The following files are generated for each processed video:
@@ -85,7 +102,7 @@ import tkinter as tk
 import urllib.request
 from collections import deque
 from pathlib import Path
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, simpledialog
 
 import cv2
 import mediapipe as mp
@@ -1076,7 +1093,7 @@ def save_config_to_toml(config, filepath):
                 f.write("# This is useful when the subject size changes significantly during the video.\n")
                 f.write("# Example: Small subject at start (frames 0-100) needs larger ROI and 4x resize,\n")
                 f.write("#          but larger subject later (frames 101+) needs smaller ROI and 2x resize.\n\n")
-                
+
                 for idx, range_config in enumerate(bbox_ranges):
                     f.write(f"[[bounding_box_ranges.range]]  # Range {idx + 1}\n")
                     f.write(f"frame_start = {range_config.get('frame_start', 0)}  # Start frame (0-based)\n")
@@ -1086,6 +1103,8 @@ def save_config_to_toml(config, filepath):
                         f.write('frame_end = "inf"  # End frame (use "inf" for last frame)\n')
                     else:
                         f.write(f"frame_end = {int(frame_end_val)}  # End frame\n")
+                    roi_type = range_config.get('roi_type', 'inclusion')
+                    f.write(f'roi_type = "{roi_type}"  # "inclusion" = detect inside ROI, "exclusion" = ignore this area\n')
                     f.write(f"enable_crop = {str(range_config.get('enable_crop', False)).lower()}  # Enable ROI for this range\n")
                     f.write(f"bbox_x_min = {range_config.get('bbox_x_min', 0)}  # Left edge of ROI\n")
                     f.write(f"bbox_y_min = {range_config.get('bbox_y_min', 0)}  # Top edge of ROI\n")
@@ -1322,17 +1341,18 @@ def load_config_from_toml(filepath):
                 # Handle both single dict and list of dicts
                 if isinstance(ranges_list, dict):
                     ranges_list = [ranges_list]
-                
+
                 config["bounding_box_ranges"] = []
                 for range_config in ranges_list:
                     frame_end = range_config.get("frame_end", float('inf'))
                     # Handle 'inf' string in TOML
                     if isinstance(frame_end, str) and frame_end.lower() == "inf":
                         frame_end = float('inf')
-                    
+
                     range_dict = {
                         "frame_start": int(range_config.get("frame_start", 0)),
                         "frame_end": float(frame_end) if isinstance(frame_end, (int, float)) else float('inf'),
+                        "roi_type": str(range_config.get("roi_type", "inclusion")),  # "inclusion" or "exclusion"
                         "enable_crop": bool(range_config.get("enable_crop", False)),
                         "bbox_x_min": int(range_config.get("bbox_x_min", 0)),
                         "bbox_y_min": int(range_config.get("bbox_y_min", 0)),
@@ -1386,79 +1406,236 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
         super().__init__(parent, title="MediaPipe and Resize Configuration (or TOML)")
 
     def body(self, master):
-        # Labels
-        tk.Label(master, text="min_detection_confidence (0.0 - 1.0):").grid(
-            row=0, column=0, sticky="e"
-        )
-        tk.Label(master, text="min_tracking_confidence (0.0 - 1.0):").grid(
-            row=1, column=0, sticky="e"
-        )
-        tk.Label(master, text="model_complexity (0, 1, 2):").grid(row=2, column=0, sticky="e")
-        tk.Label(master, text="enable_segmentation (True/False):").grid(row=3, column=0, sticky="e")
-        tk.Label(master, text="smooth_segmentation (True/False):").grid(row=4, column=0, sticky="e")
-        tk.Label(master, text="static_image_mode (True/False):").grid(row=5, column=0, sticky="e")
-        tk.Label(master, text="apply_filtering (True/False):").grid(row=6, column=0, sticky="e")
-        tk.Label(master, text="estimate_occluded (True/False):").grid(row=7, column=0, sticky="e")
-        tk.Label(master, text="enable_resize (True/False):").grid(row=8, column=0, sticky="e")
-        tk.Label(master, text="resize_scale (2, 3, ...):").grid(row=9, column=0, sticky="e")
-        tk.Label(master, text="Enable initial frame padding? (True/False):").grid(
-            row=10, column=0, sticky="e"
-        )
-        tk.Label(master, text="Number of padding frames:").grid(row=11, column=0, sticky="e")
-        tk.Label(master, text="Enable reverse padding? (True/False):").grid(
-            row=12, column=0, sticky="e"
-        )
-        tk.Label(master, text="Number of reverse padding frames:").grid(row=13, column=0, sticky="e")
+        # Configure window size and minimum size for better visibility
+        self.geometry("1000x800")
+        self.minsize(900, 600)
+        self.resizable(True, True)
 
-        # Entries
-        self.min_detection_entry = tk.Entry(master)
+        # Ensure window controls are visible (close, resize, minimize)
+        # Dialog class already has cancel method, so we can use it
+        try:
+            self.protocol("WM_DELETE_WINDOW", self.cancel)
+        except AttributeError:
+            # If cancel doesn't exist, use destroy
+            self.protocol("WM_DELETE_WINDOW", self.destroy)
+
+        # Create main container with scrollbars
+        # Create frame for canvas and scrollbars
+        canvas_frame = tk.Frame(master)
+        canvas_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        # Create horizontal scrollbar (at bottom)
+        h_scrollbar = tk.Scrollbar(canvas_frame, orient="horizontal")
+        h_scrollbar.pack(side="bottom", fill="x")
+
+        # Create vertical scrollbar (on right)
+        v_scrollbar = tk.Scrollbar(canvas_frame, orient="vertical")
+        v_scrollbar.pack(side="right", fill="y")
+
+        # Create canvas with both scrollbars
+        canvas = tk.Canvas(
+            canvas_frame,
+            xscrollcommand=h_scrollbar.set,
+            yscrollcommand=v_scrollbar.set,
+            highlightthickness=0
+        )
+        canvas.pack(side="left", fill="both", expand=True)
+
+        # Configure scrollbars
+        h_scrollbar.config(command=canvas.xview)
+        v_scrollbar.config(command=canvas.yview)
+
+        # Create scrollable frame inside canvas
+        scrollable_frame = tk.Frame(canvas)
+        canvas_window = canvas.create_window(0, 0, window=scrollable_frame, anchor="nw")
+
+        # Function to update scroll region and canvas window size
+        def update_scroll_region(event=None):
+            # Update the scroll region
+            canvas.update_idletasks()
+            bbox = canvas.bbox("all")
+            if bbox:
+                canvas.config(scrollregion=bbox)
+
+            # Update canvas window width to match canvas width
+            canvas_width = canvas.winfo_width()
+            if canvas_width > 1:
+                canvas.itemconfig(canvas_window, width=canvas_width)
+
+        # Bind events for dynamic resizing
+        scrollable_frame.bind("<Configure>", update_scroll_region)
+        canvas.bind("<Configure>", lambda e: canvas.itemconfig(canvas_window, width=e.width))
+
+        # Mouse wheel bindings for cross-platform scrolling
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        def _on_mousewheel_mac(event):
+            if event.num == 4:
+                canvas.yview_scroll(-1, "units")
+            elif event.num == 5:
+                canvas.yview_scroll(1, "units")
+
+        def _on_shift_mousewheel(event):
+            canvas.xview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        # Bind mouse wheel events
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        canvas.bind_all("<Shift-MouseWheel>", _on_shift_mousewheel)
+        canvas.bind_all("<Button-4>", _on_mousewheel_mac)
+        canvas.bind_all("<Button-5>", _on_mousewheel_mac)
+
+        # Use scrollable_frame as the new master for all widgets
+        master = scrollable_frame
+
+        # Configure master to expand columns properly
+        master.grid_columnconfigure(0, weight=1, minsize=200)
+        master.grid_columnconfigure(1, weight=1, minsize=150)
+
+        # Initial update after window is shown
+        self.after(100, update_scroll_region)
+
+        row = 0
+
+        # MediaPipe Configuration Frame
+        mp_frame = tk.LabelFrame(master, text="MediaPipe Configuration", padx=5, pady=5)
+        mp_frame.grid(row=row, column=0, columnspan=2, sticky="ew", padx=5, pady=5)
+        mp_frame.grid_columnconfigure(1, weight=1)
+        row += 1
+
+        # MediaPipe parameters
+        mp_row = 0
+        tk.Label(mp_frame, text="min_detection_confidence (0.0 - 1.0):").grid(
+            row=mp_row, column=0, padx=5, pady=5, sticky="w"
+        )
+        self.min_detection_entry = tk.Entry(mp_frame, width=15)
         self.min_detection_entry.insert(0, "0.1")
-        self.min_tracking_entry = tk.Entry(master)
-        self.min_tracking_entry.insert(0, "0.1")
-        self.model_complexity_entry = tk.Entry(master)
-        self.model_complexity_entry.insert(0, "2")
-        self.enable_segmentation_entry = tk.Entry(master)
-        self.enable_segmentation_entry.insert(0, "False")
-        self.smooth_segmentation_entry = tk.Entry(master)
-        self.smooth_segmentation_entry.insert(0, "False")
-        self.static_image_mode_entry = tk.Entry(master)
-        self.static_image_mode_entry.insert(0, "False")
-        self.apply_filtering_entry = tk.Entry(master)
-        self.apply_filtering_entry.insert(0, "True")
-        self.estimate_occluded_entry = tk.Entry(master)
-        self.estimate_occluded_entry.insert(0, "True")
-        self.enable_resize_entry = tk.Entry(master)
-        self.enable_resize_entry.insert(0, "False")
-        self.resize_scale_entry = tk.Entry(master)
-        self.resize_scale_entry.insert(0, "2")
-        self.enable_padding_entry = tk.Entry(master)
-        self.enable_padding_entry.insert(0, str(ENABLE_PADDING_DEFAULT))
-        self.pad_start_frames_entry = tk.Entry(master)
-        self.pad_start_frames_entry.insert(0, str(PAD_START_FRAMES_DEFAULT))
-        self.enable_reverse_padding_entry = tk.Entry(master)
-        self.enable_reverse_padding_entry.insert(0, "False")
-        self.pad_end_frames_entry = tk.Entry(master)
-        self.pad_end_frames_entry.insert(0, "0")
+        self.min_detection_entry.grid(row=mp_row, column=1, padx=5, pady=5, sticky="w")
+        mp_row += 1
 
-        # Grid
-        self.min_detection_entry.grid(row=0, column=1)
-        self.min_tracking_entry.grid(row=1, column=1)
-        self.model_complexity_entry.grid(row=2, column=1)
-        self.enable_segmentation_entry.grid(row=3, column=1)
-        self.smooth_segmentation_entry.grid(row=4, column=1)
-        self.static_image_mode_entry.grid(row=5, column=1)
-        self.apply_filtering_entry.grid(row=6, column=1)
-        self.estimate_occluded_entry.grid(row=7, column=1)
-        self.enable_resize_entry.grid(row=8, column=1)
-        self.resize_scale_entry.grid(row=9, column=1)
-        self.enable_padding_entry.grid(row=10, column=1)
-        self.pad_start_frames_entry.grid(row=11, column=1)
-        self.enable_reverse_padding_entry.grid(row=12, column=1)
-        self.pad_end_frames_entry.grid(row=13, column=1)
+        tk.Label(mp_frame, text="min_tracking_confidence (0.0 - 1.0):").grid(
+            row=mp_row, column=0, padx=5, pady=5, sticky="w"
+        )
+        self.min_tracking_entry = tk.Entry(mp_frame, width=15)
+        self.min_tracking_entry.insert(0, "0.1")
+        self.min_tracking_entry.grid(row=mp_row, column=1, padx=5, pady=5, sticky="w")
+        mp_row += 1
+
+        tk.Label(mp_frame, text="model_complexity (0, 1, 2):").grid(
+            row=mp_row, column=0, padx=5, pady=5, sticky="w"
+        )
+        self.model_complexity_entry = tk.Entry(mp_frame, width=15)
+        self.model_complexity_entry.insert(0, "2")
+        self.model_complexity_entry.grid(row=mp_row, column=1, padx=5, pady=5, sticky="w")
+        mp_row += 1
+
+        tk.Label(mp_frame, text="enable_segmentation (True/False):").grid(
+            row=mp_row, column=0, padx=5, pady=5, sticky="w"
+        )
+        self.enable_segmentation_entry = tk.Entry(mp_frame, width=15)
+        self.enable_segmentation_entry.insert(0, "False")
+        self.enable_segmentation_entry.grid(row=mp_row, column=1, padx=5, pady=5, sticky="w")
+        mp_row += 1
+
+        tk.Label(mp_frame, text="smooth_segmentation (True/False):").grid(
+            row=mp_row, column=0, padx=5, pady=5, sticky="w"
+        )
+        self.smooth_segmentation_entry = tk.Entry(mp_frame, width=15)
+        self.smooth_segmentation_entry.insert(0, "False")
+        self.smooth_segmentation_entry.grid(row=mp_row, column=1, padx=5, pady=5, sticky="w")
+        mp_row += 1
+
+        tk.Label(mp_frame, text="static_image_mode (True/False):").grid(
+            row=mp_row, column=0, padx=5, pady=5, sticky="w"
+        )
+        self.static_image_mode_entry = tk.Entry(mp_frame, width=15)
+        self.static_image_mode_entry.insert(0, "False")
+        self.static_image_mode_entry.grid(row=mp_row, column=1, padx=5, pady=5, sticky="w")
+        mp_row += 1
+
+        tk.Label(mp_frame, text="apply_filtering (True/False):").grid(
+            row=mp_row, column=0, padx=5, pady=5, sticky="w"
+        )
+        self.apply_filtering_entry = tk.Entry(mp_frame, width=15)
+        self.apply_filtering_entry.insert(0, "True")
+        self.apply_filtering_entry.grid(row=mp_row, column=1, padx=5, pady=5, sticky="w")
+        mp_row += 1
+
+        tk.Label(mp_frame, text="estimate_occluded (True/False):").grid(
+            row=mp_row, column=0, padx=5, pady=5, sticky="w"
+        )
+        self.estimate_occluded_entry = tk.Entry(mp_frame, width=15)
+        self.estimate_occluded_entry.insert(0, "True")
+        self.estimate_occluded_entry.grid(row=mp_row, column=1, padx=5, pady=5, sticky="w")
+        mp_row += 1
+
+        # Video Resize Frame
+        resize_frame = tk.LabelFrame(master, text="Video Resize", padx=5, pady=5)
+        resize_frame.grid(row=row, column=0, columnspan=2, sticky="ew", padx=5, pady=5)
+        resize_frame.grid_columnconfigure(1, weight=1)
+        row += 1
+
+        resize_row = 0
+        tk.Label(resize_frame, text="enable_resize (True/False):").grid(
+            row=resize_row, column=0, padx=5, pady=5, sticky="w"
+        )
+        self.enable_resize_entry = tk.Entry(resize_frame, width=15)
+        self.enable_resize_entry.insert(0, "False")
+        self.enable_resize_entry.grid(row=resize_row, column=1, padx=5, pady=5, sticky="w")
+        resize_row += 1
+
+        tk.Label(resize_frame, text="resize_scale (2, 3, ...):").grid(
+            row=resize_row, column=0, padx=5, pady=5, sticky="w"
+        )
+        self.resize_scale_entry = tk.Entry(resize_frame, width=15)
+        self.resize_scale_entry.insert(0, "2")
+        self.resize_scale_entry.grid(row=resize_row, column=1, padx=5, pady=5, sticky="w")
+        resize_row += 1
+
+        # Padding Frame
+        padding_frame = tk.LabelFrame(master, text="Frame Padding", padx=5, pady=5)
+        padding_frame.grid(row=row, column=0, columnspan=2, sticky="ew", padx=5, pady=5)
+        padding_frame.grid_columnconfigure(1, weight=1)
+        row += 1
+
+        pad_row = 0
+        tk.Label(padding_frame, text="Enable initial frame padding? (True/False):").grid(
+            row=pad_row, column=0, padx=5, pady=5, sticky="w"
+        )
+        self.enable_padding_entry = tk.Entry(padding_frame, width=15)
+        self.enable_padding_entry.insert(0, str(ENABLE_PADDING_DEFAULT))
+        self.enable_padding_entry.grid(row=pad_row, column=1, padx=5, pady=5, sticky="w")
+        pad_row += 1
+
+        tk.Label(padding_frame, text="Number of padding frames:").grid(
+            row=pad_row, column=0, padx=5, pady=5, sticky="w"
+        )
+        self.pad_start_frames_entry = tk.Entry(padding_frame, width=15)
+        self.pad_start_frames_entry.insert(0, str(PAD_START_FRAMES_DEFAULT))
+        self.pad_start_frames_entry.grid(row=pad_row, column=1, padx=5, pady=5, sticky="w")
+        pad_row += 1
+
+        tk.Label(padding_frame, text="Enable reverse padding? (True/False):").grid(
+            row=pad_row, column=0, padx=5, pady=5, sticky="w"
+        )
+        self.enable_reverse_padding_entry = tk.Entry(padding_frame, width=15)
+        self.enable_reverse_padding_entry.insert(0, "False")
+        self.enable_reverse_padding_entry.grid(row=pad_row, column=1, padx=5, pady=5, sticky="w")
+        pad_row += 1
+
+        tk.Label(padding_frame, text="Number of reverse padding frames:").grid(
+            row=pad_row, column=0, padx=5, pady=5, sticky="w"
+        )
+        self.pad_end_frames_entry = tk.Entry(padding_frame, width=15)
+        self.pad_end_frames_entry.insert(0, "0")
+        self.pad_end_frames_entry.grid(row=pad_row, column=1, padx=5, pady=5, sticky="w")
+        pad_row += 1
 
         # Bounding box section
-        bbox_frame = tk.LabelFrame(master, text="Bounding Box (ROI) Selection", padx=10, pady=10)
-        bbox_frame.grid(row=14, column=0, columnspan=2, pady=(10, 0), sticky="ew")
+        bbox_frame = tk.LabelFrame(master, text="Bounding Box (ROI) Selection", padx=5, pady=5)
+        bbox_frame.grid(row=row, column=0, columnspan=2, sticky="ew", padx=5, pady=5)
+        bbox_frame.grid_columnconfigure(1, weight=1)
+        row += 1
 
         # Enable crop checkbox
         self.enable_crop_var = tk.BooleanVar(value=False)
@@ -1503,7 +1680,7 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
             roi_buttons_frame,
             text="Select BBox ROI",
             command=self.select_roi_from_video,
-            bg="#FF9800",
+            bg="white",
             fg="black",
             width=18,
         )
@@ -1514,7 +1691,7 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
             roi_buttons_frame,
             text="Select Polygon ROI",
             command=self.select_polygon_roi_from_video,
-            bg="#4CAF50",
+            bg="white",
             fg="black",
             width=18,
         )
@@ -1531,24 +1708,35 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
         self.resize_crop_scale_entry.insert(0, "2")
         self.resize_crop_scale_entry.grid(row=8, column=1, sticky="w", padx=5)
 
-        # Multi-ROI section
+        # Multi-ROI section with inclusion/exclusion support
         multi_roi_frame = tk.Frame(bbox_frame)
-        multi_roi_frame.grid(row=9, column=0, columnspan=2, pady=10)
+        multi_roi_frame.grid(row=9, column=0, columnspan=2, pady=10, sticky="ew")
+        multi_roi_frame.grid_columnconfigure(0, weight=1)
+        multi_roi_frame.grid_columnconfigure(1, weight=1)
 
-        tk.Label(multi_roi_frame, text="Number of ROI ranges:").pack(side="left", padx=5)
-        self.num_roi_ranges_entry = tk.Entry(multi_roi_frame, width=5)
+        tk.Label(multi_roi_frame, text="Number of ROI ranges:", fg="black").grid(row=0, column=0, sticky="w", padx=5)
+        self.num_roi_ranges_entry = tk.Entry(multi_roi_frame, width=5, bg="white", fg="black")
         self.num_roi_ranges_entry.insert(0, "1")
-        self.num_roi_ranges_entry.pack(side="left", padx=5)
+        self.num_roi_ranges_entry.grid(row=0, column=1, sticky="w", padx=5)
 
         setup_multi_roi_btn = tk.Button(
             multi_roi_frame,
             text="Setup Multiple ROIs",
             command=self.setup_multiple_rois,
-            bg="#9C27B0",
-            fg="white",
+            bg="white",
+            fg="black",
             width=18,
         )
-        setup_multi_roi_btn.pack(side="left", padx=5)
+        setup_multi_roi_btn.grid(row=0, column=2, padx=5)
+
+        # ROI type info label
+        roi_type_info = tk.Label(
+            multi_roi_frame,
+            text="ROI Types: Inclusion (detect inside) | Exclusion (ignore area)",
+            fg="gray",
+            font=("Arial", 8)
+        )
+        roi_type_info.grid(row=1, column=0, columnspan=3, pady=(5, 0), sticky="w", padx=5)
 
         # ROI ranges status label
         self.roi_ranges_label = tk.Label(bbox_frame, text="ROI ranges configured: 0", fg="gray")
@@ -1567,10 +1755,12 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
             entry.bind("<KeyRelease>", self.update_normalized_coords)
 
         # TOML section
-        toml_frame = tk.LabelFrame(master, text="Advanced Configuration (TOML)", padx=10, pady=10)
-        toml_frame.grid(row=15, column=0, columnspan=2, pady=(10, 0), sticky="ew")
+        toml_frame = tk.LabelFrame(master, text="Advanced Configuration (TOML)", padx=5, pady=5)
+        toml_frame.grid(row=row, column=0, columnspan=2, sticky="ew", padx=5, pady=5)
+        row += 1
+
         btns_frame = tk.Frame(toml_frame)
-        btns_frame.pack()
+        btns_frame.pack(pady=5)
         tk.Button(btns_frame, text="Load Configuration TOML", command=self.load_config_file).pack(
             side="left", padx=5
         )
@@ -1579,7 +1769,6 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
             text="Create Default TOML Template",
             command=self.create_default_toml_template,
         ).pack(side="left", padx=5)
-        tk.Button(btns_frame, text="Help", command=self.show_help).pack(side="left", padx=5)
         tk.Button(
             btns_frame,
             text="Save Current Config",
@@ -1587,8 +1776,9 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
             bg="#2196F3",
             fg="white",
         ).pack(side="left", padx=5)
+        tk.Button(btns_frame, text="Help", command=self.show_help).pack(side="left", padx=5)
         self.toml_label = tk.Label(toml_frame, text="No TOML loaded", fg="gray")
-        self.toml_label.pack()
+        self.toml_label.pack(pady=5)
 
         return self.min_detection_entry
 
@@ -1652,7 +1842,6 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
 
     def setup_multiple_rois(self):
         """Setup multiple ROI ranges with visual bounding box selection for each"""
-        from tkinter import simpledialog, messagebox
 
         try:
             num_ranges = int(self.num_roi_ranges_entry.get())
@@ -1681,7 +1870,7 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
             return
 
         first_video = str(video_files[0])
-        
+
         # Get video info for cap
         cap = cv2.VideoCapture(first_video)
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -1724,21 +1913,36 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
                     messagebox.showerror("Error", f"Invalid end frame: {frame_end_str}")
                     break
 
-            # Get resize crop scale for this range
-            resize_scale = simpledialog.askinteger(
-                f"ROI Range {i + 1}/{num_ranges}",
-                f"Enter resize crop scale for range {i + 1} (2-8):",
-                minvalue=1,
-                maxvalue=10,
-                initialvalue=2,
+            # Ask for ROI type (inclusion or exclusion)
+            roi_type_choice = simpledialog.askstring(
+                f"ROI Range {i + 1}/{num_ranges} - Type",
+                f"Enter ROI type for range {i + 1}:\n'inclusion' = detect only inside this ROI\n'exclusion' = ignore this area\n\n(Default: inclusion)",
+                initialvalue="inclusion"
             )
-            if resize_scale is None:
-                resize_scale = 2
+            if roi_type_choice is None:
+                roi_type_choice = "inclusion"
+            roi_type = roi_type_choice.lower().strip()
+            if roi_type not in ["inclusion", "exclusion"]:
+                roi_type = "inclusion"  # Default to inclusion
+
+            # Get resize crop scale for this range (only for inclusion ROIs)
+            resize_scale = 1
+            if roi_type == "inclusion":
+                resize_scale = simpledialog.askinteger(
+                    f"ROI Range {i + 1}/{num_ranges}",
+                    f"Enter resize crop scale for range {i + 1} (2-8):",
+                    minvalue=1,
+                    maxvalue=10,
+                    initialvalue=2,
+                )
+                if resize_scale is None:
+                    resize_scale = 2
 
             # Now select the bounding box visually
+            roi_type_text = "INCLUSION" if roi_type == "inclusion" else "EXCLUSION"
             messagebox.showinfo(
-                f"Select BBox for Range {i + 1}",
-                f"Select the bounding box for frames {frame_start} to {frame_end_str}.\n\nDrag to select region, press SPACE or ENTER to confirm."
+                f"Select {roi_type_text} ROI for Range {i + 1}",
+                f"Select the ROI for frames {frame_start} to {frame_end_str}.\n\nType: {roi_type_text}\nDrag to select region, press SPACE or ENTER to confirm."
             )
 
             # Open video at the specified start frame
@@ -1769,13 +1973,14 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
             range_config = {
                 "frame_start": frame_start,
                 "frame_end": frame_end,
-                "enable_crop": True,
+                "roi_type": roi_type,  # "inclusion" or "exclusion"
+                "enable_crop": roi_type == "inclusion",  # Only enable crop for inclusion
                 "bbox_x_min": x_min,
                 "bbox_y_min": y_min,
                 "bbox_x_max": x_max,
                 "bbox_y_max": y_max,
-                "enable_resize_crop": True,
-                "resize_crop_scale": resize_scale,
+                "enable_resize_crop": roi_type == "inclusion",  # Only resize crop for inclusion
+                "resize_crop_scale": resize_scale if roi_type == "inclusion" else 1,
             }
             self.bounding_box_ranges.append(range_config)
 
@@ -2461,11 +2666,11 @@ For more information, visit: https://github.com/vaila-multimodaltoolbox/vaila
         # Load multiple ROI ranges
         bbox_ranges = config.get("bounding_box_ranges", [])
         self.bounding_box_ranges = bbox_ranges
-        
+
         # Update ROI ranges GUI elements
         self.num_roi_ranges_entry.delete(0, tk.END)
         self.num_roi_ranges_entry.insert(0, str(len(bbox_ranges) if bbox_ranges else 1))
-        
+
         if hasattr(self, "roi_ranges_label"):
             self.roi_ranges_label.config(
                 text=f"ROI ranges configured: {len(bbox_ranges)}",
@@ -2511,6 +2716,125 @@ For more information, visit: https://github.com/vaila-multimodaltoolbox/vaila
                 "roi_polygon_points": getattr(self, "roi_polygon_points", None),  # Store polygon points if selected
                 "bounding_box_ranges": getattr(self, "bounding_box_ranges", []),  # Store multiple ROI ranges
             }
+
+
+class DeviceSelectionDialog(tk.simpledialog.Dialog):
+    """Dialog to select CPU or GPU backend for processing"""
+
+    def __init__(self, parent, available_backends):
+        """
+        Args:
+            parent: Tkinter parent window
+            available_backends: dict with {backend_name: (available, info_dict, test_result)}
+        """
+        self.available_backends = available_backends
+        self.selected_device = "cpu"  # Default
+        super().__init__(parent, title="Select Processing Device")
+
+    def body(self, master):
+        tk.Label(master, text="Select processing device:", font=("Arial", 10, "bold")).grid(
+            row=0, column=0, columnspan=2, pady=(10, 20), sticky="w"
+        )
+
+        # Create a shared StringVar for radio buttons
+        self.device_var = tk.StringVar(value="cpu")
+
+        row = 1
+
+        # CPU option (always available)
+        self.cpu_var = tk.Radiobutton(
+            master,
+            text="CPU (Standard Processing)",
+            variable=self.device_var,
+            value="cpu",
+            command=lambda: setattr(self, "selected_device", "cpu"),
+            font=("Arial", 9),
+        )
+        self.cpu_var.grid(row=row, column=0, columnspan=2, sticky="w", padx=20, pady=5)
+        row += 1
+
+        # GPU backend options
+        backend_labels = {
+            "nvidia": "GPU (NVIDIA CUDA - High Performance)",
+            "rocm": "GPU (AMD ROCm - High Performance)",
+            "mps": "GPU (Apple Silicon MPS - High Performance)",
+        }
+
+        for backend_name in ["nvidia", "rocm", "mps"]:
+            if backend_name in self.available_backends:
+                available, info, error = self.available_backends[backend_name]
+                test_result = self.available_backends.get(f"{backend_name}_test", (False, "Not tested"))
+
+                backend_text = backend_labels.get(backend_name, f"GPU ({backend_name.upper()})")
+                if not available:
+                    backend_text += " [NOT AVAILABLE]"
+
+                backend_var = tk.Radiobutton(
+                    master,
+                    text=backend_text,
+                    variable=self.device_var,
+                    value=backend_name,
+                    command=lambda b=backend_name: setattr(self, "selected_device", b),
+                    font=("Arial", 9),
+                    state="normal" if available else "disabled",
+                )
+                backend_var.grid(row=row, column=0, columnspan=2, sticky="w", padx=20, pady=5)
+                row += 1
+
+        # Info frame for selected backend
+        info_frame = tk.LabelFrame(master, text="Device Information", padx=10, pady=10)
+        info_frame.grid(row=row, column=0, columnspan=2, padx=20, pady=10, sticky="ew")
+        row += 1
+
+        # Find first available GPU backend for info display
+        info_text = ""
+        for backend_name in ["nvidia", "rocm", "mps"]:
+            if backend_name in self.available_backends:
+                available, info, error = self.available_backends[backend_name]
+                test_result = self.available_backends.get(f"{backend_name}_test", (False, "Not tested"))
+
+                if available and info:
+                    info_text = f"Backend: {backend_name.upper()}\n"
+                    info_text += f"GPU: {info.get('name', 'Unknown')}\n"
+                    info_text += f"Driver: {info.get('driver_version', 'Unknown')}\n"
+                    if info.get("memory_total_mb", 0) > 0:
+                        info_text += f"Memory: {info['memory_total_mb'] / 1024:.1f} GB\n"
+                    if test_result[0]:
+                        info_text += "Status: ✓ GPU tested and working"
+                    else:
+                        info_text += f"Status: ⚠ {test_result[1]}"
+                    break
+
+        if not info_text:
+            # No GPU available
+            info_text = "No GPU backends available.\n"
+            info_text += "Requirements:\n"
+            info_text += "• NVIDIA: NVIDIA GPU with CUDA support and drivers\n"
+            info_text += "• ROCm: AMD GPU with ROCm installed\n"
+            info_text += "• MPS: Apple Silicon (arm64) on macOS\n"
+            info_text += "• MediaPipe with GPU delegate support"
+
+        tk.Label(info_frame, text=info_text, justify="left", font=("Arial", 8)).grid(
+            row=0, column=0, sticky="w"
+        )
+
+        return self.cpu_var
+
+    def apply(self):
+        # Get selected value from StringVar
+        selected = self.device_var.get()
+        if selected in ["nvidia", "rocm", "mps"]:
+            # Check if this backend is available
+            if selected in self.available_backends:
+                available, _, _ = self.available_backends[selected]
+                if available:
+                    self.result = selected
+                else:
+                    self.result = "cpu"
+            else:
+                self.result = "cpu"
+        else:
+            self.result = "cpu"
 
 
 def select_free_polygon_roi(video_path):
@@ -3208,6 +3532,283 @@ def is_linux_system():
     return platform.system().lower() == "linux"
 
 
+def detect_nvidia_gpu():
+    """
+    Detect if NVIDIA GPU is available and accessible.
+    Returns tuple: (is_available: bool, gpu_info: dict, error_message: str)
+    """
+    gpu_info = {}
+    error_message = None
+
+    # Check for nvidia-smi command
+    try:
+        import subprocess
+
+        result = subprocess.run(
+            [
+                "nvidia-smi",
+                "--query-gpu=name,driver_version,memory.total",
+                "--format=csv,noheader,nounits",
+            ],
+            capture_output=True,
+            timeout=5,
+            text=True,
+        )
+
+        if result.returncode == 0 and result.stdout.strip():
+            lines = result.stdout.strip().split("\n")
+            if lines and lines[0]:
+                # Parse first GPU info
+                parts = lines[0].split(",")
+                if len(parts) >= 3:
+                    gpu_info = {
+                        "name": parts[0].strip(),
+                        "driver_version": parts[1].strip(),
+                        "memory_total_mb": int(parts[2].strip())
+                        if parts[2].strip().isdigit()
+                        else 0,
+                        "count": len(lines),
+                    }
+                    return True, gpu_info, None
+        else:
+            error_message = "nvidia-smi found but no GPU detected"
+            return False, gpu_info, error_message
+
+    except FileNotFoundError:
+        error_message = "nvidia-smi not found (NVIDIA drivers may not be installed)"
+        return False, gpu_info, error_message
+    except subprocess.TimeoutExpired:
+        error_message = "nvidia-smi timeout (drivers may not be responding)"
+        return False, gpu_info, error_message
+    except Exception as e:
+        error_message = f"Error checking GPU: {str(e)}"
+        return False, gpu_info, error_message
+
+
+def detect_rocm_gpu():
+    """
+    Detect if ROCm (AMD) GPU is available and accessible.
+    Returns tuple: (is_available: bool, gpu_info: dict, error_message: str)
+    """
+    gpu_info = {}
+    error_message = None
+
+    # Check for rocm-smi command
+    try:
+        import subprocess
+
+        # Try common ROCm paths
+        rocm_paths = [
+            "/opt/rocm/bin/rocm-smi",
+            "/usr/bin/rocm-smi",
+            "rocm-smi",
+        ]
+
+        rocm_smi_path = None
+        for path in rocm_paths:
+            if os.path.exists(path) or shutil.which(path):
+                rocm_smi_path = path
+                break
+
+        if not rocm_smi_path:
+            error_message = "rocm-smi not found (ROCm may not be installed)"
+            return False, gpu_info, error_message
+
+        result = subprocess.run(
+            [
+                rocm_smi_path,
+                "--showid",
+                "--showproductname",
+                "--showdriverversion",
+            ],
+            capture_output=True,
+            timeout=5,
+            text=True,
+        )
+
+        if result.returncode == 0 and result.stdout.strip():
+            # Parse ROCm output (format may vary)
+            lines = result.stdout.strip().split("\n")
+            gpu_info = {
+                "name": "AMD GPU (ROCm)",
+                "driver_version": "Unknown",
+                "memory_total_mb": 0,
+                "count": 1,
+            }
+            # Try to extract GPU name from output
+            for line in lines:
+                if "Card series" in line or "Product Name" in line:
+                    parts = line.split(":")
+                    if len(parts) > 1:
+                        gpu_info["name"] = parts[1].strip()
+                elif "Driver version" in line or "Driver Version" in line:
+                    parts = line.split(":")
+                    if len(parts) > 1:
+                        gpu_info["driver_version"] = parts[1].strip()
+
+            return True, gpu_info, None
+        else:
+            error_message = "rocm-smi found but no GPU detected"
+            return False, gpu_info, error_message
+
+    except FileNotFoundError:
+        error_message = "rocm-smi not found (ROCm may not be installed)"
+        return False, gpu_info, error_message
+    except subprocess.TimeoutExpired:
+        error_message = "rocm-smi timeout (drivers may not be responding)"
+        return False, gpu_info, error_message
+    except Exception as e:
+        error_message = f"Error checking ROCm GPU: {str(e)}"
+        return False, gpu_info, error_message
+
+
+def detect_mps_gpu():
+    """
+    Detect if MPS (Apple Silicon) GPU is available.
+    Returns tuple: (is_available: bool, gpu_info: dict, error_message: str)
+    """
+    gpu_info = {}
+    error_message = None
+
+    # Check if running on macOS with Apple Silicon
+    if platform.system() != "Darwin":
+        error_message = "MPS is only available on macOS"
+        return False, gpu_info, error_message
+
+    # Check if it's Apple Silicon (arm64)
+    machine = platform.machine().lower()
+    if machine not in ["arm64", "aarch64"]:
+        error_message = "MPS requires Apple Silicon (arm64)"
+        return False, gpu_info, error_message
+
+    # Try to get GPU info from system_profiler
+    try:
+        import subprocess
+
+        result = subprocess.run(
+            ["system_profiler", "SPDisplaysDataType"],
+            capture_output=True,
+            timeout=5,
+            text=True,
+        )
+
+        gpu_info = {
+            "name": "Apple Silicon GPU",
+            "driver_version": "MPS",
+            "memory_total_mb": 0,  # Shared memory, not easily detectable
+            "count": 1,
+        }
+
+        if result.returncode == 0 and result.stdout.strip():
+            # Try to extract GPU name
+            for line in result.stdout.split("\n"):
+                if "Chipset Model" in line:
+                    parts = line.split(":")
+                    if len(parts) > 1:
+                        gpu_info["name"] = parts[1].strip()
+                        break
+
+        return True, gpu_info, None
+
+    except Exception:
+        # Even if we can't get detailed info, MPS might still be available
+        gpu_info = {
+            "name": "Apple Silicon GPU",
+            "driver_version": "MPS",
+            "memory_total_mb": 0,
+            "count": 1,
+        }
+        return True, gpu_info, None
+
+
+def detect_gpu_backends():
+    """
+    Detect all available GPU backends (NVIDIA, ROCm, MPS).
+    Returns: dict with {backend_name: (available, info_dict, error_msg)}
+    """
+    backends = {}
+
+    # NVIDIA/CUDA
+    nvidia_available, nvidia_info, nvidia_error = detect_nvidia_gpu()
+    backends["nvidia"] = (nvidia_available, nvidia_info, nvidia_error)
+
+    # ROCm/AMD
+    rocm_available, rocm_info, rocm_error = detect_rocm_gpu()
+    backends["rocm"] = (rocm_available, rocm_info, rocm_error)
+
+    # MPS/Apple Silicon
+    mps_available, mps_info, mps_error = detect_mps_gpu()
+    backends["mps"] = (mps_available, mps_info, mps_error)
+
+    return backends
+
+
+def test_mediapipe_gpu_delegate(backend="nvidia"):
+    """
+    Test if MediaPipe can use GPU delegate for a specific backend.
+    Args:
+        backend: "nvidia", "rocm", "mps", or "cpu"
+    Returns tuple: (works: bool, error_message: str)
+    """
+    try:
+        import mediapipe as mp
+
+        base_options_cls = mp.tasks.BaseOptions
+        pose_landmarker_cls = mp.tasks.vision.PoseLandmarker
+        pose_landmarker_options_cls = mp.tasks.vision.PoseLandmarkerOptions
+        vision_running_mode_cls = mp.tasks.vision.RunningMode
+
+        # Check if GPU delegate is available
+        if not hasattr(base_options_cls.Delegate, "GPU"):
+            return False, "MediaPipe GPU delegate not available in this version"
+
+        # For CPU, always return True (no test needed)
+        if backend == "cpu":
+            return True, None
+
+        # Try to get a model path (use lite for quick test)
+        try:
+            model_path = get_model_path(0)  # Lite model for testing
+        except Exception as e:
+            return False, f"Could not get model for testing: {str(e)}"
+
+        # Try to create options with GPU delegate
+        try:
+            options = pose_landmarker_options_cls(
+                base_options=base_options_cls(
+                    model_asset_path=model_path, delegate=base_options_cls.Delegate.GPU
+                ),
+                running_mode=vision_running_mode_cls.IMAGE,  # Use IMAGE mode for quick test
+                num_poses=1,
+                min_pose_detection_confidence=0.5,
+                min_pose_presence_confidence=0.5,
+            )
+
+            # Try to create landmarker (this will fail if GPU is not available)
+            with pose_landmarker_cls.create_from_options(options) as landmarker:
+                # Create a dummy test image
+                test_image = np.zeros((100, 100, 3), dtype=np.uint8)
+                rgb_image = cv2.cvtColor(test_image, cv2.COLOR_BGR2RGB)
+                mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_image)
+
+                # Try to detect (this will fail if GPU delegate doesn't work)
+                landmarker.detect(mp_image)
+                return True, None
+
+        except Exception as e:
+            error_msg = str(e)
+            if "GPU" in error_msg or "delegate" in error_msg.lower() or "CUDA" in error_msg or "ROCm" in error_msg or "MPS" in error_msg:
+                return False, f"GPU delegate test failed for {backend}: {error_msg}"
+            else:
+                # Might be a different error, but GPU delegate was created
+                return True, None
+
+    except ImportError as e:
+        return False, f"MediaPipe import error: {str(e)}"
+    except Exception as e:
+        return False, f"Unexpected error testing GPU ({backend}): {str(e)}"
+
+
 def get_system_memory_info():
     """Get current system memory usage"""
     try:
@@ -3358,7 +3959,7 @@ def process_video_batch(
     # Derive resize status from dimensions to ensure correctness even if config is stale
     derived_scale = width / full_width if full_width and full_width > 0 else 1.0
     derived_enable_resize = abs(derived_scale - 1.0) > 0.01
-    
+
     batch_landmarks = []
     batch_pixel_landmarks = []
     landmarks_history = deque(maxlen=10)
@@ -3387,7 +3988,7 @@ def process_video_batch(
             derived_enable_resize,
             derived_scale
         )
-        
+
         enable_crop = (
             bbox_config.get("bbox_x_min", 0) != 0 or
             bbox_config.get("bbox_y_min", 0) != 0 or
@@ -3514,9 +4115,44 @@ def process_frame_with_tasks_api(
     """
     Process a single frame using MediaPipe Tasks API.
     Returns landmarks in normalized coordinates (mapped to full frame if cropping was used).
-    Supports both bounding box and polygon ROI.
+    Supports both bounding box and polygon ROI, including exclusion ROIs.
     """
-    # Apply bounding box or polygon cropping if enabled
+    # First, apply exclusion masks if any exclusion ROIs are defined
+    exclusion_rois = bbox_config.get("exclusion_rois", [])
+    if exclusion_rois:
+        # Create a mask that excludes all exclusion ROIs
+        exclusion_mask = np.ones((process_height, process_width), dtype=np.uint8) * 255
+
+        for exclusion_roi in exclusion_rois:
+            roi_polygon = exclusion_roi.get("roi_polygon_points")
+
+            if roi_polygon and len(roi_polygon) >= 3:
+                # Polygon exclusion ROI
+                if bbox_config.get("video_resized", False):
+                    resize_scale = bbox_config.get("resize_scale", 1.0)
+                    scaled_polygon = [
+                        [int(pt[0] * resize_scale), int(pt[1] * resize_scale)]
+                        for pt in roi_polygon
+                    ]
+                else:
+                    scaled_polygon = [[int(pt[0]), int(pt[1])] for pt in roi_polygon]
+
+                polygon_pts = np.array(scaled_polygon, dtype=np.int32)
+                # Fill exclusion area with black (0) in mask
+                cv2.fillPoly(exclusion_mask, [polygon_pts], 0)
+            else:
+                # Bounding box exclusion ROI
+                x_min = max(0, min(exclusion_roi.get("bbox_x_min", 0), process_width - 1))
+                y_min = max(0, min(exclusion_roi.get("bbox_y_min", 0), process_height - 1))
+                x_max = max(x_min + 1, min(exclusion_roi.get("bbox_x_max", process_width), process_width))
+                y_max = max(y_min + 1, min(exclusion_roi.get("bbox_y_max", process_height), process_height))
+                # Fill exclusion area with black (0) in mask
+                exclusion_mask[y_min:y_max, x_min:x_max] = 0
+
+        # Apply exclusion mask to frame
+        frame = cv2.bitwise_and(frame, frame, mask=exclusion_mask)
+
+    # Apply bounding box or polygon cropping if enabled (inclusion ROI)
     process_frame = frame
     actual_process_width = process_width
     actual_process_height = process_height
@@ -3668,7 +4304,8 @@ def get_bbox_config_for_frame(frame_idx, pose_config, original_width, original_h
     """
     Get bounding box configuration for a specific frame index.
     Supports multiple ROI ranges for different frame intervals.
-    
+    Returns both inclusion and exclusion ROIs for this frame.
+
     Args:
         frame_idx: Current frame index (0-based, excluding padding)
         pose_config: Full pose configuration dictionary
@@ -3676,78 +4313,106 @@ def get_bbox_config_for_frame(frame_idx, pose_config, original_width, original_h
         processing_width, processing_height: Processing video dimensions (may be resized)
         enable_resize: Whether video was resized
         resize_scale: Resize scale factor
-        
+
     Returns:
-        bbox_config: Dictionary with ROI configuration for this frame
+        bbox_config: Dictionary with ROI configuration for this frame, including exclusion_rois list
     """
     # Check if we have multiple ROI ranges defined
     bbox_ranges = pose_config.get("bounding_box_ranges", [])
-    
+
+    # Collect all exclusion ROIs for this frame
+    exclusion_rois = []
+    inclusion_roi = None
+
     if bbox_ranges and len(bbox_ranges) > 0:
-        # Find the range that contains this frame
+        # Find all ROIs that apply to this frame
         for range_config in bbox_ranges:
             frame_start = range_config.get("frame_start", 0)
             frame_end = range_config.get("frame_end", float('inf'))
-            
+
             if frame_start <= frame_idx <= frame_end:
-                # Found matching range - use its configuration
-                enable_crop = range_config.get("enable_crop", False)
-                
-                if not enable_crop:
-                    # No crop for this range
-                    return {
-                        "enable_resize_crop": False,
-                        "resize_crop_scale": 1,
-                        "bbox_x_min": 0,
-                        "bbox_y_min": 0,
-                        "bbox_x_max": processing_width,
-                        "bbox_y_max": processing_height,
-                        "bbox_x_min_orig": 0,
-                        "bbox_y_min_orig": 0,
-                        "bbox_x_max_orig": original_width,
-                        "bbox_y_max_orig": original_height,
-                        "video_resized": enable_resize,
-                        "resize_scale": resize_scale if enable_resize else 1.0,
-                        "roi_polygon_points": None,
+                roi_type = range_config.get("roi_type", "inclusion")
+
+                if roi_type == "exclusion":
+                    # Collect exclusion ROI
+                    exclusion_roi = {
+                        "bbox_x_min": range_config.get("bbox_x_min", 0),
+                        "bbox_y_min": range_config.get("bbox_y_min", 0),
+                        "bbox_x_max": range_config.get("bbox_x_max", original_width),
+                        "bbox_y_max": range_config.get("bbox_y_max", original_height),
+                        "roi_polygon_points": range_config.get("roi_polygon_points"),
                     }
-                
-                # Get bbox coordinates from range config
-                bbox_x_min_orig = range_config.get("bbox_x_min", 0)
-                bbox_y_min_orig = range_config.get("bbox_y_min", 0)
-                bbox_x_max_orig = range_config.get("bbox_x_max", original_width)
-                bbox_y_max_orig = range_config.get("bbox_y_max", original_height)
-                
-                # Scale coordinates if video was resized
-                if enable_resize and resize_scale > 1:
-                    bbox_x_min_scaled = int(bbox_x_min_orig * resize_scale)
-                    bbox_y_min_scaled = int(bbox_y_min_orig * resize_scale)
-                    bbox_x_max_scaled = int(bbox_x_max_orig * resize_scale)
-                    bbox_y_max_scaled = int(bbox_y_max_orig * resize_scale)
+                    # Scale coordinates if video was resized
+                    if enable_resize and resize_scale > 1:
+                        exclusion_roi["bbox_x_min"] = int(exclusion_roi["bbox_x_min"] * resize_scale)
+                        exclusion_roi["bbox_y_min"] = int(exclusion_roi["bbox_y_min"] * resize_scale)
+                        exclusion_roi["bbox_x_max"] = int(exclusion_roi["bbox_x_max"] * resize_scale)
+                        exclusion_roi["bbox_y_max"] = int(exclusion_roi["bbox_y_max"] * resize_scale)
+                    exclusion_rois.append(exclusion_roi)
                 else:
-                    bbox_x_min_scaled = bbox_x_min_orig
-                    bbox_y_min_scaled = bbox_y_min_orig
-                    bbox_x_max_scaled = bbox_x_max_orig
-                    bbox_y_max_scaled = bbox_y_max_orig
-                
-                return {
-                    "enable_resize_crop": range_config.get("enable_resize_crop", False),
-                    "resize_crop_scale": range_config.get("resize_crop_scale", 2),
-                    "bbox_x_min": bbox_x_min_scaled,
-                    "bbox_y_min": bbox_y_min_scaled,
-                    "bbox_x_max": bbox_x_max_scaled,
-                    "bbox_y_max": bbox_y_max_scaled,
-                    "bbox_x_min_orig": bbox_x_min_orig,
-                    "bbox_y_min_orig": bbox_y_min_orig,
-                    "bbox_x_max_orig": bbox_x_max_orig,
-                    "bbox_y_max_orig": bbox_y_max_orig,
-                    "video_resized": enable_resize,
-                    "resize_scale": resize_scale if enable_resize else 1.0,
-                    "roi_polygon_points": range_config.get("roi_polygon_points"),
-                }
-    
+                    # Inclusion ROI (only one per frame)
+                    enable_crop = range_config.get("enable_crop", False)
+
+                    if not enable_crop:
+                        # No crop for this range
+                        inclusion_roi = {
+                            "enable_resize_crop": False,
+                            "resize_crop_scale": 1,
+                            "bbox_x_min": 0,
+                            "bbox_y_min": 0,
+                            "bbox_x_max": processing_width,
+                            "bbox_y_max": processing_height,
+                            "bbox_x_min_orig": 0,
+                            "bbox_y_min_orig": 0,
+                            "bbox_x_max_orig": original_width,
+                            "bbox_y_max_orig": original_height,
+                            "video_resized": enable_resize,
+                            "resize_scale": resize_scale if enable_resize else 1.0,
+                            "roi_polygon_points": None,
+                        }
+                    else:
+                        # Get bbox coordinates from range config
+                        bbox_x_min_orig = range_config.get("bbox_x_min", 0)
+                        bbox_y_min_orig = range_config.get("bbox_y_min", 0)
+                        bbox_x_max_orig = range_config.get("bbox_x_max", original_width)
+                        bbox_y_max_orig = range_config.get("bbox_y_max", original_height)
+
+                        # Scale coordinates if video was resized
+                        if enable_resize and resize_scale > 1:
+                            bbox_x_min_scaled = int(bbox_x_min_orig * resize_scale)
+                            bbox_y_min_scaled = int(bbox_y_min_orig * resize_scale)
+                            bbox_x_max_scaled = int(bbox_x_max_orig * resize_scale)
+                            bbox_y_max_scaled = int(bbox_y_max_orig * resize_scale)
+                        else:
+                            bbox_x_min_scaled = bbox_x_min_orig
+                            bbox_y_min_scaled = bbox_y_min_orig
+                            bbox_x_max_scaled = bbox_x_max_orig
+                            bbox_y_max_scaled = bbox_y_max_orig
+
+                        inclusion_roi = {
+                            "enable_resize_crop": range_config.get("enable_resize_crop", False),
+                            "resize_crop_scale": range_config.get("resize_crop_scale", 2),
+                            "bbox_x_min": bbox_x_min_scaled,
+                            "bbox_y_min": bbox_y_min_scaled,
+                            "bbox_x_max": bbox_x_max_scaled,
+                            "bbox_y_max": bbox_y_max_scaled,
+                            "bbox_x_min_orig": bbox_x_min_orig,
+                            "bbox_y_min_orig": bbox_y_min_orig,
+                            "bbox_x_max_orig": bbox_x_max_orig,
+                            "bbox_y_max_orig": bbox_y_max_orig,
+                            "video_resized": enable_resize,
+                            "resize_scale": resize_scale if enable_resize else 1.0,
+                            "roi_polygon_points": range_config.get("roi_polygon_points"),
+                        }
+
+        # Return config with inclusion ROI and exclusion ROIs
+        if inclusion_roi:
+            inclusion_roi["exclusion_rois"] = exclusion_rois
+            return inclusion_roi
+
     # Fallback to single global ROI if no ranges match or exist
     enable_crop = pose_config.get("enable_crop", False)
-    
+
     if not enable_crop:
         return {
             "enable_resize_crop": False,
@@ -3763,13 +4428,14 @@ def get_bbox_config_for_frame(frame_idx, pose_config, original_width, original_h
             "video_resized": enable_resize,
             "resize_scale": resize_scale if enable_resize else 1.0,
             "roi_polygon_points": None,
+            "exclusion_rois": [],  # No exclusion ROIs for default config
         }
 
     bbox_x_min_orig = pose_config.get("bbox_x_min", 0)
     bbox_y_min_orig = pose_config.get("bbox_y_min", 0)
     bbox_x_max_orig = pose_config.get("bbox_x_max", original_width)
     bbox_y_max_orig = pose_config.get("bbox_y_max", original_height)
-    
+
     if enable_resize and resize_scale > 1:
         bbox_x_min_scaled = int(bbox_x_min_orig * resize_scale)
         bbox_y_min_scaled = int(bbox_y_min_orig * resize_scale)
@@ -3795,10 +4461,18 @@ def get_bbox_config_for_frame(frame_idx, pose_config, original_width, original_h
         "video_resized": enable_resize,
         "resize_scale": resize_scale if enable_resize else 1.0,
         "roi_polygon_points": pose_config.get("roi_polygon_points"),
+        "exclusion_rois": [],  # No exclusion ROIs for single global ROI
     }
-def process_video(video_path, output_dir, pose_config):
+def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backend=None):
     """
     Process a video file using MediaPipe Pose estimation with optional video resize.
+
+    Args:
+        video_path: Path to input video file
+        output_dir: Directory to save output files
+        pose_config: Configuration dictionary with MediaPipe parameters
+        use_gpu: Whether to use GPU acceleration (default: False)
+        gpu_backend: GPU backend to use ("nvidia", "rocm", "mps") if use_gpu is True
     """
     # #region agent log
     try:
@@ -3901,9 +4575,25 @@ def process_video(video_path, output_dir, pose_config):
     PoseLandmarkerOptions = mp.tasks.vision.PoseLandmarkerOptions  # noqa: N806 - MediaPipe class name
     VisionRunningMode = mp.tasks.vision.RunningMode  # noqa: N806 - MediaPipe class name
 
-    # Create options
+    # Create options with CPU or GPU Delegate
+    if use_gpu and gpu_backend:
+        try:
+            # Try GPU delegate
+            delegate = BaseOptions.Delegate.GPU
+            backend_name = gpu_backend.upper()
+            print(f"Using GPU ({backend_name}) for processing")
+        except Exception as e:
+            print(f"Warning: Could not use GPU delegate ({gpu_backend}): {e}")
+            print("Falling back to CPU")
+            delegate = BaseOptions.Delegate.CPU
+            use_gpu = False
+            gpu_backend = None
+    else:
+        delegate = BaseOptions.Delegate.CPU
+        print("Using CPU for processing")
+
     options = PoseLandmarkerOptions(
-        base_options=BaseOptions(model_asset_path=model_path),
+        base_options=BaseOptions(model_asset_path=model_path, delegate=delegate),
         running_mode=VisionRunningMode.VIDEO,
         num_poses=1,
         min_pose_detection_confidence=pose_config["min_detection_confidence"],
@@ -4005,7 +4695,7 @@ def process_video(video_path, output_dir, pose_config):
             # Process padding frames first if enabled
             if enable_padding and pad_start_frames > 0 and padding_frame is not None:
                 print(f"Processing {pad_start_frames} padding frames...")
-                
+
                 # Get bbox config for frame 0 (padding uses first frame config)
                 padding_bbox_config = get_bbox_config_for_frame(
                     0,
@@ -4150,7 +4840,7 @@ def process_video(video_path, output_dir, pose_config):
             # Process padding frames first if enabled
             if enable_padding and pad_start_frames > 0 and padding_frame is not None:
                 print(f"Processing {pad_start_frames} padding frames...")
-                
+
                 # Get bbox config for frame 0 (padding uses first frame config)
                 padding_bbox_config = get_bbox_config_for_frame(
                     0,
@@ -4303,12 +4993,11 @@ def process_video(video_path, output_dir, pose_config):
                     reverse_padding_bbox_config.get("bbox_x_max", width) != width or
                     reverse_padding_bbox_config.get("bbox_y_max", height) != height
                 ) or pose_config.get("enable_crop", False)
-                
                 # Process reverse padding frames (from last to first, like a rear wiper)
                 for pad_idx in range(pad_end_frames):
                     if should_throttle_cpu(frame_count):
                         apply_cpu_throttling()
-                    
+
                     # Use frames in reverse order (last frame first, then second-to-last, etc.)
                     reverse_frame_idx = pad_end_frames - 1 - pad_idx
                     if reverse_frame_idx < len(last_frames_for_padding):
@@ -4417,14 +5106,14 @@ def process_video(video_path, output_dir, pose_config):
     if enable_padding and pad_start_frames > 0:
         print(f"Removing {pad_start_frames} padding frames from filtered results")
         print(f"Before removal: {len(df_norm)} frames")
-        
+
         # Calculate end index (exclude reverse padding if present)
         end_idx = len(df_norm)
         if pose_config.get("enable_reverse_padding", False) and pose_config.get("pad_end_frames", 0) > 0:
             pad_end_frames = pose_config.get("pad_end_frames", 0)
             end_idx -= pad_end_frames
             print(f"Also removing {pad_end_frames} reverse padding frames from end")
-        
+
         df_norm = df_norm.iloc[pad_start_frames:end_idx].reset_index(drop=True)
         df_pixel = df_pixel.iloc[pad_start_frames:end_idx].reset_index(drop=True)
         # Ajustar frame_index para começar do 0
@@ -4774,6 +5463,33 @@ def process_videos_in_directory(existing_root=None):
     print(f"Running script: {Path(__file__).name}")
     print(f"Script directory: {Path(__file__).parent.resolve()}")
 
+    # Detect GPU backends availability
+    print("\n=== Detecting GPU Backends Availability ===")
+    backends = detect_gpu_backends()
+
+    # Test each available backend
+    available_backends = {}
+    for backend_name in ["nvidia", "rocm", "mps"]:
+        if backend_name in backends:
+            available, info, error = backends[backend_name]
+            if available:
+                print(f"\nTesting {backend_name.upper()} backend...")
+                test_result = test_mediapipe_gpu_delegate(backend_name)
+                available_backends[backend_name] = (available, info, error)
+                available_backends[f"{backend_name}_test"] = test_result
+                if test_result[0]:
+                    print(f"✓ {backend_name.upper()} backend test passed")
+                else:
+                    print(f"⚠ {backend_name.upper()} backend test failed: {test_result[1]}")
+                    # Mark as unavailable if test fails
+                    available_backends[backend_name] = (False, info, test_result[1])
+            else:
+                print(f"✗ {backend_name.upper()} not available: {error}")
+                available_backends[backend_name] = (False, info, error)
+                available_backends[f"{backend_name}_test"] = (False, error)
+
+    print("=" * 40 + "\n")
+
     # Use existing root or create new one for dialogs
     if existing_root is not None:
         root = existing_root
@@ -4785,6 +5501,20 @@ def process_videos_in_directory(existing_root=None):
 
         with suppress(Exception):
             root.attributes("-topmost", True)
+
+    # Show device selection dialog
+    device_dialog = DeviceSelectionDialog(root, available_backends)
+    selected_device = device_dialog.result if device_dialog.result else "cpu"
+
+    use_gpu = selected_device in ["nvidia", "rocm", "mps"]
+    gpu_backend = selected_device if use_gpu else None
+
+    if use_gpu:
+        print(f"✓ GPU processing selected ({selected_device.upper()})")
+    else:
+        print("✓ CPU processing selected")
+
+    print()
 
     # Helper function to prepare root window for dialogs on macOS
     # Fixes issue where dialogs appear in wrong position (bottom corner) on macOS
@@ -4867,7 +5597,7 @@ def process_videos_in_directory(existing_root=None):
         output_dir.mkdir(parents=True, exist_ok=True)
 
         try:
-            process_video(video_file, output_dir, pose_config)
+            process_video(video_file, output_dir, pose_config, use_gpu=use_gpu, gpu_backend=gpu_backend)
         except Exception as e:
             print(f"Error processing {video_file.name}: {e}")
         finally:
