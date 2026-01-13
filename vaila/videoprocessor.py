@@ -5,14 +5,13 @@ https://github.com/vaila-multimodaltoolbox/vaila
 Please see AUTHORS for contributors.
 Created by Paulo Santiago
 Date: 03 April 2025
-Updated: 25 July 2025
-
-Licensed under GNU Lesser General Public License v3.0
+Updated: 12 January 2026
 
 Description:
-This script allows users to process and edit video files, enabling batch processing of videos. Users can choose between two main operations:
+This script allows users to process and edit video files, enabling batch processing of videos. Users can choose between three main operations:
 1. Merging a video with its reversed version, resulting in a video with double the frames.
 2. Splitting each video into two halves and saving only the second half.
+3. Merging multiple videos into a single video in a specified order.
 The script supports custom text files for batch processing and includes a GUI for directory and file selection.
 
 Key Features:
@@ -23,23 +22,44 @@ Key Features:
 - Split option: Processes each video to save only the second half.
 - Automatic creation of output directories based on a timestamp for organized file management.
 - Detailed console output for tracking progress and handling errors.
+- Support for merging multiple videos into a single video in a specified order.
 
 Usage:
-- python videoprocessor.py
-- Run the script to open a graphical interface. After selecting the source and target directories, choose between merging or splitting the videos.
+- Run the script to open a graphical interface.
+- Select the operation to perform.
+- Select the source directory.
+- Select the target directory.
+- Select the text file to use for batch processing.
+- Click the "Start" button to begin the processing.
 - The processed videos will be saved in a new output directory named with a timestamp.
 
 Requirements:
 - FFmpeg must be installed and accessible in the system PATH.
-- Python 3.x environment.
+- Python 3.12.12 environment.
 - Tkinter for the GUI components (usually included with Python).
+- rich for enhanced console output.
+- tqdm for progress tracking.
+- pathlib for path manipulation.
+- subprocess for subprocess management.
+- time for time management.
+- json for JSON manipulation.
+- os for operating system management.
+- tkinter for the GUI components.
+- simpledialog for simple dialogs.
+- messagebox for message boxes.
+- filedialog for file dialogs.
+- tqdm for progress tracking.
+- rich for enhanced console output.
+- pathlib for path manipulation.
+- subprocess for subprocess management.
 
-Installation of FFmpeg (for video processing):
-- **Conda (recommended)**:
-  ```bash
-  conda install -c conda-forge ffmpeg
-  ```
+Installation:
+uv run videoprocessor.py
 
+License:
+Affero General Public License v3.0
+https://www.gnu.org/licenses/agpl-3.0.html
+Visit the project repository: https://github.com/vaila-multimodaltoolbox
 """
 
 import json
@@ -317,6 +337,8 @@ def process_videos_merge(source_dir, target_dir, use_text_file=False, text_file_
                 "4",
                 f"-{quality_param}",
                 preset_value,
+                "-pix_fmt",
+                "yuv420p",
                 output_video,
             ]
 
@@ -721,6 +743,14 @@ def process_videos_gui():
             "Invalid operation selected. Please enter 'm', 's', or 'multi'.",
         )
         return
+
+    # Print the selected operation
+    operation_names = {
+        "m": "merge (original+reverse)",
+        "s": "split (keep second half)",
+        "multi": "multi-video merge"
+    }
+    print(f"Selected operation: '{operation}' - {operation_names[operation]}")
 
     # For multi-video merge, call the new module
     if operation == "multi":

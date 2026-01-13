@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 11 January 2026
-Version: 0.7.1 (NVIDIA GPU Optimized)
+Update Date: 12 January 2026
+Version: 0.7.2 (NVIDIA GPU Optimized)
 
 Example of usage:
 First activate the vaila environment:
@@ -664,6 +664,8 @@ def get_default_config():
         },
         "enable_padding": ENABLE_PADDING_DEFAULT,
         "pad_start_frames": PAD_START_FRAMES_DEFAULT,
+        "enable_reverse_padding": False,  # NEW: Reverse padding (rear wiper)
+        "pad_end_frames": 0,  # NEW: Number of frames for reverse padding
         "bounding_box": {
             "enable_crop": False,
             "bbox_x_min": 0,
@@ -673,6 +675,8 @@ def get_default_config():
             "enable_resize_crop": False,
             "resize_crop_scale": 2,
         },
+        # NEW: Múltiplos ranges de ROI para diferentes intervalos de frames
+        "bounding_box_ranges": [],  # Lista de dicts com frame_start, frame_end, e config de ROI
     }
 
 
@@ -1001,16 +1005,24 @@ def save_config_to_toml(config, filepath):
 
             f.write("\n[padding]\n")
             f.write("# ================================================================\n")
-            f.write("# INITIAL FRAME PADDING FOR STABILIZATION\n")
+            f.write("# FRAME PADDING FOR STABILIZATION (NORMAL AND REVERSE)\n")
             f.write("# ================================================================\n")
-            f.write("# Add repeated frames at the start to help MediaPipe stabilize.\n")
+            f.write("# Add repeated frames at the start/end to help MediaPipe stabilize.\n")
             f.write(
                 f"enable_padding = {str(config.get('enable_padding', ENABLE_PADDING_DEFAULT)).lower()}  # true/false\n"
             )
             f.write(
                 f"pad_start_frames = {config.get('pad_start_frames', PAD_START_FRAMES_DEFAULT)}  # Number of frames to pad at start\n"
             )
-            f.write("# Recommended: 30-60 for most videos.\n\n")
+            f.write("# Recommended: 30-60 for most videos.\n")
+            f.write(
+                f"enable_reverse_padding = {str(config.get('enable_reverse_padding', False)).lower()}  # NEW: Reverse padding (rear wiper)\n"
+            )
+            f.write("#                         # true = repeat last frames at end (for videos where subject gets closer)\n")
+            f.write(
+                f"pad_end_frames = {config.get('pad_end_frames', 0)}  # NEW: Number of frames to pad at end (reverse padding)\n"
+            )
+            f.write("#                         # Recommended: 30-60 for videos where subject size changes significantly\n\n")
 
             f.write("[bounding_box]\n")
             f.write("# ================================================================\n")
@@ -1058,6 +1070,76 @@ def save_config_to_toml(config, filepath):
             f.write("#                         # 5-8 = for very distant or tiny people\n")
             f.write("# This is separate from video_resize. Only the cropped region is resized,\n")
             f.write("# which is more efficient than resizing the entire video.\n\n")
+            f.write("# Polygon ROI (optional):\n")
+            if bb.get("roi_polygon_points"):
+                # Save polygon points as TOML array
+                polygon_str = "[\n"
+                for pt in bb["roi_polygon_points"]:
+                    polygon_str += f"    [{pt[0]}, {pt[1]}],\n"
+                polygon_str = polygon_str.rstrip(",\n") + "\n]"
+                f.write(f"roi_polygon_points = {polygon_str}  # Polygon ROI points\n")
+            else:
+                f.write("# roi_polygon_points = [[x1, y1], [x2, y2], ...]  # Polygon ROI points\n")
+            f.write("# Note: If roi_polygon_points is set, it takes precedence over bbox coordinates.\n")
+            f.write("# Use 'Select Polygon ROI' button in GUI to visually select polygon from video.\n\n")
+
+            # NEW: Save multiple ROI ranges for different frame intervals
+            bbox_ranges = config.get("bounding_box_ranges", [])
+            if bbox_ranges and len(bbox_ranges) > 0:
+                f.write("[bounding_box_ranges]\n")
+                f.write("# ================================================================\n")
+                f.write("# MULTIPLE ROI RANGES FOR DIFFERENT FRAME INTERVALS (ADVANCED)\n")
+                f.write("# ================================================================\n")
+                f.write("# Define different ROI and resize crop settings for different frame ranges.\n")
+                f.write("# This is useful when the subject size changes significantly during the video.\n")
+                f.write("# Example: Small subject at start (frames 0-100) needs larger ROI and 4x resize,\n")
+                f.write("#          but larger subject later (frames 101+) needs smaller ROI and 2x resize.\n\n")
+                
+                for idx, range_config in enumerate(bbox_ranges):
+                    f.write(f"[[bounding_box_ranges.range]]  # Range {idx + 1}\n")
+                    f.write(f"frame_start = {range_config.get('frame_start', 0)}  # Start frame (0-based)\n")
+                    frame_end_val = range_config.get('frame_end', float('inf'))
+                    if frame_end_val == float('inf'):
+                        f.write('frame_end = "inf"  # End frame (use "inf" for last frame)\n')
+                    else:
+                        f.write(f"frame_end = {int(frame_end_val)}  # End frame\n")
+                    f.write(f"enable_crop = {str(range_config.get('enable_crop', False)).lower()}  # Enable ROI for this range\n")
+                    f.write(f"bbox_x_min = {range_config.get('bbox_x_min', 0)}  # Left edge of ROI\n")
+                    f.write(f"bbox_y_min = {range_config.get('bbox_y_min', 0)}  # Top edge of ROI\n")
+                    f.write(f"bbox_x_max = {range_config.get('bbox_x_max', 1920)}  # Right edge of ROI\n")
+                    f.write(f"bbox_y_max = {range_config.get('bbox_y_max', 1080)}  # Bottom edge of ROI\n")
+                    f.write(f"enable_resize_crop = {str(range_config.get('enable_resize_crop', False)).lower()}  # Resize cropped region\n")
+                    f.write(f"resize_crop_scale = {range_config.get('resize_crop_scale', 2)}  # Scale factor (2-8)\n")
+                    if range_config.get("roi_polygon_points"):
+                        polygon_str = "[\n"
+                        for pt in range_config["roi_polygon_points"]:
+                            polygon_str += f"    [{pt[0]}, {pt[1]}],\n"
+                        polygon_str = polygon_str.rstrip(",\n") + "\n]"
+                        f.write(f"roi_polygon_points = {polygon_str}  # Polygon ROI points (optional)\n")
+                    f.write("\n")
+            else:
+                f.write("# [bounding_box_ranges]  # Uncomment to use multiple ROI ranges\n")
+                f.write("# [[bounding_box_ranges.range]]\n")
+                f.write("# frame_start = 0\n")
+                f.write("# frame_end = 100\n")
+                f.write("# enable_crop = true\n")
+                f.write("# bbox_x_min = 100\n")
+                f.write("# bbox_y_min = 100\n")
+                f.write("# bbox_x_max = 500\n")
+                f.write("# bbox_y_max = 400\n")
+                f.write("# enable_resize_crop = true\n")
+                f.write("# resize_crop_scale = 4\n")
+                f.write("#\n")
+                f.write("# [[bounding_box_ranges.range]]\n")
+                f.write("# frame_start = 101\n")
+                f.write('# frame_end = \"inf\"  # Use \"inf\" for last frame\\n')
+                f.write("# enable_crop = true\n")
+                f.write("# bbox_x_min = 150\n")
+                f.write("# bbox_y_min = 150\n")
+                f.write("# bbox_x_max = 600\n")
+                f.write("# bbox_y_max = 500\n")
+                f.write("# enable_resize_crop = true\n")
+                f.write("# resize_crop_scale = 2\n\n")
 
         print(f"Configuration saved to: {filepath}")
         return True
@@ -1196,9 +1278,13 @@ def load_config_from_toml(filepath):
             pad = toml_config["padding"]
             config["enable_padding"] = bool(pad.get("enable_padding", ENABLE_PADDING_DEFAULT))
             config["pad_start_frames"] = int(pad.get("pad_start_frames", PAD_START_FRAMES_DEFAULT))
+            config["enable_reverse_padding"] = bool(pad.get("enable_reverse_padding", False))
+            config["pad_end_frames"] = int(pad.get("pad_end_frames", 0))
         else:
             config["enable_padding"] = ENABLE_PADDING_DEFAULT
             config["pad_start_frames"] = PAD_START_FRAMES_DEFAULT
+            config["enable_reverse_padding"] = False
+            config["pad_end_frames"] = 0
 
         # Bounding box section
         if "bounding_box" in toml_config:
@@ -1239,6 +1325,43 @@ def load_config_from_toml(filepath):
                     "resize_crop_scale": 2,
                 }
             )
+
+        # NEW: Load multiple ROI ranges for different frame intervals
+        if "bounding_box_ranges" in toml_config:
+            bbox_ranges_config = toml_config["bounding_box_ranges"]
+            if "range" in bbox_ranges_config:
+                ranges_list = bbox_ranges_config["range"]
+                # Handle both single dict and list of dicts
+                if isinstance(ranges_list, dict):
+                    ranges_list = [ranges_list]
+                
+                config["bounding_box_ranges"] = []
+                for range_config in ranges_list:
+                    frame_end = range_config.get("frame_end", float('inf'))
+                    # Handle 'inf' string in TOML
+                    if isinstance(frame_end, str) and frame_end.lower() == "inf":
+                        frame_end = float('inf')
+                    
+                    range_dict = {
+                        "frame_start": int(range_config.get("frame_start", 0)),
+                        "frame_end": float(frame_end) if isinstance(frame_end, (int, float)) else float('inf'),
+                        "enable_crop": bool(range_config.get("enable_crop", False)),
+                        "bbox_x_min": int(range_config.get("bbox_x_min", 0)),
+                        "bbox_y_min": int(range_config.get("bbox_y_min", 0)),
+                        "bbox_x_max": int(range_config.get("bbox_x_max", 1920)),
+                        "bbox_y_max": int(range_config.get("bbox_y_max", 1080)),
+                        "enable_resize_crop": bool(range_config.get("enable_resize_crop", False)),
+                        "resize_crop_scale": int(range_config.get("resize_crop_scale", 2)),
+                        "roi_polygon_points": range_config.get("roi_polygon_points"),
+                    }
+                    config["bounding_box_ranges"].append(range_dict)
+                    print(f"Loaded ROI range: frames {range_dict['frame_start']}-{range_dict['frame_end']}, crop={range_dict['enable_crop']}, resize={range_dict['enable_resize_crop']}")
+            else:
+                config["bounding_box_ranges"] = []
+                print("Warning: [bounding_box_ranges] section found but no 'range' entries")
+        else:
+            config["bounding_box_ranges"] = []
+            print("No [bounding_box_ranges] section found, using single ROI (backward compatible)")
 
         print(f"Configuration loaded successfully from: {filepath}")
         print(f"Total parameters: {len(config)}")
@@ -1294,6 +1417,10 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
             row=10, column=0, sticky="e"
         )
         tk.Label(master, text="Number of padding frames:").grid(row=11, column=0, sticky="e")
+        tk.Label(master, text="Enable reverse padding? (True/False):").grid(
+            row=12, column=0, sticky="e"
+        )
+        tk.Label(master, text="Number of reverse padding frames:").grid(row=13, column=0, sticky="e")
 
         # Entries
         self.min_detection_entry = tk.Entry(master)
@@ -1320,6 +1447,10 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
         self.enable_padding_entry.insert(0, str(ENABLE_PADDING_DEFAULT))
         self.pad_start_frames_entry = tk.Entry(master)
         self.pad_start_frames_entry.insert(0, str(PAD_START_FRAMES_DEFAULT))
+        self.enable_reverse_padding_entry = tk.Entry(master)
+        self.enable_reverse_padding_entry.insert(0, "False")
+        self.pad_end_frames_entry = tk.Entry(master)
+        self.pad_end_frames_entry.insert(0, "0")
 
         # Grid
         self.min_detection_entry.grid(row=0, column=1)
@@ -1334,10 +1465,12 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
         self.resize_scale_entry.grid(row=9, column=1)
         self.enable_padding_entry.grid(row=10, column=1)
         self.pad_start_frames_entry.grid(row=11, column=1)
+        self.enable_reverse_padding_entry.grid(row=12, column=1)
+        self.pad_end_frames_entry.grid(row=13, column=1)
 
         # Bounding box section
         bbox_frame = tk.LabelFrame(master, text="Bounding Box (ROI) Selection", padx=10, pady=10)
-        bbox_frame.grid(row=12, column=0, columnspan=2, pady=(10, 0), sticky="ew")
+        bbox_frame.grid(row=14, column=0, columnspan=2, pady=(10, 0), sticky="ew")
 
         # Enable crop checkbox
         self.enable_crop_var = tk.BooleanVar(value=False)
@@ -1410,6 +1543,32 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
         self.resize_crop_scale_entry.insert(0, "2")
         self.resize_crop_scale_entry.grid(row=8, column=1, sticky="w", padx=5)
 
+        # Multi-ROI section
+        multi_roi_frame = tk.Frame(bbox_frame)
+        multi_roi_frame.grid(row=9, column=0, columnspan=2, pady=10)
+
+        tk.Label(multi_roi_frame, text="Number of ROI ranges:").pack(side="left", padx=5)
+        self.num_roi_ranges_entry = tk.Entry(multi_roi_frame, width=5)
+        self.num_roi_ranges_entry.insert(0, "1")
+        self.num_roi_ranges_entry.pack(side="left", padx=5)
+
+        setup_multi_roi_btn = tk.Button(
+            multi_roi_frame,
+            text="Setup Multiple ROIs",
+            command=self.setup_multiple_rois,
+            bg="#9C27B0",
+            fg="white",
+            width=18,
+        )
+        setup_multi_roi_btn.pack(side="left", padx=5)
+
+        # ROI ranges status label
+        self.roi_ranges_label = tk.Label(bbox_frame, text="ROI ranges configured: 0", fg="gray")
+        self.roi_ranges_label.grid(row=10, column=0, columnspan=2, pady=5)
+
+        # Initialize bounding_box_ranges list
+        self.bounding_box_ranges = []
+
         # Bind update function to coordinate entries
         for entry in [
             self.bbox_x_min_entry,
@@ -1421,7 +1580,7 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
 
         # TOML section
         toml_frame = tk.LabelFrame(master, text="Advanced Configuration (TOML)", padx=10, pady=10)
-        toml_frame.grid(row=13, column=0, columnspan=2, pady=(10, 0), sticky="ew")
+        toml_frame.grid(row=15, column=0, columnspan=2, pady=(10, 0), sticky="ew")
         btns_frame = tk.Frame(toml_frame)
         btns_frame.pack()
         tk.Button(btns_frame, text="Load Configuration TOML", command=self.load_config_file).pack(
@@ -1433,6 +1592,13 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
             command=self.create_default_toml_template,
         ).pack(side="left", padx=5)
         tk.Button(btns_frame, text="Help", command=self.show_help).pack(side="left", padx=5)
+        tk.Button(
+            btns_frame,
+            text="Save Current Config",
+            command=self.save_current_config_to_toml,
+            bg="#2196F3",
+            fg="white",
+        ).pack(side="left", padx=5)
         self.toml_label = tk.Label(toml_frame, text="No TOML loaded", fg="gray")
         self.toml_label.pack()
 
@@ -1493,6 +1659,209 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
                 )
             else:
                 messagebox.showerror("Error", "Failed to create template file.")
+
+        dialog_root.destroy()
+
+    def setup_multiple_rois(self):
+        """Setup multiple ROI ranges with visual bounding box selection for each"""
+        from tkinter import simpledialog, messagebox
+
+        try:
+            num_ranges = int(self.num_roi_ranges_entry.get())
+            if num_ranges < 1:
+                messagebox.showerror("Error", "Number of ROI ranges must be at least 1.")
+                return
+        except ValueError:
+            messagebox.showerror("Error", "Please enter a valid number for ROI ranges.")
+            return
+
+        if not self.input_dir:
+            messagebox.showerror(
+                "Error", "No input directory specified. Please select input directory first."
+            )
+            return
+
+        # Find first video file
+        video_files = [
+            f
+            for f in Path(self.input_dir).glob("*.*")
+            if f.suffix.lower() in [".mp4", ".avi", ".mov"]
+        ]
+
+        if not video_files:
+            messagebox.showerror("Error", "No video files found in input directory.")
+            return
+
+        first_video = str(video_files[0])
+        
+        # Get video info for cap
+        cap = cv2.VideoCapture(first_video)
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        cap.release()
+
+        # Reset ranges list
+        self.bounding_box_ranges = []
+
+        for i in range(num_ranges):
+            # Ask for frame range
+            frame_start = simpledialog.askinteger(
+                f"ROI Range {i + 1}/{num_ranges}",
+                f"Enter START frame for ROI range {i + 1}:\n(Video has {total_frames} frames, 0-indexed)",
+                minvalue=0,
+                maxvalue=total_frames - 1,
+                initialvalue=0 if i == 0 else self.bounding_box_ranges[-1].get("frame_end", 0) + 1 if self.bounding_box_ranges else 0,
+            )
+            if frame_start is None:
+                messagebox.showinfo("Cancelled", f"Setup cancelled at range {i + 1}.")
+                break
+
+            # For last range, suggest "inf" equivalent (total_frames)
+            default_end = total_frames - 1 if i == num_ranges - 1 else frame_start + 100
+            frame_end_str = simpledialog.askstring(
+                f"ROI Range {i + 1}/{num_ranges}",
+                f"Enter END frame for ROI range {i + 1}:\n(Enter 'inf' for last frame, or a number up to {total_frames - 1})",
+                initialvalue="inf" if i == num_ranges - 1 else str(min(default_end, total_frames - 1)),
+            )
+            if frame_end_str is None:
+                messagebox.showinfo("Cancelled", f"Setup cancelled at range {i + 1}.")
+                break
+
+            # Parse frame_end
+            if frame_end_str.lower() == "inf":
+                frame_end = float("inf")
+            else:
+                try:
+                    frame_end = int(frame_end_str)
+                except ValueError:
+                    messagebox.showerror("Error", f"Invalid end frame: {frame_end_str}")
+                    break
+
+            # Get resize crop scale for this range
+            resize_scale = simpledialog.askinteger(
+                f"ROI Range {i + 1}/{num_ranges}",
+                f"Enter resize crop scale for range {i + 1} (2-8):",
+                minvalue=1,
+                maxvalue=10,
+                initialvalue=2,
+            )
+            if resize_scale is None:
+                resize_scale = 2
+
+            # Now select the bounding box visually
+            messagebox.showinfo(
+                f"Select BBox for Range {i + 1}",
+                f"Select the bounding box for frames {frame_start} to {frame_end_str}.\n\nDrag to select region, press SPACE or ENTER to confirm."
+            )
+
+            # Open video at the specified start frame
+            cap = cv2.VideoCapture(first_video)
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_start)
+            ret, frame = cap.read()
+            cap.release()
+
+            if not ret:
+                messagebox.showerror("Error", f"Could not read frame {frame_start} from video.")
+                break
+
+            # Let user select ROI
+            cv2.namedWindow("Select ROI for Range " + str(i + 1), cv2.WINDOW_NORMAL)
+            cv2.resizeWindow("Select ROI for Range " + str(i + 1), 1280, 720)
+            bbox = cv2.selectROI("Select ROI for Range " + str(i + 1), frame, fromCenter=False, showCrosshair=True)
+            cv2.destroyAllWindows()
+
+            if bbox[2] == 0 or bbox[3] == 0:
+                messagebox.showinfo("Skipped", f"ROI selection skipped for range {i + 1}.")
+                continue
+
+            x_min, y_min, w, h = bbox
+            x_max = x_min + w
+            y_max = y_min + h
+
+            # Add to ranges list
+            range_config = {
+                "frame_start": frame_start,
+                "frame_end": frame_end,
+                "enable_crop": True,
+                "bbox_x_min": x_min,
+                "bbox_y_min": y_min,
+                "bbox_x_max": x_max,
+                "bbox_y_max": y_max,
+                "enable_resize_crop": True,
+                "resize_crop_scale": resize_scale,
+            }
+            self.bounding_box_ranges.append(range_config)
+
+            print(f"ROI Range {i + 1} configured: frames {frame_start}-{frame_end_str}, bbox ({x_min}, {y_min}) to ({x_max}, {y_max})")
+
+        # Update status label
+        self.roi_ranges_label.config(
+            text=f"ROI ranges configured: {len(self.bounding_box_ranges)}",
+            fg="green" if self.bounding_box_ranges else "gray"
+        )
+
+        if self.bounding_box_ranges:
+            messagebox.showinfo(
+                "Setup Complete",
+                f"Configured {len(self.bounding_box_ranges)} ROI range(s).\n\nUse 'Save Current Config' to save to TOML file."
+            )
+
+    def save_current_config_to_toml(self):
+        """Save current GUI configuration to a TOML file"""
+        from tkinter import filedialog, messagebox
+
+        # Create a root window for the dialog
+        dialog_root = tk.Tk()
+        dialog_root.withdraw()
+        dialog_root.attributes("-topmost", True)
+
+        file_path = filedialog.asksaveasfilename(
+            parent=dialog_root,
+            title="Save Current Configuration to TOML",
+            defaultextension=".toml",
+            filetypes=[("TOML files", "*.toml"), ("All files", "*.*")],
+            initialfile="my_config.toml",
+        )
+
+        if file_path:
+            # Collect current GUI values
+            save_config = {
+                "min_detection_confidence": float(self.min_detection_entry.get()),
+                "min_tracking_confidence": float(self.min_tracking_entry.get()),
+                "model_complexity": int(self.model_complexity_entry.get()),
+                "enable_segmentation": self.enable_segmentation_entry.get().lower() == "true",
+                "smooth_segmentation": self.smooth_segmentation_entry.get().lower() == "true",
+                "static_image_mode": self.static_image_mode_entry.get().lower() == "true",
+                "apply_filtering": self.apply_filtering_entry.get().lower() == "true",
+                "estimate_occluded": self.estimate_occluded_entry.get().lower() == "true",
+                "enable_resize": self.enable_resize_entry.get().lower() == "true",
+                "resize_scale": int(self.resize_scale_entry.get()),
+                "enable_advanced_filtering": False,
+                "interp_method": "linear",
+                "smooth_method": "none",
+                "max_gap": 60,
+                "_all_smooth_params": get_default_config()["smoothing_params"],
+                "enable_padding": self.enable_padding_entry.get().lower() == "true",
+                "pad_start_frames": int(self.pad_start_frames_entry.get()),
+                "enable_reverse_padding": self.enable_reverse_padding_entry.get().lower() == "true",
+                "pad_end_frames": int(self.pad_end_frames_entry.get()),
+                "enable_crop": self.enable_crop_var.get(),
+                "bbox_x_min": int(self.bbox_x_min_entry.get() or 0),
+                "bbox_y_min": int(self.bbox_y_min_entry.get() or 0),
+                "bbox_x_max": int(self.bbox_x_max_entry.get() or 1920),
+                "bbox_y_max": int(self.bbox_y_max_entry.get() or 1080),
+                "enable_resize_crop": self.enable_resize_crop_var.get(),
+                "resize_crop_scale": int(self.resize_crop_scale_entry.get() or 2),
+                "bounding_box_ranges": getattr(self, "bounding_box_ranges", []),
+            }
+
+            ok = save_config_to_toml(save_config, file_path)
+            if ok:
+                messagebox.showinfo(
+                    "Configuration Saved",
+                    f"Configuration saved successfully to:\\n{file_path}",
+                )
+            else:
+                messagebox.showerror("Error", "Failed to save configuration file.")
 
         dialog_root.destroy()
 
@@ -1960,6 +2329,17 @@ For more information, visit: https://github.com/vaila-multimodaltoolbox/vaila
             0, str(config.get("pad_start_frames", PAD_START_FRAMES_DEFAULT))
         )
 
+        # Reverse padding (rear wiper)
+        self.enable_reverse_padding_entry.delete(0, tk.END)
+        self.enable_reverse_padding_entry.insert(
+            0, str(config.get("enable_reverse_padding", False))
+        )
+
+        self.pad_end_frames_entry.delete(0, tk.END)
+        self.pad_end_frames_entry.insert(
+            0, str(config.get("pad_end_frames", 0))
+        )
+
         # Bounding box parameters
         enable_crop = config.get("enable_crop", False)
         self.enable_crop_var.set(enable_crop)
@@ -1985,6 +2365,20 @@ For more information, visit: https://github.com/vaila-multimodaltoolbox/vaila
         roi_polygon = config.get("roi_polygon_points")
         if roi_polygon:
             self.roi_polygon_points = roi_polygon
+
+        # Load multiple ROI ranges
+        bbox_ranges = config.get("bounding_box_ranges", [])
+        self.bounding_box_ranges = bbox_ranges
+        
+        # Update ROI ranges GUI elements
+        self.num_roi_ranges_entry.delete(0, tk.END)
+        self.num_roi_ranges_entry.insert(0, str(len(bbox_ranges) if bbox_ranges else 1))
+        
+        if hasattr(self, "roi_ranges_label"):
+            self.roi_ranges_label.config(
+                text=f"ROI ranges configured: {len(bbox_ranges)}",
+                fg="green" if bbox_ranges else "gray"
+            )
 
         # Update normalized coordinates display
         self.update_normalized_coords()
@@ -2012,6 +2406,8 @@ For more information, visit: https://github.com/vaila-multimodaltoolbox/vaila
                 "_all_smooth_params": get_default_config()["smoothing_params"],
                 "enable_padding": self.enable_padding_entry.get().lower() == "true",
                 "pad_start_frames": int(self.pad_start_frames_entry.get()),
+                "enable_reverse_padding": self.enable_reverse_padding_entry.get().lower() == "true",
+                "pad_end_frames": int(self.pad_end_frames_entry.get()),
                 # Bounding box settings
                 "enable_crop": self.enable_crop_var.get(),
                 "bbox_x_min": int(self.bbox_x_min_entry.get() or 0),
@@ -2021,6 +2417,7 @@ For more information, visit: https://github.com/vaila-multimodaltoolbox/vaila
                 "enable_resize_crop": self.enable_resize_crop_var.get(),
                 "resize_crop_scale": int(self.resize_crop_scale_entry.get() or 2),
                 "roi_polygon_points": getattr(self, "roi_polygon_points", None),  # Store polygon points if selected
+                "bounding_box_ranges": getattr(self, "bounding_box_ranges", []),  # Store multiple ROI ranges
             }
 
 
@@ -2975,28 +3372,18 @@ def process_video_batch(
     batch_index=0,
     fps=30.0,
     start_frame_idx=0,
+    enable_resize=False,
+    resize_scale=1.0,
 ):
     """
     Process a batch of frames using MediaPipe Tasks API and return landmarks with CPU throttling.
-    Supports bounding box cropping and coordinate mapping.
+    Supports bounding box cropping and coordinate mapping with dynamic ROI ranges.
     """
     # Use full dimensions if provided, otherwise use processing dimensions
     if full_width is None:
         full_width = width
     if full_height is None:
         full_height = height
-
-    # Extract bounding box config
-    enable_crop = pose_config.get("enable_crop", False)
-    bbox_config = {
-        "enable_resize_crop": pose_config.get("enable_resize_crop", False),
-        "resize_crop_scale": pose_config.get("resize_crop_scale", 2),
-        "bbox_x_min": pose_config.get("bbox_x_min", 0),
-        "bbox_y_min": pose_config.get("bbox_y_min", 0),
-        "bbox_x_max": pose_config.get("bbox_x_max", width),
-        "bbox_y_max": pose_config.get("bbox_y_max", height),
-        "roi_polygon_points": pose_config.get("roi_polygon_points"),
-    }
 
     batch_landmarks = []
     batch_pixel_landmarks = []
@@ -3014,6 +3401,36 @@ def process_video_batch(
         # Calculate timestamp (must be monotonically increasing)
         global_frame_idx = start_frame_idx + i
         timestamp_ms = int((global_frame_idx * 1000) / fps) if fps > 0 else global_frame_idx * 33
+
+        # Get dynamic bbox config for this frame (supports multiple ROI ranges)
+        bbox_config = get_bbox_config_for_frame(
+            global_frame_idx,
+            pose_config,
+            full_width,
+            full_height,
+            width,
+            height,
+            enable_resize,
+            resize_scale,
+        )
+        enable_crop = bbox_config.get("enable_crop", False) if hasattr(bbox_config, "get") else (
+            bbox_config.get("bbox_x_min", 0) != 0 or 
+            bbox_config.get("bbox_y_min", 0) != 0 or
+            bbox_config.get("bbox_x_max", width) != width or
+            bbox_config.get("bbox_y_max", height) != height
+        )
+        # Check if any ROI range has enable_crop, or if single bbox config has crop
+        if not enable_crop:
+            bbox_ranges = pose_config.get("bounding_box_ranges", [])
+            if bbox_ranges:
+                for range_config in bbox_ranges:
+                    if (range_config.get("frame_start", 0) <= global_frame_idx <= 
+                        range_config.get("frame_end", float('inf')) and
+                        range_config.get("enable_crop", False)):
+                        enable_crop = True
+                        break
+            else:
+                enable_crop = pose_config.get("enable_crop", False)
 
         # Process frame with Tasks API
         landmarks = process_frame_with_tasks_api(
@@ -3083,6 +3500,139 @@ def cleanup_memory():
         print(
             f"Memory cleanup: {memory_info['available_gb']:.1f}GB available, {memory_info['percent_used']:.1f}% used"
         )
+
+
+def get_bbox_config_for_frame(frame_idx, pose_config, original_width, original_height, processing_width, processing_height, enable_resize, resize_scale):
+    """
+    Get bounding box configuration for a specific frame index.
+    Supports multiple ROI ranges for different frame intervals.
+    
+    Args:
+        frame_idx: Current frame index (0-based, excluding padding)
+        pose_config: Full pose configuration dictionary
+        original_width, original_height: Original video dimensions
+        processing_width, processing_height: Processing video dimensions (may be resized)
+        enable_resize: Whether video was resized
+        resize_scale: Resize scale factor
+        
+    Returns:
+        bbox_config: Dictionary with ROI configuration for this frame
+    """
+    # Check if we have multiple ROI ranges defined
+    bbox_ranges = pose_config.get("bounding_box_ranges", [])
+    
+    if bbox_ranges and len(bbox_ranges) > 0:
+        # Find the range that contains this frame
+        for range_config in bbox_ranges:
+            frame_start = range_config.get("frame_start", 0)
+            frame_end = range_config.get("frame_end", float('inf'))
+            
+            if frame_start <= frame_idx <= frame_end:
+                # Found matching range - use its configuration
+                enable_crop = range_config.get("enable_crop", False)
+                
+                if not enable_crop:
+                    # No crop for this range
+                    return {
+                        "enable_resize_crop": False,
+                        "resize_crop_scale": 1,
+                        "bbox_x_min": 0,
+                        "bbox_y_min": 0,
+                        "bbox_x_max": processing_width,
+                        "bbox_y_max": processing_height,
+                        "bbox_x_min_orig": 0,
+                        "bbox_y_min_orig": 0,
+                        "bbox_x_max_orig": original_width,
+                        "bbox_y_max_orig": original_height,
+                        "video_resized": enable_resize,
+                        "resize_scale": resize_scale if enable_resize else 1.0,
+                        "roi_polygon_points": None,
+                    }
+                
+                # Get bbox coordinates from range config
+                bbox_x_min_orig = range_config.get("bbox_x_min", 0)
+                bbox_y_min_orig = range_config.get("bbox_y_min", 0)
+                bbox_x_max_orig = range_config.get("bbox_x_max", original_width)
+                bbox_y_max_orig = range_config.get("bbox_y_max", original_height)
+                
+                # Scale coordinates if video was resized
+                if enable_resize and resize_scale > 1:
+                    bbox_x_min_scaled = int(bbox_x_min_orig * resize_scale)
+                    bbox_y_min_scaled = int(bbox_y_min_orig * resize_scale)
+                    bbox_x_max_scaled = int(bbox_x_max_orig * resize_scale)
+                    bbox_y_max_scaled = int(bbox_y_max_orig * resize_scale)
+                else:
+                    bbox_x_min_scaled = bbox_x_min_orig
+                    bbox_y_min_scaled = bbox_y_min_orig
+                    bbox_x_max_scaled = bbox_x_max_orig
+                    bbox_y_max_scaled = bbox_y_max_orig
+                
+                return {
+                    "enable_resize_crop": range_config.get("enable_resize_crop", False),
+                    "resize_crop_scale": range_config.get("resize_crop_scale", 2),
+                    "bbox_x_min": bbox_x_min_scaled,
+                    "bbox_y_min": bbox_y_min_scaled,
+                    "bbox_x_max": bbox_x_max_scaled,
+                    "bbox_y_max": bbox_y_max_scaled,
+                    "bbox_x_min_orig": bbox_x_min_orig,
+                    "bbox_y_min_orig": bbox_y_min_orig,
+                    "bbox_x_max_orig": bbox_x_max_orig,
+                    "bbox_y_max_orig": bbox_y_max_orig,
+                    "video_resized": enable_resize,
+                    "resize_scale": resize_scale if enable_resize else 1.0,
+                    "roi_polygon_points": range_config.get("roi_polygon_points"),
+                }
+        
+        # No matching range found - use default (no crop)
+        print(f"Warning: Frame {frame_idx} not in any ROI range, using default (no crop)")
+        return {
+            "enable_resize_crop": False,
+            "resize_crop_scale": 1,
+            "bbox_x_min": 0,
+            "bbox_y_min": 0,
+            "bbox_x_max": processing_width,
+            "bbox_y_max": processing_height,
+            "bbox_x_min_orig": 0,
+            "bbox_y_min_orig": 0,
+            "bbox_x_max_orig": original_width,
+            "bbox_y_max_orig": original_height,
+            "video_resized": enable_resize,
+            "resize_scale": resize_scale if enable_resize else 1.0,
+            "roi_polygon_points": None,
+        }
+    
+    # Fallback to single bounding_box config (backward compatibility)
+    enable_crop = pose_config.get("enable_crop", False)
+    if enable_resize and resize_scale > 1:
+        bbox_x_min_orig = pose_config.get("bbox_x_min", 0)
+        bbox_y_min_orig = pose_config.get("bbox_y_min", 0)
+        bbox_x_max_orig = pose_config.get("bbox_x_max", original_width)
+        bbox_y_max_orig = pose_config.get("bbox_y_max", original_height)
+        bbox_x_min_scaled = int(bbox_x_min_orig * resize_scale)
+        bbox_y_min_scaled = int(bbox_y_min_orig * resize_scale)
+        bbox_x_max_scaled = int(bbox_x_max_orig * resize_scale)
+        bbox_y_max_scaled = int(bbox_y_max_orig * resize_scale)
+    else:
+        bbox_x_min_scaled = pose_config.get("bbox_x_min", 0)
+        bbox_y_min_scaled = pose_config.get("bbox_y_min", 0)
+        bbox_x_max_scaled = pose_config.get("bbox_x_max", processing_width)
+        bbox_y_max_scaled = pose_config.get("bbox_y_max", processing_height)
+    
+    return {
+        "enable_resize_crop": pose_config.get("enable_resize_crop", False),
+        "resize_crop_scale": pose_config.get("resize_crop_scale", 2),
+        "bbox_x_min": bbox_x_min_scaled,
+        "bbox_y_min": bbox_y_min_scaled,
+        "bbox_x_max": bbox_x_max_scaled,
+        "bbox_y_max": bbox_y_max_scaled,
+        "bbox_x_min_orig": pose_config.get("bbox_x_min", 0),
+        "bbox_y_min_orig": pose_config.get("bbox_y_min", 0),
+        "bbox_x_max_orig": pose_config.get("bbox_x_max", original_width),
+        "bbox_y_max_orig": pose_config.get("bbox_y_max", original_height),
+        "video_resized": enable_resize,
+        "resize_scale": resize_scale if enable_resize else 1.0,
+        "roi_polygon_points": pose_config.get("roi_polygon_points"),
+    }
 
 
 def get_model_path(complexity):
@@ -3456,55 +4006,36 @@ def process_video(video_path, output_dir, pose_config, use_gpu=True):
 
     enable_padding = pose_config.get("enable_padding", ENABLE_PADDING_DEFAULT)
     pad_start_frames = pose_config.get("pad_start_frames", PAD_START_FRAMES_DEFAULT)
+    enable_reverse_padding = pose_config.get("enable_reverse_padding", False)
+    pad_end_frames = pose_config.get("pad_end_frames", 0)
 
     print(
         f"Padding configuration: enable_padding={enable_padding}, pad_start_frames={pad_start_frames}"
     )
+    if enable_reverse_padding:
+        print(f"Reverse padding (rear wiper): enabled, pad_end_frames={pad_end_frames}")
 
     # Store first frame for padding (only one copy, we'll reuse it)
     padding_frame = first_frame.copy() if enable_padding and pad_start_frames > 0 else None
+    
+    # Store last frame(s) for reverse padding
+    last_frames_for_padding = []
+    if enable_reverse_padding and pad_end_frames > 0:
+        # Read last frames for reverse padding
+        cap.set(cv2.CAP_PROP_POS_FRAMES, max(0, total_frames - pad_end_frames))
+        for _ in range(pad_end_frames):
+            ret, frame = cap.read()
+            if ret:
+                last_frames_for_padding.append(frame.copy())
+            else:
+                break
+        # If we didn't get enough frames, repeat the last one
+        while len(last_frames_for_padding) < pad_end_frames and len(last_frames_for_padding) > 0:
+            last_frames_for_padding.append(last_frames_for_padding[-1].copy())
+        print(f"Stored {len(last_frames_for_padding)} frames for reverse padding")
 
-    # Extract bounding box config
-    enable_crop = pose_config.get("enable_crop", False)
-    # IMPORTANT: If video was resized, scale bbox coordinates to match resized video dimensions
-    if enable_resize and resize_metadata:
-        resize_scale = resize_metadata["scale_factor"]
-        bbox_x_min_orig = pose_config.get("bbox_x_min", 0)
-        bbox_y_min_orig = pose_config.get("bbox_y_min", 0)
-        bbox_x_max_orig = pose_config.get("bbox_x_max", original_width)
-        bbox_y_max_orig = pose_config.get("bbox_y_max", original_height)
-        # Scale bbox coordinates to resized video
-        bbox_x_min_scaled = int(bbox_x_min_orig * resize_scale)
-        bbox_y_min_scaled = int(bbox_y_min_orig * resize_scale)
-        bbox_x_max_scaled = int(bbox_x_max_orig * resize_scale)
-        bbox_y_max_scaled = int(bbox_y_max_orig * resize_scale)
-        print(
-            f"Bbox scaled for resized video: ({bbox_x_min_scaled}, {bbox_y_min_scaled}) to ({bbox_x_max_scaled}, {bbox_y_max_scaled})"
-        )
-    else:
-        bbox_x_min_scaled = pose_config.get("bbox_x_min", 0)
-        bbox_y_min_scaled = pose_config.get("bbox_y_min", 0)
-        bbox_x_max_scaled = pose_config.get("bbox_x_max", width)
-        bbox_y_max_scaled = pose_config.get("bbox_y_max", height)
-
-    bbox_config = {
-        "enable_resize_crop": pose_config.get("enable_resize_crop", False),
-        "resize_crop_scale": pose_config.get("resize_crop_scale", 2),
-        "bbox_x_min": bbox_x_min_scaled,  # Use scaled coordinates for processing
-        "bbox_y_min": bbox_y_min_scaled,
-        "bbox_x_max": bbox_x_max_scaled,
-        "bbox_y_max": bbox_y_max_scaled,
-        # Store original coordinates for mapping back
-        "bbox_x_min_orig": pose_config.get("bbox_x_min", 0),
-        "bbox_y_min_orig": pose_config.get("bbox_y_min", 0),
-        "bbox_x_max_orig": pose_config.get("bbox_x_max", original_width),
-        "bbox_y_max_orig": pose_config.get("bbox_y_max", original_height),
-        "video_resized": enable_resize and resize_metadata is not None,
-        "resize_scale": resize_metadata["scale_factor"]
-        if (enable_resize and resize_metadata)
-        else 1.0,
-        "roi_polygon_points": pose_config.get("roi_polygon_points"),  # Store polygon ROI if available
-    }
+    # Get resize scale for bbox config function
+    resize_scale_value = resize_metadata["scale_factor"] if (enable_resize and resize_metadata) else 1.0
 
     # Check if batch processing should be used
     use_batch_processing = should_use_batch_processing(video_path, pose_config)
@@ -3529,7 +4060,25 @@ def process_video(video_path, output_dir, pose_config, use_gpu=True):
 
             # Process padding frames first if enabled
             if enable_padding and pad_start_frames > 0 and padding_frame is not None:
-                print(f"Processing {pad_start_frames} padding frames...")
+                print(f"Processing {pad_start_frames} padding frames (forward)...")
+                # Get bbox config for frame 0 (padding uses first frame config)
+                padding_bbox_config = get_bbox_config_for_frame(
+                    0,
+                    pose_config,
+                    original_width,
+                    original_height,
+                    width,
+                    height,
+                    enable_resize,
+                    resize_scale_value,
+                )
+                padding_enable_crop = (
+                    padding_bbox_config.get("bbox_x_min", 0) != 0 or
+                    padding_bbox_config.get("bbox_y_min", 0) != 0 or
+                    padding_bbox_config.get("bbox_x_max", width) != width or
+                    padding_bbox_config.get("bbox_y_max", height) != height
+                ) or pose_config.get("enable_crop", False)
+                
                 for pad_idx in range(pad_start_frames):
                     if should_throttle_cpu(frame_count):
                         apply_cpu_throttling()
@@ -3539,8 +4088,8 @@ def process_video(video_path, output_dir, pose_config, use_gpu=True):
                         padding_frame,
                         landmarker,
                         timestamp_ms,
-                        enable_crop,
-                        bbox_config,
+                        padding_enable_crop,
+                        padding_bbox_config,
                         width,
                         height,
                         original_width,
@@ -3593,6 +4142,8 @@ def process_video(video_path, output_dir, pose_config, use_gpu=True):
                             batch_index=current_batch,
                             fps=fps,
                             start_frame_idx=batch_start_idx,
+                            enable_resize=enable_resize,
+                            resize_scale=resize_scale_value,
                         )
                         normalized_landmarks_list.extend(batch_norm)
                         pixel_landmarks_list.extend(batch_pixel)
@@ -3623,6 +4174,8 @@ def process_video(video_path, output_dir, pose_config, use_gpu=True):
                         batch_index=current_batch,
                         fps=fps,
                         start_frame_idx=batch_start_idx,
+                        enable_resize=enable_resize,
+                        resize_scale=resize_scale_value,
                     )
 
                     normalized_landmarks_list.extend(batch_norm)
@@ -3642,6 +4195,74 @@ def process_video(video_path, output_dir, pose_config, use_gpu=True):
                     current_batch += 1
                     time.sleep(0.1)
 
+            # Process reverse padding frames (rear wiper) if enabled
+            if enable_reverse_padding and pad_end_frames > 0 and len(last_frames_for_padding) > 0:
+                print(f"Processing {pad_end_frames} reverse padding frames (rear wiper)...")
+                # Get bbox config for last frame (reverse padding uses last frame config)
+                last_frame_idx = total_frames - 1
+                reverse_padding_bbox_config = get_bbox_config_for_frame(
+                    last_frame_idx,
+                    pose_config,
+                    original_width,
+                    original_height,
+                    width,
+                    height,
+                    enable_resize,
+                    resize_scale_value,
+                )
+                reverse_padding_enable_crop = (
+                    reverse_padding_bbox_config.get("bbox_x_min", 0) != 0 or
+                    reverse_padding_bbox_config.get("bbox_y_min", 0) != 0 or
+                    reverse_padding_bbox_config.get("bbox_x_max", width) != width or
+                    reverse_padding_bbox_config.get("bbox_y_max", height) != height
+                ) or pose_config.get("enable_crop", False)
+                
+                # Process reverse padding frames (from last to first, like a rear wiper)
+                for pad_idx in range(pad_end_frames):
+                    if should_throttle_cpu(frame_count):
+                        apply_cpu_throttling()
+                    
+                    # Use frames in reverse order (last frame first, then second-to-last, etc.)
+                    reverse_frame_idx = pad_end_frames - 1 - pad_idx
+                    if reverse_frame_idx < len(last_frames_for_padding):
+                        reverse_padding_frame = last_frames_for_padding[reverse_frame_idx]
+                    else:
+                        # Fallback to last frame if we don't have enough
+                        reverse_padding_frame = last_frames_for_padding[-1] if last_frames_for_padding else padding_frame
+
+                    timestamp_ms = int((frame_count * 1000) / fps) if fps > 0 else frame_count * 33
+                    landmarks = process_frame_with_tasks_api(
+                        reverse_padding_frame,
+                        landmarker,
+                        timestamp_ms,
+                        reverse_padding_enable_crop,
+                        reverse_padding_bbox_config,
+                        width,
+                        height,
+                        original_width,
+                        original_height,
+                        pose_config,
+                        landmarks_history,
+                    )
+
+                    if landmarks:
+                        landmarks_history.append(landmarks)
+                        normalized_landmarks_list.append(landmarks)
+                        pixel_landmarks = [
+                            [int(lm[0] * original_width), int(lm[1] * original_height), lm[2]]
+                            for lm in landmarks
+                        ]
+                        pixel_landmarks_list.append(pixel_landmarks)
+                    else:
+                        num_landmarks = len(landmark_names)
+                        nan_landmarks = [[np.nan, np.nan, np.nan] for _ in range(num_landmarks)]
+                        normalized_landmarks_list.append(nan_landmarks)
+                        pixel_landmarks_list.append(nan_landmarks)
+                        frames_with_missing_data.append(frame_count)
+
+                    frame_count += 1
+                    time.sleep(FRAME_SLEEP_TIME)
+
         # Set frame_count for batch processing
         frame_count = len(normalized_landmarks_list)
         cap.release()
@@ -3655,7 +4276,25 @@ def process_video(video_path, output_dir, pose_config, use_gpu=True):
         with PoseLandmarker.create_from_options(options) as landmarker:
             # Process padding frames first if enabled
             if enable_padding and pad_start_frames > 0 and padding_frame is not None:
-                print(f"Processing {pad_start_frames} padding frames...")
+                print(f"Processing {pad_start_frames} padding frames (forward)...")
+                # Get bbox config for frame 0 (padding uses first frame config)
+                padding_bbox_config = get_bbox_config_for_frame(
+                    0,
+                    pose_config,
+                    original_width,
+                    original_height,
+                    width,
+                    height,
+                    enable_resize,
+                    resize_scale_value,
+                )
+                padding_enable_crop = (
+                    padding_bbox_config.get("bbox_x_min", 0) != 0 or
+                    padding_bbox_config.get("bbox_y_min", 0) != 0 or
+                    padding_bbox_config.get("bbox_x_max", width) != width or
+                    padding_bbox_config.get("bbox_y_max", height) != height
+                ) or pose_config.get("enable_crop", False)
+                
                 for pad_idx in range(pad_start_frames):
                     if should_throttle_cpu(frame_count):
                         apply_cpu_throttling()
@@ -3665,8 +4304,8 @@ def process_video(video_path, output_dir, pose_config, use_gpu=True):
                         padding_frame,
                         landmarker,
                         timestamp_ms,
-                        enable_crop,
-                        bbox_config,
+                        padding_enable_crop,
+                        padding_bbox_config,
                         width,
                         height,
                         original_width,
@@ -3701,6 +4340,9 @@ def process_video(video_path, output_dir, pose_config, use_gpu=True):
 
             # Reset video to beginning and process real frames
             cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            
+            # Track actual video frame index (excluding padding)
+            actual_video_frame_idx = 0
 
             # Process all frames frame-by-frame (no memory accumulation)
             while cap.isOpened():
@@ -3712,13 +4354,44 @@ def process_video(video_path, output_dir, pose_config, use_gpu=True):
                 if should_throttle_cpu(frame_count):
                     apply_cpu_throttling()
 
+                # Get dynamic bbox config for this actual video frame (supports multiple ROI ranges)
+                dynamic_bbox_config = get_bbox_config_for_frame(
+                    actual_video_frame_idx,
+                    pose_config,
+                    original_width,
+                    original_height,
+                    width,
+                    height,
+                    enable_resize,
+                    resize_scale_value,
+                )
+                # Determine if crop is enabled for this frame
+                dynamic_enable_crop = (
+                    dynamic_bbox_config.get("bbox_x_min", 0) != 0 or
+                    dynamic_bbox_config.get("bbox_y_min", 0) != 0 or
+                    dynamic_bbox_config.get("bbox_x_max", width) != width or
+                    dynamic_bbox_config.get("bbox_y_max", height) != height
+                )
+                if not dynamic_enable_crop:
+                    # Check ROI ranges
+                    bbox_ranges = pose_config.get("bounding_box_ranges", [])
+                    if bbox_ranges:
+                        for range_config in bbox_ranges:
+                            if (range_config.get("frame_start", 0) <= actual_video_frame_idx <= 
+                                range_config.get("frame_end", float('inf')) and
+                                range_config.get("enable_crop", False)):
+                                dynamic_enable_crop = True
+                                break
+                    else:
+                        dynamic_enable_crop = pose_config.get("enable_crop", False)
+
                 timestamp_ms = int((frame_count * 1000) / fps) if fps > 0 else frame_count * 33
                 landmarks = process_frame_with_tasks_api(
                     frame,
                     landmarker,
                     timestamp_ms,
-                    enable_crop,
-                    bbox_config,
+                    dynamic_enable_crop,
+                    dynamic_bbox_config,
                     width,
                     height,
                     original_width,
@@ -3726,6 +4399,8 @@ def process_video(video_path, output_dir, pose_config, use_gpu=True):
                     pose_config,
                     landmarks_history,
                 )
+                
+                actual_video_frame_idx += 1
 
                 if landmarks:
                     if VERBOSE_FRAMES:
@@ -3756,8 +4431,82 @@ def process_video(video_path, output_dir, pose_config, use_gpu=True):
                 # Progress info every 100 frames
                 if frame_count % 100 == 0:
                     print(
-                        f"  Processed {frame_count}/{total_frames + (pad_start_frames if enable_padding else 0)} frames"
+                        f"  Processed {frame_count}/{total_frames + (pad_start_frames if enable_padding else 0) + (pad_end_frames if enable_reverse_padding else 0)} frames"
                     )
+
+            # Process reverse padding frames (rear wiper) if enabled
+            if enable_reverse_padding and pad_end_frames > 0 and len(last_frames_for_padding) > 0:
+                print(f"Processing {pad_end_frames} reverse padding frames (rear wiper)...")
+                # Get bbox config for last frame (reverse padding uses last frame config)
+                last_frame_idx = total_frames - 1
+                reverse_padding_bbox_config = get_bbox_config_for_frame(
+                    last_frame_idx,
+                    pose_config,
+                    original_width,
+                    original_height,
+                    width,
+                    height,
+                    enable_resize,
+                    resize_scale_value,
+                )
+                reverse_padding_enable_crop = (
+                    reverse_padding_bbox_config.get("bbox_x_min", 0) != 0 or
+                    reverse_padding_bbox_config.get("bbox_y_min", 0) != 0 or
+                    reverse_padding_bbox_config.get("bbox_x_max", width) != width or
+                    reverse_padding_bbox_config.get("bbox_y_max", height) != height
+                ) or pose_config.get("enable_crop", False)
+                
+                # Process reverse padding frames (from last to first, like a rear wiper)
+                for pad_idx in range(pad_end_frames):
+                    if should_throttle_cpu(frame_count):
+                        apply_cpu_throttling()
+                    
+                    # Use frames in reverse order (last frame first, then second-to-last, etc.)
+                    reverse_frame_idx = pad_end_frames - 1 - pad_idx
+                    if reverse_frame_idx < len(last_frames_for_padding):
+                        reverse_padding_frame = last_frames_for_padding[reverse_frame_idx]
+                    else:
+                        # Fallback to last frame if we don't have enough
+                        reverse_padding_frame = last_frames_for_padding[-1] if last_frames_for_padding else padding_frame
+
+                    timestamp_ms = int((frame_count * 1000) / fps) if fps > 0 else frame_count * 33
+                    landmarks = process_frame_with_tasks_api(
+                        reverse_padding_frame,
+                        landmarker,
+                        timestamp_ms,
+                        reverse_padding_enable_crop,
+                        reverse_padding_bbox_config,
+                        width,
+                        height,
+                        original_width,
+                        original_height,
+                        pose_config,
+                        landmarks_history,
+                    )
+
+                    if landmarks:
+                        if VERBOSE_FRAMES:
+                            print(f"Reverse padding frame {pad_idx}: pose detected!")
+                        landmarks_history.append(landmarks)
+                        if pose_config.get("apply_filtering", False) and len(landmarks_history) > 3:
+                            landmarks = apply_temporal_filter(list(landmarks_history))
+                        normalized_landmarks_list.append(landmarks)
+                        pixel_landmarks = [
+                            [int(lm[0] * original_width), int(lm[1] * original_height), lm[2]]
+                            for lm in landmarks
+                        ]
+                        pixel_landmarks_list.append(pixel_landmarks)
+                    else:
+                        if VERBOSE_FRAMES:
+                            print(f"Reverse padding frame {pad_idx}: NO pose detected")
+                        num_landmarks = len(landmark_names)
+                        nan_landmarks = [[np.nan, np.nan, np.nan] for _ in range(num_landmarks)]
+                        normalized_landmarks_list.append(nan_landmarks)
+                        pixel_landmarks_list.append(nan_landmarks)
+                        frames_with_missing_data.append(frame_count)
+
+                    frame_count += 1
+                    time.sleep(FRAME_SLEEP_TIME)
 
         cap.release()
         cv2.destroyAllWindows()
@@ -3813,22 +4562,43 @@ def process_video(video_path, output_dir, pose_config, use_gpu=True):
             df_pixel, pose_config, lambda msg: print(f"  Pixel data: {msg}")
         )
 
-    # AGORA remover padding dos resultados filtrados
+    # AGORA remover padding dos resultados filtrados (inicial e reverso)
+    total_padding_frames = 0
     if enable_padding and pad_start_frames > 0:
-        print(f"Removing {pad_start_frames} padding frames from filtered results")
+        total_padding_frames += pad_start_frames
+    if enable_reverse_padding and pad_end_frames > 0:
+        total_padding_frames += pad_end_frames
+    
+    if total_padding_frames > 0:
+        print(f"Removing {total_padding_frames} padding frames from filtered results (start: {pad_start_frames if enable_padding else 0}, end: {pad_end_frames if enable_reverse_padding else 0})")
         print(f"Before removal: {len(df_norm)} frames")
-        df_norm = df_norm.iloc[pad_start_frames:].reset_index(drop=True)
-        df_pixel = df_pixel.iloc[pad_start_frames:].reset_index(drop=True)
+        
+        # Remove start padding
+        if enable_padding and pad_start_frames > 0:
+            df_norm = df_norm.iloc[pad_start_frames:].reset_index(drop=True)
+            df_pixel = df_pixel.iloc[pad_start_frames:].reset_index(drop=True)
+            try:
+                df_pixel_unfiltered = df_pixel_unfiltered.iloc[pad_start_frames:].reset_index(drop=True)
+            except Exception:
+                pass
+        
+        # Remove end padding (reverse padding)
+        if enable_reverse_padding and pad_end_frames > 0:
+            df_norm = df_norm.iloc[:-pad_end_frames].reset_index(drop=True) if len(df_norm) > pad_end_frames else df_norm
+            df_pixel = df_pixel.iloc[:-pad_end_frames].reset_index(drop=True) if len(df_pixel) > pad_end_frames else df_pixel
+            try:
+                df_pixel_unfiltered = df_pixel_unfiltered.iloc[:-pad_end_frames].reset_index(drop=True) if len(df_pixel_unfiltered) > pad_end_frames else df_pixel_unfiltered
+            except Exception:
+                pass
+        
         # Ajustar frame_index para começar do 0
         df_norm["frame_index"] = df_norm.index
         df_pixel["frame_index"] = df_pixel.index
-        print(f"After removal: {len(df_norm)} frames")
-        # Remove padding from unfiltered as well to keep alignment
         try:
-            df_pixel_unfiltered = df_pixel_unfiltered.iloc[pad_start_frames:].reset_index(drop=True)
             df_pixel_unfiltered["frame_index"] = df_pixel_unfiltered.index
         except Exception:
             pass
+        print(f"After removal: {len(df_norm)} frames")
     else:
         print("No padding frames to remove from filtered results")
 
