@@ -52,6 +52,18 @@ from tkinter import filedialog, messagebox, simpledialog
 import tqdm
 from rich import print
 
+# Try to import toml for TOML file support
+try:
+    import toml
+except ImportError:
+    try:
+        import tomli as toml
+    except ImportError:
+        try:
+            import tomllib as toml
+        except ImportError:
+            toml = None
+
 
 def check_ffmpeg_installed():
     """Check if FFmpeg is available on the system"""
@@ -574,6 +586,432 @@ def process_videos_merge(source_dir, target_dir, use_text_file=False, text_file_
             print(f"Error processing video {video_path}: {e}")
 
 
+def save_frame_merge_toml(
+    source_video,
+    output_video,
+    selected_frame,
+    reverse_frames_count,
+    original_start_frame,
+    original_total_frames,
+    fps,
+    output_dir,
+    video_basename,
+):
+    """
+    Save frame reverse merge metadata to TOML file.
+    
+    Parameters:
+    -----------
+    source_video : str
+        Path to original source video
+    output_video : str
+        Path to merged output video
+    selected_frame : int
+        Frame number selected by user
+    reverse_frames_count : int
+        Number of frames in the reversed portion
+    original_start_frame : int
+        Frame where original video starts in merged video
+    original_total_frames : int
+        Total frames in original video
+    fps : float
+        Frames per second
+    output_dir : str
+        Directory to save TOML file
+    video_basename : str
+        Base name for output file
+    """
+    if toml is None:
+        print("Warning: TOML library not available. Cannot save metadata file.")
+        return
+    
+    toml_path = os.path.join(
+        output_dir, f"{video_basename}_frame_reverse_merge.toml"
+    )
+    
+    toml_data = {
+        "frame_reverse_merge": {
+            "source_video": source_video,
+            "output_video": output_video,
+            "selected_frame": selected_frame,
+            "reverse_frames_count": reverse_frames_count,
+            "original_start_frame": original_start_frame,
+            "original_total_frames": original_total_frames,
+            "fps": float(fps),
+            "processing_date": time.strftime("%Y-%m-%d %H:%M:%S"),
+        }
+    }
+    
+    try:
+        with open(toml_path, "w", encoding="utf-8") as f:
+            toml.dump(toml_data, f)
+        print(f"TOML metadata saved to: {toml_path}")
+    except Exception as e:
+        print(f"Error saving TOML file: {e}")
+
+
+def process_videos_frame_reverse_merge(source_dir, target_dir, use_text_file=False, text_file_path=None):
+    print("\n" + "="*60)
+    print("METHOD: FRAME-BASED REVERSE MERGE (frame N→0 reverse + original)")
+    print("="*60)
+    print(f"Source directory: {source_dir}")
+    print(f"Target directory: {target_dir}")
+    print(f"Using text file: {use_text_file}")
+    if use_text_file and text_file_path:
+        print(f"Text file path: {text_file_path}")
+    print("="*60 + "\n")
+    
+    # Create a new directory with timestamp
+    timestamp = time.strftime("%Y%m%d%H%M%S")
+    output_dir = os.path.join(target_dir, f"framereverse_{timestamp}")
+    os.makedirs(output_dir, exist_ok=True)
+    print(f"Output directory created: {output_dir}")
+
+    video_files = []
+
+    # Use provided text file if specified
+    if use_text_file and text_file_path:
+        with open(text_file_path) as file:
+            for line in file.readlines():
+                line = line.strip()
+                if line:
+                    video_files.append(os.path.join(source_dir, line.strip()))
+    else:
+        # No text file provided, process all videos in source_dir
+        with os.scandir(source_dir) as entries:
+            for entry in entries:
+                if entry.is_file() and entry.name.lower().endswith(
+                    (".mp4", ".avi", ".mov", ".mkv", ".MP4", ".AVI", ".MOV", ".MKV")
+                ):
+                    video_files.append(entry.path)
+
+    # Ask user to choose frame number (once for all videos)
+    frame_msg = (
+        "Enter the frame number to reverse from:\n\n"
+        "Example: 500 = reverse frames from 0 to 500 (backward)\n"
+        "The reversed portion (frame N→0) will be concatenated\n"
+        "with the full original video at the beginning."
+    )
+    selected_frame = simpledialog.askinteger(
+        "Frame Number", frame_msg, minvalue=1, initialvalue=500
+    )
+
+    # Handle case where user cancels dialog
+    if selected_frame is None:
+        messagebox.showerror("Error", "Frame number is required. Operation cancelled.")
+        return
+    
+    if selected_frame < 1:
+        messagebox.showerror("Error", "Frame number must be at least 1. Operation cancelled.")
+        return
+    
+    print(f"Selected frame: {selected_frame}")
+
+    # Detect hardware encoder and available presets - moved outside the loop
+    print("\nDetecting hardware encoder...")
+    encoder_info = detect_hardware_encoder()
+    encoder = encoder_info["encoder"]
+    quality_param = encoder_info["quality_param"]
+    quality_values = encoder_info["quality_values"]
+    print(f"Selected encoder: {encoder}")
+
+    # Ask user to choose quality by number (1-9) - moved outside the loop
+    quality_msg = (
+        "Choose quality level (1-9):\n1-3: Fast (lower quality)\n4-6: Medium\n7-9: High (slower)"
+    )
+    quality_num = simpledialog.askinteger(
+        "Quality Level", quality_msg, minvalue=1, maxvalue=9, initialvalue=5
+    )
+
+    # Handle case where user cancels dialog
+    if quality_num is None:
+        quality_num = 5  # Default to medium quality
+
+    # Map the number to a quality setting - moved outside the loop
+    if quality_num <= 3:
+        quality = "fast"
+    elif quality_num <= 6:
+        quality = "medium"
+    else:
+        quality = "high"
+
+    # Get preset value - moved outside the loop
+    preset_value = quality_values[quality]
+
+    # Simplified approach: use numerical presets for libx264 - moved outside the loop
+    if encoder == "libx264":
+        # Convert p1-p9 to actual preset names
+        preset_map = {
+            "p1": "ultrafast",
+            "p2": "veryfast",
+            "p3": "faster",
+            "p4": "fast",
+            "p5": "medium",
+            "p6": "slow",
+            "p7": "slower",
+            "p8": "veryslow",
+            "p9": "placebo",
+        }
+        preset_value = preset_map.get(preset_value, "medium")
+
+    print(f"Using encoder: {encoder} with {quality_param}={preset_value}")
+
+    # Iterate over video files and apply the frame reverse merge process
+    for video_path in tqdm.tqdm(video_files, desc="Processing videos"):
+        try:
+            print(f"Processing video: {video_path}")
+
+            # Get total number of frames first to validate
+            frames_cmd = [
+                "ffprobe",
+                "-v",
+                "error",
+                "-select_streams",
+                "v:0",
+                "-count_frames",
+                "-show_entries",
+                "stream=nb_read_frames",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                video_path,
+            ]
+            try:
+                total_frames = int(
+                    subprocess.run(
+                        frames_cmd,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                    ).stdout.strip()
+                )
+            except Exception as e:
+                print(f"Error getting frame count: {e}")
+                print(f"Skipping {video_path}")
+                continue
+
+            # Validate frame number
+            if selected_frame > total_frames:
+                print(f"Warning: Selected frame {selected_frame} exceeds total frames {total_frames}")
+                print(f"Skipping {video_path}")
+                continue
+
+            if selected_frame == 0:
+                print(f"Warning: Frame 0 selected, nothing to reverse")
+                print(f"Skipping {video_path}")
+                continue
+
+            # Output video path
+            output_video = os.path.join(
+                output_dir,
+                f"{os.path.splitext(os.path.basename(video_path))[0]}_framereverse.mp4",
+            )
+
+            # Verificar se já processou este vídeo anteriormente
+            if os.path.exists(output_video):
+                if not messagebox.askyesno(
+                    "File exists",
+                    f"Output file already exists:\n{output_video}\n\nOverwrite?",
+                ):
+                    print(f"Skipping {video_path} (output exists)")
+                    continue
+
+            # Get video metadata for logging
+            try:
+                # Get resolution
+                resolution_cmd = [
+                    "ffprobe",
+                    "-v",
+                    "error",
+                    "-select_streams",
+                    "v:0",
+                    "-show_entries",
+                    "stream=width,height",
+                    "-of",
+                    "default=noprint_wrappers=1:nokey=1",
+                    video_path,
+                ]
+                resolution = (
+                    subprocess.run(
+                        resolution_cmd,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                    )
+                    .stdout.strip()
+                    .split("\n")
+                )
+                width = int(resolution[0])
+                height = int(resolution[1])
+
+                # Get frame rate
+                fps_cmd = [
+                    "ffprobe",
+                    "-v",
+                    "error",
+                    "-select_streams",
+                    "v:0",
+                    "-show_entries",
+                    "stream=r_frame_rate",
+                    "-of",
+                    "default=noprint_wrappers=1:nokey=1",
+                    video_path,
+                ]
+                fps_str = subprocess.run(
+                    fps_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+                ).stdout.strip()
+                frame_rate = eval(fps_str)  # Convert "30000/1001" to float
+
+                # Get duration
+                duration_cmd = [
+                    "ffprobe",
+                    "-v",
+                    "error",
+                    "-show_entries",
+                    "format=duration",
+                    "-of",
+                    "default=noprint_wrappers=1:nokey=1",
+                    video_path,
+                ]
+                duration = float(
+                    subprocess.run(
+                        duration_cmd,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                    ).stdout.strip()
+                )
+
+                print(
+                    f"Video info: {width}x{height}, {frame_rate:.2f} fps, {duration:.2f}s, {total_frames} frames"
+                )
+
+            except Exception as e:
+                print(f"Warning: Could not get detailed video info: {e}")
+                width = height = "Unknown"
+                duration = 0
+                frame_rate = "Unknown"
+
+            # Calculate reverse frames count (frames 0 to selected_frame-1, inclusive)
+            # Note: FFmpeg uses 0-indexed frames, so frame N means frames 0 to N-1
+            reverse_frames_count = selected_frame
+            original_start_frame = reverse_frames_count  # Original starts after reversed portion
+
+            # Calculate durations
+            reverse_duration = reverse_frames_count / frame_rate if frame_rate != "Unknown" else 0
+            merged_duration = reverse_duration + duration
+            merged_frames = reverse_frames_count + total_frames
+
+            print(
+                f"Reverse: frames 0-{selected_frame-1} ({reverse_frames_count} frames) | "
+                f"Merged: {merged_frames} frames, {merged_duration:.2f}s"
+            )
+
+            # Create FFmpeg filter_complex for frame-based reverse
+            # Select frames 0 to selected_frame-1, reverse them, then concat with full original
+            # Note: FFmpeg select filter uses 0-indexed frames
+            # 'lt(n,selected_frame)' selects frames where n < selected_frame (i.e., 0 to selected_frame-1)
+            filter_complex = (
+                f"[0:v]select='lt(n\\,{selected_frame})',reverse,setpts=PTS-STARTPTS[rev];"
+                f"[rev][0:v]concat=n=2:v=1:a=0[out]"
+            )
+
+            ffmpeg_command = [
+                "ffmpeg",
+                "-i",
+                video_path,
+                "-filter_complex",
+                filter_complex,
+                "-map",
+                "[out]",
+                "-c:v",
+                encoder,
+                "-threads",
+                "4",
+                f"-{quality_param}",
+                preset_value,
+                output_video,
+            ]
+
+            # Process video
+            start_time = time.time()
+            subprocess.run(ffmpeg_command, check=True)
+            elapsed = time.time() - start_time
+
+            # Save TOML metadata
+            video_basename = os.path.splitext(os.path.basename(video_path))[0]
+            save_frame_merge_toml(
+                source_video=video_path,
+                output_video=output_video,
+                selected_frame=selected_frame,
+                reverse_frames_count=reverse_frames_count,
+                original_start_frame=original_start_frame,
+                original_total_frames=total_frames,
+                fps=frame_rate if frame_rate != "Unknown" else 0.0,
+                output_dir=output_dir,
+                video_basename=video_basename,
+            )
+
+            # Write detailed log file
+            log_file_path = os.path.join(
+                output_dir,
+                f"{video_basename}_frame_reverse_frames.txt",
+            )
+            with open(log_file_path, "w") as log_file:
+                log_file.write("DETAILED FRAME REVERSE MERGE REPORT\n")
+                log_file.write("==================================\n\n")
+                log_file.write(f"Source Video: {video_path}\n")
+                log_file.write(f"Output Video: {output_video}\n")
+                log_file.write(f"Processing Date: {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+
+                log_file.write("ORIGINAL VIDEO DETAILS\n")
+                log_file.write("---------------------\n")
+                log_file.write(f"Resolution: {width} x {height}\n")
+                log_file.write(f"Frame Rate: {frame_rate if isinstance(frame_rate, str) else frame_rate:.2f} fps\n")
+                log_file.write(f"Duration: {duration:.2f} seconds\n")
+                log_file.write(f"Total Frames: {total_frames}\n\n")
+
+                log_file.write("FRAME REVERSE MERGE STRUCTURE\n")
+                log_file.write("----------------------------\n")
+                log_file.write(f"Selected Frame: {selected_frame}\n\n")
+                
+                log_file.write("Part 1 (Reversed Video - Frames 0 to {}):\n".format(selected_frame - 1))
+                log_file.write(f"  - Start Frame: 0 (reversed to frame {selected_frame - 1})\n")
+                log_file.write(f"  - End Frame: {selected_frame - 1} (reversed to 0)\n")
+                log_file.write(f"  - Frames Count: {reverse_frames_count}\n")
+                log_file.write(f"  - Duration: {reverse_duration:.2f} seconds\n\n")
+                
+                log_file.write("Part 2 (Original Video - Full):\n")
+                log_file.write("  - Start Frame: 0\n")
+                log_file.write(f"  - End Frame: {total_frames - 1}\n")
+                log_file.write(f"  - Frames Count: {total_frames}\n")
+                log_file.write(f"  - Duration: {duration:.2f} seconds\n\n")
+
+                log_file.write("MERGED VIDEO DETAILS\n")
+                log_file.write("-------------------\n")
+                log_file.write(f"Total Frames: {merged_frames}\n")
+                log_file.write(f"Total Duration: {merged_duration:.2f} seconds\n")
+                log_file.write(f"Original Starts at Frame: {original_start_frame}\n")
+                log_file.write(f"Encoder: {encoder}\n")
+                log_file.write(f"Quality Setting: {quality_param}={preset_value}\n")
+
+                # Add file size
+                output_size_mb = os.path.getsize(output_video) / (1024 * 1024)
+                log_file.write(f"File Size: {output_size_mb:.2f} MB\n")
+
+                log_file.write("\nFFmpeg Command Used:\n")
+                log_file.write(f"{' '.join(ffmpeg_command)}\n")
+
+            print(
+                f"Processed in {elapsed:.2f} seconds ({os.path.getsize(output_video) / 1024 / 1024:.2f} MB)"
+            )
+            print(f"Video processed and saved to: {output_video}")
+
+        except subprocess.CalledProcessError as e:
+            print(f"FFmpeg error processing video {video_path}: {e}")
+        except Exception as e:
+            print(f"Error processing video {video_path}: {e}")
+
+
 def process_videos_split(source_dir, target_dir, use_text_file=False, text_file_path=None):
     print("\n" + "="*60)
     print("METHOD: SPLIT (keep second half)")
@@ -797,10 +1235,10 @@ def process_videos_gui():
         )
         return
 
-    # Ask user to select one of the three options
+    # Ask user to select one of the four options
     operation_input = simpledialog.askstring(
         "Operation",
-        "Enter operation:\n'm' for merge (original+reverse)\n's' for split (keep second half)\n'multi' for multi-video merge",
+        "Enter operation:\n'm' for merge (original+reverse)\n's' for split (keep second half)\n'f' for frame-based reverse merge\n'multi' for multi-video merge",
     )
 
     # Check if user cancelled the dialog
@@ -810,10 +1248,10 @@ def process_videos_gui():
 
     operation = operation_input.strip().lower()
 
-    if not operation or operation not in ["m", "s", "multi"]:
+    if not operation or operation not in ["m", "s", "f", "multi"]:
         messagebox.showerror(
             "Error",
-            "Invalid operation selected. Please enter 'm', 's', or 'multi'.",
+            "Invalid operation selected. Please enter 'm', 's', 'f', or 'multi'.",
         )
         return
 
@@ -821,6 +1259,7 @@ def process_videos_gui():
     operation_names = {
         "m": "MERGE (original + reverse)",
         "s": "SPLIT (keep second half)",
+        "f": "FRAME-BASED REVERSE MERGE",
         "multi": "MULTI-VIDEO MERGE"
     }
     print(f"Selected operation: '{operation}' - {operation_names.get(operation, 'UNKNOWN')}")
@@ -875,6 +1314,8 @@ def process_videos_gui():
         process_videos_merge(source_dir, target_dir, use_text_file, text_file_path)
     elif operation == "s":
         process_videos_split(source_dir, target_dir, use_text_file, text_file_path)
+    elif operation == "f":
+        process_videos_frame_reverse_merge(source_dir, target_dir, use_text_file, text_file_path)
 
 
 if __name__ == "__main__":
