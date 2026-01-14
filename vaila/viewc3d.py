@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 ================================================================================
 Author: Paulo Santiago
-Version: 0.1.0
+Version: 0.2.0
 Created: 06 February 2025
-Last Updated: 12 January 2026
+Last Updated: 14 January 2026
 
 To run:
 uv run viewc3d.py
@@ -72,6 +72,9 @@ Features soccer field lines and penalty areas.
     - Enhanced unit detection with statistical analysis
     - Real-time label updates during animation
     - Robust fallback visualization system
+
+License:
+    Affero General Public License v3.0 - AGPL-3.0
 """
 
 import contextlib
@@ -391,7 +394,7 @@ def load_c3d_file():
 
         # Extract marker labels
         marker_labels = c3d["parameters"]["POINT"]["LABELS"]["value"]
-        if isinstance(marker_labels[0], list):
+        if len(marker_labels) > 0 and isinstance(marker_labels[0], list):
             marker_labels = marker_labels[0]
 
         # Extract residuals if available
@@ -427,7 +430,7 @@ def load_c3d_file():
         analog_info = None
         try:
             analog_labels = c3d["parameters"]["ANALOG"]["LABELS"]["value"]
-            if isinstance(analog_labels[0], list):
+            if len(analog_labels) > 0 and isinstance(analog_labels[0], list):
                 analog_labels = analog_labels[0]
             analog_freq = c3d["header"]["analogs"]["frame_rate"]
             analog_info = {
@@ -1649,10 +1652,10 @@ def run_viewc3d():
         y_range = ground_height
         z_range = max(0.1, data_z_max - data_z_min)
 
-        # Slightly extend ranges to include origin and give more air
-        x_range = max(x_range, abs(data_center[0]) * 2.0, 1.0)
-        y_range = max(y_range, abs(data_center[1]) * 2.0, 1.0)
-        z_range = max(z_range, abs(data_center[2]) * 2.0, 0.5)
+        # Extend ranges significantly to provide better initial view
+        x_range = max(x_range, abs(data_center[0]) * 3.0, 2.0)  # Increased multiplier and minimum
+        y_range = max(y_range, abs(data_center[1]) * 3.0, 2.0)  # Increased multiplier and minimum
+        z_range = max(z_range, abs(data_center[2]) * 3.0, 1.0)  # Increased multiplier and minimum
 
         set_camera_blender_like(
             ctr,
@@ -1660,10 +1663,10 @@ def run_viewc3d():
             x_range,
             y_range,
             z_range,
-            fov_x_deg=40.0,
+            fov_x_deg=50.0,  # Wider FOV for better initial view
             width=1280,
             height=720,
-            margin=1.35,
+            margin=1.8,  # Increased margin for more space
         )
         print("[green]Camera configured with Blender-like FOV (~40° horiz) and 16:9 aspect[/green]")
 
@@ -1782,8 +1785,9 @@ def run_viewc3d():
         vis.update_geometry(ls)
 
     def toggle_trails(_vis_obj):
-        trails_enabled[0] = not trails_enabled[0]
-        if not trails_enabled[0]:
+        # The logic for trails_enabled[0] was inverted in the provided snippet.
+        # Correcting to match the intent of toggling and the original structure.
+        if trails_enabled[0]:  # If currently enabled, disable
             # Remove existing trails
             for ls in trails_linesets:
                 if ls is not None:
@@ -1791,14 +1795,17 @@ def run_viewc3d():
             for i in range(num_markers):
                 trails_linesets[i] = None
                 trails_positions[i].clear()
-            print("\nTrails disabled")
-        else:
+            print("\nTrails: OFF")
+            trails_enabled[0] = False
+        else:  # If currently disabled, enable
             # Initialize with current frame positions
             for i in range(num_markers):
                 trails_positions[i].clear()
-                if not np.isnan(points[0, i]).any():
-                    trails_positions[i].append(points[0, i].copy())
-            print(f"\nTrails enabled (length={trail_length[0]} frames)")
+                # Only add if the initial position is not NaN
+                if not np.isnan(points[current_frame, i]).any():
+                    trails_positions[i].append(points[current_frame, i].copy())
+            print(f"\nTrails: ON (History: {trail_length[0]} frames)")
+            trails_enabled[0] = True
         return False
 
     def load_skeleton_from_json(_vis_obj):
@@ -1812,6 +1819,7 @@ def run_viewc3d():
         )
         root.destroy()
         if not json_file:
+            print("\n[yellow]Skeleton load cancelled.[/yellow]")
             return False
         try:
             with open(json_file, encoding="utf-8") as f:
@@ -1943,6 +1951,7 @@ def run_viewc3d():
                 + (" ..." if len(selected_marker_names) > 30 else ""),
             )
             if a is None:
+                print("\n[yellow]Measurement cancelled.[/yellow]")
                 return False
             b = simpledialog.askstring(
                 "Distance Measurement",
@@ -1951,6 +1960,7 @@ def run_viewc3d():
                 + (" ..." if len(selected_marker_names) > 30 else ""),
             )
             if b is None:
+                print("\n[yellow]Measurement cancelled.[/yellow]")
                 return False
         finally:
             root.destroy()
@@ -2011,6 +2021,7 @@ def run_viewc3d():
         root.destroy()
 
         if not swap_file:
+            print("\n[yellow]Apply swaps cancelled.[/yellow]")
             return False
 
         try:
@@ -2348,6 +2359,28 @@ def run_viewc3d():
                 )
                 cancel_btn.pack(side=tk.LEFT, padx=5)
 
+                def on_load_csv():
+                    root.destroy()
+                    # Call the existing function to load swaps
+                    apply_swaps_from_file(vis)
+                    # We return a special indicator or just False/None since execution passed to another function
+                    # But create_swap_dialog is expected to return a dict. 
+                    # We can set cancelled=True to avoid further processing in manual_swap_markers
+                    dialog_result["cancelled"] = True 
+                    dialog_result["loaded_csv"] = True # Flag to indicate we switched flows
+
+                load_btn = tk.Button(
+                    button_frame,
+                    text="Load CSV",
+                    command=on_load_csv,
+                    bg="#2196F3", # Blue
+                    fg="white",
+                    font=("Arial", 11, "bold"),
+                    width=15,
+                    height=2,
+                )
+                load_btn.pack(side=tk.LEFT, padx=5)
+
                 # Center window
                 root.update_idletasks()
                 w = root.winfo_width()
@@ -2366,7 +2399,12 @@ def run_viewc3d():
         # Show dialog and get result
         result = create_swap_dialog()
 
+        if result.get("loaded_csv"):
+            # User chose to load a CSV instead of manual swap
+            return False
+
         if result["cancelled"] or result["marker_a"] is None or result["marker_b"] is None:
+            print("\n[yellow]Manual swap cancelled.[/yellow]")
             return False
 
         marker_a = result["marker_a"]
@@ -2406,6 +2444,7 @@ def run_viewc3d():
             root.destroy()
 
             if not csv_path:
+                print("\n[yellow]Save swap CSV cancelled.[/yellow]")
                 return False
 
             # Check if CSV file already exists and load it, or create new
@@ -2493,6 +2532,7 @@ def run_viewc3d():
         root.destroy()
 
         if not out_path:
+            print("\n[yellow]Save C3D cancelled.[/yellow]")
             return False
 
         try:
@@ -2609,6 +2649,7 @@ def run_viewc3d():
         out_dir = filedialog.askdirectory(title="Select output directory for PNG sequence")
         root.destroy()
         if not out_dir:
+            print("\n[yellow]PNG sequence export cancelled.[/yellow]")
             return False
         was_playing = is_playing
         is_playing = False
@@ -2686,6 +2727,7 @@ def run_viewc3d():
         root.destroy()
 
         if not out_path:
+            print("\n[yellow]Save swap template cancelled.[/yellow]")
             return False
 
         try:
@@ -2694,35 +2736,35 @@ def run_viewc3d():
             if isinstance(all_marker_labels[0], list):
                 all_marker_labels = all_marker_labels[0]
 
-            # Create template with example rows
+            # Create template based on actual C3D markers
+            # Get only the first 20 or so if there are too many, or maybe all
+            # It's better to list them in column 'marker_a' as candidates
+            
+            # Prepare data for DataFrame
+            markers_to_list = all_marker_labels
+            
             template_data = {
-                "marker_a": ["L_ANK", "R_ANK", "L_HEEL"],
-                "marker_b": ["R_ANK", "L_ANK", "R_HEEL"],
-                "start_frame": [150, 200, 300],
-                "end_frame": [150, 450, 800],
+                "marker_a": markers_to_list,
+                "marker_b": [""] * len(markers_to_list), # Empty for user to fill
+                "start_frame": ["1"] * len(markers_to_list), # Suggested start
+                "end_frame": [""] * len(markers_to_list), # Empty for user to fill
             }
 
             template_df = pd.DataFrame(template_data)
 
-            # Add comments as header
-            comments = [
-                "# Marker Label Swap Template",
-                "# Format: marker_a, marker_b, start_frame, end_frame",
-                "# For single frame: use same value for start_frame and end_frame",
-                "# For frame range: specify start_frame and end_frame",
-                "# Available markers in this file:",
-            ]
-            for i, label in enumerate(all_marker_labels[:20]):  # Show first 20 markers
-                comments.append(f"#   {i}: {label}")
-            if len(all_marker_labels) > 20:
-                comments.append(f"#   ... and {len(all_marker_labels) - 20} more markers")
-            comments.append("#")
+            # Write data directly without comments to ensure compatibility with pd.read_csv
+            template_df.to_csv(out_path, index=False)
 
-            # Write comments and data
-            with open(out_path, "w", encoding="utf-8") as f:
-                for comment in comments:
-                    f.write(comment + "\n")
-                template_df.to_csv(f, index=False)
+            # Print available markers to terminal instead
+            print(f"\n[green]Template CSV saved: {out_path}[/green]")
+            print(f"  Example entries: {len(template_data['marker_a'])} rows")
+            print(f"  Format matches 'O' key export: marker_a,marker_b,start_frame,end_frame")
+            print("  Available markers in file:")
+            for i, label in enumerate(all_marker_labels):
+                 if i < 20:
+                     print(f"    {i}: {label}")
+            if len(all_marker_labels) > 20:
+                print(f"    ... and {len(all_marker_labels) - 20} more markers")
 
             print(f"\n[green]Template CSV saved: {out_path}[/green]")
             print(f"  Example entries: {len(template_data['marker_a'])} rows")
@@ -2749,6 +2791,7 @@ def run_viewc3d():
         root.destroy()
 
         if not out_path:
+            print("\n[yellow]Save skeleton template cancelled.[/yellow]")
             return False
 
         try:
@@ -2806,41 +2849,50 @@ def run_viewc3d():
         )
         root.destroy()
         if not out_path:
+            print("\n[yellow]MP4 export cancelled.[/yellow]")
             return False
         was_playing = is_playing
         is_playing = False
         start_frame = current_frame
         tmp_dir = tempfile.mkdtemp(prefix="viewc3d_frames_")
-        print(f"\nExporting MP4 via ffmpeg → {out_path}")
+        output_filename = Path(out_path) # Use Path for easier handling with ffmpeg
+        temp_dir = Path(tmp_dir)
+        print(f"\nExporting MP4 via ffmpeg → {output_filename}")
         try:
             for fidx in range(num_frames):
                 current_frame = fidx
                 update_spheres(points[current_frame])
-                png_path = os.path.join(tmp_dir, f"frame_{fidx:05d}.png")
-                vis.capture_screen_image(png_path, do_render=True)
-            # Build ffmpeg command
-            cmd = [
-                "ffmpeg",
-                "-y",
-                "-framerate",
-                str(max(1, int(fps))),
-                "-i",
-                os.path.join(tmp_dir, "frame_%05d.png"),
-                "-c:v",
-                "libx264",
-                "-pix_fmt",
-                "yuv420p",
-                "-crf",
-                "18",
-                out_path,
-            ]
-            try:
-                subprocess.run(cmd, check=True)
-                print("\nMP4 export finished")
-            except FileNotFoundError:
-                print("\n[red]ffmpeg not found. Install ffmpeg and ensure it is in PATH.[/red]")
-            except subprocess.CalledProcessError as exc:
-                print(f"\n[red]ffmpeg failed:[/red] {exc}")
+                png_path = temp_dir / f"frame_{fidx:05d}.png"
+                vis.capture_screen_image(str(png_path), do_render=True)
+            
+            # Use 'pad' filter to ensure dimensions are divisible by 2
+            # pad=ceil(iw/2)*2:ceil(ih/2)*2
+            subprocess.run(
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-framerate",
+                    str(max(1, int(fps))),
+                    "-i",
+                    str(temp_dir / "frame_%05d.png"),
+                    "-c:v",
+                    "libx264",
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-vf",
+                    "pad=ceil(iw/2)*2:ceil(ih/2)*2",
+                    "-crf",
+                    "18",
+                    str(output_filename),
+                ],
+                check=True,
+            )
+            print(f"\n[green]Video export successful via ffmpeg![/green]")
+            print(f"Saved to: {output_filename}")
+        except FileNotFoundError:
+            print("\n[red]ffmpeg not found. Install ffmpeg and ensure it is in PATH.[/red]")
+        except subprocess.CalledProcessError as exc:
+            print(f"\n[red]ffmpeg failed:[/red] {exc}")
         finally:
             current_frame = start_frame
             update_spheres(points[current_frame])
@@ -3534,12 +3586,14 @@ O - Manual swap markers (visual editing)
         nonlocal current_frame
         current_frame = 0
         update_spheres(points[current_frame])
+        print("\nJumped to START (Frame 1)")
         return False
 
     def jump_to_end(_vis_obj):
         nonlocal current_frame
         current_frame = num_frames - 1
         update_spheres(points[current_frame])
+        print(f"\nJumped to END (Frame {num_frames})")
         return False
 
     # Add variables to control the ground and background colors
@@ -3625,6 +3679,53 @@ O - Manual swap markers (visual editing)
                 print(f"Time: {(current_frame / fps):.3f}s")
             else:
                 print(f"Frame {current_frame + 1}: No valid markers")
+        return False
+
+    # Add unit conversion override key
+    def override_units(_vis_obj):
+        """Allow user to manually override unit conversion"""
+        nonlocal points, spheres, spheres_bases
+
+        user_choice = ask_user_units_c3d()
+
+        if user_choice == "mm":
+            # Interpret current data as millimeters and convert to meters
+            print(
+                "[yellow]Applying unit override: interpreting current data as millimeters → converting to meters[/yellow]"
+            )
+            points = points * 0.001
+        elif user_choice == "m":
+            # Interpret current data as meters; no scaling needed
+            print(
+                "[yellow]Applying unit override: interpreting current data as meters (no scaling)[/yellow]"
+            )
+        else:
+            # Keep as is if user kept auto
+            print(
+                "[yellow]Unit override cancelled or auto-selected; keeping current scaling[/yellow]"
+            )
+            return False
+
+        # Recreate spheres with new positions
+        for i in range(num_markers):
+            vis.remove_geometry(spheres[i], reset_bounding_box=False)
+
+            new_sphere = o3d.geometry.TriangleMesh.create_sphere(
+                radius=current_radius, resolution=8
+            )
+            base_vertices = np.asarray(new_sphere.vertices).copy()
+            current_pos = points[current_frame][i]
+            new_sphere.vertices = o3d.utility.Vector3dVector(base_vertices + current_pos)
+            new_sphere.paint_uniform_color(available_colors[current_color_index][0])
+
+            spheres[i] = new_sphere
+            spheres_bases[i] = base_vertices
+            vis.add_geometry(spheres[i], reset_bounding_box=False)
+
+        # Update current frame
+        update_spheres(points[current_frame])
+
+        print("[bold green]Unit conversion override applied![/bold green]")
         return False
 
     def show_quality_stats(_vis_obj):
@@ -3714,48 +3815,85 @@ O - Manual swap markers (visual editing)
     vis.register_key_callback(ord("P"), previous_frame)
     vis.register_key_callback(ord("B"), backward_60_frames)
 
-    # Other shortcuts
+    # Navigation shortcuts
     vis.register_key_callback(ord(" "), toggle_play)  # Space
     vis.register_key_callback(257, toggle_play)  # Enter/Return
-    vis.register_key_callback(
-        ord("O"),
-        lambda _vis_obj: print(ctr.convert_to_pinhole_camera_parameters().extrinsic),
-    )
+    vis.register_key_callback(ord("S"), jump_to_start)  # S - Start
+    vis.register_key_callback(ord("E"), jump_to_end)  # E - End
+    vis.register_key_callback(ord("F"), next_frame)  # F - Forward 1 frame
+    vis.register_key_callback(ord("B"), previous_frame)  # B - Back 1 frame
+
+    # Marker controls
     vis.register_key_callback(ord("+"), increase_radius)
     vis.register_key_callback(ord("="), increase_radius)
     vis.register_key_callback(ord("-"), decrease_radius)
-    vis.register_key_callback(ord("C"), cycle_color)
-    vis.register_key_callback(ord("S"), jump_to_start)
-    vis.register_key_callback(ord("E"), jump_to_end)
-    vis.register_key_callback(ord("A"), show_quality_stats)  # Quality statistics
+    vis.register_key_callback(ord("C"), cycle_color)  # Color cycle
+    vis.register_key_callback(ord("X"), toggle_marker_labels)  # Labels
 
-    # New shortcuts for colors and features
-    vis.register_key_callback(ord("T"), toggle_background_advanced)  # Background colored
-    vis.register_key_callback(ord("Y"), change_ground_color)  # Ground plane colored
-    vis.register_key_callback(ord("L"), set_view_limits)
-    vis.register_key_callback(ord("I"), show_frame_info)
-    vis.register_key_callback(ord("H"), show_help)
+    # View controls
+    vis.register_key_callback(ord("T"), toggle_background_advanced)  # Background
+    vis.register_key_callback(ord("Y"), change_ground_color)  # Ground color
     vis.register_key_callback(ord("G"), toggle_field_lines)  # Field lines
     vis.register_key_callback(ord("M"), toggle_grid)  # Grid visibility
-    vis.register_key_callback(ord("X"), toggle_marker_labels)  # Marker labels
-    # New advanced features
-    vis.register_key_callback(ord("W"), toggle_trails)  # Trails
-    vis.register_key_callback(ord("J"), load_skeleton_from_json)  # Skeleton JSON
-    vis.register_key_callback(ord("D"), measure_distance_between_two_markers)  # Distance
-    vis.register_key_callback(ord("K"), save_screenshot)  # Screenshot
-    vis.register_key_callback(ord("N"), apply_swaps_from_file)  # Apply swaps from CSV/TOML
-    vis.register_key_callback(ord("O"), manual_swap_markers)  # Manual swap markers
-    vis.register_key_callback(ord("Z"), export_png_sequence)  # PNG sequence
+    vis.register_key_callback(ord("L"), set_view_limits)  # View limits
+    vis.register_key_callback(ord("R"), reset_camera_view)  # Reset camera
 
-    # Register Ctrl+S for saving C3D file using register_key_action_callback (supports modifiers)
+    # Information and help
+    vis.register_key_callback(ord("I"), show_frame_info)  # Frame info
+    vis.register_key_callback(ord("A"), show_quality_stats)  # Quality stats
+    vis.register_key_callback(ord("H"), show_help)  # Help
+
+    # Advanced features
+    vis.register_key_callback(ord("W"), toggle_trails)  # Trails
+    vis.register_key_callback(ord("J"), load_skeleton_from_json)  # Skeleton
+    vis.register_key_callback(ord("D"), measure_distance_between_two_markers)  # Distance
+    vis.register_key_callback(ord("N"), apply_swaps_from_file)  # Apply swaps
+    vis.register_key_callback(ord("O"), manual_swap_markers)  # Manual swaps
+
+    # Capture and export
+    vis.register_key_callback(ord("K"), save_screenshot)  # Screenshot
+    vis.register_key_callback(ord("Z"), export_png_sequence)  # PNG sequence
+    vis.register_key_callback(ord("V"), export_video_mp4)  # MP4 export
+    vis.register_key_callback(ord("8"), render_turntable)  # Turntable
+
+    # Templates
+    vis.register_key_callback(ord("9"), save_swap_template_csv)  # Swap template
+    vis.register_key_callback(ord("0"), save_skeleton_template_json)  # Skeleton template
+
+    # Playback speed
+    vis.register_key_callback(ord("]"), faster_playback)  # Faster
+    vis.register_key_callback(ord("["), slower_playback)  # Slower
+    vis.register_key_callback(ord("Q"), toggle_verbose)  # Verbose toggle
+
+    # Special keys - Ctrl+S for save (using action callback for modifiers)
     def ctrl_s_key_action(vis, action, mods):
         # action: 0=RELEASE, 1=PRESS, 2=REPEAT
         # mods: bitmask - 1=SHIFT, 2=CTRL, 4=ALT, 8=SUPER
-        if action == 1 and (mods & 2):  # PRESS with CTRL modifier
-            return save_c3d_file(vis)
+        
+        # PRESS (1)
+        if action == 1:
+            if mods & 2:  # CTRL modifier
+                return save_c3d_file(vis)
+            elif not mods: # No modifiers (Plain 's' or 'S' depending on key handling)
+                # If this callback intercepts 'S' key, we must handle the basic action here
+                return jump_to_start(vis)
+                
         return False
 
     vis.register_key_action_callback(ord("S"), ctrl_s_key_action)  # Ctrl+S for save
+
+    # Also register lowercase 's' for jump to start for robustness
+    vis.register_key_callback(ord("s"), jump_to_start) 
+    
+    # Register lowercase variants for other navigation keys to be safe
+    vis.register_key_callback(ord("e"), jump_to_end)
+    vis.register_key_callback(ord("w"), toggle_trails)
+    vis.register_key_callback(ord("f"), next_frame)
+    vis.register_key_callback(ord("b"), previous_frame)
+    vis.register_key_callback(ord("p"), previous_frame)
+
+    # Unit override
+    vis.register_key_callback(ord("U"), override_units)  # Units override
     # Views (1,2,3,4) and template saves (9,0)
     vis.register_key_callback(ord("1"), view_front)  # Front view
     vis.register_key_callback(ord("2"), view_right)  # Right view
@@ -3773,54 +3911,7 @@ O - Manual swap markers (visual editing)
     # Quit (ESC)
     vis.register_key_callback(256, lambda _v: (vis.destroy_window(), False)[1])
 
-    # Add unit conversion override key
-    def override_units(_vis_obj):
-        """Allow user to manually override unit conversion"""
-        nonlocal points, spheres, spheres_bases
 
-        user_choice = ask_user_units_c3d()
-
-        if user_choice == "mm":
-            # Interpret current data as millimeters and convert to meters
-            print(
-                "[yellow]Applying unit override: interpreting current data as millimeters → converting to meters[/yellow]"
-            )
-            points = points * 0.001
-        elif user_choice == "m":
-            # Interpret current data as meters; no scaling needed
-            print(
-                "[yellow]Applying unit override: interpreting current data as meters (no scaling)[/yellow]"
-            )
-        else:
-            # Keep as is if user kept auto
-            print(
-                "[yellow]Unit override cancelled or auto-selected; keeping current scaling[/yellow]"
-            )
-            return False
-
-        # Recreate spheres with new positions
-        for i in range(num_markers):
-            vis.remove_geometry(spheres[i], reset_bounding_box=False)
-
-            new_sphere = o3d.geometry.TriangleMesh.create_sphere(
-                radius=current_radius, resolution=8
-            )
-            base_vertices = np.asarray(new_sphere.vertices).copy()
-            current_pos = points[current_frame][i]
-            new_sphere.vertices = o3d.utility.Vector3dVector(base_vertices + current_pos)
-            new_sphere.paint_uniform_color(available_colors[current_color_index][0])
-
-            spheres[i] = new_sphere
-            spheres_bases[i] = base_vertices
-            vis.add_geometry(spheres[i], reset_bounding_box=False)
-
-        # Update current frame
-        update_spheres(points[current_frame])
-
-        print("[bold green]Unit conversion override applied![/bold green]")
-        return False
-
-    vis.register_key_callback(ord("U"), override_units)  # U for Units
 
     # --- Field Drawing Logic from soccerfield.py ---
 
