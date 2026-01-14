@@ -1652,6 +1652,7 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
     output_video_path = output_dir / f"{video_path.stem}_mp.mp4"
     output_file_path = output_dir / f"{video_path.stem}_mp_norm.csv"
     output_pixel_file_path = output_dir / f"{video_path.stem}_mp_pixel.csv"
+    output_vaila_file_path = output_dir / f"{video_path.stem}_mp_vaila.csv"
     output_yolo_file_path = output_dir / f"{video_path.stem}_yolo_pixel.csv"
     output_yolo_bbox_path = output_dir / f"{video_path.stem}_yolo_bbox.csv"
     output_config_path = output_dir / "config.toml"
@@ -1689,7 +1690,15 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
     landmarks_history = []
 
     # Prepare headers for CSV
-    headers = ["frame_index"] + [f"{name}_x,{name}_y,{name}_z" for name in landmark_names]
+    # Standard MediaPipe format: frame_index, nose_x, nose_y, nose_z, nose_vis, ...
+    headers = ["frame_index"]
+    for name in landmark_names:
+        headers.extend([f"{name}_x", f"{name}_y", f"{name}_z", f"{name}_conf"])
+    
+    # Vaila format: frame, p1_x, p1_y, ... p33_x, p33_y
+    vaila_headers = ["frame"]
+    for i in range(1, 34):
+        vaila_headers.extend([f"p{i}_x", f"p{i}_y"])
 
     # Lists to store landmarks
     normalized_landmarks_list = []
@@ -1917,11 +1926,13 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
     with (
         open(output_file_path, "w") as f_norm,
         open(output_pixel_file_path, "w") as f_pixel,
+        open(output_vaila_file_path, "w") as f_vaila,
         open(output_yolo_file_path, "w") as f_yolo,
         open(output_yolo_bbox_path, "w") as f_bbox,
     ):
         f_norm.write(",".join(headers) + "\n")
         f_pixel.write(",".join(headers) + "\n")
+        f_vaila.write(",".join(vaila_headers) + "\n")
         f_yolo.write(",".join(yolo_headers) + "\n")
         f_bbox.write(",".join(bbox_headers) + "\n")
 
@@ -1956,6 +1967,15 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
                     # Pad missing
                     flat_landmarks_norm.extend([np.nan] * 4)
                     flat_landmarks_pixel.extend([np.nan] * 4)
+            
+            # Format Vaila landmarks (p1_x, p1_y, ...)
+            flat_landmarks_vaila = []
+            for i in range(33):
+                if i < len(landmarks_pixel):
+                    lm_px = landmarks_pixel[i]
+                    flat_landmarks_vaila.extend(lm_px[:2])
+                else:
+                    flat_landmarks_vaila.extend([np.nan] * 2)
 
             # Format YOLO keypoints
             flat_yolo_kps = []
@@ -1990,12 +2010,17 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
                  "NaN" if np.isnan(value) else f"{value:.6f}" for value in flat_landmarks_pixel
             )
             
+            vaila_str = ",".join(
+                 "NaN" if np.isnan(value) else f"{value:.6f}" for value in flat_landmarks_vaila
+            )
+
             yolo_kps_str = ",".join(
                  "NaN" if np.isnan(value) else f"{value:.6f}" for value in flat_yolo_kps
             )
 
             f_norm.write(f"{frame_idx}," + landmarks_norm_str + "\n")
             f_pixel.write(f"{frame_idx}," + landmarks_pixel_str + "\n")
+            f_vaila.write(f"{frame_idx}," + vaila_str + "\n")
             f_yolo.write(f"{frame_idx}," + yolo_kps_str + "\n")
             f_bbox.write(f"{frame_idx}," + bbox_str + "\n")
 
@@ -2008,6 +2033,7 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
     print("CSVs saved successfully!")
     print(f"  - {output_file_path.name}")
     print(f"  - {output_pixel_file_path.name}")
+    print(f"  - {output_vaila_file_path.name}")
     print(f"  - {output_yolo_file_path.name}")
     print(f"  - {output_yolo_bbox_path.name}")
     print(f"\n{'=' * 60}")
@@ -2152,6 +2178,7 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
     print(f"  - {output_video_path.name}")
     print(f"  - {output_file_path.name}")
     print(f"  - {output_pixel_file_path.name}")
+    print(f"  - {output_vaila_file_path.name}")
     print(f"  - {output_yolo_file_path.name}")
     print(f"  - {output_config_path.name}")
     print(f"  - {output_report_path.name}")
