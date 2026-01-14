@@ -89,7 +89,7 @@ def _debug_log(hypothesis_id, location, message, data=None):
 
 # Additional imports for filtering and interpolation
 from pykalman import KalmanFilter  # noqa: E402
-from rich import print  # noqa: E402
+#from rich import print  # noqa: E402
 from scipy.interpolate import UnivariateSpline  # noqa: E402
 from scipy.signal import butter, savgol_filter, sosfiltfilt  # noqa: E402
 from statsmodels.nonparametric.smoothers_lowess import lowess  # noqa: E402
@@ -653,6 +653,202 @@ def get_default_config():
             "resize_crop_scale": 2,
         },
     }
+
+
+# GPU detection functions
+def detect_nvidia_gpu():
+    """
+    Detect if NVIDIA GPU is available and accessible.
+    Returns tuple: (is_available: bool, gpu_info: dict, error_message: str)
+    """
+    gpu_info = {}
+    error_message = None
+
+    try:
+        result = subprocess.run(
+            [
+                "nvidia-smi",
+                "--query-gpu=name,driver_version,memory.total",
+                "--format=csv,noheader,nounits",
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=5,
+            text=True,
+        )
+
+        if result.returncode == 0 and result.stdout.strip():
+            lines = result.stdout.strip().split("\n")
+            if lines and lines[0]:
+                parts = lines[0].split(",")
+                if len(parts) >= 3:
+                    gpu_info = {
+                        "name": parts[0].strip(),
+                        "driver_version": parts[1].strip(),
+                        "memory_total_mb": int(parts[2].strip())
+                        if parts[2].strip().isdigit()
+                        else 0,
+                        "count": len(lines),
+                    }
+                    return True, gpu_info, None
+        else:
+            error_message = "nvidia-smi found but no GPU detected"
+            return False, gpu_info, error_message
+
+    except FileNotFoundError:
+        error_message = "nvidia-smi not found (NVIDIA drivers may not be installed)"
+        return False, gpu_info, error_message
+    except subprocess.TimeoutExpired:
+        error_message = "nvidia-smi timeout (drivers may not be responding)"
+        return False, gpu_info, error_message
+    except Exception as e:
+        error_message = f"Error checking GPU: {str(e)}"
+        return False, gpu_info, error_message
+
+
+def detect_amd_gpu():
+    """
+    Detect if AMD GPU is available.
+    Returns tuple: (is_available: bool, gpu_info: dict, error_message: str)
+    """
+    gpu_info = {}
+    error_message = None
+
+    try:
+        # Try to detect AMD GPU using rocm-smi or clinfo
+        result = subprocess.run(
+            ["rocm-smi", "--showid", "--showproductname"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=5,
+            text=True,
+        )
+
+        if result.returncode == 0 and result.stdout.strip():
+            lines = result.stdout.strip().split("\n")
+            if lines:
+                gpu_info = {
+                    "name": "AMD GPU (ROCm)",
+                    "driver_version": "ROCm",
+                    "count": len([l for l in lines if "card" in l.lower()]),
+                }
+                return True, gpu_info, None
+    except FileNotFoundError:
+        pass
+    except Exception:
+        pass
+
+    # Try alternative detection methods
+    try:
+        result = subprocess.run(
+            ["lspci"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=5,
+            text=True,
+        )
+        if result.returncode == 0:
+            if "amd" in result.stdout.lower() or "radeon" in result.stdout.lower():
+                gpu_info = {
+                    "name": "AMD GPU (detected via lspci)",
+                    "driver_version": "Unknown",
+                    "count": 1,
+                }
+                return True, gpu_info, None
+    except Exception:
+        pass
+
+    error_message = "AMD GPU not detected or ROCm not available"
+    return False, gpu_info, error_message
+
+
+def test_mediapipe_gpu():
+    """
+    Test if MediaPipe can use GPU (for future compatibility).
+    Note: FaceMesh currently doesn't support GPU delegate like Pose does.
+    Returns tuple: (works: bool, error_message: str)
+    """
+    # FaceMesh doesn't currently support GPU delegate in MediaPipe
+    # This function is a placeholder for future compatibility
+    return False, "MediaPipe FaceMesh GPU delegate not yet available"
+
+
+# Device selection dialog
+class DeviceSelectionDialog(tk.simpledialog.Dialog):
+    """Dialog to select CPU or GPU for processing"""
+
+    def __init__(self, parent, nvidia_available, nvidia_info, amd_available, amd_info):
+        self.nvidia_available = nvidia_available
+        self.nvidia_info = nvidia_info
+        self.amd_available = amd_available
+        self.amd_info = amd_info
+        self.selected_device = "cpu"  # Default
+        super().__init__(parent, title="Select Processing Device")
+
+    def body(self, master):
+        tk.Label(master, text="Select processing device:", font=("Arial", 10, "bold")).grid(
+            row=0, column=0, columnspan=2, pady=(10, 20), sticky="w"
+        )
+
+        self.device_var = tk.StringVar(value="cpu")
+
+        # CPU option
+        self.cpu_var = tk.Radiobutton(
+            master,
+            text="CPU (Standard Processing)",
+            variable=self.device_var,
+            value="cpu",
+            command=lambda: setattr(self, "selected_device", "cpu"),
+            font=("Arial", 9),
+        )
+        self.cpu_var.grid(row=1, column=0, columnspan=2, sticky="w", padx=20, pady=5)
+
+        # NVIDIA GPU option
+        gpu_text = "NVIDIA GPU (CUDA)"
+        if self.nvidia_available:
+            gpu_text += f"\nDetected: {self.nvidia_info.get('name', 'Unknown')}\nVRAM: {self.nvidia_info.get('memory_total_mb', 0)} MB"
+            state = "normal"
+        else:
+            gpu_text += "\nNot detected"
+            state = "disabled"
+
+        self.nvidia_var = tk.Radiobutton(
+            master,
+            text=gpu_text,
+            variable=self.device_var,
+            value="nvidia",
+            command=lambda: setattr(self, "selected_device", "nvidia"),
+            font=("Arial", 9),
+            state=state,
+            justify="left",
+        )
+        self.nvidia_var.grid(row=2, column=0, columnspan=2, sticky="w", padx=20, pady=5)
+
+        # AMD GPU option
+        amd_text = "AMD GPU (ROCm)"
+        if self.amd_available:
+            amd_text += f"\nDetected: {self.amd_info.get('name', 'Unknown')}"
+            state = "normal"
+        else:
+            amd_text += "\nNot detected"
+            state = "disabled"
+
+        self.amd_var = tk.Radiobutton(
+            master,
+            text=amd_text,
+            variable=self.device_var,
+            value="amd",
+            command=lambda: setattr(self, "selected_device", "amd"),
+            font=("Arial", 9),
+            state=state,
+            justify="left",
+        )
+        self.amd_var.grid(row=3, column=0, columnspan=2, sticky="w", padx=20, pady=5)
+
+        return self.cpu_var
+
+    def apply(self):
+        self.selected_device = self.device_var.get()
 
 
 # TOML configuration save/load functions
@@ -2506,12 +2702,57 @@ def process_video(video_path, output_dir, face_config):
                         x = int(lm[0] * original_width)
                         y = int(lm[1] * original_height)
                         points[i] = (x, y)
-                        cv2.circle(frame, (x, y), 2, (0, 255, 0), -1)
+                        # cv2.circle(frame, (x, y), 2, (0, 255, 0), -1) # Moved to end with custom size/color
 
-                # Draw connections
+                # Define colors (BGR) for Left (Blue) and Right (Red)
+                # Note: OpenCV uses BGR
+                color_right = (0, 0, 255)   # Red (Subject's Right)
+                color_left = (255, 0, 0)    # Blue (Subject's Left)
+                color_other = (0, 255, 0)   # Green (Other points)
+                color_neutral_conn = (200, 200, 200) # Grey/White for neutral connections
+                
+                # Draw connections with specific colors
                 for connection in DRAW_CONNECTIONS:
                     if connection[0] in points and connection[1] in points:
-                        cv2.line(frame, points[connection[0]], points[connection[1]], (255, 0, 0), 1)
+                        start_pt = points[connection[0]]
+                        end_pt = points[connection[1]]
+                        
+                        # Determine color based on connection
+                        is_right_eye = any((connection == c or connection == c[::-1]) for c in MEDIAPIPE_REGIONS["right_eye"])
+                        is_right_brow = any((connection == c or connection == c[::-1]) for c in MEDIAPIPE_REGIONS["right_eyebrow"])
+                        is_left_eye = any((connection == c or connection == c[::-1]) for c in MEDIAPIPE_REGIONS["left_eye"])
+                        is_left_brow = any((connection == c or connection == c[::-1]) for c in MEDIAPIPE_REGIONS["left_eyebrow"])
+
+                        if is_right_eye or is_right_brow:
+                            color = color_right
+                        elif is_left_eye or is_left_brow:
+                            color = color_left
+                        else:
+                            color = color_neutral_conn
+
+                        cv2.line(frame, start_pt, end_pt, color, 1)
+
+                # Draw iris landmarks individually
+                # Right Iris (468-472) -> Red
+                for i in range(468, 473): 
+                     if i in points:
+                         cv2.circle(frame, points[i], 2, color_right, -1)
+                
+                # Left Iris (473-477) -> Blue
+                for i in range(473, 478):
+                     if i in points:
+                         cv2.circle(frame, points[i], 2, color_left, -1)
+
+                # Draw other points (Green, smaller size)
+                for i, pt in points.items():
+                    if i < 468: # Non-iris landmarks
+                        # Check if it's already part of the colored features to avoid overwriting or leave it?
+                        # User said "demais points em green", implies all others.
+                        # Logic: Draw all small green, then overwrite eyes? Or just draw points not in eyes?
+                        # Simplest: Draw ALL face mesh points as small green dots first, then maybe eyes on top?
+                        # But loop order here is after connectivity. 
+                        # Let's draw them all as small green dots for the "diminuir size" request.
+                        cv2.circle(frame, pt, 1, color_other, -1)
 
         out.write(frame)
         frame_idx += 1
@@ -2633,6 +2874,50 @@ def process_videos_in_directory(existing_root=None):
     if not output_base:
         messagebox.showerror("Error", "No output directory selected.")
         return
+
+    prepare_root_for_dialog()
+    
+    # GPU Detection and Selection
+    print("Checking for available GPUs...")
+    nvidia_avail, nvidia_info, nvidia_error = detect_nvidia_gpu()
+    amd_avail, amd_info, amd_error = detect_amd_gpu()
+
+    if nvidia_avail:
+        print(f"NVIDIA GPU detected: {nvidia_info.get('name')}")
+    else:
+        print(f"NVIDIA GPU not detected: {nvidia_error}")
+
+    if amd_avail:
+        print(f"AMD GPU detected: {amd_info.get('name')}")
+
+    # Show Device Selection Dialog
+    device_dialog = DeviceSelectionDialog(
+        root, nvidia_avail, nvidia_info, amd_avail, amd_info
+    )
+    selected_device = device_dialog.selected_device
+    print(f"Selected processing device: {selected_device}")
+
+    # Set CUDA_VISIBLE_DEVICES based on selection
+    if selected_device == "nvidia":
+        os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+        print("Configured for NVIDIA GPU (CUDA)")
+    elif selected_device == "amd":
+        # AMD logic usually handles itself via ROCm, but we can set visible devices if needed
+        # os.environ["HIP_VISIBLE_DEVICES"] = "0" 
+        print("Configured for AMD GPU (ROCm)")
+    else:
+        os.environ["CUDA_VISIBLE_DEVICES"] = "-1" # Disable CUDA
+        print("Configured for CPU")
+    
+    # Check dependencies for GPU
+    if selected_device != "cpu":
+        try:
+            import tensorflow as tf
+            print(f"TensorFlow version: {tf.__version__}")
+            gpus = tf.config.list_physical_devices('GPU')
+            print(f"TensorFlow GPUs: {gpus}")
+        except ImportError:
+            pass
 
     # Face configuration (GUI or TOML via dialog)
     face_config = get_face_config(root, input_dir=input_dir)

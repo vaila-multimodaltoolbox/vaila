@@ -6,7 +6,7 @@
 - **File:** `vaila\readc3d_export.py`
 - **Lines:** 1255
 - **Size:** 47131 characters
-- **Version:** 25 September 2024
+- **Version:** JANUARY 2026
 - **Author:** Prof. Paulo R. P. Santiago
 - **GUI Interface:** ✅ Yes
 
@@ -18,8 +18,8 @@ readc3d_export.py
 ===============================================================================
 Author: Prof. Paulo R. P. Santiago
 Version: 25 September 2024
-Update: 15 September 2025
-Version updated: 0.0.3
+Update: JANUARY 2026
+Version updated: 0.0.4 (Didactic Inspector)
 Python Version: 3.12.11
 
 Description:
@@ -34,7 +34,9 @@ Features:
 - Extracts and saves events with their labels and times.
 - Extracts and saves points residuals with time columns.
 - Supports saving the data in CSV format.
-- Optionally saves the data in Excel format (can be slow for l...
+- Optionally saves the data in Excel format.
+- **Didactic C3D Inspector:** A tabbed GUI to explore C3D structure, check data health, and view parameters/events.
+- **Export Reports:** Save inspection summaries as TXT or didactic HTML files.
 
 ## 🔧 Main Functions
 
@@ -53,8 +55,9 @@ Features:
 - `save_data_statistics`
 - `save_to_files`
 - `convert_c3d_to_csv`
-- `print_complete_data_structure`
 - `batch_convert_c3d_to_csv`
+- `inspect_c3d_gui`
+- `DidacticC3DInspector` (Class)
 
 
 
