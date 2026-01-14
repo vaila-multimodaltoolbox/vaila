@@ -175,4 +175,4 @@ hooks/*
 !install-hooks.sh
 
 # Ignore all .pt files at root level
-*.pt
+*.pttests/markerless_2d_analysis/temp/

@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation: 29 July 2024
-Update: 11 January 2026
-Version: 0.1.0
+Update: 14 January 2026
+Version: 0.1.1
 
 Description:
 This script performs batch processing of videos for 2D pose estimation using
@@ -21,10 +21,11 @@ The user can configure key parameters via a graphical interface:
 - YOLO: model selection (yolo11n to yolo11x), confidence threshold
 - Modes: YOLO-only, YOLO+MediaPipe, or MediaPipe-only
 
-New Features (v0.1.0):
+New Features (v0.1.1):
 - Updated to use MediaPipe Tasks API (0.10.31+) instead of deprecated mp.solutions
 - Manual OpenCV drawing for landmarks (compatible with new MediaPipe version)
 - Automatic model download for both MediaPipe and YOLO models
+- ROI polygon definition and bbox upscale factor for YOLO+MediaPipe mode
 
 Usage example:
 First activate the vaila environment:
@@ -74,6 +75,7 @@ import platform
 import shutil
 import time
 import tkinter as tk
+#from rich import print
 import urllib.request
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
@@ -84,7 +86,13 @@ import numpy as np
 import torch
 
 # --- NEW IMPORTS FOR THE TASKS API (MediaPipe 0.10.31+) ---
+import ultralytics
 from ultralytics import YOLO
+import toml
+import webbrowser
+
+
+__version__ = "0.1.1"
 
 # MANUAL DEFINITION OF THE BODY CONNECTIONS (since mp.solutions was removed)
 POSE_CONNECTIONS = frozenset(
@@ -134,6 +142,7 @@ def get_hardware_info():
     info.append(f"Python version: {platform.python_version()}")
     info.append(f"OpenCV version: {cv2.__version__}")
     info.append(f"MediaPipe version: {mp.__version__}")
+    info.append(f"Ultralytics (YOLO) version: {ultralytics.__version__}")
     info.append(f"PyTorch version: {torch.__version__}")
 
     if torch.cuda.is_available():
@@ -224,7 +233,307 @@ landmark_names = [
 ]
 
 
+def select_free_polygon_roi(video_path):
+    """
+    Let the user draw a free polygon ROI on the first frame of the video.
+    Left click adds points, right click removes the last point, Enter confirms,
+    Esc skips, and 'r' resets. Returns a numpy array of int32 points or None.
+    """
+    cap = None
+    window_name = None
+    try:
+        # Extract first frame from video
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            print(f"Error: Could not open video file: {video_path}")
+            return None
+
+        # Read first frame
+        ret, frame = cap.read()
+        cap.release()
+        cap = None
+
+        if not ret or frame is None:
+            print("Error: Could not read first frame from video for ROI selection.")
+            return None
+
+        # Scale frame to reasonable size for display
+        scale = 1.0
+        h, w = frame.shape[:2]
+        max_h = 1000  # Smaller max height for better fit
+        max_w = 1800
+        if h > max_h or w > max_w:
+            scale_h = max_h / h if h > max_h else 1.0
+            scale_w = max_w / w if w > max_w else 1.0
+            scale = min(scale_h, scale_w)
+            frame = cv2.resize(frame, (int(w * scale), int(h * scale)))
+
+        roi_points = []
+        mouse_clicked = False
+
+        def mouse_callback(event, x, y, flags, param):
+            nonlocal mouse_clicked
+            if event == cv2.EVENT_LBUTTONDOWN:
+                roi_points.append((x, y))
+                mouse_clicked = True
+                print(f"Point added: ({x}, {y}) - Total points: {len(roi_points)}")
+            elif event == cv2.EVENT_RBUTTONDOWN and roi_points:
+                removed = roi_points.pop()
+                mouse_clicked = True
+                print(f"Point removed: {removed} - Total points: {len(roi_points)}")
+
+        window_name = "Select ROI (Left: add, Right: undo, Enter: confirm, Esc: skip, r: reset)"
+
+        # Create window with WINDOW_NORMAL flag for resizability
+        if platform.system() == "Darwin":
+            window_flags = cv2.WINDOW_GUI_NORMAL | cv2.WINDOW_KEEPRATIO
+        else:
+            window_flags = cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO
+
+        cv2.namedWindow(window_name, window_flags)
+
+        # Set mouse callback BEFORE showing window
+        cv2.setMouseCallback(window_name, mouse_callback)
+
+        # Show window first to ensure it exists
+        cv2.imshow(window_name, frame)
+        cv2.waitKey(1)
+
+        # Colors for polygon
+        polygon_color = (255, 255, 0)  # Cyan (BGR)
+        point_color = (0, 255, 255)  # Yellow (BGR)
+        closing_line_color = (255, 0, 255)  # Magenta (BGR)
+
+        # Help text
+        help_text = [
+            "Left Click: Add point",
+            "Right Click: Remove last point",
+            "Enter: Confirm selection",
+            "Esc: Cancel",
+            "R: Reset all points",
+        ]
+
+        loop_count = 0
+        while True:
+            display_img = frame.copy()
+
+            # Draw help text
+            if loop_count < 100 or len(roi_points) == 0:
+                y_offset = 20
+                for i, text in enumerate(help_text):
+                    y_pos = y_offset + i * 25
+                    cv2.putText(
+                        display_img, text, (10, y_pos), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 3
+                    )
+                    cv2.putText(
+                        display_img,
+                        text,
+                        (10, y_pos),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.6,
+                        (255, 255, 255),
+                        2,
+                    )
+
+            if roi_points:
+                pts = np.array(roi_points, np.int32).reshape((-1, 1, 2))
+                cv2.polylines(display_img, [pts], False, polygon_color, 2)
+                for pt in roi_points:
+                    cv2.circle(display_img, pt, 4, point_color, -1)
+                if len(roi_points) > 1:
+                    cv2.line(display_img, roi_points[-1], roi_points[0], closing_line_color, 1)
+                
+                point_text = f"Points: {len(roi_points)} (min 3)"
+                text_y = display_img.shape[0] - 20
+                cv2.putText(display_img, point_text, (10, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+
+            cv2.imshow(window_name, display_img)
+            key = cv2.waitKey(30) & 0xFF
+            loop_count += 1
+
+            if key == 13 or key == 10:  # Enter
+                if len(roi_points) >= 3:
+                    print(f"ROI confirmed with {len(roi_points)} points")
+                    # Scale points back to original resolution if needed
+                    if scale != 1.0:
+                        roi_points = [(int(x / scale), int(y / scale)) for x, y in roi_points]
+                    break
+                else:
+                    print(f"Need at least 3 points. Currently have {len(roi_points)}")
+            elif key == 27:  # Esc
+                print("ROI selection cancelled")
+                roi_points = []
+                break
+            elif key == ord("r") or key == ord("R"):  # Reset
+                roi_points = []
+
+        cv2.destroyAllWindows()
+        if roi_points:
+            return np.array(roi_points, dtype=np.int32)
+        else:
+            return None
+
+    except Exception as e:
+        print(f"Error in select_free_polygon_roi: {e}")
+        try:
+            cv2.destroyAllWindows()
+        except:
+            pass
+        return None
+
+
 class ConfidenceInputDialog(simpledialog.Dialog):
+    def __init__(self, parent, title=None, input_dir=None):
+        self.input_dir = input_dir
+        self.roi_polygon_points = None
+        super().__init__(parent, title)
+
+    def load_config(self):
+        """Load configuration from TOML file"""
+        try:
+            filename = filedialog.askopenfilename(
+                title="Load Configuration",
+                filetypes=[("TOML files", "*.toml"), ("All files", "*.*")],
+                parent=self
+            )
+            if not filename:
+                return
+
+            with open(filename, "r") as f:
+                config = toml.load(f)
+
+            # Update fields
+            if "min_detection_confidence" in config:
+                self.min_detection_entry.delete(0, tk.END)
+                self.min_detection_entry.insert(0, str(config["min_detection_confidence"]))
+            
+            if "min_tracking_confidence" in config:
+                self.min_tracking_entry.delete(0, tk.END)
+                self.min_tracking_entry.insert(0, str(config["min_tracking_confidence"]))
+            
+            if "model_complexity" in config:
+                self.model_complexity_entry.delete(0, tk.END)
+                self.model_complexity_entry.insert(0, str(config["model_complexity"]))
+            
+            if "enable_segmentation" in config:
+                self.enable_segmentation_entry.delete(0, tk.END)
+                self.enable_segmentation_entry.insert(0, str(config["enable_segmentation"]))
+            
+            if "smooth_segmentation" in config:
+                self.smooth_segmentation_entry.delete(0, tk.END)
+                self.smooth_segmentation_entry.insert(0, str(config["smooth_segmentation"]))
+            
+            if "static_image_mode" in config:
+                self.static_image_mode_entry.delete(0, tk.END)
+                self.static_image_mode_entry.insert(0, str(config["static_image_mode"]))
+            
+            if "use_yolo" in config:
+                self.use_yolo_entry.delete(0, tk.END)
+                self.use_yolo_entry.insert(0, str(config["use_yolo"]))
+            
+            if "yolo_mode" in config:
+                self.yolo_mode_var.set(config["yolo_mode"])
+            
+            if "yolo_model" in config:
+                self.yolo_model_var.set(config["yolo_model"])
+            
+            if "yolo_conf" in config:
+                self.yolo_conf_entry.delete(0, tk.END)
+                self.yolo_conf_entry.insert(0, str(config["yolo_conf"]))
+            
+            if "filter_type" in config:
+                self.filter_type_entry.delete(0, tk.END)
+                self.filter_type_entry.insert(0, str(config["filter_type"]))
+            
+            if "bbox_upscale_factor" in config:
+                self.upscale_factor_entry.delete(0, tk.END)
+                self.upscale_factor_entry.insert(0, str(config["bbox_upscale_factor"]))
+            
+            # Load ROI points if available
+            if "roi_polygon_points" in config and config["roi_polygon_points"]:
+                self.roi_polygon_points = config["roi_polygon_points"]
+                self.polygon_status_label.config(text=f"{len(self.roi_polygon_points)} points (Loaded)", fg="blue")
+            
+            messagebox.showinfo("Success", f"Configuration loaded from {Path(filename).name}")
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load configuration: {e}")
+
+    def save_config_to_file(self):
+        """Save current configuration to TOML file"""
+        try:
+            # Get current values
+            current_config = {
+                "min_detection_confidence": float(self.min_detection_entry.get()),
+                "min_tracking_confidence": float(self.min_tracking_entry.get()),
+                "model_complexity": int(self.model_complexity_entry.get()),
+                "enable_segmentation": self.enable_segmentation_entry.get().lower() == "true",
+                "smooth_segmentation": self.smooth_segmentation_entry.get().lower() == "true",
+                "static_image_mode": self.static_image_mode_entry.get().lower() == "true",
+                "use_yolo": self.use_yolo_entry.get().lower() == "true",
+                "yolo_mode": self.yolo_mode_var.get(),
+                "yolo_model": self.yolo_model_var.get(),
+                "yolo_conf": float(self.yolo_conf_entry.get()),
+                "filter_type": self.filter_type_entry.get().lower(),
+                "bbox_upscale_factor": int(self.upscale_factor_entry.get()),
+                "roi_polygon_points": self.roi_polygon_points,
+            }
+
+            filename = filedialog.asksaveasfilename(
+                title="Save Configuration",
+                filetypes=[("TOML files", "*.toml")],
+                defaultextension=".toml",
+                initialfile="pose_config.toml",
+                parent=self
+            )
+            
+            if not filename:
+                return
+
+            with open(filename, "w") as f:
+                toml.dump(current_config, f)
+            
+            messagebox.showinfo("Success", f"Configuration saved to {Path(filename).name}")
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to save configuration: {e}")
+
+    def create_default_config(self):
+        """Reset to default configuration"""
+        if messagebox.askyesno("Confirm", "Reset configuration to defaults?"):
+            self.min_detection_entry.delete(0, tk.END); self.min_detection_entry.insert(0, "0.5")
+            self.min_tracking_entry.delete(0, tk.END); self.min_tracking_entry.insert(0, "0.5")
+            self.model_complexity_entry.delete(0, tk.END); self.model_complexity_entry.insert(0, "2")
+            self.enable_segmentation_entry.delete(0, tk.END); self.enable_segmentation_entry.insert(0, "True")
+            self.smooth_segmentation_entry.delete(0, tk.END); self.smooth_segmentation_entry.insert(0, "True")
+            self.static_image_mode_entry.delete(0, tk.END); self.static_image_mode_entry.insert(0, "False")
+            self.use_yolo_entry.delete(0, tk.END); self.use_yolo_entry.insert(0, "True")
+            self.yolo_mode_var.set("yolo_mediapipe")
+            self.yolo_model_var.set("yolo11x-pose.pt")
+            self.yolo_conf_entry.delete(0, tk.END); self.yolo_conf_entry.insert(0, "0.5")
+            self.filter_type_entry.delete(0, tk.END); self.filter_type_entry.insert(0, "none")
+
+            self.upscale_factor_entry.delete(0, tk.END); self.upscale_factor_entry.insert(0, "2")
+            
+            self.roi_polygon_points = None
+            self.polygon_status_label.config(text="None selected", fg="gray")
+
+    def show_help(self):
+        """Show help information in browser"""
+        try:
+            # Get path to help file
+            current_dir = Path(__file__).parent
+            help_path = current_dir / "help" / "markerless2d_analysis_v2.html"
+            
+            if help_path.exists():
+                webbrowser.open_new_tab(help_path.as_uri())
+            else:
+                messagebox.showerror("Error", f"Help file not found at:\n{help_path}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to open help: {e}")
+
+
+
     def body(self, master):
         # Available YOLO11-pose models
         yolo_models = [
@@ -245,7 +554,9 @@ class ConfidenceInputDialog(simpledialog.Dialog):
         tk.Label(master, text="YOLO mode (yolo_only/yolo_mediapipe):").grid(row=7)
         tk.Label(master, text="YOLO model (yolo11n-pose.pt, yolo11s-pose.pt, etc.):").grid(row=8)
         tk.Label(master, text="YOLO confidence threshold (0.0 - 1.0):").grid(row=9)
-        tk.Label(master, text="Apply filter? (none/kalman/savgol):").grid(row=10)
+        tk.Label(master, text="Apply filter? (none/kalman/savgol/median):").grid(row=10)
+        tk.Label(master, text="BBox Upscale Factor (2-8):").grid(row=11)
+        tk.Label(master, text="Polygon ROI:").grid(row=12)
 
         self.min_detection_entry = tk.Entry(master)
         self.min_detection_entry.insert(0, "0.5")
@@ -288,7 +599,25 @@ class ConfidenceInputDialog(simpledialog.Dialog):
         self.yolo_conf_entry = tk.Entry(master)
         self.yolo_conf_entry.insert(0, "0.5")
         self.filter_type_entry = tk.Entry(master)
-        self.filter_type_entry.insert(0, "kalman")
+        self.filter_type_entry.insert(0, "none")
+
+        self.upscale_factor_entry = tk.Entry(master)
+        self.upscale_factor_entry.insert(0, "2")
+        
+        self.polygon_btn = tk.Button(master, text="Select Polygon ROI", command=self.select_polygon_roi)
+        self.polygon_btn.grid(row=12, column=1)
+        self.polygon_status_label = tk.Label(master, text="None selected", fg="gray")
+        self.polygon_status_label.grid(row=12, column=2)
+
+        # Config Buttons Frame
+        btn_frame = tk.Frame(master)
+        btn_frame.grid(row=13, column=0, columnspan=3, pady=10)
+        
+        tk.Button(btn_frame, text="Save Config", command=self.save_config_to_file).pack(side=tk.LEFT, padx=5)
+        tk.Button(btn_frame, text="Load Config", command=self.load_config).pack(side=tk.LEFT, padx=5)
+        tk.Button(btn_frame, text="Create Config", command=self.create_default_config).pack(side=tk.LEFT, padx=5)
+        tk.Button(btn_frame, text="Help", command=self.show_help).pack(side=tk.LEFT, padx=5)
+
 
         self.min_detection_entry.grid(row=0, column=1)
         self.min_tracking_entry.grid(row=1, column=1)
@@ -298,9 +627,40 @@ class ConfidenceInputDialog(simpledialog.Dialog):
         self.static_image_mode_entry.grid(row=5, column=1)
         self.use_yolo_entry.grid(row=6, column=1)
         self.yolo_conf_entry.grid(row=9, column=1)
+        self.yolo_conf_entry.grid(row=9, column=1)
         self.filter_type_entry.grid(row=10, column=1)
+        self.upscale_factor_entry.grid(row=11, column=1)
 
         return self.min_detection_entry
+
+    def select_polygon_roi(self):
+        if not self.input_dir:
+            messagebox.showerror("Error", "No input directory available.")
+            return
+
+        # Find first video
+        try:
+            video_files = [
+                f
+                for f in Path(self.input_dir).glob("*.*")
+                if f.suffix.lower() in [".mp4", ".avi", ".mov"]
+            ]
+            if not video_files:
+                messagebox.showerror("Error", "No videos found in input directory.")
+                return
+            
+            video_path = str(video_files[0])
+            roi_points = select_free_polygon_roi(video_path)
+            
+            if roi_points is not None and len(roi_points) >= 3:
+                self.roi_polygon_points = roi_points.tolist() if hasattr(roi_points, "tolist") else roi_points
+                self.polygon_status_label.config(text=f"{len(self.roi_polygon_points)} points", fg="green")
+                messagebox.showinfo("Success", f"Polygon ROI selected with {len(self.roi_polygon_points)} points.")
+            else:
+                self.polygon_status_label.config(text="Cancelled", fg="orange")
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to select ROI: {e}")
 
     def apply(self):
         self.result = {
@@ -315,10 +675,12 @@ class ConfidenceInputDialog(simpledialog.Dialog):
             "yolo_model": self.yolo_model_var.get(),  # Get selected model
             "yolo_conf": float(self.yolo_conf_entry.get()),
             "filter_type": self.filter_type_entry.get().lower(),
+            "bbox_upscale_factor": int(self.upscale_factor_entry.get()),
+            "roi_polygon_points": self.roi_polygon_points,
         }
 
 
-def get_pose_config(existing_root=None):
+def get_pose_config(existing_root=None, input_dir=None):
     """Get pose configuration from user via dialog"""
     if existing_root is not None:
         root = existing_root
@@ -360,7 +722,7 @@ def get_pose_config(existing_root=None):
         except Exception:
             pass
 
-        dialog = ConfidenceInputDialog(root, title="Pose Configuration")
+        dialog = ConfidenceInputDialog(root, title="Pose Configuration", input_dir=input_dir)
         print("Dialog created, checking result...")
 
         # Update root after dialog closes
@@ -619,13 +981,13 @@ def download_or_load_yolo_model(model_name=None):
                         source = Path(model.ckpt_path)
                         if source.exists():
                             shutil.copy2(str(source), str(model_path))
-                            print(f"✓ Model saved to {model_path}")
+                            print(f"Model saved to {model_path}")
                 except Exception:
                     pass
 
         # Configure for GPU or CPU
         model.to(device)
-        print(f"✓ YOLO model loaded successfully on {device}")
+        print(f"YOLO model loaded successfully on {device}")
 
         return model
     except Exception as e:
@@ -650,7 +1012,7 @@ def download_or_load_yolo_model(model_name=None):
                     model = YOLO(fallback_name, verbose=False)
 
             model.to(device)
-            print(f"✓ Fallback YOLO model loaded successfully on {device}")
+            print(f"Fallback YOLO model loaded successfully on {device}")
             return model
         except Exception as e2:
             print(f"Failed to load any YOLO model: {e2}")
@@ -690,21 +1052,38 @@ def detect_persons_with_yolo(frame, model, conf_threshold=0.5):
 
     persons = []
     if results and len(results) > 0 and results[0].boxes is not None:
-        for box in results[0].boxes.data.cpu().numpy():
+        boxes = results[0].boxes.data.cpu().numpy()
+        
+        # Check for keypoints
+        keypoints = None
+        if hasattr(results[0], "keypoints") and results[0].keypoints is not None:
+             if hasattr(results[0].keypoints, "data") and len(results[0].keypoints.data) > 0:
+                 keypoints = results[0].keypoints.data.cpu().numpy()
+
+        for i, box in enumerate(boxes):
             x1, y1, x2, y2, conf, cls = box
             if cls == 0:  # person class
-                # Scale back to original size
-                persons.append(
-                    {
-                        "bbox": [
-                            int(x1 / scale),
-                            int(y1 / scale),
-                            int(x2 / scale),
-                            int(y2 / scale),
-                        ],
-                        "conf": float(conf),
-                    }
-                )
+                person_data = {
+                    "bbox": [
+                        int(x1 / scale),
+                        int(y1 / scale),
+                        int(x2 / scale),
+                        int(y2 / scale),
+                    ],
+                    "conf": float(conf),
+                    "keypoints": None
+                }
+                
+                # Add keypoints if available
+                if keypoints is not None and i < len(keypoints):
+                    # Scale keypoints back
+                    kps = keypoints[i].copy()
+                    # kps shape is (17, 3) -> [x, y, conf]
+                    kps[:, 0] /= scale
+                    kps[:, 1] /= scale
+                    person_data["keypoints"] = kps
+                
+                persons.append(person_data)
 
     return persons
 
@@ -733,16 +1112,16 @@ def process_frame_with_yolo_pose_only(frame, yolo_model, conf_threshold=0.5, fra
     )
 
     if not results or len(results) == 0:
-        return None, None
+        return None, None, None
 
     result = results[0]
 
     # Check if keypoints are available
     if not hasattr(result, "keypoints") or result.keypoints is None:
-        return None, None
+        return None, None, None
 
     if len(result.keypoints.data) == 0:
-        return None, None
+        return None, None, None
 
     # Get keypoints from YOLO (shape: [num_persons, num_keypoints, 3] where 3 = [x, y, confidence])
     try:
@@ -753,7 +1132,7 @@ def process_frame_with_yolo_pose_only(frame, yolo_model, conf_threshold=0.5, fra
             print(f"  YOLO keypoints dtype: {keypoints.dtype}")
     except (IndexError, AttributeError) as e:
         print(f"\n  Warning: Could not extract keypoints: {e}")
-        return None, None
+        return None, None, None
 
     # YOLO11-pose has 17 keypoints
     # Map YOLO keypoints to MediaPipe format (33 landmarks)
@@ -825,11 +1204,18 @@ def process_frame_with_yolo_pose_only(frame, yolo_model, conf_threshold=0.5, fra
                 # Skip if conversion fails
                 continue
 
-    return landmarks_norm, landmarks_px
+    return landmarks_norm, landmarks_px, keypoints
 
 
 def process_frame_with_mediapipe_tasks(
-    frame, landmarker, timestamp_ms, yolo_model=None, yolo_conf=0.4, use_yolo=True
+    frame,
+    landmarker,
+    timestamp_ms,
+    yolo_model=None,
+    yolo_conf=0.4,
+    use_yolo=True,
+    roi_polygon_points=None,
+    bbox_upscale_factor=1,
 ):
     """
     Process a frame with MediaPipe Tasks API, optionally using YOLO for better detection.
@@ -841,37 +1227,143 @@ def process_frame_with_mediapipe_tasks(
         yolo_model: YOLO model for person detection
         yolo_conf: YOLO confidence threshold
         use_yolo: Whether to use YOLO for person detection
+        roi_polygon_points: Optional polygon points for ROI filtering
+        bbox_upscale_factor: Factor to upscale the YOLO bbox crop before inference
     Returns:
         landmarks_norm: Normalized landmarks (0-1)
         landmarks_px: Pixel landmarks
         best_person_bbox: Bounding box if YOLO was used
+        best_person_keypoints: Raw YOLO keypoints if available
     """
     height, width = frame.shape[:2]
 
     # If using YOLO, detect persons first
     best_person_bbox = None
+    best_person_keypoints = None
     if use_yolo and yolo_model is not None:
         persons = detect_persons_with_yolo(frame, yolo_model, yolo_conf)
 
-        # Select the person with highest confidence or largest bbox
+
+        filtered_persons = []
         if persons:
+            if roi_polygon_points is not None and len(roi_polygon_points) >= 3:
+                # Filter by polygon ROI
+                # Convert points to correct format for pointPolygonTest
+                poly_pts = np.array(roi_polygon_points, dtype=np.int32)
+                for p in persons:
+                    # Check if center of bbox is inside polygon
+                    bbox = p["bbox"]
+                    center_x = (bbox[0] + bbox[2]) / 2
+                    center_y = (bbox[1] + bbox[3]) / 2
+                    
+                    # pointPolygonTest returns > 0 if inside, 0 if on edge, < 0 if outside
+                    if cv2.pointPolygonTest(poly_pts, (center_x, center_y), False) >= 0:
+                        filtered_persons.append(p)
+            else:
+                filtered_persons = persons
+
+        # Select the person with highest confidence or largest bbox from filtered list
+        if filtered_persons:
             # Sort by bbox area (largest first) and confidence
-            persons.sort(
+            filtered_persons.sort(
                 key=lambda p: (p["bbox"][2] - p["bbox"][0])
                 * (p["bbox"][3] - p["bbox"][1])
                 * p["conf"],
                 reverse=True,
             )
-            best_person_bbox = persons[0]["bbox"]
+            best_person_bbox = filtered_persons[0]["bbox"]
+            best_person_keypoints = filtered_persons[0].get("keypoints")
 
-    # Process with MediaPipe Tasks API
+    # --- INFERENCE LOGIC ---
+    
+    # Check if we should use crop & upscale strategy
+    if best_person_bbox and bbox_upscale_factor > 1 and use_yolo:
+        # 1. Extract and Upscale Crop
+        x1, y1, x2, y2 = best_person_bbox
+        
+        # Add margin (20%)
+        w_bbox = x2 - x1
+        h_bbox = y2 - y1
+        margin_w = int(w_bbox * 0.2)
+        margin_h = int(h_bbox * 0.2)
+        
+        crop_x1 = max(0, x1 - margin_w)
+        crop_y1 = max(0, y1 - margin_h)
+        crop_x2 = min(width, x2 + margin_w)
+        crop_y2 = min(height, y2 + margin_h)
+        
+        # Calculate actual crop dimensions
+        crop_w = crop_x2 - crop_x1
+        crop_h = crop_y2 - crop_y1
+        
+        if crop_w > 0 and crop_h > 0:
+            crop_img = frame[crop_y1:crop_y2, crop_x1:crop_x2]
+            
+            # Upscale
+            new_w = crop_w * bbox_upscale_factor
+            new_h = crop_h * bbox_upscale_factor
+            
+            try:
+                upscaled_crop = cv2.resize(crop_img, (new_w, new_h), interpolation=cv2.INTER_CUBIC)
+                
+                # 2. Run MediaPipe on Upscaled Crop
+                rgb_frame = cv2.cvtColor(upscaled_crop, cv2.COLOR_BGR2RGB)
+                mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
+                pose_landmarker_result = landmarker.detect_for_video(mp_image, timestamp_ms)
+                
+                # 3. Process Results
+                if not pose_landmarker_result.pose_landmarks or len(pose_landmarker_result.pose_landmarks) == 0:
+                    return None, None, best_person_bbox, best_person_keypoints
+                
+                raw_landmarks = pose_landmarker_result.pose_landmarks[0]
+                
+                # 4. Map Coordinates Back to Original Frame
+                landmarks_norm = []
+                landmarks_px = []
+                
+                for landmark in raw_landmarks:
+                    # Helper lambda to map coordinates
+                    # Input: normalized coord in upscaled crop (0-1)
+                    # Output: normalized coord in original frame (0-1)
+                    
+                    # 1. Un-normalize to get pixel in upscaled crop
+                    px_crop_x = landmark.x * new_w
+                    px_crop_y = landmark.y * new_h
+                    
+                    # 2. Downscale to get pixel in original crop
+                    px_orig_crop_x = px_crop_x / bbox_upscale_factor
+                    px_orig_crop_y = px_crop_y / bbox_upscale_factor
+                    
+                    # 3. Add offset to get pixel in original frame
+                    px_final_x = px_orig_crop_x + crop_x1
+                    px_final_y = px_orig_crop_y + crop_y1
+                    
+                    # 4. Normalize to original frame
+                    norm_final_x = px_final_x / width
+                    norm_final_y = px_final_y / height
+                    
+                    visibility = 1.0 # Tasks API default
+                    
+                    landmarks_norm.append([norm_final_x, norm_final_y, landmark.z, visibility])
+                    landmarks_px.append(
+                        [int(px_final_x), int(px_final_y), landmark.z, visibility]
+                    )
+                
+                return landmarks_norm, landmarks_px, best_person_bbox, best_person_keypoints
+                
+            except Exception as e:
+                print(f"Error in upscale inference: {e}")
+                # Fallback to full frame inference below
+                pass
+
+    # Fallback / Standard Inference (Full Frame)
     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
     # Detect pose using Tasks API
     pose_landmarker_result = landmarker.detect_for_video(mp_image, timestamp_ms)
 
     if not pose_landmarker_result.pose_landmarks or len(pose_landmarker_result.pose_landmarks) == 0:
-        return None, None, best_person_bbox
+        return None, None, best_person_bbox, best_person_keypoints
 
     # Get the first pose detected
     raw_landmarks = pose_landmarker_result.pose_landmarks[0]
@@ -904,7 +1396,7 @@ def process_frame_with_mediapipe_tasks(
 
         # If less than 50% of the visible landmarks are inside the bbox, ignore
         if total_visible > 0 and inside_count / total_visible < 0.5:
-            return None, None, best_person_bbox
+            return None, None, best_person_bbox, best_person_keypoints
 
     # Convert landmarks to the necessary formats
     landmarks_norm = []
@@ -928,8 +1420,10 @@ def apply_temporal_filter(landmarks_history, current_landmarks, filter_type="non
 
     if filter_type == "kalman":
         return apply_kalman_filter(landmarks_history, current_landmarks)
-    elif filter_type == "savgol" and len(landmarks_history) >= 5:
+    elif filter_type == "savgol" and len(landmarks_history) >= 3:
         return apply_savgol_filter(landmarks_history, current_landmarks)
+    elif filter_type == "median" and len(landmarks_history) >= 3:
+        return apply_median_filter(landmarks_history, current_landmarks)
 
     return current_landmarks
 
@@ -943,7 +1437,7 @@ def apply_kalman_filter(landmarks_history, current_landmarks):
     for i in range(len(current_landmarks)):
         if i < len(landmarks_history[-1]):
             # Simple weighted average between the previous and current value
-            alpha = 0.7  # Weight for the current value
+            alpha = 0.95  # Weight for the current value
             prev = landmarks_history[-1][i]
             curr = current_landmarks[i]
 
@@ -1052,7 +1546,7 @@ def draw_yolo_landmarks(frame, landmarks_px, width, height):
     return frame
 
 
-def apply_savgol_filter(landmarks_history, current_landmarks, window_length=5):
+def apply_savgol_filter(landmarks_history, current_landmarks, window_length=3):
     """Apply simplified Savitzky-Golay filter"""
     if not landmarks_history or current_landmarks is None:
         return current_landmarks
@@ -1084,6 +1578,56 @@ def apply_savgol_filter(landmarks_history, current_landmarks, window_length=5):
     return filtered
 
 
+def apply_median_filter(landmarks_history, current_landmarks, window_size=5):
+    """Apply Moving Median filter"""
+    if not landmarks_history or current_landmarks is None:
+        return current_landmarks
+
+    filtered = []
+    # Use odd window size
+    window = min(window_size if window_size % 2 != 0 else window_size + 1, len(landmarks_history) + 1)
+    
+    # Collect all frames including current
+    all_frames = landmarks_history[-(window-1):] + [current_landmarks]
+    
+    # Iterate over each landmark index
+    for i in range(len(current_landmarks)):
+        # Collect valid coordinates across frames for this landmark
+        valid_coords = []
+        
+        for frame in all_frames:
+            if i < len(frame) and frame[i] is not None:
+                # Check for NaNs
+                if not any(np.isnan(c) for c in frame[i][:3] if isinstance(c, (int, float))):
+                     valid_coords.append(frame[i])
+        
+        if not valid_coords:
+            filtered.append(current_landmarks[i])
+            continue
+            
+        # Calculate median for x, y, z
+        try:
+            # Transpose to get lists of x, y, z, vis
+            # valid_coords shape: [n_frames, 4] -> transpose -> [4, n_frames]
+            transposed = list(zip(*valid_coords))
+            
+            x_median = np.median(transposed[0])
+            y_median = np.median(transposed[1])
+            z_median = np.median(transposed[2])
+            
+            # For visibility/confidence, we can take median or just use current
+            # Using current usually makes more sense for tracking logic, 
+            # but median might be more stable. Let's use median too.
+            vis_median = np.median(transposed[3]) if len(transposed) > 3 else 1.0
+            
+            filtered.append([x_median, y_median, z_median, vis_median])
+        except Exception:
+            # Fallback
+            filtered.append(current_landmarks[i])
+            
+    return filtered
+
+
 def process_video(video_path, output_dir, pose_config, yolo_model=None):
     """Process a video file with optimized YOLO + MediaPipe Tasks API pipeline"""
     print(f"Processing video: {video_path}")
@@ -1108,6 +1652,18 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
     output_video_path = output_dir / f"{video_path.stem}_mp.mp4"
     output_file_path = output_dir / f"{video_path.stem}_mp_norm.csv"
     output_pixel_file_path = output_dir / f"{video_path.stem}_mp_pixel.csv"
+    output_yolo_file_path = output_dir / f"{video_path.stem}_yolo_pixel.csv"
+    output_yolo_bbox_path = output_dir / f"{video_path.stem}_yolo_bbox.csv"
+    output_config_path = output_dir / "config.toml"
+    output_report_path = output_dir / "report.txt"
+
+    # Save configuration to TOML
+    try:
+        with open(output_config_path, "w") as f:
+            toml.dump(pose_config, f)
+        print(f"Configuration saved to {output_config_path}")
+    except Exception as e:
+        print(f"Error saving configuration: {e}")
 
     # Initialize MediaPipe Tasks API
     model_path = get_mediapipe_model_path(pose_config["model_complexity"])
@@ -1138,26 +1694,27 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
     # Lists to store landmarks
     normalized_landmarks_list = []
     pixel_landmarks_list = []
+    yolo_pixel_landmarks_list = []  # For YOLO keypoints
     bbox_list = []
     frames_with_missing_data = []
 
     print(f"\n{'=' * 60}")
-    print(f"PROCESSANDO VÍDEO: {video_path.name}")
+    print(f"PROCESSING VIDEO: {video_path.name}")
     print(f"{'=' * 60}")
-    print(f"Total de frames: {total_frames}")
-    print(f"Resolução: {width}x{height}")
+    print(f"Total frames: {total_frames}")
+    print(f"Resolution: {width}x{height}")
     print(f"FPS: {fps:.2f}")
     if yolo_model is not None and pose_config.get("use_yolo", False):
         yolo_model_name = pose_config.get("yolo_model", "yolo11x-pose.pt")
         yolo_mode = pose_config.get("yolo_mode", "yolo_mediapipe")
         if yolo_mode == "yolo_only":
-            print("Pipeline: YOLOv11-pose apenas")
+            print("Pipeline: YOLOv11-pose only")
         else:
             print("Pipeline: YOLOv11 + MediaPipe")
         print(f"YOLO Model: {yolo_model_name}")
         print(f"YOLO Confidence: {pose_config.get('yolo_conf', 0.5)}")
     else:
-        print("Pipeline: MediaPipe apenas")
+        print("Pipeline: MediaPipe only")
     print(f"{'=' * 60}\n")
 
     # Process video
@@ -1165,7 +1722,7 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
     frames_with_pose = 0
     frames_without_pose = 0
 
-    print("Iniciando processamento de frames...")
+    print("Starting frame processing...")
     while cap.isOpened():
         success, frame = cap.read()
         if not success:
@@ -1180,8 +1737,8 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
             pose_rate = (frames_with_pose / (frame_count + 1)) * 100 if frame_count > 0 else 0
             print(
                 f"\r  Frame {frame_count}/{total_frames} ({progress:.1f}%) | "
-                f"Pose detectado: {frames_with_pose} ({pose_rate:.1f}%) | "
-                f"Sem pose: {frames_without_pose}",
+                f"Pose detected: {frames_with_pose} ({pose_rate:.1f}%) | "
+                f"Without pose: {frames_without_pose}",
                 end="",
                 flush=True,
             )
@@ -1193,8 +1750,8 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
             remaining_frames = total_frames - frame_count
             eta = remaining_frames / fps_processing if fps_processing > 0 else 0
             print(
-                f"\n  Velocidade: {fps_processing:.1f} fps | "
-                f"Tempo decorrido: {elapsed:.1f}s | "
+                f"\n Processing speed: {fps_processing:.1f} fps | "
+                f"Elapsed time: {elapsed:.1f}s | "
                 f"ETA: {eta:.1f}s",
                 end="",
                 flush=True,
@@ -1202,9 +1759,11 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
 
         # Process frame based on mode
         yolo_mode = pose_config.get("yolo_mode", "yolo_mediapipe")
+        yolo_kps = None
+        
         if yolo_mode == "yolo_only" and yolo_model is not None:
             # Use YOLO pose only
-            landmarks_norm, landmarks_px = process_frame_with_yolo_pose_only(
+            landmarks_norm, landmarks_px, yolo_kps = process_frame_with_yolo_pose_only(
                 frame, yolo_model, pose_config["yolo_conf"], frame_count
             )
             bbox = None
@@ -1214,14 +1773,37 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
                 landmarks_px = None
         else:
             # Use MediaPipe Tasks API (with or without YOLO for detection)
-            landmarks_norm, landmarks_px, bbox = process_frame_with_mediapipe_tasks(
+            landmarks_norm, landmarks_px, bbox, yolo_kps = process_frame_with_mediapipe_tasks(
                 frame,
                 landmarker,
                 timestamp_ms,
                 yolo_model,
                 pose_config["yolo_conf"],
                 pose_config["use_yolo"] and yolo_mode == "yolo_mediapipe",
+                pose_config.get("roi_polygon_points"),
+                pose_config.get("bbox_upscale_factor", 1),
             )
+
+            
+            # Extract YOLO landmarks if available (via a hack, or we need to update process_frame_with_mediapipe_tasks)
+            # Actually, let's update process_frame_with_mediapipe_tasks to return the full person dict or just the landmarks
+            # For now, let's look at how process_frame_with_mediapipe_tasks is implemented.
+            # It calls detect_persons_with_yolo and picks the best one.
+            # I need to modify process_frame_with_mediapipe_tasks to return the yolo keypoints too.
+            # But since I can't easily see the signature change in this chunk, 
+            # I will modify process_frame_with_mediapipe_tasks separately.
+            # Assuming I will modify it to return (landmarks_norm, landmarks_px, bbox, yolo_kps)
+            
+            # Wait, I cannot change the unpacking here before changing the function definition.
+            # I will assume I change the function definition in the next step.
+            # For now, let's handle the extraction here assuming the function returns 4 values.
+            # BUT: I am in the middle of a multi_replace.
+            # I'll stick to 3 values here and modify the function `process_frame_with_mediapipe_tasks` to stash the yolo kps 
+            # in a way I can retrieve, or better: I'll accept that I need to edit `process_frame_with_mediapipe_tasks` 
+            # AND the call site simultaneously.
+            
+            pass # Placeholder, edited in next chunk logic
+
 
         # Apply temporal filter if configured
         if landmarks_norm and pose_config["filter_type"] != "none":
@@ -1264,6 +1846,12 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
             pixel_landmarks_list.append(landmarks_px)
             bbox_list.append(bbox)
             frames_with_pose += 1
+            
+            # Store YOLO keypoints if available
+            if yolo_kps is not None:
+                yolo_pixel_landmarks_list.append(yolo_kps)
+            else:
+                yolo_pixel_landmarks_list.append(np.full((17, 3), np.nan))
         else:
             num_landmarks = len(landmark_names)
             nan_landmarks = [[np.nan, np.nan, np.nan, np.nan] for _ in range(num_landmarks)]
@@ -1272,23 +1860,26 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
             bbox_list.append(bbox)
             frames_with_missing_data.append(frame_count)
             frames_without_pose += 1
+            
+            # Store NaN for YOLO
+            yolo_pixel_landmarks_list.append(np.full((17, 3), np.nan))
 
         frame_count += 1
 
     # Final progress update
     print(
         f"\r  Frame {frame_count}/{total_frames} (100.0%) | "
-        f"Pose detectado: {frames_with_pose} | "
-        f"Sem pose: {frames_without_pose}"
+        f"Pose detected: {frames_with_pose} | "
+        f"No pose: {frames_without_pose}"
     )
-    print("\n✓ Processamento de frames concluído!")
-    print(f"  Total processado: {frame_count} frames")
+    print("\nFrame processing completed!")
+    print(f"  Total processed: {frame_count} frames")
     if frame_count > 0:
         print(
-            f"  Frames com pose: {frames_with_pose} ({frames_with_pose / frame_count * 100:.1f}%)"
+            f"  Frames with pose: {frames_with_pose} ({frames_with_pose / frame_count * 100:.1f}%)"
         )
         print(
-            f"  Frames sem pose: {frames_without_pose} ({frames_without_pose / frame_count * 100:.1f}%)"
+            f"  Frames without pose: {frames_without_pose} ({frames_without_pose / frame_count * 100:.1f}%)"
         )
 
     # Close capture
@@ -1298,45 +1889,115 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
         landmarker.close()
 
     print(f"\n{'=' * 60}")
-    print("SALVANDO ARQUIVOS CSV...")
+    print("SAVING CSV FILES...")
     print(f"{'=' * 60}")
 
     # Save CSVs
+    # YOLO 17 keypoint names
+    yolo_kp_names = [
+        "nose", "left_eye", "right_eye", "left_ear", "right_ear",
+        "left_shoulder", "right_shoulder", "left_elbow", "right_elbow",
+        "left_wrist", "right_wrist", "left_hip", "right_hip",
+        "left_knee", "right_knee", "left_ankle", "right_ankle"
+    ]
+    # Prepare headers in vailá format (p1_x, p1_y, p1_z, p1_conf...)
+    # MediaPipe has 33 landmarks
+    headers = ["frame"]
+    for i in range(1, 34):
+        headers.extend([f"p{i}_x", f"p{i}_y", f"p{i}_z", f"p{i}_conf"])
+    
+    # YOLO has 17 keypoints
+    yolo_headers = ["frame"]
+    for i in range(1, 18):
+        yolo_headers.extend([f"p{i}_x", f"p{i}_y", f"p{i}_conf"])
+
+    # YOLO BBox headers
+    bbox_headers = ["frame", "bbox_x1", "bbox_y1", "bbox_x2", "bbox_y2", "bbox_conf", "bbox_label"]
+
     with (
         open(output_file_path, "w") as f_norm,
         open(output_pixel_file_path, "w") as f_pixel,
+        open(output_yolo_file_path, "w") as f_yolo,
+        open(output_yolo_bbox_path, "w") as f_bbox,
     ):
         f_norm.write(",".join(headers) + "\n")
         f_pixel.write(",".join(headers) + "\n")
+        f_yolo.write(",".join(yolo_headers) + "\n")
+        f_bbox.write(",".join(bbox_headers) + "\n")
 
         for frame_idx in range(len(normalized_landmarks_list)):
             landmarks_norm = normalized_landmarks_list[frame_idx]
             landmarks_pixel = pixel_landmarks_list[frame_idx]
-
-            # Flatten only the first 3 values (x, y, z)
+            yolo_kps = yolo_pixel_landmarks_list[frame_idx]
+            
+            # Format MediaPipe/Combined landmarks
             flat_landmarks_norm = []
             flat_landmarks_pixel = []
+            
+            # Ensure we process exactly 33 landmarks
+            for i in range(33):
+                if i < len(landmarks_norm):
+                    lm_norm = landmarks_norm[i]
+                    lm_px = landmarks_pixel[i]
+                    
+                    # Norm: x, y, z, conf
+                    flat_landmarks_norm.extend(lm_norm[:4])
+                    
+                    # Pixel: x, y, z, conf
+                    # Note: lm_px might be [x, y, z, conf] or just [x, y] depending on creation
+                    # Check shape
+                    if len(lm_px) >= 4:
+                        flat_landmarks_pixel.extend(lm_px[:4])
+                    elif len(lm_px) == 3:
+                         flat_landmarks_pixel.extend(lm_px[:3] + [1.0]) # Add dummy conf
+                    else:
+                         flat_landmarks_pixel.extend(lm_px[:2] + [0.0, 1.0]) # Add dummy z, conf
+                else:
+                    # Pad missing
+                    flat_landmarks_norm.extend([np.nan] * 4)
+                    flat_landmarks_pixel.extend([np.nan] * 4)
 
-            for lm_norm, lm_px in zip(landmarks_norm, landmarks_pixel):
-                flat_landmarks_norm.extend(lm_norm[:3])  # Only x, y, z
-                flat_landmarks_pixel.extend(lm_px[:3])  # Only x, y, z
+            # Format YOLO keypoints
+            flat_yolo_kps = []
+            if yolo_kps is not None:
+                for kp in yolo_kps:
+                    # kp is [x, y, conf]
+                    flat_yolo_kps.extend(kp)
+                # Check if we have fewer than 17 keypoints
+                if len(yolo_kps) < 17:
+                     flat_yolo_kps.extend([np.nan] * 3 * (17 - len(yolo_kps)))
+            else:
+                flat_yolo_kps.extend([np.nan] * 3 * 17)
 
+            # Format BBox
+            # bbox_list[frame_idx] contains [x1, y1, x2, y2] or None
+            # IMPORTANT: bbox_list MUST be same length as normalized_landmarks_list. 
+            # Assuming it is handled in loops above (it is).
+            current_bbox = bbox_list[frame_idx] if frame_idx < len(bbox_list) else None
+            
+            if current_bbox:
+                # Assuming bbox is [x1, y1, x2, y2]. Add dummy conf (1.0) and label ("person")
+                bbox_str = f"{current_bbox[0]},{current_bbox[1]},{current_bbox[2]},{current_bbox[3]},1.0,person"
+            else:
+                bbox_str = "NaN,NaN,NaN,NaN,NaN,NaN"
+
+            # Write rows
             landmarks_norm_str = ",".join(
                 "NaN" if np.isnan(value) else f"{value:.6f}" for value in flat_landmarks_norm
             )
+            
             landmarks_pixel_str = ",".join(
-                (
-                    "NaN"
-                    if np.isnan(value)
-                    else str(int(round(value)))
-                    if i % 3 != 2 and not np.isnan(value)
-                    else f"{value:.6f}"
-                )
-                for i, value in enumerate(flat_landmarks_pixel)
+                 "NaN" if np.isnan(value) else f"{value:.6f}" for value in flat_landmarks_pixel
+            )
+            
+            yolo_kps_str = ",".join(
+                 "NaN" if np.isnan(value) else f"{value:.6f}" for value in flat_yolo_kps
             )
 
             f_norm.write(f"{frame_idx}," + landmarks_norm_str + "\n")
             f_pixel.write(f"{frame_idx}," + landmarks_pixel_str + "\n")
+            f_yolo.write(f"{frame_idx}," + yolo_kps_str + "\n")
+            f_bbox.write(f"{frame_idx}," + bbox_str + "\n")
 
             # Progress for CSV writing
             if frame_idx % 50 == 0:
@@ -1344,9 +2005,11 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
                 print(f"\r  Saving CSVs: {csv_progress:.1f}%", end="", flush=True)
 
     print("\r  Saving CSVs: 100.0%")
-    print("✓ CSVs saved successfully!")
+    print("CSVs saved successfully!")
     print(f"  - {output_file_path.name}")
     print(f"  - {output_pixel_file_path.name}")
+    print(f"  - {output_yolo_file_path.name}")
+    print(f"  - {output_yolo_bbox_path.name}")
     print(f"\n{'=' * 60}")
     print("Creating video with visualization...")
     print(f"{'=' * 60}")
@@ -1422,9 +2085,8 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
     print("PROCESSING COMPLETED!")
     print(f"{'=' * 60}")
 
-    # Create log
-    log_info_path = output_dir / "log_info.txt"
-    with open(log_info_path, "w") as log_file:
+    # Create report
+    with open(output_report_path, "w") as log_file:
         log_file.write("=" * 60 + "\n")
         log_file.write("Processing Log\n")
         log_file.write("=" * 60 + "\n\n")
@@ -1476,29 +2138,39 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
             log_file.write(f"\nGPU Memory used: {torch.cuda.max_memory_allocated() / 1e9:.2f} GB\n")
 
     print(f"\n{'=' * 60}")
-    print("RESUMO DO PROCESSAMENTO")
+    print("PROCESSING SUMMARY")
     print(f"{'=' * 60}")
-    print(f"Tempo total: {execution_time:.2f} segundos ({execution_time / 60:.1f} minutos)")
-    print(f"Velocidade média: {frame_count / execution_time:.2f} fps")
-    print(f"Frames processados: {frame_count}")
-    print(f"Frames com pose: {frames_with_pose} ({frames_with_pose / frame_count * 100:.1f}%)")
+    print(f"Total time: {execution_time:.2f} seconds ({execution_time / 60:.1f} minutes)")
+    print(f"Average speed: {frame_count / execution_time:.2f} fps")
+    print(f"Frames processed: {frame_count}")
+    print(f"Frames with pose: {frames_with_pose} ({frames_with_pose / frame_count * 100:.1f}%)")
     print(
-        f"Frames sem pose: {frames_without_pose} ({frames_without_pose / frame_count * 100:.1f}%)"
+        f"Frames without pose: {frames_without_pose} ({frames_without_pose / frame_count * 100:.1f}%)"
     )
-    print("\nArquivos salvos em:")
+    print("\nFiles saved in:")
     print(f"  {output_dir}")
     print(f"  - {output_video_path.name}")
     print(f"  - {output_file_path.name}")
     print(f"  - {output_pixel_file_path.name}")
-    print(f"  - {log_info_path.name}")
+    print(f"  - {output_yolo_file_path.name}")
+    print(f"  - {output_config_path.name}")
+    print(f"  - {output_report_path.name}")
     print(f"{'=' * 60}")
-    print("✓ PROCESSAMENTO CONCLUÍDO COM SUCESSO!")
+    print("PROCESSING COMPLETED SUCCESSFULLY!")
     print(f"{'=' * 60}\n")
 
 
 def process_videos_in_directory(existing_root=None):
     print(f"Running script: {Path(__file__).name}")
+    print(f"Script Version: {__version__}")
     print(f"Script directory: {Path(__file__).parent.resolve()}")
+    
+    models_dir = Path(__file__).parent / "models"
+    print(f"Models Directory: {models_dir.resolve()}")
+    if not models_dir.exists():
+        print("  (Directory does not exist yet, will be created on first download)")
+    else:
+        print("  (Directory exists)")
 
     # Use existing root or create new one for dialogs
     print("Initializing Tkinter root window...")
@@ -1652,7 +2324,7 @@ def process_videos_in_directory(existing_root=None):
     except Exception as e:
         print(f"Warning: Could not prepare root for configuration dialog: {e}")
 
-    pose_config = get_pose_config(root)
+    pose_config = get_pose_config(root, input_dir=input_dir)
 
     # Hide root again after configuration (only if we created it)
     if existing_root is None and platform.system() != "Windows":
@@ -1679,7 +2351,7 @@ def process_videos_in_directory(existing_root=None):
         if yolo_model is not None:
             use_yolo_successfully = True
             print(
-                f"✓ YOLO model '{selected_model}' loaded successfully - using YOLOv11 + MediaPipe pipeline"
+                f"YOLO model '{selected_model}' loaded successfully - using YOLOv11 + MediaPipe pipeline"
             )
         else:
             print("Warning: Could not load YOLO model, proceeding without it")

@@ -89,7 +89,18 @@ Advanced version of the 2D pose estimation script that incorporates YOLOv11 for 
 - **yolo_conf** (0.0-1.0): YOLO confidence threshold
 
 ### Temporal Filtering
-- **filter_type**: `none`, `kalman`, `savgol`
+- **filter_type**: 
+  - `none`: No filtering
+  - `kalman`: Kalman filter (good for tracking)
+  - `savgol`: Savitzky-Golay filter (good for smoothing)
+  - `median`: Moving Median filter (best for removing outliers/spikes)
+
+### Graphical User Interface (GUI)
+The configuration dialog includes the following buttons:
+- **Save Config**: Save current settings to a `.toml` file.
+- **Load Config**: Load settings from a `.toml` file.
+- **Create Config**: Reset settings to defaults.
+- **Help**: Open this help documentation.
 
 ## 📁 Output Files
 
@@ -109,12 +120,21 @@ For each processed video:
    - Coordinates in pixel format
    - Original video resolution
 
-4. **Log File** (`log_info.txt`)
-   - Hardware information
-   - Video information
-   - Pipeline configuration (YOLO/MediaPipe)
-   - Detection statistics
-   - Performance metrics
+    - Original video resolution
+ 
+ 4. **YOLO Keypoints CSV** (`*_yolo_pixel.csv`)
+    - Raw 17 keypoints from YOLO model (if used)
+    - Pixel coordinates and confidence
+ 
+ 5. **Configuration File** (`config.toml`)
+    - Copy of the configuration parameters used
+ 
+ 6. **Report File** (`report.txt`)
+    - Hardware information
+    - Video information
+    - Pipeline configuration (YOLO/MediaPipe)
+    - Detection statistics
+    - Performance metrics
 
 ## 🚀 Usage
 
