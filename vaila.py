@@ -2014,6 +2014,20 @@ class Vaila(tk.Tk):
         )
         button_csv_to_c3d.pack(side="right", padx=20, pady=20)
 
+        # Button for Inspect C3D
+        def launch_inspect():
+            window.destroy()
+            from vaila.readc3d_export import inspect_c3d_gui
+            inspect_c3d_gui(self)
+
+        button_inspect = Button(
+            window,
+            text="Inspect C3D",
+            command=launch_inspect,
+            bg="#e1f5fe"
+        )
+        button_inspect.pack(side="bottom", padx=20, pady=20)
+
     # C_A_r1_c3
     def gapfill_split(self):
         """Runs the Linear Interpolation or Split Data module.
@@ -2698,116 +2712,11 @@ class Vaila(tk.Tk):
     # B5_r6_c2 - Face Mesh
     def face_mesh_analysis(self):
         """Runs the Face Mesh analysis tool."""
-        # Create a dialog window for device selection
-        dialog = Toplevel(self)
-        dialog.title("Face Mesh Analysis - Select Device")
-        dialog.geometry("600x400")
-        dialog.transient(self)
-        dialog.grab_set()
-        # Center the dialog
-        dialog.update_idletasks()
-        x = (dialog.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
-        y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
-        dialog.geometry(f"+{x}+{y}")
-
-        # Create main frame
-        main_frame = tk.Frame(dialog, padx=20, pady=20)
-        main_frame.pack(fill="both", expand=True)
-
-        # Title
-        title_label = Label(
-            main_frame,
-            text="Select Face Mesh Analysis Device",
-            font=("Arial", 12, "bold"),
-        )
-        title_label.pack(pady=(0, 20))
-
-        # Device selection variable
-        device_var = tk.StringVar(value="cpu")
-
-        # CPU option
-        cpu_frame = tk.Frame(main_frame, relief="raised", borderwidth=2, padx=10, pady=10)
-        cpu_frame.pack(fill="x", pady=5)
-        cpu_radio = tk.Radiobutton(
-            cpu_frame,
-            text="CPU Processing",
-            variable=device_var,
-            value="cpu",
-            font=("Arial", 10),
-        )
-        cpu_radio.pack(anchor="w")
-        cpu_desc = Label(
-            cpu_frame,
-            text="Standard CPU processing (MediaPipe FaceMesh)",
-            font=("Arial", 9),
-            fg="gray",
-        )
-        cpu_desc.pack(anchor="w", padx=(25, 0))
-
-        # GPU NVIDIA option
-        gpu_frame = tk.Frame(main_frame, relief="raised", borderwidth=2, padx=10, pady=10)
-        gpu_frame.pack(fill="x", pady=5)
-        gpu_radio = tk.Radiobutton(
-            gpu_frame,
-            text="GPU NVIDIA Processing",
-            variable=device_var,
-            value="nvidia",
-            font=("Arial", 10),
-        )
-        gpu_radio.pack(anchor="w")
-        gpu_desc = Label(
-            gpu_frame,
-            text="NVIDIA GPU accelerated processing (Note: FaceMesh currently uses CPU, GPU support may be available in future MediaPipe versions)",
-            font=("Arial", 9),
-            fg="gray",
-        )
-        gpu_desc.pack(anchor="w", padx=(25, 0))
-
-        # Buttons frame
-        buttons_frame = tk.Frame(main_frame)
-        buttons_frame.pack(pady=(20, 0))
-
-        def launch_face_mesh():
-            device_choice = device_var.get()
-            dialog.destroy()
-
-            try:
-                if device_choice == "cpu":
-                    print("\n" + "=" * 60)
-                    print("Face Mesh Analysis - Device Selected: CPU")
-                    print("=" * 60)
-                    print("Launching: vaila.mp_facemesh")
-                    print("Features: MediaPipe FaceMesh, CPU processing")
-                    print("=" * 60 + "\n")
-                    run_vaila_module("vaila.mp_facemesh", "vaila/mp_facemesh.py")
-                elif device_choice == "nvidia":
-                    print("\n" + "=" * 60)
-                    print("Face Mesh Analysis - Device Selected: GPU NVIDIA")
-                    print("=" * 60)
-                    print("Launching: vaila.mp_facemesh_nvidia")
-                    print("Features: MediaPipe FaceMesh with NVIDIA GPU support")
-                    print("Note: FaceMesh currently uses CPU, GPU acceleration may be available in future versions")
-                    print("=" * 60 + "\n")
-                    run_vaila_module("vaila.mp_facemesh_nvidia", "vaila/mp_facemesh_nvidia.py")
-            except Exception as e:
-                print(f"\nERROR: Failed to launch face mesh analysis: {e}\n")
-                messagebox.showerror("Error", f"Failed to launch face mesh analysis: {e}")
-
-        def cancel():
-            dialog.destroy()
-
-        # OK and Cancel buttons
-        ok_button = Button(buttons_frame, text="OK", command=launch_face_mesh, width=10)
-        ok_button.pack(side="left", padx=5)
-        cancel_button = Button(buttons_frame, text="Cancel", command=cancel, width=10)
-        cancel_button.pack(side="left", padx=5)
-
-        # Make Enter key trigger OK
-        dialog.bind("<Return>", lambda e: launch_face_mesh())
-        dialog.bind("<Escape>", lambda e: cancel())
-
-        # Focus on dialog
-        dialog.focus_set()
+        print("\n" + "=" * 60)
+        print("Launching: vaila.mp_facemesh")
+        print("Features: MediaPipe FaceMesh with GPU/CPU selection")
+        print("=" * 60 + "\n")
+        run_vaila_module("vaila.mp_facemesh", "vaila/mp_facemesh.py")
 
 
 if __name__ == "__main__":
