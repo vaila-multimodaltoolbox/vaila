@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -12,7 +12,7 @@
             background-color: #f5f5f5;
         }
         .container {
-            max-width: 800px;
+            max-width: 900px;
             margin: 0 auto;
             background: white;
             padding: 30px;
@@ -20,75 +20,97 @@
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
         h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
-        h2 { color: #34495e; margin-top: 30px; }
+        h2 { color: #34495e; margin-top: 30px; border-left: 5px solid #3498db; padding-left: 10px; }
+        h3 { color: #2c3e50; margin-top: 20px; }
         .module-info { background: #ecf0f1; padding: 15px; border-radius: 5px; margin: 20px 0; }
+        .feature-box { background: #e8f4f8; padding: 15px; border-radius: 5px; margin: 10px 0; border: 1px solid #bce8f1; }
         .functions { background: #f8f9fa; padding: 15px; border-left: 4px solid #28a745; margin: 15px 0; }
         .docstring { background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 15px 0; }
-        .errorr { background: #f8d7da; padding: 15px; border-left: 4px solid #dc3545; margin: 15px 0; }
-        code { background: #e9ecef; padding: 2px 6px; border-radius: 3px; }
+        code { background: #e9ecef; padding: 2px 6px; border-radius: 3px; font-family: monospace; }
         pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; }
-        .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #6c757d; font-size: 0.9em; }
+        ul { margin-top: 5px; }
+        li { margin-bottom: 5px; }
+        .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #6c757d; font-size: 0.9em; text-align: center; }
+        .btn { display: inline-block; padding: 2px 6px; border: 1px solid #ccc; background: #eee; border-radius: 3px; font-size: 0.9em; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>vailá - markerless2d_analysis_v2</h1>
+        <h1><i>vailá</i> - markerless2d_analysis_v2</h1>
 
         <div class="module-info">
             <h3>📋 Module Information</h3>
-            <p><strong>Category:</strong> Ml</p>
-            <p><strong>File:</strong> vaila\markerless2d_analysis_v2.py</p>
-            <p><strong>Lines:</strong> 797</p>
-            <p><strong>Size:</strong> 27887 characters</p>
-            <p><strong>Version:</strong> 0.2.0</p>
-            <p><strong>Author:</strong> Prof. Dr. Paulo Santiago</p>
+            <p><strong>Category:</strong> Machine Learning / Analysis</p>
+            <p><strong>File:</strong> <code>vaila/markerless2d_analysis_v2.py</code></p>
+            <p><strong>Version:</strong> 0.1.1</p>
+            <p><strong>Author:</strong> Paulo Roberto Pereira Santiago</p>
             <p><strong>GUI Interface:</strong> ✅ Yes</p>
+            <p><strong>License:</strong> AGPLv3.0</p>
         </div>
-
-        
 
         <div class="docstring">
             <h3>📖 Description</h3>
-            <pre>
-Script: markerless_2D_analysis_v2.py
-Author: Prof. Dr. Paulo Santiago
-Version: 0.2.0
-Created: 01 December 2024
-Updated: 09 June 2025
-
-Description:
-Version 0.2.0 of the markerless_2D_analysis.py script that corrects problems with detection
-using YOLO and MediaPipe, especially for use on CPU.
-
-Main improvements:
-- Correction of MediaPipe processing within bounding boxes
-- Optimization for CPU with better performance
-- Better tracking of people
-- More efficient and robust processing
-
-Usage:
-- Run the script to open a graphical interface for selecting the input directory
-  containing video files (.mp4, .avi, .mov), the output directory, and for
-  specifying the MediaPipe configuration parameters.
-
-Requirements:
-- Python 3.12.11
-- OpenCV (`pip install opencv-python`)
-- MediaPipe (`pip install mediapipe`)
-- Ultralytics (`pip install ultralytics`)
-- Tkinter (usually included with Python installations)
-</pre>
+            <p>Advanced version of the 2D pose estimation script that incorporates YOLOv11 for person detection to improve MediaPipe's performance. It offers robust multi-person tracking, advanced temporal filtering, and detailed reporting.</p>
+            
+            <h4>Key Features:</h4>
+            <ul>
+                <li><strong>YOLOv11 Integration:</strong> Uses YOLO models (n, s, m, l, x) for accurate person detection.</li>
+                <li><strong>Dual Modes:</strong> <code>yolo_only</code> (17 keypoints) and <code>yolo_mediapipe</code> (33 landmarks).</li>
+                <li><strong>Advanced Filtering:</strong> Moving Median (outlier removal), Kalman (tracking), and Savitzky-Golay (smoothing).</li>
+                <li><strong>Comprehensive Output:</strong> Annotated video, normalized CSV, pixel CSV, YOLO raw CSV, and detailed reports.</li>
+            </ul>
         </div>
+
+        <h2>⚙️ Configuration & GUI</h2>
+        <p>The main configuration dialog now includes easy-to-use buttons for managing your settings:</p>
+        <div class="feature-box">
+            <ul>
+                <li><span class="btn">Save Config</span>: Save current parameters to a <code>.toml</code> file.</li>
+                <li><span class="btn">Load Config</span>: Load parameters from a saved <code>.toml</code> file.</li>
+                <li><span class="btn">Create Config</span>: Reset all parameters to default values.</li>
+                <li><span class="btn">Help</span>: Open this documentation.</li>
+            </ul>
+        </div>
+
+        <h3>Parameters</h3>
+        <ul>
+            <li><strong>Filter Type:</strong>
+                <ul>
+                    <li><code>none</code>: Raw data.</li>
+                    <li><code>median</code>: Removes short-term outliers/spikes (Window=5).</li>
+                    <li><code>kalman</code>: Predictive filter, good for continuous tracking.</li>
+                    <li><code>savgol</code>: Polynomial smoothing.</li>
+                </ul>
+            </li>
+            <li><strong>YOLO Mode:</strong> Choose between YOLO-only (faster) or Hybrid (more detailed).</li>
+            <li><strong>Model Complexity:</strong> MediaPipe model size (0, 1, 2).</li>
+        </ul>
+
+        <h2>📁 Output Files</h2>
+        <p>For each processed video, the following files are generated:</p>
+        <ul>
+            <li><code>*_mp.mp4</code>: Annotated video with landmarks and skeleton.</li>
+            <li><code>*_mp_norm.csv</code>: Normalized coordinates (0-1).</li>
+            <li><code>*_mp_pixel.csv</code>: Pixel coordinates mapped to video resolution.</li>
+            <li><code>*_yolo_pixel.csv</code>: Raw YOLO keypoints (if available).</li>
+            <li><code>config.toml</code>: A copy of the configuration used.</li>
+            <li><code>report.txt</code>: Detailed processing log and metadata.</li>
+        </ul>
 
         <div class="functions">
             <h3>🔧 Main Functions</h3>
-            <p><strong>Total functions found:</strong> 12</p>
-            <ul><li><code>get_hardware_info</code></li><li><code>get_pose_config</code></li><li><code>download_or_load_yolo_model</code></li><li><code>detect_persons_with_yolo</code></li><li><code>process_frame_with_mediapipe</code></li><li><code>apply_temporal_filter</code></li><li><code>apply_kalman_filter</code></li><li><code>apply_savgol_filter</code></li><li><code>process_video</code></li><li><code>process_videos_in_directory</code></li><li><code>body</code></li><li><code>apply</code></li></ul>
+            <ul>
+                <li><code>process_video</code>: Main processing pipeline.</li>
+                <li><code>detect_persons_with_yolo</code>: Handles YOLO inference.</li>
+                <li><code>apply_median_filter</code>: Applies moving median filter.</li>
+                <li><code>apply_kalman_filter</code> / <code>apply_savgol_filter</code>: Other temporal filters.</li>
+                <li><code>download_or_load_yolo_model</code>: Manages model assets.</li>
+            </ul>
         </div>
 
         <div class="footer">
-            <p>📅 Generated automatically on: 15/10/2025 08:04:44</p>
-            <p>🔗 Part of vailá - Multimodal Toolbox</p>
+            <p>📅 Generated: January 2026</p>
+            <p>🔗 Part of <i>vailá</i> - Multimodal Toolbox</p>
             <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
         </div>
     </div>
