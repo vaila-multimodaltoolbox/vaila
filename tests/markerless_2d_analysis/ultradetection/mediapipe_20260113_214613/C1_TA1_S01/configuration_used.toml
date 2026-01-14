@@ -1,0 +1,168 @@
+# ================================================================
+# MediaPipe 2D Analysis Configuration File
+# Generated automatically by markerless_2D_analysis.py in vaila Multimodal Analysis Toolbox
+# Created: 2026-01-13 21:52:09
+# ================================================================
+#
+# HOW TO USE THIS FILE:
+# 1. Edit the values below to customize your analysis
+# 2. Save this file
+# 3. In the script, click 'Load Existing TOML Configuration'
+# 4. Select this file and run your analysis
+#
+# IMPORTANT: Keep the format exactly as shown!
+# - true/false must be lowercase
+# - Numbers can have decimals (3.0) or not (30)
+# - Text must be in quotes ("linear")
+# ================================================================
+
+# ================================================================
+# VIDEO INFO
+# ================================================================
+video_total_frames = 2553  # Total frames in the processed video
+
+[mediapipe]
+# ================================================================
+# MEDIAPIPE POSE DETECTION SETTINGS
+# ================================================================
+# These control how MediaPipe detects poses in your video
+min_detection_confidence = 0.1    # How confident to start detecting (0.1-1.0)
+#                                        # Lower = detect more poses (try 0.1-0.3)
+#                                        # Higher = only clear poses (try 0.7-0.9)
+min_tracking_confidence = 0.1     # How confident to keep tracking (0.1-1.0)
+#                                       # Lower = track longer (try 0.1-0.3)
+#                                       # Higher = drop unclear tracking (try 0.7-0.9)
+model_complexity = 2                  # Model accuracy vs speed
+#                        # 0 = fastest, least accurate
+#                        # 1 = balanced speed and accuracy
+#                        # 2 = slowest, most accurate (recommended)
+enable_segmentation = false           # Draw person outline (true/false)
+#                             # true = creates person mask (slower)
+#                             # false = only landmarks (faster)
+smooth_segmentation = false           # Smooth the outline (true/false)
+#                             # Only works if enable_segmentation = true
+static_image_mode = false             # Treat each frame separately (true/false)
+#                           # false = track across frames (recommended)
+#                           # true = detect fresh each frame (slower)
+apply_filtering = true               # Apply built-in smoothing (true/false)
+#                         # true = smoother movement (recommended)
+#                         # false = raw detection results
+estimate_occluded = true             # Guess hidden body parts (true/false)
+#                           # true = fill in missing landmarks (recommended)
+#                           # false = leave gaps when parts are hidden
+
+# ================================================================
+# POST-PROCESSING (Optional)
+# ================================================================
+enable_median_filter = true          # Apply simple median smoothing (true/false)
+median_kernel_size = 5               # Kernel size (odd integer: 3, 5, 7)
+#                           # Helps reduce jitter without heavy distortion.
+
+
+[video_resize]
+# ================================================================
+# VIDEO RESIZING FOR BETTER DETECTION
+# ================================================================
+# Resize video before analysis to improve pose detection
+# Useful for: small people, distant subjects, low resolution videos
+enable_resize = false                 # Resize video before analysis (true/false)
+#                           # true = upscale for better detection
+#                           # false = use original size (faster)
+resize_scale = 2                      # Scale factor (2-8)
+#                        # 2 = double size (good for most cases)
+#                        # 3-4 = better for very small subjects
+#                        # 5-8 = for very distant or tiny people
+#                        # Higher = better detection but much slower
+#                        # Coordinates are automatically converted back
+
+[padding]
+# ================================================================
+# INITIAL FRAME PADDING FOR STABILIZATION
+# ================================================================
+# Add repeated frames at the start to help MediaPipe stabilize.
+enable_padding = true  # true/false
+pad_start_frames = 30  # Number of frames to pad at start
+enable_reverse_padding = true  # Reverse padding at end (true/false)
+pad_end_frames = 30  # Number of frames to pad at end
+# Recommended: 30-60 for most videos.
+
+[bounding_box]
+# ================================================================
+# BOUNDING BOX (ROI) SELECTION FOR SMALL SUBJECTS
+# ================================================================
+# Crop frames to a region of interest before MediaPipe processing.
+# Useful when: multiple people in frame, subject is very small,
+# or you want to focus on a specific area.
+
+enable_crop = true              # Enable bounding box cropping (true/false)
+#                         # true = crop frames to ROI before processing
+#                         # false = process full frame (default)
+
+bbox_x_min = 437                   # Left edge of ROI in pixels
+bbox_y_min = 73                   # Top edge of ROI in pixels
+bbox_x_max = 1757                  # Right edge of ROI in pixels
+bbox_y_max = 1072                  # Bottom edge of ROI in pixels
+# Note: Coordinates are in pixels. Use 'Select ROI from Video'
+# button in GUI to visually select the region from first video frame.
+
+enable_resize_crop = false       # Resize the cropped region (true/false)
+#                         # true = upscale cropped region for better detection
+#                         # false = use cropped region at original size
+
+resize_crop_scale = 2            # Scale factor for cropped region (2-8)
+#                         # 2 = double size (good for most cases)
+#                         # 3-4 = better for very small subjects
+#                         # 5-8 = for very distant or tiny people
+# This is separate from video_resize. Only the cropped region is resized,
+# which is more efficient than resizing the entire video.
+
+# Polygon ROI (optional):
+roi_polygon_points = [
+    [437, 73],
+    [1020, 96],
+    [1118, 493],
+    [1258, 647],
+    [1685, 844],
+    [1757, 974],
+    [1657, 1072],
+    [1382, 1061],
+    [1250, 955],
+    [1146, 1069],
+    [575, 1062]
+]  # Polygon ROI points
+# Note: If roi_polygon_points is set, it takes precedence over bbox coordinates.
+# Use 'Select Polygon ROI' button in GUI to visually select polygon from video.
+
+[bounding_box_ranges]
+# ================================================================
+# MULTIPLE ROI RANGES FOR DIFFERENT FRAME INTERVALS (ADVANCED)
+# ================================================================
+# Define different ROI and resize crop settings for different frame ranges.
+# This is useful when the subject size changes significantly during the video.
+# Example: Small subject at start (frames 0-100) needs larger ROI and 4x resize,
+#          but larger subject later (frames 101+) needs smaller ROI and 2x resize.
+
+[[bounding_box_ranges.range]]  # Range 1
+frame_start = 0  # Start frame (0-based)
+frame_end = "inf"  # End frame (use "inf" for last frame)
+roi_type = "inclusion"  # "inclusion" = detect inside ROI, "exclusion" = ignore this area
+enable_crop = true  # Enable ROI for this range
+bbox_x_min = 529  # Left edge of ROI
+bbox_y_min = 13  # Top edge of ROI
+bbox_x_max = 1277  # Right edge of ROI
+bbox_y_max = 1071  # Bottom edge of ROI
+enable_resize_crop = true  # Resize cropped region
+resize_crop_scale = 6  # Scale factor (2-8)
+
+[[bounding_box_ranges.range]]  # Range 2
+frame_start = 0  # Start frame (0-based)
+frame_end = 400  # End frame
+roi_type = "inclusion"  # "inclusion" = detect inside ROI, "exclusion" = ignore this area
+enable_crop = true  # Enable ROI for this range
+bbox_x_min = 619  # Left edge of ROI
+bbox_y_min = 348  # Top edge of ROI
+bbox_x_max = 882  # Right edge of ROI
+bbox_y_max = 664  # Bottom edge of ROI
+enable_resize_crop = true  # Resize cropped region
+resize_crop_scale = 4  # Scale factor (2-8)
+
