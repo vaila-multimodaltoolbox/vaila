@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 13 January 2026
-Version: 0.8.0
+Update Date: 14 January 2026
+Version: 0.8.1
 
 Example of usage:
 First activate the vaila environment:
@@ -34,7 +34,7 @@ whether to enable segmentation and smooth segmentation. The default settings
 prioritize the highest detection accuracy and tracking precision, which may
 increase computational cost.
 
-New Features (v0.7.4):
+New Features (v0.8.1):
 - Unified CPU and GPU processing in single script
 - Multi-GPU backend support (NVIDIA/CUDA, ROCm/AMD, MPS/Apple Silicon)
 - Automatic GPU detection and testing
@@ -204,7 +204,7 @@ _debug_log(
 
 # Additional imports for filtering and interpolation
 from pykalman import KalmanFilter  # noqa: E402
-from rich import print  # noqa: E402
+#from rich import print  # noqa: E402
 from scipy.interpolate import UnivariateSpline  # noqa: E402
 from scipy.signal import butter, savgol_filter, sosfiltfilt  # noqa: E402
 from statsmodels.nonparametric.smoothers_lowess import lowess  # noqa: E402
