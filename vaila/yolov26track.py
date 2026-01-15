@@ -1,6 +1,6 @@
 """
 Project: vailá
-Script: yolov11track.py
+Script: yolov26track.py
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
@@ -10,7 +10,7 @@ Update Date: 12 January 2026
 Version: 0.0.7
 
 Description:
-    This script performs object detection and tracking on video files using the YOLO model v11.
+    This script performs object detection and tracking on video files using the YOLO model v26.
     It integrates multiple features, including:
       - Object detection and tracking using the Ultralytics YOLO library.
       - A graphical interface (Tkinter) for dynamic parameter configuration.
@@ -20,7 +20,7 @@ Description:
 
 Usage:
     Run the script from the command line by passing the path to a video file as an argument:
-            python yolov11track.py
+            python yolov26track.py
 
 Requirements:
     - Python 3.x
@@ -102,7 +102,7 @@ except ImportError:
 # Print the script version and directory
 print(f"Running script: {Path(__file__).name}")
 print(f"Script directory: {Path(__file__).parent}")
-print("Starting YOLOv11Track...")
+print("Starting YOLOv26Track...")
 print("-" * 80)
 print(f"Ultralytics version: {ultralytics.__version__}")
 print("-" * 80)
@@ -412,7 +412,7 @@ def select_free_polygon_roi(video_path):
     try:
         # #region agent log
         log_debug(
-            "yolov11track.py:381", "ROI selection started", {"video_path": str(video_path)}, "A"
+            "yolov26track.py:381", "ROI selection started", {"video_path": str(video_path)}, "A"
         )
         # #endregion agent log
 
@@ -434,7 +434,7 @@ def select_free_polygon_roi(video_path):
         # #region agent log
         h_orig, w_orig = frame.shape[:2]
         log_debug(
-            "yolov11track.py:395",
+            "yolov26track.py:395",
             "Original frame dimensions",
             {"width": w_orig, "height": h_orig},
             "A",
@@ -457,7 +457,7 @@ def select_free_polygon_roi(video_path):
         # #region agent log
         h_scaled, w_scaled = frame.shape[:2]
         log_debug(
-            "yolov11track.py:428",
+            "yolov26track.py:428",
             "After scaling",
             {"width": w_scaled, "height": h_scaled, "scale": scale},
             "A",
@@ -471,7 +471,7 @@ def select_free_polygon_roi(video_path):
             nonlocal mouse_clicked
             # #region agent log
             log_debug(
-                "yolov11track.py:437",
+                "yolov26track.py:437",
                 "Mouse event",
                 {"event": event, "x": x, "y": y, "flags": flags},
                 "D",
@@ -483,7 +483,7 @@ def select_free_polygon_roi(video_path):
                 print(f"Point added: ({x}, {y}) - Total points: {len(roi_points)}")
                 # #region agent log
                 log_debug(
-                    "yolov11track.py:443",
+                    "yolov26track.py:443",
                     "Point added",
                     {"point": (x, y), "total_points": len(roi_points)},
                     "D",
@@ -495,7 +495,7 @@ def select_free_polygon_roi(video_path):
                 print(f"Point removed: {removed} - Total points: {len(roi_points)}")
                 # #region agent log
                 log_debug(
-                    "yolov11track.py:449",
+                    "yolov26track.py:449",
                     "Point removed",
                     {"removed": removed, "total_points": len(roi_points)},
                     "D",
@@ -506,7 +506,7 @@ def select_free_polygon_roi(video_path):
 
         # #region agent log
         log_debug(
-            "yolov11track.py:455",
+            "yolov26track.py:455",
             "Creating window",
             {"window_name": window_name, "frame_size": (w_scaled, h_scaled)},
             "B",
@@ -526,7 +526,7 @@ def select_free_polygon_roi(video_path):
         cv2.setMouseCallback(window_name, mouse_callback)
 
         # #region agent log
-        log_debug("yolov11track.py:473", "Mouse callback set", {}, "D")
+        log_debug("yolov26track.py:473", "Mouse callback set", {}, "D")
         # #endregion agent log
 
         # Show window first to ensure it exists
@@ -550,7 +550,7 @@ def select_free_polygon_roi(video_path):
 
             # #region agent log
             log_debug(
-                "yolov11track.py:464",
+                "yolov26track.py:464",
                 "Window resize attempted",
                 {"width": desired_w, "height": desired_h},
                 "B",
@@ -558,7 +558,7 @@ def select_free_polygon_roi(video_path):
             # #endregion agent log
         except Exception as e:
             # #region agent log
-            log_debug("yolov11track.py:467", "Window resize failed", {"error": str(e)}, "B")
+            log_debug("yolov26track.py:467", "Window resize failed", {"error": str(e)}, "B")
             # #endregion agent log
             pass
 
@@ -648,7 +648,7 @@ def select_free_polygon_roi(video_path):
             # #region agent log
             if loop_count % 50 == 0:  # Log every 50 iterations to avoid spam
                 log_debug(
-                    "yolov11track.py:512",
+                    "yolov26track.py:512",
                     "Loop iteration",
                     {"loop_count": loop_count, "key": key, "roi_points_count": len(roi_points)},
                     "C",
@@ -659,7 +659,7 @@ def select_free_polygon_roi(video_path):
             if key == 13 or key == 10:  # Enter (13) or Return (10) - both work
                 # #region agent log
                 log_debug(
-                    "yolov11track.py:518",
+                    "yolov26track.py:518",
                     "Enter pressed - confirming",
                     {"roi_points_count": len(roi_points)},
                     "C",
@@ -672,14 +672,14 @@ def select_free_polygon_roi(video_path):
                     print(f"Need at least 3 points. Currently have {len(roi_points)}")
             elif key == 27:  # Esc
                 # #region agent log
-                log_debug("yolov11track.py:526", "Esc pressed - cancelling", {}, "C")
+                log_debug("yolov26track.py:526", "Esc pressed - cancelling", {}, "C")
                 # #endregion agent log
                 print("ROI selection cancelled")
                 roi_points = []
                 break
             elif key == ord("r") or key == ord("R"):  # Reset (case insensitive)
                 # #region agent log
-                log_debug("yolov11track.py:531", "R pressed - resetting", {}, "C")
+                log_debug("yolov26track.py:531", "R pressed - resetting", {}, "C")
                 # #endregion agent log
                 print("ROI points reset")
                 roi_points = []
@@ -691,7 +691,7 @@ def select_free_polygon_roi(video_path):
         if len(roi_points) < 3:
             # #region agent log
             log_debug(
-                "yolov11track.py:541",
+                "yolov26track.py:541",
                 "Insufficient points",
                 {"roi_points_count": len(roi_points)},
                 "D",
@@ -704,7 +704,7 @@ def select_free_polygon_roi(video_path):
         final_points = (np.array(roi_points, dtype=np.float32) / scale).astype(np.int32)
         # #region agent log
         log_debug(
-            "yolov11track.py:549",
+            "yolov26track.py:549",
             "ROI selection completed",
             {"final_points_count": len(final_points), "scale": scale},
             "A",
@@ -716,7 +716,7 @@ def select_free_polygon_roi(video_path):
     except Exception as e:
         # #region agent log
         log_debug(
-            "yolov11track.py:491",
+            "yolov26track.py:491",
             "Exception in ROI selection",
             {"error": str(e), "error_type": type(e).__name__},
             "A",
@@ -1369,29 +1369,29 @@ class ModelSelectorDialog(tk.simpledialog.Dialog):
         # Pre-trained models list
         models = [
             # Object Detection explanation: https://docs.ultralytics.com/tasks/detect/
-            ("yolo11n.pt", "Detection - Nano (fastest)"),
-            ("yolo11s.pt", "Detection - Small"),
-            ("yolo11m.pt", "Detection - Medium"),
-            ("yolo11l.pt", "Detection - Large"),
-            ("yolo11x.pt", "Detection - XLarge (most accurate)"),
+            ("yolo26n.pt", "Detection - Nano (fastest)"),
+            ("yolo26s.pt", "Detection - Small"),
+            ("yolo26m.pt", "Detection - Medium"),
+            ("yolo26l.pt", "Detection - Large"),
+            ("yolo26x.pt", "Detection - XLarge (most accurate)"),
             # Pose Estimation explanation: https://docs.ultralytics.com/tasks/pose/
-            ("yolo11n-pose.pt", "Pose - Nano (fastest)"),
-            ("yolo11s-pose.pt", "Pose - Small"),
-            ("yolo11m-pose.pt", "Pose - Medium"),
-            ("yolo11l-pose.pt", "Pose - Large"),
-            ("yolo11x-pose.pt", "Pose - XLarge (most accurate)"),
+            ("yolo26n-pose.pt", "Pose - Nano (fastest)"),
+            ("yolo26s-pose.pt", "Pose - Small"),
+            ("yolo26m-pose.pt", "Pose - Medium"),
+            ("yolo26l-pose.pt", "Pose - Large"),
+            ("yolo26x-pose.pt", "Pose - XLarge (most accurate)"),
             # Segmentation explanation: https://docs.ultralytics.com/tasks/segment/
-            ("yolo11n-seg.pt", "Segmentation - Nano"),
-            ("yolo11s-seg.pt", "Segmentation - Small"),
-            ("yolo11m-seg.pt", "Segmentation - Medium"),
-            ("yolo11l-seg.pt", "Segmentation - Large"),
-            ("yolo11x-seg.pt", "Segmentation - XLarge"),
+            ("yolo26n-seg.pt", "Segmentation - Nano"),
+            ("yolo26s-seg.pt", "Segmentation - Small"),
+            ("yolo26m-seg.pt", "Segmentation - Medium"),
+            ("yolo26l-seg.pt", "Segmentation - Large"),
+            ("yolo26x-seg.pt", "Segmentation - XLarge"),
             # OBB (Oriented Bounding Box) explanation: https://docs.ultralytics.com/tasks/obb/
-            ("yolo11n-obb.pt", "OBB - Nano"),
-            ("yolo11s-obb.pt", "OBB - Small"),
-            ("yolo11m-obb.pt", "OBB - Medium"),
-            ("yolo11l-obb.pt", "OBB - Large"),
-            ("yolo11x-obb.pt", "OBB - XLarge"),
+            ("yolo26n-obb.pt", "OBB - Nano"),
+            ("yolo26s-obb.pt", "OBB - Small"),
+            ("yolo26m-obb.pt", "OBB - Medium"),
+            ("yolo26l-obb.pt", "OBB - Large"),
+            ("yolo26x-obb.pt", "OBB - XLarge"),
         ]
 
         # Create listbox with scrollbar for pre-trained models
@@ -2508,11 +2508,11 @@ def select_id_and_run_pose():
 
         # Ask for pose model
         pose_models = [
-            ("yolo11n-pose.pt", "Pose - Nano (fastest)"),
-            ("yolo11s-pose.pt", "Pose - Small"),
-            ("yolo11m-pose.pt", "Pose - Medium"),
-            ("yolo11l-pose.pt", "Pose - Large"),
-            ("yolo11x-pose.pt", "Pose - XLarge (most accurate)"),
+            ("yolo26n-pose.pt", "Pose - Nano (fastest)"),
+            ("yolo26s-pose.pt", "Pose - Small"),
+            ("yolo26m-pose.pt", "Pose - Medium"),
+            ("yolo26l-pose.pt", "Pose - Large"),
+            ("yolo26x-pose.pt", "Pose - XLarge (most accurate)"),
         ]
 
         model_dialog = tk.Toplevel(selection_dialog)
@@ -2736,7 +2736,7 @@ def process_pose_for_merged_csv(
     merged_csv_path,
     video_path,
     device=None,
-    pose_model_name="yolo11n-pose.pt",
+    pose_model_name="yolo26n-pose.pt",
     conf=0.10,
     iou=0.70,
 ):
@@ -2747,7 +2747,7 @@ def process_pose_for_merged_csv(
         tracking_dir: Directory containing tracking results
         merged_csv_path: Path to the merged CSV file
         video_path: Path to the video file
-        device: Device to use for pose estimation (None for auto-detect)
+        device: Device to use for pose estimation
         pose_model_name: Name of the pose model to use
         conf: Confidence threshold for pose detection (default: 0.10)
         iou: IoU threshold for pose detection (default: 0.70)
@@ -2805,7 +2805,7 @@ def process_pose_for_single_id(
     tracker_id,
     video_path,
     device=None,
-    pose_model_name="yolo11n-pose.pt",
+    pose_model_name="yolo26n-pose.pt",
     conf=0.10,
     iou=0.70,
 ):
@@ -2816,7 +2816,7 @@ def process_pose_for_single_id(
         tracking_dir: Directory containing tracking results
         tracker_id: The ID to process
         video_path: Path to the video file
-        device: Device to use for pose estimation (None for auto-detect)
+        device: Device to use for pose estimation
         pose_model_name: Name of the pose model to use
         conf: Confidence threshold for pose detection (default: 0.10)
         iou: IoU threshold for pose detection (default: 0.70)
@@ -3103,14 +3103,14 @@ def _process_pose_from_csv(
     return True
 
 
-def process_pose_in_bboxes(tracking_dir, device=None, pose_model_name="yolo11n-pose.pt"):
+def process_pose_in_bboxes(tracking_dir, device=None, pose_model_name="yolo26n-pose.pt"):
     """
     Process pose estimation within bounding boxes from tracking results.
 
     Args:
         tracking_dir: Directory containing tracking results (CSVs and processed video)
         device: Device to use for pose estimation (None for auto-detect, "cuda" or "cpu")
-        pose_model_name: Name of the pose model to use (default: yolo11n-pose.pt)
+        pose_model_name: Name of the pose model to use (default: yolo26n-pose.pt)
 
     Returns:
         True if successful, False otherwise
@@ -3371,10 +3371,10 @@ def process_pose_in_bboxes(tracking_dir, device=None, pose_model_name="yolo11n-p
     return True
 
 
-def run_yolov11track():
+def run_yolov26track():
     print(f"Running script: {Path(__file__).name}")
     print(f"Script directory: {Path(__file__).parent.resolve()}")
-    print("Starting yolov11track.py...")
+    print("Starting yolov26track.py...")
     print("-" * 80)
 
     # Print hardware information
@@ -3896,11 +3896,11 @@ def run_yolov11track():
             if tracking_dir:
                 # Simple pose model selection dialog
                 pose_models = [
-                    ("yolo11n-pose.pt", "Pose - Nano (fastest)"),
-                    ("yolo11s-pose.pt", "Pose - Small"),
-                    ("yolo11m-pose.pt", "Pose - Medium"),
-                    ("yolo11l-pose.pt", "Pose - Large"),
-                    ("yolo11x-pose.pt", "Pose - XLarge (most accurate)"),
+                    ("yolo26n-pose.pt", "Pose - Nano (fastest)"),
+                    ("yolo26s-pose.pt", "Pose - Small"),
+                    ("yolo26m-pose.pt", "Pose - Medium"),
+                    ("yolo26l-pose.pt", "Pose - Large"),
+                    ("yolo26x-pose.pt", "Pose - XLarge (most accurate)"),
                 ]
 
                 pose_dialog = tk.Toplevel(root)
@@ -3993,7 +3993,7 @@ def run_yolov11track():
 if __name__ == "__main__":
     # Launch GUI-based tracker application
     try:
-        run_yolov11track()
+        run_yolov26track()
     except KeyboardInterrupt:
         print("\n\nTracking interrupted by user.")
         sys.exit(0)

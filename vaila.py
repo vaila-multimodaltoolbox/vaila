@@ -1848,9 +1848,22 @@ class Vaila(tk.Tk):
         # Create a dialog window for tracking version selection
         dialog = tk.Toplevel(self)
         dialog.title("Select YOLO Version")
-        dialog.geometry("400x320")
+        dialog.geometry("400x500")
         dialog.transient(self)  # Make dialog modal
-        dialog.grab_set()
+        
+        # Try to set grab, but don't fail if another grab is active
+        try:
+            dialog.grab_set()
+        except tk.TclError:
+            # Another grab is active, try to release it first
+            try:
+                self.grab_release()
+            except Exception:
+                pass
+            try:
+                dialog.grab_set()
+            except Exception:
+                pass  # Continue without grab if it still fails
 
         tk.Label(dialog, text="Select YOLO tracker version to use:", pady=15).pack()
 
@@ -1876,6 +1889,28 @@ class Vaila(tk.Tk):
                     f"Error: {str(e)}",
                 )
 
+        def use_yolov26():
+            dialog.destroy()
+            try:
+                # Import inside function to avoid early loading
+                import sys
+
+                # Add the site-packages path first to ensure proper numpy loading
+                site_packages = os.path.join(
+                    os.path.dirname(sys.executable), "Lib", "site-packages"
+                )
+                if site_packages not in sys.path:
+                    sys.path.insert(0, site_packages)
+
+                from vaila import yolov26track
+
+                yolov26track.run_yolov26track()
+            except Exception as e:
+                messagebox.showerror(
+                    "Error Running YOLOv26",
+                    f"Error: {str(e)}",
+                )
+
         def use_train_yolov11():
             dialog.destroy()
             try:
@@ -1885,7 +1920,7 @@ class Vaila(tk.Tk):
             except Exception as e:
                 messagebox.showerror("Error in YOLO Training", f"Error: {str(e)}")
 
-        def use_yolo_pose():
+        def use_yolo_pose_v11():
             dialog.destroy()
             try:
                 from vaila import yolov11track
@@ -1893,14 +1928,28 @@ class Vaila(tk.Tk):
                 yolov11track.select_id_and_run_pose()
             except Exception as e:
                 messagebox.showerror(
-                    "Error Running YOLO Pose",
+                    "Error Running YOLOv11 Pose",
                     f"Error: {str(e)}",
                 )
 
-        tk.Button(dialog, text="YOLOv11 Tracker", command=use_yolov11, width=20).pack(pady=10)
-        tk.Button(dialog, text="Train YOLO", command=use_train_yolov11, width=20).pack(pady=10)
-        tk.Button(dialog, text="YOLO Pose", command=use_yolo_pose, width=20).pack(pady=10)
-        tk.Button(dialog, text="Cancel", command=dialog.destroy, width=10).pack(pady=10)
+        def use_yolo_pose_v26():
+            dialog.destroy()
+            try:
+                from vaila import yolov26track
+
+                yolov26track.select_id_and_run_pose()
+            except Exception as e:
+                messagebox.showerror(
+                    "Error Running YOLOv26 Pose",
+                    f"Error: {str(e)}",
+                )
+
+        tk.Button(dialog, text="YOLOv11 Tracker", command=use_yolov11, width=20).pack(pady=8)
+        tk.Button(dialog, text="YOLOv26 Tracker", command=use_yolov26, width=20).pack(pady=8)
+        tk.Button(dialog, text="Train YOLO", command=use_train_yolov11, width=20).pack(pady=8)
+        tk.Button(dialog, text="YOLOv11 Pose", command=use_yolo_pose_v11, width=20).pack(pady=8)
+        tk.Button(dialog, text="YOLOv26 Pose", command=use_yolo_pose_v26, width=20).pack(pady=8)
+        tk.Button(dialog, text="Cancel", command=dialog.destroy, width=10).pack(pady=8)
 
         # Wait for the dialog to be closed
         self.wait_window(dialog)
