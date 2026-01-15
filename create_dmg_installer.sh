@@ -19,8 +19,8 @@
 #                                                                                       #
 # Author: Prof. Dr. Paulo R. P. Santiago                                                #
 # Creation: 20 November 2025                                                           #
-# Update: 11 January 2026                                                              #
-# Version: 0.3.0                                                                        #
+# Update: 14 January 2026                                                              #
+# Version: 0.3.1                                                                        #
 # OS: macOS                                                                             #
 #########################################################################################
 
@@ -267,22 +267,25 @@ tell application "Finder"
         -- Configure window
         set toolbar visible of theWindow to false
         set statusbar visible of theWindow to false
-        set bounds of theWindow to {400, 100, 920, 420}
+        set bounds of theWindow to {400, 100, 1000, 500}
         set current view of theWindow to icon view
         
         -- Configure icon view
-        set icon size of theViewOptions to 96
+        set icon size of theViewOptions to 110
         set arrangement of theViewOptions to not arranged
         
         -- Position icons
+        set arrangement of theViewOptions to not arranged
+        delay 1
+        
         try
-            set position of item "vaila_installer" of theWindow to {160, 205}
+            set position of item "vaila_installer" of theWindow to {140, 200}
         end try
         try
-            set position of item "Applications" of theWindow to {360, 205}
+            set position of item "Applications" of theWindow to {460, 200}
         end try
         try
-            set position of item "README.txt" of theWindow to {560, 205}
+            set position of item "README.txt" of theWindow to {300, 360}
         end try
         
         -- Set background if available
