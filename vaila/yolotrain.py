@@ -81,10 +81,16 @@ class YOLOTrainApp(tk.Tk):
 
         # Available YOLO models (expanded list)
         self.available_models = [
-            # YOLO11 Models (Latest)
+            # YOLO26 Models (Latest - 2026)
+            "yolo26x.pt",  # YOLO26 Extra Large
+            "yolo26l.pt",  # YOLO26 Large
+            "yolo26m.pt",  # YOLO26 Medium (Recommended default)
+            "yolo26s.pt",  # YOLO26 Small
+            "yolo26n.pt",  # YOLO26 Nano
+            # YOLO11 Models
             "yolo11x.pt",  # YOLO11 Extra Large
             "yolo11l.pt",  # YOLO11 Large
-            "yolo11m.pt",  # YOLO11 Medium (Recommended default)
+            "yolo11m.pt",  # YOLO11 Medium
             "yolo11s.pt",  # YOLO11 Small
             "yolo11n.pt",  # YOLO11 Nano
             # YOLOv8 Models (Stable)
@@ -93,7 +99,7 @@ class YOLOTrainApp(tk.Tk):
             "yolov8m.pt",  # YOLOv8 Medium
             "yolov8s.pt",  # YOLOv8 Small
             "yolov8n.pt",  # YOLOv8 Nano
-            # YOLOv9 Models (Latest)
+            # YOLOv9 Models
             "yolov9c.pt",  # YOLOv9 Compact
             "yolov9e.pt",  # YOLOv9 Extra Large
             "yolov9l.pt",  # YOLOv9 Large
@@ -104,7 +110,7 @@ class YOLOTrainApp(tk.Tk):
         # Tkinter variables
         self.dataset_path = tk.StringVar()
         self.yaml_path = tk.StringVar()
-        self.base_model = tk.StringVar(value="yolo11m.pt")
+        self.base_model = tk.StringVar(value="yolo26m.pt")
         self.project_name = tk.StringVar(value="yolo_training")
 
         self.create_widgets()
@@ -201,7 +207,9 @@ class YOLOTrainApp(tk.Tk):
         category = self.model_category.get()
 
         # Filter models by category
-        if category == "YOLO11":
+        if category == "YOLO26":
+            models = [m for m in self.available_models if m.startswith("yolo26")]
+        elif category == "YOLO11":
             models = [m for m in self.available_models if m.startswith("yolo11")]
         elif category == "YOLOv8":
             models = [m for m in self.available_models if m.startswith("yolov8")]
@@ -215,7 +223,9 @@ class YOLOTrainApp(tk.Tk):
 
         # Set default model for category
         if models:
-            if category == "YOLO11":
+            if category == "YOLO26":
+                self.base_model.set("yolo26m.pt")
+            elif category == "YOLO11":
                 self.base_model.set("yolo11m.pt")
             elif category == "YOLOv8":
                 self.base_model.set("yolov8m.pt")
@@ -231,9 +241,10 @@ YOLO MODEL SELECTION GUIDE
 ==========================
 
 MODEL CATEGORIES:
-• YOLO11: Latest version (2024) - Best performance
-• YOLOv8: Stable version - Well tested
-• YOLOv9: Latest version - Advanced features
+• YOLO26: Latest version (2026) - Best performance (RECOMMENDED)
+• YOLO11: Previous version (2024) - Well tested
+• YOLOv9: Advanced features
+• YOLOv8: Stable version - Legacy support
 
 MODEL SIZES (n → s → m → l → x):
 • n (Nano): ~6MB - Fastest, lowest accuracy
@@ -243,7 +254,7 @@ MODEL SIZES (n → s → m → l → x):
 • x (Extra Large): ~300MB - Slowest, highest accuracy
 
 RECOMMENDATIONS:
-• For beginners: Use YOLO11m
+• For beginners: Use YOLO26m (default)
 • For real-time: Use nano (n) models
 • For best accuracy: Use large (l) or extra large (x) models
 • For mobile/edge: Use nano (n) or small (s) models
@@ -253,7 +264,7 @@ TRAINING CONSIDERATIONS:
 • Smaller models may need more training epochs
 • Medium models offer best balance of speed/accuracy
 
-For more info: https://docs.ultralytics.com/models/
+For more info: https://docs.ultralytics.com/models/yolo26/
         """
 
         messagebox.showinfo("YOLO Model Guide", help_text)
@@ -689,7 +700,7 @@ names: {names_str}  # class names
                 device = yaml_data.get("device", "cpu")
 
                 # Get model name from YAML (with default)
-                model_name = yaml_data.get("model", "yolo11m.pt")
+                model_name = yaml_data.get("model", "yolo26m.pt")
 
                 print("\nTraining parameters from YAML:")
                 print(f"  Epochs: {epochs}")
@@ -901,6 +912,38 @@ names: {names_str}  # class names
 
         # Model size and performance characteristics
         model_info = {
+            # YOLO26 Models (Latest - 2026)
+            "yolo26n.pt": {
+                "size": "~6MB",
+                "speed": "Fastest",
+                "accuracy": "Lower",
+                "use": "Edge devices, real-time",
+            },
+            "yolo26s.pt": {
+                "size": "~20MB",
+                "speed": "Fast",
+                "accuracy": "Low",
+                "use": "Mobile, embedded",
+            },
+            "yolo26m.pt": {
+                "size": "~50MB",
+                "speed": "Medium",
+                "accuracy": "Good",
+                "use": "General purpose (recommended)",
+            },
+            "yolo26l.pt": {
+                "size": "~150MB",
+                "speed": "Slow",
+                "accuracy": "High",
+                "use": "High accuracy needed",
+            },
+            "yolo26x.pt": {
+                "size": "~300MB",
+                "speed": "Slowest",
+                "accuracy": "Highest",
+                "use": "Best accuracy",
+            },
+            # YOLO11 Models
             "yolo11n.pt": {
                 "size": "~6MB",
                 "speed": "Fastest",
@@ -917,7 +960,7 @@ names: {names_str}  # class names
                 "size": "~50MB",
                 "speed": "Medium",
                 "accuracy": "Good",
-                "use": "General purpose (recommended)",
+                "use": "General purpose",
             },
             "yolo11l.pt": {
                 "size": "~150MB",
@@ -931,6 +974,7 @@ names: {names_str}  # class names
                 "accuracy": "Highest",
                 "use": "Best accuracy",
             },
+            # YOLOv8 Models
             "yolov8n.pt": {
                 "size": "~6MB",
                 "speed": "Fastest",
@@ -961,6 +1005,7 @@ names: {names_str}  # class names
                 "accuracy": "Highest",
                 "use": "Best accuracy",
             },
+            # YOLOv9 Models
             "yolov9c.pt": {
                 "size": "~10MB",
                 "speed": "Fast",

@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic Hardware Optimization - vailá</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f9;
+        }
+
+        h1,
+        h2,
+        h3 {
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+
+        h1 {
+            font-size: 2.5em;
+            margin-top: 0;
+        }
+
+        .vaila-brand {
+            font-style: italic;
+            font-weight: bold;
+        }
+
+        .profile-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+            background-color: #fff;
+        }
+
+        .profile-table th,
+        .profile-table td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .profile-table th {
+            background-color: #3498db;
+            color: #fff;
+        }
+
+        .profile-table tr:hover {
+            background-color: #f1f1f1;
+        }
+
+        code {
+            background-color: #e1e1e1;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-family: 'Courier New', Courier, monospace;
+        }
+
+        .warning-box {
+            background-color: #fff3cd;
+            border-left: 6px solid #ffc107;
+            padding: 15px;
+            margin: 20px 0;
+        }
+
+        .back-link {
+            display: inline-block;
+            margin-top: 20px;
+            text-decoration: none;
+            color: #3498db;
+            font-weight: bold;
+        }
+
+        .back-link:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>Dynamic Hardware Optimization</h1>
+
+    <p><span class="vaila-brand">vailá</span> is designed to adapt intelligently to the hardware it runs on. Whether you
+        are using a high-end workstation with an RTX 4090 or a sleek laptop with limited graphic memory, the toolbox
+        automatically configures itself for the best possible performance.</p>
+
+    <h2>How it Works</h2>
+    <p>The built-in <strong>HardwareManager</strong> scans your system at startup to detect OS, GPU Model and VRAM.</p>
+    <p>Based on this scan, it assigns one of three performance profiles:</p>
+
+    <table class="profile-table">
+        <thead>
+            <tr>
+                <th>Profile</th>
+                <th>Hardware</th>
+                <th>Description</th>
+                <th>Settings</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>ULTRA</strong></td>
+                <td>&gt; 20GB VRAM</td>
+                <td>High-end (RTX 4090, 3090)</td>
+                <td>FP16, 8GB Workspace</td>
+            </tr>
+            <tr>
+                <td><strong>HIGH</strong></td>
+                <td>7GB - 20GB</td>
+                <td>Mid-range (RTX 5050, 4070)</td>
+                <td>FP16, 2GB Workspace</td>
+            </tr>
+            <tr>
+                <td><strong>LITE</strong></td>
+                <td>&lt; 7GB or CPU</td>
+                <td>Entry-level / CPU-only</td>
+                <td>FP32 (CPU) or minimal settings</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>Auto-Export & Cross-Platform Support</h2>
+    <p><span class="vaila-brand">vailá</span> uses <strong>TensorRT</strong> (<code>.engine</code> files) for extreme
+        acceleration. These files are hardware-specific.</p>
+    <p>To solve this, <span class="vaila-brand">vailá</span> implements <strong>Auto-Export</strong>:</p>
+    <ol>
+        <li><strong>Automatic Detection</strong>: Checks if an engine exists for <strong>your specific OS and
+                GPU</strong>.</li>
+        <li><strong>Automatic Creation</strong>: If missing, it creates it from the source model. Example:
+            <code>yolo26x-pose_NVIDIA_GeForce_RTX_4090.engine</code></li>
+        <li><strong>Coexistence</strong>: Multiple engines for different machines can exist side-by-side.</li>
+    </ol>
+
+    <div class="warning-box">
+        <h3>⚠️ First Run Notification</h3>
+        <p><strong>The first time</strong> you run a new model on a new computer, the process can take <strong>2 to 10
+                minutes</strong> while it builds the engine. <strong>Do not close the window.</strong> Subsequent runs
+            will be instant.</p>
+    </div>
+
+    <h2>Windows vs. Linux</h2>
+    <p>The experience is identical. If you dual-boot, <span class="vaila-brand">vailá</span> will manage engines for
+        both Windows and Linux automatically.</p>
+
+    <a href="index.html" class="back-link">← Back to Help Index</a>
+
+</body>
+
+</html>
