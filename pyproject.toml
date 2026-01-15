@@ -126,6 +126,11 @@ dev = [
     "ruff",
 ]
 
+gpu = [
+    "tensorrt",
+    "nvidia-ml-py",
+]
+
 [project.scripts]
 vaila = "vaila:main"
 

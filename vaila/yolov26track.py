@@ -58,6 +58,7 @@ import colorsys
 import contextlib
 import csv
 import datetime
+from .HardwareManager import HardwareManager
 import glob
 import os
 import platform
@@ -2922,7 +2923,12 @@ def _process_pose_from_csv(
             messagebox.showerror("Error", f"Failed to download pose model: {str(e)}")
             return False
 
+    # Initialize Hardware Manager
+    hw = HardwareManager()
+
     try:
+        # Check and auto-export optimized .engine model
+        pose_model_path = hw.auto_export(pose_model_name)
         pose_model = YOLO(pose_model_path)
         print(f"Pose model loaded: {pose_model_name}")
     except Exception as e:
@@ -3164,7 +3170,12 @@ def process_pose_in_bboxes(tracking_dir, device=None, pose_model_name="yolo26n-p
             messagebox.showerror("Error", f"Failed to download pose model: {str(e)}")
             return False
 
+    # Initialize Hardware Manager
+    hw = HardwareManager()
+
     try:
+        # Check and auto-export optimized .engine model
+        pose_model_path = hw.auto_export(pose_model_name)
         pose_model = YOLO(pose_model_path)
         print(f"Pose model loaded: {pose_model_name}")
     except Exception as e:
@@ -3462,7 +3473,13 @@ def run_yolov26track():
         print(f"CPU cores: {os.cpu_count()}")
 
     # Initialize the YOLO model
+    # Use HardwareManager to get optimal model for this GPU
+    hw = HardwareManager()
+    hw.print_report()
+    
     try:
+        # Auto-export if needed (creates .engine optimized for this GPU)
+        model_path = hw.auto_export(model_name) 
         model = YOLO(model_path)
         print(f"Model loaded successfully: {model_path}")
     except Exception as e:
