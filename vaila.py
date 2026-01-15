@@ -165,7 +165,7 @@ Mocap fullbody_c3d           Markerless_3D      Markerless_2D_MP and YOLO
    IMU_csv --> |                                       | <-- Cluster_csv
 Open Field --> |       vailá - multimodal toolbox      | <-- Force Plate
  StartBlock -->|                                       | <-- GRF Analysis
-               +---------------------------------------+ <-- etc, etc, etc.
+ etc, etc. --> +---------------------------------------+ <-- etc, etc, etc.
                                  |
                                  V
         +---------------------------------------------------+
@@ -193,7 +193,7 @@ B4_r4_c4 - MP Angles      B4_r4_c5 - Markerless Live
 B4_r5_c1 - Ultrasound     B4_r5_c2 - Brainstorm      B4_r5_c3 - Scout
 B4_r5_c4 - StartBlock     B4_r5_c5 - Pynalty
 
-B5_r6_c1 - Sprint         B5_r6_c2 - vailá           B5_r6_c3 - vailá
+B5_r6_c1 - Sprint         B5_r6_c2 - Face Mesh       B5_r6_c3 - vailá
 B5_r6_c4 - vailá          B5_r6_c5 - vailá
 
 ============================== Tools Available (Frame C) ===================
