@@ -6,8 +6,8 @@ Author: Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 14 October 2024
-Update Date: 12 January 2026
-Version: 0.0.10
+Update Date: 15 January 2026
+Version: 0.1.0
 Python Version: 3.12.12
 
 Description:
@@ -20,9 +20,12 @@ split for further analysis.
 
 Key Features:
 -------------
-1. **Data Splitting**:
+1. **New Features**:
+   - Hampel filter for spike removal.
+   - Median filter for spike removal.
+2. **Data Splitting**:
    - Splits CSV files into two halves for easier data management and analysis.
-2. **Padding**:
+3. **Padding**:
    - Pads the data with the last valid value to avoid edge effects.
 
     padding_length = 0.1 * len(data)  # 10% padding of the data length before and after the data
@@ -32,10 +35,10 @@ Key Features:
     y = Filtering or smoothing the data method
     return y[padding_length:-padding_length]
 
-3. **Filtering/Smoothing**:
+4. **Filtering/Smoothing**:
    - Applies Kalman filter, Savitzky-Golay filter, or nearest value fill to
      numerical data.
-4. **Gap Filling with Interpolation**:
+5. **Gap Filling with Interpolation**:
    - Fills gaps in numerical data using linear interpolation, Kalman filter,
      Savitzky-Golay filter, nearest value fill, or leaves NaNs as is.
    - Only the missing data (NaNs) are filled; existing data remains unchanged.
@@ -44,6 +47,20 @@ Usage:
 ------
 - Run this script to launch a graphical user interface (GUI) that provides options
   to perform interpolation on CSV files or to split them into two parts.
+- The filled or split files are saved in new directories to avoid overwriting the
+  original files.
+
+How to run:
+-----------
+GUI mode:
+- Run this script to launch a graphical user interface (GUI) that provides options
+  to perform interpolation on CSV files or to split them into two parts.
+- The filled or split files are saved in new directories to avoid overwriting the
+  original files.
+
+CLI mode:
+- Run this script with command line arguments to perform interpolation on CSV files
+  or to split them into two parts.
 - The filled or split files are saved in new directories to avoid overwriting the
   original files.
 
@@ -87,7 +104,266 @@ except ImportError:
             return data
 
 
+# =============================================================================
+# ROBUST SPIKE REMOVAL AND NAN HANDLING FUNCTIONS
+# =============================================================================
+
+# Numba-optimized Hampel filter functions
+try:
+    from numba import jit, njit, prange
+
+    @jit(nopython=True)
+    def _calc_medians(window_size, arr, medians):
+        """Calculate rolling medians using Numba JIT."""
+        for i in range(window_size, len(arr) - window_size, 1):
+            id0 = i - window_size
+            id1 = i + window_size
+            median = np.median(arr[id0:id1])
+            medians[i] = median
+
+    @jit(nopython=True)
+    def _calc_medians_std(window_size, arr, medians, medians_diff):
+        """Calculate rolling MAD (scaled to σ) using Numba JIT."""
+        k = 1.4826  # Scale factor to convert MAD to σ estimate
+        for i in range(window_size, len(arr) - window_size, 1):
+            id0 = i - window_size
+            id1 = i + window_size
+            x = arr[id0:id1]
+            medians_diff[i] = k * np.median(np.abs(x - np.median(x)))
+
+    @njit(parallel=True)
+    def _calc_medians_parallel(window_size, arr, medians):
+        """Calculate rolling medians using Numba parallel JIT."""
+        for i in prange(window_size, len(arr) - window_size, 1):
+            id0 = i - window_size
+            id1 = i + window_size
+            median = np.median(arr[id0:id1])
+            medians[i] = median
+
+    @njit(parallel=True)
+    def _calc_medians_std_parallel(window_size, arr, medians, medians_diff):
+        """Calculate rolling MAD (scaled to σ) using Numba parallel JIT."""
+        k = 1.4826  # Scale factor to convert MAD to σ estimate
+        for i in prange(window_size, len(arr) - window_size, 1):
+            id0 = i - window_size
+            id1 = i + window_size
+            x = arr[id0:id1]
+            medians_diff[i] = k * np.median(np.abs(x - np.median(x)))
+
+    NUMBA_AVAILABLE = True
+except ImportError:
+    NUMBA_AVAILABLE = False
+    print("Warning: Numba not available. Hampel filter will use slower pandas implementation.")
+
+
+def _hampel_numba(arr, window_size=5, n=3, parallel=True):
+    """
+    Hampel filter using Numba for high performance.
+
+    Returns indices of outliers detected.
+    """
+    if isinstance(arr, pd.Series):
+        arr = arr.values
+    elif isinstance(arr, pd.DataFrame):
+        arr = arr.values
+
+    arr = np.asarray(arr, dtype=np.float64)
+    medians = np.ones_like(arr, dtype=float) * np.nan
+    medians_diff = np.ones_like(arr, dtype=float) * np.nan
+
+    if parallel:
+        _calc_medians_parallel(window_size, arr, medians)
+        _calc_medians_std_parallel(window_size, arr, medians, medians_diff)
+    else:
+        _calc_medians(window_size, arr, medians)
+        _calc_medians_std(window_size, arr, medians, medians_diff)
+
+    ind = np.abs(arr - medians) > n * medians_diff
+    outlier_indices = np.where(ind)[0]
+    return outlier_indices, medians
+
+
+def _hampel_pandas(data, window_size=7, n_sigmas=3):
+    """Fallback Hampel filter using pandas (slower, for when Numba unavailable)."""
+    data = np.asarray(data).copy().astype(float)
+    series = pd.Series(data)
+
+    if window_size % 2 == 0:
+        window_size += 1
+
+    rolling_median = series.rolling(window=window_size, center=True, min_periods=1).median()
+
+    def get_mad(x):
+        med = np.nanmedian(x)
+        return 1.4826 * np.nanmedian(np.abs(x - med))  # k=1.4826 for proper scaling
+
+    rolling_mad = series.rolling(window=window_size, center=True, min_periods=1).apply(
+        get_mad, raw=True
+    )
+    rolling_mad = rolling_mad.replace(0, np.nan).fillna(1e-10)
+
+    outliers = np.abs(series - rolling_median) > n_sigmas * rolling_mad
+    cleaned = series.copy()
+    cleaned[outliers] = rolling_median[outliers]
+
+    return cleaned.values
+
+
+def hampel_filter(data, window_size=7, n_sigmas=3, parallel=True):
+    """
+    Detect and remove spikes using Hampel filter with Numba optimization.
+
+    Uses rolling Median and MAD (Median Absolute Deviation) with k=1.4826
+    scale factor for proper MAD-to-σ conversion.
+
+    Parameters:
+    - data: array-like, 1D array
+    - window_size: int, half-window size for Numba version, full window for pandas
+    - n_sigmas: float, threshold in σ units (default 3)
+    - parallel: bool, use parallel Numba computation (default True)
+
+    Returns:
+    - cleaned_data: array-like, data with spikes replaced by local median
+    """
+    data = np.asarray(data).copy().astype(float)
+
+    if NUMBA_AVAILABLE:
+        # Use Numba optimized version
+        half_window = window_size // 2 if window_size > 2 else 2
+        outlier_indices, medians = _hampel_numba(data, half_window, n_sigmas, parallel)
+
+        # Replace outliers with median values
+        cleaned = data.copy()
+        for idx in outlier_indices:
+            if not np.isnan(medians[idx]):
+                cleaned[idx] = medians[idx]
+        return cleaned
+    else:
+        # Fallback to pandas version
+        return _hampel_pandas(data, window_size, n_sigmas)
+
+
+
+
+def robust_zscore_cleaning(data, threshold=3.5):
+    """
+    Remove global spikes using robust Z-Score based on MAD.
+
+    Z = 0.6745 * (x - median) / MAD
+
+    Points with |Z| > threshold are replaced with linear interpolation.
+
+    Parameters:
+    - data: array-like, 1D array
+    - threshold: float, z-score threshold (default 3.5)
+
+    Returns:
+    - cleaned_data: array-like, data with outliers interpolated
+    """
+    data = np.asarray(data).copy().astype(float)
+
+    # Calculate robust z-score
+    median = np.nanmedian(data)
+    mad = np.nanmedian(np.abs(data - median))
+
+    if mad == 0:
+        return data  # No variation, nothing to clean
+
+    z_scores = 0.6745 * (data - median) / mad
+
+    # Mark outliers as NaN
+    outliers = np.abs(z_scores) > threshold
+    data[outliers] = np.nan
+
+    # Interpolate the outlier positions
+    return pd.Series(data).interpolate(method="linear", limit_direction="both").values
+
+
+def median_filter_smooth(data, kernel_size=5):
+    """
+    Apply median filter smoothing to remove impulsive noise.
+
+    Parameters:
+    - data: array-like, 1D array
+    - kernel_size: int, size of the median filter window (must be odd)
+
+    Returns:
+    - filtered_data: array-like, median-filtered data
+    """
+    from scipy.signal import medfilt
+
+    data = np.asarray(data).copy().astype(float)
+
+    # Ensure kernel_size is odd
+    if kernel_size % 2 == 0:
+        kernel_size += 1
+
+    # Handle NaN values by interpolating them first
+    nan_mask = np.isnan(data)
+    if np.any(nan_mask):
+        data_clean = pd.Series(data).interpolate(method="linear", limit_direction="both").values
+        # Handle edge NaNs
+        data_clean = pd.Series(data_clean).ffill().bfill().values
+        filtered = medfilt(data_clean, kernel_size)
+        # Restore NaN positions
+        filtered[nan_mask] = np.nan
+        return filtered
+
+    return medfilt(data, kernel_size)
+
+
+def apply_smoothing_with_nan_handling(data, smooth_func, preserve_nans=False, **kwargs):
+    """
+    Apply a smoothing function while handling NaN values.
+
+    If preserve_nans is True, the function:
+    1. Saves the NaN mask
+    2. Temporarily interpolates NaN positions
+    3. Applies the smoothing function
+    4. Restores NaN positions in the output
+
+    This is used to fix the "Skip" interpolation option bug where smoothing
+    filters would fail on data containing NaNs.
+
+    Parameters:
+    - data: array-like, 1D array (may contain NaNs)
+    - smooth_func: callable, the smoothing function to apply
+    - preserve_nans: bool, if True, NaN positions are restored after smoothing
+    - **kwargs: additional arguments passed to smooth_func
+
+    Returns:
+    - smoothed_data: array-like, smoothed data (with or without NaNs restored)
+    """
+    data = np.asarray(data).copy().astype(float)
+
+    # Save original NaN mask
+    nan_mask = np.isnan(data)
+
+    if nan_mask.any():
+        # Temporarily interpolate NaN positions for smoothing
+        data_filled = pd.Series(data).interpolate(method="linear", limit_direction="both").values
+
+        # Handle edge cases where interpolation couldn't fill all NaNs
+        remaining_nans = np.isnan(data_filled)
+        if remaining_nans.any():
+            # Use forward/backward fill for edge NaNs
+            data_filled = pd.Series(data_filled).ffill().bfill().values
+    else:
+        data_filled = data
+
+    # Apply smoothing
+    smoothed = smooth_func(data_filled, **kwargs)
+
+    # Restore NaN positions if requested
+    if preserve_nans and nan_mask.any():
+        smoothed = np.asarray(smoothed).astype(float)
+        smoothed[nan_mask] = np.nan
+
+    return smoothed
+
+
 def save_config_to_toml(config, filepath):
+
     """Save the current configuration to a TOML file with didactic comments for non-experts."""
     with open(filepath, "w", encoding="utf-8") as f:
         f.write("# ================================================================\n")
@@ -325,6 +601,17 @@ class InterpolationConfigDialog:
         scrollable_frame.bind(
             "<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
         )
+        
+        # Bind mouse wheel for scrolling
+        def _on_mousewheel(event):
+             if event.num == 5 or event.delta < 0:
+                 canvas.yview_scroll(1, "units")
+             elif event.num == 4 or event.delta > 0:
+                 canvas.yview_scroll(-1, "units")
+                 
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        canvas.bind_all("<Button-4>", _on_mousewheel)
+        canvas.bind_all("<Button-5>", _on_mousewheel)
 
         canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
@@ -362,7 +649,7 @@ class InterpolationConfigDialog:
         """Create interpolation method selection"""
         frame = tk.LabelFrame(
             parent,
-            text="Gap Filling Method",
+            text="Gap Fill Method",
             padx=15,
             pady=12,
             font=("Arial", 12, "bold"),
@@ -388,10 +675,10 @@ class InterpolationConfigDialog:
         self.interp_entry.pack(fill="x", padx=10, pady=5)
 
     def create_smoothing_section(self, parent):
-        """Create smoothing method selection"""
+        """Create smoothing/filtering method selection"""
         frame = tk.LabelFrame(
             parent,
-            text="Smoothing Method",
+            text="Smooth/Filter Method",
             padx=15,
             pady=12,
             font=("Arial", 12, "bold"),
@@ -404,13 +691,15 @@ class InterpolationConfigDialog:
 4 - Kalman Filter (state estimation with noise reduction)
 5 - Butterworth Filter (4th order, frequency domain filtering)
 6 - Spline Smoothing (flexible curve fitting)
-7 - ARIMA (time series modeling and filtering)"""
+7 - ARIMA (time series modeling and filtering)
+8 - Moving Median (robust to outliers, impulsive noise removal)
+9 - Hampel Filter (spike detection and removal using MAD)"""
 
         tk.Label(frame, text=methods_text, justify="left", font=("Arial", 11)).pack(
             anchor="w", padx=10, pady=5
         )
 
-        tk.Label(frame, text="Enter smoothing method (1-7):", font=("Arial", 11, "bold")).pack(
+        tk.Label(frame, text="Enter smoothing method (1-9):", font=("Arial", 11, "bold")).pack(
             anchor="w", padx=10, pady=8
         )
         self.smooth_entry = tk.Entry(frame, font=("Arial", 12))
@@ -629,6 +918,10 @@ class InterpolationConfigDialog:
                 self.create_splines_params()
             elif smooth_method == 7:  # ARIMA
                 self.create_arima_params()
+            elif smooth_method == 8:  # Moving Median
+                self.create_median_params()
+            elif smooth_method == 9:  # Hampel Filter
+                self.create_hampel_params()
             else:
                 label = tk.Label(
                     self.params_frame,
@@ -639,9 +932,10 @@ class InterpolationConfigDialog:
                 self.params_widgets.append(label)
 
         except ValueError:
-            label = tk.Label(self.params_frame, text="Please enter a valid method number (1-7)")
+            label = tk.Label(self.params_frame, text="Please enter a valid method number (1-8)")
             label.pack(anchor="w", padx=5, pady=5)
             self.params_widgets.append(label)
+
 
     def create_savgol_params(self):
         """Create Savitzky-Golay parameters"""
@@ -887,7 +1181,79 @@ class InterpolationConfigDialog:
         )
         self.param_entries.update({"p": entry1, "d": entry2, "q": entry3})
 
+    def create_median_params(self):
+        """Create Moving Median parameters"""
+        # Kernel size
+        label1 = tk.Label(
+            self.params_frame, text="Kernel size (must be odd):", font=("Arial", 11)
+        )
+        label1.pack(anchor="w", padx=5, pady=2)
+
+        self.median_kernel = tk.StringVar(value="5")
+        entry1 = tk.Entry(self.params_frame, textvariable=self.median_kernel, font=("Arial", 11))
+        entry1.pack(fill="x", padx=5, pady=2)
+
+        # Tooltip for kernel size
+        tooltip1 = tk.Label(
+            self.params_frame,
+            text="💡 Tip: Use 3-7 for light noise, 7-15 for heavy impulsive noise. Must be odd.",
+            font=("Arial", 9),
+            fg="#666666",
+            wraplength=300,
+        )
+        tooltip1.pack(anchor="w", padx=5, pady=(0, 5))
+
+        self.params_widgets.extend([label1, entry1, tooltip1])
+        self.param_entries["kernel_size"] = entry1
+
+    def create_hampel_params(self):
+        """Create Hampel filter parameters"""
+        # Window size
+        label1 = tk.Label(
+            self.params_frame, text="Window size (must be odd):", font=("Arial", 11)
+        )
+        label1.pack(anchor="w", padx=5, pady=2)
+
+        self.hampel_window = tk.StringVar(value="7")
+        entry1 = tk.Entry(self.params_frame, textvariable=self.hampel_window, font=("Arial", 11))
+        entry1.pack(fill="x", padx=5, pady=2)
+
+        # Tooltip for window size
+        tooltip1 = tk.Label(
+            self.params_frame,
+            text="💡 Tip: 5-11 for most cases. Larger windows detect larger-scale spikes.",
+            font=("Arial", 9),
+            fg="#666666",
+            wraplength=300,
+        )
+        tooltip1.pack(anchor="w", padx=5, pady=(0, 5))
+
+        # Sigma threshold
+        label2 = tk.Label(
+            self.params_frame, text="Sigma threshold:", font=("Arial", 11)
+        )
+        label2.pack(anchor="w", padx=5, pady=2)
+
+        self.hampel_sigma = tk.StringVar(value="3")
+        entry2 = tk.Entry(self.params_frame, textvariable=self.hampel_sigma, font=("Arial", 11))
+        entry2.pack(fill="x", padx=5, pady=2)
+
+        # Tooltip for sigma threshold
+        tooltip2 = tk.Label(
+            self.params_frame,
+            text="💡 Tip: 2.5-4.0 typical. Points > sigma*MAD from median are replaced.",
+            font=("Arial", 9),
+            fg="#666666",
+            wraplength=300,
+        )
+        tooltip2.pack(anchor="w", padx=5, pady=(0, 5))
+
+        self.params_widgets.extend([label1, entry1, tooltip1, label2, entry2, tooltip2])
+        self.param_entries["hampel_window"] = entry1
+        self.param_entries["hampel_sigma"] = entry2
+
     def update_parameter_value(self, event, stringvar):
+
         """Update the value of the StringVar when the user presses Enter"""
         widget = event.widget
         value = widget.get()
@@ -900,12 +1266,12 @@ class InterpolationConfigDialog:
             interp_num = int(self.interp_entry.get())
             smooth_num = int(self.smooth_entry.get())
 
-            if not (1 <= interp_num <= 7):
-                messagebox.showerror("Error", "Gap filling method must be between 1 and 7")
+            if not (1 <= interp_num <= 6):
+                messagebox.showerror("Error", "Gap filling method must be between 1 and 6")
                 return False
 
-            if not (1 <= smooth_num <= 7):
-                messagebox.showerror("Error", "Smoothing method must be between 1 and 7")
+            if not (1 <= smooth_num <= 9):
+                messagebox.showerror("Error", "Smoothing method must be between 1 and 9")
                 return False
 
             # Validate parameters specifically
@@ -1097,6 +1463,18 @@ class InterpolationConfigDialog:
                 print(f"- AR order (p): {p}")
                 print(f"- Difference order (d): {d}")
                 print(f"- MA order (q): {q}")
+            elif smooth_method == 8:  # Moving Median
+                kernel_size = int(self.median_kernel.get())
+                params_text = f"Kernel Size: {kernel_size}"
+                print("\nMoving Median Parameters:")
+                print(f"- Kernel Size: {kernel_size}")
+            elif smooth_method == 9:  # Hampel Filter
+                window_size = int(self.hampel_window.get())
+                n_sigmas = float(self.hampel_sigma.get())
+                params_text = f"Window Size: {window_size}, Sigmas: {n_sigmas}"
+                print("\nHampel Filter Parameters:")
+                print(f"- Window Size: {window_size}")
+                print(f"- Sigmas: {n_sigmas}")
 
             print("=" * 50)
 
@@ -1131,6 +1509,7 @@ Parameters have been confirmed and will be used for processing.
             padding = self.loaded_toml.get("padding", {})
             split = self.loaded_toml.get("split", {})
             smooth_params = {k: v for k, v in smoothing.items() if k != "method"}
+            interp_params = {k: v for k, v in interp.items() if k not in ["method", "max_gap"]}
             sample_rate = None
             time_config = self.loaded_toml.get("time_column", {})
             if "sample_rate" in time_config:
@@ -1152,12 +1531,14 @@ Parameters have been confirmed and will be used for processing.
             self.result = {
                 "padding": float(padding.get("percent", 10)),
                 "interp_method": interp.get("method", "linear"),
+                "interp_params": interp_params,
                 "smooth_method": smoothing.get("method", "none"),
                 "smooth_params": smooth_params,
                 "max_gap": int(interp.get("max_gap", 60)),
                 "do_split": bool(split.get("enabled", False)),
                 "sample_rate": sample_rate,
             }
+
         else:
             try:
                 # Check if the parameters have been confirmed
@@ -1198,6 +1579,8 @@ Parameters have been confirmed and will be used for processing.
                     5: "butterworth",
                     6: "splines",
                     7: "arima",
+                    8: "median",
+                    9: "hampel",
                 }
 
                 # Debug: Print the values of the Entry widgets
@@ -1213,8 +1596,12 @@ Parameters have been confirmed and will be used for processing.
                 padding = float(self.padding_entry.get())
                 do_split = self.split_var.get()
 
+                # Prepare interpolation parameters
+                interp_params = {}
+
                 # Prepare the smoothing parameters based on the chosen method
                 smooth_params = {}
+
                 if smooth_method == 2:  # Savitzky-Golay
                     window_length = int(self.savgol_window.get())
                     polyorder = int(self.savgol_poly.get())
@@ -1259,6 +1646,22 @@ Parameters have been confirmed and will be used for processing.
                     smooth_params = {"p": p, "d": d, "q": q}
                     print(f"APPLY: ARIMA settings - order=({p},{d},{q})")
 
+                elif smooth_method == 8:  # Moving Median
+                    kernel_size = int(self.median_kernel.get())
+                    smooth_params = {"kernel_size": kernel_size}
+                    print(f"APPLY: Moving Median settings - kernel_size={kernel_size}")
+
+                elif smooth_method == 9:  # Hampel Filter
+                    window_size = int(self.hampel_window.get())
+                    n_sigmas = float(self.hampel_sigma.get())
+                    smooth_params = {
+                        "window_size": window_size,
+                        "n_sigmas": n_sigmas,
+                    }
+                    print(
+                        f"APPLY: Hampel settings - window={window_size}, sigmas={n_sigmas}"
+                    )
+
                 # Display a summary of the chosen parameters
                 summary = f"""
 === CONFIGURATION SUMMARY ===
@@ -1295,6 +1698,11 @@ Parameters have been confirmed and will be used for processing.
                         int(smooth_params["q"]),
                     )
                     summary += f"\nARIMA Parameters:\n- Order: {order}"
+                elif smooth_method == 8:  # Moving Median
+                    kernel_size = int(smooth_params["kernel_size"])
+                    summary += f"\nMoving Median Parameters:\n- Kernel Size: {kernel_size}"
+                elif smooth_method == 9:  # Hampel Filter
+                    summary += f"\nHampel Filter Parameters:\n- Window Size: {smooth_params['window_size']}\n- Sigmas: {smooth_params['n_sigmas']}"
 
                 # Get sample rate if provided
                 sample_rate_str = self.sample_rate.get().strip()
@@ -1315,6 +1723,7 @@ Parameters have been confirmed and will be used for processing.
                     config_result = {
                         "padding": padding,
                         "interp_method": interp_map[interp_method],
+                        "interp_params": interp_params,
                         "smooth_method": smooth_map[smooth_method],
                         "smooth_params": smooth_params,
                         "max_gap": max_gap,
@@ -1395,6 +1804,8 @@ Parameters have been confirmed and will be used for processing.
             5: "butterworth",
             6: "splines",
             7: "arima",
+            8: "median",
+            9: "hampel",
         }
         interp_method = interp_map.get(int(self.interp_entry.get()), "linear")
         smooth_method = smooth_map.get(int(self.smooth_entry.get()), "none")
@@ -1430,6 +1841,13 @@ Parameters have been confirmed and will be used for processing.
                 "p": int(self.arima_p.get()),
                 "d": int(self.arima_d.get()),
                 "q": int(self.arima_q.get()),
+            }
+        elif smooth_method == "median":
+            smoothing_params = {"kernel_size": int(self.median_kernel.get())}
+        elif smooth_method == "hampel":
+            smoothing_params = {
+                "window_size": int(self.hampel_window.get()),
+                "n_sigmas": float(self.hampel_sigma.get()),
             }
         # Get sample rate if provided
         sample_rate_str = self.sample_rate.get().strip()
@@ -1469,6 +1887,8 @@ Parameters have been confirmed and will be used for processing.
             "butterworth": 5,
             "splines": 6,
             "arima": 7,
+            "median": 8,
+            "hampel": 9,
         }
         interp = config.get("interpolation", {})
         smoothing = config.get("smoothing", {})
@@ -1521,12 +1941,12 @@ Parameters have been confirmed and will be used for processing.
             interp_num = int(self.interp_entry.get())
             smooth_num = int(self.smooth_entry.get())
 
-            if not (1 <= interp_num <= 6):
-                messagebox.showerror("Error", "Gap filling method must be between 1 and 6")
+            if not (1 <= interp_num <= 7):
+                messagebox.showerror("Error", "Gap filling method must be between 1 and 7")
                 return False
 
-            if not (1 <= smooth_num <= 7):
-                messagebox.showerror("Error", "Smoothing method must be between 1 and 7")
+            if not (1 <= smooth_num <= 8):
+                messagebox.showerror("Error", "Smoothing method must be between 1 and 8")
                 return False
 
             # Validate specific method parameters
@@ -2073,6 +2493,7 @@ Parameters have been confirmed and will be used for processing.
                 5: "butterworth",
                 6: "splines",
                 7: "arima",
+                8: "median",
             }
 
             smooth_method = int(self.smooth_entry.get())
@@ -2112,19 +2533,31 @@ Parameters have been confirmed and will be used for processing.
                 )
             elif smooth_method == 6:  # Splines
                 smooth_params = {"smoothing_factor": float(self.spline_smoothing.get())}
-                print(f"[DEBUG] Splines params: smoothing={smooth_params['smoothing_factor']}")
+                print(f"[DEBUG] Spline params: smoothing_factor={smooth_params['smoothing_factor']}")
             elif smooth_method == 7:  # ARIMA
                 smooth_params = {
                     "p": int(self.arima_p.get()),
                     "d": int(self.arima_d.get()),
                     "q": int(self.arima_q.get()),
                 }
-                print(
-                    f"[DEBUG] ARIMA params: p={smooth_params['p']}, d={smooth_params['d']}, q={smooth_params['q']}"
-                )
+                print(f"[DEBUG] ARIMA params: p={smooth_params['p']}, d={smooth_params['d']}, q={smooth_params['q']}")
+            elif smooth_method == 8:  # Moving Median
+                smooth_params = {"kernel_size": int(self.median_kernel.get())}
+                print(f"[DEBUG] Moving Median params: kernel_size={smooth_params['kernel_size']}")
+
+            # Get interpolation parameters (Hampel)
+            interp_params = {}
+            interp_method_val = int(self.interp_entry.get())
+            if interp_method_val == 7:  # Hampel
+                interp_params = {
+                    "window_size": int(self.hampel_window.get()),
+                    "n_sigmas": float(self.hampel_sigma.get()),
+                }
+                print(f"[DEBUG] Hampel params: window={interp_params['window_size']}, sigmas={interp_params['n_sigmas']}")
 
             config = {
                 "interp_method": interp_map[int(self.interp_entry.get())],
+                "interp_params": interp_params,
                 "smooth_method": smooth_map[smooth_method],
                 "smooth_params": smooth_params,
                 "padding": float(self.padding_entry.get()),
@@ -2171,6 +2604,15 @@ Parameters have been confirmed and will be used for processing.
                 series = series.interpolate(method="cubic", limit_direction="both")
             elif config["interp_method"] == "nearest":
                 series = series.interpolate(method="nearest", limit_direction="both")
+            elif config["interp_method"] == "hampel":
+                # Apply Hampel filter first (on valid data logic handled by hampel_filter)
+                params = config.get("interp_params", {})
+                window_size = params.get("window_size", 7)
+                n_sigmas = params.get("n_sigmas", 3)
+                # Hampel filter returns numpy array
+                padded_data = hampel_filter(padded_data, window_size=window_size, n_sigmas=n_sigmas)
+                # Then interpolate generic gaps
+                series = pd.Series(padded_data).interpolate(method="linear", limit_direction="both")
 
             padded_data = series.values
 
@@ -2207,6 +2649,9 @@ Parameters have been confirmed and will be used for processing.
                     params = config["smooth_params"]
                     order = (params["p"], params["d"], params["q"])
                     padded_data = arima_smooth(padded_data, order=order)
+                elif config["smooth_method"] == "median":
+                    params = config["smooth_params"]
+                    padded_data = median_filter_smooth(padded_data, kernel_size=params.get("kernel_size", 5))
             except Exception as e:
                 print(f"Error in smoothing: {str(e)}")
 
@@ -3065,6 +3510,7 @@ def process_file(file_path, dest_dir, config):
             if nan_mask.any() and config["interp_method"] not in ["none", "skip"]:
                 print(f"Applying {config['interp_method']} interpolation")
 
+
                 # Check maximum gap size
                 max_gap = config["max_gap"]
                 print(f"Using maximum gap size: {max_gap} frames")
@@ -3100,7 +3546,8 @@ def process_file(file_path, dest_dir, config):
                     interpolated = df[col].copy()
 
                     # Apply interpolation only to gaps smaller than max_gap
-                    if config["interp_method"] == "linear":
+                    if config["interp_method"] in ["linear", "hampel"]:
+                        # Hampel uses linear interpolation after spike removal
                         interpolated = interpolated.interpolate(
                             method="linear", limit_direction="both"
                         )
@@ -3116,6 +3563,7 @@ def process_file(file_path, dest_dir, config):
                         # For Kalman, we need to handle the entire column
                         # We'll apply it after this block
                         pass
+
 
                     # Restore NaN values for gaps larger than max_gap
                     for start, end in zip(gap_starts, gap_ends):
@@ -3158,8 +3606,10 @@ def process_file(file_path, dest_dir, config):
                         except Exception as e:
                             print(f"Error applying Kalman filter: {str(e)}")
                 else:  # No gap size limit
-                    if config["interp_method"] == "linear":
+                    if config["interp_method"] in ["linear", "hampel"]:
+                        # Hampel uses linear interpolation after spike removal
                         df[col] = df[col].interpolate(method="linear", limit_direction="both")
+
                     elif config["interp_method"] == "nearest":
                         df[col] = df[col].interpolate(method="nearest", limit_direction="both")
                     elif config["interp_method"] == "cubic":
@@ -3200,13 +3650,37 @@ def process_file(file_path, dest_dir, config):
         # STEP 2: Apply smoothing to each column
         if config["smooth_method"] != "none":
             print("\nSTEP 2: Applying smoothing to each column")
+            
+            # Check if we need to preserve NaNs (Skip interpolation mode)
+            preserve_nans = config["interp_method"] == "skip"
+            if preserve_nans:
+                print("Note: Skip mode - NaN positions will be preserved after smoothing")
+            
             for col in numeric_cols:
                 print(f"\nSmoothing column: {col}")
+                
+                # Save original NaN mask for Skip mode
+                original_nan_mask = df[col].isna().copy() if preserve_nans else None
+                
                 try:
+                    data = df[col].values.copy().astype(float)
+                    
+                    # For Skip mode, temporarily fill NaNs before smoothing
+                    if preserve_nans and np.any(np.isnan(data)):
+                        data_for_smoothing = pd.Series(data).interpolate(
+                            method="linear", limit_direction="both"
+                        ).ffill().bfill().values
+                        print(f"Temporarily interpolated {original_nan_mask.sum()} NaN values for smoothing")
+                    else:
+                        data_for_smoothing = data
+                    
+                    # Apply the selected smoothing method
+                    smoothed_result = None
+                    
                     if config["smooth_method"] == "savgol":
                         params = config["smooth_params"]
-                        df[col] = savgol_smooth(
-                            df[col].values, params["window_length"], params["polyorder"]
+                        smoothed_result = savgol_smooth(
+                            data_for_smoothing, params["window_length"], params["polyorder"]
                         )
                         print(
                             f"Applied Savitzky-Golay filter with window={params['window_length']}, order={params['polyorder']}"
@@ -3214,14 +3688,14 @@ def process_file(file_path, dest_dir, config):
 
                     elif config["smooth_method"] == "lowess":
                         params = config["smooth_params"]
-                        df[col] = lowess_smooth(df[col].values, params["frac"], params["it"])
+                        smoothed_result = lowess_smooth(data_for_smoothing, params["frac"], params["it"])
                         print(
                             f"Applied LOWESS smoothing with fraction={params['frac']}, iterations={params['it']}"
                         )
 
                     elif config["smooth_method"] == "kalman":
                         params = config["smooth_params"]
-                        df[col] = kalman_smooth(df[col].values, params["n_iter"], params["mode"])
+                        smoothed_result = kalman_smooth(data_for_smoothing, params["n_iter"], params["mode"])
                         print(
                             f"Applied Kalman filter with {params['n_iter']} iterations in {params['mode']} mode"
                         )
@@ -3229,47 +3703,33 @@ def process_file(file_path, dest_dir, config):
                     elif config["smooth_method"] == "butterworth":
                         params = config["smooth_params"]
                         try:
-                            data = df[col].to_numpy()  # Use to_numpy() instead of .values
-                            if np.isnan(data).any():
-                                print(
-                                    f"Warning: Column {col} contains NaN values. Interpolating before filtering..."
-                                )
-                                data = pd.Series(data).interpolate(method="linear").values
-
                             fs = float(params["fs"])
                             cutoff = float(params["cutoff"])
 
-                            # Garantir que a frequência de corte seja razoável
+                            # Ensure cutoff frequency is valid
                             if cutoff >= fs / 2:
                                 cutoff = fs / 2 - 1
                                 print(f"Warning: Adjusted cutoff frequency to {cutoff} Hz")
 
-                            # Usar a função butter_filter do filter_utils.py
-                            filtered = butter_filter(
-                                data,
+                            # Use butter_filter from filter_utils.py
+                            smoothed_result = butter_filter(
+                                data_for_smoothing,
                                 fs=fs,
                                 filter_type="low",
                                 cutoff=cutoff,
                                 order=4,
                                 padding=True,
                             )
-
-                            if not np.array_equal(
-                                np.array(filtered), np.array(data)
-                            ):  # Verificar se houve mudança
-                                df[col] = filtered
-                                print(f"Successfully filtered column {col}")
-                            else:
-                                print(f"Warning: No change detected after filtering column {col}")
+                            print(f"Applied Butterworth filter with cutoff={cutoff} Hz, fs={fs} Hz")
 
                         except Exception as e:
                             print(f"Error filtering column {col}: {str(e)}")
-                            # Manter dados originais em caso de erro
                             print("Keeping original data for this column")
+                            smoothed_result = data_for_smoothing
 
                     elif config["smooth_method"] == "splines":
                         params = config["smooth_params"]
-                        df[col] = spline_smooth(df[col].values, s=float(params["smoothing_factor"]))
+                        smoothed_result = spline_smooth(data_for_smoothing, s=float(params["smoothing_factor"]))
                         print(
                             f"Applied Spline smoothing with smoothing factor={params['smoothing_factor']}"
                         )
@@ -3277,13 +3737,37 @@ def process_file(file_path, dest_dir, config):
                     elif config["smooth_method"] == "arima":
                         params = config["smooth_params"]
                         order = (int(params["p"]), int(params["d"]), int(params["q"]))
-                        df[col] = arima_smooth(df[col].values, order=order)
+                        smoothed_result = arima_smooth(data_for_smoothing, order=order)
                         print(f"Applied ARIMA filter with order={order}")
+
+                    elif config["smooth_method"] == "median":
+                        params = config["smooth_params"]
+                        kernel_size = int(params.get("kernel_size", 5))
+                        smoothed_result = median_filter_smooth(data_for_smoothing, kernel_size=kernel_size)
+                        print(f"Applied Moving Median filter with kernel_size={kernel_size}")
+
+                    elif config["smooth_method"] == "hampel":
+                        params = config["smooth_params"]
+                        window_size = int(params.get("window_size", 7))
+                        n_sigmas = float(params.get("n_sigmas", 3))
+                        smoothed_result = hampel_filter(data_for_smoothing, window_size=window_size, n_sigmas=n_sigmas)
+                        print(f"Applied Hampel filter with window_size={window_size}, n_sigmas={n_sigmas}")
+                    
+                    # Apply the smoothed result
+                    if smoothed_result is not None:
+                        # Restore NaN positions for Skip mode
+                        if preserve_nans and original_nan_mask is not None and original_nan_mask.any():
+                            smoothed_result = np.asarray(smoothed_result).astype(float)
+                            smoothed_result[original_nan_mask.values] = np.nan
+                            print(f"Restored {original_nan_mask.sum()} NaN positions")
+                        
+                        df[col] = smoothed_result
 
                 except Exception as e:
                     error_msg = f"Error smoothing column {col}: {str(e)}"
                     print(error_msg)
                     file_info["warnings"].append(error_msg)
+
 
         # Remove padding
         print("\nRemoving padding")
