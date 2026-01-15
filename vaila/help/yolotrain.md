@@ -3,70 +3,100 @@
 ## 📋 Module Information
 
 - **Category:** Ml
-- **File:** `vaila\yolotrain.py`
-- **Lines:** 1195
-- **Size:** 44729 characters
-- **Version:** 0.0.4
+- **File:** `vaila/yolotrain.py`
+- **Lines:** 1170+
+- **Version:** 0.0.5
 - **Author:** Paulo Roberto Pereira Santiago
+- **Email:** paulosantiago@usp.br
+- **GitHub:** https://github.com/vaila-multimodaltoolbox/vaila
 - **GUI Interface:** ✅ Yes
 
 ## 📖 Description
 
+Simplified YOLO training interface specifically designed for AnyLabeling exports. Automatically detects AnyLabeling structure and creates minimal YAML files.
 
-Project: vailá Multimodal Toolbox
-Script: yolotrain.py - Yesplified AnyLabeling YOLO Trainer
+### Key Features
+- Support for **YOLO26** (latest), YOLO11, YOLOv9, and YOLOv8 models
+- Simplified interface for AnyLabeling YOLO format exports
+- Automatic YAML file generation with comprehensive options
+- GPU auto-detection (CUDA, MPS, CPU)
+- Model download management to `vaila/models/` directory
 
-Author: Paulo Roberto Pereira Santiago
-Email: paulosantiago@usp.br
-GitHub: https://github.com/vaila-multimodaltoolbox/vaila
-Creation Date: 24 May 2025
-Update Date: 09 June 2025
-Version: 0.0.4
+### Supported Models
 
-Description:
-    Yesplified YOLO training interface specifically designed for AnyLabeling exports.
-    Automatically detects AnyLabeling structure and creates minimal YAML files.
+#### YOLO26 (Recommended - 2026)
+- `yolo26n.pt` - Nano (fastest)
+- `yolo26s.pt` - Small
+- `yolo26m.pt` - Medium (default)
+- `yolo26l.pt` - Large
+- `yolo26x.pt` - XLarge (most accurate)
 
-Usage:
-    Run the script from the command line:
-        python yolotrain.py
+#### YOLO11
+- `yolo11n.pt`, `yolo11s.pt`, `yolo11m.pt`, `yolo11l.pt`, `yolo11x.pt`
 
-Requirements:
-    - Python 3.x
-    - Ultralytics YOLO
-    - Tkinter (for GUI operations)
+#### YOLOv9
+- `yolov9c.pt`, `yolov9s.pt`, `yolov9m.pt`, `yolov9l.pt`, `yolov9e.pt`
 
-License:
-    This project is licensed under the terms of GNU General Public License v3.0.
+#### YOLOv8
+- `yolov8n.pt`, `yolov8s.pt`, `yolov8m.pt`, `yolov8l.pt`, `yolov8x.pt`
 
-Change History:
-    - v0.0.4: Yesplified interface, AnyLabeling-focused, minimal YAML generation
-    - v0.0.3: Added support for AnyLabeling data, improved UI
-    - v0.0.2: Added validation and threading support
-    - v0.0.1: First version
+## Usage
 
+Run the script from the command line:
+```bash
+python yolotrain.py
+```
+
+## Requirements
+- Python 3.x
+- Ultralytics YOLO
+- Tkinter (for GUI operations)
+- PyTorch with CUDA support (optional, for GPU training)
 
 ## 🔧 Main Functions
 
-**Total functions found:** 11
+- `run_yolotrain_gui()` - Entry point for training GUI
+- `YOLOTrainApp` - Main application class
+- `create_widgets()` - Create GUI elements
+- `_update_model_list()` - Filter models by category (YOLO26, YOLO11, YOLOv8, YOLOv9)
+- `show_model_help()` - Show model selection guide
+- `show_anylabeling_help()` - Show AnyLabeling export guide
+- `browse_dataset()` - Browse for dataset folder
+- `browse_yaml()` / `create_new_yaml()` - YAML configuration
+- `start_training_thread()` - Start training in background thread
+- `_run_training()` - Execute YOLO training
+- `_show_model_characteristics()` - Display model info
 
-- `run_yolotrain_gui`
-- `write`
-- `flush`
-- `create_widgets`
-- `show_model_help`
-- `show_anylabeling_help`
-- `browse_dataset`
-- `browse_yaml`
-- `create_new_yaml`
-- `start_training_thread`
-- `show_completion`
+## 📁 Model Storage
 
+All models are downloaded to: `vaila/models/`
 
+This includes:
+- Pre-trained detection models
+- Pose estimation models
+- Segmentation models
+- OBB (Oriented Bounding Box) models
 
+## 🔬 Dataset Structure
+
+Expected AnyLabeling export structure:
+```
+your_dataset/
+├── train/
+│   ├── images/
+│   └── labels/
+├── val/
+│   ├── images/
+│   └── labels/
+├── test/ (optional)
+│   ├── images/
+│   └── labels/
+└── classes.txt
+```
 
 ---
 
-📅 **Generated automatically on:** 15/10/2025 08:04:44
-🔗 **Part of vailá - Multimodal Toolbox**
+📅 **Last Updated:** January 2026 (v0.0.5 - YOLO26 support, GPU auto-detection)  
+🔗 **Part of vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
+
