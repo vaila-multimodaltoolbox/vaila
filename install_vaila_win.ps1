@@ -118,7 +118,7 @@ Try {
 # COMMON FUNCTIONS (used by both methods)
 # ============================================================================
 
-function Create-DesktopShortcut {
+function New-DesktopShortcut {
     param(
         [string]$TargetPath,
         [string]$Arguments,
@@ -163,7 +163,7 @@ function Create-DesktopShortcut {
     Write-Host "Desktop shortcut for 'vaila' created at $desktopShortcutPath." -ForegroundColor Green
 }
 
-function Create-StartMenuShortcut {
+function New-StartMenuShortcut {
     param(
         [string]$TargetPath,
         [string]$Arguments,
@@ -455,7 +455,7 @@ function Install-WithUv {
     # Generate lock file
     Write-Host ""
     Write-Host "Generating lock file (uv.lock)..." -ForegroundColor Yellow
-    & uv lock
+    & uv lock --upgrade
 
     # Sync dependencies
     Write-Host ""
@@ -581,8 +581,8 @@ pause
     Setup-WindowsTerminalProfile -CommandLine $wtCommandLine -IconPath $wtIconPath
 
     # Create shortcuts
-    Create-DesktopShortcut -TargetPath "pwsh.exe" -Arguments "-ExecutionPolicy Bypass -NoExit -File `"$runScript`"" -WorkingDirectory $vailaProgramPath
-    Create-StartMenuShortcut -TargetPath "pwsh.exe" -Arguments "-ExecutionPolicy Bypass -NoExit -File `"$runScript`"" -WorkingDirectory $vailaProgramPath
+    New-DesktopShortcut -TargetPath "pwsh.exe" -Arguments "-ExecutionPolicy Bypass -NoExit -File `"$runScript`"" -WorkingDirectory $vailaProgramPath
+    New-StartMenuShortcut -TargetPath "pwsh.exe" -Arguments "-ExecutionPolicy Bypass -NoExit -File `"$runScript`"" -WorkingDirectory $vailaProgramPath
 
     return $runScript
 }
@@ -810,8 +810,8 @@ Read-Host
     Setup-WindowsTerminalProfile -CommandLine $wtCommandLine -IconPath $wtIconPath
 
     # Create shortcuts
-    Create-DesktopShortcut -TargetPath "pwsh.exe" -Arguments "-ExecutionPolicy Bypass -NoExit -Command `"& `'$condaPath\shell\condabin\conda-hook.ps1`'; conda activate `'vaila`'; cd `'$vailaProgramPath`'; python `'vaila.py`'`"" -IconPath "$vailaProgramPath\docs\images\vaila_ico.ico" -WorkingDirectory $vailaProgramPath
-    Create-StartMenuShortcut -TargetPath "pwsh.exe" -Arguments "-ExecutionPolicy Bypass -NoExit -Command `"& `'$condaPath\shell\condabin\conda-hook.ps1`'; conda activate `'vaila`'; cd `'$vailaProgramPath`'; python `'vaila.py`'`"" -IconPath "$vailaProgramPath\docs\images\vaila_ico.ico" -WorkingDirectory $vailaProgramPath
+    New-DesktopShortcut -TargetPath "pwsh.exe" -Arguments "-ExecutionPolicy Bypass -NoExit -Command `"& `'$condaPath\shell\condabin\conda-hook.ps1`'; conda activate `'vaila`'; cd `'$vailaProgramPath`'; python `'vaila.py`'`"" -IconPath "$vailaProgramPath\docs\images\vaila_ico.ico" -WorkingDirectory $vailaProgramPath
+    New-StartMenuShortcut -TargetPath "pwsh.exe" -Arguments "-ExecutionPolicy Bypass -NoExit -Command `"& `'$condaPath\shell\condabin\conda-hook.ps1`'; conda activate `'vaila`'; cd `'$vailaProgramPath`'; python `'vaila.py`'`"" -IconPath "$vailaProgramPath\docs\images\vaila_ico.ico" -WorkingDirectory $vailaProgramPath
 
     # Adjust site-packages permissions
     $vailaSitePackagesDir = Join-Path $condaPath "envs\vaila\Lib\site-packages"

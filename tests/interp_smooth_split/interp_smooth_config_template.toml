@@ -28,14 +28,20 @@
 #   - kalman: predictive filling (advanced)
 #   - none: leave gaps as NaN
 #   - skip: do not fill gaps, only apply smoothing
+#   - hampel: robust spike removal before linear interpolation
 method = "linear"
 # Maximum gap size to fill (in frames).
 # 0 = fill all gaps, 60 = fill up to 2 seconds at 30fps.
 max_gap = 60
+#
+# --- Parameters for Interpolation Methods ---
+# Hampel Filter (hampel):
+window_size = 7      # Window size (must be odd, e.g. 5, 7, 9)
+n_sigmas = 3.0       # Threshold in MAD units (e.g. 3.0)
 
 [smoothing]
 # Method for smoothing the data after filling gaps.
-# Options: "none", "savgol", "lowess", "kalman", "butterworth", "splines", "arima"
+# Options: "none", "savgol", "lowess", "kalman", "butterworth", "splines", "arima", "median"
 #   - none: no smoothing
 #   - savgol: Savitzky-Golay filter (preserves peaks)
 #   - lowess: Local regression (for noisy data)
@@ -43,6 +49,7 @@ max_gap = 60
 #   - butterworth: Butterworth filter (biomechanics standard)
 #   - splines: Spline smoothing (very smooth curves)
 #   - arima: ARIMA model (time series)
+#   - median: Moving Median filter (impulsive noise removal)
 method = "none"
 #
 # --- Parameters for each smoothing method (only the relevant ones are used) ---
@@ -64,6 +71,8 @@ smoothing_factor = 1.0   # 0 = no smoothing, 1 = moderate, 10+ = strong
 p = 1                # AR order
 d = 0                # Difference order
 q = 0                # MA order
+# Moving Median (median):
+kernel_size = 5      # Window size (must be odd, e.g. 5, 7, 11)
 
 [padding]
 # Add extra frames at the start and end to avoid edge effects.
