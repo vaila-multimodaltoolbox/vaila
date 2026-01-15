@@ -55,6 +55,10 @@ Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion
 Name: "{autoprograms}\{#MyAppName}\{#MyAppName}"; Filename: "pwsh.exe"; Parameters: "-ExecutionPolicy Bypass -NoExit -File ""{app}\run_vaila.ps1"""; IconFilename: "{app}\docs\images\vaila_ico.ico"; WorkingDir: "{app}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "pwsh.exe"; Parameters: "-ExecutionPolicy Bypass -NoExit -File ""{app}\run_vaila.ps1"""; IconFilename: "{app}\docs\images\vaila_ico.ico"; WorkingDir: "{app}"
 
+[Dirs]
+; Allow users to modify files in the installation directory (needed for uv to manage .venv)
+Name: "{app}"; Permissions: users-modify
+
 [Run]
 ; Execute the PowerShell installation script with administrator privileges
 ; Use -File instead of -Command for better reliability with paths containing spaces
@@ -104,7 +108,7 @@ begin
       '# Automatically created by the installer' + #13#10 + #13#10 +
       'try {' + #13#10 +
       '    Set-Location "' + ExpandConstant('{app}') + '"' + #13#10 +
-      '    & uv run "' + ExpandConstant('{app}') + '\vaila.py"' + #13#10 +
+      '    & uv run --no-sync "' + ExpandConstant('{app}') + '\vaila.py"' + #13#10 +
       '} catch {' + #13#10 +
       '    Write-Host "Error: Could not start vaila. Please ensure uv is properly installed." -ForegroundColor Red' + #13#10 +
       '    Write-Host "You can run the installation script again: install_vaila_win.ps1" -ForegroundColor Yellow' + #13#10 +
