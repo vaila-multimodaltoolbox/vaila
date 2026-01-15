@@ -482,7 +482,7 @@ install_with_uv() {
     # Generate lock file
     echo ""
     echo "Generating lock file (uv.lock)..."
-    uv lock
+    uv lock --upgrade
 
     # Sync dependencies
     echo ""

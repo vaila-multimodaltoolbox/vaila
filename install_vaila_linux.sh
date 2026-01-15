@@ -409,7 +409,7 @@ install_with_uv() {
     # Generate lock file
     echo ""
     echo "Generating lock file (uv.lock)..."
-    uv lock
+    uv lock --upgrade
 
     # Install Cairo dependencies BEFORE uv sync (needed for pycairo compilation)
     echo ""
