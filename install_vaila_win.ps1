@@ -212,7 +212,7 @@ function New-StartMenuShortcut {
     Write-Host "Start Menu shortcut for 'vaila' created at $startMenuShortcutPath." -ForegroundColor Green
 }
 
-function Setup-WindowsTerminalProfile {
+function Set-WindowsTerminalProfile {
     param(
         [string]$CommandLine,
         [string]$IconPath
@@ -406,18 +406,23 @@ function Install-WithUv {
         Write-Host "Setting permissions for installation directory..." -ForegroundColor Yellow
         Try {
             $acl = Get-Acl $vailaProgramPath
-            $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
-            $permission = $currentUser, "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow"
+            # Grant FullControl to 'Users' group so standard users can update .venv and run uv
+            $userGroup = "BUILTIN\Users"
+            $permission = $userGroup, "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow"
             $accessRule = New-Object System.Security.AccessControl.FileSystemAccessRule $permission
-            $acl.SetAccessRule($accessRule)
+            $acl.AddAccessRule($accessRule)
+            
+            # Ensure Administrators also have full control
             $adminGroup = "BUILTIN\Administrators"
             $adminPermission = $adminGroup, "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow"
             $adminAccessRule = New-Object System.Security.AccessControl.FileSystemAccessRule $adminPermission
-            $acl.SetAccessRule($adminAccessRule)
+            $acl.AddAccessRule($adminAccessRule)
+            
             Set-Acl $vailaProgramPath $acl
-            Write-Host "Permissions set successfully." -ForegroundColor Green
+            Write-Host "Permissions set successfully (Users group granted FullControl)." -ForegroundColor Green
         } Catch {
-            Write-Warning "Could not set permissions. Continuing anyway..."
+            Write-Warning "Could not set permissions: $_"
+            Write-Warning "You may need to manually grant 'Full Control' to 'Users' for '$vailaProgramPath'"
         }
     }
 
@@ -578,7 +583,7 @@ pause
 
     # Setup Windows Terminal profile
     $wtCommandLine = "pwsh.exe -ExecutionPolicy Bypass -NoExit -File `"$runScript`""
-    Setup-WindowsTerminalProfile -CommandLine $wtCommandLine -IconPath $wtIconPath
+    Set-WindowsTerminalProfile -CommandLine $wtCommandLine -IconPath $wtIconPath
 
     # Create shortcuts
     New-DesktopShortcut -TargetPath "pwsh.exe" -Arguments "-ExecutionPolicy Bypass -NoExit -File `"$runScript`"" -WorkingDirectory $vailaProgramPath
@@ -807,7 +812,7 @@ Read-Host
 
     # Setup Windows Terminal profile
     $wtCommandLine = "pwsh.exe -ExecutionPolicy Bypass -NoExit -Command `"& `'$condaPath\shell\condabin\conda-hook.ps1`'; conda activate `'vaila`'; cd `'$vailaProgramPath`'; python `'vaila.py`'`""
-    Setup-WindowsTerminalProfile -CommandLine $wtCommandLine -IconPath $wtIconPath
+    Set-WindowsTerminalProfile -CommandLine $wtCommandLine -IconPath $wtIconPath
 
     # Create shortcuts
     New-DesktopShortcut -TargetPath "pwsh.exe" -Arguments "-ExecutionPolicy Bypass -NoExit -Command `"& `'$condaPath\shell\condabin\conda-hook.ps1`'; conda activate `'vaila`'; cd `'$vailaProgramPath`'; python `'vaila.py`'`"" -IconPath "$vailaProgramPath\docs\images\vaila_ico.ico" -WorkingDirectory $vailaProgramPath
