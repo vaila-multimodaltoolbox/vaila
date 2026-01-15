@@ -21,8 +21,8 @@
 #                                                                                       #
 # Author: Prof. Dr. Paulo R. P. Santiago                                                #
 # Creation: September 17, 2024                                                          #
-# Updated: 12 January 2026                                                              #
-# Version: 0.3.1                                                                        #
+# Updated: 15 January 2026                                                              #
+# Version: 0.3.12                                                                        #
 # OS: Ubuntu, Kubuntu, Linux Mint, Pop_OS!, Zorin OS, etc. (Debian-based)             #
 #########################################################################################
 
@@ -424,7 +424,15 @@ install_with_uv() {
     echo ""
     echo "Installing vaila dependencies with uv..."
     echo "This may take a few minutes on first run..."
-    uv sync
+    
+    # Check for NVIDIA GPU for dependency installation
+    EXTRAS=""
+    if command -v nvidia-smi &> /dev/null && nvidia-smi &> /dev/null; then
+        echo "NVIDIA GPU detected. Including 'gpu' extra dependencies (TensorRT)..."
+        EXTRAS="--extra gpu"
+    fi
+
+    uv sync $EXTRAS
 
     # Detect NVIDIA GPU
     echo ""
