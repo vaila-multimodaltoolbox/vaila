@@ -17,9 +17,9 @@
         - Can run without administrator privileges (some features may be skipped)
     Author: Prof. Dr. Paulo R. P. Santiago
     Creation: 17 December 2024
-    Updated: 11 January 2026
-    Version: 0.3.0
-    OS: Windows 10/11
+    Updated: 15 January 2026    
+    Version: 0.3.12
+    OS: Windows 11
     Reference: https://docs.astral.sh/uv/
 #>
 
@@ -466,7 +466,16 @@ function Install-WithUv {
     Write-Host ""
     Write-Host "Installing vaila dependencies with uv..." -ForegroundColor Yellow
     Write-Host "This may take a few minutes on first run..." -ForegroundColor Yellow
-    & uv sync
+
+    # Check for NVIDIA GPU / Ask user about GPU support for TensorRT
+    $extras = ""
+    # Simple check if nvidia-smi is available
+    If (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
+         Write-Host "NVIDIA GPU tools detected. Including 'gpu' extra dependencies (TensorRT)..." -ForegroundColor Green
+         $extras = "--extra gpu"
+    }
+
+    & uv sync $extras
 
     # Prompt user about installing PyTorch/YOLO stack
     Write-Host ""

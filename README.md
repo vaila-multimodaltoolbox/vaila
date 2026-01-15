@@ -259,6 +259,8 @@ vaila
 - **Simplicity:** You no longer *need* to pre-install Anaconda or Miniconda manually.
 - **Reliability:** Uses a strictly locked dependency file (`uv.lock`) ensuring that what runs on our machine runs on yours.
 - **Modern:** Built with Rust, following Python packaging standards (`pyproject.toml`).
+- **Dynamic Hardware Optimization**: Automatically detects hardware (RTX 4090 vs Laptop) and optimizes models using TensorRT.
+- **Cross-Platform**: Full support for **Windows**, **Linux**, and **macOS** (Apple Silicon).
 
 **Note:** Conda installation methods are still available but are now considered legacy due to slower installation and execution times.
 
@@ -599,6 +601,21 @@ run_vaila.bat
 - The launch scripts (`run_vaila.sh`, `run_vaila.ps1`, `run_vaila.bat`) are automatically created during installation.
 - These scripts work with both installation methods (uv and conda).
 - The scripts are located in the installation directory (`~/vaila` on Linux/macOS, or the Program Files/user directory on Windows).
+
+---
+
+## ⚡ GPU Support & Optimization
+
+*vailá* includes a **HardwareManager** that automatically optimizes performance for your specific computer.
+
+- **Auto-Export**: The first time you run a model, *vailá* builds a custom `.engine` file for your GPU.
+  - *Note*: This process takes 2-5 minutes on the first run.
+- **Cross-Platform**: 
+  - On **Windows**, it uses `trtexec.exe` to build Windows-compatible engines.
+  - On **Linux**, it builds Linux-compatible engines.
+  - Both can coexist in the same folder if you dual-boot.
+- **Profiles**:
+  - **The toolbox automatically selects valid settings (Workspace size, Precision) based on your VRAM.**
 
 ---
 
