@@ -88,6 +88,17 @@ import torch
 # --- NEW IMPORTS FOR THE TASKS API (MediaPipe 0.10.31+) ---
 import ultralytics
 from ultralytics import YOLO
+# Handle imports for both package and script execution
+try:
+    from .HardwareManager import HardwareManager
+except ImportError:
+    import sys
+    from pathlib import Path
+    # Add the current directory to sys.path to allow absolute import
+    current_dir = str(Path(__file__).parent.resolve())
+    if current_dir not in sys.path:
+        sys.path.append(current_dir)
+    from HardwareManager import HardwareManager
 import toml
 import webbrowser
 
@@ -959,60 +970,37 @@ def download_or_load_yolo_model(model_name=None):
     try:
         print(f"Loading YOLO model {model_name} for maximum accuracy...")
         print(f"Models directory: {models_dir}")
-
-        # Check if model exists in project models directory
-        if model_path.exists():
-            print(f"Found local model at {model_path}")
-            model = YOLO(str(model_path), verbose=False)
+        
+        # Initialize HardwareManager for dynamic optimization
+        hw = HardwareManager()
+        
+        # Use auto_export to get the best model (Engine or PT) for this hardware
+        optimized_model_path = hw.auto_export(model_name)
+        
+        print(f"🚀 OPTIMIZED MODEL: Loading tailored model from {optimized_model_path}")
+        model = YOLO(str(optimized_model_path), task="pose")
+        
+        # Only move to device if it's a PyTorch model (engines handle this internally)
+        if str(optimized_model_path).endswith(".pt"):
+            model.to(device)
+            print(f"YOLO model loaded successfully on {device}")
         else:
-            # Download the model using the same method as markerless_live.py
-            downloaded_path = download_yolo_model(model_name)
-
-            if downloaded_path and os.path.exists(downloaded_path):
-                print(f"Loading downloaded model from {downloaded_path}")
-                model = YOLO(downloaded_path, verbose=False)
-            else:
-                # If download failed, try to use YOLO's automatic download
-                print("Attempting to use YOLO's automatic download...")
-                model = YOLO(model_name, verbose=False)
-                # Try to save it after loading
-                try:
-                    if hasattr(model, "ckpt_path") and model.ckpt_path:
-                        source = Path(model.ckpt_path)
-                        if source.exists():
-                            shutil.copy2(str(source), str(model_path))
-                            print(f"Model saved to {model_path}")
-                except Exception:
-                    pass
-
-        # Configure for GPU or CPU
-        model.to(device)
-        print(f"YOLO model loaded successfully on {device}")
+            print(f"TensorRT Engine loaded successfully (Auto-Device)")
 
         return model
     except Exception as e:
         print(f"Error loading YOLO model: {e}")
         # Try fallback to a lighter model
         try:
-            # Try fallback to nano pose model
             print("Trying fallback to yolo11n-pose.pt (nano - smaller model)...")
             fallback_name = "yolo11n-pose.pt"
-            fallback_path = models_dir / fallback_name
-
-            if fallback_path.exists():
-                print(f"Found fallback model at {fallback_path}")
-                model = YOLO(str(fallback_path), verbose=False)
-            else:
-                # Download fallback model
-                downloaded_path = download_yolo_model(fallback_name)
-
-                if downloaded_path and os.path.exists(downloaded_path):
-                    model = YOLO(downloaded_path, verbose=False)
-                else:
-                    model = YOLO(fallback_name, verbose=False)
-
-            model.to(device)
-            print(f"Fallback YOLO model loaded successfully on {device}")
+            # Attempt auto-export on fallback too
+            optimized_fallback = hw.auto_export(fallback_name)
+            model = YOLO(str(optimized_fallback), task="pose")
+            
+            if str(optimized_fallback).endswith(".pt"):
+                model.to(device)
+            print(f"Fallback YOLO model loaded successfully")
             return model
         except Exception as e2:
             print(f"Failed to load any YOLO model: {e2}")
