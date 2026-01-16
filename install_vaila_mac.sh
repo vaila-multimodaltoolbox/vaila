@@ -462,6 +462,15 @@ install_with_uv() {
 
     cd "$VAILA_HOME"
 
+    # Remove incompatible GPU dependencies (tensorrt, nvidia-ml-py) for macOS
+    # This ensures uv doesn't try to build/install them, while keeping the original pyproject.toml intact for other OSs
+    echo "Configuring dependencies for macOS..."
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        sed -i '' '/tensorrt/d' pyproject.toml
+        sed -i '' '/nvidia-ml-py/d' pyproject.toml
+        echo "Removed Linux/Windows-only GPU dependencies from local configuration."
+    fi
+
     # Initialize uv project
     echo ""
     echo "Initializing uv project..."
