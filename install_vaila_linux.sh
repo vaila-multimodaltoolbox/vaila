@@ -429,7 +429,7 @@ install_with_uv() {
     EXTRAS=""
     if command -v nvidia-smi &> /dev/null && nvidia-smi &> /dev/null; then
         echo "NVIDIA GPU detected. Including 'gpu' extra dependencies (TensorRT)..."
-        EXTRAS="--extra gpu"
+        EXTRAS="--extra=gpu"
     fi
 
     uv sync $EXTRAS

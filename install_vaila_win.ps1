@@ -56,7 +56,8 @@ If ($isAdmin) {
     $vailaProgramPath = "${env:ProgramFiles}\vaila"
     Write-Host "Installation location: $vailaProgramPath" -ForegroundColor Green
     Write-Host "(Administrator privileges detected - using Program Files)" -ForegroundColor Green
-} Else {
+}
+Else {
     $vailaProgramPath = "$env:USERPROFILE\vaila"
     Write-Host "Installation location: $vailaProgramPath" -ForegroundColor Yellow
     Write-Host "(No administrator privileges - using user directory)" -ForegroundColor Yellow
@@ -101,7 +102,8 @@ Try {
             Write-Host "Continuing anyway, but installation may fail..." -ForegroundColor Yellow
         }
     }
-} Catch {
+}
+Catch {
     Write-Warning "Could not check disk space. Continuing anyway..."
 }
 
@@ -110,7 +112,8 @@ Write-Host "Checking internet connectivity..." -ForegroundColor Yellow
 Try {
     $null = Invoke-WebRequest -Uri "https://www.google.com" -TimeoutSec 5 -UseBasicParsing
     Write-Host "Internet connection available." -ForegroundColor Green
-} Catch {
+}
+Catch {
     Write-Warning "No internet connection detected. Some features may not work properly."
 }
 
@@ -152,9 +155,11 @@ function New-DesktopShortcut {
     If ($iconFile) {
         $desktopShortcut.IconLocation = "$iconFile,0"
         Write-Host "Using icon: $iconFile" -ForegroundColor Green
-    } ElseIf ($IconPath) {
+    }
+    ElseIf ($IconPath) {
         $desktopShortcut.IconLocation = "$IconPath,0"
-    } Else {
+    }
+    Else {
         Write-Warning "Icon file not found. Shortcut will use default icon."
     }
     
@@ -174,7 +179,8 @@ function New-StartMenuShortcut {
     Write-Host "Creating Start Menu shortcut for 'vaila'..." -ForegroundColor Yellow
     If ($isAdmin) {
         $startMenuPath = "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\vaila"
-    } Else {
+    }
+    Else {
         $startMenuPath = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\vaila"
     }
     If (-Not (Test-Path $startMenuPath)) {
@@ -203,7 +209,8 @@ function New-StartMenuShortcut {
     }
     If ($iconFile) {
         $startMenuShortcut.IconLocation = "$iconFile,0"
-    } ElseIf ($IconPath) {
+    }
+    ElseIf ($IconPath) {
         $startMenuShortcut.IconLocation = "$IconPath,0"
     }
     
@@ -235,11 +242,11 @@ function Set-WindowsTerminalProfile {
 
             # Add new 'vaila' profile
             $vailaProfile = @{
-                name = "vaila"
-                commandline = $CommandLine
+                name              = "vaila"
+                commandline       = $CommandLine
                 startingDirectory = "$vailaProgramPath"
-                guid = "{17ce5bfe-17ed-5f3a-ab15-5cd5baafed5b}"
-                hidden = $false
+                guid              = "{17ce5bfe-17ed-5f3a-ab15-5cd5baafed5b}"
+                hidden            = $false
             }
             # Add icon only if found
             If ($IconPath -and (Test-Path $IconPath)) {
@@ -249,7 +256,8 @@ function Set-WindowsTerminalProfile {
             $settingsJson.profiles.list += $vailaProfile
             $settingsJson | ConvertTo-Json -Depth 100 | Out-File -FilePath $settingsPath -Encoding UTF8
             Write-Host "'vaila' profile added to Windows Terminal successfully." -ForegroundColor Green
-        } Else {
+        }
+        Else {
             Write-Host "Windows Terminal settings.json not found. Skipping profile setup." -ForegroundColor Yellow
         }
     }
@@ -290,7 +298,8 @@ function Install-WithUv {
                         $uvInstalledSuccessfully = $true
                         Write-Host "uv installed successfully via winget!" -ForegroundColor Green
                     }
-                } Catch {
+                }
+                Catch {
                     Write-Host "winget installation failed, trying official installer..." -ForegroundColor Yellow
                 }
             }
@@ -311,18 +320,21 @@ function Install-WithUv {
                     Exit 1
                 }
                 Write-Host "uv installed successfully!" -ForegroundColor Green
-            } Catch {
+            }
+            Catch {
                 Write-Error "Failed to install uv. Please install manually."
                 Exit 1
             }
         }
-    } Else {
+    }
+    Else {
         Write-Host "uv is already installed." -ForegroundColor Green
         Write-Host "Updating uv..." -ForegroundColor Yellow
         Try {
             & uv self update
             Write-Host "uv updated successfully." -ForegroundColor Green
-        } Catch {
+        }
+        Catch {
             Write-Warning "Failed to update uv. Continuing with current version."
         }
     }
@@ -341,10 +353,12 @@ function Install-WithUv {
             Write-Host "Python 3.12.12 not found. Installing via uv..." -ForegroundColor Yellow
             & uv python install 3.12.12
             Write-Host "Python 3.12.12 installed successfully." -ForegroundColor Green
-        } Else {
+        }
+        Else {
             Write-Host "Python 3.12.12 found." -ForegroundColor Green
         }
-    } Catch {
+    }
+    Catch {
         Write-Warning "Could not verify Python 3.12.12 installation. Continuing..."
     }
 
@@ -358,14 +372,16 @@ function Install-WithUv {
     If ($isAlreadyInstalled) {
         Write-Host "Script is running from installation directory. Files are already in place." -ForegroundColor Green
         Write-Host "Skipping file copy step." -ForegroundColor Green
-    } Else {
+    }
+    Else {
         # Clean destination directory and copy files
         Write-Host ""
         If (Test-Path $vailaProgramPath) {
             Write-Host "Updating existing vaila installation in $vailaProgramPath..." -ForegroundColor Yellow
             Write-Host "Removing old files (keeping .venv to be recreated)..." -ForegroundColor Yellow
             Get-ChildItem -Path $vailaProgramPath -Exclude ".venv" | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-        } Else {
+        }
+        Else {
             Write-Host "Installing vaila to $vailaProgramPath..." -ForegroundColor Yellow
             New-Item -ItemType Directory -Force -Path $vailaProgramPath | Out-Null
         }
@@ -386,7 +402,8 @@ function Install-WithUv {
             $targetPath = Join-Path $vailaProgramPath $_.Name
             If ($_.PSIsContainer) {
                 Copy-Item -Path $_.FullName -Destination $targetPath -Recurse -Force -Exclude $excludeItems
-            } Else {
+            }
+            Else {
                 Copy-Item -Path $_.FullName -Destination $targetPath -Force
             }
         }
@@ -420,7 +437,8 @@ function Install-WithUv {
             
             Set-Acl $vailaProgramPath $acl
             Write-Host "Permissions set successfully (Users group granted FullControl)." -ForegroundColor Green
-        } Catch {
+        }
+        Catch {
             Write-Warning "Could not set permissions: $_"
             Write-Warning "You may need to manually grant 'Full Control' to 'Users' for '$vailaProgramPath'"
         }
@@ -440,7 +458,8 @@ function Install-WithUv {
         Write-Host "Virtual environment already exists. Removing old one..." -ForegroundColor Yellow
         Try {
             Remove-Item -Path ".venv" -Recurse -Force -ErrorAction Stop
-        } Catch {
+        }
+        Catch {
             Write-Warning "Could not remove existing .venv. Attempting to create new .venv anyway..."
         }
     }
@@ -452,7 +471,8 @@ function Install-WithUv {
             Exit 1
         }
         Write-Host "Virtual environment created successfully." -ForegroundColor Green
-    } Catch {
+    }
+    Catch {
         Write-Error "Failed to create virtual environment: $_"
         Exit 1
     }
@@ -468,11 +488,11 @@ function Install-WithUv {
     Write-Host "This may take a few minutes on first run..." -ForegroundColor Yellow
 
     # Check for NVIDIA GPU / Ask user about GPU support for TensorRT
-    $extras = ""
+    $extras = @()
     # Simple check if nvidia-smi is available
     If (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
-         Write-Host "NVIDIA GPU tools detected. Including 'gpu' extra dependencies (TensorRT)..." -ForegroundColor Green
-         $extras = "--extra gpu"
+        Write-Host "NVIDIA GPU tools detected. Including 'gpu' extra dependencies (TensorRT)..." -ForegroundColor Green
+        $extras = @("--extra=gpu")
     }
 
     & uv sync $extras
@@ -507,17 +527,20 @@ function Install-WithUv {
                 & uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
                 $pytorchInstalled = $true
                 Write-Host "PyTorch with CUDA installed successfully." -ForegroundColor Green
-            } Catch {
+            }
+            Catch {
                 Write-Warning "Failed to install CUDA-enabled PyTorch."
             }
-        } Else {
+        }
+        Else {
             Write-Host ""
             Write-Host "Installing CPU-only PyTorch..." -ForegroundColor Yellow
             Try {
                 & uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
                 $pytorchInstalled = $true
                 Write-Host "CPU-only PyTorch installed successfully." -ForegroundColor Green
-            } Catch {
+            }
+            Catch {
                 Write-Warning "Failed to install CPU-only PyTorch."
             }
         }
@@ -528,7 +551,8 @@ function Install-WithUv {
             Try {
                 & uv pip install ultralytics boxmot
                 Write-Host "YOLO dependencies installed successfully." -ForegroundColor Green
-            } Catch {
+            }
+            Catch {
                 Write-Warning "Failed to install YOLO dependencies."
             }
         }
@@ -540,12 +564,14 @@ function Install-WithUv {
     Try {
         & uv pip install pycairo
         Write-Host "pycairo installed successfully." -ForegroundColor Green
-    } Catch {
+    }
+    Catch {
         Write-Warning "pycairo installation failed. Trying with force-reinstall..."
         Try {
             & uv pip install --force-reinstall --no-cache-dir pycairo
             Write-Host "pycairo installed successfully." -ForegroundColor Green
-        } Catch {
+        }
+        Catch {
             Write-Warning "pycairo installation failed. This may cause issues with the application."
         }
     }
@@ -633,7 +659,8 @@ function Install-WithConda {
         conda update conda -y
         conda update --all -y
         Write-Host "Conda and base packages updated." -ForegroundColor Green
-    } Catch {
+    }
+    Catch {
         Write-Warning "Failed to update conda or packages. Continuing anyway."
     }
 
@@ -668,10 +695,12 @@ function Install-WithConda {
             Try {
                 & conda env update -f "$vailaProgramPath\yaml_for_conda_env\vaila_win.yaml"
                 Write-Host "Environment updated successfully." -ForegroundColor Green
-            } Catch {
+            }
+            Catch {
                 Write-Warning "Failed to update environment from YAML. Continuing anyway."
             }
-        } Else {
+        }
+        Else {
             Write-Host ""
             Write-Host "Selected: RESET - Creating fresh environment" -ForegroundColor Green
             Write-Host "Removing old 'vaila' environment..."
@@ -679,7 +708,8 @@ function Install-WithConda {
                 conda deactivate
                 conda env remove -n vaila -y
                 Write-Host "Old 'vaila' environment removed successfully." -ForegroundColor Green
-            } Catch {
+            }
+            Catch {
                 Write-Warning "Could not remove old environment. Continuing anyway."
             }
             
@@ -690,12 +720,14 @@ function Install-WithConda {
                 Write-Host "Creating 'vaila' environment from YAML..." -ForegroundColor Yellow
                 & conda env create -f "$vailaProgramPath\yaml_for_conda_env\vaila_win.yaml"
                 Write-Host "'vaila' environment created successfully." -ForegroundColor Green
-            } Catch {
+            }
+            Catch {
                 Write-Error "Failed to create the 'vaila' environment."
                 Exit 1
             }
         }
-    } Else {
+    }
+    Else {
         Write-Host "'vaila' environment does not exist. Creating new environment..." -ForegroundColor Yellow
         
         Write-Host "Cleaning conda cache..." -ForegroundColor Yellow
@@ -705,7 +737,8 @@ function Install-WithConda {
             Write-Host "Creating 'vaila' environment from YAML..." -ForegroundColor Yellow
             & conda env create -f "$vailaProgramPath\yaml_for_conda_env\vaila_win.yaml"
             Write-Host "'vaila' environment created successfully." -ForegroundColor Green
-        } Catch {
+        }
+        Catch {
             Write-Error "Failed to create the 'vaila' environment."
             Exit 1
         }
@@ -717,10 +750,12 @@ function Install-WithConda {
         Try {
             conda install pytorch torchvision torchaudio pytorch-cuda -c pytorch -c nvidia -n vaila -y
             Write-Host "PyTorch with CUDA support installed successfully." -ForegroundColor Green
-        } Catch {
+        }
+        Catch {
             Write-Warning "Failed to install PyTorch with CUDA support."
         }
-    } Else {
+    }
+    Else {
         Write-Host "No NVIDIA GPU detected. Skipping PyTorch with CUDA installation." -ForegroundColor Yellow
     }
 
@@ -730,7 +765,8 @@ function Install-WithConda {
     If (Test-Path $vailaProgramPath) {
         Write-Host "Removing existing files from destination directory..." -ForegroundColor Yellow
         Get-ChildItem -Path $vailaProgramPath -Recurse -Force | Remove-Item -Force -Recurse
-    } Else {
+    }
+    Else {
         New-Item -ItemType Directory -Force -Path $vailaProgramPath | Out-Null
     }
     Get-ChildItem -Path $sourcePath -Recurse -Force | Where-Object {
@@ -742,7 +778,8 @@ function Install-WithConda {
             if (-not (Test-Path $target)) {
                 New-Item -ItemType Directory -Force -Path $target | Out-Null
             }
-        } else {
+        }
+        else {
             Copy-Item -Path $_.FullName -Destination $target -Force
         }
     }
@@ -754,7 +791,8 @@ function Install-WithConda {
     # Activate vaila environment
     If ($choice -eq "1") {
         Write-Host "Environment already activated for UPDATE mode." -ForegroundColor Green
-    } Else {
+    }
+    Else {
         Write-Host "Activating 'vaila' environment..." -ForegroundColor Yellow
         conda activate vaila
     }
@@ -765,7 +803,8 @@ function Install-WithConda {
         python -m pip install --upgrade pip
         pip install --upgrade mediapipe moviepy
         Write-Host "pip, mediapipe, and moviepy installed/upgraded successfully." -ForegroundColor Green
-    } Catch {
+    }
+    Catch {
         Write-Warning "Error upgrading pip or pip dependencies."
     }
 
@@ -774,12 +813,14 @@ function Install-WithConda {
     Try {
         pip install pycairo
         Write-Host "pycairo installed successfully." -ForegroundColor Green
-    } Catch {
+    }
+    Catch {
         Write-Warning "pycairo installation failed. Trying with force-reinstall..."
         Try {
             pip install --force-reinstall --no-cache-dir pycairo
             Write-Host "pycairo installed successfully." -ForegroundColor Green
-        } Catch {
+        }
+        Catch {
             Write-Warning "pycairo installation failed. This may cause issues with the application."
         }
     }
@@ -834,7 +875,8 @@ Read-Host
         Try {
             Start-Process "icacls.exe" -ArgumentList "`"$vailaSitePackagesDir`" /grant Users:(OI)(CI)F /T" -Wait -NoNewWindow
             Write-Host "Permissions successfully adjusted." -ForegroundColor Green
-        } Catch {
+        }
+        Catch {
             Write-Warning "Failed to adjust permissions."
         }
     }
@@ -849,7 +891,8 @@ Read-Host
 # Execute installation based on chosen method
 If ($installMethod -eq "1") {
     $runScript = Install-WithUv
-} Else {
+}
+Else {
     $runScript = Install-WithConda
 }
 
@@ -861,16 +904,19 @@ Write-Host "Checking/installing system dependencies (FFmpeg, Windows Terminal, r
 $ffmpegInstalled = Get-Command ffmpeg -ErrorAction SilentlyContinue
 If ($ffmpegInstalled) {
     Write-Host "FFmpeg is already installed." -ForegroundColor Green
-} Else {
+}
+Else {
     If ($isAdmin) {
         Write-Host "FFmpeg is not installed. Installing via winget..." -ForegroundColor Yellow
         Try {
             & winget install --id Gyan.FFmpeg -e --source winget --silent
             Write-Host "FFmpeg installed successfully." -ForegroundColor Green
-        } Catch {
+        }
+        Catch {
             Write-Warning "Failed to install FFmpeg via winget."
         }
-    } Else {
+    }
+    Else {
         Write-Host "FFmpeg is not installed. Administrator privileges required for installation." -ForegroundColor Yellow
     }
 }
@@ -879,16 +925,19 @@ If ($ffmpegInstalled) {
 $wtInstalled = Get-Command wt.exe -ErrorAction SilentlyContinue
 If ($wtInstalled) {
     Write-Host "Windows Terminal is already installed." -ForegroundColor Green
-} Else {
+}
+Else {
     If ($isAdmin) {
         Write-Host "Windows Terminal is not installed. Installing via winget..." -ForegroundColor Yellow
         Try {
             & winget install --id Microsoft.WindowsTerminal -e --source winget --silent
             Write-Host "Windows Terminal installed successfully." -ForegroundColor Green
-        } Catch {
+        }
+        Catch {
             Write-Warning "Failed to install Windows Terminal via winget."
         }
-    } Else {
+    }
+    Else {
         Write-Host "Windows Terminal is not installed. Administrator privileges required for installation." -ForegroundColor Yellow
     }
 }
@@ -907,7 +956,8 @@ If ($isAdmin) {
                 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
                 Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
                 Write-Host "Chocolatey installed successfully." -ForegroundColor Green
-            } Catch {
+            }
+            Catch {
                 Write-Warning "Failed to install Chocolatey."
             }
         }
@@ -917,11 +967,13 @@ If ($isAdmin) {
             Try {
                 choco install rsync -y
                 Write-Host "rsync installed successfully via Chocolatey." -ForegroundColor Green
-            } Catch {
+            }
+            Catch {
                 Write-Warning "Failed to install rsync via Chocolatey."
             }
         }
-    } Else {
+    }
+    Else {
         Write-Host "rsync is already installed." -ForegroundColor Green
     }
 }
@@ -935,7 +987,8 @@ Try {
     $acl.SetAccessRule($accessRule)
     Set-Acl $vailaProgramPath $acl
     Write-Host "Permissions set successfully." -ForegroundColor Green
-} Catch {
+}
+Catch {
     Write-Warning "Failed to set permissions. Continuing anyway."
 }
 
