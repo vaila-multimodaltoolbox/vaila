@@ -468,14 +468,13 @@ function Install-WithUv {
     Write-Host "This may take a few minutes on first run..." -ForegroundColor Yellow
 
     # Check for NVIDIA GPU / Ask user about GPU support for TensorRT
-    $extras = ""
+    & uv sync
+
     # Simple check if nvidia-smi is available
     If (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
-         Write-Host "NVIDIA GPU tools detected. Including 'gpu' extra dependencies (TensorRT)..." -ForegroundColor Green
-         $extras = "--extra gpu"
+         Write-Host "NVIDIA GPU tools detected. Installing extra dependencies from requirements-gpu.txt..." -ForegroundColor Green
+         & uv pip install -r requirements-gpu.txt
     }
-
-    & uv sync $extras
 
     # Prompt user about installing PyTorch/YOLO stack
     Write-Host ""

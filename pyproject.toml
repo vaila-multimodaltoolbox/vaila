@@ -127,8 +127,8 @@ dev = [
 ]
 
 gpu = [
-    "tensorrt",
-    "nvidia-ml-py",
+    "tensorrt; sys_platform == 'linux' or sys_platform == 'win32'",
+    "nvidia-ml-py; sys_platform == 'linux' or sys_platform == 'win32'",
 ]
 
 [project.scripts]

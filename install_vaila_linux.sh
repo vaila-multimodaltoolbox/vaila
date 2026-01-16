@@ -426,13 +426,14 @@ install_with_uv() {
     echo "This may take a few minutes on first run..."
     
     # Check for NVIDIA GPU for dependency installation
-    EXTRAS=""
+    echo ""
+    echo "Installing vaila dependencies with uv..."
+    uv sync
+    
     if command -v nvidia-smi &> /dev/null && nvidia-smi &> /dev/null; then
-        echo "NVIDIA GPU detected. Including 'gpu' extra dependencies (TensorRT)..."
-        EXTRAS="--extra gpu"
+        echo "NVIDIA GPU detected. Installing extra dependencies from requirements-gpu.txt..."
+        uv pip install -r requirements-gpu.txt
     fi
-
-    uv sync $EXTRAS
 
     # Detect NVIDIA GPU
     echo ""
