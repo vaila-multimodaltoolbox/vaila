@@ -51,9 +51,7 @@ Source: "pyproject.toml"; DestDir: "{app}"; Flags: ignoreversion
 Source: "LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion
 
-[Icons]
-Name: "{autoprograms}\{#MyAppName}\{#MyAppName}"; Filename: "pwsh.exe"; Parameters: "-ExecutionPolicy Bypass -NoExit -File ""{app}\run_vaila.ps1"""; IconFilename: "{app}\docs\images\vaila_ico.ico"; WorkingDir: "{app}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "pwsh.exe"; Parameters: "-ExecutionPolicy Bypass -NoExit -File ""{app}\run_vaila.ps1"""; IconFilename: "{app}\docs\images\vaila_ico.ico"; WorkingDir: "{app}"
+
 
 [Dirs]
 ; Allow users to modify files in the installation directory (needed for uv to manage .venv)
@@ -102,21 +100,8 @@ procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then
   begin
-    // Create a more robust execution script for vaila using uv
-    SaveStringToFile(ExpandConstant('{app}\run_vaila.ps1'), 
-      '# Script to run vaila using uv' + #13#10 +
-      '# Automatically created by the installer' + #13#10 + #13#10 +
-      'try {' + #13#10 +
-      '    Set-Location "' + ExpandConstant('{app}') + '"' + #13#10 +
-      '    & uv run --no-sync "' + ExpandConstant('{app}') + '\vaila.py"' + #13#10 +
-      '} catch {' + #13#10 +
-      '    Write-Host "Error: Could not start vaila. Please ensure uv is properly installed." -ForegroundColor Red' + #13#10 +
-      '    Write-Host "You can run the installation script again: install_vaila_win.ps1" -ForegroundColor Yellow' + #13#10 +
-      '    Read-Host "Press Enter to exit"' + #13#10 +
-      '}',
-      False);
-    
     // Show completion message
+
     MsgBox('vaila has been installed successfully!' + #13#10 + #13#10 +
            'The installation script will now run to set up the Python environment using uv.' + #13#10 +
            'This may take several minutes. Please wait for the process to complete.' + #13#10 + #13#10 +
