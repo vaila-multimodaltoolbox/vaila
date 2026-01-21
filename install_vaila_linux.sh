@@ -21,8 +21,8 @@
 #                                                                                       #
 # Author: Prof. Dr. Paulo R. P. Santiago                                                #
 # Creation: September 17, 2024                                                          #
-# Updated: 15 January 2026                                                              #
-# Version: 0.3.12                                                                        #
+# Updated: 21 January 2026                                                              #
+# Version: 0.3.13                                                                        #
 # OS: Ubuntu, Kubuntu, Linux Mint, Pop_OS!, Zorin OS, etc. (Debian-based)             #
 #########################################################################################
 
@@ -432,7 +432,19 @@ install_with_uv() {
         EXTRAS="--extra gpu"
     fi
 
-    uv sync $EXTRAS
+    # Sync dependencies with proper error handling
+    if [ -z "$EXTRAS" ]; then
+        if ! uv sync; then
+            echo "Error: uv sync failed. Dependencies may not be installed correctly."
+            exit 1
+        fi
+    else
+        if ! uv sync $EXTRAS; then
+            echo "Error: uv sync failed. Dependencies may not be installed correctly."
+            exit 1
+        fi
+    fi
+    echo "Dependencies installed successfully."
 
     # Detect NVIDIA GPU
     echo ""
@@ -540,6 +552,26 @@ install_with_uv() {
         }
     else
         echo "pycairo is already installed."
+    fi
+
+    # Verify environment is properly set up by checking for PIL (Pillow)
+    echo ""
+    echo "Verifying environment setup..."
+    if ! uv run python -c "import PIL; print('PIL OK')" 2>&1 | grep -q "PIL OK"; then
+        echo "Warning: Environment verification failed. PIL module not found. Running uv sync again..."
+        if [ -z "$EXTRAS" ]; then
+            uv sync || {
+                echo "Error: Failed to sync dependencies during verification."
+                exit 1
+            }
+        else
+            uv sync $EXTRAS || {
+                echo "Error: Failed to sync dependencies during verification."
+                exit 1
+            }
+        fi
+    else
+        echo "Environment verification successful."
     fi
 
     # Create run_vaila.sh script using uv
