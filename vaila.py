@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 15 January 2026
-Version: 0.3.12
+Update Date: 20 January 2026
+Version: 0.3.13
 
 Example of usage:
 uv run vaila.py (recommended)
@@ -56,6 +56,7 @@ Visit the project repository: https://github.com/vaila-multimodaltoolbox
 """
 
 # Standard library imports
+import contextlib
 import os
 import platform
 import signal
@@ -262,13 +263,11 @@ class Vaila(tk.Tk):
 
         # Set WM_CLASS for Linux (needed for proper icon in taskbar/dock)
         if platform.system() == "Linux":
-            try:
-                # Set both class name and instance name to 'vaila' for proper desktop integration
-                # Use tk.call instead of wm_class method which may not exist in all Tkinter versions
+            # Set both class name and instance name to 'vaila' for proper desktop integration
+            # Use tk.call instead of wm_class method which may not exist in all Tkinter versions
+            # Silently ignore if WM_CLASS setting fails (not critical for functionality)
+            with contextlib.suppress(AttributeError, Exception):
                 self.tk.call('wm', 'class', self._w, 'vaila', 'vaila')
-            except (AttributeError, Exception) as e:
-                # Silently ignore if WM_CLASS setting fails (not critical for functionality)
-                pass
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -1850,20 +1849,17 @@ class Vaila(tk.Tk):
         dialog.title("Select YOLO Version")
         dialog.geometry("400x500")
         dialog.transient(self)  # Make dialog modal
-        
+
         # Try to set grab, but don't fail if another grab is active
         try:
             dialog.grab_set()
         except tk.TclError:
             # Another grab is active, try to release it first
-            try:
+            with contextlib.suppress(Exception):
                 self.grab_release()
-            except Exception:
-                pass
-            try:
+            # Continue without grab if it still fails
+            with contextlib.suppress(Exception):
                 dialog.grab_set()
-            except Exception:
-                pass  # Continue without grab if it still fails
 
         tk.Label(dialog, text="Select YOLO tracker version to use:", pady=15).pack()
 
