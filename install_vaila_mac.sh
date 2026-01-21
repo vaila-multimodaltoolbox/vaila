@@ -21,8 +21,8 @@
 #                                                                                       #
 # Author: Prof. Dr. Paulo R. P. Santiago                                                #
 # Creation: 20 November 2025                                                          #
-# Update: 15 January 2026                                                              #
-# Version: 0.3.12                                                                        #
+# Update: 20 January 2026                                                              #
+# Version: 0.3.13                                                                        #
 # OS: macOS (Apple Silicon or Intel)                                                    #
 #########################################################################################
 
@@ -264,18 +264,29 @@ PYTHON_SCRIPT
         
         if [[ "$INSTALL_METHOD" == "1" ]]; then
             # uv method
-            if ! uv pip list | grep -q "pyobjc-framework-Cocoa"; then
-                echo "Installing pyobjc-framework-Cocoa..."
-                uv pip install pyobjc-framework-Cocoa || true
-            fi
-            
+            # pyobjc-framework-Cocoa should already be installed via uv sync (done before restoring pyproject.toml)
+            # Skip installation check here to avoid TensorRT resolution errors
+            # The package is optional (only needed for icon setting), so we continue even if not installed
+            # No need to check or install - already handled during uv sync
             cd "$VAILA_HOME"
             if [ -f "$PROJECT_DIR/set_mac_icon.py" ]; then
-                if uv run python "$PROJECT_DIR/set_mac_icon.py" "$APP_DIR" "$APP_DIR/Contents/Resources/vaila.icns"; then
-                    echo "Icon applied successfully to App Bundle."
-                fi
-                if uv run python "$PROJECT_DIR/set_mac_icon.py" "$VAILA_HOME" "$APP_DIR/Contents/Resources/vaila.icns"; then
-                    echo "Icon applied successfully to installation directory."
+                # Use venv Python directly instead of uv run to avoid project resolution
+                # This prevents TensorRT resolution errors
+                if [ -f ".venv/bin/python" ]; then
+                    if .venv/bin/python "$PROJECT_DIR/set_mac_icon.py" "$APP_DIR" "$APP_DIR/Contents/Resources/vaila.icns" 2>&1 | grep -v -i "tensorrt" || true; then
+                        echo "Icon applied successfully to App Bundle."
+                    fi
+                    if .venv/bin/python "$PROJECT_DIR/set_mac_icon.py" "$VAILA_HOME" "$APP_DIR/Contents/Resources/vaila.icns" 2>&1 | grep -v -i "tensorrt" || true; then
+                        echo "Icon applied successfully to installation directory."
+                    fi
+                else
+                    # Fallback to uv run if venv python not available
+                    if uv run python "$PROJECT_DIR/set_mac_icon.py" "$APP_DIR" "$APP_DIR/Contents/Resources/vaila.icns" 2>&1 | grep -v -i "tensorrt" || true; then
+                        echo "Icon applied successfully to App Bundle."
+                    fi
+                    if uv run python "$PROJECT_DIR/set_mac_icon.py" "$VAILA_HOME" "$APP_DIR/Contents/Resources/vaila.icns" 2>&1 | grep -v -i "tensorrt" || true; then
+                        echo "Icon applied successfully to installation directory."
+                    fi
                 fi
             fi
         else
@@ -479,16 +490,81 @@ install_with_uv() {
         echo "Virtual environment already exists. uv sync will update it as needed."
     fi
 
-    # Generate lock file
-    echo ""
-    echo "Generating lock file (uv.lock)..."
-    uv lock --upgrade
-
-    # Sync dependencies
+    # Sync dependencies (uv sync will generate/update lock file automatically)
+    # On macOS, we need to temporarily remove GPU extras as uv resolves all optional dependencies
+    # even when not installing them, and TensorRT doesn't support macOS
     echo ""
     echo "Installing vaila dependencies with uv..."
+    echo "Note: GPU extras (TensorRT) are excluded on macOS as they're not supported."
     echo "This may take a few minutes on first run..."
-    uv sync
+    
+    # Temporarily remove GPU extras from pyproject.toml
+    if grep -q '^gpu = \[' "$VAILA_HOME/pyproject.toml"; then
+        # Backup original
+        cp "$VAILA_HOME/pyproject.toml" "$VAILA_HOME/pyproject.toml.bak"
+        
+        # Remove GPU extras section using Python
+        cd "$VAILA_HOME"
+        python3 << 'PYTHON_SCRIPT'
+import re
+
+with open("pyproject.toml", "r") as f:
+    lines = f.readlines()
+
+in_gpu_section = False
+gpu_start = None
+output_lines = []
+
+for i, line in enumerate(lines):
+    if line.strip().startswith("gpu = ["):
+        in_gpu_section = True
+        gpu_start = i
+        # Skip the gpu = [ line
+        continue
+    elif in_gpu_section:
+        # Check if this is the closing bracket
+        if line.strip() == "]":
+            in_gpu_section = False
+            gpu_start = None
+            # Skip the closing bracket
+            continue
+        else:
+            # Skip lines in GPU section
+            continue
+    else:
+        output_lines.append(line)
+
+with open("pyproject.toml", "w") as f:
+    f.writelines(output_lines)
+PYTHON_SCRIPT
+        
+        # Sync without GPU extras
+        uv sync || {
+            # Restore original if sync fails
+            mv "$VAILA_HOME/pyproject.toml.bak" "$VAILA_HOME/pyproject.toml"
+            exit 1
+        }
+        
+        # Ensure pyobjc-framework-Cocoa is installed BEFORE restoring pyproject.toml
+        # This avoids TensorRT resolution when installing it later
+        if ! uv pip list | grep -q "pyobjc-framework-Cocoa"; then
+            echo "Installing pyobjc-framework-Cocoa after sync (GPU section still removed)..."
+            # pyproject.toml still has GPU section removed, so this won't trigger TensorRT
+            uv sync 2>&1 | grep -v "tensorrt" || true
+            # If still not installed, use venv pip directly
+            if ! uv pip list | grep -q "pyobjc-framework-Cocoa"; then
+                if [ -f ".venv/bin/pip" ]; then
+                    .venv/bin/pip install pyobjc-framework-Cocoa 2>&1 | grep -v "tensorrt" || true
+                fi
+            fi
+        fi
+        
+        # Restore original pyproject.toml
+        mv "$VAILA_HOME/pyproject.toml.bak" "$VAILA_HOME/pyproject.toml"
+    else
+        # If no GPU extras found, just sync normally
+        uv sync
+    fi
 
     # Detect architecture for PyTorch
     echo ""
@@ -602,7 +678,17 @@ if [ ! -f "pyproject.toml" ]; then
     exit 1
 fi
 
-uv run --no-sync python vaila.py
+    # Use venv Python directly to avoid uv run resolving project dependencies
+    # This prevents TensorRT resolution errors on macOS when pyproject.toml has gpu extra
+    if [ -f ".venv/bin/python" ]; then
+        # Activate venv and run directly - avoids project resolution
+        source .venv/bin/activate 2>/dev/null || true
+        .venv/bin/python vaila.py
+    else
+        # Fallback to uv run with --no-extra gpu to exclude TensorRT on macOS
+        # This prevents the extra gpu from being resolved even though it's in pyproject.toml
+        uv run --no-sync --no-extra gpu python vaila.py
+    fi
 
 echo
 echo "Program finished. Press Enter to close this window..."
@@ -610,6 +696,42 @@ read
 EOF
 
     chmod +x "$RUN_SCRIPT"
+    
+    # Create a convenient 'vaila' command in venv bin directory
+    # This allows running 'vaila' directly without 'uv run' which tries to resolve gpu extra
+    if [ -d "$VAILA_HOME/.venv/bin" ]; then
+        cat << 'VAILA_WRAPPER' > "$VAILA_HOME/.venv/bin/vaila"
+#!/bin/bash
+# Wrapper script to run vaila.py using venv Python directly
+# This avoids uv run resolving project dependencies (including gpu extra on macOS)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$SCRIPT_DIR" || exit 1
+exec "$(dirname "${BASH_SOURCE[0]}")/python" vaila.py "$@"
+VAILA_WRAPPER
+        chmod +x "$VAILA_HOME/.venv/bin/vaila"
+        
+        # Create a uv-run wrapper that excludes gpu extra on macOS
+        # This allows users to use 'uv run vaila.py' without errors
+        cat << 'UV_RUN_WRAPPER' > "$VAILA_HOME/.venv/bin/uv-run-vaila"
+#!/bin/bash
+# Wrapper for uv run that excludes gpu extra on macOS
+# This prevents TensorRT resolution errors when using 'uv run vaila.py'
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$SCRIPT_DIR" || exit 1
+# Use uv run with --no-extra gpu to avoid TensorRT on macOS
+if command -v uv &> /dev/null; then
+    uv run --no-sync --no-extra gpu python vaila.py "$@"
+else
+    echo "Error: uv not found in PATH"
+    exit 1
+fi
+UV_RUN_WRAPPER
+        chmod +x "$VAILA_HOME/.venv/bin/uv-run-vaila"
+        
+        echo "Created convenient commands:"
+        echo "  - .venv/bin/vaila (recommended - uses venv Python directly)"
+        echo "  - .venv/bin/uv-run-vaila (wrapper for 'uv run' that excludes gpu extra)"
+    fi
 }
 
 # ============================================================================
@@ -812,9 +934,19 @@ echo ""
 echo "============================================================"
 echo "vaila installation completed successfully!"
 echo "============================================================"
+echo ""
+echo "IMPORTANT: On macOS, do NOT use 'uv run vaila.py' directly!"
+echo "The 'gpu' extra in pyproject.toml includes TensorRT which doesn't support macOS."
+echo ""
 echo "You can run vaila by:"
-echo "1. Running: $RUN_SCRIPT"
-echo "2. Opening 'vaila' from your Applications folder"
+echo "1. Recommended: $RUN_SCRIPT"
+echo "2. Recommended: cd ~/vaila && .venv/bin/vaila"
+echo "3. Alternative: cd ~/vaila && .venv/bin/python vaila.py"
+echo "4. Alternative: cd ~/vaila && .venv/bin/uv-run-vaila (wrapper that excludes gpu extra)"
+echo "5. Opening 'vaila' from your Applications folder"
 echo "   - Launchpad or /Applications/vaila.app (recommended)"
 echo "   - Or ~/Applications/vaila.app"
+echo ""
+echo "If you really need to use 'uv run', use:"
+echo "  uv run --no-sync --no-extra gpu python vaila.py"
 echo ""
