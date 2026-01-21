@@ -10,15 +10,15 @@
     Notes:
         - uv method: uv will be automatically installed if not present
         - conda method: Requires Conda (Anaconda or Miniconda) to be installed
-        - Python 3.12.12 will be installed via uv or conda depending on method chosen
+        - Python 3.12.13 will be installed via uv or conda depending on method chosen
         - Installation location:
           * With admin: C:\Program Files\vaila (Windows standard location)
           * Without admin: C:\Users\<user>\vaila (user directory)
         - Can run without administrator privileges (some features may be skipped)
     Author: Prof. Dr. Paulo R. P. Santiago
     Creation: 17 December 2024
-    Updated: 15 January 2026    
-    Version: 0.3.12
+    Updated: 21 January 2026    
+    Version: 0.3.13
     OS: Windows 11
     Reference: https://docs.astral.sh/uv/
 #>
@@ -474,8 +474,24 @@ function Install-WithUv {
          Write-Host "NVIDIA GPU tools detected. Including 'gpu' extra dependencies (TensorRT)..." -ForegroundColor Green
          $extras = "--extra gpu"
     }
-
-    & uv sync $extras
+    
+    Try {
+        if ([string]::IsNullOrWhiteSpace($extras)) {
+            & uv sync
+        } else {
+            & uv sync $extras
+        }
+        $syncExitCode = $LASTEXITCODE
+        
+        If ($syncExitCode -ne 0) {
+            Write-Error "uv sync failed with exit code $syncExitCode. Dependencies may not be installed correctly."
+            Exit 1
+        }
+        Write-Host "Dependencies installed successfully." -ForegroundColor Green
+    } Catch {
+        Write-Error "Failed to sync dependencies: $_"
+        Exit 1
+    }
 
     # Prompt user about installing PyTorch/YOLO stack
     Write-Host ""
@@ -548,6 +564,25 @@ function Install-WithUv {
         } Catch {
             Write-Warning "pycairo installation failed. This may cause issues with the application."
         }
+    }
+    
+    # Verify environment is properly set up by checking for PIL (Pillow)
+    Write-Host ""
+    Write-Host "Verifying environment setup..." -ForegroundColor Yellow
+    Try {
+        $testResult = & uv run python -c "import PIL; print('PIL OK')" 2>&1
+        If ($testResult -match "PIL OK") {
+            Write-Host "Environment verification successful." -ForegroundColor Green
+        } Else {
+            Write-Warning "Environment verification failed. PIL module not found. Running uv sync again..."
+            & uv sync
+            If ($LASTEXITCODE -ne 0) {
+                Write-Error "Failed to sync dependencies during verification."
+                Exit 1
+            }
+        }
+    } Catch {
+        Write-Warning "Could not verify environment. Continuing anyway..."
     }
 
     # Create run_vaila.ps1 script
