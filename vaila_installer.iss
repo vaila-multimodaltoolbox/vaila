@@ -2,7 +2,7 @@
 ; vaila Installer Script
 
 #define MyAppName "vaila"
-#define MyAppVersion "0.3.14"
+#define MyAppVersion "0.3.15"
 #define MyAppPublisher "Prof. Dr. Paulo R. P. Santiago"
 #define MyAppURL "https://github.com/vaila-multimodaltoolbox/vaila"
 
@@ -63,9 +63,10 @@ Name: "{app}"; Permissions: users-modify
 [Run]
 ; Execute the PowerShell installation script with administrator privileges
 ; Use -File instead of -Command for better reliability with paths containing spaces
-; Note: Removing runascurrentuser so the script runs with installer's admin privileges
-; This ensures the script can create .venv in Program Files
-Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\install_vaila_win.ps1"""; WorkingDir: "{app}"; Flags: shellexec waituntilterminated postinstall; Description: "Run vaila installation (uv or Conda)"
+; Since PrivilegesRequired=admin, the PowerShell process will inherit admin privileges
+; This ensures the script can create .venv in Program Files and install rsync/scp
+; The script will automatically detect admin privileges and install rsync via winget/Chocolatey or scp via OpenSSH Client
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\install_vaila_win.ps1"""; WorkingDir: "{app}"; Flags: shellexec waituntilterminated postinstall; Description: "Run vaila installation (uv or Conda) and install dependencies (rsync/scp)"
 
 [Code]
 // This code is executed before installation begins
@@ -106,7 +107,9 @@ begin
     // Show completion message
 
     MsgBox('vaila has been installed successfully!' + #13#10 + #13#10 +
-           'The installation script will now run to set up the Python environment using uv.' + #13#10 +
+           'The installation script will now run to:' + #13#10 +
+           '- Set up the Python environment using uv' + #13#10 +
+           '- Install system dependencies (FFmpeg, rsync/scp, Windows Terminal)' + #13#10 +
            'This may take several minutes. Please wait for the process to complete.' + #13#10 + #13#10 +
            'After installation, you can launch vaila from:' + #13#10 +
            '- Desktop shortcut' + #13#10 +
