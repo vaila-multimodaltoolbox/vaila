@@ -6,9 +6,9 @@
                  removing vaila profiles from Windows Terminal, and deleting
                  Start Menu and Desktop shortcuts.
     Creation Date: 10 Jan 2025
-    Last Update: 21 January 2026
+    Last Update: 22 January 2026
     Author: Paulo R. P. Santiago
-    Version: 0.3.13
+    Version: 0.3.14
 #>
 
 $ErrorActionPreference = "Continue"

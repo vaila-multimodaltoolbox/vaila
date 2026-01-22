@@ -110,20 +110,22 @@ dependencies = [
     "rich",
     "ydata_profiling",
     "xonsh[full]",
-    "intel-openmp; sys_platform != 'darwin' and (platform_machine == 'x86_64' or platform_machine == 'AMD64')",
     "yt-dlp",
     "openai",
     "odfpy",
     "psutil",
     "pyzmq",
     "protobuf",
-    "pyobjc-framework-Cocoa; sys_platform == 'darwin'",
     "ruff>=0.14.11",
 ]
 
 [project.optional-dependencies]
 dev = [
     "ruff",
+]
+gpu = [
+    "tensorrt",
+    "nvidia-ml-py",
 ]
 
 [project.scripts]
@@ -132,6 +134,16 @@ vaila = "vaila:main"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
+torchvision = { index = "pytorch-cu128" }
+torchaudio = { index = "pytorch-cu128" }
 
 [tool.uv.workspace]
 # Workspace configuration if needed
