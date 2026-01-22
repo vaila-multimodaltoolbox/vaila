@@ -10,7 +10,7 @@
     Notes:
         - uv method: uv will be automatically installed if not present
         - conda method: Requires Conda (Anaconda or Miniconda) to be installed
-        - Python 3.12.13 will be installed via uv or conda depending on method chosen
+        - Python 3.12.12 will be installed via uv or conda depending on method chosen
         - Installation location:
           * With admin: C:\Program Files\vaila (Windows standard location)
           * Without admin: C:\Users\<user>\vaila (user directory)
@@ -18,7 +18,7 @@
     Author: Prof. Dr. Paulo R. P. Santiago
     Creation: 17 December 2024
     Updated: 21 January 2026    
-    Version: 0.3.13
+    Version: 0.3.14
     OS: Windows 11
     Reference: https://docs.astral.sh/uv/
 #>
@@ -426,6 +426,44 @@ function Install-WithUv {
         }
     }
 
+    # Select appropriate pyproject.toml template based on GPU detection and user choice
+    Write-Host ""
+    Write-Host "Selecting pyproject.toml configuration..." -ForegroundColor Yellow
+    
+    # Detect NVIDIA GPU
+    $hasNvidiaGPU = Get-Command nvidia-smi -ErrorAction SilentlyContinue
+    $useGPU = $false
+    
+    # Ask user if GPU detected
+    If ($hasNvidiaGPU) {
+        Write-Host "NVIDIA GPU detected. Install with GPU support (CUDA 12.1)? [Y/n]" -ForegroundColor Cyan
+        $gpuChoice = Read-Host
+        $useGPU = ($gpuChoice -ne "n" -and $gpuChoice -ne "N")
+    } Else {
+        Write-Host "No NVIDIA GPU detected. Using CPU-only configuration." -ForegroundColor Yellow
+    }
+    
+    # Backup current pyproject.toml
+    If (Test-Path "$vailaProgramPath\pyproject.toml") {
+        Copy-Item "$vailaProgramPath\pyproject.toml" "$vailaProgramPath\pyproject_universal_cpu.toml" -Force
+        Write-Host "Backed up pyproject.toml to pyproject_universal_cpu.toml" -ForegroundColor Green
+    }
+    
+    # Choose template
+    If ($useGPU) {
+        If (Test-Path "$vailaProgramPath\pyproject_win_cuda12.toml") {
+            Copy-Item "$vailaProgramPath\pyproject_win_cuda12.toml" "$vailaProgramPath\pyproject.toml" -Force
+            Write-Host "Using Windows CUDA 12.1 configuration." -ForegroundColor Green
+        } Else {
+            Write-Warning "pyproject_win_cuda12.toml not found. Using CPU-only configuration."
+            Copy-Item "$vailaProgramPath\pyproject_universal_cpu.toml" "$vailaProgramPath\pyproject.toml" -Force
+            $useGPU = $false
+        }
+    } Else {
+        Copy-Item "$vailaProgramPath\pyproject_universal_cpu.toml" "$vailaProgramPath\pyproject.toml" -Force
+        Write-Host "Using CPU-only configuration." -ForegroundColor Green
+    }
+
     # Initialize uv project
     Write-Host ""
     Write-Host "Initializing uv project..." -ForegroundColor Yellow
@@ -467,29 +505,23 @@ function Install-WithUv {
     Write-Host "Installing vaila dependencies with uv..." -ForegroundColor Yellow
     Write-Host "This may take a few minutes on first run..." -ForegroundColor Yellow
 
-    # Check for NVIDIA GPU / Ask user about GPU support for TensorRT
-    $extras = ""
-    # Simple check if nvidia-smi is available
-    If (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
-         Write-Host "NVIDIA GPU tools detected. Including 'gpu' extra dependencies (TensorRT)..." -ForegroundColor Green
-         $extras = "--extra gpu"
-    }
-    
+    # Execute uv sync with appropriate extras
     Try {
-        if ([string]::IsNullOrWhiteSpace($extras)) {
-            & uv sync
+        if ($useGPU) {
+            & uv sync --extra gpu
         } else {
-            & uv sync $extras
+            & uv sync
         }
         $syncExitCode = $LASTEXITCODE
         
         If ($syncExitCode -ne 0) {
-            Write-Error "uv sync failed with exit code $syncExitCode. Dependencies may not be installed correctly."
-            Exit 1
+            throw "uv sync failed with exit code $syncExitCode"
         }
         Write-Host "Dependencies installed successfully." -ForegroundColor Green
     } Catch {
-        Write-Error "Failed to sync dependencies: $_"
+        Write-Warning "uv sync failed. Restoring universal CPU configuration..."
+        Copy-Item "$vailaProgramPath\pyproject_universal_cpu.toml" "$vailaProgramPath\pyproject.toml" -Force
+        Write-Error "Installation failed. Please check the error messages above."
         Exit 1
     }
 
