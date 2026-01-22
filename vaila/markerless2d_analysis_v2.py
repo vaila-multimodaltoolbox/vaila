@@ -1663,19 +1663,8 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
     PoseLandmarkerOptions = mp.tasks.vision.PoseLandmarkerOptions
     VisionRunningMode = mp.tasks.vision.RunningMode
 
-    # Check for GPU delegate override
-    delegate = BaseOptions.Delegate.CPU
-    if device != "cpu" and torch.cuda.is_available():
-        # Try to use GPU delegate if available
-        # Note: MediaPipe GPU support on Linux Python can be limited
-        try:
-             delegate = BaseOptions.Delegate.GPU
-             print("Attempting to use MediaPipe GPU delegate...")
-        except Exception:
-             print("MediaPipe GPU delegate not available, using CPU.")
-             delegate = BaseOptions.Delegate.CPU
-
     # Create options for PoseLandmarker
+    # Note: Using CPU delegate for MediaPipe to ensure stability
     options = PoseLandmarkerOptions(
         base_options=BaseOptions(model_asset_path=model_path),
         running_mode=VisionRunningMode.VIDEO,
@@ -1715,18 +1704,38 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
     print(f"Total frames: {total_frames}")
     print(f"Resolution: {width}x{height}")
     print(f"FPS: {fps:.2f}")
+    
+    # Hardware/Pipeline Status
+    print("-" * 60)
+    print("PIPELINE EXECUTION STATUS:")
     if yolo_model is not None and pose_config.get("use_yolo", False):
         yolo_model_name = pose_config.get("yolo_model", "yolo11x-pose.pt")
         yolo_mode = pose_config.get("yolo_mode", "yolo_mediapipe")
+        
+        # Determine YOLO device
+        yolo_device = "Unknown"
+        if hasattr(yolo_model, "device"):
+            yolo_device = str(yolo_model.device)
+        elif hasattr(yolo_model, "predictor") and hasattr(yolo_model.predictor, "device"):
+             yolo_device = str(yolo_model.predictor.device)
+        else:
+             # Fallback check
+             yolo_device = str(device) # From global variable
+
         if yolo_mode == "yolo_only":
             print("Pipeline: YOLOv11-pose only")
         else:
             print("Pipeline: YOLOv11 + MediaPipe")
+            
         print(f"YOLO Model: {yolo_model_name}")
+        print(f"YOLO Device: {yolo_device.upper()} (GPU)" if "cuda" in yolo_device else f"YOLO Device: {yolo_device.upper()} (CPU)")
         print(f"YOLO Confidence: {pose_config.get('yolo_conf', 0.5)}")
     else:
         print("Pipeline: MediaPipe only")
-    print(f"{'=' * 60}\n")
+        
+    # MediaPipe Status
+    print("MediaPipe Device: CPU (Default)")
+    print("-" * 60)
 
     # Process video
     frame_count = 0
