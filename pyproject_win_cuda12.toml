@@ -117,13 +117,16 @@ dependencies = [
     "psutil",
     "pyzmq",
     "protobuf",
-    "pyobjc-framework-Cocoa; sys_platform == 'darwin'",
     "ruff>=0.14.11",
 ]
 
 [project.optional-dependencies]
 dev = [
     "ruff",
+]
+gpu = [
+    "tensorrt",
+    "nvidia-ml-py",
 ]
 
 [project.scripts]
@@ -132,6 +135,16 @@ vaila = "vaila:main"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[[tool.uv.index]]
+name = "pytorch-cu121"
+url = "https://download.pytorch.org/whl/cu121"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu121" }
+torchvision = { index = "pytorch-cu121" }
+torchaudio = { index = "pytorch-cu121" }
 
 [tool.uv.workspace]
 # Workspace configuration if needed

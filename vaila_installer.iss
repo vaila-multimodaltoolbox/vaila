@@ -2,7 +2,7 @@
 ; vaila Installer Script
 
 #define MyAppName "vaila"
-#define MyAppVersion "0.3.13"
+#define MyAppVersion "0.3.14"
 #define MyAppPublisher "Prof. Dr. Paulo R. P. Santiago"
 #define MyAppURL "https://github.com/vaila-multimodaltoolbox/vaila"
 
@@ -48,6 +48,9 @@ Source: "vaila\*"; DestDir: "{app}\vaila"; Flags: ignoreversion recursesubdirs c
 Source: "docs\*"; DestDir: "{app}\docs"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "tests\*"; DestDir: "{app}\tests"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "pyproject.toml"; DestDir: "{app}"; Flags: ignoreversion
+; Note: pyproject.toml is already replaced with the OS-specific template (pyproject_win_cuda12.toml
+; or pyproject_universal_cpu.toml) before creating the installer. The template files (pyproject_*.toml)
+; are not needed in the installer as the correct configuration is already in pyproject.toml.
 Source: "LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion
 
