@@ -259,10 +259,50 @@ vaila
 - **Simplicity:** You no longer *need* to pre-install Anaconda or Miniconda manually.
 - **Reliability:** Uses a strictly locked dependency file (`uv.lock`) ensuring that what runs on our machine runs on yours.
 - **Modern:** Built with Rust, following Python packaging standards (`pyproject.toml`).
-- **Dynamic Hardware Optimization**: Automatically detects hardware (RTX 4090 vs Laptop) and optimizes models using TensorRT.
-- **Cross-Platform**: Full support for **Windows**, **Linux**, and **macOS** (Apple Silicon).
+- **Dynamic Hardware Optimization**: Automatically detects hardware (NVIDIA GPU, Apple Silicon) and selects the optimized configuration template for your system.
+- **Cross-Platform**: Full support for **Windows** (CUDA 12.1), **Linux** (CUDA 12.8), and **macOS** (Metal/MPS).
 
 **Note:** Conda installation methods are still available but are now considered legacy due to slower installation and execution times.
+
+#### 🎯 Smart Configuration System
+
+*vailá* uses a **template-based configuration system** that automatically selects the optimal dependencies for your hardware:
+
+- **`pyproject.toml`** (in repository): Universal CPU-only configuration (default in repository, compatible with all systems)
+- **`pyproject_win_cuda12.toml`**: Windows with NVIDIA CUDA 12.1 support (TensorRT, GPU acceleration)
+- **`pyproject_linux_cuda12.toml`**: Linux with NVIDIA CUDA 12.8 support (TensorRT, GPU acceleration)
+- **`pyproject_macos.toml`**: macOS with Metal/MPS acceleration (Apple Silicon optimized)
+- **`pyproject_universal_cpu.toml`**: Universal CPU-only fallback (backup template)
+
+**How it works (step-by-step):**
+
+1. **Hardware Detection**: The installation script detects your hardware:
+   - **Windows/Linux**: Checks for NVIDIA GPU via `nvidia-smi` command
+   - **macOS**: Detects architecture via `uname -m` (Apple Silicon `arm64` vs Intel `x86_64`)
+2. **User Prompt**: If GPU/accelerator is detected, it asks if you want GPU support:
+   - Windows: "NVIDIA GPU detected. Install with GPU support (CUDA 12.1)? [Y/n]"
+   - Linux: "NVIDIA GPU detected. Install with GPU support (CUDA 12.8)? [Y/n]"
+   - macOS: "Apple Silicon detected. Use Metal/MPS acceleration? [Y/n]"
+3. **Template Selection**: Based on your choice, it selects the appropriate template:
+   - **Windows + GPU** → `pyproject_win_cuda12.toml` (CUDA 12.1 + TensorRT)
+   - **Linux + GPU** → `pyproject_linux_cuda12.toml` (CUDA 12.8 + TensorRT)
+   - **macOS (Apple Silicon) + Metal** → `pyproject_macos.toml` (Metal/MPS optimized)
+   - **Otherwise** → `pyproject_universal_cpu.toml` (CPU-only)
+4. **Backup**: Backs up current `pyproject.toml` to `pyproject_universal_cpu.toml`
+5. **Template Application**: **Copies the selected template to `pyproject.toml` BEFORE creating the virtual environment**
+   - ⚠️ **Critical**: This happens **before** `uv python pin` and `uv venv` are executed
+   - This ensures the virtual environment is created with the correct dependencies from the start
+6. **Environment Creation**: `uv` creates the `.venv` with the correct dependencies from the beginning
+7. **Dependency Installation**: Runs `uv sync` (or `uv sync --extra gpu` if GPU support was selected)
+8. **Automatic Fallback**: If installation fails, it automatically restores the universal CPU configuration and retries
+
+**Important:** The template selection happens **before** `uv python pin` and `uv venv` are executed. This ensures the virtual environment is created with the correct dependencies from the beginning, avoiding dependency resolution conflicts.
+
+This ensures that:
+- ✅ The virtual environment is created with the correct dependencies from the beginning
+- ✅ No dependency resolution conflicts occur during installation
+- ✅ Each OS/GPU combination gets its optimized dependency set
+- ✅ Automatic fallback to CPU-only if GPU installation fails
 
 For more information about uv, visit: [https://github.com/astral-sh/uv](https://github.com/astral-sh/uv)
 
@@ -270,7 +310,7 @@ For more information about uv, visit: [https://github.com/astral-sh/uv](https://
 
 ## 🪟 For Windows
 
-Installation is now streamlined using **uv**. Simply download and run the installation script.
+Installation is now streamlined using **uv** with automatic GPU detection.
 
 ### **Important Notice Before Installation**
 
@@ -297,9 +337,13 @@ Installation is now streamlined using **uv**. Simply download and run the instal
    .\install_vaila_win.ps1
    ```
    
-   The script will prompt you to choose between:
-   - **uv** (recommended - modern, fast)
-   - **Conda** (legacy - for compatibility)
+   The script will:
+   1. Detect if you have an **NVIDIA GPU**.
+   2. Ask if you want to install with GPU support (optimizes for CUDA 12.1).
+   3. Automatically select and apply the correct configuration template:
+      - **GPU detected + user chooses GPU**: Uses `pyproject_win_cuda12.toml` (CUDA 12.1, TensorRT)
+      - **No GPU or user chooses CPU**: Uses `pyproject_universal_cpu.toml` (CPU-only)
+   4. Install **uv** and all dependencies with the selected configuration.
 
    **Note:** If you run as **Administrator**, *vailá* installs to `C:\Program Files\vaila`. If you run as a **Standard User**, it installs to your user profile (`~\vaila`).
 
@@ -308,15 +352,19 @@ Installation is now streamlined using **uv**. Simply download and run the instal
    The installation script automatically:
 
 - Checks for **uv**; if missing, installs it automatically
+- **Detects your hardware** (NVIDIA GPU) and prompts for GPU support preference
+- **Selects the optimal configuration template** (`pyproject_win_cuda12.toml` or `pyproject_universal_cpu.toml`)
+- **Applies the template** to `pyproject.toml` **before** creating the virtual environment
 - Installs **Python 3.12.12** (via uv) securely isolated for *vailá*
-- Creates a virtual environment (`.venv`) and syncs all dependencies from `pyproject.toml`
-- Prompts you to optionally install **PyTorch/YOLO** (GPU/CPU) stack
+- Creates a virtual environment (`.venv`) with the correct dependencies from the start
+- Syncs all dependencies using `uv sync` (with `--extra gpu` if GPU support was selected)
 - Installs **FFmpeg** and **Windows Terminal** (if running as Administrator)
 - Configures shortcuts:
   - **Desktop shortcut** with proper icon
   - **Start Menu shortcut**
   - **Windows Terminal profile** for quick access
 - Sets appropriate permissions for the installation directories
+- **Automatically falls back** to CPU-only configuration if GPU installation fails
 
 ### ⚠️ **Important Notes**
 
@@ -359,9 +407,13 @@ We provide an automated installation script that handles everything for you (dep
    ./install_vaila_linux.sh
    ```
    
-   The script will prompt you to choose between:
-   - **uv** (recommended - modern, fast)
-   - **Conda** (legacy - for compatibility)
+   The script will:
+   1. Detect if you have an **NVIDIA GPU**.
+   2. Ask if you want to install with GPU support (optimizes for CUDA 12.8).
+   3. Automatically select and apply the correct configuration template:
+      - **GPU detected + user chooses GPU**: Uses `pyproject_linux_cuda12.toml` (CUDA 12.8, TensorRT)
+      - **No GPU or user chooses CPU**: Uses `pyproject_universal_cpu.toml` (CPU-only)
+   4. Install **uv** and all dependencies with the selected configuration.
 
 3. **Manual Installation (Alternative)**
 
@@ -374,11 +426,34 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 # Clone and install vailá
 git clone https://github.com/vaila-multimodaltoolbox/vaila
 cd vaila
+
+# ⚠️ IMPORTANT: Select GPU configuration BEFORE creating virtual environment
+# The template must be copied to pyproject.toml BEFORE running uv python pin and uv venv
+# For NVIDIA GPU with CUDA 12.8:
+# cp pyproject_linux_cuda12.toml pyproject.toml
+# For CPU-only (default):
+# The default pyproject.toml is already CPU-only, so no copy needed for CPU
+# (or explicitly: cp pyproject_universal_cpu.toml pyproject.toml)
+
+# Initialize Python version (uses the pyproject.toml you just configured)
+uv python pin 3.12.12
+
+# Create virtual environment (uses the pyproject.toml you just configured)
+uv venv --python 3.12.12
+
+# Generate lock file
+uv lock --upgrade
+
+# Install dependencies
 uv sync
+# Or with GPU support (if you selected GPU template):
+# uv sync --extra gpu
 
 # Run vailá
 uv run vaila.py
 ```
+
+**⚠️ Critical Note:** When installing manually, you **MUST** copy the appropriate template to `pyproject.toml` **BEFORE** running `uv python pin` and `uv venv`. The installation scripts do this automatically, but for manual installation you need to do it yourself. The order matters because `uv` reads `pyproject.toml` when creating the virtual environment.
 
 ### Legacy Conda Installation
 
@@ -429,6 +504,14 @@ The installer will prompt you to choose your preferred installation method:
    ```bash
    ./install_vaila_mac.sh
    ```
+   
+   The script will:
+   1. Detect your architecture (**Apple Silicon** vs **Intel**).
+   2. If Apple Silicon, ask if you want to use **Metal/MPS** acceleration (recommended).
+   3. Automatically select and apply the correct configuration template:
+      - **Apple Silicon + user chooses Metal**: Uses `pyproject_macos.toml` (Metal/MPS optimized)
+      - **Intel or user chooses CPU-only**: Uses `pyproject_universal_cpu.toml` (CPU-only)
+   4. Install **uv** and all dependencies with the selected configuration.
 
 3. **Choose your installation method when prompted**:
    - **Option 1: uv** (recommended - modern, fast, requires Homebrew)
@@ -606,7 +689,22 @@ run_vaila.bat
 
 ## ⚡ GPU Support & Optimization
 
-*vailá* includes a **HardwareManager** that automatically optimizes performance for your specific computer.
+*vailá* provides comprehensive GPU support across all platforms with automatic hardware detection and optimized dependency installation.
+
+### Installation-Time GPU Support
+
+During installation, the scripts automatically:
+- **Detect NVIDIA GPUs** (Windows/Linux) or **Apple Silicon** (macOS)
+- **Prompt you** to choose GPU or CPU-only installation
+- **Select the optimal configuration template**:
+  - Windows: `pyproject_win_cuda12.toml` (CUDA 12.1 + TensorRT)
+  - Linux: `pyproject_linux_cuda12.toml` (CUDA 12.8 + TensorRT)
+  - macOS: `pyproject_macos.toml` (Metal/MPS acceleration)
+  - Fallback: `pyproject_universal_cpu.toml` (CPU-only, always available)
+
+### Runtime GPU Optimization
+
+*vailá* includes a **HardwareManager** that automatically optimizes performance for your specific computer:
 
 - **Auto-Export**: The first time you run a model, *vailá* builds a custom `.engine` file for your GPU.
   - *Note*: This process takes 2-5 minutes on the first run.
