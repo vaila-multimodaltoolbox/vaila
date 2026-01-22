@@ -1398,7 +1398,7 @@ def process_frame_with_mediapipe_tasks(
             [int(landmark.x * width), int(landmark.y * height), landmark.z, visibility]
         )
 
-    return landmarks_norm, landmarks_px, best_person_bbox
+    return landmarks_norm, landmarks_px, best_person_bbox, best_person_keypoints
 
 
 def apply_temporal_filter(landmarks_history, current_landmarks, filter_type="none"):
@@ -1470,6 +1470,8 @@ def draw_yolo_landmarks(frame, landmarks_px, width, height):
         24,
         25,
         26,
+        27,
+        28,
         27,
         28,
     ]
@@ -1660,6 +1662,18 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
     PoseLandmarker = mp.tasks.vision.PoseLandmarker
     PoseLandmarkerOptions = mp.tasks.vision.PoseLandmarkerOptions
     VisionRunningMode = mp.tasks.vision.RunningMode
+
+    # Check for GPU delegate override
+    delegate = BaseOptions.Delegate.CPU
+    if device != "cpu" and torch.cuda.is_available():
+        # Try to use GPU delegate if available
+        # Note: MediaPipe GPU support on Linux Python can be limited
+        try:
+             delegate = BaseOptions.Delegate.GPU
+             print("Attempting to use MediaPipe GPU delegate...")
+        except Exception:
+             print("MediaPipe GPU delegate not available, using CPU.")
+             delegate = BaseOptions.Delegate.CPU
 
     # Create options for PoseLandmarker
     options = PoseLandmarkerOptions(
