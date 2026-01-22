@@ -268,19 +268,35 @@ vaila
 
 *vailá* uses a **template-based configuration system** that automatically selects the optimal dependencies for your hardware:
 
-- **`pyproject.toml`** (default): Universal CPU-only configuration, compatible with all systems
+- **`pyproject.toml`** (in repository): Universal CPU-only configuration (default in repository, compatible with all systems)
 - **`pyproject_win_cuda12.toml`**: Windows with NVIDIA CUDA 12.1 support (TensorRT, GPU acceleration)
 - **`pyproject_linux_cuda12.toml`**: Linux with NVIDIA CUDA 12.8 support (TensorRT, GPU acceleration)
 - **`pyproject_macos.toml`**: macOS with Metal/MPS acceleration (Apple Silicon optimized)
 - **`pyproject_universal_cpu.toml`**: Universal CPU-only fallback (backup template)
 
-**How it works:**
+**How it works (step-by-step):**
 
-1. The installation script detects your hardware (NVIDIA GPU, Apple Silicon, etc.)
-2. It backs up the current `pyproject.toml` to `pyproject_universal_cpu.toml`
-3. It copies the appropriate template to `pyproject.toml` **before** creating the virtual environment
-4. `uv` then creates the virtual environment with the correct dependencies from the start
-5. If installation fails, it automatically restores the universal CPU configuration
+1. **Hardware Detection**: The installation script detects your hardware:
+   - **Windows/Linux**: Checks for NVIDIA GPU via `nvidia-smi` command
+   - **macOS**: Detects architecture via `uname -m` (Apple Silicon `arm64` vs Intel `x86_64`)
+2. **User Prompt**: If GPU/accelerator is detected, it asks if you want GPU support:
+   - Windows: "NVIDIA GPU detected. Install with GPU support (CUDA 12.1)? [Y/n]"
+   - Linux: "NVIDIA GPU detected. Install with GPU support (CUDA 12.8)? [Y/n]"
+   - macOS: "Apple Silicon detected. Use Metal/MPS acceleration? [Y/n]"
+3. **Template Selection**: Based on your choice, it selects the appropriate template:
+   - **Windows + GPU** → `pyproject_win_cuda12.toml` (CUDA 12.1 + TensorRT)
+   - **Linux + GPU** → `pyproject_linux_cuda12.toml` (CUDA 12.8 + TensorRT)
+   - **macOS (Apple Silicon) + Metal** → `pyproject_macos.toml` (Metal/MPS optimized)
+   - **Otherwise** → `pyproject_universal_cpu.toml` (CPU-only)
+4. **Backup**: Backs up current `pyproject.toml` to `pyproject_universal_cpu.toml`
+5. **Template Application**: **Copies the selected template to `pyproject.toml` BEFORE creating the virtual environment**
+   - ⚠️ **Critical**: This happens **before** `uv python pin` and `uv venv` are executed
+   - This ensures the virtual environment is created with the correct dependencies from the start
+6. **Environment Creation**: `uv` creates the `.venv` with the correct dependencies from the beginning
+7. **Dependency Installation**: Runs `uv sync` (or `uv sync --extra gpu` if GPU support was selected)
+8. **Automatic Fallback**: If installation fails, it automatically restores the universal CPU configuration and retries
+
+**Important:** The template selection happens **before** `uv python pin` and `uv venv` are executed. This ensures the virtual environment is created with the correct dependencies from the beginning, avoiding dependency resolution conflicts.
 
 This ensures that:
 - ✅ The virtual environment is created with the correct dependencies from the beginning
@@ -411,23 +427,33 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 git clone https://github.com/vaila-multimodaltoolbox/vaila
 cd vaila
 
-# OPTIONAL: Select GPU configuration before creating virtual environment
+# ⚠️ IMPORTANT: Select GPU configuration BEFORE creating virtual environment
+# The template must be copied to pyproject.toml BEFORE running uv python pin and uv venv
 # For NVIDIA GPU with CUDA 12.8:
 # cp pyproject_linux_cuda12.toml pyproject.toml
 # For CPU-only (default):
-# cp pyproject_universal_cpu.toml pyproject.toml
-# Note: The default pyproject.toml is already CPU-only, so no copy needed for CPU
+# The default pyproject.toml is already CPU-only, so no copy needed for CPU
+# (or explicitly: cp pyproject_universal_cpu.toml pyproject.toml)
 
-# Create virtual environment and install dependencies
+# Initialize Python version (uses the pyproject.toml you just configured)
+uv python pin 3.12.12
+
+# Create virtual environment (uses the pyproject.toml you just configured)
+uv venv --python 3.12.12
+
+# Generate lock file
+uv lock --upgrade
+
+# Install dependencies
 uv sync
-# Or with GPU support:
+# Or with GPU support (if you selected GPU template):
 # uv sync --extra gpu
 
 # Run vailá
 uv run vaila.py
 ```
 
-**Note:** When installing manually, make sure to copy the appropriate template to `pyproject.toml` **before** running `uv sync`. The installation scripts do this automatically, but for manual installation you need to do it yourself.
+**⚠️ Critical Note:** When installing manually, you **MUST** copy the appropriate template to `pyproject.toml` **BEFORE** running `uv python pin` and `uv venv`. The installation scripts do this automatically, but for manual installation you need to do it yourself. The order matters because `uv` reads `pyproject.toml` when creating the virtual environment.
 
 ### Legacy Conda Installation
 
