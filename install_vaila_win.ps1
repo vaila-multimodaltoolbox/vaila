@@ -17,8 +17,8 @@
         - Can run without administrator privileges (some features may be skipped)
     Author: Prof. Dr. Paulo R. P. Santiago
     Creation: 17 December 2024
-    Updated: 21 January 2026    
-    Version: 0.3.14
+    Updated: 22 January 2026    
+    Version: 0.3.15
     OS: Windows 11
     Reference: https://docs.astral.sh/uv/
 #>
@@ -960,37 +960,117 @@ If ($wtInstalled) {
     }
 }
 
-# rsync (for transfer scripts)
+# rsync and OpenSSH Client (for transfer scripts)
 If ($isAdmin) {
-    Write-Host "Checking for rsync..." -ForegroundColor Yellow
+    Write-Host "Checking for file transfer tools (rsync/scp)..." -ForegroundColor Yellow
     $rsyncInstalled = Get-Command rsync -ErrorAction SilentlyContinue
+    $scpInstalled = Get-Command scp -ErrorAction SilentlyContinue
+    
+    # Check rsync first
     If (-Not $rsyncInstalled) {
-        # Try Chocolatey first
-        $chocoInstalled = Get-Command choco -ErrorAction SilentlyContinue
-        If (-Not $chocoInstalled) {
-            Write-Host "Installing Chocolatey..." -ForegroundColor Yellow
+        Write-Host "rsync is not installed. Attempting installation..." -ForegroundColor Yellow
+        
+        # Method 1: Try winget (Windows Package Manager)
+        $wingetAvailable = Get-Command winget -ErrorAction SilentlyContinue
+        If ($wingetAvailable) {
+            Write-Host "Trying to install rsync via winget..." -ForegroundColor Cyan
             Try {
-                Set-ExecutionPolicy Bypass -Scope Process -Force
-                [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-                Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
-                Write-Host "Chocolatey installed successfully." -ForegroundColor Green
+                & winget install --id=Git.Git -e --silent --accept-package-agreements --accept-source-agreements
+                # Git for Windows includes rsync
+                Start-Sleep -Seconds 3
+                $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+                $rsyncInstalled = Get-Command rsync -ErrorAction SilentlyContinue
+                If ($rsyncInstalled) {
+                    Write-Host "rsync installed successfully via Git for Windows (winget)." -ForegroundColor Green
+                }
             } Catch {
-                Write-Warning "Failed to install Chocolatey."
+                Write-Host "winget installation failed, trying Chocolatey..." -ForegroundColor Yellow
             }
         }
         
-        If (Get-Command choco -ErrorAction SilentlyContinue) {
-            Write-Host "Installing rsync via Chocolatey..." -ForegroundColor Yellow
-            Try {
-                choco install rsync -y
-                Write-Host "rsync installed successfully via Chocolatey." -ForegroundColor Green
-            } Catch {
-                Write-Warning "Failed to install rsync via Chocolatey."
+        # Method 2: Try Chocolatey if winget failed
+        If (-Not $rsyncInstalled) {
+            $chocoInstalled = Get-Command choco -ErrorAction SilentlyContinue
+            If (-Not $chocoInstalled) {
+                Write-Host "Installing Chocolatey..." -ForegroundColor Yellow
+                Try {
+                    Set-ExecutionPolicy Bypass -Scope Process -Force
+                    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+                    Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+                    Write-Host "Chocolatey installed successfully." -ForegroundColor Green
+                } Catch {
+                    Write-Warning "Failed to install Chocolatey."
+                }
+            }
+            
+            If (Get-Command choco -ErrorAction SilentlyContinue) {
+                Write-Host "Installing rsync via Chocolatey..." -ForegroundColor Yellow
+                Try {
+                    choco install rsync -y
+                    Start-Sleep -Seconds 3
+                    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+                    $rsyncInstalled = Get-Command rsync -ErrorAction SilentlyContinue
+                    If ($rsyncInstalled) {
+                        Write-Host "rsync installed successfully via Chocolatey." -ForegroundColor Green
+                    } Else {
+                        Write-Warning "Chocolatey installation completed but rsync not found in PATH."
+                    }
+                } Catch {
+                    Write-Warning "Failed to install rsync via Chocolatey."
+                }
             }
         }
     } Else {
         Write-Host "rsync is already installed." -ForegroundColor Green
     }
+    
+    # Check/Install OpenSSH Client (includes scp) as fallback
+    If (-Not $scpInstalled) {
+        Write-Host "Checking for OpenSSH Client (includes scp)..." -ForegroundColor Yellow
+        Try {
+            # Check if OpenSSH Client capability is installed
+            $opensshStatus = Get-WindowsCapability -Online | Where-Object Name -like 'OpenSSH.Client*'
+            If ($opensshStatus -and $opensshStatus.State -ne 'Installed') {
+                Write-Host "Installing OpenSSH Client (includes scp)..." -ForegroundColor Yellow
+                Add-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0
+                Start-Sleep -Seconds 2
+                $scpInstalled = Get-Command scp -ErrorAction SilentlyContinue
+                If ($scpInstalled) {
+                    Write-Host "OpenSSH Client installed successfully. scp is now available." -ForegroundColor Green
+                }
+            } ElseIf ($opensshStatus -and $opensshStatus.State -eq 'Installed') {
+                # OpenSSH is installed but scp not in PATH - refresh PATH
+                $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+                $scpInstalled = Get-Command scp -ErrorAction SilentlyContinue
+                If ($scpInstalled) {
+                    Write-Host "OpenSSH Client is installed. scp is available." -ForegroundColor Green
+                }
+            }
+        } Catch {
+            Write-Warning "Could not install OpenSSH Client automatically. You can install it manually:"
+            Write-Host "  Settings > Apps > Optional Features > Add OpenSSH Client" -ForegroundColor Cyan
+            Write-Host "  Or run: dism /online /Add-Capability /CapabilityName:OpenSSH.Client~~~~0.0.1.0" -ForegroundColor Cyan
+        }
+    } Else {
+        Write-Host "scp (OpenSSH Client) is already installed." -ForegroundColor Green
+    }
+    
+    # Summary
+    Write-Host ""
+    If ($rsyncInstalled) {
+        Write-Host "✓ rsync is available for file transfers." -ForegroundColor Green
+    } ElseIf ($scpInstalled) {
+        Write-Host "✓ scp is available for file transfers (rsync not installed)." -ForegroundColor Yellow
+        Write-Host "  Note: The transfer script will use scp as an alternative to rsync." -ForegroundColor Yellow
+    } Else {
+        Write-Warning "Neither rsync nor scp is available. File transfer feature may not work."
+        Write-Host "  To enable file transfers, install one of:" -ForegroundColor Yellow
+        Write-Host "    - rsync: via Git for Windows, Chocolatey, or WSL" -ForegroundColor Cyan
+        Write-Host "    - scp: Enable OpenSSH Client in Windows Optional Features" -ForegroundColor Cyan
+    }
+} Else {
+    Write-Host "Skipping rsync/scp installation (requires Administrator privileges)." -ForegroundColor Yellow
+    Write-Host "  File transfer feature will use scp if OpenSSH Client is already installed." -ForegroundColor Yellow
 }
 
 # Ensure correct permissions
