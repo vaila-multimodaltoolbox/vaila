@@ -22,7 +22,7 @@
 # Author: Prof. Dr. Paulo R. P. Santiago                                                #
 # Creation: September 17, 2024                                                          #
 # Updated: 21 January 2026                                                              #
-# Version: 0.3.13                                                                        #
+# Version: 0.3.14                                                                        #
 # OS: Ubuntu, Kubuntu, Linux Mint, Pop_OS!, Zorin OS, etc. (Debian-based)             #
 #########################################################################################
 
@@ -389,6 +389,46 @@ install_with_uv() {
 
     cd "$VAILA_HOME"
 
+    # Select appropriate pyproject.toml template based on GPU detection and user choice
+    echo ""
+    echo "Selecting pyproject.toml configuration..."
+    
+    # Detect NVIDIA GPU
+    HAS_NVIDIA_GPU=false
+    if command -v nvidia-smi &> /dev/null && nvidia-smi &> /dev/null; then
+        HAS_NVIDIA_GPU=true
+    fi
+    
+    USE_GPU=false
+    if [[ "$HAS_NVIDIA_GPU" == true ]]; then
+        echo "NVIDIA GPU detected. Install with GPU support (CUDA 12.8)? [Y/n]"
+        read gpu_choice
+        USE_GPU=$([[ "$gpu_choice" != "n" && "$gpu_choice" != "N" ]])
+    else
+        echo "No NVIDIA GPU detected. Using CPU-only configuration."
+    fi
+    
+    # Backup current pyproject.toml
+    if [ -f "$VAILA_HOME/pyproject.toml" ]; then
+        cp "$VAILA_HOME/pyproject.toml" "$VAILA_HOME/pyproject_universal_cpu.toml"
+        echo "Backed up pyproject.toml to pyproject_universal_cpu.toml"
+    fi
+    
+    # Choose template
+    if [[ "$USE_GPU" == true ]]; then
+        if [ -f "$VAILA_HOME/pyproject_linux_cuda12.toml" ]; then
+            cp "$VAILA_HOME/pyproject_linux_cuda12.toml" "$VAILA_HOME/pyproject.toml"
+            echo "Using Linux CUDA 12.8 configuration."
+        else
+            echo "Warning: pyproject_linux_cuda12.toml not found. Using CPU-only."
+            cp "$VAILA_HOME/pyproject_universal_cpu.toml" "$VAILA_HOME/pyproject.toml"
+            USE_GPU=false
+        fi
+    else
+        cp "$VAILA_HOME/pyproject_universal_cpu.toml" "$VAILA_HOME/pyproject.toml"
+        echo "Using CPU-only configuration."
+    fi
+
     # Initialize uv project
     echo ""
     echo "Initializing uv project..."
@@ -420,27 +460,23 @@ install_with_uv() {
         echo "Warning: Failed to install Cairo dependencies. pycairo may fail to build."
     }
 
-    # Sync dependencies (install all packages from pyproject.toml)
+    # Sync dependencies
     echo ""
     echo "Installing vaila dependencies with uv..."
     echo "This may take a few minutes on first run..."
     
-    # Check for NVIDIA GPU for dependency installation
-    EXTRAS=""
-    if command -v nvidia-smi &> /dev/null && nvidia-smi &> /dev/null; then
-        echo "NVIDIA GPU detected. Including 'gpu' extra dependencies (TensorRT)..."
-        EXTRAS="--extra gpu"
-    fi
-
-    # Sync dependencies with proper error handling
-    if [ -z "$EXTRAS" ]; then
-        if ! uv sync; then
-            echo "Error: uv sync failed. Dependencies may not be installed correctly."
+    if [[ "$USE_GPU" == true ]]; then
+        if ! uv sync --extra gpu; then
+            echo "Error: uv sync failed. Restoring universal CPU configuration..."
+            cp "$VAILA_HOME/pyproject_universal_cpu.toml" "$VAILA_HOME/pyproject.toml"
+            echo "Installation failed. Please check the error messages above."
             exit 1
         fi
     else
-        if ! uv sync $EXTRAS; then
-            echo "Error: uv sync failed. Dependencies may not be installed correctly."
+        if ! uv sync; then
+            echo "Error: uv sync failed. Restoring universal CPU configuration..."
+            cp "$VAILA_HOME/pyproject_universal_cpu.toml" "$VAILA_HOME/pyproject.toml"
+            echo "Installation failed. Please check the error messages above."
             exit 1
         fi
     fi

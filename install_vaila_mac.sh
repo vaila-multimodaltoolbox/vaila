@@ -22,7 +22,7 @@
 # Author: Prof. Dr. Paulo R. P. Santiago                                                #
 # Creation: 20 November 2025                                                          #
 # Update: 20 January 2026                                                              #
-# Version: 0.3.13                                                                        #
+# Version: 0.3.14                                                                        #
 # OS: macOS (Apple Silicon or Intel)                                                    #
 #########################################################################################
 
@@ -473,6 +473,43 @@ install_with_uv() {
 
     cd "$VAILA_HOME"
 
+    # Select appropriate pyproject.toml template based on architecture and user choice
+    echo ""
+    echo "Selecting pyproject.toml configuration..."
+    
+    # Detect architecture
+    ARCH=$(uname -m)
+    USE_METAL=false
+    
+    if [[ "$ARCH" == "arm64" ]]; then
+        echo "Apple Silicon detected. Use Metal/MPS acceleration? [Y/n]"
+        read metal_choice
+        USE_METAL=$([[ "$metal_choice" != "n" && "$metal_choice" != "N" ]])
+    else
+        echo "Intel Mac detected. Using CPU-only configuration."
+    fi
+    
+    # Backup current pyproject.toml
+    if [ -f "$VAILA_HOME/pyproject.toml" ]; then
+        cp "$VAILA_HOME/pyproject.toml" "$VAILA_HOME/pyproject_universal_cpu.toml"
+        echo "Backed up pyproject.toml to pyproject_universal_cpu.toml"
+    fi
+    
+    # Choose template
+    if [[ "$USE_METAL" == true ]]; then
+        if [ -f "$VAILA_HOME/pyproject_macos.toml" ]; then
+            cp "$VAILA_HOME/pyproject_macos.toml" "$VAILA_HOME/pyproject.toml"
+            echo "Using macOS Metal/MPS configuration."
+        else
+            echo "Warning: pyproject_macos.toml not found. Using CPU-only."
+            cp "$VAILA_HOME/pyproject_universal_cpu.toml" "$VAILA_HOME/pyproject.toml"
+            USE_METAL=false
+        fi
+    else
+        cp "$VAILA_HOME/pyproject_universal_cpu.toml" "$VAILA_HOME/pyproject.toml"
+        echo "Using CPU-only configuration."
+    fi
+
     # Initialize uv project
     echo ""
     echo "Initializing uv project..."
@@ -490,81 +527,18 @@ install_with_uv() {
         echo "Virtual environment already exists. uv sync will update it as needed."
     fi
 
-    # Sync dependencies (uv sync will generate/update lock file automatically)
-    # On macOS, we need to temporarily remove GPU extras as uv resolves all optional dependencies
-    # even when not installing them, and TensorRT doesn't support macOS
+    # Sync dependencies
     echo ""
     echo "Installing vaila dependencies with uv..."
-    echo "Note: GPU extras (TensorRT) are excluded on macOS as they're not supported."
     echo "This may take a few minutes on first run..."
     
-    # Temporarily remove GPU extras from pyproject.toml
-    if grep -q '^gpu = \[' "$VAILA_HOME/pyproject.toml"; then
-        # Backup original
-        cp "$VAILA_HOME/pyproject.toml" "$VAILA_HOME/pyproject.toml.bak"
-        
-        # Remove GPU extras section using Python
-        cd "$VAILA_HOME"
-        python3 << 'PYTHON_SCRIPT'
-import re
-
-with open("pyproject.toml", "r") as f:
-    lines = f.readlines()
-
-in_gpu_section = False
-gpu_start = None
-output_lines = []
-
-for i, line in enumerate(lines):
-    if line.strip().startswith("gpu = ["):
-        in_gpu_section = True
-        gpu_start = i
-        # Skip the gpu = [ line
-        continue
-    elif in_gpu_section:
-        # Check if this is the closing bracket
-        if line.strip() == "]":
-            in_gpu_section = False
-            gpu_start = None
-            # Skip the closing bracket
-            continue
-        else:
-            # Skip lines in GPU section
-            continue
-    else:
-        output_lines.append(line)
-
-with open("pyproject.toml", "w") as f:
-    f.writelines(output_lines)
-PYTHON_SCRIPT
-        
-        # Sync without GPU extras
-        uv sync || {
-            # Restore original if sync fails
-            mv "$VAILA_HOME/pyproject.toml.bak" "$VAILA_HOME/pyproject.toml"
-            exit 1
-        }
-        
-        # Ensure pyobjc-framework-Cocoa is installed BEFORE restoring pyproject.toml
-        # This avoids TensorRT resolution when installing it later
-        if ! uv pip list | grep -q "pyobjc-framework-Cocoa"; then
-            echo "Installing pyobjc-framework-Cocoa after sync (GPU section still removed)..."
-            # pyproject.toml still has GPU section removed, so this won't trigger TensorRT
-            uv sync 2>&1 | grep -v "tensorrt" || true
-            # If still not installed, use venv pip directly
-            if ! uv pip list | grep -q "pyobjc-framework-Cocoa"; then
-                if [ -f ".venv/bin/pip" ]; then
-                    .venv/bin/pip install pyobjc-framework-Cocoa 2>&1 | grep -v "tensorrt" || true
-                fi
-            fi
-        fi
-        
-        # Restore original pyproject.toml
-        mv "$VAILA_HOME/pyproject.toml.bak" "$VAILA_HOME/pyproject.toml"
-    else
-        # If no GPU extras found, just sync normally
-        uv sync
+    if ! uv sync; then
+        echo "Error: uv sync failed. Restoring universal CPU configuration..."
+        cp "$VAILA_HOME/pyproject_universal_cpu.toml" "$VAILA_HOME/pyproject.toml"
+        echo "Installation failed. Please check the error messages above."
+        exit 1
     fi
+    echo "Dependencies installed successfully."
 
     # Detect architecture for PyTorch
     echo ""
