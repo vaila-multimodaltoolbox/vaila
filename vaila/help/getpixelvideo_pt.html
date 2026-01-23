@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>getpixelvideo.py - Documentação Completa</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+        }
+
+        h2 {
+            color: #34495e;
+            border-left: 4px solid #3498db;
+            padding-left: 15px;
+            margin-top: 30px;
+        }
+
+        h3 {
+            color: #2980b9;
+            margin-top: 25px;
+        }
+
+        .version-info {
+            background-color: #ecf0f1;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+
+        .feature-box {
+            background-color: #e8f4fd;
+            border: 1px solid #3498db;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+
+        .warning {
+            background-color: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+
+        .code {
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 3px;
+            padding: 10px;
+            font-family: 'Courier New', monospace;
+            overflow-x: auto;
+        }
+
+        .key {
+            background-color: #e9ecef;
+            border: 1px solid #adb5bd;
+            border-radius: 3px;
+            padding: 2px 6px;
+            font-family: monospace;
+            font-weight: bold;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+
+        th,
+        td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+        }
+
+        .format-example {
+            background-color: #f8f9fa;
+            border-left: 4px solid #28a745;
+            padding: 10px;
+            margin: 10px 0;
+        }
+
+        .controls-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+
+        .control-section {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+        }
+
+        .toc {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 5px;
+            margin-bottom: 30px;
+        }
+
+        .toc ul {
+            list-style-type: none;
+            padding-left: 0;
+        }
+
+        .toc li {
+            margin: 8px 0;
+        }
+
+        .toc a {
+            text-decoration: none;
+            color: #3498db;
+            cursor: pointer;
+        }
+
+        .toc a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>getpixelvideo.py - Documentação Completa</h1>
+
+        <div class="version-info">
+            <strong>Versão:</strong> 0.3.0<br>
+            <strong>Data:</strong> Janeiro 2026<br>
+            <strong>Autores:</strong> Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro<br>
+            <strong>Projeto:</strong> vailá - Multimodal Toolbox<br>
+            <strong>Novo na 0.3.0:</strong> Modo Labeling para criação de datasets de ML (Bounding Boxes)
+        </div>
+
+        <div class="toc">
+            <h3>Índice</h3>
+            <ul>
+                <li><a href="#overview">1. Visão Geral</a></li>
+                <li><a href="#installation">2. Instalação e Requisitos</a></li>
+                <li><a href="#usage">3. Uso Básico</a></li>
+                <li><a href="#controls">4. Controles e Interface</a></li>
+                <li><a href="#formats">5. Formatos de Arquivo Suportados</a></li>
+                <li><a href="#modes">6. Modos de Marcação</a></li>
+                <li><a href="#visualization">7. Visualização de Dados</a></li>
+                <li><a href="#saving">8. Opções de Salvamento</a></li>
+                <li><a href="#advanced">9. Recursos Avançados</a></li>
+                <li><a href="#troubleshooting">10. Solução de Problemas</a></li>
+            </ul>
+        </div>
+
+        <section id="overview">
+            <h2>1. Visão Geral</h2>
+            <p>
+                <strong>getpixelvideo.py</strong> é uma ferramenta abrangente de anotação de vídeo que permite aos usuários marcar e
+                salvar coordenadas de pixels em quadros de vídeo.
+                A ferramenta suporta múltiplos formatos CSV e fornece recursos avançados de visualização para diferentes
+                tipos de dados de análise de movimento.
+            </p>
+
+            <div class="feature-box">
+                <h3>Principais Recursos:</h3>
+                <ul>
+                    <li><strong>Suporte Multi-formato:</strong> Carregar e visualizar formatos MediaPipe, YOLO tracking e vailá
+                        padrão</li>
+                    <li><strong>Visualização Avançada:</strong> Figuras de palitos para MediaPipe, caixas delimitadoras para YOLO
+                        tracking</li>
+                    <li><strong>Marcação Flexível:</strong> Múltiplos modos de marcadores para diferentes necessidades de anotação</li>
+                    <li><strong>Zoom & Navegação:</strong> Capacidades completas de zoom com navegação quadro a quadro</li>
+                    <li><strong>Modo Persistência:</strong> Visualizar trilhas de marcadores através de múltiplos quadros</li>
+                    <li><strong>Auto-detecção:</strong> Detectar automaticamente formato CSV ou seleção manual</li>
+                </ul>
+            </div>
+        </section>
+
+        <section id="installation">
+            <h2>2. Instalação e Requisitos</h2>
+
+            <h3>Dependências Necessárias:</h3>
+            <ul>
+                <li><strong>Python 3.12+</strong></li>
+                <li><strong>OpenCV (cv2):</strong> Processamento de vídeo</li>
+                <li><strong>Pygame:</strong> GUI e visualização</li>
+                <li><strong>Pandas:</strong> Manipulação de dados CSV</li>
+                <li><strong>NumPy:</strong> Operações numéricas</li>
+                <li><strong>Tkinter:</strong> Diálogos de arquivo (geralmente incluído com Python)</li>
+            </ul>
+
+            <h3>Instalação:</h3>
+            <div class="code">
+                pip install opencv-python pygame pandas numpy
+            </div>
+
+            <div class="warning">
+                <strong>Nota:</strong> Em alguns sistemas, o pygame pode exigir dependências adicionais do sistema.
+                Se encontrar problemas, consulte a documentação de instalação do pygame para sua plataforma específica.
+            </div>
+        </section>
+
+        <section id="usage">
+            <h2>3. Uso Básico</h2>
+
+            <h3>Iniciando a Aplicação:</h3>
+            <div class="code">
+                python vaila/getpixelvideo.py
+            </div>
+
+            <h3>Processo Passo-a-Passo:</h3>
+            <ol>
+                <li><strong>Selecione o Vídeo:</strong> Escolha o arquivo de vídeo para processar</li>
+                <li><strong>Carregue Dados Existentes:</strong> Use o botão 'Load' na interface (opcional)</li>
+                <li><strong>Selecione o Formato:</strong> Se carregando dados, escolha o formato CSV:
+                    <ul>
+                        <li><strong>Auto-detectar:</strong> Detecta automaticamente o formato</li>
+                        <li><strong>Formato MediaPipe:</strong> Para dados de landmarks com visualização de stick figure</li>
+                        <li><strong>Formato YOLO tracking:</strong> Para dados de tracking com visualização de bounding box
+                        </li>
+                        <li><strong>Formato vailá padrão:</strong> Para dados de coordenadas padrão</li>
+                    </ul>
+                </li>
+                <li><strong>Navegue e Anote:</strong> Use a interface para navegar, fazer zoom e editar marcadores</li>
+                <li><strong>Slve os Resultados:</strong> Salve os dados anotados em formato CSV</li>
+            </ol>
+        </section>
+
+        <section id="controls">
+            <h2>4. Controles e Interface</h2>
+
+            <div class="controls-grid">
+                <div class="control-section">
+                    <h3>Navegação de Vídeo</h3>
+                    <table>
+                        <tr>
+                            <td><span class="key">Espaço</span></td>
+                            <td>Reproduzir/Pausar</td>
+                        </tr>
+                        <tr>
+                            <td><span class="key">→</span></td>
+                            <td>Próximo Quadro (quando pausado)</td>
+                        </tr>
+                        <tr>
+                            <td><span class="key">←</span></td>
+                            <td>Quadro Anterior (quando pausado)</td>
+                        </tr>
+                        <tr>
+                            <td><span class="key">↑</span></td>
+                            <td>Avançar Rápido (quando pausado)</td>
+                        </tr>
+                        <tr>
+                            <td><span class="key">↓</span></td>
+                            <td>Retroceder (quando pausado)</td>
+                        </tr>
+                        <tr>
+                            <td><span class="key">Arrastar Slider</span></td>
+                            <td>Pular para quadro específico</td>
+                        </tr>
+                    </table>
+                </div>
+
+                <div class="control-section">
+                    <h3>Zoom e Pan</h3>
+                    <table>
+                        <tr>
+                            <td><span class="key">+</span></td>
+                            <td>Aumentar Zoom</td>
+                        </tr>
+                        <tr>
+                            <td><span class="key">-</span></td>
+                            <td>Diminuir Zoom</td>
+                        </tr>
+                        <tr>
+                            <td><span class="key">Roda do Mouse</span></td>
+                            <td>Zoom In/Out</td>
+                        </tr>
+                        <tr>
+                            <td><span class="key">Clique do Meio</span></td>
+                            <td>Habilitar Pan/Mover</td>
+                        </tr>
+                    </table>
+                </div>
+
+                <div class="control-section">
+                    <h3>Gerenciamento de Marcadores</h3>
+                    <table>
+                        <tr>
+                            <td><span class="key">Clique Esquerdo</span></td>
+                            <td>Adicionar Marcador</td>
+                        </tr>
+                        <tr>
+                            <td><span class="key">Clique Direito</span></td>
+                            <td>Remover Último Marcador</td>
+                        </tr>
+                        <tr>
+                            <td><span class="key">TAB</span></td>
+                            <td>Próximo marcador no quadro atual</td>
+                        </tr>
+                        <tr>
+                            <td><span class="key">SHIFT+TAB</span></td>
+                            <td>Marcador anterior no quadro atual</td>
+                        </tr>
+                        <tr>
+                            <td><span class="key">DELETE</span></td>
+                            <td>Excluir marcador selecionado</td>
+                        </tr>
+                        <tr>
+                            <td><span class="key">A</span></td>
+                            <td>Adicionar novo marcador vazio ao arquivo</td>
+                        </tr>
+                        <tr>
+                            <td><span class="key">R</span></td>
+                            <td>Remover último marcador do arquivo</td>
+                        </tr>
+                        <tr>
+                            <td><span class="key">L</span></td>
+                            <td>Alternar modo Labeling</td>
+                        </tr>
+                        <tr>
+                            <td><span class="key">Z / Clique Dir.</span></td>
+                            <td>Remover última bounding box (Modo Labeling)</td>
+                        </tr>
+                        <tr>
+                            <td><span class="key">N</span></td>
+                            <td>Renomear label do objeto (Modo Labeling)</td>
+                        </tr>
+                    </table>
+                </div>
+
+                <div class="control-section">
+                    <h3>Operações de Arquivo</h3>
+                    <table>
+                        <tr>
+                            <td><span class="key">S</span></td>
+                            <td>Salvar marcadores atuais</td>
+                        </tr>
+                        <tr>
+                            <td><span class="key">B</span></td>
+                            <td>Fazer backup dos dados atuais</td>
+                        </tr>
+                        <tr>
+                            <td><span class="key">L</span></td>
+                            <td>Recarregar coordenadas do arquivo</td>
+                        </tr>
+                        <tr>
+                            <td><span class="key">H</span></td>
+                            <td>Mostrar diálogo de ajuda</td>
+                        </tr>
+                        <tr>
+                            <td><span class="key">F5</span></td>
+                            <td>Salvar Projeto de Labeling</td>
+                        </tr>
+                        <tr>
+                            <td><span class="key">F6</span></td>
+                            <td>Carregar Projeto de Labeling</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <section id="formats">
+            <h2>5. Formatos de Arquivo Suportados</h2>
+
+            <div class="warning">
+                <strong>Importante:</strong> A ferramenta carrega e exibe apenas coordenadas x,y. Coordenadas Z e outros
+                metadados são ignorados durante o carregamento.
+            </div>
+
+            <h3>Formato MediaPipe</h3>
+            <p>Usado para dados de estimação de pose e detecção de landmarks. A ferramenta extrai coordenadas x,y dos dados de
+                landmark do MediaPipe.</p>
+            <div class="format-example">
+                <strong>Formato de Entrada:</strong> frame_index, nose_x, nose_y, nose_z, left_eye_inner_x, left_eye_inner_y,
+                left_eye_inner_z, ...
+                <br><strong>Dados Carregados:</strong> Apenas coordenadas x,y são extraídas e exibidas
+                <br><strong>Exemplo:</strong>
+                <div class="code">
+                    frame_index,nose_x,nose_y,nose_z,left_eye_inner_x,left_eye_inner_y,left_eye_inner_z
+                    0,100.5,200.3,0.0,150.2,250.1,0.0
+                    1,105.2,205.1,0.0,155.3,255.2,0.0
+                </div>
+                <p><em>Nota: Coordenadas Z são ignoradas no carregamento</em></p>
+            </div>
+
+            <h3>Formato YOLO Tracking</h3>
+            <p>Usado para dados de tracking e detecção de objetos. A ferramenta calcula pontos centrais a partir das caixas delimitadoras.</p>
+            <div class="format-example">
+                <strong>Formato de Entrada:</strong> Frame, Tracker ID, Label, X_min, Y_min, X_max, Y_max, Confidence,
+                Color_R, Color_G, Color_B
+                <br><strong>Dados Carregados:</strong> Pontos centrais calculados das bounding boxes (X_min+X_max)/2,
+                (Y_min+Y_max)/2
+                <br><strong>Exemplo:</strong>
+                <div class="code">
+                    Frame,Tracker ID,Label,X_min,Y_min,X_max,Y_max,Confidence,Color_R,Color_G,Color_B
+                    0,1,person,100,200,200,300,0.9,255,0,0
+                    0,2,person,300,400,400,500,0.8,0,255,0
+                </div>
+            </div>
+
+            <h3>Formato vailá Padrão</h3>
+            <p>Formato de coordenadas padrão usado pela toolbox vailá.</p>
+            <div class="format-example">
+                <strong>Formato:</strong> frame, p1_x, p1_y, p2_x, p2_y, p3_x, p3_y, ...
+                <br><strong>Exemplo:</strong>
+                <div class="code">
+                    frame,p1_x,p1_y,p2_x,p2_y
+                    0,100.5,200.3,150.2,250.1
+                    1,105.2,205.1,155.3,255.2
+                </div>
+            </div>
+        </section>
+
+        <section id="modes">
+            <h2>6. Modos de Marcação</h2>
+
+            <h3>Modo Normal (Padrão)</h3>
+            <p>O modo de marcação padrão onde clicar seleciona e atualiza o marcador atual. Use TAB para navegar
+                entre marcadores. Cada marcador mantém seu ID em todos os quadros.</p>
+            <ul>
+                <li><strong>Caso de uso:</strong> Rastrear pontos específicos através dos quadros</li>
+                <li><strong>Navegação:</strong> TAB para circular entre marcadores</li>
+                <li><strong>Seleção:</strong> Clique para selecionar e atualizar o marcador atual</li>
+            </ul>
+
+            <h3>Modo 1 Line (tecla C)</h3>
+            <p>Cria pontos em sequência em um quadro. Cada clique adiciona um novo marcador. Ideal para traçar caminhos ou
+                contornos.</p>
+            <ul>
+                <li><strong>Caso de uso:</strong> Traçar contornos, caminhos ou outlines</li>
+                <li><strong>Ativação:</strong> Pressione a tecla C para alternar</li>
+                <li><strong>Comportamento:</strong> Cada clique cria um novo marcador sequencial</li>
+            </ul>
+
+            <h3>Modo Sequencial (tecla S)</h3>
+            <p>Cada clique cria um novo marcador com IDs incrementais. Não é necessário selecionar marcadores primeiro. Disponível apenas no
+                Modo Normal.</p>
+            <ul>
+                <li><strong>Caso de uso:</strong> Anotação rápida de múltiplos pontos</li>
+                <li><strong>Ativação:</strong> Pressione a tecla S para alternar</li>
+                <li><strong>Comportamento:</strong> Incremento automático de ID para cada novo marcador</li>
+            </ul>
+
+            <h3>Modo Labeling (tecla L)</h3>
+            <p>Desenha caixas delimitadoras nos quadros de vídeo para criar datasets para treinamento de detecção de objetos (formato YOLO/COCO).
+            </p>
+            <ul>
+                <li><strong>Modo Labeling:</strong> Crie anotações de bounding box, com suporte para salvar/carregar projeto
+                    (F5/F6)</li>
+                <li><strong>Exportação de Dataset:</strong> Exporte datasets estruturados (train/val/test) com imagens e anotações JSON</li>
+                <li><strong>Comportamento:</strong> Clique e arraste para desenhar caixas, pressione Z para desfazer a última caixa</li>
+                <li><strong>Exportação:</strong> Salvar exporta dataset estruturado com divisão train/val/test</li>
+            </ul>
+        </section>
+
+        <section id="visualization">
+            <h2>7. Visualização de Dados</h2>
+
+            <h3>Visualização MediaPipe</h3>
+            <p>Ao carregar dados MediaPipe, a ferramenta exibe figuras de palitos conectando os landmarks:</p>
+            <ul>
+                <li><strong>Landmarks:</strong> Pontos vermelhos para cada ponto detectado</li>
+                <li><strong>Conexões:</strong> Linhas verdes conectando landmarks relacionados</li>
+                <li><strong>Estrutura de Pose:</strong> Pose corporal completa com cabeça, braços, torso e pernas</li>
+            </ul>
+
+            <h3>Visualização YOLO Tracking</h3>
+            <p>Ao carregar dados YOLO tracking, a ferramenta exibe caixas delimitadoras:</p>
+            <ul>
+                <li><strong>Caixas Delimitadoras:</strong> Retângulos coloridos ao redor de objetos detectados</li>
+                <li><strong>Labels:</strong> Classe do objeto e ID do tracker exibidos</li>
+                <li><strong>Cores:</strong> Cores únicas para diferentes IDs de tracker</li>
+                <li><strong>Confiança:</strong> Valores de confiança de detecção mostrados</li>
+            </ul>
+
+            <h3>Visualização vailá Padrão</h3>
+            <p>Visualização padrão de marcadores pontuais:</p>
+            <ul>
+                <li><strong>Marcadores:</strong> Círculos verdes para cada ponto</li>
+                <li><strong>Números:</strong> IDs dos marcadores exibidos ao lado dos pontos</li>
+                <li><strong>Seleção:</strong> Destaque laranja para marcador selecionado</li>
+            </ul>
+        </section>
+
+        <section id="saving">
+            <h2>8. Opções de Salvamento</h2>
+
+            <h3>Salvamento Padrão (tecla S)</h3>
+            <p>Salva marcadores atuais no formato padrão vailá.</p>
+            <ul>
+                <li><strong>Formato:</strong> frame, p1_x, p1_y, p2_x, p2_y, ...</li>
+                <li><strong>Arquivo:</strong> {nome_video}_markers.csv</li>
+                <li><strong>Localização:</strong> Mesmo diretório do arquivo de vídeo</li>
+            </ul>
+
+            <h3>Salvamento 1 Line</h3>
+            <p>Salva marcadores sequenciais do modo 1 Line.</p>
+            <ul>
+                <li><strong>Formato:</strong> frame, p1_x, p1_y, p2_x, p2_y, ...</li>
+                <li><strong>Arquivo:</strong> {nome_video}_markers_sequential.csv</li>
+                <li><strong>Uso:</strong> Para traçado de caminhos e dados de contorno</li>
+            </ul>
+
+            <h3>Salvamento Sequencial</h3>
+            <p>Salva marcadores com IDs incrementais.</p>
+            <ul>
+                <li><strong>Formato:</strong> frame, p1_x, p1_y, p2_x, p2_y, ...</li>
+                <li><strong>Arquivo:</strong> {nome_video}_markers_sequential.csv</li>
+                <li><strong>Uso:</strong> Para anotações de múltiplos pontos</li>
+            </ul>
+
+            <h3>Salvamento Labeling (Modo de Caixas Delimitadoras)</h3>
+            <p>Salva caixas delimitadoras como dataset estruturado para treinamento de Machine Learning.</p>
+            <ul>
+                <li><strong>Exportação:</strong> Salvar exporta dataset estruturado por divisão (split)</li>
+                <li><strong>Gerenciamento de Projeto:</strong> F5 para Salvar, F6 para Carregar projetos de labeling</li>
+                <li><strong>Renomear:</strong> Pressione N para renomear labels de objetos</li>
+                <li><strong>Diretório:</strong> {nome_video}_dataset/</li>
+                <li><strong>Estrutura:</strong> pastas train/val/test com images/ e labels/</li>
+                <li><strong>Divisão:</strong> Divisão automática 70/20/10 (train/val/test)</li>
+                <li><strong>Uso:</strong> Para criar datasets de detecção de objetos (formato YOLO/COCO)</li>
+                <li><strong>Ativação:</strong> Salvar quando o modo Labeling estiver ativo</li>
+            </ul>
+        </section>
+
+        <section id="advanced">
+            <h2>9. Recursos Avançados</h2>
+
+            <h3>Modo Persistência (tecla P)</h3>
+            <p>Mostra marcadores de quadros anteriores para visualizar trilhas de movimento.</p>
+            <ul>
+                <li><strong>Ativação:</strong> Pressione P para alternar</li>
+                <li><strong>Ajuste:</strong> Pressione 1/2 para diminuir/aumentar quadros de persistência</li>
+                <li><strong>Alternância Completa:</strong> Pressione 3 para persistência completa</li>
+                <li><strong>Visualização:</strong> Trilhas desvanecidas mostram movimento do marcador</li>
+            </ul>
+
+            <h3>Modo Labeling (tecla L)</h3>
+            <p>Crie anotações de bounding box para treinamento de modelos de detecção de objetos.</p>
+            <ul>
+                <li><strong>Ativação:</strong> Pressione a tecla L ou clique no botão "Labeling"</li>
+                <li><strong>Uso:</strong> Clique e arraste para desenhar caixas delimitadoras nos quadros de vídeo</li>
+                <li><strong>Editar:</strong> Pressione Z para remover a última caixa no quadro atual</li>
+                <li><strong>Exportação:</strong> Salvar cria dataset estruturado com divisão train/val/test</li>
+                <li><strong>Estrutura do Dataset:</strong> Imagens e anotações JSON organizadas por divisão</li>
+                <li><strong>Formato:</strong> Arquivos JSON com coordenadas x, y, w, h e labels</li>
+                <li><strong>Salvar Projeto:</strong> F5 para salvar estado atual em JSON (permite resumir depois)</li>
+                <li><strong>Carregar Projeto:</strong> F6 para carregar estado salvo de JSON</li>
+                <li><strong>Renomear:</strong> Pressione N para renomear o label (ex: "bola", "jogador")</li>
+                <li><strong>Caso de uso:</strong> Criar datasets para YOLO, COCO, ou outros frameworks de ML</li>
+            </ul>
+
+            <h3>Auto-detecção</h3>
+            <p>A ferramenta detecta automaticamente formato CSV baseado na estrutura das colunas:</p>
+            <ul>
+                <li><strong>MediaPipe:</strong> Detecta 'landmark' nos nomes das colunas</li>
+                <li><strong>YOLO:</strong> Detecta colunas 'Frame', 'Tracker ID', 'X_min'</li>
+                <li><strong>vailá:</strong> Detecta padrão 'frame' e 'p' nas colunas</li>
+            </ul>
+
+            <h3>Backup e Recuperação</h3>
+            <p>Sistema de backup integrado para segurança dos dados:</p>
+            <ul>
+                <li><strong>Backup:</strong> Pressione B para criar backup</li>
+                <li><strong>Recarregar:</strong> Pressione L para recarregar do arquivo</li>
+                <li><strong>Auto-backup:</strong> Backups automáticos antes de operações importantes</li>
+            </ul>
+        </section>
+
+        <section id="troubleshooting">
+            <h2>10. Solução de Problemas</h2>
+
+            <h3>Problemas Comuns</h3>
+
+            <h4>Vídeo Não Carrega</h4>
+            <ul>
+                <li>Verifique se o arquivo de vídeo está corrompido</li>
+                <li>Certifique-se de que o formato de vídeo é suportado (MP4, AVI, MOV, MKV)</li>
+                <li>Verifique se o caminho do arquivo não contém caracteres especiais</li>
+            </ul>
+
+            <h4>Formato CSV Não Detectado</h4>
+            <ul>
+                <li>Verifique se a estrutura do arquivo CSV corresponde ao formato esperado</li>
+                <li>Use seleção manual de formato se a auto-detecção falhar</li>
+                <li>Verifique se o arquivo CSV não está corrompido</li>
+            </ul>
+
+            <h4>Problemas de Performance</h4>
+            <ul>
+                <li>Reduza a resolução do vídeo para melhor performance</li>
+                <li>Feche outros aplicativos para liberar memória</li>
+                <li>Use níveis menores de zoom para vídeos grandes</li>
+            </ul>
+
+            <h4>Problemas de Visualização</h4>
+            <ul>
+                <li>Certifique-se de que os dados CSV estão no formato correto</li>
+                <li>Verifique se os valores de coordenadas estão dentro das dimensões do vídeo</li>
+                <li>Verifique conexões de landmarks para dados MediaPipe</li>
+            </ul>
+
+            <div class="warning">
+                <strong>Suporte:</strong> Para ajuda adicional, verifique a documentação do projeto vailá ou crie uma issue
+                no repositório GitHub.
+            </div>
+        </section>
+
+        <div class="feature-box">
+            <h3>Referência Rápida</h3>
+            <p><strong>Controles Essenciais:</strong></p>
+            <ul>
+                <li><span class="key">Espaço</span> - Reproduzir/Pausar</li>
+                <li><span class="key">Clique Esq.</span> - Adicionar Marcador</li>
+                <li><span class="key">TAB</span> - Navegar Marcadores</li>
+                <li><span class="key">S</span> - Salvar</li>
+                <li><span class="key">H</span> - Ajuda</li>
+            </ul>
+        </div>
+    </div>
+</body>
+
+</html>
