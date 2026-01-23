@@ -53,6 +53,44 @@ import unicodedata
 from tkinter import filedialog, messagebox, simpledialog
 
 
+
+
+def ask_directory(title="Select Directory", initialdir=None, parent=None):
+    """
+    Custom directory selection function to handle Linux quirks.
+    Uses zenity if available on Linux, otherwise falls back to tkinter.
+    """
+    if initialdir:
+        initialdir = os.path.normpath(initialdir)
+
+    if platform.system() == "Linux" and shutil.which("zenity"):
+        try:
+            cmd = ["zenity", "--file-selection", "--directory", f"--title={title}"]
+            if initialdir and os.path.exists(initialdir):
+                cmd.append(f"--filename={initialdir}")
+            
+            # zenity returns the path with a newline at the end
+            result = subprocess.check_output(cmd, stderr=subprocess.DEVNULL).decode('utf-8').strip()
+            return result
+        except subprocess.CalledProcessError:
+            # User cancelled
+            return ""
+        except Exception as e:
+            print(f"Zenity error: {e}, falling back to tkinter")
+    
+    # Fallback to tkinter
+    kwargs = {"title": title}
+    if initialdir:
+        kwargs["initialdir"] = initialdir
+    if parent:
+        kwargs["parent"] = parent
+        
+    path = filedialog.askdirectory(**kwargs)
+    if path:
+        return os.path.normpath(path)
+    return path
+
+
 def copy_file():
     # Print the directory and name of the script being executed
     print(f"Running script: {os.path.basename(__file__)}")
@@ -60,7 +98,7 @@ def copy_file():
     print("[Action] Copy files")
 
     # Prompt the user to select the main path directory for recursive search
-    src_directory = filedialog.askdirectory(title="Select Source Directory")
+    src_directory = ask_directory(title="Select Source Directory")
 
     # Check if a source directory was selected; if not, show an error message
     if not src_directory:
@@ -112,7 +150,7 @@ def process_copy(src_directory, file_extension, patterns):
     ext_filter = file_extension
 
     # Prompt the user to select the destination directory where the new directories will be created
-    base_dest_directory = filedialog.askdirectory(title="Select Destination Directory")
+    base_dest_directory = ask_directory(title="Select Destination Directory")
     if not base_dest_directory:
         messagebox.showerror("Error", "No destination directory selected.")
         return
@@ -177,7 +215,7 @@ def export_file():
         messagebox.showerror("Error", "No source file selected.")
         return
 
-    dest = filedialog.askdirectory(title="Select the destination directory")
+    dest = ask_directory(title="Select the destination directory")
     if not dest:
         messagebox.showerror("Error", "No destination directory selected.")
         return
@@ -196,7 +234,7 @@ def move_file():
     print("[Action] Move files")
 
     # Prompt the user to select the main path directory for recursive search
-    src_directory = filedialog.askdirectory(title="Select Source Directory")
+    src_directory = ask_directory(title="Select Source Directory")
 
     # Check if a source directory was selected; if not, show an error message
     if not src_directory:
@@ -242,7 +280,7 @@ def process_move(src_directory, file_extension, patterns):
     )
 
     # Prompt the user to select the destination directory where the new directories will be created
-    base_dest_directory = filedialog.askdirectory(title="Select Destination Directory")
+    base_dest_directory = ask_directory(title="Select Destination Directory")
     if not base_dest_directory:
         messagebox.showerror("Error", "No destination directory selected.")
         return
@@ -311,7 +349,7 @@ def remove_file():
     ]
 
     # Prompt the user to select the root directory for the removal process
-    root_directory = filedialog.askdirectory(title="Select Root Directory for Removal")
+    root_directory = ask_directory(title="Select Root Directory for Removal")
     if not root_directory:
         messagebox.showerror("Error", "No root directory selected.")
         return
@@ -506,7 +544,7 @@ def rename_files():
     print("[Action] Rename files")
 
     # Prompt the user to select the directory containing the files to rename
-    directory = filedialog.askdirectory(title="Select Directory with Files to Rename")
+    directory = ask_directory(title="Select Directory with Files to Rename")
 
     if not directory:
         messagebox.showerror("Error", "No directory selected.")
@@ -605,7 +643,7 @@ def normalize_names():
     print("[Action] Normalize names")
 
     # Prompt user for directory
-    directory = filedialog.askdirectory(title="Select Directory to Normalize (Files & Folders)")
+    directory = ask_directory(title="Select Directory to Normalize (Files & Folders)")
 
     if not directory:
         messagebox.showerror("Error", "No directory selected.")
@@ -682,7 +720,7 @@ def tree_file():
     print("[Action] Tree file")
 
     # Prompt the user to select the main path directory for recursive search
-    src_directory = filedialog.askdirectory(title="Select Source Directory")
+    src_directory = ask_directory(title="Select Source Directory")
 
     # Check if a source directory was selected; if not, show an error message
     if not src_directory:
@@ -698,7 +736,7 @@ def tree_file():
         return
 
     # Prompt the user to select the destination directory where the .txt file will be saved
-    dest_directory = filedialog.askdirectory(title="Select Destination Directory")
+    dest_directory = ask_directory(title="Select Destination Directory")
     if not dest_directory:
         messagebox.showerror("Error", "No destination directory selected.")
         return
@@ -734,7 +772,7 @@ def find_file():
     print("[Action] Find file")
 
     # Prompt the user to select the main path directory for recursive search
-    src_directory = filedialog.askdirectory(title="Select Source Directory")
+    src_directory = ask_directory(title="Select Source Directory")
 
     # Check if a source directory was selected; if not, show an error message
     if not src_directory:
@@ -772,7 +810,7 @@ def find_file():
         full_pattern = file_extension  # Use extension only if no pattern is provided
 
     # Prompt the user to select the destination directory where the .txt file will be saved
-    dest_directory = filedialog.askdirectory(title="Select Destination Directory")
+    dest_directory = ask_directory(title="Select Destination Directory")
     if not dest_directory:
         messagebox.showerror("Error", "No destination directory selected.")
         return
@@ -992,7 +1030,7 @@ def _transfer_file_gui():
     local_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
     
     def browse_local():
-        dir_path = filedialog.askdirectory(
+        dir_path = ask_directory(
             title="Select Local Directory to Transfer",
             initialdir=local_dir_var.get() or default_local_dir,
             parent=transfer_window
@@ -1102,20 +1140,21 @@ def _transfer_file_gui():
         cancel_btn.config(state=tk.NORMAL)
         
         # Build command
+        # Normalize paths (Universal format for Windows compatibility)
+        local_dir_normalized = local_dir.replace("\\", "/").rstrip('/')
+        
+        # Context: Remote path likely doesn't need normalization if it's Linux, but good to be safe w.r.t slashes
+        if not remote_dir.startswith("/") and ":" not in remote_dir: # Simple check assuming Linux/Unix remote
+             remote_dir_normalized = f"/{remote_dir}".replace("//", "/")
+        else:
+             remote_dir_normalized = remote_dir
+        
+        remote_path_trimmed = remote_dir_normalized.rstrip('/')
+
+        # Build command
         if use_rsync:
             # For rsync, the -e option needs the ssh command as a single string
             ssh_cmd = f"ssh -p {remote_port}"
-            
-            # Normalize paths
-            local_dir_normalized = local_dir.replace("\\", "/").rstrip('/')
-            
-            # Context: Remote path likely doesn't need normalization if it's Linux, but good to be safe w.r.t slashes
-            if not remote_dir.startswith("/") and ":" not in remote_dir: # Simple check assuming Linux/Unix remote
-                 remote_dir_normalized = f"/{remote_dir}".replace("//", "/")
-            else:
-                 remote_dir_normalized = remote_dir
-            
-            remote_path_for_rsync = remote_dir_normalized.rstrip('/')
             
             if mode == "upload":
                 # Local -> Remote
@@ -1124,7 +1163,7 @@ def _transfer_file_gui():
                     "-avzhP",
                     "-e", ssh_cmd,
                     f"{local_dir_normalized}",  # Source: send directory itself
-                    f"{remote_user}@{remote_host}:{remote_path_for_rsync}/" # Dest: into this dir
+                    f"{remote_user}@{remote_host}:{remote_path_trimmed}/" # Dest: into this dir
                 ]
             else:
                 # Remote -> Local
@@ -1132,11 +1171,14 @@ def _transfer_file_gui():
                     rsync_path,
                     "-avzhP",
                     "-e", ssh_cmd,
-                    f"{remote_user}@{remote_host}:{remote_path_for_rsync}", # Source: send directory itself
+                    f"{remote_user}@{remote_host}:{remote_path_trimmed}", # Source: send directory itself
                     f"{local_dir_normalized}/" # Dest: into this dir
                 ]
                 
         else: # SCP
+            # SCP treats recursive copy of 'dir' to 'dest' as 'dest/dir'.
+            # Similar to rsync with trailing slash on dest, or no trailing slash on src.
+            # Using normalized paths with forward slashes is safer on Windows OpenSSH/Git Bash.
             if mode == "upload":
                 cmd = [
                     scp_path,
@@ -1144,7 +1186,7 @@ def _transfer_file_gui():
                     "-P", remote_port,
                     "-v",
                     "-C",
-                    local_dir,
+                    local_dir_normalized,
                     f"{remote_user}@{remote_host}:{remote_dir}"
                 ]
             else:
@@ -1155,7 +1197,7 @@ def _transfer_file_gui():
                     "-v",
                     "-C",
                     f"{remote_user}@{remote_host}:{remote_dir}",
-                    local_dir
+                    local_dir_normalized
                 ]
         
         def run_transfer():
