@@ -1,47 +1,80 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <title>vailá - Versatile Anarcho Integrated Multimodal Toolbox Help</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
-    h1, h2, h3 { color: #2c3e50; }
-    pre { background-color: #f4f4f4; padding: 10px; overflow: auto; }
-    code { background-color: #f4f4f4; padding: 3px 6px; }
-    .section { margin-bottom: 40px; }
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      line-height: 1.6;
+    }
+
+    h1,
+    h2,
+    h3 {
+      color: #2c3e50;
+    }
+
+    pre {
+      background-color: #f4f4f4;
+      padding: 10px;
+      overflow: auto;
+    }
+
+    code {
+      background-color: #f4f4f4;
+      padding: 3px 6px;
+    }
+
+    .section {
+      margin-bottom: 40px;
+    }
   </style>
 </head>
+
 <body>
   <h1>vailá - Versatile Anarcho Integrated Multimodal Toolbox Help</h1>
-  
+
   <div class="section" id="english">
     <h2>English Version</h2>
-  
+
     <h3>Overview</h3>
     <p>
-      vailá is an open-source multimodal toolbox for human movement analysis. It integrates data from various sources – including IMU, MoCap, markerless tracking, face mesh detection, GNSS/GPS, EMG, and more – enabling advanced and customizable analysis.
+      vailá is an open-source multimodal toolbox for human movement analysis. It integrates data from various sources –
+      including IMU, MoCap, markerless tracking, face mesh detection, GNSS/GPS, EMG, and more – enabling advanced and
+      customizable analysis.
     </p>
-  
+
     <h3>Key Features</h3>
     <ul>
-      <li><strong>Data Integration:</strong> Supports multiple data types (IMU, MoCap, markerless, face mesh, GNSS, EMG).</li>
-      <li><strong>Data Processing & Analysis:</strong> Feature extraction, advanced analysis, and 2D/3D visualization.</li>
+      <li><strong>Data Integration:</strong> Supports multiple data types (IMU, MoCap, markerless, face mesh, GNSS,
+        EMG).</li>
+      <li><strong>Data Processing & Analysis:</strong> Feature extraction, advanced analysis, and 2D/3D visualization.
+      </li>
       <li><strong>Machine Learning:</strong> Modules for training, validation, and prediction using ML models.</li>
-      <li><strong>File Management:</strong> Organization, renaming, copying, and file movement.</li>
-      <li><strong>Video Processing:</strong> Extraction of frames, compression (H.264 and H.265), and video trimming.</li>
+      <li><strong>File Management:</strong> Organization, renaming, copying, file movement, and file transfer (SSH).
+      </li>
+      <li><strong>Video Processing:</strong> Extraction of frames, compression (H.264 and H.265), and video trimming.
+      </li>
     </ul>
-  
+
     <h3>Installation Instructions</h3>
     <h4>⚡ Powered by <em>uv</em> (Recommended)</h4>
     <p>
-      <em>vailá</em> now uses <strong><a href="https://github.com/astral-sh/uv">uv</a></strong>, an extremely fast Python package installer. 
-      <strong>uv is the recommended installation method</strong> for all platforms due to its <strong>10-100x faster installation</strong> 
+      <em>vailá</em> now uses <strong><a href="https://github.com/astral-sh/uv">uv</a></strong>, an extremely fast
+      Python package installer.
+      <strong>uv is the recommended installation method</strong> for all platforms due to its <strong>10-100x faster
+        installation</strong>
       and <strong>faster execution times</strong> compared to Conda.
     </p>
     <h4>Prerequisites</h4>
     <ul>
-      <li><strong>uv:</strong> Will be automatically installed by the installation scripts, or install manually from <a href="https://github.com/astral-sh/uv">https://github.com/astral-sh/uv</a></li>
-      <li><strong>FFmpeg:</strong> Required for video processing functionalities (installed automatically on Windows)</li>
+      <li><strong>uv:</strong> Will be automatically installed by the installation scripts, or install manually from <a
+          href="https://github.com/astral-sh/uv">https://github.com/astral-sh/uv</a></li>
+      <li><strong>FFmpeg:</strong> Required for video processing functionalities (installed automatically on Windows)
+      </li>
     </ul>
     <h4>Steps</h4>
     <ol>
@@ -85,14 +118,17 @@ uv sync</code></pre>
 python vaila.py</code></pre>
       </li>
     </ol>
-  
+
     <h3>GUI Button Documentation</h3>
     <p>
-      All buttons in the vailá GUI are documented. See the <a href="vaila_buttons/README.md">Button Documentation</a> for complete details.
+      All buttons in the vailá GUI are documented. See the <a href="vaila_buttons/README.md">Button Documentation</a>
+      for complete details.
     </p>
     <ul>
-      <li><strong><a href="vaila_buttons/markerless-2d-button.html">Markerless 2D Analysis</a></strong> - Advanced pose estimation</li>
-      <li><strong><a href="vaila_buttons/README.md">All Button Documentation</a></strong> - Complete list of all GUI buttons</li>
+      <li><strong><a href="vaila_buttons/markerless-2d-button.html">Markerless 2D Analysis</a></strong> - Advanced pose
+        estimation</li>
+      <li><strong><a href="vaila_buttons/README.md">All Button Documentation</a></strong> - Complete list of all GUI
+        buttons</li>
     </ul>
 
     <h3>Script Help Documentation</h3>
@@ -100,12 +136,14 @@ python vaila.py</code></pre>
       Comprehensive documentation for all Python scripts and modules in vailá:
     </p>
     <ul>
-      <li><strong><a href="../vaila/help/index.html">Script Help Index</a></strong> - Complete documentation for all Python modules and scripts</li>
+      <li><strong><a href="../vaila/help/index.html">Script Help Index</a></strong> - Complete documentation for all
+        Python modules and scripts</li>
     </ul>
 
     <h3>Video Processing Tools</h3>
     <ul>
-      <li><strong><a href="../vaila/help/tools/drawboxe.html">DrawBoxe</a></strong> - Draw boxes and polygons on videos with frame interval support</li>
+      <li><strong><a href="../vaila/help/tools/drawboxe.html">DrawBoxe</a></strong> - Draw boxes and polygons on videos
+        with frame interval support</li>
     </ul>
 
     <h3>Modules and Tools</h3>
@@ -121,14 +159,19 @@ python vaila.py</code></pre>
       <li><strong>GNSS/GPS Analysis</strong></li>
       <li><strong>EEG/EMG Analysis</strong></li>
       <li>
-        <strong>ML Walkway:</strong> 
+        <strong>ML Walkway:</strong>
         <ul>
           <li>Model Training</li>
           <li>Model Validation</li>
           <li>Prediction with Pre-trained Models</li>
         </ul>
       </li>
-      <li><strong>File Management</strong></li>
+      <li>
+        <strong>File Management:</strong>
+        <ul>
+          <li>File Transfer (SSH - Upload/Download)</li>
+        </ul>
+      </li>
       <li>
         <strong>Video Processing:</strong>
         <ul>
@@ -137,7 +180,7 @@ python vaila.py</code></pre>
       </li>
       <li><strong>Visualization</strong></li>
     </ul>
-  
+
     <h3>How to Use</h3>
     <p>
       After setting up the environment, run vailá using:
@@ -148,19 +191,22 @@ python vaila.py</code></pre>
     <pre><code>conda activate vaila
 python vaila.py</code></pre>
     <p>
-      The graphical interface allows you to select the desired module. For example, when selecting "ML Walkway," a window with options for model training, validation, or prediction will open.
+      The graphical interface allows you to select the desired module. For example, when selecting "ML Walkway," a
+      window with options for model training, validation, or prediction will open.
     </p>
-  
+
     <h3>Contributing</h3>
     <p>
-      Contributions are welcome! If you encounter issues or have suggestions, please submit a pull request or open an issue on GitHub.
+      Contributions are welcome! If you encounter issues or have suggestions, please submit a pull request or open an
+      issue on GitHub.
     </p>
-  
+
     <h3>License</h3>
     <p>
-      This project is licensed under the <strong>GNU Lesser General Public License v3.0</strong>. See the <code>LICENSE</code> file for more details.
+      This project is licensed under the <strong>GNU Lesser General Public License v3.0</strong>. See the
+      <code>LICENSE</code> file for more details.
     </p>
-  
+
     <h3>How to Cite</h3>
     <p>
       If vailá is useful for your research, please cite:
@@ -172,37 +218,48 @@ python vaila.py</code></pre>
   url={https://github.com/vaila-multimodaltoolbox/vaila}
 }</code></pre>
   </div>
-  
+
   <hr>
-  
+
   <div class="section" id="portuguese">
     <h2>Versão em Português</h2>
-  
+
     <h3>Visão Geral</h3>
     <p>
-      vailá é uma ferramenta multimodal de código aberto para análise do movimento humano. Ela integra dados de diversas fontes – como IMU, MoCap, rastreamento markerless, detecção de face mesh, GNSS/GPS, EMG e mais – permitindo uma análise avançada e customizável.
+      vailá é uma ferramenta multimodal de código aberto para análise do movimento humano. Ela integra dados de diversas
+      fontes – como IMU, MoCap, rastreamento markerless, detecção de face mesh, GNSS/GPS, EMG e mais – permitindo uma
+      análise avançada e customizável.
     </p>
-  
+
     <h3>Principais Funcionalidades</h3>
     <ul>
-      <li><strong>Integração de Dados:</strong> Suporte a múltiplos tipos de dados (IMU, MoCap, markerless, face mesh, GNSS, EMG).</li>
-      <li><strong>Processamento & Análise de Dados:</strong> Extração de características, análise avançada e visualização em 2D/3D.</li>
-      <li><strong>Machine Learning:</strong> Módulos para treinamento, validação e predição utilizando modelos de ML.</li>
-      <li><strong>Gerenciamento de Arquivos:</strong> Organização, renomeação, cópia e movimentação de arquivos.</li>
-      <li><strong>Processamento de Vídeo:</strong> Extração de frames, compressão (H.264 e H.265) e corte de vídeos.</li>
+      <li><strong>Integração de Dados:</strong> Suporte a múltiplos tipos de dados (IMU, MoCap, markerless, face mesh,
+        GNSS, EMG).</li>
+      <li><strong>Processamento & Análise de Dados:</strong> Extração de características, análise avançada e
+        visualização em 2D/3D.</li>
+      <li><strong>Machine Learning:</strong> Módulos para treinamento, validação e predição utilizando modelos de ML.
+      </li>
+      <li><strong>Gerenciamento de Arquivos:</strong> Organização, renomeação, cópia, movimentação e transferência (SSH)
+        de arquivos.</li>
+      <li><strong>Processamento de Vídeo:</strong> Extração de frames, compressão (H.264 e H.265) e corte de vídeos.
+      </li>
     </ul>
-  
+
     <h3>Instruções de Instalação</h3>
     <h4>⚡ Powered by <em>uv</em> (Recomendado)</h4>
     <p>
-      <em>vailá</em> agora usa <strong><a href="https://github.com/astral-sh/uv">uv</a></strong>, um instalador de pacotes Python extremamente rápido. 
-      <strong>uv é o método de instalação recomendado</strong> para todas as plataformas devido à sua <strong>instalação 10-100x mais rápida</strong> 
+      <em>vailá</em> agora usa <strong><a href="https://github.com/astral-sh/uv">uv</a></strong>, um instalador de
+      pacotes Python extremamente rápido.
+      <strong>uv é o método de instalação recomendado</strong> para todas as plataformas devido à sua <strong>instalação
+        10-100x mais rápida</strong>
       e <strong>tempos de execução mais rápidos</strong> em comparação com Conda.
     </p>
     <h4>Pré-requisitos</h4>
     <ul>
-      <li><strong>uv:</strong> Será instalado automaticamente pelos scripts de instalação, ou instale manualmente em <a href="https://github.com/astral-sh/uv">https://github.com/astral-sh/uv</a></li>
-      <li><strong>FFmpeg:</strong> Necessário para funcionalidades de processamento de vídeo (instalado automaticamente no Windows)</li>
+      <li><strong>uv:</strong> Será instalado automaticamente pelos scripts de instalação, ou instale manualmente em <a
+          href="https://github.com/astral-sh/uv">https://github.com/astral-sh/uv</a></li>
+      <li><strong>FFmpeg:</strong> Necessário para funcionalidades de processamento de vídeo (instalado automaticamente
+        no Windows)</li>
     </ul>
     <h4>Passos</h4>
     <ol>
@@ -246,13 +303,14 @@ uv sync</code></pre>
 python vaila.py</code></pre>
       </li>
     </ol>
-  
+
     <h3>Documentação de Help dos Scripts</h3>
     <p>
       Documentação completa para todos os scripts e módulos Python em vailá:
     </p>
     <ul>
-      <li><strong><a href="../vaila/help/index.html">Índice de Help dos Scripts</a></strong> - Documentação completa para todos os módulos e scripts Python</li>
+      <li><strong><a href="../vaila/help/index.html">Índice de Help dos Scripts</a></strong> - Documentação completa
+        para todos os módulos e scripts Python</li>
     </ul>
 
     <h3>Módulos e Ferramentas</h3>
@@ -268,14 +326,19 @@ python vaila.py</code></pre>
       <li><strong>Análise GNSS/GPS</strong></li>
       <li><strong>Análise EEG/EMG</strong></li>
       <li>
-        <strong>ML Walkway:</strong> 
+        <strong>ML Walkway:</strong>
         <ul>
           <li>Treinamento de Modelos</li>
           <li>Validação de Modelos</li>
           <li>Predição com Modelos Pré-treinados</li>
         </ul>
       </li>
-      <li><strong>Gerenciamento de Arquivos</strong></li>
+      <li>
+        <strong>Gerenciamento de Arquivos:</strong>
+        <ul>
+          <li>Transferência de Arquivos (SSH - Upload/Download)</li>
+        </ul>
+      </li>
       <li>
         <strong>Processamento de Vídeo:</strong>
         <ul>
@@ -287,9 +350,10 @@ python vaila.py</code></pre>
 
     <h3>Ferramentas de Processamento de Vídeo</h3>
     <ul>
-      <li><strong><a href="../vaila/help/tools/drawboxe.html">DrawBoxe</a></strong> - Desenhar caixas e polígonos em vídeos com suporte a intervalos de frames</li>
+      <li><strong><a href="../vaila/help/tools/drawboxe.html">DrawBoxe</a></strong> - Desenhar caixas e polígonos em
+        vídeos com suporte a intervalos de frames</li>
     </ul>
-  
+
     <h3>Como Utilizar</h3>
     <p>
       Após configurar o ambiente, inicie o vailá com o comando:
@@ -300,19 +364,22 @@ python vaila.py</code></pre>
     <pre><code>conda activate vaila
 python vaila.py</code></pre>
     <p>
-      A interface gráfica permitirá que você selecione o módulo desejado. Por exemplo, ao selecionar "ML Walkway", uma janela com opções para treinamento, validação ou predição de modelos será aberta.
+      A interface gráfica permitirá que você selecione o módulo desejado. Por exemplo, ao selecionar "ML Walkway", uma
+      janela com opções para treinamento, validação ou predição de modelos será aberta.
     </p>
-  
+
     <h3>Contribuição</h3>
     <p>
-      Suas contribuições são bem-vindas! Caso encontre problemas ou tenha sugestões, por favor, envie um pull request ou abra uma issue no GitHub.
+      Suas contribuições são bem-vindas! Caso encontre problemas ou tenha sugestões, por favor, envie um pull request ou
+      abra uma issue no GitHub.
     </p>
-  
+
     <h3>Licença</h3>
     <p>
-      Este projeto está licenciado sob a <strong>GNU Lesser General Public License v3.0</strong>. Consulte o arquivo <code>LICENSE</code> para mais detalhes.
+      Este projeto está licenciado sob a <strong>GNU Lesser General Public License v3.0</strong>. Consulte o arquivo
+      <code>LICENSE</code> para mais detalhes.
     </p>
-  
+
     <h3>Como Citar</h3>
     <p>
       Se o vailá for útil na sua pesquisa, por favor, cite:
@@ -324,8 +391,9 @@ python vaila.py</code></pre>
   url={https://github.com/vaila-multimodaltoolbox/vaila}
 }</code></pre>
   </div>
-  
+
   <hr>
   <p>&copy; 2024 vailá. Todos os direitos reservados.</p>
 </body>
+
 </html>

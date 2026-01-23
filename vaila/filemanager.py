@@ -13,10 +13,6 @@ Version: 0.3.14
 Description:
 This script is designed to manage files and directories through a graphical user interface (GUI) using Tkinter. It supports various operations such as copying, moving, removing, and converting files, along with advanced features like pattern matching and batch processing. The tool is particularly useful for organizing large datasets and automating repetitive file operations.
 
-    File Export:
-        Exports files to formats such as CSV, FBX, and TRC.
-        Enables the user to prepare data for specific tools or further analysis.
-
     File Copy/Move:
         Allows copying or moving files based on file extensions and pattern matching.
         Streamlines file management across directories, minimizing manual effort.
@@ -25,25 +21,18 @@ This script is designed to manage files and directories through a graphical user
         Removes files matching specific extensions or directories.
         Safeguards critical system files from accidental deletion by recognizing forbidden patterns and offering multiple user confirmations.
 
-Changelog for Version 0.1.1:
+    File Transfer:
+        Provides a GUI for transferring files via SSH (rsync/scp).
+        Supports both Upload (Send) and Download (Receive) modes.
+        Includes cross-platform support (Linux, macOS, Windows) with password (paramiko) or key-based authentication.
 
-    Added support for file export to CSV, FBX, and TRC formats.
-    Added support for file copy/move based on file extensions and pattern matching.
-    Added support for file removal based on file extensions or directory names.
-    Added support for file tree generation.
-    Added support for file find based on file name pattern and extension.
-    Added support for file transfer using SSH.
-    Added support for file import from CSV, FBX, and TRC formats.
-    Added support for file rename based on file name pattern.
-    Added support for file tree generation.
-    Added support for file find based on file name pattern and extension.
-    Added support for file transfer using SSH.
-    Added support for file import from CSV, FBX, and TRC formats.
-    Added support for file rename based on file name pattern.
-    Added support for file tree generation.
-    Added support for file find based on file name pattern and extension.
+Changelog for Version 0.3.14:
 
-    Initial release of the filemanager.py script.
+    Added "Transfer Files (SSH)" GUI directly into the File Manager.
+    Implemented cross-platform Transfer tool (Upload/Download modes).
+    Removed dependency on external shell scripts for transfer on Linux/Unix.
+    Enhanced GUI with "Upload" and "Download" radio buttons for bidirectional transfer.
+    Integrated paramiko for SSH password support in the GUI.
 
 License:
 This script is distributed under the AGPL3 License
@@ -56,6 +45,7 @@ import platform  # Add this import at the top with other imports
 import re
 import shutil
 import subprocess
+import sys
 import threading
 import time
 import tkinter as tk
@@ -851,78 +841,19 @@ def transfer_file():
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
     print("[Action] Transfer file")
 
-    # Ensure we have a root window before any messagebox calls
-    root_for_error = None
+    # Call the cross-platform GUI
     try:
-        if hasattr(tk, '_default_root') and tk._default_root is not None:
-            root_for_error = tk._default_root
-        else:
-            # Create a hidden root window for error dialogs
-            root_for_error = tk.Tk()
-            root_for_error.withdraw()
-    except Exception as root_err:
-        root_for_error = None
-
-    try:
-        if platform.system() == "Windows":
-            # Windows: Use Python implementation
-            _transfer_file_windows()
-        else:
-            # Linux/macOS: Use shell script
-            script_dir = os.path.dirname(os.path.abspath(__file__))
-            script_name = "transfer.sh"
-            script_path = os.path.join(script_dir, script_name)
-
-            if not os.path.exists(script_path):
-                # Try to get root for parent
-                try:
-                    root = tk._default_root if hasattr(tk,'_default_root') and tk._default_root is not None else None
-                except:
-                    root = None
-                messagebox.showerror("Error", f"Transfer script not found: {script_path}", parent=root)
-                return
-
-            # Make the script executable
-            os.chmod(script_path, 0o755)
-
-            print(f"Executing transfer script: {script_path}")
-
-            # Execute the shell script in a new terminal
-            if platform.system() == "Darwin":  # macOS
-                subprocess.Popen(["open", "-a", "Terminal", script_path])
-            else:  # Linux
-                # Try different terminal emulators
-                terminals = ["gnome-terminal", "xterm", "konsole", "lxterminal"]
-                for terminal in terminals:
-                    try:
-                        subprocess.Popen([terminal, "-e", f"bash {script_path}"], cwd=script_dir)
-                        break
-                    except FileNotFoundError:
-                        continue
-                else:
-                    # Fallback: try to run directly
-                    subprocess.Popen(["bash", script_path], cwd=script_dir)
-
-    except FileNotFoundError as e:
-        messagebox.showerror(
-            "Error",
-            f"Transfer script not found: {e.filename}\n"
-            f"Please ensure {script_name} is in the same directory as filemanager.py",
-        )
-        print(f"Script not found: {e}")
-
+        _transfer_file_gui()
     except Exception as e:
-        # Always use print to avoid Tkinter messagebox errors
-        error_msg = f"Unexpected error during transfer: {e}"
-        print(error_msg)
-        # DO NOT use messagebox here - it causes the "-default value" error
-        # The error will be visible in the console/terminal
+        print(f"Error launching transfer GUI: {e}")
+        messagebox.showerror("Error", f"Error launching transfer GUI: {e}")
 
 
-def _transfer_file_windows():
-    """Windows-specific file transfer implementation using Python with GUI."""
+def _transfer_file_gui():
+    """Cross-platform file transfer implementation using Python with GUI."""
     import shutil
     import threading
+    import shlex
     
     # Check for rsync or scp
     rsync_path = shutil.which("rsync")
@@ -947,15 +878,24 @@ def _transfer_file_windows():
     if not rsync_path and not scp_path:
         error_msg = (
             "Neither rsync nor scp is found in PATH.\n\n"
-            "To use file transfer, install one of:\n\n"
-            "Option 1: SCP (Recommended for Windows)\n"
+            "To use file transfer, please install rsync or ensure OpenSSH is installed."
+        )
+        if platform.system() == "Windows":
+             error_msg += (
+            "\n\nOption 1: SCP (Recommended for Windows)\n"
             "  - Enable OpenSSH Client: Settings > Apps > Optional Features > Add OpenSSH Client\n"
             "  - Or run as Administrator: dism /online /Add-Capability /CapabilityName:OpenSSH.Client~~~~0.0.1.0\n\n"
             "Option 2: rsync\n"
             "  - Install via Git for Windows (includes rsync)\n"
             "  - Or install via Chocolatey: choco install rsync\n"
             "  - Or install via WSL/Cygwin"
-        )
+             )
+        else:
+             error_msg += (
+                 "\n\nLinux: sudo apt install rsync openssh-client\n"
+                 "macOS: brew install rsync"
+             )
+
         # Use print if root is not available to avoid the error
         if root is None:
             print(f"ERROR: {error_msg}")
@@ -965,7 +905,7 @@ def _transfer_file_windows():
         except Exception as msg_err:
             print(f"ERROR: {error_msg}")
         return
-    
+
     # Determine which tool to use
     use_rsync = rsync_path is not None
     transfer_method = "RSYNC" if use_rsync else "SCP"
@@ -1003,6 +943,9 @@ def _transfer_file_windows():
     remote_port_var = tk.StringVar(value="22")
     remote_dir_var = tk.StringVar()
     ssh_password_var = tk.StringVar()  # Password field
+    mode_var = tk.StringVar(value="upload") # Transfer mode: upload or download
+    local_label_var = tk.StringVar(value="Local Directory (Source):")
+    remote_label_var = tk.StringVar(value="Remote Directory (Destination):")
     
     # Main frame
     main_frame = tk.Frame(transfer_window, padx=10, pady=10)
@@ -1016,6 +959,7 @@ def _transfer_file_windows():
     )
     title_label.pack(pady=(0, 10))
     
+    
     if not use_rsync:
         info_label = tk.Label(
             main_frame,
@@ -1024,9 +968,24 @@ def _transfer_file_windows():
             font=("Arial", 9)
         )
         info_label.pack(pady=(0, 10))
+
+    # Mode selection
+    mode_frame = tk.LabelFrame(main_frame, text="Transfer Mode", padx=5, pady=5)
+    mode_frame.pack(fill=tk.X, pady=(0, 10))
+    
+    def update_labels():
+        if mode_var.get() == "upload":
+            local_label_var.set("Local Directory (Source):")
+            remote_label_var.set("Remote Directory (Destination):")
+        else:
+            local_label_var.set("Local Directory (Destination):")
+            remote_label_var.set("Remote Directory (Source):")
+
+    tk.Radiobutton(mode_frame, text="Upload (Send to Remote)", variable=mode_var, value="upload", command=update_labels).pack(side=tk.LEFT, padx=10)
+    tk.Radiobutton(mode_frame, text="Download (Receive from Remote)", variable=mode_var, value="download", command=update_labels).pack(side=tk.LEFT, padx=10)
     
     # Local directory
-    tk.Label(main_frame, text="Local Directory:", anchor="w").pack(fill=tk.X, pady=(5, 2))
+    tk.Label(main_frame, textvariable=local_label_var, anchor="w").pack(fill=tk.X, pady=(5, 2))
     local_frame = tk.Frame(main_frame)
     local_frame.pack(fill=tk.X, pady=(0, 10))
     local_entry = tk.Entry(local_frame, textvariable=local_dir_var, width=50)
@@ -1056,7 +1015,7 @@ def _transfer_file_windows():
     tk.Entry(main_frame, textvariable=remote_port_var, width=50).pack(fill=tk.X, pady=(0, 10))
     
     # Remote directory
-    tk.Label(main_frame, text="Remote Directory (full path):", anchor="w").pack(fill=tk.X, pady=(5, 2))
+    tk.Label(main_frame, textvariable=remote_label_var, anchor="w").pack(fill=tk.X, pady=(5, 2))
     tk.Entry(main_frame, textvariable=remote_dir_var, width=50).pack(fill=tk.X, pady=(0, 10))
     
     # SSH Password
@@ -1119,6 +1078,8 @@ def _transfer_file_windows():
                 return  # User will enter password and try again
             # If No, continue without password (will prompt in terminal)
         
+        mode = mode_var.get()
+        
         # Show progress area
         progress_frame.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
         progress_label.pack(anchor="w")
@@ -1126,9 +1087,17 @@ def _transfer_file_windows():
         progress_scroll.pack(side=tk.RIGHT, fill=tk.Y)
         progress_text.config(state=tk.NORMAL)
         progress_text.delete(1.0, tk.END)
-        progress_text.insert(tk.END, f"Starting transfer...\n")
-        progress_text.insert(tk.END, f"From: {local_dir}\n")
-        progress_text.insert(tk.END, f"To: {remote_user}@{remote_host}:{remote_dir}\n")
+        progress_text.insert(tk.END, f"Starting {mode}...\n")
+        
+        if mode == "upload":
+            source_desc = local_dir
+            dest_desc = f"{remote_user}@{remote_host}:{remote_dir}"
+        else:
+            source_desc = f"{remote_user}@{remote_host}:{remote_dir}"
+            dest_desc = local_dir
+            
+        progress_text.insert(tk.END, f"From: {source_desc}\n")
+        progress_text.insert(tk.END, f"To: {dest_desc}\n")
         progress_text.insert(tk.END, f"SSH Port: {remote_port}\n")
         progress_text.insert(tk.END, f"Method: {transfer_method}\n")
         progress_text.insert(tk.END, "-" * 60 + "\n\n")
@@ -1142,40 +1111,59 @@ def _transfer_file_windows():
         # Build command
         if use_rsync:
             # For rsync, the -e option needs the ssh command as a single string
-            # The ssh command with port must be properly quoted
-            # Normalize Windows paths (use forward slashes for rsync)
-            local_dir_normalized = local_dir.replace("\\", "/")
-            # Ensure remote_dir has proper format
-            if not remote_dir.startswith("/"):
-                remote_dir_normalized = f"/{remote_dir}".replace("//", "/")
-            else:
-                remote_dir_normalized = remote_dir
-            
-            # Build ssh command - must be a single string for -e option
-            # For Windows rsync, we need to ensure the path format is correct
             ssh_cmd = f"ssh -p {remote_port}"
-            # Remove trailing slash from local path - without it, rsync transfers the directory itself
-            # With trailing slash, rsync transfers only the contents
-            local_path_for_rsync = local_dir_normalized.rstrip('/')
-            # Ensure remote path has proper format
+            
+            # Normalize paths
+            local_dir_normalized = local_dir.replace("\\", "/").rstrip('/')
+            
+            # Context: Remote path likely doesn't need normalization if it's Linux, but good to be safe w.r.t slashes
+            if not remote_dir.startswith("/") and ":" not in remote_dir: # Simple check assuming Linux/Unix remote
+                 remote_dir_normalized = f"/{remote_dir}".replace("//", "/")
+            else:
+                 remote_dir_normalized = remote_dir
+            
             remote_path_for_rsync = remote_dir_normalized.rstrip('/')
-            cmd = [
-                rsync_path,
-                "-avhP",
-                "-e", ssh_cmd,
-                f"{local_path_for_rsync}",  # No trailing slash - transfers the directory itself
-                f"{remote_user}@{remote_host}:{remote_path_for_rsync}/"
-            ]
-        else:
-            cmd = [
-                scp_path,
-                "-r",
-                "-P", remote_port,
-                "-v",
-                "-C",
-                local_dir,
-                f"{remote_user}@{remote_host}:{remote_dir}"
-            ]
+            
+            if mode == "upload":
+                # Local -> Remote
+                cmd = [
+                    rsync_path,
+                    "-avhP",
+                    "-e", ssh_cmd,
+                    f"{local_dir_normalized}",  # Source: send directory itself
+                    f"{remote_user}@{remote_host}:{remote_path_for_rsync}/" # Dest: into this dir
+                ]
+            else:
+                # Remote -> Local
+                cmd = [
+                    rsync_path,
+                    "-avhP",
+                    "-e", ssh_cmd,
+                    f"{remote_user}@{remote_host}:{remote_path_for_rsync}", # Source: send directory itself
+                    f"{local_dir_normalized}/" # Dest: into this dir
+                ]
+                
+        else: # SCP
+            if mode == "upload":
+                cmd = [
+                    scp_path,
+                    "-r",
+                    "-P", remote_port,
+                    "-v",
+                    "-C",
+                    local_dir,
+                    f"{remote_user}@{remote_host}:{remote_dir}"
+                ]
+            else:
+                cmd = [
+                    scp_path,
+                    "-r",
+                    "-P", remote_port,
+                    "-v",
+                    "-C",
+                    f"{remote_user}@{remote_host}:{remote_dir}",
+                    local_dir
+                ]
         
         def run_transfer():
             try:
@@ -1228,50 +1216,85 @@ def _transfer_file_windows():
                                 # Use SFTP to transfer files
                                 sftp = ssh.open_sftp()
                                 
-                                # Ensure remote directory exists
-                                remote_dir_parts = remote_dir.strip('/').split('/')
-                                current_remote_path = ''
-                                for part in remote_dir_parts:
-                                    if part:
-                                        current_remote_path = f"{current_remote_path}/{part}" if current_remote_path else f"/{part}"
-                                        try:
-                                            sftp.stat(current_remote_path)
-                                        except IOError:
-                                            sftp.mkdir(current_remote_path)
-                                
-                                # Transfer directory recursively
-                                # First, create the directory on remote (using the basename of local_dir)
-                                local_dir_name = os.path.basename(local_dir.rstrip('/\\'))
-                                remote_target_dir = f"{remote_dir.rstrip('/')}/{local_dir_name}"
-                                
-                                # Ensure remote target directory exists
-                                try:
-                                    sftp.stat(remote_target_dir)
-                                except IOError:
-                                    sftp.mkdir(remote_target_dir)
-                                
-                                # Transfer files recursively
-                                def upload_directory(local_path, remote_path):
-                                    for item in os.listdir(local_path):
-                                        local_item = os.path.join(local_path, item)
-                                        remote_item = f"{remote_path.rstrip('/')}/{item}"
-                                        
-                                        if os.path.isdir(local_item):
+                                if mode == "upload":
+                                    # Ensure remote directory exists
+                                    remote_dir_parts = remote_dir.strip('/').split('/')
+                                    current_remote_path = ''
+                                    for part in remote_dir_parts:
+                                        if part:
+                                            current_remote_path = f"{current_remote_path}/{part}" if current_remote_path else f"/{part}"
                                             try:
-                                                sftp.mkdir(remote_item)
+                                                sftp.stat(current_remote_path)
                                             except IOError:
-                                                pass  # Directory may already exist
-                                            upload_directory(local_item, remote_item)
-                                        else:
-                                            progress_text.config(state=tk.NORMAL)
-                                            progress_text.insert(tk.END, f"Transferring: {os.path.basename(local_item)}\n")
-                                            progress_text.config(state=tk.DISABLED)
-                                            progress_text.see(tk.END)
-                                            transfer_window.update_idletasks()
-                                            sftp.put(local_item, remote_item)
+                                                sftp.mkdir(current_remote_path)
+                                    
+                                    # Transfer directory recursively (Upload)
+                                    # First, create the directory on remote (using the basename of local_dir)
+                                    local_dir_name = os.path.basename(local_dir.rstrip('/\\'))
+                                    remote_target_dir = f"{remote_dir.rstrip('/')}/{local_dir_name}"
+                                    
+                                    # Ensure remote target directory exists
+                                    try:
+                                        sftp.stat(remote_target_dir)
+                                    except IOError:
+                                        sftp.mkdir(remote_target_dir)
+                                    
+                                    # Transfer files recursively
+                                    def upload_directory(local_path, remote_path):
+                                        for item in os.listdir(local_path):
+                                            local_item = os.path.join(local_path, item)
+                                            remote_item = f"{remote_path.rstrip('/')}/{item}"
+                                            
+                                            if os.path.isdir(local_item):
+                                                try:
+                                                    sftp.mkdir(remote_item)
+                                                except IOError:
+                                                    pass  # Directory may already exist
+                                                upload_directory(local_item, remote_item)
+                                            else:
+                                                progress_text.config(state=tk.NORMAL)
+                                                progress_text.insert(tk.END, f"Uploading: {os.path.basename(local_item)}\n")
+                                                progress_text.config(state=tk.DISABLED)
+                                                progress_text.see(tk.END)
+                                                transfer_window.update_idletasks()
+                                                sftp.put(local_item, remote_item)
+                                    
+                                    # Upload the entire directory structure
+                                    upload_directory(local_dir, remote_target_dir)
                                 
-                                # Upload the entire directory structure
-                                upload_directory(local_dir, remote_target_dir)
+                                else:
+                                    # Download Mode
+                                    import stat
+                                    
+                                    # Context: Downloading 'remote_dir' content to 'local_dir'
+                                    # Similar to rsync logic:
+                                    # If rsync remote_dir local_dir/ -> creates local_dir/remote_dir_name
+                                    
+                                    remote_basename = os.path.basename(remote_dir.rstrip('/'))
+                                    local_target_dir = os.path.join(local_dir, remote_basename)
+                                    
+                                    if not os.path.exists(local_target_dir):
+                                        os.makedirs(local_target_dir)
+                                        
+                                    def download_directory(remote_path, local_path):
+                                        for attr in sftp.listdir_attr(remote_path):
+                                            remote_item = f"{remote_path.rstrip('/')}/{attr.filename}"
+                                            local_item = os.path.join(local_path, attr.filename)
+                                            
+                                            if stat.S_ISDIR(attr.st_mode):
+                                                if not os.path.exists(local_item):
+                                                    os.makedirs(local_item)
+                                                download_directory(remote_item, local_item)
+                                            else:
+                                                progress_text.config(state=tk.NORMAL)
+                                                progress_text.insert(tk.END, f"Downloading: {attr.filename}\n")
+                                                progress_text.config(state=tk.DISABLED)
+                                                progress_text.see(tk.END)
+                                                transfer_window.update_idletasks()
+                                                sftp.get(remote_item, local_item)
+                                    
+                                    # Download recursively
+                                    download_directory(remote_dir.rstrip('/'), local_target_dir)
                                 
                                 sftp.close()
                                 ssh.close()
@@ -1454,18 +1477,61 @@ $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
                     start_btn.config(state=tk.NORMAL)
                     cancel_btn.config(state=tk.DISABLED)
                 else:
-                    # Linux/macOS: Use subprocess with stdin for password
-                    # This is more complex and may not work well, so we'll use a terminal too
-                    import shlex
-                    cmd_str = ' '.join([shlex.quote(arg) for arg in cmd])
-                    subprocess.Popen(
-                        ["xterm", "-e", f"bash -c '{cmd_str}; read -p \"Press Enter to close...\"'"],
-                        cwd=os.path.dirname(os.path.abspath(__file__))
-                    )
+                    # Linux/macOS: Use interactive terminal or internal execution
                     
+                    # If using paramiko (password handled), we shouldn't be here (paramiko catches earlier)
+                    # So we are here only if using rsync/scp directly
+                    
+                    # If this is a key-based transfer (no password needed), we can just run it
+                    # But if it prompts for password, it will fail/hang without PTY
+                    
+                    # Try to check if we can run non-interactively? Hard to know if key is set up.
+                    # Best approach: Try to run in terminal if we can't be sure
+                    
+                    # Try to execute directly first and capture output (similar to Windows "wait" approach but without new window)
+                    # BUT updating the GUI in real-time
+                    
+                    # Note: If rsync prompts for password, it reads from /dev/tty. 
+                    # Without a proper TTY, it might fail or we can't feed it password.
+                    
+                    # Let's try to run it. If it hangs, user can cancel.
                     progress_text.config(state=tk.NORMAL)
-                    progress_text.insert(tk.END, "\n✓ Transfer window opened. Enter password in terminal.\n")
+                    progress_text.insert(tk.END, "Executing command...\n")
                     progress_text.config(state=tk.DISABLED)
+                    progress_text.see(tk.END)
+                    transfer_window.update_idletasks()
+
+                    process = subprocess.Popen(
+                        cmd,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        universal_newlines=True,
+                        bufsize=1
+                    )
+                    transfer_process_ref["process"] = process
+
+                    # Read output
+                    for line in process.stdout:
+                        progress_text.config(state=tk.NORMAL)
+                        progress_text.insert(tk.END, line)
+                        progress_text.config(state=tk.DISABLED)
+                        progress_text.see(tk.END)
+                    
+                    process.wait()
+                    exit_code = process.returncode
+                    
+                    if exit_code == 0:
+                        progress_text.config(state=tk.NORMAL)
+                        progress_text.insert(tk.END, "\n" + "-" * 60 + "\n")
+                        progress_text.insert(tk.END, "✓ Transfer completed successfully!\n", "success")
+                        progress_text.config(state=tk.DISABLED)
+                    else:
+                        progress_text.config(state=tk.NORMAL)
+                        progress_text.insert(tk.END, f"\n✗ Transfer exited with code {exit_code}.\n", "error")
+                        progress_text.insert(tk.END, "If it failed due to authentication, try providing the password in the GUI (uses Paramiko).\n")
+                        progress_text.config(state=tk.DISABLED)
+                    
+                    progress_text.see(tk.END)
                     start_btn.config(state=tk.NORMAL)
                     cancel_btn.config(state=tk.DISABLED)
                 

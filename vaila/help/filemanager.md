@@ -10,20 +10,22 @@
 - **License:** AGPLv3  
 
 ## 📖 Description
-GUI toolkit for file operations (copy, move, remove, import/export, rename, tree, find, transfer). Provides terminal feedback for each action and supports pattern/extension filters with safe guards against dangerous paths.
+GUI toolkit for file operations (copy, move, remove, import/export, rename, tree, find, transfer). Provides terminal feedback for each action and supports pattern/extension filters with safe guards against dangerous paths. Now includes a built-in cross-platform SSH Transfer tool for bidirectional file transfer (Upload/Download).
 
 ## 🚀 Key Updates
 - Terminal feedback for every action (Copy/Move/Remove/Rename/Find/Tree/Transfer/Import menu).
 - Copy: patterns empty → copy all files; extension empty → all extensions; collision-safe naming.
 - Normalize names: accent/lower/underscore cleanup; topdown=False to avoid path breaks.
 - Safety: forbidden patterns for destructive remove.
+- **Transfer GUI**: Integrated SSH transfer tool with Upload/Download modes, supporting `rsync`, `scp`, and `paramiko`.
 
 ## 🎛️ Controls & Prompts
 - Source/destination directory pickers (Tk dialogs) per operation.
 - Copy/Move: ask extension (blank = all), patterns (blank = all); creates timestamped output dirs (`vaila_copy_...`, `vaila_move_...`); collision suffix `_1`, `_2`...
 - Rename: text replace with extension filter.
 - Tree/Find: saves results with timestamp in selected destination.
-- Transfer: calls platform script (`transfer.bat` on Windows, `transfer.sh` on *nix).
+- Tree/Find: saves results with timestamp in selected destination.
+- Transfer: Opens "File Transfer Configuration" window. Select Mode (Upload/Download), Local/Remote paths, and SSH credentials. Supports password (via `paramiko`) or key-based auth.
 
 ## 🛠 Main Functions
 - `copy_file` / `process_copy`  
