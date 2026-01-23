@@ -2891,8 +2891,11 @@ def play_video_with_controls(video_path, coordinates=None):
                     while len(coordinates[frame_count]) <= selected_marker_idx:
                         coordinates[frame_count].append((None, None))
                     coordinates[frame_count][selected_marker_idx] = (video_x, video_y)
+                    
                     if selected_marker_idx in deleted_positions[frame_count]:
                         deleted_positions[frame_count].remove(selected_marker_idx)
+                    
+
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -3389,6 +3392,10 @@ def play_video_with_controls(video_path, coordinates=None):
                                     )
                                     if selected_marker_idx in deleted_positions[frame_count]:
                                         deleted_positions[frame_count].remove(selected_marker_idx)
+                                    
+                                    frame_count = min(frame_count + 1, total_frames - 1)
+                                    paused = True
+                                    
                                 else:
                                     # Add new marker at the end
                                     coordinates[frame_count].append((video_x, video_y))
