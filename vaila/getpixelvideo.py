@@ -3,11 +3,11 @@
 Pixel Coordinate Tool - getpixelvideo.py
 ================================================================================
 vailá - Multimodal Toolbox
-Author: Prof. Dr. Paulo R. P. Santiago
+Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/paulopreto/vaila-multimodaltoolbox
 Date: 22 July 2025
-Update: 11 January 2026
-Version: 0.3.3
+Update: 23 January 2026
+Version: 0.3.16
 Python Version: 3.12.12
 
 Description:
@@ -17,10 +17,14 @@ zoom functionality for precise annotations. The window can now be resized dynami
 and all UI elements adjust accordingly. Users can navigate the video frames, mark
 points, and save results in CSV format.
 
-New Features in This Version 0.3.3:
+New Features in This Version 0.3.16:
+- ClickPass Mode: Auto-advance frame after marking
+- Zoom on Scroll: Use mouse wheel to zoom in/out
+- Playback Speed: Use [ and ] to adjust speed
+- Help Button: '?' button opens documentation
 GUI Pygame in Linux to avoid conflicts with Tkinter.
 
-New Features in This Version 0.3.2:
+New Features in This Version 0.3.14:
 ------------------------------
 1. Button "Labeling" to label images in video frames for Machine Learning training.
 2. YOLO dataset directory support.
@@ -66,6 +70,8 @@ Visit the project repository: https://github.com/vaila-multimodaltoolbox
 import io
 import json
 import os
+import shutil
+import urllib.request
 
 # Configure SDL environment variables BEFORE importing pygame
 # to prevent EGL/OpenGL warnings on Linux systems
@@ -96,6 +102,25 @@ if platform.system() == "Linux":
 else:
     import cv2
     import pygame
+
+# Optional imports for advanced features
+try:
+    import mediapipe as mp
+    MEDIAPIPE_AVAILABLE = True
+except ImportError:
+    MEDIAPIPE_AVAILABLE = False
+    print("Warning: MediaPipe not found. Pose estimation features will be disabled.")
+
+try:
+    import ultralytics
+    # Mute YOLO unnecessary logs
+    ultralytics.checks = lambda: None
+    from ultralytics import YOLO
+    YOLO_AVAILABLE = True
+except ImportError:
+    YOLO_AVAILABLE = False
+    print("Warning: Ultralytics (YOLO) not found. Advanced pose estimation will be limited.")
+
 import os
 from datetime import datetime
 
@@ -120,6 +145,310 @@ def get_color_for_id(marker_id):
         (128, 255, 0),  # Lime
     ]
     return colors[marker_id % len(colors)]
+
+
+POSE_LANDMARKER = None
+YOLO_MODEL = None
+
+# MediaPipe Pose Connections (Standard 33-keypoint topology)
+POSE_CONNECTIONS = frozenset([
+    (0, 1), (1, 2), (2, 3), (3, 7), (0, 4), (4, 5),
+    (5, 6), (6, 8), (9, 10), (11, 12), (11, 13),
+    (13, 15), (15, 17), (15, 19), (15, 21), (17, 19),
+    (12, 14), (14, 16), (16, 18), (16, 20), (16, 22),
+    (18, 20), (11, 23), (12, 24), (23, 24), (23, 25),
+    (24, 26), (25, 27), (26, 28), (27, 29), (28, 30),
+    (29, 31), (30, 32), (27, 31), (28, 32)
+])
+
+
+def download_or_load_yolo_model(model_name=None):
+    """Download or load YOLO model for pose detection"""
+    if not YOLO_AVAILABLE:
+        return None
+        
+    # Default to pose model if not specified
+    if model_name is None:
+        model_name = "yolo11x-pose.pt"  # Extra large pose model for accuracy
+    
+    # Use vaila/models directory
+    models_dir = Path(__file__).parent / "models"
+    models_dir.mkdir(exist_ok=True)
+    model_path = models_dir / model_name
+    
+    # Check if we need to download (Ultralytics handles downloads automatically if we pass the name,
+    # but we want to control where it goes to keep it self-contained)
+    
+    # If the file exists at our path, load it directly
+    if model_path.exists():
+        try:
+             # Load the model
+             print(f"Loading YOLO model from {model_path}...")
+             return YOLO(str(model_path))
+        except Exception as e:
+             print(f"Error loading local YOLO model: {e}")
+             return None
+             
+    # If not, let YOLO download it (it usually puts it in current dir or cache)
+    # To be safe and clean, we can try to download it ourselves or let YOLO do it and then move it?
+    # Simpler: Just rely on YOLO's auto download which is robust.
+    # However, to store it in our models folder, we can use the same logic as markerless2d
+    
+    try:
+        print(f"Loading/Downloading YOLO model {model_name}...")
+        # This triggers download if not found
+        model = YOLO(model_name)
+        
+        # If we successfully loaded/downloaded, check if the file is in CWD and move it to models_dir
+        cwd_model = Path.cwd() / model_name
+        if cwd_model.exists() and not model_path.exists():
+            print(f"Moving downloaded model to {models_dir}...")
+            shutil.move(str(cwd_model), str(model_path))
+            
+        return model
+    except Exception as e:
+                 
+        return model
+    except Exception as e:
+        print(f"Failed to load YOLO model: {e}")
+        return None
+
+
+def detect_person_box(frame, model):
+    """
+    Detect the most prominent person in the frame using YOLO.
+    Returns [x1, y1, x2, y2] or None.
+    """
+    if model is None:
+        return None
+        
+    # Run inference
+    # conf=0.4 is a reasonable threshold
+    results = model(frame, classes=0, verbose=False, conf=0.4)
+    
+    if not results or len(results) == 0:
+        return None
+        
+    boxes = results[0].boxes
+    if not boxes or len(boxes) == 0:
+        return None
+        
+    # Find the largest person (by area * conf) to likely be the main subject
+    best_box = None
+    best_score = -1
+    
+    for box in boxes:
+        # box.xyxy is [x1, y1, x2, y2]
+        coords = box.xyxy[0].cpu().numpy()
+        conf = float(box.conf[0].cpu().numpy())
+        
+        x1, y1, x2, y2 = coords
+        area = (x2 - x1) * (y2 - y1)
+        score = area * conf
+        
+        if score > best_score:
+            best_score = score
+            best_box = coords
+            
+    return best_box
+
+
+
+def get_mediapipe_model_path(complexity=1):
+    """Download the correct MediaPipe Tasks model based on complexity (0=Lite, 1=Full, 2=Heavy)"""
+    # Use vaila/models directory for storing models (relative to this script)
+    models_dir = Path(__file__).parent / "models"
+    models_dir.mkdir(exist_ok=True)
+
+    models = {
+        0: "pose_landmarker_lite.task",
+        1: "pose_landmarker_full.task",
+        2: "pose_landmarker_heavy.task",
+    }
+    model_name = models.get(complexity, "pose_landmarker_full.task")
+    model_path = models_dir / model_name
+
+    if not model_path.exists():
+        print(f"Downloading MediaPipe Tasks model ({model_name})... please wait.")
+        # Correct URLs for the models
+        model_urls = {
+            0: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
+            1: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task",
+            2: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_heavy/float16/1/pose_landmarker_heavy.task",
+        }
+        url = model_urls.get(complexity, model_urls[1])
+        try:
+            print(f"Downloading from {url}...")
+            urllib.request.urlretrieve(url, str(model_path))
+            print("Download completed!")
+        except Exception as e:
+            print(f"Error downloading model: {e}")
+            return None
+    return str(model_path.resolve())
+
+
+def detect_pose_mediapipe(frame):
+    """
+    Detect Pose Landmarks using MediaPipe + YOLO Strategy.
+    
+    Strategy:
+    1. Detect person with YOLO (if available).
+    2. Crop and Upscale (2x) the person ROI.
+    3. Run MediaPipe Tasks API on the crop.
+    4. Map coordinates back to original frame.
+    
+    Falls back to simple full-frame MediaPipe if YOLO is missing or detection fails.
+    """
+    global POSE_LANDMARKER, YOLO_MODEL
+    
+    if not MEDIAPIPE_AVAILABLE:
+            return []
+            
+    # --- Step 1: Initialize Models ---
+    
+    # Initialize MediaPipe Landmarker if needed
+    if hasattr(mp, "tasks") and POSE_LANDMARKER is None:
+        try:
+            model_path = get_mediapipe_model_path(complexity=1)
+            if model_path:
+                BaseOptions = mp.tasks.BaseOptions
+                PoseLandmarker = mp.tasks.vision.PoseLandmarker
+                PoseLandmarkerOptions = mp.tasks.vision.PoseLandmarkerOptions
+                VisionRunningMode = mp.tasks.vision.RunningMode
+
+                options = PoseLandmarkerOptions(
+                    base_options=BaseOptions(model_asset_path=model_path),
+                    running_mode=VisionRunningMode.IMAGE,
+                    min_pose_detection_confidence=0.5,
+                    min_pose_presence_confidence=0.5,
+                )
+                POSE_LANDMARKER = PoseLandmarker.create_from_options(options)
+        except Exception as e:
+            print(f"Error initializing MediaPipe Landmarker: {e}")
+
+    # Initialize YOLO Model if available and not loaded
+    if YOLO_AVAILABLE and YOLO_MODEL is None:
+        YOLO_MODEL = download_or_load_yolo_model()
+
+    height, width = frame.shape[:2]
+    
+    # --- Step 2: YOLO Detection & Crop Prep ---
+    
+    person_box = None
+    if YOLO_AVAILABLE and YOLO_MODEL is not None:
+         person_box = detect_person_box(frame, YOLO_MODEL)
+
+    run_on_crop = False
+    crop_info = None # (x1, y1, scale_w, scale_h)
+
+    # Prepare input image for MediaPipe
+    # If we have a person box, we crop and upscale
+    if person_box is not None:
+        x1, y1, x2, y2 = person_box
+        
+        # Add 20% margin
+        w_box = x2 - x1
+        h_box = y2 - y1
+        margin_w = int(w_box * 0.2)
+        margin_h = int(h_box * 0.2)
+        
+        crop_x1 = max(0, int(x1 - margin_w))
+        crop_y1 = max(0, int(y1 - margin_h))
+        crop_x2 = min(width, int(x2 + margin_w))
+        crop_y2 = min(height, int(y2 + margin_h))
+        
+        crop_w = crop_x2 - crop_x1
+        crop_h = crop_y2 - crop_y1
+        
+        if crop_w > 10 and crop_h > 10:
+             # Crop
+             crop_img = frame[crop_y1:crop_y2, crop_x1:crop_x2]
+             
+             # Upscale 2x
+             upscale_factor = 2.0
+             target_w = int(crop_w * upscale_factor)
+             target_h = int(crop_h * upscale_factor)
+             
+             try:
+                 upscaled_crop = cv2.resize(crop_img, (target_w, target_h), interpolation=cv2.INTER_CUBIC)
+                 rgb_frame = cv2.cvtColor(upscaled_crop, cv2.COLOR_BGR2RGB)
+                 run_on_crop = True
+                 crop_info = (crop_x1, crop_y1, crop_w, crop_h, target_w, target_h)
+             except Exception as e:
+                 print(f"Resize failed: {e}, falling back to full frame.")
+                 rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        else:
+             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    else:
+        # Full frame fallback
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+    landmarks = []
+    
+    # --- Step 3: Inference (Tasks API preferred) ---
+    if hasattr(mp, "tasks") and POSE_LANDMARKER:
+        try:
+            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
+            detection_result = POSE_LANDMARKER.detect(mp_image)
+            
+            if detection_result.pose_landmarks:
+                pose_landmarks = detection_result.pose_landmarks[0]
+                
+                for landmark in pose_landmarks:
+                    if run_on_crop and crop_info:
+                        # Map back to original frame
+                        # 1. Un-normalize in Upscaled Crop
+                        c_x1, c_y1, cw, ch, tw, th = crop_info
+                        
+                        px_in_upscale_x = landmark.x * tw
+                        px_in_upscale_y = landmark.y * th
+                        
+                        # 2. Downscale to Original Crop
+                        px_in_crop_x = px_in_upscale_x / (tw / cw)
+                        px_in_crop_y = px_in_upscale_y / (th / ch)
+                        
+                        # 3. Add Offset
+                        px = int(px_in_crop_x + c_x1)
+                        py = int(px_in_crop_y + c_y1)
+                    else:
+                        # Standard full frame normalization
+                        px = min(int(landmark.x * width), width - 1)
+                        py = min(int(landmark.y * height), height - 1)
+                        
+                    landmarks.append((px, py))
+                return landmarks
+        except Exception as e:
+             print(f"Tasks API inference failed: {e}")
+             # Fallthrough to legacy
+
+    # --- Step 4: Legacy Fallback (mp.solutions) ---
+    # Only if Tasks API failed or not available, and we are NOT running on crop 
+    # (Legacy API might expect full frame or might handle crop, but let's keep it simple: fallback is full frame)
+    if not run_on_crop and hasattr(mp, "solutions") and hasattr(mp.solutions, "pose"):
+        try:
+            with mp.solutions.pose.Pose(
+                static_image_mode=True, 
+                model_complexity=1, 
+                enable_segmentation=False, 
+                min_detection_confidence=0.5
+            ) as pose:
+                # Need to re-convert if we were trying crop logic logic above and failed mid-way
+                # But here we are assuming full-frame RGB is available or we convert
+                if not 'rgb_frame' in locals() or run_on_crop:
+                     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                     
+                results = pose.process(rgb_frame)
+                
+                if results.pose_landmarks:
+                    for landmark in results.pose_landmarks.landmark:
+                        px = min(int(landmark.x * width), width - 1)
+                        py = min(int(landmark.y * height), height - 1)
+                        landmarks.append((px, py))
+                    return landmarks
+        except Exception as e:
+            print(f"Legacy API failed: {e}")
+
+    return []
 
 
 # Removed pygame_file_dialog - now using Tkinter directly for file dialogs
@@ -203,8 +532,9 @@ def pygame_file_dialog(
     dialog_screen = pygame.display.set_mode((dialog_width, dialog_height))
     pygame.display.set_caption("Select File")
 
-    font = pygame.font.Font(None, 24)
-    small_font = pygame.font.Font(None, 20)
+    # Use Verdana for better legibility (l vs I)
+    font = pygame.font.SysFont("verdana", 12)
+    small_font = pygame.font.SysFont("verdana", 12)
 
     running = True
     text_input = ""
@@ -492,22 +822,57 @@ def pygame_file_dialog(
                         selected_file = None
 
             elif event.type == pygame.MOUSEWHEEL:
-                # Scroll through items - MOUSEWHEEL doesn't have pos, use mouse position
-                mouse_x, mouse_y = pygame.mouse.get_pos()
-                if list_rect.collidepoint(mouse_x, mouse_y):
-                    # Faster scrolling: 5 items per tick
-                    scroll_offset = max(0, min(scroll_offset - (event.y * 5), len(items) - 20))
-
-                    # Ensure selected_index stays valid if we want, or just leave it off-screen
-                    # but if we scroll, we might want to keep selection in view?
-                    # Actually standard behavior allows selection to go off screen.
-                    # But if user presses arrow keys, it should jump back.
-                    # Current logic forces it into view:
-                    if selected_index < scroll_offset:
-                        # Don't change selection just by scrolling, unless we want to
-                        pass
-                    elif selected_index >= scroll_offset + 20:
-                        pass
+                # Zoom on Scroll
+                # event.y > 0 means scroll up (zoom in)
+                # event.y < 0 means scroll down (zoom out)
+                
+                old_zoom = zoom_level
+                zoom_factor = 1.1
+                
+                if event.y > 0:
+                    zoom_level = min(10.0, zoom_level * zoom_factor)
+                elif event.y < 0:
+                    zoom_level = max(0.1, zoom_level / zoom_factor)
+                
+                # Adjust offsets to keep view centered on mouse if possible, or center of screen
+                # For simplicity, keeping center of view roughly consistent or just top-left logic
+                # To zoom toward mouse, we need mouse position.
+                mx, my = pygame.mouse.get_pos()
+                if my < window_height: # Only if in video area
+                     # Convert mouse to video coords relative to old zoom
+                     vx = (mx + offset_x) / old_zoom # Wait, offset logic is complex in this script
+                     # Let's stick to simple zoom first or check how crop_x/y works
+                     # crop_x = offset_x
+                     
+                     # The script uses: video_x = (x + crop_x) / zoom_level
+                     # So crop_x = offset_x
+                     
+                     # We want (mx + new_offset_x) / new_zoom = (mx + old_offset_x) / old_zoom
+                     # (mx + new_offset_x) = ((mx + old_offset_x) / old_zoom) * new_zoom
+                     # new_offset_x = [ ((mx + old_offset_x) / old_zoom) * new_zoom ] - mx
+                     
+                     target_vx = (mx + offset_x) / old_zoom
+                     target_vy = (my + offset_y) / old_zoom
+                     
+                     offset_x = (target_vx * zoom_level) - mx
+                     offset_y = (target_vy * zoom_level) - my
+                     
+                     # Clamp offsets
+                     offset_x = max(0, offset_x) # Actually this prevents panning left of 0?
+                     offset_y = max(0, offset_y)
+                     # Wait, offset_x in this script seems to be strictly positive (crop starting point)
+                     # But zoomed_width = original_width * zoom_level
+                     # We need to ensure we don't visualize outside.
+                     
+                     zoomed_width = original_width * zoom_level
+                     zoomed_height = original_height * zoom_level
+                     
+                     offset_x = max(0, min(offset_x, zoomed_width - window_width))
+                     offset_y = max(0, min(offset_y, zoomed_height - window_height))
+                
+                save_message_text = f"Zoom: {zoom_level:.2f}X"
+                showing_save_message = True
+                save_message_timer = 30
 
         pygame.time.Clock().tick(60)
 
@@ -584,6 +949,12 @@ def play_video_with_controls(video_path, coordinates=None):
     box_start_pos = None  # (x, y) in video coordinates
     current_box_rect = None  # pygame.Rect for preview
     current_label = "object"  # Default class label
+
+    # Feature: Click & Pass
+    click_pass_mode = False
+
+    # Feature: Playback Speed
+    playback_speed = 1.0  # 1.0 = Normal, 0.5 = Half speed, 2.0 = Double speed
 
     # YOLO tracking visualization variables
     tracking_data = {}  # Structure: {frame_index: [{'x1': int, 'y1': int, 'x2': int, 'y2': int, 'label': str, 'conf': float, 'color': (r, g, b)}, ...]}
@@ -1352,6 +1723,7 @@ def play_video_with_controls(video_path, coordinates=None):
 
             traceback.print_exc()
 
+
     def draw_controls():
         """
         Draw the control area on a separate surface.
@@ -1365,7 +1737,8 @@ def play_video_with_controls(video_path, coordinates=None):
         control_surface_height = 80
         control_surface = pygame.Surface((window_width, control_surface_height))
         control_surface.fill((30, 30, 30))
-        font = pygame.font.Font(None, 20)
+        # Use Verdana for better legibility (l vs I)
+        font = pygame.font.SysFont("verdana", 12)
 
         # Draw slider for frames along the bottom.
         slider_margin_left = 10
@@ -1422,57 +1795,38 @@ def play_video_with_controls(video_path, coordinates=None):
         persist_button_width = 70
         seq_button_width = 70
         auto_button_width = 70
+        click_pass_button_width = 70
         labeling_button_width = 70
         tracking_csv_button_width = 120
         export_video_button_width = 100
+        help_web_button_width = 30  # Width for '?' button
         total_buttons_width = (
             (button_width * 3)
             + persist_button_width
             + seq_button_width
             + auto_button_width
+            + click_pass_button_width
             + labeling_button_width
             + tracking_csv_button_width
             + export_video_button_width
-            + (button_gap * 8)
+            + help_web_button_width
+            + (button_gap * 9)
         )
         cluster_x = (window_width - total_buttons_width) // 2
         cluster_y = slider_y - button_height - 5
 
-        # Load button
-        load_button_rect = pygame.Rect(cluster_x, cluster_y, button_width, button_height)
-        pygame.draw.rect(control_surface, (100, 100, 100), load_button_rect)
-        load_text = font.render("Load", True, (255, 255, 255))
-        control_surface.blit(load_text, load_text.get_rect(center=load_button_rect.center))
-
-        # Save button.
-        save_button_rect = pygame.Rect(
-            cluster_x + button_width + button_gap,
-            cluster_y,
-            button_width,
-            button_height,
-        )
-        pygame.draw.rect(control_surface, (100, 100, 100), save_button_rect)
-        save_text = font.render("Save", True, (255, 255, 255))
-        control_surface.blit(save_text, save_text.get_rect(center=save_button_rect.center))
-
-        # Help button.
-        help_button_rect = pygame.Rect(
-            cluster_x + 2 * (button_width + button_gap),
-            cluster_y,
-            button_width,
-            button_height,
-        )
-        pygame.draw.rect(control_surface, (100, 100, 100), help_button_rect)
-        help_text = font.render("Help", True, (255, 255, 255))
-        control_surface.blit(help_text, help_text.get_rect(center=help_button_rect.center))
-
-        # "1 Line" mode toggle button.
+        # Helper to advance x position
+        current_x = cluster_x
+        
+        # 1. "1 Line" mode toggle button.
         one_line_button_rect = pygame.Rect(
-            cluster_x + 3 * (button_width + button_gap),
+            current_x,
             cluster_y,
             button_width,
             button_height,
         )
+        current_x += button_width + button_gap
+        
         btn_color = (150, 50, 50) if one_line_mode else (100, 100, 100)
         pygame.draw.rect(control_surface, btn_color, one_line_button_rect)
         one_line_text = font.render("1 Line", True, (255, 255, 255))
@@ -1480,13 +1834,15 @@ def play_video_with_controls(video_path, coordinates=None):
             one_line_text, one_line_text.get_rect(center=one_line_button_rect.center)
         )
 
-        # "Persist" mode toggle button.
+        # 2. "Persist" mode toggle button.
         persist_button_rect = pygame.Rect(
-            cluster_x + 4 * (button_width + button_gap),
+            current_x,
             cluster_y,
             persist_button_width,
             button_height,
         )
+        current_x += persist_button_width + button_gap
+        
         persist_color = (50, 150, 50) if persistence_enabled else (100, 100, 100)
         pygame.draw.rect(control_surface, persist_color, persist_button_rect)
 
@@ -1496,46 +1852,61 @@ def play_video_with_controls(video_path, coordinates=None):
         )
         control_surface.blit(persist_text, persist_text.get_rect(center=persist_button_rect.center))
 
-        # Add Sequential mode button after persist button
+        # 3. Sequential mode button
         seq_button_rect = pygame.Rect(
-            cluster_x + 4 * (button_width + button_gap) + persist_button_width + button_gap,
+            current_x,
             cluster_y,
             seq_button_width,
             button_height,
         )
+        current_x += seq_button_width + button_gap
+        
         seq_color = (50, 150, 50) if sequential_mode else (100, 100, 100)
         pygame.draw.rect(control_surface, seq_color, seq_button_rect)
         seq_text = font.render("Sequential", True, (255, 255, 255))
         control_surface.blit(seq_text, seq_text.get_rect(center=seq_button_rect.center))
 
-        # Add Auto-marking mode button after sequential button
+        # 4. Auto-marking mode button
         auto_button_rect = pygame.Rect(
-            cluster_x
-            + 4 * (button_width + button_gap)
-            + persist_button_width
-            + seq_button_width
-            + (button_gap * 2),
+            current_x,
             cluster_y,
             auto_button_width,
             button_height,
         )
+        current_x += auto_button_width + button_gap
+        
         auto_color = (150, 50, 150) if auto_marking_mode else (100, 100, 100)
         pygame.draw.rect(control_surface, auto_color, auto_button_rect)
         auto_text = font.render("Auto", True, (255, 255, 255))
         control_surface.blit(auto_text, auto_text.get_rect(center=auto_button_rect.center))
 
-        # Add Labeling mode button after auto button
+        # 5. ClickPass mode button
+        click_pass_button_rect = pygame.Rect(
+            current_x,
+            cluster_y,
+            click_pass_button_width,
+            button_height,
+        )
+        current_x += click_pass_button_width + button_gap
+        
+        click_pass_color = (50, 50, 150) if click_pass_mode else (100, 100, 100)
+        pygame.draw.rect(control_surface, click_pass_color, click_pass_button_rect)
+        click_pass_text = font.render("ClickPass", True, (255, 255, 255))
+        control_surface.blit(
+            click_pass_text, click_pass_text.get_rect(center=click_pass_button_rect.center)
+        )
+
+        # 6. Pose button REMOVED (Use 'J' hotkey)
+
+        # 7. Labeling mode button
         labeling_button_rect = pygame.Rect(
-            cluster_x
-            + 4 * (button_width + button_gap)
-            + persist_button_width
-            + seq_button_width
-            + auto_button_width
-            + (button_gap * 3),
+            current_x,
             cluster_y,
             labeling_button_width,
             button_height,
         )
+        current_x += labeling_button_width + button_gap
+        
         labeling_color = (50, 150, 150) if labeling_mode else (100, 100, 100)
         pygame.draw.rect(control_surface, labeling_color, labeling_button_rect)
         labeling_text = font.render("Labeling", True, (255, 255, 255))
@@ -1543,14 +1914,16 @@ def play_video_with_controls(video_path, coordinates=None):
             labeling_text, labeling_text.get_rect(center=labeling_button_rect.center)
         )
 
-        # Add Load Tracking CSV button (to the right of Labeling button)
+        # 7. Load Tracking CSV button
         tracking_csv_button_width = 120
         tracking_csv_button_rect = pygame.Rect(
-            labeling_button_rect.right + button_gap,
+            current_x,
             cluster_y,
             tracking_csv_button_width,
             button_height,
         )
+        current_x += tracking_csv_button_width # No gap yet, indicator comes next?
+        
         tracking_csv_color = (100, 150, 200) if csv_loaded else (100, 100, 100)
         pygame.draw.rect(control_surface, tracking_csv_color, tracking_csv_button_rect)
         tracking_csv_text = font.render("Load Track CSV", True, (255, 255, 255))
@@ -1558,7 +1931,7 @@ def play_video_with_controls(video_path, coordinates=None):
             tracking_csv_text, tracking_csv_text.get_rect(center=tracking_csv_button_rect.center)
         )
 
-        # Add Show Tracking checkbox indicator (small square next to button)
+        # 8. Show Tracking checkbox indicator (small square next to button)
         show_tracking_indicator_size = 12
         show_tracking_indicator_rect = pygame.Rect(
             tracking_csv_button_rect.right + 5,
@@ -1566,6 +1939,9 @@ def play_video_with_controls(video_path, coordinates=None):
             show_tracking_indicator_size,
             show_tracking_indicator_size,
         )
+        # Advance X past indicator and gap
+        current_x += 5 + show_tracking_indicator_size + button_gap
+
         if show_tracking and csv_loaded:
             pygame.draw.rect(control_surface, (0, 255, 0), show_tracking_indicator_rect)
             pygame.draw.rect(control_surface, (255, 255, 255), show_tracking_indicator_rect, 1)
@@ -1573,18 +1949,69 @@ def play_video_with_controls(video_path, coordinates=None):
             pygame.draw.rect(control_surface, (60, 60, 60), show_tracking_indicator_rect)
             pygame.draw.rect(control_surface, (150, 150, 150), show_tracking_indicator_rect, 1)
 
-        # Add Export Video button (to the right of tracking indicator)
+        # 9. Load button (Moved here)
+        load_button_rect = pygame.Rect(current_x, cluster_y, button_width, button_height)
+        current_x += button_width + button_gap
+        
+        pygame.draw.rect(control_surface, (100, 100, 100), load_button_rect)
+        load_text = font.render("Load", True, (255, 255, 255))
+        control_surface.blit(load_text, load_text.get_rect(center=load_button_rect.center))
+
+        # 10. Save button (Moved here)
+        save_button_rect = pygame.Rect(
+            current_x,
+            cluster_y,
+            button_width,
+            button_height,
+        )
+        current_x += button_width + button_gap
+        
+        pygame.draw.rect(control_surface, (100, 100, 100), save_button_rect)
+        save_text = font.render("Save", True, (255, 255, 255))
+        control_surface.blit(save_text, save_text.get_rect(center=save_button_rect.center))
+
+        # 11. Help button (Moved here)
+        help_button_rect = pygame.Rect(
+            current_x,
+            cluster_y,
+            button_width,
+            button_height,
+        )
+        current_x += button_width + button_gap
+        
+        pygame.draw.rect(control_surface, (100, 100, 100), help_button_rect)
+        help_text = font.render("Help", True, (255, 255, 255))
+        control_surface.blit(help_text, help_text.get_rect(center=help_button_rect.center))
+
+        # 12. Export Video button
         export_video_button_rect = pygame.Rect(
-            show_tracking_indicator_rect.right + button_gap + 5,
+            current_x,
             cluster_y,
             export_video_button_width,
             button_height,
         )
+        current_x += export_video_button_width + button_gap
+        
         export_video_color = (200, 100, 50)  # Orange color
         pygame.draw.rect(control_surface, export_video_color, export_video_button_rect)
         export_video_text = font.render("Export Video", True, (255, 255, 255))
         control_surface.blit(
             export_video_text, export_video_text.get_rect(center=export_video_button_rect.center)
+        )
+
+        # 13. Help Web button ('?')
+        help_web_button_rect = pygame.Rect(
+            current_x,
+            cluster_y,
+            help_web_button_width,
+            button_height,
+        )
+        current_x += help_web_button_width + button_gap
+        
+        pygame.draw.rect(control_surface, (100, 100, 150), help_web_button_rect)
+        help_web_text = font.render("?", True, (255, 255, 255))
+        control_surface.blit(
+            help_web_text, help_web_text.get_rect(center=help_web_button_rect.center)
         )
 
         # Display current class label when in labeling mode
@@ -1599,6 +2026,11 @@ def play_video_with_controls(video_path, coordinates=None):
             )
             control_surface.blit(tracking_info, (slider_margin_left + 200, slider_y - 45))
 
+
+        # Display Speed Info
+        speed_text = font.render(f"Speed: {playback_speed}X", True, (255, 255, 255))
+        control_surface.blit(speed_text, (window_width - 100, slider_y - 45))
+
         screen.blit(control_surface, (0, window_height))
         return (
             one_line_button_rect,
@@ -1608,10 +2040,12 @@ def play_video_with_controls(video_path, coordinates=None):
             load_button_rect,
             seq_button_rect,  # Add sequential button to return
             auto_button_rect,  # Add auto button to return
+            click_pass_button_rect, # Add ClickPass button to return
             labeling_button_rect,  # Add labeling button to return
             tracking_csv_button_rect,  # Add tracking CSV button to return
             show_tracking_indicator_rect,  # Add tracking indicator to return
             export_video_button_rect,  # Add export video button to return
+            help_web_button_rect,  # Add help web button to return
             slider_margin_left,
             slider_y,
             slider_width,
@@ -1629,6 +2063,7 @@ def play_video_with_controls(video_path, coordinates=None):
             "- Down Arrow: Rewind (when paused)",
             "- +: Zoom In",
             "- -: Zoom Out",
+            "- Scroll M: Zoom In/Out",
             "- Left Click: Add Marker",
             "- Right Click: Remove Last Marker",
             "- Middle Click: Enable Pan/Move",
@@ -1638,6 +2073,9 @@ def play_video_with_controls(video_path, coordinates=None):
             "- DELETE: Delete selected marker",
             "- A: Add new empty marker to file",
             "- R: Remove last marker from file",
+            "- J: Detect Pose (MediaPipe + YOLO)",  # Updated Pose help
+            "- H: Show this help",
+            "- ?: Open documentation in browser",
             "",
             "=== LABELING MODE (Bounding Boxes) ===",
             "",
@@ -1677,6 +2115,20 @@ def play_video_with_controls(video_path, coordinates=None):
             "- Auto-marking Mode (M key): Automatically marks",
             "  points at mouse position during playback.",
             "  No clicking required - just move the mouse.",
+            "",
+            "- ClickPass Mode: Advances to next frame after",
+            "  adding a marker (Normal Mode).",
+            "",
+            "Playback Speed:",
+            "- [ : Slower",
+            "- ] : Faster",
+            "",
+            "- ClickPass Mode: Advances to next frame after",
+            "  adding a marker (Normal Mode).",
+            "",
+            "Playback Speed:",
+            "- [ : Slower",
+            "- ] : Faster",
             "",
             "Persistence Mode (P key):",
             "Shows markers from previous frames.",
@@ -1797,7 +2249,9 @@ def play_video_with_controls(video_path, coordinates=None):
         overlay.fill((0, 0, 0))
 
         # Create UI elements
-        font = pygame.font.Font(None, 36)
+        if persistent and frame in bboxes:
+             # Use a larger font for persistent boxes? Or same
+             font = pygame.font.SysFont("verdana", 16)
         title = font.render("Persistence Settings", True, (255, 255, 255))
 
         instruction = font.render(
@@ -1905,7 +2359,8 @@ def play_video_with_controls(video_path, coordinates=None):
         overlay.fill((0, 0, 0))
 
         # Create UI elements
-        font = pygame.font.Font(None, 36)
+        # Dialog font
+        font = pygame.font.SysFont("verdana", 14)
         title = font.render(prompt, True, (255, 255, 255))
 
         input_text = initial_text
@@ -2556,11 +3011,66 @@ def play_video_with_controls(video_path, coordinates=None):
             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_count)
             ret, frame = cap.read()
         else:
-            # When playing, just read the next frame without repositioning
-            ret, frame = cap.read()
-            if ret:
-                frame_count = int(cap.get(cv2.CAP_PROP_POS_FRAMES)) - 1
+            # When playing, handle speed logic
+            # Calculate frames to advance based on speed
+            # Accumulate fractional frames for smooth slow playback is tricky in simple loop
+            # Simple integer logic:
+            if playback_speed >= 1.0:
+                # Setup skip
+                skip = int(playback_speed)
+                for _ in range(skip):
+                    ret, frame = cap.read()
+                    if not ret:
+                        break
+                if ret:
+                    frame_count = int(cap.get(cv2.CAP_PROP_POS_FRAMES)) - 1
             else:
+                # Slow motion: skip READING new frames based on speed
+                # E.g. 0.5X -> read every 2nd loop
+                # This requires keeping track of time or loop counts
+                # Let's rely on slowing down the loop tick? No, simpler to just wait
+                # To simulate slow motion without complex buffering, we just don't read every frame
+                # Actually, cap.read() advances the frame. If we want slowmo, we must NOT call read()
+                # and use the LAST read frame for multiple loop iterations.
+                
+                # Simple implementation: use a counter
+                # Initialize static var for slow mo if not exists (hacky in local scope but works if var external)
+                # Better: use floating point frame index target?
+                
+                # Let's try controlling the actual frame position
+                # This is safer for consistency
+                 
+                frames_to_advance = playback_speed  # e.g. 0.5
+                # We need to accumulate this... but we don't have a persistent accumulator easily here
+                # without restructuring.
+                
+                # Alternative: Use Time-based approach
+                # But for now, let's use the simple logic valid for high speeds, and for low speeds
+                # we just modify wait time?
+                # The loop runs at 30Hz (clock.tick(30)).
+                # To get 0.5X speed (15fps effective), we should update frame every 2 ticks.
+                
+                if not hasattr(play_video_with_controls, "slow_mo_accumulator"):
+                    play_video_with_controls.slow_mo_accumulator = 0.0
+                
+                play_video_with_controls.slow_mo_accumulator += playback_speed
+                if play_video_with_controls.slow_mo_accumulator >= 1.0:
+                    play_video_with_controls.slow_mo_accumulator -= 1.0
+                    ret, frame = cap.read()
+                    if ret:
+                         frame_count = int(cap.get(cv2.CAP_PROP_POS_FRAMES)) - 1
+                else:
+                    # Don't read, just keep current frame (last_valid_frame)
+                    # But we need 'ret' to be True to show something
+                     if last_valid_frame is not None:
+                         frame = last_valid_frame.copy()
+                         ret = True
+                     else:
+                        ret, frame = cap.read() # Force read first time
+                        if ret:
+                             frame_count = int(cap.get(cv2.CAP_PROP_POS_FRAMES)) - 1
+            
+            if not ret:
                 # End of video reached or short/merged video read failure.
                 # Gracefully pause at the last known frame instead of exiting.
                 paused = True
@@ -2597,8 +3107,8 @@ def play_video_with_controls(video_path, coordinates=None):
         zoomed_width = int(original_width * zoom_level)
         zoomed_height = int(original_height * zoom_level)
         zoomed_frame = cv2.resize(frame, (zoomed_width, zoomed_height))
-        crop_x = max(0, min(zoomed_width - window_width, offset_x))
-        crop_y = max(0, min(zoomed_height - window_height, offset_y))
+        crop_x = int(max(0, min(zoomed_width - window_width, offset_x)))
+        crop_y = int(max(0, min(zoomed_height - window_height, offset_y)))
         cropped_frame = zoomed_frame[
             crop_y : crop_y + window_height, crop_x : crop_x + window_width
         ]
@@ -2609,7 +3119,8 @@ def play_video_with_controls(video_path, coordinates=None):
         screen.blit(frame_surface, (0, 0))
 
         # Draw persistent markers first (draw in order from oldest to newest)
-        font = pygame.font.Font(None, 24)
+        # Draw persistent markers first (draw in order from oldest to newest)
+        font = pygame.font.SysFont("verdana", 14)
         if persistence_enabled:
             # Calculate range of frames to show
             start_frame = max(0, frame_count - persistence_frames)
@@ -2721,7 +3232,30 @@ def play_video_with_controls(video_path, coordinates=None):
                     # Draw a small circle for the most recent position
                     pygame.draw.circle(screen, color, (last_screen_x, last_screen_y), 2)
 
+        # Draw Pose Connections if likely a full pose (33 points)
+        if not one_line_mode and len(coordinates[frame_count]) == 33:
+             for start_idx, end_idx in POSE_CONNECTIONS:
+                 if start_idx < 33 and end_idx < 33:
+                      # Check if indices exist (redundant but safe)
+                      if start_idx < len(coordinates[frame_count]) and end_idx < len(coordinates[frame_count]):
+                          pt1 = coordinates[frame_count][start_idx]
+                          pt2 = coordinates[frame_count][end_idx]
+                          
+                          if pt1 is not None and pt2 is not None: 
+                              x1, y1 = pt1
+                              x2, y2 = pt2
+                              
+                              if x1 is not None and y1 is not None and x2 is not None and y2 is not None:
+                                   sx1 = int((x1 * zoom_level) - crop_x)
+                                   sy1 = int((y1 * zoom_level) - crop_y)
+                                   sx2 = int((x2 * zoom_level) - crop_x)
+                                   sy2 = int((y2 * zoom_level) - crop_y)
+                                   
+                                   # Draw simple yellow line for skeleton
+                                   pygame.draw.line(screen, (255, 255, 0), (sx1, sy1), (sx2, sy2), 2)
+
         # Draw current frame markers
+
         if one_line_mode:
             for idx, (f_num, x, y) in enumerate(one_line_markers):
                 if f_num == frame_count:
@@ -2848,10 +3382,12 @@ def play_video_with_controls(video_path, coordinates=None):
             load_button_rect,
             seq_button_rect,  # Add sequential button to return
             auto_button_rect,  # Add auto button to return
+            click_pass_button_rect, # Add ClickPass button to return
             labeling_button_rect,  # Add labeling button to return
             tracking_csv_button_rect,  # Add tracking CSV button to return
             show_tracking_indicator_rect,  # Add tracking indicator to return
             export_video_button_rect,  # Add export video button to return
+            help_web_button_rect,  # Add help web button to return
             slider_x,
             slider_y,
             slider_width,
@@ -2865,7 +3401,7 @@ def play_video_with_controls(video_path, coordinates=None):
                 showing_save_message = False
             else:
                 # Draw save message notification at top of screen
-                msg_font = pygame.font.Font(None, 28)
+                msg_font = pygame.font.SysFont("verdana", 14)
                 msg_surface = msg_font.render(save_message_text, True, (255, 255, 255))
                 msg_bg = pygame.Surface(
                     (msg_surface.get_width() + 20, msg_surface.get_height() + 10)
@@ -2994,6 +3530,9 @@ def play_video_with_controls(video_path, coordinates=None):
                         save_message_text = f"Label changed to: {current_label}"
                         showing_save_message = True
                         save_message_timer = 60
+                
+
+                         
                 elif event.key == pygame.K_F5:
                     # Save Project
                     if labeling_mode:
@@ -3219,6 +3758,10 @@ def play_video_with_controls(video_path, coordinates=None):
                     showing_save_message = True
                     save_message_timer = 30
 
+                # Show help dialog with 'h'
+                elif event.key == pygame.K_h:
+                    show_help_dialog()
+
                 # Adicionar novo marcador
                 elif event.key == pygame.K_a:
                     add_new_marker()
@@ -3226,6 +3769,48 @@ def play_video_with_controls(video_path, coordinates=None):
                 # Remover marcador
                 elif event.key == pygame.K_r or event.key == pygame.K_d:
                     remove_marker()
+                    
+                # Playback Speed Control
+                elif event.key == pygame.K_RIGHTBRACKET:  # ]
+                    playback_speed *= 2.0
+                    if playback_speed > 16.0: playback_speed = 16.0
+                    save_message_text = f"Speed: {playback_speed}X"
+                    showing_save_message = True
+                    save_message_text = f"Speed: {playback_speed}X"
+                    showing_save_message = True
+                    save_message_timer = 30
+                    
+                # Add Pose detection hotkey 'J'
+                elif event.key == pygame.K_j:
+                     if MEDIAPIPE_AVAILABLE:
+                         landmarks = detect_pose_mediapipe(frame)
+                         if landmarks:
+                             # Ensure coordinate list is large enough
+                             while len(coordinates) <= frame_count:
+                                 coordinates.append([])
+                             
+                             # Add points
+                             for px, py in landmarks:
+                                 coordinates[frame_count].append((px, py))
+                                 
+                             save_message_text = f"Pose: Added {len(landmarks)} points"
+                             showing_save_message = True
+                             save_message_timer = 60
+                         else:
+                             save_message_text = "Pose: No person detected"
+                             showing_save_message = True
+                             save_message_timer = 60
+                     else:
+                         save_message_text = "MediaPipe not installed"
+                         showing_save_message = True
+                         save_message_timer = 60
+                         
+                elif event.key == pygame.K_LEFTBRACKET:  # [
+                    playback_speed /= 2.0
+                    if playback_speed < 0.0625: playback_speed = 0.0625
+                    save_message_text = f"Speed: {playback_speed}X"
+                    showing_save_message = True
+                    save_message_timer = 30
 
                 # Add sequential mode toggle with 'o' key
                 elif (
@@ -3313,6 +3898,14 @@ def play_video_with_controls(video_path, coordinates=None):
                             )
                             showing_save_message = True
                             save_message_timer = 30
+                    elif click_pass_button_rect.collidepoint(x, rel_y):
+                        if not one_line_mode:
+                            click_pass_mode = not click_pass_mode
+                            save_message_text = (
+                                f"ClickPass {'enabled' if click_pass_mode else 'disabled'}"
+                            )
+                            showing_save_message = True
+                            save_message_timer = 30
                     elif labeling_button_rect.collidepoint(x, rel_y):
                         labeling_mode = not labeling_mode
                         if labeling_mode:
@@ -3338,9 +3931,22 @@ def play_video_with_controls(video_path, coordinates=None):
                         )
                         showing_save_message = True
                         save_message_timer = 60
+                        save_message_text = (
+                            f"Tracking display {'enabled' if show_tracking else 'disabled'}"
+                        )
+                        showing_save_message = True
+                        save_message_timer = 60
                     elif export_video_button_rect.collidepoint(x, rel_y):
                         # Export video with annotations
                         export_video_with_annotations()
+                    elif help_web_button_rect.collidepoint(x, rel_y):
+                         # Open documentation in browser
+                         import webbrowser
+                         help_url = "file://" + os.path.abspath(os.path.join(os.path.dirname(__file__), "help", "getpixelvideo_help.html"))
+                         # Also try to open the md file if html logic fails or as backup? No, HTML is better.
+                         # Let's try to be robust
+                         webbrowser.open(help_url)
+                         
                     elif slider_y <= rel_y <= slider_y + slider_height:
                         dragging_slider = True
                         rel_x = x - slider_x
@@ -3393,6 +3999,40 @@ def play_video_with_controls(video_path, coordinates=None):
                                     # Add new marker at the end
                                     coordinates[frame_count].append((video_x, video_y))
                                     selected_marker_idx = len(coordinates[frame_count]) - 1
+
+                                # Feature: ClickPass logic
+                                if click_pass_mode:
+                                     # Visual Feedback: Redraw frame with new marker before advancing
+                                     # Force a single draw cycle
+                                     # Note: This is a bit hacky but gives immediate feedback
+                                     
+                                     # We need to re-render everything to show the marker
+                                     # Since we are inside the loop, we can't easily jump to the drawing code
+                                     # So we just flip display? No, we haven't drawn the new marker yet.
+                                     # The main loop draws at the start.
+                                     
+                                     # Actually, we just added the coordinate to `coordinates`.
+                                     # If we wait here, the user sees the OLD frame.
+                                     
+                                     # To show the NEW marker, we'd need to draw it.
+                                     # Let's do a quick draw of just the marker or everything?
+                                     # Everything is safer.
+                                     
+                                     # Simplified draw for feedback (copy-pasting drawing logic is bad)
+                                     # Let's just draw a circle on the screen directly on top
+                                     
+                                     # Convert video coord to screen coord
+                                     screen_cx = int(video_x * zoom_level - crop_x)
+                                     screen_cy = int(video_y * zoom_level - crop_y)
+                                     
+                                     # Draw green circle
+                                     pygame.draw.circle(screen, (0, 255, 0), (screen_cx, screen_cy), 5)
+                                     pygame.display.flip()
+                                     
+                                     pygame.time.delay(200) # Wait 200ms
+                                     
+                                     frame_count = min(frame_count + 1, total_frames - 1)
+                                     paused = True
 
                     elif event.button == 3:  # Right click
                         # Keep existing behavior for right-click (delete most recent)
@@ -3503,6 +4143,7 @@ def play_video_with_controls(video_path, coordinates=None):
 
                         # Create preview rect
                         current_box_rect = pygame.Rect(screen_x, screen_y, screen_w, screen_h)
+                
                 if dragging_slider:
                     rel_x = event.pos[0] - slider_x
                     rel_x = max(0, min(rel_x, slider_width))
@@ -3517,6 +4158,47 @@ def play_video_with_controls(video_path, coordinates=None):
                     else:
                         frame_count = max(0, frame_count)
                     paused = True
+
+            elif event.type == pygame.MOUSEWHEEL:
+                # Zoom on Scroll
+                # event.y > 0 means scroll up (zoom in)
+                # event.y < 0 means scroll down (zoom out)
+                
+                old_zoom = zoom_level
+                zoom_factor = 1.1
+                
+                if event.y > 0:
+                    zoom_level = min(10.0, zoom_level * zoom_factor)
+                elif event.y < 0:
+                    zoom_level = max(0.1, zoom_level / zoom_factor)
+                
+                # Adjust offsets to keep view centered on mouse if possible
+                mx, my = pygame.mouse.get_pos()
+                if my < window_height: # Only if in video area
+                     # Center zoom on mouse cursor
+                     target_vx = (mx + offset_x) / old_zoom
+                     target_vy = (my + offset_y) / old_zoom
+                     
+                     offset_x = (target_vx * zoom_level) - mx
+                     offset_y = (target_vy * zoom_level) - my
+                     
+                     # Clamp offsets
+                     zoomed_width = original_width * zoom_level
+                     zoomed_height = original_height * zoom_level
+                     
+                     if zoomed_width > window_width:
+                         offset_x = max(0, min(zoomed_width - window_width, offset_x))
+                     else:
+                         offset_x = 0
+                         
+                     if zoomed_height > window_height:
+                         offset_y = max(0, min(zoomed_height - window_height, offset_y))
+                     else:
+                         offset_y = 0
+                
+                save_message_text = f"Zoom: {zoom_level:.2f}X"
+                showing_save_message = True
+                save_message_timer = 30
 
         if paused:
             # Se pausado, não limitamos a taxa de FPS para que a interface seja responsiva
@@ -4435,7 +5117,7 @@ def run_getpixelvideo():
     # User requested to remove the startup prompt since there is a Load button in the GUI.
     # defaulting to False (starting fresh)
     print("\n" + "=" * 50)
-    print("Vailá - Pixel Coordinate Tool")
+    print("vailá - Pixel Coordinate Tool")
     print("=" * 50)
     print("Starting fresh. Use the 'Load' button to import keypoints.")
 
