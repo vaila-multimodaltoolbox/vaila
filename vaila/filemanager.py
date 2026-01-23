@@ -7,8 +7,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 22 January 2026
-Version: 0.3.14
+Update Date: 23 January 2026
+Version: 0.3.15
 
 Description:
 This script is designed to manage files and directories through a graphical user interface (GUI) using Tkinter. It supports various operations such as copying, moving, removing, and converting files, along with advanced features like pattern matching and batch processing. The tool is particularly useful for organizing large datasets and automating repetitive file operations.
@@ -26,7 +26,7 @@ This script is designed to manage files and directories through a graphical user
         Supports both Upload (Send) and Download (Receive) modes.
         Includes cross-platform support (Linux, macOS, Windows) with password (paramiko) or key-based authentication.
 
-Changelog for Version 0.3.14:
+Changelog for Version 0.3.15:
 
     Added "Transfer Files (SSH)" GUI directly into the File Manager.
     Implemented cross-platform Transfer tool (Upload/Download modes).
@@ -1018,10 +1018,12 @@ def _transfer_file_gui():
     tk.Label(main_frame, textvariable=remote_label_var, anchor="w").pack(fill=tk.X, pady=(5, 2))
     tk.Entry(main_frame, textvariable=remote_dir_var, width=50).pack(fill=tk.X, pady=(0, 10))
     
-    # SSH Password
-    tk.Label(main_frame, text="SSH Password:", anchor="w").pack(fill=tk.X, pady=(5, 2))
-    password_entry = tk.Entry(main_frame, textvariable=ssh_password_var, width=50, show="*")
-    password_entry.pack(fill=tk.X, pady=(0, 10))
+    # SSH Password (REMOVED/DISABLED)
+    # tk.Label(main_frame, text="SSH Password:", anchor="w").pack(fill=tk.X, pady=(5, 2))
+    # password_entry = tk.Entry(main_frame, textvariable=ssh_password_var, width=50, show="*")
+    # password_entry.pack(fill=tk.X, pady=(0, 10))
+    tk.Label(main_frame, text="Note: You will be prompted for the password in the terminal window.", 
+             fg="blue", font=("Arial", 9, "italic")).pack(fill=tk.X, pady=(5, 10))
     
     # Progress text area (initially hidden)
     progress_frame = tk.Frame(main_frame)
@@ -1066,17 +1068,8 @@ def _transfer_file_gui():
             messagebox.showerror("Error", "Please enter remote directory.", parent=transfer_window)
             return
         
-        if not ssh_password:
-            # Password is optional - user can choose to enter it in terminal if not provided
-            use_password_in_gui = messagebox.askyesno(
-                "SSH Password",
-                "No password entered. Do you want to enter it now?\n\n"
-                "Click 'Yes' to enter password in GUI, or 'No' to enter it in the terminal window.",
-                parent=transfer_window
-            )
-            if use_password_in_gui:
-                return  # User will enter password and try again
-            # If No, continue without password (will prompt in terminal)
+        # Always force terminal prompt - no password checking needed here
+        # if not ssh_password: ... logic removed
         
         mode = mode_var.get()
         
@@ -1128,7 +1121,7 @@ def _transfer_file_gui():
                 # Local -> Remote
                 cmd = [
                     rsync_path,
-                    "-avhP",
+                    "-avzhP",
                     "-e", ssh_cmd,
                     f"{local_dir_normalized}",  # Source: send directory itself
                     f"{remote_user}@{remote_host}:{remote_path_for_rsync}/" # Dest: into this dir
@@ -1137,7 +1130,7 @@ def _transfer_file_gui():
                 # Remote -> Local
                 cmd = [
                     rsync_path,
-                    "-avhP",
+                    "-avzhP",
                     "-e", ssh_cmd,
                     f"{remote_user}@{remote_host}:{remote_path_for_rsync}", # Source: send directory itself
                     f"{local_dir_normalized}/" # Dest: into this dir
@@ -1168,370 +1161,55 @@ def _transfer_file_gui():
         def run_transfer():
             try:
                 progress_text.config(state=tk.NORMAL)
-                progress_text.insert(tk.END, f"Command: {' '.join(cmd)}\n\n")
-                progress_text.config(state=tk.DISABLED)
-                progress_text.see(tk.END)
-                transfer_window.update_idletasks()
+                # Try to run in terminal if we can't be sure
                 
-                # Try to use paramiko if password is provided
-                use_paramiko = False
-                if ssh_password:
-                    try:
-                        import paramiko
-                        use_paramiko = True
-                        progress_text.config(state=tk.NORMAL)
-                        progress_text.insert(tk.END, "Using paramiko for password authentication...\n")
-                        progress_text.config(state=tk.DISABLED)
-                        progress_text.see(tk.END)
-                        transfer_window.update_idletasks()
-                        
-                        # Use paramiko to transfer files via SFTP
-                        def transfer_with_paramiko():
-                            try:
-                                progress_text.config(state=tk.NORMAL)
-                                progress_text.insert(tk.END, "Connecting to server...\n")
-                                progress_text.config(state=tk.DISABLED)
-                                progress_text.see(tk.END)
-                                transfer_window.update_idletasks()
-                                
-                                # Create SSH client
-                                ssh = paramiko.SSHClient()
-                                ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-                                
-                                # Connect with password
-                                ssh.connect(
-                                    hostname=remote_host,
-                                    port=int(remote_port),
-                                    username=remote_user,
-                                    password=ssh_password,
-                                    timeout=30
-                                )
-                                
-                                progress_text.config(state=tk.NORMAL)
-                                progress_text.insert(tk.END, "Connected! Starting file transfer...\n")
-                                progress_text.config(state=tk.DISABLED)
-                                progress_text.see(tk.END)
-                                transfer_window.update_idletasks()
-                                
-                                # Use SFTP to transfer files
-                                sftp = ssh.open_sftp()
-                                
-                                if mode == "upload":
-                                    # Ensure remote directory exists
-                                    remote_dir_parts = remote_dir.strip('/').split('/')
-                                    current_remote_path = ''
-                                    for part in remote_dir_parts:
-                                        if part:
-                                            current_remote_path = f"{current_remote_path}/{part}" if current_remote_path else f"/{part}"
-                                            try:
-                                                sftp.stat(current_remote_path)
-                                            except IOError:
-                                                sftp.mkdir(current_remote_path)
-                                    
-                                    # Transfer directory recursively (Upload)
-                                    # First, create the directory on remote (using the basename of local_dir)
-                                    local_dir_name = os.path.basename(local_dir.rstrip('/\\'))
-                                    remote_target_dir = f"{remote_dir.rstrip('/')}/{local_dir_name}"
-                                    
-                                    # Ensure remote target directory exists
-                                    try:
-                                        sftp.stat(remote_target_dir)
-                                    except IOError:
-                                        sftp.mkdir(remote_target_dir)
-                                    
-                                    # Transfer files recursively
-                                    def upload_directory(local_path, remote_path):
-                                        for item in os.listdir(local_path):
-                                            local_item = os.path.join(local_path, item)
-                                            remote_item = f"{remote_path.rstrip('/')}/{item}"
-                                            
-                                            if os.path.isdir(local_item):
-                                                try:
-                                                    sftp.mkdir(remote_item)
-                                                except IOError:
-                                                    pass  # Directory may already exist
-                                                upload_directory(local_item, remote_item)
-                                            else:
-                                                progress_text.config(state=tk.NORMAL)
-                                                progress_text.insert(tk.END, f"Uploading: {os.path.basename(local_item)}\n")
-                                                progress_text.config(state=tk.DISABLED)
-                                                progress_text.see(tk.END)
-                                                transfer_window.update_idletasks()
-                                                sftp.put(local_item, remote_item)
-                                    
-                                    # Upload the entire directory structure
-                                    upload_directory(local_dir, remote_target_dir)
-                                
-                                else:
-                                    # Download Mode
-                                    import stat
-                                    
-                                    # Context: Downloading 'remote_dir' content to 'local_dir'
-                                    # Similar to rsync logic:
-                                    # If rsync remote_dir local_dir/ -> creates local_dir/remote_dir_name
-                                    
-                                    remote_basename = os.path.basename(remote_dir.rstrip('/'))
-                                    local_target_dir = os.path.join(local_dir, remote_basename)
-                                    
-                                    if not os.path.exists(local_target_dir):
-                                        os.makedirs(local_target_dir)
-                                        
-                                    def download_directory(remote_path, local_path):
-                                        for attr in sftp.listdir_attr(remote_path):
-                                            remote_item = f"{remote_path.rstrip('/')}/{attr.filename}"
-                                            local_item = os.path.join(local_path, attr.filename)
-                                            
-                                            if stat.S_ISDIR(attr.st_mode):
-                                                if not os.path.exists(local_item):
-                                                    os.makedirs(local_item)
-                                                download_directory(remote_item, local_item)
-                                            else:
-                                                progress_text.config(state=tk.NORMAL)
-                                                progress_text.insert(tk.END, f"Downloading: {attr.filename}\n")
-                                                progress_text.config(state=tk.DISABLED)
-                                                progress_text.see(tk.END)
-                                                transfer_window.update_idletasks()
-                                                sftp.get(remote_item, local_item)
-                                    
-                                    # Download recursively
-                                    download_directory(remote_dir.rstrip('/'), local_target_dir)
-                                
-                                sftp.close()
-                                ssh.close()
-                                
-                                progress_text.config(state=tk.NORMAL)
-                                progress_text.insert(tk.END, "\n" + "-" * 60 + "\n")
-                                progress_text.insert(tk.END, "✓ Transfer completed successfully!\n", "success")
-                                progress_text.config(state=tk.DISABLED)
-                                progress_text.see(tk.END)
-                                
-                                start_btn.config(state=tk.NORMAL)
-                                cancel_btn.config(state=tk.DISABLED)
-                                
-                            except Exception as e:
-                                progress_text.config(state=tk.NORMAL)
-                                progress_text.insert(tk.END, f"\n✗ Error: {e}\n", "error")
-                                progress_text.config(state=tk.DISABLED)
-                                progress_text.see(tk.END)
-                                start_btn.config(state=tk.NORMAL)
-                                cancel_btn.config(state=tk.DISABLED)
-                        
-                        # Run paramiko transfer in thread
-                        transfer_thread = threading.Thread(target=transfer_with_paramiko, daemon=True)
-                        transfer_thread.start()
-                        return  # Exit early, paramiko handles everything
-                        
-                    except ImportError:
-                        # paramiko not available, fall back to terminal approach
-                        use_paramiko = False
-                        progress_text.config(state=tk.NORMAL)
-                        progress_text.insert(tk.END, "Note: paramiko not available. Password will be entered in terminal.\n")
-                        progress_text.insert(tk.END, "To use password from GUI, install: pip install paramiko\n\n")
-                        progress_text.config(state=tk.DISABLED)
-                        progress_text.see(tk.END)
+                # Try to execute directly first and capture output (similar to Windows "wait" approach but without new window)
+                # BUT updating the GUI in real-time
                 
-                # On Windows, execute in a separate terminal to allow password input
-                if platform.system() == "Windows":
-                    # Create a PowerShell script to run the command
-                    script_dir = os.path.dirname(os.path.abspath(__file__))
-                    ps_script = os.path.join(script_dir, "transfer_run.ps1")
-                    
-                    # Build PowerShell script with proper command execution
-                    # For rsync, we need to ensure the -e option is passed correctly
-                    # The issue is that PowerShell array syntax may not work correctly with rsync
-                    # So we'll build the command as a string instead
-                    
-                    def escape_ps_string(s):
-                        # Escape for PowerShell string
-                        return s.replace('`', '``').replace('$', '`$').replace('"', '`"').replace("'", "''")
-                    
-                    # Build command for PowerShell execution
-                    # Use Start-Process or direct execution with proper argument array
-                    if use_rsync:
-                        # For rsync, build arguments array for PowerShell
-                        # PowerShell needs arguments as an array, not a string
-                        exe_path = cmd[0]
-                        args_list = []
-                        i = 1
-                        while i < len(cmd):
-                            if cmd[i] == "-e" and i + 1 < len(cmd):
-                                # -e and its value must be separate array elements
-                                args_list.append('-e')
-                                args_list.append(cmd[i+1])  # "ssh -p PORT" as single string
-                                i += 2
-                            else:
-                                args_list.append(cmd[i])
-                                i += 1
-                        
-                        # Build PowerShell command using array syntax
-                        args_str = ', '.join([f'"{escape_ps_string(arg)}"' for arg in args_list])
-                        exe_escaped = escape_ps_string(exe_path)
-                        cmd_str = f'& "{exe_escaped}" {args_str}'
-                    else:
-                        # For scp, build command string
-                        cmd_parts = [escape_ps_string(cmd[0])]
-                        for arg in cmd[1:]:
-                            if ' ' in arg or ':' in arg or '@' in arg:
-                                cmd_parts.append(f'"{escape_ps_string(arg)}"')
-                            else:
-                                cmd_parts.append(escape_ps_string(arg))
-                        cmd_str = ' '.join(cmd_parts)
-                    
-                    # If password provided, we'll need to use a different approach
-                    # For now, we'll create a script that can use the password
-                    password_note = ""
-                    if ssh_password:
-                        password_note = f"""
-Write-Host "Password provided in GUI - using it for authentication..." -ForegroundColor Green
-# Note: rsync/scp don't accept password via command line for security
-# The password will be used via SSH_ASKPASS or similar mechanism if available
-# Otherwise, you may still be prompted
-"""
-                    else:
-                        password_note = """
-Write-Host "You will be prompted for your SSH password." -ForegroundColor Green
-Write-Host "Enter your password when prompted (it will not be visible)." -ForegroundColor Green
-"""
-                    
-                    # Write PowerShell script
-                    # Build PowerShell script with proper argument array
-                    if use_rsync:
-                        # Build arguments array for PowerShell
-                        ps_args_array = []
-                        for i, arg in enumerate(cmd[1:]):  # Skip executable
-                            escaped = escape_ps_string(arg)
-                            ps_args_array.append(f'    "{escaped}"')
-                        ps_args_str = ',\n'.join(ps_args_array)
-                        exe_escaped = escape_ps_string(cmd[0])
-                        ps_exec_cmd = f"""$args = @(
-{ps_args_str}
-)
-& "{exe_escaped}" $args"""
-                    else:
-                        # For scp
-                        ps_args_array = []
-                        for arg in cmd[1:]:
-                            escaped = escape_ps_string(arg)
-                            ps_args_array.append(f'    "{escaped}"')
-                        ps_args_str = ',\n'.join(ps_args_array)
-                        exe_escaped = escape_ps_string(cmd[0])
-                        ps_exec_cmd = f"""$args = @(
-{ps_args_str}
-)
-& "{exe_escaped}" $args"""
-                    
-                    ps_content = f"""# Transfer script - allows interactive password input
-Write-Host "============================================" -ForegroundColor Cyan
-Write-Host "File Transfer ({transfer_method})" -ForegroundColor Cyan
-Write-Host "============================================" -ForegroundColor Cyan
-Write-Host ""
-Write-Host "Transferring: {local_dir}" -ForegroundColor Yellow
-Write-Host "To: {remote_user}@{remote_host}:{remote_dir}" -ForegroundColor Yellow
-Write-Host "SSH Port: {remote_port}" -ForegroundColor Yellow
-Write-Host ""
-{password_note}
-Write-Host "Starting transfer..." -ForegroundColor Cyan
-Write-Host ""
+                # Note: If rsync prompts for password, it reads from /dev/tty. 
+                # Without a proper TTY, it might fail or we can't feed it password.
+                
+                # On Linux/Mac, to allow password input, we should spawn a terminal
+                terminal_cmd = None
+                script_cmd = ' '.join([f"'{arg}'" if " " in arg else arg for arg in cmd])
 
-# Execute the command with proper argument array handling
-{ps_exec_cmd}
-$exitCode = $LASTEXITCODE
-
-if ($exitCode -eq 0) {{
-    Write-Host ""
-    Write-Host "✓ Transfer completed successfully!" -ForegroundColor Green
-}} else {{
-    Write-Host ""
-    Write-Host "✗ Transfer failed! (Exit code: $exitCode)" -ForegroundColor Red
-    Write-Host "Please check your connection and credentials." -ForegroundColor Yellow
-}}
-
-Write-Host ""
-Write-Host "Press any key to close this window..." -ForegroundColor Gray
-$null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
-"""
-                    
-                    with open(ps_script, "w", encoding="utf-8") as f:
-                        f.write(ps_content)
-                    
-                    # Execute PowerShell script in a new window
-                    subprocess.Popen(
-                        [
-                            "powershell.exe",
-                            "-ExecutionPolicy", "Bypass",
-                            "-NoExit",
-                            "-File", ps_script
-                        ],
-                        cwd=script_dir
-                    )
-                    
+                # Detect terminal emulator
+                if shutil.which("gnome-terminal"):
+                     # gnome-terminal requires -- bash -c "cmd; exec bash" to keep open or just run
+                     terminal_cmd = ["gnome-terminal", "--", "bash", "-c", f"{script_cmd}; echo 'Press Enter to exit...'; read"]
+                elif shutil.which("xterm"):
+                     terminal_cmd = ["xterm", "-e", f"{script_cmd}; echo 'Press Enter to exit...'; read"]
+                elif shutil.which("konsole"):
+                     terminal_cmd = ["konsole", "-e", "bash", "-c", f"{script_cmd}; echo 'Press Enter to exit...'; read"]
+                elif shutil.which("xfce4-terminal"):
+                     terminal_cmd = ["xfce4-terminal", "-e", f"bash -c \"{script_cmd}; echo 'Press Enter to exit...'; read\""]
+                elif platform.system() == "Darwin": # macOS
+                     # Use AppleScript to tell Terminal to do script
+                     escaped_script = script_cmd.replace('"', '\\"')
+                     subprocess.run(["osascript", "-e", f'tell application "Terminal" to do script "{escaped_script}"'])
+                     terminal_cmd = [] # Handled
+                
+                if terminal_cmd:
+                    subprocess.Popen(terminal_cmd)
                     progress_text.config(state=tk.NORMAL)
-                    progress_text.insert(tk.END, "\n" + "-" * 60 + "\n")
-                    progress_text.insert(tk.END, "✓ Transfer window opened.\n", "success")
-                    progress_text.insert(tk.END, "Please enter your SSH password in the PowerShell window.\n")
-                    progress_text.insert(tk.END, "Monitor the progress in that window.\n")
+                    progress_text.insert(tk.END, f"\n Launched external terminal for password input.\n")
                     progress_text.config(state=tk.DISABLED)
-                    progress_text.see(tk.END)
-                    
-                    # Re-enable start button
-                    start_btn.config(state=tk.NORMAL)
-                    cancel_btn.config(state=tk.DISABLED)
+                elif platform.system() == "Darwin" and not terminal_cmd:
+                     # Handled by osascript above
+                     progress_text.config(state=tk.NORMAL)
+                     progress_text.insert(tk.END, f"\n Launched macOS Terminal for password input.\n")
+                     progress_text.config(state=tk.DISABLED)
                 else:
-                    # Linux/macOS: Use interactive terminal or internal execution
-                    
-                    # If using paramiko (password handled), we shouldn't be here (paramiko catches earlier)
-                    # So we are here only if using rsync/scp directly
-                    
-                    # If this is a key-based transfer (no password needed), we can just run it
-                    # But if it prompts for password, it will fail/hang without PTY
-                    
-                    # Try to check if we can run non-interactively? Hard to know if key is set up.
-                    # Best approach: Try to run in terminal if we can't be sure
-                    
-                    # Try to execute directly first and capture output (similar to Windows "wait" approach but without new window)
-                    # BUT updating the GUI in real-time
-                    
-                    # Note: If rsync prompts for password, it reads from /dev/tty. 
-                    # Without a proper TTY, it might fail or we can't feed it password.
-                    
-                    # Let's try to run it. If it hangs, user can cancel.
+                    # Fallback for when no known terminal found - try running in current pty if possible or error
+                    msg = "Could not detect a supported terminal emulator (gnome-terminal, xterm, konsole, xfce4-terminal).\n" \
+                          "Please run the following command manually in your terminal:\n\n" + script_cmd
+                    messagebox.showinfo("Manual Run Required", msg)
                     progress_text.config(state=tk.NORMAL)
-                    progress_text.insert(tk.END, "Executing command...\n")
+                    progress_text.insert(tk.END, f"\n{msg}\n")
+                    progress_text.insert(tk.END, f"Command: {script_cmd}\n")
                     progress_text.config(state=tk.DISABLED)
-                    progress_text.see(tk.END)
-                    transfer_window.update_idletasks()
 
-                    process = subprocess.Popen(
-                        cmd,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.STDOUT,
-                        universal_newlines=True,
-                        bufsize=1
-                    )
-                    transfer_process_ref["process"] = process
-
-                    # Read output
-                    for line in process.stdout:
-                        progress_text.config(state=tk.NORMAL)
-                        progress_text.insert(tk.END, line)
-                        progress_text.config(state=tk.DISABLED)
-                        progress_text.see(tk.END)
-                    
-                    process.wait()
-                    exit_code = process.returncode
-                    
-                    if exit_code == 0:
-                        progress_text.config(state=tk.NORMAL)
-                        progress_text.insert(tk.END, "\n" + "-" * 60 + "\n")
-                        progress_text.insert(tk.END, "✓ Transfer completed successfully!\n", "success")
-                        progress_text.config(state=tk.DISABLED)
-                    else:
-                        progress_text.config(state=tk.NORMAL)
-                        progress_text.insert(tk.END, f"\n✗ Transfer exited with code {exit_code}.\n", "error")
-                        progress_text.insert(tk.END, "If it failed due to authentication, try providing the password in the GUI (uses Paramiko).\n")
-                        progress_text.config(state=tk.DISABLED)
-                    
-                    progress_text.see(tk.END)
+                    # Since it runs externally, we re-enable buttons immediately (or we could wait if we tracked PID)
                     start_btn.config(state=tk.NORMAL)
                     cancel_btn.config(state=tk.DISABLED)
                 
