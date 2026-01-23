@@ -512,8 +512,8 @@ class ConfidenceInputDialog(simpledialog.Dialog):
     def create_default_config(self):
         """Reset to default configuration"""
         if messagebox.askyesno("Confirm", "Reset configuration to defaults?"):
-            self.min_detection_entry.delete(0, tk.END); self.min_detection_entry.insert(0, "0.5")
-            self.min_tracking_entry.delete(0, tk.END); self.min_tracking_entry.insert(0, "0.5")
+            self.min_detection_entry.delete(0, tk.END); self.min_detection_entry.insert(0, "0.1")
+            self.min_tracking_entry.delete(0, tk.END); self.min_tracking_entry.insert(0, "0.1")
             self.model_complexity_entry.delete(0, tk.END); self.model_complexity_entry.insert(0, "2")
             self.enable_segmentation_entry.delete(0, tk.END); self.enable_segmentation_entry.insert(0, "True")
             self.smooth_segmentation_entry.delete(0, tk.END); self.smooth_segmentation_entry.insert(0, "True")
@@ -521,10 +521,10 @@ class ConfidenceInputDialog(simpledialog.Dialog):
             self.use_yolo_entry.delete(0, tk.END); self.use_yolo_entry.insert(0, "True")
             self.yolo_mode_var.set("yolo_mediapipe")
             self.yolo_model_var.set("yolo11x-pose.pt")
-            self.yolo_conf_entry.delete(0, tk.END); self.yolo_conf_entry.insert(0, "0.5")
+            self.yolo_conf_entry.delete(0, tk.END); self.yolo_conf_entry.insert(0, "0.3")
             self.filter_type_entry.delete(0, tk.END); self.filter_type_entry.insert(0, "none")
 
-            self.upscale_factor_entry.delete(0, tk.END); self.upscale_factor_entry.insert(0, "2")
+            self.upscale_factor_entry.delete(0, tk.END); self.upscale_factor_entry.insert(0, "4")
             
             self.roi_polygon_points = None
             self.polygon_status_label.config(text="None selected", fg="gray")
@@ -570,9 +570,9 @@ class ConfidenceInputDialog(simpledialog.Dialog):
         tk.Label(master, text="Polygon ROI:").grid(row=12)
 
         self.min_detection_entry = tk.Entry(master)
-        self.min_detection_entry.insert(0, "0.5")
+        self.min_detection_entry.insert(0, "0.1")
         self.min_tracking_entry = tk.Entry(master)
-        self.min_tracking_entry.insert(0, "0.5")
+        self.min_tracking_entry.insert(0, "0.1")
         self.model_complexity_entry = tk.Entry(master)
         self.model_complexity_entry.insert(0, "2")
         self.enable_segmentation_entry = tk.Entry(master)
@@ -608,12 +608,12 @@ class ConfidenceInputDialog(simpledialog.Dialog):
         self.yolo_model_combo.grid(row=8, column=1, sticky="ew")
 
         self.yolo_conf_entry = tk.Entry(master)
-        self.yolo_conf_entry.insert(0, "0.5")
+        self.yolo_conf_entry.insert(0, "0.3")
         self.filter_type_entry = tk.Entry(master)
         self.filter_type_entry.insert(0, "none")
 
         self.upscale_factor_entry = tk.Entry(master)
-        self.upscale_factor_entry.insert(0, "2")
+        self.upscale_factor_entry.insert(0, "4")
         
         self.polygon_btn = tk.Button(master, text="Select Polygon ROI", command=self.select_polygon_roi)
         self.polygon_btn.grid(row=12, column=1)
