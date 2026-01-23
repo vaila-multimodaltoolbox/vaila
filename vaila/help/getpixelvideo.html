@@ -1,223 +1,816 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>vailá - getpixelvideo Tool</title>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>getpixelvideo.py - Complete Documentation</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 40px;
-            line-height: 1.6;
-            background-color: #f5f5f5;
-            color: #333;
-        }
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        line-height: 1.6;
+        margin: 0;
+        padding: 20px;
+        background-color: #f5f5f5;
+        color: #333;
+      }
 
-        .container {
-            max-width: 900px;
-            margin: 0 auto;
-            background: white;
-            padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-        }
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        background-color: white;
+        padding: 30px;
+        border-radius: 10px;
+        box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+      }
 
-        h1 {
-            color: #2c3e50;
-            border-bottom: 3px solid #3498db;
-            padding-bottom: 15px;
-            margin-bottom: 30px;
-        }
+      h1 {
+        color: #2c3e50;
+        border-bottom: 3px solid #3498db;
+        padding-bottom: 10px;
+        margin-bottom: 30px;
+      }
 
-        h2 {
-            color: #34495e;
-            margin-top: 30px;
-            border-left: 5px solid #3498db;
-            padding-left: 15px;
-        }
+      h2 {
+        color: #34495e;
+        border-left: 4px solid #3498db;
+        padding-left: 15px;
+        margin-top: 30px;
+      }
 
-        h3 {
-            color: #2c3e50;
-            margin-top: 25px;
-        }
+      h3 {
+        color: #2980b9;
+        margin-top: 25px;
+      }
 
-        .module-info {
-            background: #ecf0f1;
-            padding: 20px;
-            border-radius: 5px;
-            margin: 20px 0;
-            border-left: 5px solid #95a5a6;
-        }
+      .version-info {
+        background-color: #ecf0f1;
+        padding: 15px;
+        border-radius: 5px;
+        margin-bottom: 20px;
+      }
 
-        .description-box {
-            background: #e8f6f3;
-            padding: 20px;
-            border-radius: 5px;
-            border-left: 5px solid #1abc9c;
-            margin: 20px 0;
-        }
+      .feature-box {
+        background-color: #e8f4fd;
+        border: 1px solid #3498db;
+        border-radius: 5px;
+        padding: 15px;
+        margin: 15px 0;
+      }
 
-        .usage-box {
-            background: #fdf2e9;
-            padding: 20px;
-            border-radius: 5px;
-            border-left: 5px solid #e67e22;
-            margin: 20px 0;
-        }
+      .warning {
+        background-color: #fff3cd;
+        border: 1px solid #ffc107;
+        border-radius: 5px;
+        padding: 15px;
+        margin: 15px 0;
+      }
 
-        code {
-            background: #e9ecef;
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-family: Consolas, monospace;
-            color: #c0392b;
-        }
+      .code {
+        background-color: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 3px;
+        padding: 10px;
+        font-family: "Courier New", monospace;
+        overflow-x: auto;
+      }
 
-        pre {
-            background: #2c3e50;
-            color: #ecf0f1;
-            padding: 15px;
-            border-radius: 5px;
-            overflow-x: auto;
-            font-family: Consolas, monospace;
-        }
+      .key {
+        background-color: #e9ecef;
+        border: 1px solid #adb5bd;
+        border-radius: 3px;
+        padding: 2px 6px;
+        font-family: monospace;
+        font-weight: bold;
+      }
 
-        ul {
-            margin-left: 20px;
-        }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 15px 0;
+      }
 
-        li {
-            margin-bottom: 8px;
-        }
+      th,
+      td {
+        border: 1px solid #ddd;
+        padding: 12px;
+        text-align: left;
+      }
 
-        .footer {
-            margin-top: 50px;
-            padding-top: 20px;
-            border-top: 1px solid #dee2e6;
-            color: #7f8c8d;
-            font-size: 0.9em;
-            text-align: center;
-        }
+      th {
+        background-color: #f8f9fa;
+        font-weight: bold;
+      }
 
-        a {
-            color: #3498db;
-            text-decoration: none;
-        }
+      .format-example {
+        background-color: #f8f9fa;
+        border-left: 4px solid #28a745;
+        padding: 10px;
+        margin: 10px 0;
+      }
 
-        a:hover {
-            text-decoration: underline;
-        }
+      .controls-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 20px;
+        margin: 20px 0;
+      }
+
+      .control-section {
+        background-color: #f8f9fa;
+        padding: 15px;
+        border-radius: 5px;
+      }
+
+      .toc {
+        background-color: #f8f9fa;
+        padding: 20px;
+        border-radius: 5px;
+        margin-bottom: 30px;
+      }
+
+      .toc ul {
+        list-style-type: none;
+        padding-left: 0;
+      }
+
+      .toc li {
+        margin: 8px 0;
+      }
+
+      .toc a {
+        text-decoration: none;
+        color: #3498db;
+        cursor: pointer;
+      }
+
+      .toc a:hover {
+        text-decoration: underline;
+      }
     </style>
-</head>
+  </head>
 
-<body>
+  <body>
     <div class="container">
-        <h1>🔍 vailá - getpixelvideo Tool</h1>
+      <h1>getpixelvideo.py - Complete Documentation</h1>
 
-        <div class="module-info">
-            <h2>📋 Module Information</h2>
-            <ul>
-                <li><strong>Category:</strong> Tools</li>
-                <li><strong>File:</strong> <code>vaila/getpixelvideo.py</code></li>
-                <li><strong>Version:</strong> 0.3.16 (Updated: 23 January 2026)</li>
-                <li><strong>Author:</strong> Prof. Dr. Paulo R. P. Santiago</li>
-                <li><strong>GUI Interface:</strong> ✅ Yes (Pygame based)</li>
-            </ul>
-        </div>
+      <div class="version-info">
+        <strong>Version:</strong> 0.3.0<br />
+        <strong>Date:</strong> January 2026<br />
+        <strong>Authors:</strong> Prof. Dr. Paulo R. P. Santiago, Rafael L. M.
+        Monteiro<br />
+        <strong>Project:</strong> vailá - Multimodal Toolbox<br />
+        <strong>New in 0.3.0:</strong> Labeling Mode for ML dataset creation
+        (Bounding Boxes)
+      </div>
 
-        <div class="description-box">
-            <h2>📖 Description</h2>
-            <p>
-                This tool enables marking and saving pixel coordinates in video frames, with zoom functionality for
-                precise annotations.
-                The window can be resized dynamically, and all UI elements adjust accordingly.
-                Users can navigate the video frames, mark points, label images for machine learning tasks,
-                visualize YOLO tracking results, and save all data in CSV format.
-            </p>
-
-            <h3>New Features in Version 0.3.16:</h3>
-            <ul>
-                <li><strong>ClickPass Mode:</strong> Automatically advances to the next frame after adding a marker (Normal Mode).</li>
-                <li><strong>Zoom on Scroll:</strong> Use the mouse scroll wheel to zoom in and out centered on the cursor.</li>
-                <li><strong>Playback Speed:</strong> Control playback speed using <code>[</code> (slower) and <code>]</code> (faster).</li>
-                <li><strong>Instant Pose Estimation (YOLO + MediaPipe):</strong> Press <code>J</code> to auto-detect 33 body landmarks with high accuracy (uses YOLO for person detection + MediaPipe).</li>
-                <li><strong>Help Button:</strong> New '?' button links to detailed documentation.</li>
-            </ul>
-
-            <h3>New Features in Version 0.3.3:</h3>
-            <ul>
-                <li><strong>GUI Pygame in Linux:</strong> Uses Pygame for the GUI on Linux systems to avoid conflicts
-                    with Tkinter, ensuring smoother operation.</li>
-            </ul>
-
-            <h3>New Features in Version 0.3.2:</h3>
-            <ul>
-                <li><strong>Labeling Mode:</strong> A new "Labeling" button allows for labeling images in video frames
-                    specifically for Machine Learning training.</li>
-                <li><strong>YOLO Dataset Support:</strong> Support for YOLO dataset directory structures.</li>
-                <li><strong>YOLO Tracking Visualization:</strong> Visualize tracking data from CSV files (in
-                    <code>all_id_detection.csv</code> format) with bounding box overlays directly on the video.</li>
-                <li><strong>YOLO Integration:</strong> Automatic download of YOLOv8/v11 models for enhanced person detection.</li>
-            </ul>
-        </div>
-
-        <div class="usage-box">
-            <h2>🚀 How to Use</h2>
-            <ol>
-                <li><strong>Select Video:</strong> Choose the video file you wish to process.</li>
-                <li><strong>Load Keypoints (Optional):</strong> Select a keypoint file to load existing data if
-                    available.</li>
-                <li><strong>Mark Points:</strong> Use the mouse to mark points on the video frames. You can zoom in for
-                    better precision.</li>
-                <li><strong>Label Images (Optional):</strong> Use the labeling mode to creating bounding boxes for
-                    object detection datasets.</li>
-                <li><strong>Save Results:</strong> Save your marked coordinates or labeled data to a CSV file.</li>
-            </ol>
-        </div>
-
-        <h2>⌨️ Command Line Usage</h2>
-        <pre>python getpixelvideo.py [options]</pre>
-
-        <h3>Options:</h3>
+      <div class="toc">
+        <h3>Table of Contents</h3>
         <ul>
-            <li><code>-h, --help</code>: Show this help message and exit.</li>
-            <li><code>-v, --version</code>: Show version information and exit.</li>
-            <li><code>-f FILE, --file FILE</code>: Specify the video file to process.</li>
-            <li><code>-k KEYPOINT, --keypoint KEYPOINT</code>: Specify the keypoint file to load.</li>
-            <li><code>-l, --labeling</code>: Start in labeling mode to label images for ML training.</li>
-            <li><code>-s, --save</code>: Save the results in CSV format.</li>
-            <li><code>-p, --persistence</code>: Show persistence mode (visualize points from previous frames).</li>
-            <li><code>-a, --auto</code>: Show auto-marking mode.</li>
-            <li><code>-c, --sequential</code>: Show sequential mode.</li>
+          <li><a href="#overview">1. Overview</a></li>
+          <li><a href="#installation">2. Installation & Requirements</a></li>
+          <li><a href="#usage">3. Basic Usage</a></li>
+          <li><a href="#controls">4. Controls & Interface</a></li>
+          <li><a href="#formats">5. Supported File Formats</a></li>
+          <li><a href="#modes">6. Marker Modes</a></li>
+          <li><a href="#visualization">7. Data Visualization</a></li>
+          <li><a href="#saving">8. Saving Options</a></li>
+          <li><a href="#advanced">9. Advanced Features</a></li>
+          <li><a href="#troubleshooting">10. Troubleshooting</a></li>
         </ul>
+      </div>
 
-        <h2>🔧 Main Functions</h2>
-        <ul>
-            <li><code>get_color_for_id</code>: Generates consistent colors for markers.</li>
-            <li><code>play_video_with_controls</code>: Main function handling video playback and user interaction.</li>
-            <li><code>pygame_file_dialog</code>: Native Pygame file dialog for selecting files without Tkinter
-                conflicts.</li>
-            <li><code>export_video_with_annotations</code>: Exports the video with markers and bounding boxes burned in.
+      <section id="overview">
+        <h2>1. Overview</h2>
+        <p>
+          <strong>getpixelvideo.py</strong> is a comprehensive video annotation
+          tool that allows users to mark and save pixel coordinates in video
+          frames. The tool supports multiple CSV formats and provides advanced
+          visualization capabilities for different types of motion analysis
+          data.
+        </p>
+
+        <div class="feature-box">
+          <h3>Key Features:</h3>
+          <ul>
+            <li>
+              <strong>Multi-format Support:</strong> Load and visualize
+              MediaPipe, YOLO tracking, and vailá standard formats
             </li>
-            <li><code>load_coordinates_from_file</code>: Loads existing coordinate data.</li>
-            <li><code>save_coordinates</code>: Saves current markings to CSV.</li>
-            <li><code>save_labeling_project</code>: Saves bounding box data for ML.</li>
+            <li>
+              <strong>Advanced Visualization:</strong> Stick figures for
+              MediaPipe, bounding boxes for YOLO tracking
+            </li>
+            <li>
+              <strong>Flexible Marking:</strong> Multiple marker modes for
+              different annotation needs
+            </li>
+            <li>
+              <strong>Zoom & Navigation:</strong> Full zoom capabilities with
+              frame-by-frame navigation
+            </li>
+            <li>
+              <strong>Persistence Mode:</strong> View marker trails across
+              multiple frames
+            </li>
+            <li>
+              <strong>Auto-detection:</strong> Automatically detect CSV format
+              or manual selection
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <section id="installation">
+        <h2>2. Installation & Requirements</h2>
+
+        <h3>Required Dependencies:</h3>
+        <ul>
+          <li><strong>Python 3.12+</strong></li>
+          <li><strong>OpenCV (cv2):</strong> Video processing</li>
+          <li><strong>Pygame:</strong> GUI and visualization</li>
+          <li><strong>Pandas:</strong> CSV data handling</li>
+          <li><strong>NumPy:</strong> Numerical operations</li>
+          <li>
+            <strong>Tkinter:</strong> File dialogs (usually included with
+            Python)
+          </li>
         </ul>
 
-        <hr>
+        <h3>Installation:</h3>
+        <div class="code">pip install opencv-python pygame pandas numpy</div>
 
-        <h2>📜 License</h2>
-        <p>This program is licensed under the <strong>GNU Affero General Public License v3.0</strong>.</p>
-        <p>For more details, visit: <a href="https://www.gnu.org/licenses/agpl-3.0.html"
-                target="_blank">https://www.gnu.org/licenses/agpl-3.0.html</a></p>
-
-        <div class="footer">
-            <p>📅 <strong>Last Updated:</strong> 23 January 2026</p>
-            <p>🔗 <strong>Part of vailá - Multimodal Toolbox</strong></p>
-            <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila" target="_blank">GitHub Repository</a></p>
+        <div class="warning">
+          <strong>Note:</strong> On some systems, pygame might require
+          additional system dependencies. If you encounter issues, refer to the
+          pygame installation documentation for your specific platform.
         </div>
-    </div>
-</body>
+      </section>
 
+      <section id="usage">
+        <h2>3. Basic Usage</h2>
+
+        <h3>Starting the Application:</h3>
+        <div class="code">python vaila/getpixelvideo.py</div>
+
+        <h3>Step-by-Step Process:</h3>
+        <ol>
+          <li>
+            <strong>Select Video:</strong> Choose the video file to process
+          </li>
+          <li>
+            <strong>Load Existing Data:</strong> Use 'Load' button in interface
+            (optional)
+          </li>
+          <li>
+            <strong>Select Format:</strong> If loading data, choose the CSV
+            format:
+            <ul>
+              <li>
+                <strong>Auto-detect:</strong> Automatically detects the format
+              </li>
+              <li>
+                <strong>MediaPipe format:</strong> For landmark data with stick
+                figure visualization
+              </li>
+              <li>
+                <strong>YOLO tracking format:</strong> For tracking data with
+                bounding box visualization
+              </li>
+              <li>
+                <strong>vailá standard format:</strong> For standard coordinate
+                data
+              </li>
+            </ul>
+          </li>
+          <li>
+            <strong>Navigate & Annotate:</strong> Use the interface to navigate,
+            zoom, and edit markers
+          </li>
+          <li>
+            <strong>Save Results:</strong> Save the annotated data in CSV format
+          </li>
+        </ol>
+      </section>
+
+      <section id="controls">
+        <h2>4. Controls & Interface</h2>
+
+        <div class="controls-grid">
+          <div class="control-section">
+            <h3>Video Navigation</h3>
+            <table>
+              <tr>
+                <td><span class="key">Space</span></td>
+                <td>Play/Pause</td>
+              </tr>
+              <tr>
+                <td><span class="key">→</span></td>
+                <td>Next Frame (when paused)</td>
+              </tr>
+              <tr>
+                <td><span class="key">←</span></td>
+                <td>Previous Frame (when paused)</td>
+              </tr>
+              <tr>
+                <td><span class="key">↑</span></td>
+                <td>Fast Forward (when paused)</td>
+              </tr>
+              <tr>
+                <td><span class="key">↓</span></td>
+                <td>Rewind (when paused)</td>
+              </tr>
+              <tr>
+                <td><span class="key">Drag Slider</span></td>
+                <td>Jump to specific frame</td>
+              </tr>
+            </table>
+          </div>
+
+          <div class="control-section">
+            <h3>Zoom & Pan</h3>
+            <table>
+              <tr>
+                <td><span class="key">+</span></td>
+                <td>Zoom In</td>
+              </tr>
+              <tr>
+                <td><span class="key">-</span></td>
+                <td>Zoom Out</td>
+              </tr>
+              <tr>
+                <td><span class="key">Mouse Wheel</span></td>
+                <td>Zoom In/Out</td>
+              </tr>
+              <tr>
+                <td><span class="key">Middle Click</span></td>
+                <td>Enable Pan/Move</td>
+              </tr>
+            </table>
+          </div>
+
+          <div class="control-section">
+            <h3>Marker Management</h3>
+            <table>
+              <tr>
+                <td><span class="key">Left Click</span></td>
+                <td>Add Marker</td>
+              </tr>
+              <tr>
+                <td><span class="key">Right Click</span></td>
+                <td>Remove Last Marker</td>
+              </tr>
+              <tr>
+                <td><span class="key">TAB</span></td>
+                <td>Next marker in current frame</td>
+              </tr>
+              <tr>
+                <td><span class="key">SHIFT+TAB</span></td>
+                <td>Previous marker in current frame</td>
+              </tr>
+              <tr>
+                <td><span class="key">DELETE</span></td>
+                <td>Delete selected marker</td>
+              </tr>
+              <tr>
+                <td><span class="key">A</span></td>
+                <td>Add new empty marker to file</td>
+              </tr>
+              <tr>
+                <td><span class="key">R</span></td>
+                <td>Remove last marker from file</td>
+              </tr>
+              <tr>
+                <td><span class="key">L</span></td>
+                <td>Toggle Labeling mode</td>
+              </tr>
+              <tr>
+                <td><span class="key">Z / R-Click</span></td>
+                <td>Remove last bounding box (Labeling mode)</td>
+              </tr>
+              <tr>
+                <td><span class="key">N</span></td>
+                <td>Rename object label (Labeling mode)</td>
+              </tr>
+            </table>
+          </div>
+
+          <div class="control-section">
+            <h3>File Operations</h3>
+            <table>
+              <tr>
+                <td><span class="key">S</span></td>
+                <td>Save current markers</td>
+              </tr>
+              <tr>
+                <td><span class="key">B</span></td>
+                <td>Make backup of current data</td>
+              </tr>
+              <tr>
+                <td><span class="key">L</span></td>
+                <td>Reload coordinates from file</td>
+              </tr>
+              <tr>
+                <td><span class="key">H</span></td>
+                <td>Show help dialog</td>
+              </tr>
+              <tr>
+                <td><span class="key">F5</span></td>
+                <td>Save Labeling Project</td>
+              </tr>
+              <tr>
+                <td><span class="key">F6</span></td>
+                <td>Load Labeling Project</td>
+              </tr>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section id="formats">
+        <h2>5. Supported File Formats</h2>
+
+        <div class="warning">
+          <strong>Important:</strong> The tool loads and displays only x,y
+          coordinates. Z-coordinates and other metadata are ignored during
+          loading.
+        </div>
+
+        <h3>MediaPipe Format</h3>
+        <p>
+          Used for pose estimation and landmark detection data. The tool
+          extracts x,y coordinates from MediaPipe landmark data.
+        </p>
+        <div class="format-example">
+          <strong>Input Format:</strong> frame_index, nose_x, nose_y, nose_z,
+          left_eye_inner_x, left_eye_inner_y, left_eye_inner_z, ...
+          <br /><strong>Loaded Data:</strong> Only x,y coordinates are extracted
+          and displayed <br /><strong>Example:</strong>
+          <div class="code">
+            frame_index,nose_x,nose_y,nose_z,left_eye_inner_x,left_eye_inner_y,left_eye_inner_z
+            0,100.5,200.3,0.0,150.2,250.1,0.0 1,105.2,205.1,0.0,155.3,255.2,0.0
+          </div>
+          <p><em>Note: Z-coordinates are ignored during loading</em></p>
+        </div>
+
+        <h3>YOLO Tracking Format</h3>
+        <p>
+          Used for object tracking and detection data. The tool calculates
+          center points from bounding boxes.
+        </p>
+        <div class="format-example">
+          <strong>Input Format:</strong> Frame, Tracker ID, Label, X_min, Y_min,
+          X_max, Y_max, Confidence, Color_R, Color_G, Color_B <br /><strong
+            >Loaded Data:</strong
+          >
+          Center points calculated from bounding boxes (X_min+X_max)/2,
+          (Y_min+Y_max)/2 <br /><strong>Example:</strong>
+          <div class="code">
+            Frame,Tracker
+            ID,Label,X_min,Y_min,X_max,Y_max,Confidence,Color_R,Color_G,Color_B
+            0,1,person,100,200,200,300,0.9,255,0,0
+            0,2,person,300,400,400,500,0.8,0,255,0
+          </div>
+        </div>
+
+        <h3>vailá Standard Format</h3>
+        <p>Standard coordinate format used by vailá toolbox.</p>
+        <div class="format-example">
+          <strong>Format:</strong> frame, p1_x, p1_y, p2_x, p2_y, p3_x, p3_y,
+          ... <br /><strong>Example:</strong>
+          <div class="code">
+            frame,p1_x,p1_y,p2_x,p2_y 0,100.5,200.3,150.2,250.1
+            1,105.2,205.1,155.3,255.2
+          </div>
+        </div>
+      </section>
+
+      <section id="modes">
+        <h2>6. Marker Modes</h2>
+
+        <h3>Normal Mode (Default)</h3>
+        <p>
+          The standard marking mode where clicking selects and updates the
+          current marker. Use TAB to navigate between markers. Each marker keeps
+          its ID across all frames.
+        </p>
+        <ul>
+          <li>
+            <strong>Use case:</strong> Tracking specific points across frames
+          </li>
+          <li><strong>Navigation:</strong> TAB to cycle through markers</li>
+          <li>
+            <strong>Selection:</strong> Click to select and update current
+            marker
+          </li>
+        </ul>
+
+        <h3>1 Line Mode (C key)</h3>
+        <p>
+          Creates points in sequence in one frame. Each click adds a new marker.
+          Ideal for tracing paths or outlines.
+        </p>
+        <ul>
+          <li>
+            <strong>Use case:</strong> Tracing contours, paths, or outlines
+          </li>
+          <li><strong>Activation:</strong> Press C key to toggle</li>
+          <li>
+            <strong>Behavior:</strong> Each click creates a new sequential
+            marker
+          </li>
+        </ul>
+
+        <h3>Sequential Mode (S key)</h3>
+        <p>
+          Each click creates a new marker with incrementing IDs. No need to
+          select markers first. Only available in Normal mode.
+        </p>
+        <ul>
+          <li>
+            <strong>Use case:</strong> Quick annotation of multiple points
+          </li>
+          <li><strong>Activation:</strong> Press S key to toggle</li>
+          <li>
+            <strong>Behavior:</strong> Automatic ID increment for each new
+            marker
+          </li>
+        </ul>
+
+        <h3>Labeling Mode (L key)</h3>
+        <p>
+          Draws bounding boxes on video frames to create datasets for object
+          detection training (YOLO/COCO format).
+        </p>
+        <ul>
+          <li>
+            <strong>Labeling Mode:</strong> Create bounding box annotations,
+            with save/load project support (F5/F6)
+          </li>
+          <li>
+            <strong>Dataset Export:</strong> Export structured datasets
+            (train/val/test) with images and JSON annotations
+          </li>
+          <li>
+            <strong>Behavior:</strong> Click and drag to draw boxes, press Z to
+            undo last box
+          </li>
+          <li>
+            <strong>Export:</strong> Save exports structured dataset with
+            train/val/test split
+          </li>
+        </ul>
+      </section>
+
+      <section id="visualization">
+        <h2>7. Data Visualization</h2>
+
+        <h3>MediaPipe Visualization</h3>
+        <p>
+          When loading MediaPipe data, the tool displays stick figures
+          connecting the landmarks:
+        </p>
+        <ul>
+          <li><strong>Landmarks:</strong> Red dots for each detected point</li>
+          <li>
+            <strong>Connections:</strong> Green lines connecting related
+            landmarks
+          </li>
+          <li>
+            <strong>Pose Structure:</strong> Full body pose with head, arms,
+            torso, and legs
+          </li>
+        </ul>
+
+        <h3>YOLO Tracking Visualization</h3>
+        <p>
+          When loading YOLO tracking data, the tool displays bounding boxes:
+        </p>
+        <ul>
+          <li>
+            <strong>Bounding Boxes:</strong> Colored rectangles around detected
+            objects
+          </li>
+          <li>
+            <strong>Labels:</strong> Object class and tracker ID displayed
+          </li>
+          <li>
+            <strong>Colors:</strong> Unique colors for different tracker IDs
+          </li>
+          <li>
+            <strong>Confidence:</strong> Detection confidence values shown
+          </li>
+        </ul>
+
+        <h3>vailá Standard Visualization</h3>
+        <p>Standard point marker visualization:</p>
+        <ul>
+          <li><strong>Markers:</strong> Green circles for each point</li>
+          <li><strong>Numbers:</strong> Marker IDs displayed next to points</li>
+          <li>
+            <strong>Selection:</strong> Orange highlight for selected marker
+          </li>
+        </ul>
+      </section>
+
+      <section id="saving">
+        <h2>8. Saving Options</h2>
+
+        <h3>Standard Save (S key)</h3>
+        <p>Saves current markers in the standard vailá format.</p>
+        <ul>
+          <li><strong>Format:</strong> frame, p1_x, p1_y, p2_x, p2_y, ...</li>
+          <li><strong>File:</strong> {video_name}_markers.csv</li>
+          <li><strong>Location:</strong> Same directory as video file</li>
+        </ul>
+
+        <h3>1 Line Save</h3>
+        <p>Saves sequential markers from 1 Line mode.</p>
+        <ul>
+          <li><strong>Format:</strong> frame, p1_x, p1_y, p2_x, p2_y, ...</li>
+          <li><strong>File:</strong> {video_name}_markers_sequential.csv</li>
+          <li><strong>Use:</strong> For path tracing and contour data</li>
+        </ul>
+
+        <h3>Sequential Save</h3>
+        <p>Saves markers with incrementing IDs.</p>
+        <ul>
+          <li><strong>Format:</strong> frame, p1_x, p1_y, p2_x, p2_y, ...</li>
+          <li><strong>File:</strong> {video_name}_markers_sequential.csv</li>
+          <li><strong>Use:</strong> For multiple point annotations</li>
+        </ul>
+
+        <h3>Labeling Save (Bounding Box Mode)</h3>
+        <p>
+          Saves bounding boxes as structured dataset for Machine Learning
+          training.
+        </p>
+        <ul>
+          <li>
+            <strong>Export:</strong> Save exports structured dataset by split
+          </li>
+          <li>
+            <strong>Project Management:</strong> F5 to Save, F6 to Load labeling
+            projects
+          </li>
+          <li><strong>Renaming:</strong> Press N to rename object labels</li>
+          <li><strong>Directory:</strong> {video_name}_dataset/</li>
+          <li>
+            <strong>Structure:</strong> train/val/test folders with images/ and
+            labels/
+          </li>
+          <li>
+            <strong>Split:</strong> Automatic 70/20/10 split (train/val/test)
+          </li>
+          <li>
+            <strong>Use:</strong> For creating object detection datasets
+            (YOLO/COCO format)
+          </li>
+          <li>
+            <strong>Activation:</strong> Save when Labeling mode is active
+          </li>
+        </ul>
+      </section>
+
+      <section id="advanced">
+        <h2>9. Advanced Features</h2>
+
+        <h3>Persistence Mode (P key)</h3>
+        <p>Shows markers from previous frames to visualize movement trails.</p>
+        <ul>
+          <li><strong>Activation:</strong> Press P to toggle</li>
+          <li>
+            <strong>Adjustment:</strong> Press 1/2 to decrease/increase
+            persistence frames
+          </li>
+          <li><strong>Full Toggle:</strong> Press 3 for full persistence</li>
+          <li>
+            <strong>Visualization:</strong> Fading trails show marker movement
+          </li>
+        </ul>
+
+        <h3>Labeling Mode (L key)</h3>
+        <p>
+          Create bounding box annotations for object detection model training.
+        </p>
+        <ul>
+          <li>
+            <strong>Activation:</strong> Press L key or click "Labeling" button
+          </li>
+          <li>
+            <strong>Usage:</strong> Click and drag to draw bounding boxes on
+            video frames
+          </li>
+          <li>
+            <strong>Edit:</strong> Press Z to remove last box in current frame
+          </li>
+          <li>
+            <strong>Export:</strong> Save creates structured dataset with
+            train/val/test split
+          </li>
+          <li>
+            <strong>Dataset Structure:</strong> Images and JSON annotations
+            organized by split
+          </li>
+          <li>
+            <strong>Format:</strong> JSON files with x, y, w, h coordinates and
+            labels
+          </li>
+          <li>
+            <strong>Save Project:</strong> F5 to save current state to JSON
+            (allows resuming later)
+          </li>
+          <li>
+            <strong>Load Project:</strong> F6 to load saved state from JSON
+          </li>
+          <li>
+            <strong>Rename:</strong> Press N to rename the label (e.g., "ball",
+            "player")
+          </li>
+          <li>
+            <strong>Use case:</strong> Creating datasets for YOLO, COCO, or
+            other ML frameworks
+          </li>
+        </ul>
+
+        <h3>Auto-detection</h3>
+        <p>
+          The tool automatically detects CSV format based on column structure:
+        </p>
+        <ul>
+          <li>
+            <strong>MediaPipe:</strong> Detects 'landmark' in column names
+          </li>
+          <li>
+            <strong>YOLO:</strong> Detects 'Frame', 'Tracker ID', 'X_min'
+            columns
+          </li>
+          <li>
+            <strong>vailá:</strong> Detects 'frame' and 'p' pattern in columns
+          </li>
+        </ul>
+
+        <h3>Backup and Recovery</h3>
+        <p>Built-in backup system for data safety:</p>
+        <ul>
+          <li><strong>Backup:</strong> Press B to create backup</li>
+          <li><strong>Reload:</strong> Press L to reload from file</li>
+          <li>
+            <strong>Auto-backup:</strong> Automatic backups before major
+            operations
+          </li>
+        </ul>
+      </section>
+
+      <section id="troubleshooting">
+        <h2>10. Troubleshooting</h2>
+
+        <h3>Common Issues</h3>
+
+        <h4>Video Not Loading</h4>
+        <ul>
+          <li>Check if video file is corrupted</li>
+          <li>Ensure video format is supported (MP4, AVI, MOV, MKV)</li>
+          <li>Verify file path doesn't contain special characters</li>
+        </ul>
+
+        <h4>CSV Format Not Detected</h4>
+        <ul>
+          <li>Check CSV file structure matches expected format</li>
+          <li>Use manual format selection if auto-detection fails</li>
+          <li>Verify CSV file is not corrupted</li>
+        </ul>
+
+        <h4>Performance Issues</h4>
+        <ul>
+          <li>Reduce video resolution for better performance</li>
+          <li>Close other applications to free memory</li>
+          <li>Use smaller zoom levels for large videos</li>
+        </ul>
+
+        <h4>Visualization Problems</h4>
+        <ul>
+          <li>Ensure CSV data is in the correct format</li>
+          <li>Check if coordinate values are within video dimensions</li>
+          <li>Verify landmark connections for MediaPipe data</li>
+        </ul>
+
+        <div class="warning">
+          <strong>Support:</strong> For additional help, check the vailá project
+          documentation or create an issue on the GitHub repository.
+        </div>
+      </section>
+
+      <div class="feature-box">
+        <h3>Quick Reference</h3>
+        <p><strong>Essential Controls:</strong></p>
+        <ul>
+          <li><span class="key">Space</span> - Play/Pause</li>
+          <li><span class="key">Left Click</span> - Add Marker</li>
+          <li><span class="key">TAB</span> - Navigate Markers</li>
+          <li><span class="key">S</span> - Save</li>
+          <li><span class="key">H</span> - Help</li>
+        </ul>
+      </div>
+    </div>
+  </body>
 </html>
