@@ -3251,8 +3251,8 @@ def play_video_with_controls(video_path, coordinates=None):
                                    sx2 = int((x2 * zoom_level) - crop_x)
                                    sy2 = int((y2 * zoom_level) - crop_y)
                                    
-                                   # Draw simple yellow line for skeleton
-                                   pygame.draw.line(screen, (255, 255, 0), (sx1, sy1), (sx2, sy2), 2)
+                                   # Draw simple blue line for skeleton
+                                   pygame.draw.line(screen, (0, 0, 255), (sx1, sy1), (sx2, sy2), 2)
 
         # Draw current frame markers
 
@@ -3942,9 +3942,7 @@ def play_video_with_controls(video_path, coordinates=None):
                     elif help_web_button_rect.collidepoint(x, rel_y):
                          # Open documentation in browser
                          import webbrowser
-                         help_url = "file://" + os.path.abspath(os.path.join(os.path.dirname(__file__), "help", "getpixelvideo_help.html"))
-                         # Also try to open the md file if html logic fails or as backup? No, HTML is better.
-                         # Let's try to be robust
+                         help_url = "file://" + os.path.abspath(os.path.join(os.path.dirname(__file__), "help", "getpixelvideo.html"))
                          webbrowser.open(help_url)
                          
                     elif slider_y <= rel_y <= slider_y + slider_height:
