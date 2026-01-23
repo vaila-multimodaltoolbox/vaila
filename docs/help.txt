@@ -57,6 +57,10 @@ Available Tools:
         Description: Compress video files using the H.264 codec. This helps in reducing the file size while maintaining video quality.
         Instructions: Place your video files in the data/video_compress_h264 directory. The tool will compress these videos using the H.264 codec.
 
+    Transfer Files (SSH)
+        Description: Transfer files between local and remote systems using SSH (rsync/scp).
+        Instructions: Open the File Manager (Frame A) and click "Transfer". Select Upload/Download mode and configure paths.
+
 Additional Commands:
 
     h - Display this help message.
