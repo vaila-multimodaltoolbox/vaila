@@ -1,4 +1,4 @@
-# *vailá* - Multimodal Toolbox
+# _vailá_ - Multimodal Toolbox
 
 <p align="center">
   <img src="docs/images/vaila.png" alt="vailá Logo" width="300"/>
@@ -31,23 +31,24 @@
 
 ## Introduction
 
-The analysis of human movement is fundamental in both health and sports biomechanics, providing valuable insights into various aspects of physical performance, rehabilitation, and injury prevention. However, existing software often restricts user control and customization, acting as a "black box." With *vailá*, users have the freedom to explore, customize, and create their own tools in a truly open-source and collaborative environment.
+The analysis of human movement is fundamental in both health and sports biomechanics, providing valuable insights into various aspects of physical performance, rehabilitation, and injury prevention. However, existing software often restricts user control and customization, acting as a "black box." With _vailá_, users have the freedom to explore, customize, and create their own tools in a truly open-source and collaborative environment.
 
 ## Table of Contents
 
 - [Introduction](#introduction)
 - [Description](#description)
-- [*vailá* Structure and Interface](#vailá-structure-and-interface)
+- [_vailá_ Structure and Interface](#vailá-structure-and-interface)
 - [Installation and Setup](#installation-and-setup)
 - [Running the Application](#running-the-application)
 - [Uninstallation Instructions](#uninstallation-instructions)
 - [Documentation](#documentation)
-- [Citing *vailá*](#citing-vailá)
+- [Citing _vailá_](#citing-vailá)
 - [Contribution](#contribution)
 - [License](#license)
 
 ---
-*vailá* (Versatile Anarcho Integrated Liberation Ánalysis) is an open-source multimodal toolbox that leverages data from multiple biomechanical systems to enhance human movement analysis.
+
+_vailá_ (Versatile Anarcho Integrated Liberation Ánalysis) is an open-source multimodal toolbox that leverages data from multiple biomechanical systems to enhance human movement analysis.
 
 The toolbox is designed to integrate and analyze data from diverse measurement systems commonly used in biomechanics research, including motion capture systems (such as Vicon and OptiTrack), inertial measurement units (IMU), markerless tracking solutions (OpenPose and MediaPipe), force plates (AMTI and Bertec), electromyography (EMG), GNSS/GPS systems, physiological sensors (heart rate, ECG, MEG, EEG), video analysis tools, and ultrasound systems. This comprehensive integration enables researchers to perform advanced multimodal analysis by combining data from different sources, providing a more complete understanding of human movement patterns and biomechanical parameters.
 
@@ -55,7 +56,7 @@ The toolbox is designed to integrate and analyze data from diverse measurement s
 
 This multimodal toolbox integrates data from various motion capture systems to facilitate advanced biomechanical analysis by combining multiple data sources. The primary objective is to improve understanding and evaluation of movement patterns across different contexts.
 
-## *vailá* Manifest
+## _vailá_ Manifest
 
 ### English Version
 
@@ -63,7 +64,7 @@ Join us in the liberation from paid software with the "vailá - Versatile Anarch
 
 In front of you stands a versatile tool designed to challenge the boundaries of commercial systems. This software is a symbol of innovation and freedom, determined to eliminate barriers that protect the monopoly of expensive software, ensuring the dissemination of knowledge and accessibility.
 
-With *vailá*, you are invited to explore, experiment, and create without constraints. "vailá" means "go there and do it!" — encouraging you to harness its power to perform analysis with data from multiple systems.
+With _vailá_, you are invited to explore, experiment, and create without constraints. "vailá" means "go there and do it!" — encouraging you to harness its power to perform analysis with data from multiple systems.
 
 ### Versão em Português
 
@@ -71,30 +72,30 @@ Junte-se a nós na libertação do software pago com o "vailá: Análise Versát
 
 Diante de você está uma ferramenta versátil, projetada para desafiar as fronteiras dos sistemas comerciais. Este software é um símbolo de inovação e liberdade, determinado a eliminar as barreiras que protegem o monopólio do software caro, garantindo a disseminação do conhecimento e a acessibilidade.
 
-Com *vailá*, você é convidado a explorar, experimentar e criar sem restrições. "vailá" significa "vai lá e faça!" — encorajando você a aproveitar seu poder para realizar análises com dados de múltiplos sistemas.
+Com _vailá_, você é convidado a explorar, experimentar e criar sem restrições. "vailá" significa "vai lá e faça!" — encorajando você a aproveitar seu poder para realizar análises com dados de múltiplos sistemas.
 
 ---
 
-## *vailá* Structure and Interface
+## _vailá_ Structure and Interface
 
-*vailá* provides a comprehensive multimodal analysis framework organized into three main sections (Frames A, B, and C) that handle different aspects of biomechanical data processing:
+_vailá_ provides a comprehensive multimodal analysis framework organized into three main sections (Frames A, B, and C) that handle different aspects of biomechanical data processing:
 
 ```bash
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
-                           \/  \/|_/|/|_/\/|_/                    
+                           \/  \/|_/|/|_/\/|_/
 ##########################################################################
 Mocap fullbody_c3d           Markerless_3D       Markerless_2D_MP
                   \                |                /
-                   v               v               v        
+                   v               v               v
    CUBE2D  --> +---------------------------------------+ <-- Vector Coding
    IMU_csv --> |       vailá - multimodal toolbox      | <-- Cluster_csv
 Open Field --> +---------------------------------------+ <-- Force Plate
               ^                   |                    ^ <-- YOLOv11 and MediaPipe
         EMG__/                    v                     \__Tracker YOLOv11
                     +--------------------------+
-                    | Results: Data and Figure | 
+                    | Results: Data and Figure |
                     +--------------------------+
 
 ============================ File Manager (Frame A) ========================
@@ -248,15 +249,37 @@ vaila
 
 ## Installation and Setup
 
-### ⚡ New Engine: Powered by *uv*
+### ⚡ One-Line Installation (Fastest)
 
-*vailá* has migrated to **[uv](https://github.com/astral-sh/uv)**, an extremely fast Python package installer and resolver, written in Rust. **uv is now the recommended installation method for all platforms** (Windows, Linux, macOS).
+Install _vailá_ with a single command!
+
+**🐧 Linux:**
+
+```bash
+wget -qO- https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/install_vaila_linux.sh | bash
+```
+
+**🍎 macOS:**
+
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/install_vaila_mac.sh)"
+```
+
+**🪟 Windows:**
+
+```powershell
+irm https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/install_vaila_win.ps1 | iex
+```
+
+### ⚡ New Engine: Powered by _uv_
+
+_vailá_ has migrated to **[uv](https://github.com/astral-sh/uv)**, an extremely fast Python package installer and resolver, written in Rust. **uv is now the recommended installation method for all platforms** (Windows, Linux, macOS).
 
 **Why uv is recommended:**
 
 - **Speed:** Installation is **10-100x faster** than traditional Conda setups.
 - **Performance:** **Faster execution times** compared to Conda environments.
-- **Simplicity:** You no longer *need* to pre-install Anaconda or Miniconda manually.
+- **Simplicity:** You no longer _need_ to pre-install Anaconda or Miniconda manually.
 - **Reliability:** Uses a strictly locked dependency file (`uv.lock`) ensuring that what runs on our machine runs on yours.
 - **Modern:** Built with Rust, following Python packaging standards (`pyproject.toml`).
 - **Dynamic Hardware Optimization**: Automatically detects hardware (NVIDIA GPU, Apple Silicon) and selects the optimized configuration template for your system.
@@ -266,7 +289,7 @@ vaila
 
 #### 🎯 Smart Configuration System
 
-*vailá* uses a **template-based configuration system** that automatically selects the optimal dependencies for your hardware:
+_vailá_ uses a **template-based configuration system** that automatically selects the optimal dependencies for your hardware:
 
 - **`pyproject.toml`** (in repository): Universal CPU-only configuration (default in repository, compatible with all systems)
 - **`pyproject_win_cuda12.toml`**: Windows with NVIDIA CUDA 12.1 support (TensorRT, GPU acceleration)
@@ -299,6 +322,7 @@ vaila
 **Important:** The template selection happens **before** `uv python pin` and `uv venv` are executed. This ensures the virtual environment is created with the correct dependencies from the beginning, avoiding dependency resolution conflicts.
 
 This ensures that:
+
 - ✅ The virtual environment is created with the correct dependencies from the beginning
 - ✅ No dependency resolution conflicts occur during installation
 - ✅ Each OS/GPU combination gets its optimized dependency set
@@ -314,48 +338,50 @@ Installation is now streamlined using **uv** with automatic GPU detection.
 
 ### **Important Notice Before Installation**
 
-> *vailá* values freedom and the goodwill to learn. If you are not the owner of your computer and do not have permission to perform the installation, we recommend doing it on your own computer. If you are prevented from installing software, it means you are not prepared to liberate yourself, make your modifications, and create, which is the philosophy of *vailá!*
+> _vailá_ values freedom and the goodwill to learn. If you are not the owner of your computer and do not have permission to perform the installation, we recommend doing it on your own computer. If you are prevented from installing software, it means you are not prepared to liberate yourself, make your modifications, and create, which is the philosophy of _vailá!_
 
-### 1. **Download *vailá***
+### 1. **Download _vailá_**
 
 - **Option A (Git):**
 
-     ```powershell
-     git clone https://github.com/vaila-multimodaltoolbox/vaila
-     cd vaila
-     ```
+  ```powershell
+  git clone https://github.com/vaila-multimodaltoolbox/vaila
+  cd vaila
+  ```
 
 - **Option B (Zip):**
-  - Download the `.zip` file from the [*vailá* GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
+  - Download the `.zip` file from the [_vailá_ GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
   - Extract it
   - **Important:** Rename the folder from `vaila-main` to `vaila`
 
 ### 2. **Run the Installation Script**
 
-   Open **PowerShell** inside the `vaila` folder and run:
-   ```powershell
-   .\install_vaila_win.ps1
-   ```
-   
-   The script will:
-   1. Detect if you have an **NVIDIA GPU**.
-   2. Ask if you want to install with GPU support (optimizes for CUDA 12.1).
-   3. Automatically select and apply the correct configuration template:
-      - **GPU detected + user chooses GPU**: Uses `pyproject_win_cuda12.toml` (CUDA 12.1, TensorRT)
-      - **No GPU or user chooses CPU**: Uses `pyproject_universal_cpu.toml` (CPU-only)
-   4. Install **uv** and all dependencies with the selected configuration.
+Open **PowerShell** inside the `vaila` folder and run:
 
-   **Note:** If you run as **Administrator**, *vailá* installs to `C:\Program Files\vaila`. If you run as a **Standard User**, it installs to your user profile (`~\vaila`).
+```powershell
+.\install_vaila_win.ps1
+```
+
+The script will:
+
+1.  Detect if you have an **NVIDIA GPU**.
+2.  Ask if you want to install with GPU support (optimizes for CUDA 12.1).
+3.  Automatically select and apply the correct configuration template:
+    - **GPU detected + user chooses GPU**: Uses `pyproject_win_cuda12.toml` (CUDA 12.1, TensorRT)
+    - **No GPU or user chooses CPU**: Uses `pyproject_universal_cpu.toml` (CPU-only)
+4.  Install **uv** and all dependencies with the selected configuration.
+
+**Note:** If you run as **Administrator**, _vailá_ installs to `C:\Program Files\vaila`. If you run as a **Standard User**, it installs to your user profile (`~\vaila`).
 
 ### 3. **What the Script Does**
 
-   The installation script automatically:
+The installation script automatically:
 
 - Checks for **uv**; if missing, installs it automatically
 - **Detects your hardware** (NVIDIA GPU) and prompts for GPU support preference
 - **Selects the optimal configuration template** (`pyproject_win_cuda12.toml` or `pyproject_universal_cpu.toml`)
 - **Applies the template** to `pyproject.toml` **before** creating the virtual environment
-- Installs **Python 3.12.12** (via uv) securely isolated for *vailá*
+- Installs **Python 3.12.12** (via uv) securely isolated for _vailá_
 - Creates a virtual environment (`.venv`) with the correct dependencies from the start
 - Syncs all dependencies using `uv sync` (with `--extra gpu` if GPU support was selected)
 - Installs **FFmpeg** and **Windows Terminal** (if running as Administrator)
@@ -369,23 +395,23 @@ Installation is now streamlined using **uv** with automatic GPU detection.
 ### ⚠️ **Important Notes**
 
 - The installation script requires **administrative privileges** to install system components (FFmpeg, Windows Terminal)
-- If you run without admin privileges, some features may be skipped, but *vailá* will still be installed
+- If you run without admin privileges, some features may be skipped, but _vailá_ will still be installed
 - The script dynamically configures paths, so no manual adjustments are necessary
 - **No Conda required:** The new installation method does not require Anaconda or Miniconda
 
-### 4. **Launching *vailá***
+### 4. **Launching _vailá_**
 
-   After installation, you can launch *vailá*:
+After installation, you can launch _vailá_:
 
 - Using the **Desktop shortcut** (with proper icon)
-- From the **Windows Start Menu** under *vailá*
-- From **Windows Terminal** via the pre-configured *vailá* profile
+- From the **Windows Start Menu** under _vailá_
+- From **Windows Terminal** via the pre-configured _vailá_ profile
 - Manually, by running:
 
-     ```powershell
-     cd path\to\vaila
-     uv run vaila.py
-     ```
+  ```powershell
+  cd path\to\vaila
+  uv run vaila.py
+  ```
 
 ---
 
@@ -398,15 +424,17 @@ Installation using **uv** is recommended for faster installation and execution t
 We provide an automated installation script that handles everything for you (dependencies, uv installation, virtual environment, etc.).
 
 1. **Make the script executable**:
+
    ```bash
    chmod +x install_vaila_linux.sh
    ```
 
 2. **Run the installation script**:
+
    ```bash
    ./install_vaila_linux.sh
    ```
-   
+
    The script will:
    1. Detect if you have an **NVIDIA GPU**.
    2. Ask if you want to install with GPU support (optimizes for CUDA 12.8).
@@ -504,7 +532,7 @@ The installer will prompt you to choose your preferred installation method:
    ```bash
    ./install_vaila_mac.sh
    ```
-   
+
    The script will:
    1. Detect your architecture (**Apple Silicon** vs **Intel**).
    2. If Apple Silicon, ask if you want to use **Metal/MPS** acceleration (recommended).
@@ -583,7 +611,7 @@ sudo chmod +x install_vaila_mac.sh
 
 ## Running the Application
 
-After installation, you can launch *vailá* from your applications menu or directly from the terminal, depending on your operating system.
+After installation, you can launch _vailá_ from your applications menu or directly from the terminal, depending on your operating system.
 
 ### 🚀 Using uv (Recommended)
 
@@ -592,7 +620,7 @@ After installation, you can launch *vailá* from your applications menu or direc
 **Windows:**
 
 - Use the **Desktop** or **Start Menu shortcut** created by the installer
-- Or from **Windows Terminal** via the pre-configured *vailá* profile
+- Or from **Windows Terminal** via the pre-configured _vailá_ profile
 - Or from command line:
 
   ```powershell
@@ -601,6 +629,7 @@ After installation, you can launch *vailá* from your applications menu or direc
   ```
 
 **Linux and macOS:**
+
 ```bash
 cd ~/vaila
 uv run vaila.py
@@ -613,6 +642,7 @@ If you installed using the legacy Conda method (slower execution):
 **Linux and macOS: From the Terminal (bash or zsh)**
 
 1. Navigate to the `vaila` directory:
+
    ```bash
    cd ~/vaila
    ```
@@ -637,26 +667,25 @@ If you installed using the legacy Conda method (slower execution):
 
 ---
 
-## If preferred, you can also run *vailá* from the launch scripts
+## If preferred, you can also run _vailá_ from the launch scripts
 
 ### For 🐧 Linux and 🍎 macOS
 
 - From the Applications Menu:
-  
   - Look for `vailá` in your applications menu and launch it by clicking on the icon.
 
 ---
 
 #### From the Terminal
 
-If you prefer to run *vailá* from the terminal or if you encounter issues with the applications menu, you can use the launch script created during installation.
+If you prefer to run _vailá_ from the terminal or if you encounter issues with the applications menu, you can use the launch script created during installation.
 
 ##### 🐧 Linux and 🍎 macOS
 
 The installation scripts automatically create a `run_vaila.sh` script in the installation directory (`~/vaila`).
 
 - **Run the script**:
-  
+
 ```bash
 ~/vaila/run_vaila.sh
 ```
@@ -668,13 +697,13 @@ The script will automatically use the correct Python environment (uv or conda) b
 The installation script automatically creates `run_vaila.ps1` and `run_vaila.bat` scripts in the installation directory.
 
 - **Run using PowerShell**:
-  
+
 ```powershell
 .\run_vaila.ps1
 ```
 
 - **Or double-click**:
-  
+
 ```batch
 run_vaila.bat
 ```
@@ -689,11 +718,12 @@ run_vaila.bat
 
 ## ⚡ GPU Support & Optimization
 
-*vailá* provides comprehensive GPU support across all platforms with automatic hardware detection and optimized dependency installation.
+_vailá_ provides comprehensive GPU support across all platforms with automatic hardware detection and optimized dependency installation.
 
 ### Installation-Time GPU Support
 
 During installation, the scripts automatically:
+
 - **Detect NVIDIA GPUs** (Windows/Linux) or **Apple Silicon** (macOS)
 - **Prompt you** to choose GPU or CPU-only installation
 - **Select the optimal configuration template**:
@@ -704,11 +734,11 @@ During installation, the scripts automatically:
 
 ### Runtime GPU Optimization
 
-*vailá* includes a **HardwareManager** that automatically optimizes performance for your specific computer:
+_vailá_ includes a **HardwareManager** that automatically optimizes performance for your specific computer:
 
-- **Auto-Export**: The first time you run a model, *vailá* builds a custom `.engine` file for your GPU.
-  - *Note*: This process takes 2-5 minutes on the first run.
-- **Cross-Platform**: 
+- **Auto-Export**: The first time you run a model, _vailá_ builds a custom `.engine` file for your GPU.
+  - _Note_: This process takes 2-5 minutes on the first run.
+- **Cross-Platform**:
   - On **Windows**, it uses `trtexec.exe` to build Windows-compatible engines.
   - On **Linux**, it builds Linux-compatible engines.
   - Both can coexist in the same folder if you dual-boot.
@@ -779,11 +809,13 @@ sudo chmod +x uninstall_vaila_mac.sh
 1. **Run the uninstallation script as Administrator in Anaconda/Miniconda PowerShell Prompt**:
 
 - PowerShell Script:
+
   ```powershell
   .\uninstall_vaila_win.ps1
   ```
-  
+
   **Note:** If you encounter execution policy restrictions, run:
+
   ```powershell
   powershell -ExecutionPolicy Bypass -File .\uninstall_vaila_win.ps1
   ```
@@ -818,6 +850,7 @@ Comprehensive documentation for all Python scripts and modules in vailá:
 - **[Script Help Index (Markdown)](vaila/help/index.md)** - Complete documentation for all Python modules and scripts (Markdown version)
 
 The help documentation includes detailed information about:
+
 - Module descriptions and functionality
 - Configuration parameters
 - Usage instructions
@@ -832,9 +865,9 @@ The help documentation includes detailed information about:
 
 ---
 
-## Citing *vailá*
+## Citing _vailá_
 
-If you use *vailá* in your research or project, please consider citing our work:
+If you use _vailá_ in your research or project, please consider citing our work:
 
 ```bibtex
 @misc{vaila2024,
@@ -871,8 +904,8 @@ If you use *vailá* in your research or project, please consider citing our work
 
 ## You can also refer to the tool's GitHub repository for more details and updates
 
-- [*vailá* on arXiv](https://arxiv.org/abs/2410.07238)
-- [*vailá* GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
+- [_vailá_ on arXiv](https://arxiv.org/abs/2410.07238)
+- [_vailá_ GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
 
 ## Contribution
 
