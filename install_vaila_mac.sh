@@ -21,8 +21,8 @@
 #                                                                                       #
 # Author: Prof. Dr. Paulo R. P. Santiago                                                #
 # Creation: 20 November 2025                                                          #
-# Update: 20 January 2026                                                              #
-# Version: 0.3.14                                                                        #
+# Update: 27 January 2026                                                              #
+# Version: 0.3.16                                                                        #
 # OS: macOS (Apple Silicon or Intel)                                                    #
 #########################################################################################
 
