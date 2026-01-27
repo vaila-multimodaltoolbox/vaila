@@ -73,9 +73,25 @@ $projectDir = $sourcePath
 # Check if pyproject.toml exists (for uv method)
 If ($installMethod -eq "1") {
     If (-Not (Test-Path "$projectDir\pyproject.toml")) {
-        Write-Error "pyproject.toml not found in $projectDir"
-        Write-Host "Please ensure you're running this script from the vaila project root." -ForegroundColor Yellow
-        Exit 1
+        Write-Host "Bootstrap Mode: vaila source not found locally." -ForegroundColor Cyan
+        Write-Host "Cloning vaila repository from GitHub..." -ForegroundColor Cyan
+        
+        If (-Not (Get-Command git -ErrorAction SilentlyContinue)) {
+             Write-Error "git is not installed. Please install git first."
+             Exit 1
+        }
+        
+        $tempDir = [System.IO.Path]::GetTempPath()
+        $tempVailaDir = Join-Path $tempDir "vaila_install_temp"
+        If (Test-Path $tempVailaDir) { Remove-Item -Path $tempVailaDir -Recurse -Force -ErrorAction SilentlyContinue }
+        
+        Write-Host "Downloading to temporary directory: $tempVailaDir" -ForegroundColor Yellow
+        git clone --depth 1 https://github.com/vaila-multimodaltoolbox/vaila.git $tempVailaDir
+        
+        Write-Host "Running installer from downloaded source..." -ForegroundColor Cyan
+        Set-Location $tempVailaDir
+        & ".\install_vaila_win.ps1"
+        Exit $LASTEXITCODE
     }
 }
 
