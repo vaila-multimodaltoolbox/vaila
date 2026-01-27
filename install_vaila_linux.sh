@@ -57,13 +57,30 @@ VAILA_HOME="$USER_HOME/vaila"
 DESKTOP_ENTRY_PATH="$HOME/.local/share/applications/vaila.desktop"
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Check if pyproject.toml exists (for uv method)
-if [[ "$INSTALL_METHOD" == "1" ]]; then
-    if [ ! -f "$PROJECT_DIR/pyproject.toml" ]; then
-        echo "Error: pyproject.toml not found in $PROJECT_DIR"
-        echo "Please ensure you're running this script from the vaila project root."
+# Check if running remotely (bootstrap mode)
+# If files are missing, download them first
+if [ ! -f "$PROJECT_DIR/pyproject.toml" ]; then
+    echo "Bootstrap Mode: vaila source not found locally."
+    echo "Cloning vaila repository from GitHub..."
+    
+    if ! command -v git &> /dev/null; then
+        echo "Error: git is not installed. Please install git first."
+        echo "sudo apt install git"
         exit 1
     fi
+
+    TEMP_DIR=$(mktemp -d)
+    echo "Downloading to temporary directory: $TEMP_DIR"
+    git clone --depth 1 https://github.com/vaila-multimodaltoolbox/vaila.git "$TEMP_DIR/vaila"
+    
+    echo "Running installer from downloaded source..."
+    chmod +x "$TEMP_DIR/vaila/install_vaila_linux.sh"
+    "$TEMP_DIR/vaila/install_vaila_linux.sh" "$@"
+    EXIT_CODE=$?
+    
+    echo "Cleaning up temporary files..."
+    rm -rf "$TEMP_DIR"
+    exit $EXIT_CODE
 fi
 
 # ============================================================================
