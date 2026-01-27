@@ -28,7 +28,7 @@ A ferramenta Pixel Coordinate Tool (getpixelvideo.py) é uma ferramenta abrangen
 - **Pygame:** Interface gráfica e visualização
 - **Pandas:** Manipulação de dados CSV
 - **NumPy:** Operações numéricas
-- **Tkinter:** Diálogos de file (geralmente incluído com Python)
+- **Tkinter:** Diálogos de arquivo (geralmente incluído com Python)
 
 ### Instalação
 
@@ -39,7 +39,7 @@ pip install opencv-python pygame pandas numpy
 ## Começando
 
 1. **Execute o script:** `python vaila/getpixelvideo.py`
-2. **Selecione file de vídeo:** Escolha o vídeo para processar
+2. **Selecione arquivo de vídeo:** Escolha o vídeo para processar
 3. **Carregue dados existentes:** Use o botão 'Load' na interface para carregar keypoints (opcional)
 4. **Selecione formato:** Se carregando dados, escolha o formato CSV:
    - **Auto-detectar (recomendado):** Detecta automaticamente o formato
@@ -131,7 +131,7 @@ frame,p1_x,p1_y,p2_x,p2_y
 ### Modo Sequencial (tecla S)
 
 - Cada clique cria um novo marcador com IDs incrementais
-- No é necessário selecionar marcadores primeiro
+- Não é necessário selecionar marcadores primeiro
 - Disponível apenas no modo Normal
 - **Caso de uso:** Anotação rápida de múltiplos pontos
 - **Ativação:** Pressione tecla S para alternar
@@ -176,31 +176,31 @@ frame,p1_x,p1_y,p2_x,p2_y
 
 ### Gerenciamento de Marcadores
 
-| Tecla               | Ação                                  |
-| ------------------- | ------------------------------------- |
-| **Clique Esquerdo** | Adicionar/atualizar marcador          |
-| **Clique Direito**  | Remover último marcador               |
-| **TAB**             | Próximo marcador no quadro atual      |
-| **SHIFT+TAB**       | Marcador anterior no quadro atual     |
-| **DELETE**          | Excluir marcador selecionado          |
-| **A**               | Adicionar novo marcador vazio ao file |
-| **R**               | Remover último marcador do file       |
+| Tecla               | Ação                                     |
+| ------------------- | ---------------------------------------- |
+| **Clique Esquerdo** | Adicionar/atualizar marcador             |
+| **Clique Direito**  | Remover último marcador                  |
+| **TAB**             | Próximo marcador no quadro atual         |
+| **SHIFT+TAB**       | Marcador anterior no quadro atual        |
+| **DELETE**          | Excluir marcador selecionado             |
+| **A**               | Adicionar novo marcador vazio ao arquivo |
+| **R**               | Remover último marcador do arquivo       |
 
 ### Controles de Modo
 
-| Tecla           | Ação                                              |
-| --------------- | ------------------------------------------------- |
-| **C**           | Alternar modo "1 Line"                            |
-| **S**           | Alternar modo Sequencial (apenas no modo Normal)  |
-| **P**           | Alternar modo Persistência                        |
-| **L**           | Alternar modo Labeling (Bounding Boxes)           |
-| **Z / R-Click** | Remover última caixa delimitadora (modo Labeling) |
-| **N**           | Renomear label do objeto (modo Labeling)          |
-| **F5**          | Salvar Projeto de Labeling (JSON)                 |
-| **F6**          | Carregar Projeto de Labeling (JSON)               |
-| **1**           | Diminuir quadros de persistência                  |
-| **2**           | Aumentar quadros de persistência                  |
-| **3**           | Alternar persistência completa                    |
+| Tecla           | Ação                                                       |
+| --------------- | ---------------------------------------------------------- |
+| **C**           | Alternar modo "1 Line"                                     |
+| **S**           | Alternar modo Sequencial (apenas no modo Normal)           |
+| **P**           | Alternar modo Persistência                                 |
+| **L**           | Alternar modo Labeling (Bounding Boxes)                    |
+| **Z / R-Click** | Remover última caixa delimitadora (modo Labeling)          |
+| **N**           | Renomear label do objeto (Apenas Modo Labeling)            |
+| **F5**          | Salvar Projeto de Labeling (JSON) (Apenas Modo Labeling)   |
+| **F6**          | Carregar Projeto de Labeling (JSON) (Apenas Modo Labeling) |
+| **1**           | Diminuir quadros de persistência                           |
+| **2**           | Aumentar quadros de persistência                           |
+| **3**           | Alternar persistência completa                             |
 
 ### Operações de Arquivo
 
@@ -208,7 +208,7 @@ frame,p1_x,p1_y,p2_x,p2_y
 | ----- | ------------------------------------- |
 | **S** | Salvar marcadores atuais              |
 | **B** | Fazer backup dos dados atuais         |
-| **L** | Recarregar coordenadas do file        |
+| **L** | Recarregar coordenadas do arquivo     |
 | **H** | Mostrar diálogo de ajuda              |
 | **D** | Abrir documentação completa (no help) |
 
@@ -311,19 +311,19 @@ Cada arquivo JSON contém:
 #### Salvamento Padrão (tecla S)
 
 - **Formato:** `frame, p1_x, p1_y, p2_x, p2_y, ...`
-- **File:** `{nome_do_video}_markers.csv`
-- **Localização:** Mesmo diretório do file de vídeo
+- **Arquivo:** `{nome_do_video}_markers.csv`
+- **Localização:** Mesmo diretório do arquivo de vídeo
 
 #### Salvamento 1 Line
 
 - **Formato:** `frame, p1_x, p1_y, p2_x, p2_y, ...`
-- **File:** `{nome_do_video}_markers_sequential.csv`
+- **Arquivo:** `{nome_do_video}_markers_sequential.csv`
 - **Uso:** Para traçado de caminhos e dados de contorno
 
 #### Salvamento Sequencial
 
 - **Formato:** `frame, p1_x, p1_y, p2_x, p2_y, ...`
-- **File:** `{nome_do_video}_markers_sequential.csv`
+- **Arquivo:** `{nome_do_video}_markers_sequential.csv`
 - **Uso:** Para anotações de múltiplos pontos
 
 #### Salvamento Labeling (Modo de Caixas Delimitadoras)
@@ -355,7 +355,7 @@ A ferramenta detecta automaticamente formato CSV baseado na estrutura das coluna
 Sistema de backup integrado para segurança dos dados:
 
 - **Backup:** Pressione B para criar backup
-- **Recarregar:** Pressione L para recarregar do file
+- **Recarregar:** Pressione L para recarregar do arquivo
 - **Auto-backup:** Backups automáticos antes de operações importantes
 
 ### Acesso à Documentação
@@ -372,24 +372,24 @@ Sistema de backup integrado para segurança dos dados:
 4. **Use zoom** para maior precisão ao marcar coordenadas
 5. **A tecla A** é útil para adicionar marcadores vazios que podem ser preenchidos posteriormente
 6. **O modo persistência** é ótimo para visualizar padrões de movimento
-7. **Auto-detecção** funciona melhor com files CSV formatados corretamente
+7. **Auto-detecção** funciona melhor com arquivos CSV formatados corretamente
 8. **Faça backup regularmente** usando a tecla B para evitar perda de dados
 
 ## Solução de Problemas
 
 ### Problemas Comuns
 
-#### Vídeo No Carrega
+#### Vídeo Não Carrega
 
-- Verifique se o file de vídeo está corrompido
+- Verifique se o arquivo de vídeo está corrompido
 - Certifique-se de que o formato de vídeo é suportado (MP4, AVI, MOV, MKV)
-- Verifique se o caminho do file não contém characters especiais
+- Verifique se o caminho do arquivo não contém caracteres especiais
 
-#### Formato CSV No Detectado
+#### Formato CSV Não Detectado
 
-- Verifique se a estrutura do file CSV corresponde ao formato esperado
+- Verifique se a estrutura do arquivo CSV corresponde ao formato esperado
 - Use seleção manual de formato se a auto-detecção falhar
-- Verifique se o file CSV não está corrompido
+- Verifique se o arquivo CSV não está corrompido
 
 #### Problemas de Performance
 
@@ -405,12 +405,12 @@ Sistema de backup integrado para segurança dos dados:
 
 ### Mensagens de Erro
 
-| Erro                        | Solução                                          |
-| --------------------------- | ------------------------------------------------ |
-| "Error opening video file"  | Verifique formato do vídeo e integridade do file |
-| "No keypoint file selected" | Selecione um file CSV válido ou comece do zero   |
-| "Unknown format"            | Use seleção manual de formato                    |
-| "Error loading coordinates" | Verifique formato e estrutura do file CSV        |
+| Erro                        | Solução                                             |
+| --------------------------- | --------------------------------------------------- |
+| "Error opening video file"  | Verifique formato do vídeo e integridade do arquivo |
+| "No keypoint file selected" | Selecione um arquivo CSV válido ou comece do zero   |
+| "Unknown format"            | Use seleção manual de formato                       |
+| "Error loading coordinates" | Verifique formato e estrutura do arquivo CSV        |
 
 ## Suporte e Documentação
 
@@ -443,7 +443,7 @@ Sistema de backup integrado para segurança dos dados:
 - Criada documentação HTML abrangente
 - Adicionado acesso rápido à documentação completa via tecla 'D'
 - Melhorado diálogo de ajuda com informações de formato
-- Aprimorado tratamento de errorrrs e feedback do usuário
+- Aprimorado tratamento de erros e feedback do usuário
 
 ### Versões Anteriores
 
