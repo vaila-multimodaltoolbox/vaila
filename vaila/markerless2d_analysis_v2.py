@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation: 29 July 2024
-Update: 14 January 2026
-Version: 0.1.1
+Update: 27 January 2026
+Version: 0.3.16
 
 Description:
 This script performs batch processing of videos for 2D pose estimation using
@@ -21,8 +21,9 @@ The user can configure key parameters via a graphical interface:
 - YOLO: model selection (yolo11n to yolo11x), confidence threshold
 - Modes: YOLO-only, YOLO+MediaPipe, or MediaPipe-only
 
-New Features (v0.1.1):
-- Updated to use MediaPipe Tasks API (0.10.31+) instead of deprecated mp.solutions
+New Features (v0.3.16):
+- Updated to use MediaPipe Tasks API (0.10.32+) instead of deprecated mp.solutions
+- Added temporal filters: Kalman, Savitzky-Golay, and Median
 - Manual OpenCV drawing for landmarks (compatible with new MediaPipe version)
 - Automatic model download for both MediaPipe and YOLO models
 - ROI polygon definition and bbox upscale factor for YOLO+MediaPipe mode
@@ -36,7 +37,7 @@ python markerless2d_analysis_v2.py
 Requirements:
 - Python 3.12.12
 - OpenCV (pip install opencv-python)
-- MediaPipe (pip install mediapipe>=0.10.31)
+- MediaPipe (pip install mediapipe>=0.10.32)
 - Ultralytics (pip install ultralytics)
 - Tkinter (usually included with Python installations)
 - PyTorch (for GPU acceleration)
@@ -85,7 +86,7 @@ import mediapipe as mp
 import numpy as np
 import torch
 
-# --- NEW IMPORTS FOR THE TASKS API (MediaPipe 0.10.31+) ---
+# --- NEW IMPORTS FOR THE TASKS API (MediaPipe 0.10.32+) ---
 import ultralytics
 from ultralytics import YOLO
 # Handle imports for both package and script execution
@@ -103,7 +104,7 @@ import toml
 import webbrowser
 
 
-__version__ = "0.1.1"
+__version__ = "0.3.16"
 
 # MANUAL DEFINITION OF THE BODY CONNECTIONS (since mp.solutions was removed)
 POSE_CONNECTIONS = frozenset(
@@ -455,6 +456,22 @@ class ConfidenceInputDialog(simpledialog.Dialog):
             if "filter_type" in config:
                 self.filter_type_entry.delete(0, tk.END)
                 self.filter_type_entry.insert(0, str(config["filter_type"]))
+                # Update filter param display and load appropriate value
+                filter_type = str(config["filter_type"]).lower()
+                if "filter_param" in config:
+                    self.filter_param_entry.delete(0, tk.END)
+                    self.filter_param_entry.insert(0, str(config["filter_param"]))
+                elif filter_type == "kalman" and "kalman_alpha" in config:
+                    self.filter_param_entry.delete(0, tk.END)
+                    self.filter_param_entry.insert(0, str(config["kalman_alpha"]))
+                elif filter_type == "savgol" and "savgol_window" in config:
+                    self.filter_param_entry.delete(0, tk.END)
+                    self.filter_param_entry.insert(0, str(config["savgol_window"]))
+                elif filter_type == "median" and "median_window" in config:
+                    self.filter_param_entry.delete(0, tk.END)
+                    self.filter_param_entry.insert(0, str(config["median_window"]))
+                # Trigger display update
+                self.filter_type_entry.event_generate('<FocusOut>')
             
             if "bbox_upscale_factor" in config:
                 self.upscale_factor_entry.delete(0, tk.END)
@@ -486,6 +503,7 @@ class ConfidenceInputDialog(simpledialog.Dialog):
                 "yolo_model": self.yolo_model_var.get(),
                 "yolo_conf": float(self.yolo_conf_entry.get()),
                 "filter_type": self.filter_type_entry.get().lower(),
+                "filter_param": self.filter_param_entry.get(),  # Save as string, will be converted based on type
                 "bbox_upscale_factor": int(self.upscale_factor_entry.get()),
                 "roi_polygon_points": self.roi_polygon_points,
             }
@@ -523,7 +541,8 @@ class ConfidenceInputDialog(simpledialog.Dialog):
             self.yolo_model_var.set("yolo11x-pose.pt")
             self.yolo_conf_entry.delete(0, tk.END); self.yolo_conf_entry.insert(0, "0.3")
             self.filter_type_entry.delete(0, tk.END); self.filter_type_entry.insert(0, "none")
-
+            self.filter_param_entry.delete(0, tk.END); self.filter_param_entry.insert(0, "0.75")
+            self.filter_param_label.config(text="Filter Parameter (N/A - no filter selected):")
             self.upscale_factor_entry.delete(0, tk.END); self.upscale_factor_entry.insert(0, "4")
             
             self.roi_polygon_points = None
@@ -566,8 +585,10 @@ class ConfidenceInputDialog(simpledialog.Dialog):
         tk.Label(master, text="YOLO model (yolo11n-pose.pt, yolo11s-pose.pt, etc.):").grid(row=8)
         tk.Label(master, text="YOLO confidence threshold (0.0 - 1.0):").grid(row=9)
         tk.Label(master, text="Apply filter? (none/kalman/savgol/median):").grid(row=10)
-        tk.Label(master, text="BBox Upscale Factor (2-8):").grid(row=11)
-        tk.Label(master, text="Polygon ROI:").grid(row=12)
+        self.filter_param_label = tk.Label(master, text="Filter Parameter:")
+        self.filter_param_label.grid(row=11)
+        tk.Label(master, text="BBox Upscale Factor (2-8):").grid(row=12)
+        tk.Label(master, text="Polygon ROI:").grid(row=13)
 
         self.min_detection_entry = tk.Entry(master)
         self.min_detection_entry.insert(0, "0.1")
@@ -611,18 +632,109 @@ class ConfidenceInputDialog(simpledialog.Dialog):
         self.yolo_conf_entry.insert(0, "0.3")
         self.filter_type_entry = tk.Entry(master)
         self.filter_type_entry.insert(0, "none")
+        
+        # Single filter parameter field (dynamic based on filter type)
+        self.filter_param_entry = tk.Entry(master)
+        self.filter_param_entry.insert(0, "0.75")  # Default for kalman
+        
+        # Function to update filter parameter label and default value based on filter type
+        def update_filter_param_display(*args):
+            filter_type = self.filter_type_entry.get().lower()
+            current_value = self.filter_param_entry.get()
+            
+            if filter_type == "kalman":
+                self.filter_param_label.config(text="Filter Parameter (Kalman Alpha, 0.0-1.0):")
+                # Only update if current value is a default from another filter type
+                if current_value in ["5", "3"]:
+                    self.filter_param_entry.delete(0, tk.END)
+                    self.filter_param_entry.insert(0, "0.75")
+            elif filter_type == "savgol":
+                self.filter_param_label.config(text="Filter Parameter (Savitzky-Golay Window, odd int >=3):")
+                # Only update if current value is a default from another filter type
+                if current_value in ["0.75", "3"]:
+                    self.filter_param_entry.delete(0, tk.END)
+                    self.filter_param_entry.insert(0, "5")
+            elif filter_type == "median":
+                self.filter_param_label.config(text="Filter Parameter (Median Window, odd int >=3):")
+                # Only update if current value is a default from another filter type
+                if current_value in ["0.75", "5"]:
+                    self.filter_param_entry.delete(0, tk.END)
+                    self.filter_param_entry.insert(0, "3")
+            else:  # none
+                self.filter_param_label.config(text="Filter Parameter (N/A - no filter selected):")
+        
+        # Bind filter type entry to update display
+        self.filter_type_entry.bind('<KeyRelease>', update_filter_param_display)
+        self.filter_type_entry.bind('<FocusOut>', update_filter_param_display)
+        
+        # Initial display update
+        update_filter_param_display()
 
         self.upscale_factor_entry = tk.Entry(master)
         self.upscale_factor_entry.insert(0, "4")
         
         self.polygon_btn = tk.Button(master, text="Select Polygon ROI", command=self.select_polygon_roi)
-        self.polygon_btn.grid(row=12, column=1)
+        self.polygon_btn.grid(row=13, column=1)
         self.polygon_status_label = tk.Label(master, text="None selected", fg="gray")
-        self.polygon_status_label.grid(row=12, column=2)
+        self.polygon_status_label.grid(row=13, column=2)
+        
+        # Dynamic help button for filter parameter
+        def show_filter_help():
+            filter_type = self.filter_type_entry.get().lower()
+            if filter_type == "kalman":
+                messagebox.showinfo(
+                    "Kalman Filter - Alpha Parameter",
+                    "Alpha (0.0-1.0): Weight for current value in exponential moving average.\n\n"
+                    "• Higher values (0.8-0.95): More responsive, follows motion closely\n"
+                    "• Lower values (0.5-0.7): More smoothing, reduces jitter\n"
+                    "• Default: 0.75 (balanced, less aggressive)\n\n"
+                    "Recommended:\n"
+                    "• Fast motion: 0.8-0.9\n"
+                    "• Normal motion: 0.7-0.8\n"
+                    "• Slow/smooth motion: 0.5-0.7"
+                )
+            elif filter_type == "savgol":
+                messagebox.showinfo(
+                    "Savitzky-Golay Filter - Window Parameter",
+                    "Window Length (odd integer, >=3): Number of frames to average.\n\n"
+                    "• Smaller values (3-5): Less smoothing, more responsive\n"
+                    "• Larger values (7-11): More smoothing, better noise reduction\n"
+                    "• Must be odd number (3, 5, 7, 9, 11, ...)\n"
+                    "• Default: 5 (balanced, less aggressive)\n\n"
+                    "Recommended:\n"
+                    "• High FPS videos: 5-7\n"
+                    "• Normal FPS (30): 5\n"
+                    "• Low FPS videos: 3-5"
+                )
+            elif filter_type == "median":
+                messagebox.showinfo(
+                    "Median Filter - Window Parameter",
+                    "Window Size (odd integer, >=3): Number of frames for median calculation.\n\n"
+                    "• Smaller values (3): Less aggressive, minimal lag\n"
+                    "• Larger values (5-7): More outlier removal, more lag\n"
+                    "• Must be odd number (3, 5, 7, 9, ...)\n"
+                    "• Default: 3 (less aggressive)\n\n"
+                    "Recommended:\n"
+                    "• Clean data: 3\n"
+                    "• Noisy data: 5\n"
+                    "• Very noisy data: 7"
+                )
+            else:
+                messagebox.showinfo(
+                    "Filter Parameter",
+                    "Select a filter type (kalman/savgol/median) to see parameter help.\n\n"
+                    "• kalman: Alpha parameter (0.0-1.0)\n"
+                    "• savgol: Window length (odd int >=3)\n"
+                    "• median: Window size (odd int >=3)"
+                )
+        
+        # Help button
+        filter_help_btn = tk.Button(master, text="?", command=show_filter_help, width=2)
+        filter_help_btn.grid(row=11, column=2, padx=5)
 
         # Config Buttons Frame
         btn_frame = tk.Frame(master)
-        btn_frame.grid(row=13, column=0, columnspan=3, pady=10)
+        btn_frame.grid(row=14, column=0, columnspan=3, pady=10)
         
         tk.Button(btn_frame, text="Save Config", command=self.save_config_to_file).pack(side=tk.LEFT, padx=5)
         tk.Button(btn_frame, text="Load Config", command=self.load_config).pack(side=tk.LEFT, padx=5)
@@ -638,9 +750,9 @@ class ConfidenceInputDialog(simpledialog.Dialog):
         self.static_image_mode_entry.grid(row=5, column=1)
         self.use_yolo_entry.grid(row=6, column=1)
         self.yolo_conf_entry.grid(row=9, column=1)
-        self.yolo_conf_entry.grid(row=9, column=1)
         self.filter_type_entry.grid(row=10, column=1)
-        self.upscale_factor_entry.grid(row=11, column=1)
+        self.filter_param_entry.grid(row=11, column=1)
+        self.upscale_factor_entry.grid(row=12, column=1)
 
         return self.min_detection_entry
 
@@ -649,13 +761,15 @@ class ConfidenceInputDialog(simpledialog.Dialog):
             messagebox.showerror("Error", "No input directory available.")
             return
 
-        # Find first video
+        # Find first video (sorted alphabetically)
         try:
             video_files = [
                 f
                 for f in Path(self.input_dir).glob("*.*")
                 if f.suffix.lower() in [".mp4", ".avi", ".mov"]
             ]
+            # Sort videos alphabetically by filename (case-insensitive)
+            video_files = sorted(video_files, key=lambda x: x.name.lower())
             if not video_files:
                 messagebox.showerror("Error", "No videos found in input directory.")
                 return
@@ -686,6 +800,7 @@ class ConfidenceInputDialog(simpledialog.Dialog):
             "yolo_model": self.yolo_model_var.get(),  # Get selected model
             "yolo_conf": float(self.yolo_conf_entry.get()),
             "filter_type": self.filter_type_entry.get().lower(),
+            "filter_param": self.filter_param_entry.get(),  # Save as string, will be converted based on type
             "bbox_upscale_factor": int(self.upscale_factor_entry.get()),
             "roi_polygon_points": self.roi_polygon_points,
         }
@@ -1401,31 +1516,55 @@ def process_frame_with_mediapipe_tasks(
     return landmarks_norm, landmarks_px, best_person_bbox, best_person_keypoints
 
 
-def apply_temporal_filter(landmarks_history, current_landmarks, filter_type="none"):
-    """Apply temporal filter to landmarks"""
+def apply_temporal_filter(landmarks_history, current_landmarks, filter_type="none", filter_params=None):
+    """Apply temporal filter to landmarks
+    
+    Args:
+        landmarks_history: List of previous landmark frames
+        current_landmarks: Current frame landmarks
+        filter_type: Type of filter ("none", "kalman", "savgol", "median")
+        filter_params: Dictionary with filter parameters:
+            - kalman_alpha: Weight for current value (0.0-1.0, default 0.75)
+            - savgol_window: Window length for Savitzky-Golay (odd int, default 5)
+            - median_window: Window size for median filter (odd int, default 3)
+    """
     if filter_type == "none" or not landmarks_history:
         return current_landmarks
 
+    if filter_params is None:
+        filter_params = {}
+
     if filter_type == "kalman":
-        return apply_kalman_filter(landmarks_history, current_landmarks)
+        alpha = filter_params.get("kalman_alpha", 0.75)
+        return apply_kalman_filter(landmarks_history, current_landmarks, alpha=alpha)
     elif filter_type == "savgol" and len(landmarks_history) >= 3:
-        return apply_savgol_filter(landmarks_history, current_landmarks)
+        window_length = filter_params.get("savgol_window", 5)
+        return apply_savgol_filter(landmarks_history, current_landmarks, window_length=window_length)
     elif filter_type == "median" and len(landmarks_history) >= 3:
-        return apply_median_filter(landmarks_history, current_landmarks)
+        window_size = filter_params.get("median_window", 3)
+        return apply_median_filter(landmarks_history, current_landmarks, window_size=window_size)
 
     return current_landmarks
 
 
-def apply_kalman_filter(landmarks_history, current_landmarks):
-    """Apply simplified Kalman filter"""
+def apply_kalman_filter(landmarks_history, current_landmarks, alpha=0.75):
+    """Apply simplified Kalman filter (exponential weighted moving average)
+    
+    Args:
+        landmarks_history: List of previous landmark frames
+        current_landmarks: Current frame landmarks
+        alpha: Weight for current value (0.0-1.0). Higher = more responsive, Lower = more smoothing
+               Default: 0.75 (less aggressive than previous 0.95)
+    """
     if not landmarks_history or current_landmarks is None:
         return current_landmarks
+
+    # Clamp alpha to valid range
+    alpha = max(0.0, min(1.0, alpha))
 
     filtered = []
     for i in range(len(current_landmarks)):
         if i < len(landmarks_history[-1]):
-            # Simple weighted average between the previous and current value
-            alpha = 0.95  # Weight for the current value
             prev = landmarks_history[-1][i]
             curr = current_landmarks[i]
 
@@ -1536,10 +1675,23 @@ def draw_yolo_landmarks(frame, landmarks_px, width, height):
     return frame
 
 
-def apply_savgol_filter(landmarks_history, current_landmarks, window_length=3):
-    """Apply simplified Savitzky-Golay filter"""
+def apply_savgol_filter(landmarks_history, current_landmarks, window_length=5):
+    """Apply simplified Savitzky-Golay filter (moving average)
+    
+    Args:
+        landmarks_history: List of previous landmark frames
+        current_landmarks: Current frame landmarks
+        window_length: Window size for averaging (odd integer, default 5, less aggressive than 3)
+                       Must be >= 3 and odd. Higher = more smoothing.
+    """
     if not landmarks_history or current_landmarks is None:
         return current_landmarks
+
+    # Ensure window_length is odd and >= 3
+    if window_length < 3:
+        window_length = 3
+    if window_length % 2 == 0:
+        window_length += 1
 
     # Simplify: use only moving average
     filtered = []
@@ -1568,14 +1720,27 @@ def apply_savgol_filter(landmarks_history, current_landmarks, window_length=3):
     return filtered
 
 
-def apply_median_filter(landmarks_history, current_landmarks, window_size=5):
-    """Apply Moving Median filter"""
+def apply_median_filter(landmarks_history, current_landmarks, window_size=3):
+    """Apply Moving Median filter (outlier removal)
+    
+    Args:
+        landmarks_history: List of previous landmark frames
+        current_landmarks: Current frame landmarks
+        window_size: Window size for median calculation (odd integer, default 3, less aggressive than 5)
+                     Must be >= 3 and odd. Higher = more outlier removal but more lag.
+    """
     if not landmarks_history or current_landmarks is None:
         return current_landmarks
 
+    # Ensure window_size is odd and >= 3
+    if window_size < 3:
+        window_size = 3
+    if window_size % 2 == 0:
+        window_size += 1
+
     filtered = []
     # Use odd window size
-    window = min(window_size if window_size % 2 != 0 else window_size + 1, len(landmarks_history) + 1)
+    window = min(window_size, len(landmarks_history) + 1)
     
     # Collect all frames including current
     all_frames = landmarks_history[-(window-1):] + [current_landmarks]
@@ -1839,8 +2004,33 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
 
         # Apply temporal filter if configured
         if landmarks_norm and pose_config["filter_type"] != "none":
+            filter_type = pose_config["filter_type"]
+            filter_param = pose_config.get("filter_param", "0.75")
+            
+            # Convert filter_param based on filter type
+            if filter_type == "kalman":
+                try:
+                    kalman_alpha = float(filter_param)
+                    filter_params = {"kalman_alpha": kalman_alpha}
+                except (ValueError, TypeError):
+                    filter_params = {"kalman_alpha": 0.75}  # Default
+            elif filter_type == "savgol":
+                try:
+                    savgol_window = int(filter_param)
+                    filter_params = {"savgol_window": savgol_window}
+                except (ValueError, TypeError):
+                    filter_params = {"savgol_window": 5}  # Default
+            elif filter_type == "median":
+                try:
+                    median_window = int(filter_param)
+                    filter_params = {"median_window": median_window}
+                except (ValueError, TypeError):
+                    filter_params = {"median_window": 3}  # Default
+            else:
+                filter_params = {}
+            
             landmarks_norm = apply_temporal_filter(
-                landmarks_history, landmarks_norm, pose_config["filter_type"]
+                landmarks_history, landmarks_norm, filter_type, filter_params
             )
             # Update landmarks_px with filtered values
             landmarks_px = []
@@ -2420,8 +2610,14 @@ def process_videos_in_directory(existing_root=None):
     input_dir = Path(input_dir)
     video_files = list(input_dir.glob("*.*"))
     video_files = [f for f in video_files if f.suffix.lower() in [".mp4", ".avi", ".mov"]]
+    # Sort videos alphabetically by filename (case-insensitive)
+    video_files = sorted(video_files, key=lambda x: x.name.lower())
 
-    print(f"\nFound {len(video_files)} videos to process")
+    print(f"\nFound {len(video_files)} videos to process (sorted alphabetically)")
+    if len(video_files) > 0:
+        print("Processing order:")
+        for i, vf in enumerate(video_files, 1):
+            print(f"  {i}. {vf.name}")
 
     for i, video_file in enumerate(video_files, 1):
         print(f"\n\nProcessing video {i}/{len(video_files)}: {video_file.name}")
