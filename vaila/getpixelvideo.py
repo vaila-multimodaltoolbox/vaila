@@ -6,8 +6,8 @@ vailá - Multimodal Toolbox
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/paulopreto/vaila-multimodaltoolbox
 Date: 22 July 2025
-Update: 23 January 2026
-Version: 0.3.16
+Update: 27 January 2026
+Version: 0.3.17
 Python Version: 3.12.12
 
 Description:
@@ -17,7 +17,9 @@ zoom functionality for precise annotations. The window can now be resized dynami
 and all UI elements adjust accordingly. Users can navigate the video frames, mark
 points, and save results in CSV format.
 
-New Features in This Version 0.3.16:
+New Features in This Version 0.3.17:
+- Swap landmarks using file basename_swap.toml or Shift+W to load external config.
+- Swap GUI to select start frame, end frame, marker 1 ID, and marker 2 ID.
 - ClickPass Mode: Auto-advance frame after marking
 - Zoom on Scroll: Use mouse wheel to zoom in/out
 - Playback Speed: Use [ and ] to adjust speed
@@ -127,6 +129,18 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 
+# Optional import for TOML support (Python 3.11+)
+try:
+    import tomllib
+    TOML_AVAILABLE = True
+except ImportError:
+    try:
+        import tomli as tomllib
+        TOML_AVAILABLE = True
+    except ImportError:
+        TOML_AVAILABLE = False
+        print("Warning: tomllib/tomli not found. TOML configuration features will be disabled.")
+
 # Removed native_file_dialog imports - now using Tkinter directly for all dialogs
 
 
@@ -145,6 +159,117 @@ def get_color_for_id(marker_id):
         (128, 255, 0),  # Lime
     ]
     return colors[marker_id % len(colors)]
+
+
+def apply_swap_config(coordinates, swap_config):
+    """
+    Apply marker swapping based on configuration list.
+    swap_config: list of dicts with keys: start_frame, end_frame, marker_1, marker_2
+    """
+    if not swap_config:
+        return coordinates
+
+    count = 0
+    for rule in swap_config:
+        start = rule.get('start_frame', 0)
+        end = rule.get('end_frame', float('inf'))
+        m1_idx = rule.get('marker_1')
+        m2_idx = rule.get('marker_2') # logic uses 0-indexed internally if these are indices
+
+        # Validation
+        if m1_idx is None or m2_idx is None:
+            continue
+        
+        # User input is likely 1-based (Marker 1, Marker 2...), convert to 0-based for internal list
+        # If config is from internal logic, assume 0-based. 
+        # Let's assume input is 0-based for internal consistency, GUI handles conversion.
+
+        for frame_idx, markers in coordinates.items():
+            if start <= frame_idx <= end:
+                # Ensure we have enough markers
+                if len(markers) > max(m1_idx, m2_idx):
+                    # Check if markers exist at these indices (not None)
+                    # The markers list is [(x,y), (x,y), ...]. Some might be None or placeholders?
+                    # getpixelvideo structure seems to be list of tuples.
+                    
+                    # Swap
+                    try:
+                        temp = markers[m1_idx]
+                        markers[m1_idx] = markers[m2_idx]
+                        markers[m2_idx] = temp
+                        count += 1
+                    except IndexError:
+                        pass
+    
+    print(f"Applied {count} marker swaps across frames.")
+    return coordinates
+
+
+def load_swap_toml(toml_path):
+    """Load swap configuration from TOML file."""
+    if not TOML_AVAILABLE:
+        print("TOML library not available.")
+        return []
+    
+    try:
+        with open(toml_path, "rb") as f:
+            data = tomllib.load(f)
+            raw_rules = data.get("swap", [])
+            # Convert 1-based (User/TOML) to 0-based (Internal)
+            corrected_rules = []
+            for r in raw_rules:
+                try:
+                    corrected_rules.append({
+                        "start_frame": int(r.get("start_frame", 1)) - 1,
+                        "end_frame": int(r.get("end_frame", 1)) - 1,
+                        "marker_1": int(r.get("marker_1", 1)) - 1,
+                        "marker_2": int(r.get("marker_2", 2)) - 1
+                    })
+                except (ValueError, TypeError):
+                    continue
+            return corrected_rules
+    except Exception as e:
+        print(f"Error loading TOML: {e}")
+        return []
+
+
+def save_swap_toml(toml_path, swap_rules):
+    """Save swap configuration to TOML file with 1-based indexing."""
+    if not swap_rules:
+        return
+        
+    try:
+        # Prepare data: Convert 0-based (Internal) to 1-based (User/TOML)
+        export_rules = []
+        for r in swap_rules:
+            export_rules.append({
+                "start_frame": r["start_frame"] + 1,
+                "end_frame": r["end_frame"] + 1,
+                "marker_1": r["marker_1"] + 1,
+                "marker_2": r["marker_2"] + 1
+            })
+            
+        # Manually construct TOML string to avoid external dependency for writing if possible
+        # but tomli_w is standard. Since we only have 'tomllib' (read-only) in stdlib 3.11+,
+        # and simple structure, let's write manually to avoid adding 'tomli-w' dependency if not needed.
+        
+        with open(toml_path, "w") as f:
+            f.write("# Marker Swap Configuration\n")
+            f.write("# Generated by vailá getpixelvideo.py\n\n")
+            
+            for r in export_rules:
+                f.write("[[swap]]\n")
+                f.write(f"start_frame = {r['start_frame']}\n")
+                f.write(f"end_frame = {r['end_frame']}\n")
+                f.write(f"marker_1 = {r['marker_1']}\n")
+                f.write(f"marker_2 = {r['marker_2']}\n")
+                f.write("\n")
+                
+        print(f"Swap config with {len(export_rules)} rules saved to {toml_path}")
+        return True
+    except Exception as e:
+        print(f"Error saving TOML: {e}")
+        return False
 
 
 POSE_LANDMARKER = None
@@ -896,6 +1021,30 @@ def play_video_with_controls(video_path, coordinates=None):
     original_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     fps = int(cap.get(cv2.CAP_PROP_FPS))
+
+    # Initialize coordinates if not provided
+    if coordinates is None:
+        coordinates = {i: [] for i in range(total_frames)}
+
+    # Initialize active swap rules list to track session state
+    active_swap_rules = []
+
+    # Check for basename_swap.toml and apply initial swaps
+    if video_path and TOML_AVAILABLE:
+        try:
+            base_dir = os.path.dirname(video_path)
+            base_filename = os.path.splitext(os.path.basename(video_path))[0]
+            swap_file = os.path.join(base_dir, f"{base_filename}_swap.toml")
+            if os.path.exists(swap_file):
+                print(f"Loading swap config from {swap_file}")
+                swap_conf = load_swap_toml(swap_file)
+                if swap_conf:
+                    # Update session state
+                    active_swap_rules = swap_conf
+                    coordinates = apply_swap_config(coordinates, swap_conf)
+                    print("Initial swaps applied from TOML.")
+        except Exception as e:
+            print(f"Auto-loading swap config failed: {e}")
 
     # Initialize Pygame
     pygame.init()
@@ -2155,6 +2304,11 @@ def play_video_with_controls(video_path, coordinates=None):
             "  - F6: Load Labeling Project (JSON)",
             "  - N:  Rename Object Class",
             "",
+            "  - N:  Rename Object Class",
+            "",
+            "Swap Markers:",
+            "  - W: Open Swap Dialog (range swap)",
+            "",
             "Press any key to close this help",
         ]
 
@@ -2403,6 +2557,138 @@ def play_video_with_controls(video_path, coordinates=None):
                         input_text += event.unicode
         return None
 
+    def show_swap_dialog(current_frame, total_fr):
+        """
+        Show dialog to swap two markers over a frame range.
+        Returns: dict with start_frame, end_frame, marker_1, marker_2, or None.
+        """
+        font = pygame.font.SysFont("verdana", 14)
+        
+        # Default values (1-based for user display)
+        inputs = {
+            "Start Frame": str(current_frame + 1),
+            "End Frame": str(min(current_frame + 21, total_fr)),
+            "Marker 1 ID": "1",
+            "Marker 2 ID": "2"
+        }
+        order = ["Start Frame", "End Frame", "Marker 1 ID", "Marker 2 ID"]
+        active_idx = 0
+        
+        box_width = 200
+        box_height = 30
+        margin = 10
+        dialog_width = 400
+        dialog_height = 300
+        
+        waiting = True
+        while waiting:
+            # Draw Overlay
+            overlay = pygame.Surface((window_width, window_height + 80))
+            overlay.set_alpha(200)
+            overlay.fill((0, 0, 0))
+            screen.blit(overlay, (0, 0))
+            
+            # Dialog Box Background
+            dx = (window_width - dialog_width) // 2
+            dy = (window_height - dialog_height) // 2
+            pygame.draw.rect(screen, (40, 40, 40), (dx, dy, dialog_width, dialog_height))
+            pygame.draw.rect(screen, (100, 100, 100), (dx, dy, dialog_width, dialog_height), 2)
+            
+            # Title
+            title = font.render("Swap Markers", True, (255, 255, 255))
+            screen.blit(title, (dx + 20, dy + 20))
+            
+            # Draw Fields
+            start_y = dy + 60
+            for i, key in enumerate(order):
+                # Label
+                label = font.render(key + ":", True, (200, 200, 200))
+                screen.blit(label, (dx + 30, start_y + i*(box_height+margin) + 5))
+                
+                # Input Box
+                bx = dx + 180
+                by = start_y + i*(box_height+margin)
+                color = (255, 255, 255) if i == active_idx else (150, 150, 150)
+                pygame.draw.rect(screen, (20, 20, 20), (bx, by, box_width - 40, box_height))
+                pygame.draw.rect(screen, color, (bx, by, box_width - 40, box_height), 1)
+                
+                val_surf = font.render(inputs[key], True, (255, 255, 255))
+                screen.blit(val_surf, (bx + 5, by + 5))
+                
+            # Submit Button
+            submit_rect = pygame.Rect(dx + 100, dy + dialog_height - 50, 80, 30)
+            cancel_rect = pygame.Rect(dx + 220, dy + dialog_height - 50, 80, 30)
+            
+            pygame.draw.rect(screen, (50, 150, 50), submit_rect)
+            pygame.draw.rect(screen, (150, 50, 50), cancel_rect)
+            
+            submit_txt = font.render("Apply", True, (255, 255, 255))
+            cancel_txt = font.render("Cancel", True, (255, 255, 255))
+            
+            screen.blit(submit_txt, (submit_rect.x + 20, submit_rect.y + 5))
+            screen.blit(cancel_txt, (cancel_rect.x + 15, cancel_rect.y + 5))
+            
+            pygame.display.flip()
+            
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    waiting = False
+                    return None
+                    
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    mx, my = event.pos
+                    # Check fields
+                    for i, key in enumerate(order):
+                        by = start_y + i*(box_height+margin)
+                        bx = dx + 180
+                        rect = pygame.Rect(bx, by, box_width - 40, box_height)
+                        if rect.collidepoint(mx, my):
+                            active_idx = i
+                    
+                    if submit_rect.collidepoint(mx, my):
+                        waiting = False
+                        try:
+                            return {
+                                "start_frame": int(inputs["Start Frame"]) - 1,
+                                "end_frame": int(inputs["End Frame"]) - 1,
+                                "marker_1": int(inputs["Marker 1 ID"]) - 1, # Convert 1-based to 0-based
+                                "marker_2": int(inputs["Marker 2 ID"]) - 1
+                            }
+                        except ValueError:
+                            print("Invalid input")
+                            return None
+                            
+                    if cancel_rect.collidepoint(mx, my):
+                        waiting = False
+                        return None
+                        
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        waiting = False
+                        return None
+                    elif event.key == pygame.K_TAB:
+                        active_idx = (active_idx + 1) % 4
+                    elif event.key == pygame.K_RETURN:
+                        # Try submit
+                        waiting = False
+                        try:
+                            return {
+                                "start_frame": int(inputs["Start Frame"]),
+                                "end_frame": int(inputs["End Frame"]),
+                                "marker_1": int(inputs["Marker 1 ID"]) - 1,
+                                "marker_2": int(inputs["Marker 2 ID"]) - 1
+                            }
+                        except ValueError:
+                            return None
+                    elif event.key == pygame.K_BACKSPACE:
+                        key = order[active_idx]
+                        inputs[key] = inputs[key][:-1]
+                    else:
+                        key = order[active_idx]
+                        if event.unicode.isnumeric():
+                            inputs[key] += event.unicode
+        return None
+
     def save_labeling_project():
         """
         Save the current labeling state to a JSON file INSIDE the dataset directory.
@@ -2509,11 +2795,15 @@ def play_video_with_controls(video_path, coordinates=None):
             header.extend([f"p{i}_x", f"p{i}_y"])
 
         # Get the frame number from the first non-deleted marker
+        if deleted_markers is None:
+            deleted_markers = set()
+            
+        # Get the frame number from the first non-deleted marker
         first_marker = next(
             (m for idx, m in enumerate(one_line_markers) if idx not in deleted_markers),
             None,
         )
-        if not first_marker:
+        if first_marker is None:
             print("No valid markers to save after deletions.")
             return
 
@@ -3472,6 +3762,13 @@ def play_video_with_controls(video_path, coordinates=None):
                             deleted_positions,
                             is_sequential=sequential_mode,
                         )
+                        # Save Swap Config if available
+                        if active_swap_rules:
+                            base_dir = os.path.dirname(video_path)
+                            base_filename = os.path.splitext(os.path.basename(video_path))[0]
+                            swap_file = os.path.join(base_dir, f"{base_filename}_swap.toml")
+                            save_swap_toml(swap_file, active_swap_rules)
+                            
                         saved = True
                         save_message_text = f"Saved to: {os.path.basename(output_file)}"
                         showing_save_message = True
@@ -3811,6 +4108,53 @@ def play_video_with_controls(video_path, coordinates=None):
                     save_message_text = f"Speed: {playback_speed}X"
                     showing_save_message = True
                     save_message_timer = 30
+
+                    save_message_timer = 30
+
+                # Swap Hotkey (W) and Load Config (Shift+W)
+                elif event.key == pygame.K_w:
+                    # Check for Shift modifier
+                    mods = pygame.key.get_mods()
+                    if mods & pygame.KMOD_SHIFT:
+                        # Load External Config
+                        save_message_text = "Select Swap Config File..."
+                        showing_save_message = True
+                        save_message_timer = 60
+                        
+                        # Use pygame_file_dialog to select .toml
+                        # We need to temporarily restore strict rendering if needed, but dialog handles it
+                        toml_path = pygame_file_dialog(
+                            initial_dir=os.path.dirname(video_path),
+                            file_extensions=[".toml"],
+                            restore_size=(window_width, window_height + 80) # Approximation
+                        )
+                        
+                        if toml_path and os.path.exists(toml_path):
+                            new_rules = load_swap_toml(toml_path)
+                            if new_rules:
+                                active_swap_rules.extend(new_rules)
+                                coordinates = apply_swap_config(coordinates, new_rules)
+                                save_message_text = f"Loaded {len(new_rules)} rules from {os.path.basename(toml_path)}"
+                            else:
+                                save_message_text = "No valid rules found in TOML"
+                        else:
+                            save_message_text = "Load Cancelled"
+                            
+                        showing_save_message = True
+                        save_message_timer = 120
+                        
+                    else:
+                        # Normal Swap Dialog (W)
+                        swap_data = show_swap_dialog(frame_count, total_frames)
+                        if swap_data:
+                            # Append to session state
+                            active_swap_rules.append(swap_data)
+                            # Apply
+                            rule = swap_data
+                            coordinates = apply_swap_config(coordinates, [rule])
+                            save_message_text = f"Swapped M{rule['marker_1']+1} <-> M{rule['marker_2']+1}"
+                            showing_save_message = True
+                            save_message_timer = 60
 
                 # Add sequential mode toggle with 'o' key
                 elif (
