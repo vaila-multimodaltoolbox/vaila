@@ -374,11 +374,32 @@ install_with_uv() {
     echo ""
 
     # Check for Homebrew
+    # Check for Homebrew
     if ! command -v brew &> /dev/null; then
-        echo "Error: Homebrew is not installed."
-        echo "Please install Homebrew first: https://brew.sh/"
-        echo "Command: /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
-        exit 1
+        echo "Homebrew not found. It is required for system dependencies."
+        echo "Attempting to install Homebrew automatically..."
+        
+        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+        
+        # Configure Homebrew in current environment
+        echo "Configuring Homebrew environment..."
+        if [[ "$(uname -m)" == "arm64" ]]; then
+            if [ -f "/opt/homebrew/bin/brew" ]; then
+                eval "$(/opt/homebrew/bin/brew shellenv)"
+            fi
+        else
+            if [ -f "/usr/local/bin/brew" ]; then
+                eval "$(/usr/local/bin/brew shellenv)"
+            fi
+        fi
+        
+        # Verify installation
+        if ! command -v brew &> /dev/null; then
+             echo "Error: Homebrew installation failed or 'brew' is not in PATH."
+             echo "Please install Homebrew manually: https://brew.sh/"
+             exit 1
+        fi
+        echo "Homebrew installed successfully."
     fi
 
     # Check for missing system dependencies

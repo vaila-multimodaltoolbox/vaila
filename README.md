@@ -29,6 +29,28 @@
   </table>
 </div>
 
+## ⚡ Install Now (One-Line)
+
+Install _vaila_ with a single command!
+
+**🐧 Linux:**
+
+```bash
+wget -qO- https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/install_vaila_linux.sh | bash
+```
+
+**🍎 macOS:**
+
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/install_vaila_mac.sh)"
+```
+
+**🪟 Windows:**
+
+```powershell
+irm https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/install_vaila_win.ps1 | iex
+```
+
 ## Introduction
 
 The analysis of human movement is fundamental in both health and sports biomechanics, providing valuable insights into various aspects of physical performance, rehabilitation, and injury prevention. However, existing software often restricts user control and customization, acting as a "black box." With _vailá_, users have the freedom to explore, customize, and create their own tools in a truly open-source and collaborative environment.
@@ -249,27 +271,7 @@ vaila
 
 ## Installation and Setup
 
-### ⚡ One-Line Installation (Fastest)
 
-Install _vailá_ with a single command!
-
-**🐧 Linux:**
-
-```bash
-wget -qO- https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/install_vaila_linux.sh | bash
-```
-
-**🍎 macOS:**
-
-```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/install_vaila_mac.sh)"
-```
-
-**🪟 Windows:**
-
-```powershell
-irm https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/install_vaila_win.ps1 | iex
-```
 
 ### ⚡ New Engine: Powered by _uv_
 
