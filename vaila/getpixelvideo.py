@@ -6,8 +6,8 @@ vailá - Multimodal Toolbox
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/paulopreto/vaila-multimodaltoolbox
 Date: 22 July 2025
-Update: 23 January 2026
-Version: 0.3.16
+Update: 27 January 2026
+Version: 0.3.17
 Python Version: 3.12.12
 
 Description:
@@ -17,7 +17,9 @@ zoom functionality for precise annotations. The window can now be resized dynami
 and all UI elements adjust accordingly. Users can navigate the video frames, mark
 points, and save results in CSV format.
 
-New Features in This Version 0.3.16:
+New Features in This Version 0.3.17:
+- Swap landmarks using file basename_swap.toml or Shift+W to load external config.
+- Swap GUI to select start frame, end frame, marker 1 ID, and marker 2 ID.
 - ClickPass Mode: Auto-advance frame after marking
 - Zoom on Scroll: Use mouse wheel to zoom in/out
 - Playback Speed: Use [ and ] to adjust speed
@@ -56,6 +58,11 @@ Options:
   -a, --auto            show auto-marking mode
   -c, --sequential      show sequential mode
   -h, --help            show this help message and exit
+
+Key Bindings (Labeling Mode Only - Press 'L' to toggle):
+  N                     Rename current object label
+  F5                    Save Labeling Project (JSON)
+  F6                    Load Labeling Project (JSON)
   -v, --version         show version information and exit
 
 License:
@@ -127,6 +134,18 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 
+# Optional import for TOML support (Python 3.11+)
+try:
+    import tomllib
+    TOML_AVAILABLE = True
+except ImportError:
+    try:
+        import tomli as tomllib # pyright: ignore[reportMissingImports]
+        TOML_AVAILABLE = True
+    except ImportError:
+        TOML_AVAILABLE = False
+        print("Warning: tomllib/tomli not found. TOML configuration features will be disabled.")
+
 # Removed native_file_dialog imports - now using Tkinter directly for all dialogs
 
 
@@ -145,6 +164,117 @@ def get_color_for_id(marker_id):
         (128, 255, 0),  # Lime
     ]
     return colors[marker_id % len(colors)]
+
+
+def apply_swap_config(coordinates, swap_config):
+    """
+    Apply marker swapping based on configuration list.
+    swap_config: list of dicts with keys: start_frame, end_frame, marker_1, marker_2
+    """
+    if not swap_config:
+        return coordinates
+
+    count = 0
+    for rule in swap_config:
+        start = rule.get('start_frame', 0)
+        end = rule.get('end_frame', float('inf'))
+        m1_idx = rule.get('marker_1')
+        m2_idx = rule.get('marker_2') # logic uses 0-indexed internally if these are indices
+
+        # Validation
+        if m1_idx is None or m2_idx is None:
+            continue
+        
+        # User input is likely 1-based (Marker 1, Marker 2...), convert to 0-based for internal list
+        # If config is from internal logic, assume 0-based. 
+        # Let's assume input is 0-based for internal consistency, GUI handles conversion.
+
+        for frame_idx, markers in coordinates.items():
+            if start <= frame_idx <= end:
+                # Ensure we have enough markers
+                if len(markers) > max(m1_idx, m2_idx):
+                    # Check if markers exist at these indices (not None)
+                    # The markers list is [(x,y), (x,y), ...]. Some might be None or placeholders?
+                    # getpixelvideo structure seems to be list of tuples.
+                    
+                    # Swap
+                    try:
+                        temp = markers[m1_idx]
+                        markers[m1_idx] = markers[m2_idx]
+                        markers[m2_idx] = temp
+                        count += 1
+                    except IndexError:
+                        pass
+    
+    print(f"Applied {count} marker swaps across frames.")
+    return coordinates
+
+
+def load_swap_toml(toml_path):
+    """Load swap configuration from TOML file."""
+    if not TOML_AVAILABLE:
+        print("TOML library not available.")
+        return []
+    
+    try:
+        with open(toml_path, "rb") as f:
+            data = tomllib.load(f)
+            raw_rules = data.get("swap", [])
+            # Convert 1-based (User/TOML) to 0-based (Internal)
+            corrected_rules = []
+            for r in raw_rules:
+                try:
+                    corrected_rules.append({
+                        "start_frame": int(r.get("start_frame", 1)) - 1,
+                        "end_frame": int(r.get("end_frame", 1)) - 1,
+                        "marker_1": int(r.get("marker_1", 1)) - 1,
+                        "marker_2": int(r.get("marker_2", 2)) - 1
+                    })
+                except (ValueError, TypeError):
+                    continue
+            return corrected_rules
+    except Exception as e:
+        print(f"Error loading TOML: {e}")
+        return []
+
+
+def save_swap_toml(toml_path, swap_rules):
+    """Save swap configuration to TOML file with 1-based indexing."""
+    if not swap_rules:
+        return
+        
+    try:
+        # Prepare data: Convert 0-based (Internal) to 1-based (User/TOML)
+        export_rules = []
+        for r in swap_rules:
+            export_rules.append({
+                "start_frame": r["start_frame"] + 1,
+                "end_frame": r["end_frame"] + 1,
+                "marker_1": r["marker_1"] + 1,
+                "marker_2": r["marker_2"] + 1
+            })
+            
+        # Manually construct TOML string to avoid external dependency for writing if possible
+        # but tomli_w is standard. Since we only have 'tomllib' (read-only) in stdlib 3.11+,
+        # and simple structure, let's write manually to avoid adding 'tomli-w' dependency if not needed.
+        
+        with open(toml_path, "w") as f:
+            f.write("# Marker Swap Configuration\n")
+            f.write("# Generated by vailá getpixelvideo.py\n\n")
+            
+            for r in export_rules:
+                f.write("[[swap]]\n")
+                f.write(f"start_frame = {r['start_frame']}\n")
+                f.write(f"end_frame = {r['end_frame']}\n")
+                f.write(f"marker_1 = {r['marker_1']}\n")
+                f.write(f"marker_2 = {r['marker_2']}\n")
+                f.write("\n")
+                
+        print(f"Swap config with {len(export_rules)} rules saved to {toml_path}")
+        return True
+    except Exception as e:
+        print(f"Error saving TOML: {e}")
+        return False
 
 
 POSE_LANDMARKER = None
@@ -822,57 +952,17 @@ def pygame_file_dialog(
                         selected_file = None
 
             elif event.type == pygame.MOUSEWHEEL:
-                # Zoom on Scroll
-                # event.y > 0 means scroll up (zoom in)
-                # event.y < 0 means scroll down (zoom out)
+                # Scroll the list
+                # event.y > 0 means scroll up (previous items) -> decrease offset
+                # event.y < 0 means scroll down (next items) -> increase offset
                 
-                old_zoom = zoom_level
-                zoom_factor = 1.1
-                
+                scroll_speed = 3 # Items per scroll click
                 if event.y > 0:
-                    zoom_level = min(10.0, zoom_level * zoom_factor)
+                     scroll_offset = max(0, scroll_offset - scroll_speed)
                 elif event.y < 0:
-                    zoom_level = max(0.1, zoom_level / zoom_factor)
-                
-                # Adjust offsets to keep view centered on mouse if possible, or center of screen
-                # For simplicity, keeping center of view roughly consistent or just top-left logic
-                # To zoom toward mouse, we need mouse position.
-                mx, my = pygame.mouse.get_pos()
-                if my < window_height: # Only if in video area
-                     # Convert mouse to video coords relative to old zoom
-                     vx = (mx + offset_x) / old_zoom # Wait, offset logic is complex in this script
-                     # Let's stick to simple zoom first or check how crop_x/y works
-                     # crop_x = offset_x
-                     
-                     # The script uses: video_x = (x + crop_x) / zoom_level
-                     # So crop_x = offset_x
-                     
-                     # We want (mx + new_offset_x) / new_zoom = (mx + old_offset_x) / old_zoom
-                     # (mx + new_offset_x) = ((mx + old_offset_x) / old_zoom) * new_zoom
-                     # new_offset_x = [ ((mx + old_offset_x) / old_zoom) * new_zoom ] - mx
-                     
-                     target_vx = (mx + offset_x) / old_zoom
-                     target_vy = (my + offset_y) / old_zoom
-                     
-                     offset_x = (target_vx * zoom_level) - mx
-                     offset_y = (target_vy * zoom_level) - my
-                     
-                     # Clamp offsets
-                     offset_x = max(0, offset_x) # Actually this prevents panning left of 0?
-                     offset_y = max(0, offset_y)
-                     # Wait, offset_x in this script seems to be strictly positive (crop starting point)
-                     # But zoomed_width = original_width * zoom_level
-                     # We need to ensure we don't visualize outside.
-                     
-                     zoomed_width = original_width * zoom_level
-                     zoomed_height = original_height * zoom_level
-                     
-                     offset_x = max(0, min(offset_x, zoomed_width - window_width))
-                     offset_y = max(0, min(offset_y, zoomed_height - window_height))
-                
-                save_message_text = f"Zoom: {zoom_level:.2f}X"
-                showing_save_message = True
-                save_message_timer = 30
+                     # Don't scroll past end
+                     max_scroll = max(0, len(items) - 20)
+                     scroll_offset = min(max_scroll, scroll_offset + scroll_speed)
 
         pygame.time.Clock().tick(60)
 
@@ -885,17 +975,45 @@ def pygame_file_dialog(
     return selected_file
 
 
-def play_video_with_controls(video_path, coordinates=None):
+def play_video_with_controls(video_path, coordinates=None, labels=None):
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         print("Error opening video file.")
         return
+
+    # Default labels if not provided
+    if labels is None:
+        labels = []
 
     # Video properties
     original_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     original_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     fps = int(cap.get(cv2.CAP_PROP_FPS))
+
+    # Initialize coordinates if not provided
+    if coordinates is None:
+        coordinates = {i: [] for i in range(total_frames)}
+
+    # Initialize active swap rules list to track session state
+    active_swap_rules = []
+
+    # Check for basename_swap.toml and apply initial swaps
+    if video_path and TOML_AVAILABLE:
+        try:
+            base_dir = os.path.dirname(video_path)
+            base_filename = os.path.splitext(os.path.basename(video_path))[0]
+            swap_file = os.path.join(base_dir, f"{base_filename}_swap.toml")
+            if os.path.exists(swap_file):
+                print(f"Loading swap config from {swap_file}")
+                swap_conf = load_swap_toml(swap_file)
+                if swap_conf:
+                    # Update session state
+                    active_swap_rules = swap_conf
+                    coordinates = apply_swap_config(coordinates, swap_conf)
+                    print("Initial swaps applied from TOML.")
+        except Exception as e:
+            print(f"Auto-loading swap config failed: {e}")
 
     # Initialize Pygame
     pygame.init()
@@ -2155,6 +2273,9 @@ def play_video_with_controls(video_path, coordinates=None):
             "  - F6: Load Labeling Project (JSON)",
             "  - N:  Rename Object Class",
             "",
+            "Swap Markers:",
+            "  - W: Open Swap Dialog (range swap)",
+            "",
             "Press any key to close this help",
         ]
 
@@ -2249,7 +2370,7 @@ def play_video_with_controls(video_path, coordinates=None):
         overlay.fill((0, 0, 0))
 
         # Create UI elements
-        if persistent and frame in bboxes:
+        if persistence_enabled and frame in bboxes:
              # Use a larger font for persistent boxes? Or same
              font = pygame.font.SysFont("verdana", 16)
         title = font.render("Persistence Settings", True, (255, 255, 255))
@@ -2353,8 +2474,11 @@ def play_video_with_controls(video_path, coordinates=None):
 
     def show_input_dialog(prompt, initial_text=""):
         """Show a dialog to input text"""
+        # Get current display size dynamically to support both Main Window and Dialog calls
+        current_w, current_h = pygame.display.get_surface().get_size()
+        
         # Create semi-transparent overlay
-        overlay = pygame.Surface((window_width, window_height + 80))
+        overlay = pygame.Surface((current_w, current_h))
         overlay.set_alpha(200)
         overlay.fill((0, 0, 0))
 
@@ -2372,14 +2496,14 @@ def play_video_with_controls(video_path, coordinates=None):
             # Draw title
             screen.blit(overlay, (0, 0))
             screen.blit(
-                title, (window_width // 2 - title.get_width() // 2, window_height // 2 - 50)
+                title, (current_w // 2 - title.get_width() // 2, current_h // 2 - 50)
             )
 
             # Draw input box
             input_surface = font.render(input_text + "_", True, (255, 255, 0))
             screen.blit(
                 input_surface,
-                (window_width // 2 - input_surface.get_width() // 2, window_height // 2 + 10),
+                (current_w // 2 - input_surface.get_width() // 2, current_h // 2 + 10),
             )
 
             pygame.display.flip()
@@ -2401,6 +2525,393 @@ def play_video_with_controls(video_path, coordinates=None):
                         input_text = input_text[:-1]
                     else:
                         input_text += event.unicode
+        return None
+
+    def _deprecated_show_swap_dialog(current_frame, total_fr):
+        """
+        Show dialog to swap two markers over a frame range.
+        Returns: dict with start_frame, end_frame, marker_1, marker_2, or None.
+        """
+        font = pygame.font.SysFont("verdana", 14)
+        
+        # Default values (1-based for user display)
+        inputs = {
+            "Start Frame": str(current_frame + 1),
+            "End Frame": str(min(current_frame + 21, total_fr)),
+            "Marker 1 ID": "1",
+            "Marker 2 ID": "2"
+        }
+        order = ["Start Frame", "End Frame", "Marker 1 ID", "Marker 2 ID"]
+        active_idx = 0
+        
+        box_width = 200
+        box_height = 30
+        margin = 10
+        dialog_width = 400
+        dialog_height = 300
+        
+        waiting = True
+        while waiting:
+            # Draw Overlay
+            overlay = pygame.Surface((window_width, window_height + 80))
+            overlay.set_alpha(200)
+            overlay.fill((0, 0, 0))
+            screen.blit(overlay, (0, 0))
+            
+            # Dialog Box Background
+            dx = (window_width - dialog_width) // 2
+            dy = (window_height - dialog_height) // 2
+            pygame.draw.rect(screen, (40, 40, 40), (dx, dy, dialog_width, dialog_height))
+            pygame.draw.rect(screen, (100, 100, 100), (dx, dy, dialog_width, dialog_height), 2)
+            
+            # Title
+            title = font.render("Swap Markers", True, (255, 255, 255))
+            screen.blit(title, (dx + 20, dy + 20))
+            
+            # Draw Fields
+            start_y = dy + 60
+            for i, key in enumerate(order):
+                # Label
+                label = font.render(key + ":", True, (200, 200, 200))
+                screen.blit(label, (dx + 30, start_y + i*(box_height+margin) + 5))
+                
+                # Input Box
+                bx = dx + 180
+                by = start_y + i*(box_height+margin)
+                color = (255, 255, 255) if i == active_idx else (150, 150, 150)
+                pygame.draw.rect(screen, (20, 20, 20), (bx, by, box_width - 40, box_height))
+                pygame.draw.rect(screen, color, (bx, by, box_width - 40, box_height), 1)
+                
+                val_surf = font.render(inputs[key], True, (255, 255, 255))
+                screen.blit(val_surf, (bx + 5, by + 5))
+                
+            # Submit Button
+            submit_rect = pygame.Rect(dx + 100, dy + dialog_height - 50, 80, 30)
+            cancel_rect = pygame.Rect(dx + 220, dy + dialog_height - 50, 80, 30)
+            
+            pygame.draw.rect(screen, (50, 150, 50), submit_rect)
+            pygame.draw.rect(screen, (150, 50, 50), cancel_rect)
+            
+            submit_txt = font.render("Apply", True, (255, 255, 255))
+            cancel_txt = font.render("Cancel", True, (255, 255, 255))
+            
+            screen.blit(submit_txt, (submit_rect.x + 20, submit_rect.y + 5))
+            screen.blit(cancel_txt, (cancel_rect.x + 15, cancel_rect.y + 5))
+            
+            pygame.display.flip()
+            
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    waiting = False
+                    return None
+                    
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    mx, my = event.pos
+                    # Check fields
+                    for i, key in enumerate(order):
+                        by = start_y + i*(box_height+margin)
+                        bx = dx + 180
+                        rect = pygame.Rect(bx, by, box_width - 40, box_height)
+                        if rect.collidepoint(mx, my):
+                            active_idx = i
+                    
+                    if submit_rect.collidepoint(mx, my):
+                        waiting = False
+                        try:
+                            return {
+                                "start_frame": int(inputs["Start Frame"]) - 1,
+                                "end_frame": int(inputs["End Frame"]) - 1,
+                                "marker_1": int(inputs["Marker 1 ID"]) - 1, # Convert 1-based to 0-based
+                                "marker_2": int(inputs["Marker 2 ID"]) - 1
+                            }
+                        except ValueError:
+                            print("Invalid input")
+                            return None
+                            
+                    if cancel_rect.collidepoint(mx, my):
+                        waiting = False
+                        return None
+                        
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        waiting = False
+                        return None
+                    elif event.key == pygame.K_TAB:
+                        active_idx = (active_idx + 1) % 4
+                    elif event.key == pygame.K_RETURN:
+                        # Try submit
+                        waiting = False
+                        try:
+                            return {
+                                "start_frame": int(inputs["Start Frame"]),
+                                "end_frame": int(inputs["End Frame"]),
+                                "marker_1": int(inputs["Marker 1 ID"]) - 1,
+                                "marker_2": int(inputs["Marker 2 ID"]) - 1
+                            }
+                        except ValueError:
+                            return None
+                    elif event.key == pygame.K_BACKSPACE:
+                        key = order[active_idx]
+                        inputs[key] = inputs[key][:-1]
+                    else:
+                        key = order[active_idx]
+                        if event.unicode.isnumeric():
+                            inputs[key] += event.unicode
+        return None
+
+    def show_multi_swap_dialog(current_frame, total_fr, active_rules, markers_labels):
+        """
+        Show advanced Multi-Swap Manager Dialog.
+        Allows selecting multiple pairs from a list and managing rules.
+        """
+        dialog_w, dialog_h = 900, 600
+        d_surf = pygame.display.set_mode((dialog_w, dialog_h), pygame.RESIZABLE)
+        pygame.display.set_caption("Multi-Swap Manager")
+        
+        font = pygame.font.SysFont("verdana", 14)
+        title_font = pygame.font.SysFont("verdana", 16, bold=True)
+        
+        # Colors
+        BG = (30, 30, 30)
+        PANEL = (50, 50, 50)
+        TEXT = (220, 220, 220)
+        HIGHLIGHT = (70, 130, 180) # Selection Blue
+        BTN_GREEN = (50, 150, 50)
+        BTN_RED = (150, 50, 50)
+        BTN_BLUE = (50, 80, 150)
+        
+        # Internal State
+        temp_rules = active_rules.copy() # List of dicts
+        
+        # Selection State
+        selected_m1 = None # Index
+        selected_m2 = None # Index
+        
+        # Frame Inputs
+        input_start = str(current_frame + 1)
+        input_end = str(min(current_frame + 21, total_fr))
+        active_input = None # 'start' or 'end'
+        
+        # Helper to draw text input
+        def draw_input(surface, rect, text, active):
+            color = (100, 150, 255) if active else (100, 100, 100)
+            pygame.draw.rect(surface, color, rect, 1)
+            txt_surf = font.render(text, True, TEXT)
+            surface.blit(txt_surf, (rect.x + 5, rect.y + 5))
+
+        # Helper to draw button
+        def draw_button(surface, rect, text, color, hover=False):
+            c = (min(color[0]+30, 255), min(color[1]+30, 255), min(color[2]+30, 255)) if hover else color
+            pygame.draw.rect(surface, c, rect)
+            txt = font.render(text, True, (255,255,255))
+            surface.blit(txt, (rect.x + (rect.w - txt.get_width())//2, rect.y + (rect.h - txt.get_height())//2))
+
+        # Scroll state
+        scroll_markers = 0
+        scroll_rules = 0
+        
+        # Ensure labels are sufficient
+        max_idx = 0
+        if coordinates:
+             for f_pts in coordinates.values():
+                 max_idx = max(max_idx, len(f_pts))
+        
+        display_labels = markers_labels.copy()
+        if len(display_labels) < max_idx:
+            for i in range(len(display_labels), max_idx):
+                display_labels.append(f"Pixel {i+1}")
+                
+        running = True
+        while running:
+            mx, my = pygame.mouse.get_pos()
+            d_surf.fill(BG)
+            
+            # --- Left Panel: Markers List ---
+            left_panel = pygame.Rect(10, 40, 300, dialog_h - 50)
+            pygame.draw.rect(d_surf, PANEL, left_panel)
+            d_surf.blit(title_font.render("Select Pair (Click 2)", True, TEXT), (10, 10))
+            
+            # Draw markers
+            item_h = 30
+            visible_count = left_panel.h // item_h
+            
+            for i in range(len(display_labels)):
+                idx = i # 0-based index
+                if i < scroll_markers or i >= scroll_markers + visible_count:
+                    continue
+                    
+                y = left_panel.y + (i - scroll_markers) * item_h
+                r = pygame.Rect(left_panel.x, y, left_panel.w, item_h - 1)
+                
+                # Determine color based on selection
+                color = PANEL
+                if idx == selected_m1:
+                    color = (50, 100, 50) # Greenish for first
+                elif idx == selected_m2:
+                    color = (100, 50, 50) # Reddish for second
+                elif r.collidepoint(mx, my):
+                    color = (70, 70, 70)
+                    
+                pygame.draw.rect(d_surf, color, r)
+                
+                # Text: "1: Left Hip"
+                lbl = display_labels[i]
+                d_surf.blit(font.render(f"{i+1}: {lbl}", True, TEXT), (r.x + 10, r.y + 5))
+            
+            # --- Right Panel: Controls & Rules ---
+            
+            # Frame Range
+            start_icon = font.render(f"Start Frame:", True, TEXT)
+            d_surf.blit(start_icon, (330, 40))
+            rect_start = pygame.Rect(430, 35, 100, 30)
+            draw_input(d_surf, rect_start, input_start, active_input == 'start')
+            
+            end_icon = font.render(f"End Frame:", True, TEXT)
+            d_surf.blit(end_icon, (550, 40))
+            rect_end = pygame.Rect(650, 35, 100, 30)
+            draw_input(d_surf, rect_end, input_end, active_input == 'end')
+            
+            # Selection Info
+            sel_txt = "Selection: None"
+            if selected_m1 is not None:
+                l1 = display_labels[selected_m1]
+                sel_txt = f"1: {l1}"
+            if selected_m2 is not None:
+                l2 = display_labels[selected_m2]
+                sel_txt += f"  <-->  2: {l2}"
+            d_surf.blit(font.render(sel_txt, True, (255, 200, 100)), (330, 80))
+            
+            # Add Swap Button
+            btn_add = pygame.Rect(330, 110, 120, 35)
+            draw_button(d_surf, btn_add, "Add Swap", BTN_BLUE, btn_add.collidepoint(mx, my))
+            
+            # Rules List
+            d_surf.blit(title_font.render(f"Planned Swaps ({len(temp_rules)})", True, TEXT), (330, 160))
+            rule_panel = pygame.Rect(330, 190, 550, dialog_h - 260)
+            pygame.draw.rect(d_surf, PANEL, rule_panel)
+            
+            rule_vis_count = rule_panel.h // 25
+            for i, rule in enumerate(temp_rules):
+                if i < scroll_rules or i >= scroll_rules + rule_vis_count:
+                    continue
+                y = rule_panel.y + (i - scroll_rules) * 25
+                # Label indices: rule indices are 0-based, display as 1-based or Label name
+                m1_idx = rule['marker_1']
+                m2_idx = rule['marker_2']
+                m1_name = display_labels[m1_idx] if m1_idx < len(display_labels) else f"Pixel {m1_idx+1}"
+                m2_name = display_labels[m2_idx] if m2_idx < len(display_labels) else f"Pixel {m2_idx+1}"
+                
+                txt = f"[{rule['start_frame']+1}-{rule['end_frame']+1}] {m1_name} <-> {m2_name}"
+                d_surf.blit(font.render(txt, True, TEXT), (rule_panel.x + 5, y + 2))
+                
+                # Delete X
+                del_rect = pygame.Rect(rule_panel.right - 30, y, 25, 25)
+                d_surf.blit(font.render("X", True, (255, 100, 100)), (del_rect.x + 5, del_rect.y))
+
+            # Bottom Controls
+            btn_apply = pygame.Rect(dialog_w - 150, dialog_h - 50, 130, 40)
+            draw_button(d_surf, btn_apply, "Apply All", BTN_GREEN, btn_apply.collidepoint(mx, my))
+            
+            btn_cancel = pygame.Rect(dialog_w - 290, dialog_h - 50, 130, 40)
+            draw_button(d_surf, btn_cancel, "Cancel", BTN_RED, btn_cancel.collidepoint(mx, my))
+            
+            btn_save = pygame.Rect(330, dialog_h - 50, 100, 40)
+            draw_button(d_surf, btn_save, "Save TOML", BTN_BLUE, btn_save.collidepoint(mx, my))
+            
+            btn_load = pygame.Rect(440, dialog_h - 50, 100, 40)
+            draw_button(d_surf, btn_load, "Load TOML", BTN_BLUE, btn_load.collidepoint(mx, my))
+
+            pygame.display.flip()
+            
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    return None
+                    
+                elif event.type == pygame.VIDEORESIZE:
+                    dialog_w, dialog_h = event.w, event.h
+                    d_surf = pygame.display.set_mode((dialog_w, dialog_h), pygame.RESIZABLE)
+                    
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    if event.button == 1: # Left Click
+                        # Handle Inputs
+                        if rect_start.collidepoint(mx, my): active_input = 'start'
+                        elif rect_end.collidepoint(mx, my): active_input = 'end'
+                        else: active_input = None
+                        
+                        # Handle Marker List
+                        if left_panel.collidepoint(mx, my):
+                            idx = (my - left_panel.y) // item_h + scroll_markers
+                            if 0 <= idx < len(display_labels):
+                                if selected_m1 is None:
+                                    selected_m1 = idx
+                                elif selected_m2 is None and idx != selected_m1:
+                                    selected_m2 = idx
+                                else:
+                                    # Reset if both selected or clicking same
+                                    selected_m1 = idx
+                                    selected_m2 = None
+                        
+                        # Handle Add
+                        if btn_add.collidepoint(mx, my):
+                            if selected_m1 is not None and selected_m2 is not None:
+                                try:
+                                    s = int(input_start) - 1
+                                    e = int(input_end) - 1
+                                    temp_rules.append({
+                                        'start_frame': s,
+                                        'end_frame': e,
+                                        'marker_1': selected_m1,
+                                        'marker_2': selected_m2
+                                    })
+                                    # Reset selection
+                                    selected_m1 = None
+                                    selected_m2 = None
+                                except ValueError:
+                                    print("Invalid frame range")
+
+                        # Handle Delete Rule
+                        if rule_panel.collidepoint(mx, my):
+                             ridx = (my - rule_panel.y) // 25 + scroll_rules
+                             if 0 <= ridx < len(temp_rules):
+                                 # We are just visualizing 'X' button logic roughly
+                                 if mx > rule_panel.right - 30:
+                                     temp_rules.pop(ridx)
+
+                        # Handle Footer
+                        if btn_apply.collidepoint(mx, my):
+                            return temp_rules
+                        if btn_cancel.collidepoint(mx, my):
+                            return None
+                        
+                        # Save/Load
+                        if btn_save.collidepoint(mx, my):
+                             return ("SAVE", temp_rules)
+                             
+                        if btn_load.collidepoint(mx, my):
+                             return ("LOAD", temp_rules)
+
+                    elif event.button == 4: # Scroll Up
+                        if left_panel.collidepoint(mx, my):
+                            scroll_markers = max(0, scroll_markers - 1)
+                        if rule_panel.collidepoint(mx, my):
+                            scroll_rules = max(0, scroll_rules - 1)
+                    elif event.button == 5: # Scroll Down
+                        if left_panel.collidepoint(mx, my):
+                            scroll_markers = min(max(0, len(display_labels)-visible_count), scroll_markers + 1)
+                        if rule_panel.collidepoint(mx, my):
+                            scroll_rules = min(max(0, len(temp_rules)-rule_vis_count), scroll_rules + 1)
+
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        return None
+                    
+                    if active_input:
+                        if event.key == pygame.K_BACKSPACE:
+                           if active_input == 'start': input_start = input_start[:-1]
+                           else: input_end = input_end[:-1]
+                        elif event.unicode.isnumeric():
+                           if active_input == 'start': input_start += event.unicode
+                           else: input_end += event.unicode
         return None
 
     def save_labeling_project():
@@ -2509,11 +3020,15 @@ def play_video_with_controls(video_path, coordinates=None):
             header.extend([f"p{i}_x", f"p{i}_y"])
 
         # Get the frame number from the first non-deleted marker
+        if deleted_markers is None:
+            deleted_markers = set()
+            
+        # Get the frame number from the first non-deleted marker
         first_marker = next(
             (m for idx, m in enumerate(one_line_markers) if idx not in deleted_markers),
             None,
         )
-        if not first_marker:
+        if first_marker is None:
             print("No valid markers to save after deletions.")
             return
 
@@ -2927,6 +3442,11 @@ def play_video_with_controls(video_path, coordinates=None):
 
                 if loaded_coords:
                     coordinates = loaded_coords
+                    # Fix: Re-apply active swap rules after loading new data
+                    if active_swap_rules:
+                        print(f"Re-applying {len(active_swap_rules)} swap rules to loaded data...")
+                        coordinates = apply_swap_config(coordinates, active_swap_rules)
+
                     deleted_positions = {i: set() for i in range(total_frames)}
                     one_line_mode = False
                     selected_marker_idx = 0
@@ -2982,6 +3502,11 @@ def play_video_with_controls(video_path, coordinates=None):
                         if x_col in df.columns and y_col in df.columns:
                             if pd.notna(row[x_col]) and pd.notna(row[y_col]):
                                 coordinates[frame_num].append((row[x_col], row[y_col]))
+                
+                # Fix: Re-apply active swap rules after loading new data
+                if active_swap_rules:
+                    print(f"Re-applying {len(active_swap_rules)} swap rules to loaded data...")
+                    coordinates = apply_swap_config(coordinates, active_swap_rules)
 
                 save_message_text = f"Loaded file: {os.path.basename(input_file)}"
                 # If it was in 1 line mode, switch to normal mode
@@ -3472,6 +3997,13 @@ def play_video_with_controls(video_path, coordinates=None):
                             deleted_positions,
                             is_sequential=sequential_mode,
                         )
+                        # Save Swap Config if available
+                        if active_swap_rules:
+                            base_dir = os.path.dirname(video_path)
+                            base_filename = os.path.splitext(os.path.basename(video_path))[0]
+                            swap_file = os.path.join(base_dir, f"{base_filename}_swap.toml")
+                            save_swap_toml(swap_file, active_swap_rules)
+                            
                         saved = True
                         save_message_text = f"Saved to: {os.path.basename(output_file)}"
                         showing_save_message = True
@@ -3526,8 +4058,18 @@ def play_video_with_controls(video_path, coordinates=None):
                     # Rename current label
                     new_label = show_input_dialog("Enter new label name:", current_label)
                     if new_label:
+                        old_label = current_label
                         current_label = new_label
-                        save_message_text = f"Label changed to: {current_label}"
+                        
+                        # Retroactively update existing boxes with the old label
+                        updated_count = 0
+                        for f_idx in bboxes:
+                            for bbox in bboxes[f_idx]:
+                                if bbox.get("label") == old_label:
+                                    bbox["label"] = new_label
+                                    updated_count += 1
+                        
+                        save_message_text = f"Label changed: {old_label} -> {new_label} ({updated_count} updated)"
                         showing_save_message = True
                         save_message_timer = 60
                 
@@ -3812,6 +4354,88 @@ def play_video_with_controls(video_path, coordinates=None):
                     showing_save_message = True
                     save_message_timer = 30
 
+                    save_message_timer = 30
+
+                # Swap Hotkey (W) and Load Config (Shift+W)
+                elif event.key == pygame.K_w:
+                    # New Multi-Swap Manager
+                    # Loop to allow saving/loading and returning to dialog
+                    dialog_rules = active_swap_rules # Start with current session rules
+                    
+                    while True:
+                        # Call Dialog
+                        result = show_multi_swap_dialog(frame_count, total_frames, dialog_rules, labels)
+                        
+                        if result is None:
+                            # Cancelled
+                            break
+                            
+                        if isinstance(result, list):
+                            # Apply All (result is the new list of rules)
+                            new_rules = result
+                            old_rules = active_swap_rules
+                            
+                            # 1. Revert removed rules (Diff: Old - New)
+                            # Swapping is its own inverse, so applying the same rule again undoes it.
+                            for r in old_rules:
+                                if r not in new_rules:
+                                    print(f"Reverting swap: {r}")
+                                    coordinates = apply_swap_config(coordinates, [r])
+                                    
+                            # 2. Apply new rules (Diff: New - Old)
+                            for r in new_rules:
+                                if r not in old_rules:
+                                    print(f"Applying new swap: {r}")
+                                    coordinates = apply_swap_config(coordinates, [r])
+                            
+                            # Update session state     
+                            active_swap_rules = new_rules
+                            
+                            save_message_text = f"Swap Rules Updated: {len(active_swap_rules)} active"
+                            showing_save_message = True
+                            save_message_timer = 60
+                            break # Close dialog after applying
+                        
+                        elif isinstance(result, tuple):
+                             action, r_data = result
+                             if action == "SAVE":
+                                 # Input filename
+                                 default_name = f"{os.path.basename(video_path).rsplit('.', 1)[0]}_swap.toml"
+                                 fname = show_input_dialog("Save Config As:", default_name)
+                                 if fname:
+                                     # Ensure .toml
+                                     if not fname.endswith(".toml"): fname += ".toml"
+                                     # Path: use dirname of video
+                                     save_path = os.path.join(os.path.dirname(video_path), fname)
+                                     save_swap_toml(save_path, r_data)
+                                     save_message_text = f"Saved {fname}"
+                                     showing_save_message = True
+                                     save_message_timer = 60
+                                 # Loop continues with same rules
+                                 dialog_rules = r_data
+                                 
+                             elif action == "LOAD":
+                                 # Select file
+                                 fpath = pygame_file_dialog(
+                                     initial_dir=os.path.dirname(video_path),
+                                     file_extensions=[".toml"],
+                                     restore_size=(window_width, window_height)
+                                 )
+                                 # IMMEDIATE FIX: Restore Dialog Size because we are still in the loop!
+                                 d_surf = pygame.display.set_mode((900, 600), pygame.RESIZABLE)
+
+                                 if fpath and os.path.exists(fpath):
+                                      loaded = load_swap_toml(fpath)
+                                      if loaded is not None:
+                                          dialog_rules = loaded # Replace internal dialog state
+                                          save_message_text = f"Loaded {len(loaded)} rules"
+                                          showing_save_message = True
+                                          save_message_timer = 60
+                                 # Loop continues with loaded rules
+                    
+                    # RESTORE MAIN WINDOW STATE
+                    screen = pygame.display.set_mode((window_width, window_height + 80), pygame.RESIZABLE)
+
                 # Add sequential mode toggle with 'o' key
                 elif (
                     event.key == pygame.K_o or event.key == pygame.K_s
@@ -3840,20 +4464,9 @@ def play_video_with_controls(video_path, coordinates=None):
                     elif save_button_rect.collidepoint(x, rel_y):
                         if labeling_mode and bboxes:
                             # New Unified Save Logic
-                            dataset_dir, message = save_labeling_project(
-                                video_path, bboxes, total_frames, original_width, original_height
-                            )
-                            if dataset_dir:
-                                saved = True
-                                save_message_text = (
-                                    f"Dataset exported: {os.path.basename(dataset_dir)}"
-                                )
-                                showing_save_message = True
-                                save_message_timer = 120
-                            else:
-                                save_message_text = message
-                                showing_save_message = True
-                                save_message_timer = 60
+                            save_labeling_project()
+                            showing_save_message = True
+                            save_message_timer = 60
                         elif one_line_mode:
                             output_file = save_1_line_coordinates(
                                 video_path, one_line_markers, deleted_markers
@@ -4658,7 +5271,9 @@ def load_coordinates_from_file(total_frames, video_width=None, video_height=None
 
     if not input_path:
         print("No file/folder selected. Starting fresh.")
-        return {i: [] for i in range(total_frames)}
+    if not input_path:
+        print("No file/folder selected. Starting fresh.")
+        return {i: [] for i in range(total_frames)}, []
 
     # Check if it's a YOLO dataset directory
     is_yolo, images_dir, labels_dir, classes_file = is_yolo_dataset(input_path)
@@ -4667,7 +5282,17 @@ def load_coordinates_from_file(total_frames, video_width=None, video_height=None
         # Note: We need video_path, video_width, video_height for YOLO loading
         # These will be passed from the calling function
         # For now, return a special marker that indicates YOLO dataset
-        return {"_yolo_dataset": input_path}
+        # For now, return a special marker that indicates YOLO dataset
+        # YOLO doesn't have consistent keypoint labels in the same way, usually just class IDs
+        # We can map class IDs if class file exists
+        labels = []
+        if classes_file and os.path.exists(classes_file):
+            try:
+                with open(classes_file) as f:
+                    labels = [l.strip() for l in f.readlines()]
+            except:
+                pass
+        return {"_yolo_dataset": input_path}, labels
 
     # Otherwise, treat as CSV file
     input_file = input_path
@@ -4703,7 +5328,13 @@ def load_coordinates_from_file(total_frames, video_width=None, video_height=None
         import traceback
 
         traceback.print_exc()
-        return {i: [] for i in range(total_frames)}
+    except Exception as e:
+        print(f"ERROR: Unexpected error reading file {input_file}: {e}")
+        print(f"Error type: {type(e).__name__}")
+        import traceback
+
+        traceback.print_exc()
+        return {i: [] for i in range(total_frames)}, []
 
     # Case A: vailá format (frame + pN_x/pN_y) - from markerless_2d_analysis.py
     if "frame" in df.columns and any(
@@ -4753,7 +5384,9 @@ def load_coordinates_from_file(total_frames, video_width=None, video_height=None
                 coordinates[row_idx] = []
 
         print(f"Coordinates successfully loaded (vailá format): {max_marker} markers")
-        return coordinates
+        print(f"Coordinates successfully loaded (vailá format): {max_marker} markers")
+        labels = [f"Pixel {i}" for i in range(1, max_marker + 1)]
+        return coordinates, labels
 
     # Case B: MediaPipe format (frame_index + landmark_x/y/z) - from markerless_2d_analysis.py
     if "frame_index" in df.columns and any(col.endswith("_x") for col in df.columns):
@@ -4864,7 +5497,7 @@ def load_coordinates_from_file(total_frames, video_width=None, video_height=None
         print(
             f"Coordinates successfully loaded (MediaPipe {file_type} format): {len(base_names)} landmarks"
         )
-        return coordinates
+        return coordinates, base_names
 
     # Case C: Legacy format or other CSV formats
     print(f"Unknown format detected. Columns: {list(df.columns)}")
@@ -4918,7 +5551,9 @@ def load_coordinates_from_file(total_frames, video_width=None, video_height=None
             coordinates[frame_num] = pts
 
         print(f"Coordinates loaded (generic CSV format): {len(coord_cols) // 2} coordinate pairs")
-        return coordinates
+        print(f"Coordinates loaded (generic CSV format): {len(coord_cols) // 2} coordinate pairs")
+        labels = [f"Pixel {i+1}" for i in range(len(coord_cols) // 2)]
+        return coordinates, labels
 
     print(f"File format not recognized: {input_file}. Starting fresh.")
     print("Supported formats:")
@@ -4926,7 +5561,8 @@ def load_coordinates_from_file(total_frames, video_width=None, video_height=None
     print("  2. MediaPipe format: 'frame_index', 'landmark_x', 'landmark_y', 'landmark_z', ...")
     print("  3. Generic CSV with coordinate columns")
     print("  4. YOLO dataset directory (with images/ and labels/ folders)")
-    return {i: [] for i in range(total_frames)}
+    print("  4. YOLO dataset directory (with images/ and labels/ folders)")
+    return {i: [] for i in range(total_frames)}, []
 
 
 def save_coordinates(
@@ -5131,7 +5767,7 @@ def run_getpixelvideo():
     cap.release()
 
     if load_existing:
-        loaded_data = load_coordinates_from_file(total_frames, vw, vh)
+        loaded_data, labels = load_coordinates_from_file(total_frames, vw, vh)
 
         # Check if it's a YOLO dataset marker
         if isinstance(loaded_data, dict) and "_yolo_dataset" in loaded_data:
@@ -5146,8 +5782,9 @@ def run_getpixelvideo():
             coordinates = loaded_data
     else:
         coordinates = None
+        labels = []
 
-    play_video_with_controls(video_path, coordinates)
+    play_video_with_controls(video_path, coordinates, labels)
 
 
 if __name__ == "__main__":
