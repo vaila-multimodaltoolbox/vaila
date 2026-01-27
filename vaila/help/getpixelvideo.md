@@ -188,19 +188,19 @@ frame,p1_x,p1_y,p2_x,p2_y
 
 ### Mode Controls
 
-| Key             | Action                                    |
-| --------------- | ----------------------------------------- |
-| **C**           | Toggle "1 Line" mode                      |
-| **S**           | Toggle Sequential mode (Normal mode only) |
-| **P**           | Toggle Persistence mode                   |
-| **L**           | Toggle Labeling mode (Bounding Boxes)     |
-| **Z / R-Click** | Remove last bounding box (Labeling mode)  |
-| **N**           | Rename object label (Labeling mode)       |
-| **F5**          | Save Labeling Project (JSON)              |
-| **F6**          | Load Labeling Project (JSON)              |
-| **1**           | Decrease persistence frames               |
-| **2**           | Increase persistence frames               |
-| **3**           | Toggle full persistence                   |
+| Key             | Action                                            |
+| --------------- | ------------------------------------------------- |
+| **C**           | Toggle "1 Line" mode                              |
+| **S**           | Toggle Sequential mode (Normal mode only)         |
+| **P**           | Toggle Persistence mode                           |
+| **L**           | Toggle Labeling mode (Bounding Boxes)             |
+| **Z / R-Click** | Remove last bounding box (Labeling mode)          |
+| **N**           | Rename object label (Labeling Mode Only)          |
+| **F5**          | Save Labeling Project (JSON) (Labeling Mode Only) |
+| **F6**          | Load Labeling Project (JSON) (Labeling Mode Only) |
+| **1**           | Decrease persistence frames                       |
+| **2**           | Increase persistence frames                       |
+| **3**           | Toggle full persistence                           |
 
 ### File Operations
 
