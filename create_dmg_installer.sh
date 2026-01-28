@@ -15,12 +15,12 @@
 # Notes:                                                                                #
 #   - Requires hdiutil (built-in macOS tool)                                           #
 #   - Creates a .dmg file in the current directory                                      #
-#   - The .dmg will contain vaila.app ready to drag to Applications                     #
+#   - The .dmg will contain the vaila installer scripts and necessary files             #
 #                                                                                       #
 # Author: Prof. Dr. Paulo R. P. Santiago                                                #
 # Creation: 20 November 2025                                                           #
 # Update: 27 January 2026                                                              #
-# Version: 0.3.16                                                                     #
+# Version: 0.3.17                                                                     #
 # OS: macOS                                                                             #
 #########################################################################################
 
@@ -114,6 +114,13 @@ rsync -av \
     --exclude='*.dmg' \
     --exclude='vaila_installer.dmg' \
     --exclude='*.temp.dmg' \
+    --exclude='install_vaila_win.ps1' \
+    --exclude='uninstall_vaila_win.ps1' \
+    --exclude='install_vaila_linux.sh' \
+    --exclude='uninstall_vaila_linux.sh' \
+    --exclude='vaila_installer.iss' \
+    --exclude='pyproject_win_*.toml' \
+    --exclude='pyproject_linux_*.toml' \
     "$PROJECT_DIR/" "$INSTALLER_DIR/"
 
 # Make install script executable
