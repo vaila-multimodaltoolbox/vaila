@@ -2193,6 +2193,7 @@ def play_video_with_controls(video_path, coordinates=None, labels=None):
             "- R: Remove last marker from file",
             "- J: Detect Pose (MediaPipe + YOLO)",  # Updated Pose help
             "- H: Show this help",
+            "- D: Delete all markes in the current frame",
             "- ?: Open documentation in browser",
             "",
             "=== LABELING MODE (Bounding Boxes) ===",
@@ -4033,6 +4034,17 @@ def play_video_with_controls(video_path, coordinates=None, labels=None):
                     )
                     showing_save_message = True
                     save_message_timer = 30
+                elif event.key == pygame.K_d:
+                    # Delete all markers
+                    if frame_count in coordinates:
+                        deleted_positions[frame_count] = set(
+                            range(len(coordinates[frame_count]))
+                        )
+                        save_message_text = "All markers from this frame were deleted"
+                        showing_save_message = True
+                        save_message_timer = 30
+
+
                 elif event.key == pygame.K_l:
                     labeling_mode = not labeling_mode
                     if labeling_mode:
