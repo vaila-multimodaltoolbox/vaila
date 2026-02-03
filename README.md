@@ -48,8 +48,16 @@ wget -qO- https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/i
 **🪟 Windows:**
 
 ```powershell
+irm https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/install_vaila_win.ps1 | iex
+```
+
+or
+
+```powershell
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor 3072; irm https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/install_vaila_win.ps1 | iex
 ```
+
+or
 
 If you use a one-liner that points to `https://vaila.io/install.ps1`, use the same TLS fix first:
 
@@ -933,3 +941,4 @@ maintains the freedom of the software and requires source code availability.
 
 For more details, see the [LICENSE](LICENSE) file or visit:
 <https://www.gnu.org/licenses/agpl-3.0.html>
+
