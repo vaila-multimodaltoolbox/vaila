@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -37,15 +37,45 @@
         <div class="module-info">
             <h3>📋 Module Information</h3>
             <p><strong>Category:</strong> Tools</p>
-            <p><strong>File:</strong> vaila\vaila_ytdown.py</p>
-            <p><strong>Lines:</strong> 1144</p>
-            <p><strong>Size:</strong> 46740 characters</p>
-            <p><strong>Version:</strong> 0.2.0</p>
+            <p><strong>File:</strong> vaila/vaila_ytdown.py</p>
+            <p><strong>Version:</strong> 0.3.19</p>
             <p><strong>Author:</strong> Prof. Dr. Paulo R. P. Santiago</p>
             <p><strong>GUI Interface:</strong> ✅ Yes</p>
+            <p><strong>This page</strong> can be opened from the GUI with the <strong>? Help</strong> button.</p>
         </div>
 
-        
+        <div class="docstring">
+            <h3>How to run</h3>
+            <p>The script can be used via <strong>GUI</strong> (default) or <strong>CLI</strong> (command line).</p>
+            <h4>GUI (default)</h4>
+            <pre>uv run python vaila/vaila_ytdown.py</pre>
+            <ol>
+                <li>Set <strong>Save Location</strong> (Browse…).</li>
+                <li>Choose <strong>Video (highest FPS)</strong> or <strong>Audio Only (MP3)</strong>.</li>
+                <li><strong>Direct:</strong> Paste URLs in the text box and click <strong>DOWNLOAD FROM TEXT BOX</strong>.</li>
+                <li><strong>Batch:</strong> Click <strong>LOAD FROM FILE...</strong> and select a .txt file (one URL per line).</li>
+                <li>Confirm; progress appears in the log. Use <strong>? Help</strong> in the window for more.</li>
+            </ol>
+            <h4>CLI (command line)</h4>
+            <pre># Single URL (video)
+uv run python vaila/vaila_ytdown.py -u "https://www.youtube.com/watch?v=..."
+
+# Single URL (audio only, MP3)
+uv run python vaila/vaila_ytdown.py -u "https://www.youtube.com/watch?v=..." -a
+
+# Batch from file (video)
+uv run python vaila/vaila_ytdown.py -f urls.txt -o ~/Videos
+
+# Batch from file (audio only)
+uv run python vaila/vaila_ytdown.py -f urls.txt -a -o ~/Music
+
+# Force CLI (no GUI)
+uv run python vaila/vaila_ytdown.py --no-gui -u "https://..."
+
+# Show all options
+uv run python vaila/vaila_ytdown.py -h</pre>
+            <p>Full reference: <a href="vaila_ytdown.md">vaila_ytdown.md</a>.</p>
+        </div>
 
         <div class="docstring">
             <h3>📖 Description</h3>
@@ -55,7 +85,7 @@ YouTube High Quality Downloader - vaila_ytdown.py
 ================================================================================
 Author: Prof. Dr. Paulo R. P. Santiago
 Date: March 2025
-Version: 0.2.0
+Version: 0.3.19
 
 Description:
 ------------
@@ -80,11 +110,11 @@ Requirements:
         <div class="functions">
             <h3>🔧 Main Functions</h3>
             <p><strong>Total functions found:</strong> 14</p>
-            <ul><li><code>read_urls_from_file</code></li><li><code>run_ytdown</code></li><li><code>get_video_info</code></li><li><code>download_video</code></li><li><code>download_audio</code></li><li><code>download_playlist</code></li><li><code>download_from_file</code></li><li><code>progress_hook</code></li><li><code>progress_hook</code></li><li><code>log</code></li><li><code>update_status</code></li><li><code>browse_dir</code></li><li><code>load_url_file</code></li><li><code>cleanup_resources</code></li></ul>
+            <ul><li><code>read_urls_from_file</code></li><li><code>run_ytdown</code></li><li><code>get_video_info</code></li><li><code>download_video</code></li><li><code>download_audio</code></li><li><code>download_playlist</code></li><li><code>download_from_file</code></li><li><code>process_direct_urls</code></li><li><code>start_batch_download</code></li><li><code>get_download_mode</code></li><li><code>browse_dir</code></li><li><code>load_url_file</code></li><li><code>cleanup_resources</code></li></ul>
         </div>
 
         <div class="footer">
-            <p>📅 Generated automatically on: 15/10/2025 08:04:44</p>
+            <p>📅 Updated 2026</p>
             <p>🔗 Part of vailá - Multimodal Toolbox</p>
             <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
         </div>
