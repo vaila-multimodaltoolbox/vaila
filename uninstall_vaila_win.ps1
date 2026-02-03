@@ -6,9 +6,9 @@
                  removing vaila profiles from Windows Terminal, and deleting
                  Start Menu and Desktop shortcuts.
     Creation Date: 10 Jan 2025
-    Last Update: 27 January 2026
+    Last Update: 03 February 2026
     Author: Paulo R. P. Santiago
-    Version: 0.3.16
+    Version: 0.3.18
 #>
 
 $ErrorActionPreference = "Continue"
@@ -29,13 +29,11 @@ Write-Host ""
 
 # Define possible installation paths
 # Only check 64-bit Program Files (x86 is not used for vaila)
-$possiblePaths = @()
+# Always include Program Files so we find the path when uninstaller runs as current user (e.g. Inno [UninstallRun] runascurrentuser)
+$possiblePaths = @("${env:ProgramFiles}\vaila", "$env:USERPROFILE\vaila", "$env:LOCALAPPDATA\vaila")
 If ($isAdmin) {
-    $possiblePaths += "${env:ProgramFiles}\vaila"  # 64-bit only
     Write-Host "Checking system-wide installation locations (Administrator mode)..." -ForegroundColor Yellow
 }
-$possiblePaths += "$env:USERPROFILE\vaila"
-$possiblePaths += "$env:LOCALAPPDATA\vaila"
 
 # Find actual installation path
 $vailaProgramPath = $null

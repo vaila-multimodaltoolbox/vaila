@@ -25,6 +25,9 @@
 
 $ErrorActionPreference = "Stop"
 
+# Enable TLS 1.2 (and 1.3 if available) for HTTPS; avoids "could not establish trust relationship" on some Windows setups
+[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+
 # Check if running as administrator
 $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
