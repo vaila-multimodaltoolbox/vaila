@@ -75,12 +75,14 @@ import tempfile
 import tomllib
 import wave
 from pathlib import Path
-from tkinter import Tk, filedialog, messagebox, simpledialog
+from tkinter import Tk, filedialog, messagebox, simpledialog, ttk
+import threading
 
 import cv2
 import numpy as np
 import pygame
 from rich import print
+from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 
 
 def get_precise_video_metadata(video_path):
@@ -778,11 +780,141 @@ def batch_process_sync_videos(video_path, sync_data):
 def play_video_with_cuts(video_path):
     pygame.init()
 
-    # Initialize video capture
+    # Initialize video capture with fallback conversion logic
     cap = cv2.VideoCapture(video_path)
-    if not cap.isOpened():
-        print("Error opening video file")
-        return
+    video_valid = cap.isOpened()
+    
+    if video_valid:
+        # Try reading the first frame to ensure codec support (e.g. AV1 fallback)
+        ret, _ = cap.read()
+        if not ret:
+            video_valid = False
+        else:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+    
+    if not video_valid:
+        cap.release()
+        print(f"Error opening or reading video: {video_path}")
+        
+        # Initialize Tk root if needed for the dialog
+        try:
+            root = Tk()
+            root.withdraw()
+        except Exception:
+            # If Tk is already initialized or fails, proceed with what we have
+            root = None
+
+        if messagebox.askyesno(
+            "Video Load Error",
+            f"Could not open/read video: {Path(video_path).name}\n\n"
+            "This usually happens when the video codec (e.g., AV1) is not supported "
+            "by your OpenCV installation.\n\n"
+            "Do you want to automatically convert it to H.264 (MP4) format?",
+            parent=root
+        ):
+            converted_path = str(Path(video_path).parent / (Path(video_path).stem + "_converted.mp4"))
+            print(f"[bold yellow]Preparing to convert video to H.264:[/bold yellow] {converted_path}")
+            
+            # Helper function to run conversion with visual feedback
+            def convert_with_feedback():
+                conversion_success = False
+                conversion_error = None
+                
+                # Create a progress window
+                progress_win = Tk()
+                progress_win.title("Converting Video")
+                progress_win.geometry("400x150")
+                progress_win.resizable(False, False)
+                if root:
+                    # Center relative to parent if possible, otherwise screen center
+                    try:
+                        x = root.winfo_x() + (root.winfo_width() // 2) - 200
+                        y = root.winfo_y() + (root.winfo_height() // 2) - 75
+                        progress_win.geometry(f"+{x}+{y}")
+                    except:
+                        pass
+                
+                ttk.Label(progress_win, text="Converting video to compatible format...", font=("Arial", 11)).pack(pady=(20, 10))
+                ttk.Label(progress_win, text="Please wait, this may take a moment based on video size.", font=("Arial", 9)).pack(pady=(0, 15))
+                
+                pbar = ttk.Progressbar(progress_win, mode='indeterminate')
+                pbar.pack(fill='x', padx=30, pady=5)
+                pbar.start(10)
+                
+                # Conversion logic in a thread
+                def run_ffmpeg():
+                    nonlocal conversion_success, conversion_error
+                    try:
+                        cmd = [
+                            "ffmpeg", "-y", "-i", str(video_path),
+                            "-c:v", "libx264", 
+                            "-c:a", "aac", "-b:a", "192k",
+                            "-pix_fmt", "yuv420p",
+                            str(converted_path)
+                        ]
+                        
+                        # Use rich progress in terminal
+                        with Progress(
+                            SpinnerColumn(),
+                            TextColumn("[bold blue]{task.description}"),
+                            TimeElapsedColumn(),
+                            transient=True
+                        ) as progress:
+                            task = progress.add_task(f"Converting {Path(video_path).name}...", total=None)
+                            
+                            # Run subprocess
+                            process = subprocess.run(
+                                cmd, 
+                                check=True, 
+                                stdout=subprocess.PIPE, 
+                                stderr=subprocess.PIPE
+                            )
+                            
+                        conversion_success = True
+                    except subprocess.CalledProcessError as e:
+                        conversion_error = f"FFmpeg failed: {e.stderr.decode() if e.stderr else 'Unknown error'}"
+                    except Exception as e:
+                        conversion_error = str(e)
+                    finally:
+                        # Schedule window close on main thread
+                        def cleanup():
+                            try:
+                                pbar.stop()  # Important: stop timer events before destroying
+                                progress_win.destroy()
+                            except Exception:
+                                pass
+                        progress_win.after(0, cleanup)
+
+                t = threading.Thread(target=run_ffmpeg)
+                t.daemon = True
+                t.start()
+                
+                # Keep window open until thread finishes
+                progress_win.mainloop()
+                
+                return conversion_success, conversion_error
+
+            # Run the conversion
+            success, error = convert_with_feedback()
+
+            if success:
+                print(f"[bold green]Conversion successful:[/bold green] {converted_path}")
+                messagebox.showinfo("Success", f"Video converted successfully!\nNow loading: {Path(converted_path).name}", parent=root)
+                
+                # Switch to the new video
+                video_path = converted_path
+                cap = cv2.VideoCapture(video_path)
+                
+                if not cap.isOpened():
+                    messagebox.showerror("Error", "Could not open the converted video.", parent=root)
+                    return
+            else:
+                error_msg = error if error else "Unknown error during conversion"
+                print(f"[bold red]Conversion failed:[/bold red] {error_msg}")
+                messagebox.showerror("Conversion Failed", f"Failed to convert video:\n{error_msg}\n\nEnsure ffmpeg is installed.", parent=root)
+                return
+        else:
+            return
 
     # Get precise video metadata using ffprobe
     metadata = get_precise_video_metadata(video_path)
