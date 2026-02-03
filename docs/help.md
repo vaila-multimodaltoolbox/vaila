@@ -72,6 +72,7 @@ Comprehensive documentation for all Python scripts and modules in vailá:
 
 ### Video Processing Tools
 - **[DrawBoxe](../vaila/help/drawboxe.html)** - Draw boxes and polygons on videos with frame interval support
+- **[YouTube Downloader (vaila_ytdown)](../vaila/help/vaila_ytdown.html)** - Download YouTube videos in highest quality or audio as MP3. Can be run via **GUI** (`uv run python vaila/vaila_ytdown.py`) or **CLI** (e.g. `-u URL`, `-f urls.txt`, `-a` for audio). See the help page for full usage.
 
 ### Modules and Tools
 The vailá toolbox comprises the following modules:
@@ -212,6 +213,7 @@ O toolbox vailá é composto pelos seguintes módulos:
 
 ### Ferramentas de Processamento de Vídeo
 - **[DrawBoxe](../vaila/help/drawboxe.html)** - Desenhar caixas e polígonos em vídeos com suporte a intervalos de frames
+- **[YouTube Downloader (vaila_ytdown)](../vaila/help/vaila_ytdown.html)** - Baixar vídeos do YouTube em alta qualidade ou só áudio (MP3). Pode ser usado por **GUI** (`uv run python vaila/vaila_ytdown.py`) ou **CLI** (ex.: `-u URL`, `-f urls.txt`, `-a` para áudio). Veja a página de help para uso completo.
 
 ### Como Utilizar
 Após configurar o ambiente, inicie o vailá com o comando:
