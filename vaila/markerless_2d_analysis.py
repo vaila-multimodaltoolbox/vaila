@@ -3278,6 +3278,11 @@ def test_mediapipe_gpu_delegate(backend="nvidia"):
 
         except Exception as e:
             error_msg = str(e)
+            
+            # Specific check for Linux MediaPipe GPU limitation
+            if platform.system() == "Linux" and ("GPU processing is disabled in build flags" in error_msg or "ValidatedGraphConfig Initialization failed" in error_msg):
+                 return False, f"GPU delegate test failed for {backend}.\n  NOTE: Official MediaPipe PyPI packages for Linux usually do NOT support GPU.\n  Technical error: {error_msg}"
+
             if "GPU" in error_msg or "delegate" in error_msg.lower() or "CUDA" in error_msg or "ROCm" in error_msg or "MPS" in error_msg:
                 return False, f"GPU delegate test failed for {backend}: {error_msg}"
             else:
