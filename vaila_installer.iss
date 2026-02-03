@@ -2,14 +2,14 @@
 ; vaila Installer Script
 
 #define MyAppName "vaila"
-#define MyAppVersion "0.3.17"
+#define MyAppVersion "0.3.19"
 #define MyAppPublisher "Prof. Dr. Paulo R. P. Santiago"
 #define MyAppURL "https://github.com/vaila-multimodaltoolbox/vaila"
 
 [Setup]
 ; NOTE: The AppId uniquely identifies this application.
 ; Do not use the same AppId in installers for other applications.
-AppId={{DC7B1ECD-6AC7-4F0E-91AB-58F0E3C6DAA9}
+AppId={{DC7B1ECD-6AC7-4F0E-91AB-58F0E3C6DAA9}}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
@@ -19,10 +19,10 @@ AppUpdatesURL={#MyAppURL}
 ; Set the icon for the uninstall entry in Programs and Features
 UninstallDisplayIcon={app}\docs\images\vaila_ico.ico
 ; Force 64-bit installation to use C:\Program Files (not Program Files (x86))
-ArchitecturesInstallIn64BitMode=x64
-; Use {pf64} to explicitly target 64-bit Program Files directory
+ArchitecturesInstallIn64BitMode=x64compatible
+; Use {commonpf64} to explicitly target 64-bit Program Files directory
 ; This ensures installation in C:\Program Files\vaila (not C:\Program Files (x86)\vaila)
-DefaultDirName={pf64}\{#MyAppName}
+DefaultDirName={commonpf64}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 ; Remove the following line to not require administrator privileges
 PrivilegesRequired=admin
