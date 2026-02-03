@@ -3,27 +3,58 @@
 YouTube High Quality Downloader - vaila_ytdown.py
 ================================================================================
 Author: Prof. Dr. Paulo R. P. Santiago
-Date: March 2025
-Version: 0.2.0
+Creation Date: 10 October 2025
+Update Date: 3 February 2026
+Version: 0.3.19
 
 Description:
 ------------
 This script downloads videos from YouTube in the highest quality possible,
-prioritizing highest resolution and framerate (FPS).
+prioritizing highest resolution and framerate (FPS). Can also download
+audio only as MP3.
 
 Key Features:
 - Downloads videos in highest resolution available (up to 8K)
 - Prioritizes streams with higher FPS (60fps when available)
 - Automatically selects best video and audio quality
-- Shows detailed video information including resolution and FPS
-- Downloads with progress tracking
-- Batch download support for playlists
+- Batch download from a file with URLs (one per line)
 - Uses yt-dlp for maximum compatibility and regular updates
 
-Requirements:
-- yt-dlp (pip install yt-dlp)
-- ffmpeg (must be installed on your system and in PATH)
-================================================================================
+How to use - GUI (default):
+----------------------------
+  uv run python vaila/vaila_ytdown.py
+
+  1. Set "Save Location" (Browse...).
+  2. Choose "Video (highest FPS)" or "Audio Only (MP3)".
+  3. Either paste URLs in the text box and click DOWNLOAD FROM TEXT BOX,
+     or click LOAD FROM FILE... and select a .txt file with one URL per line.
+  4. Confirm; progress appears in the log. Use "? Help" in the window for more.
+
+How to use - CLI:
+-----------------
+  # Single URL (video, best quality)
+  uv run python vaila/vaila_ytdown.py -u "https://www.youtube.com/watch?v=..."
+
+  # Single URL (audio only, MP3)
+  uv run python vaila/vaila_ytdown.py -u "https://www.youtube.com/watch?v=..." -a
+
+  # Batch from file (video)
+  uv run python vaila/vaila_ytdown.py -f urls.txt -o ~/Videos
+
+  # Batch from file (audio only)
+  uv run python vaila/vaila_ytdown.py -f urls.txt -a -o ~/Music
+
+  # Force CLI without opening GUI
+  uv run python vaila/vaila_ytdown.py --no-gui -u "https://..."
+
+  # Show all options
+  uv run python vaila/vaila_ytdown.py -h
+
+License:
+---------
+This script is licensed under the GNU Affero General Public License v3.0.
+See the LICENSE file for more details.
+Visit the project repository: https://github.com/vaila-multimodaltoolbox
 """
 
 import argparse
@@ -31,7 +62,9 @@ import os
 import re
 import shutil
 import sys
+import webbrowser
 from datetime import datetime
+from pathlib import Path
 
 from rich.console import Console
 from rich.progress import (
@@ -62,6 +95,12 @@ except ImportError:
 
 # Rich console for pretty output
 console = Console()
+
+
+def get_help_html_path():
+    """Return absolute path to vaila_ytdown.html (next to this script)."""
+    script_dir = Path(__file__).resolve().parent
+    return script_dir / "help" / "vaila_ytdown.html"
 
 
 # Simplified function to read URLs from file - no resolution parsing needed
@@ -113,7 +152,6 @@ class YTDownloader:
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
-
                 # Process all available formats to get comprehensive quality options
                 available_formats = []
 
@@ -552,17 +590,17 @@ class YTDownloader:
         )
         console.print(f"[blue]Saved to:[/blue] {batch_dir}")
 
-        # No final do método load_url_file, antes de limpar recursos
-        # Trazer a janela para frente antes da mensagem final
-        self.root.lift()
-        self.root.focus_force()
-        self.root.update()
-
-        messagebox.showinfo(
-            "Batch Download Complete",
-            f"All videos have been downloaded to:\n{batch_dir}",
-            parent=self.root,
-        )
+        # Only use GUI (root/messagebox) when running in GUI context; CLI has no root
+        root = getattr(self, "root", None)
+        if root is not None:
+            root.lift()
+            root.focus_force()
+            root.update()
+            messagebox.showinfo(
+                "Batch Download Complete",
+                f"All videos have been downloaded to:\n{batch_dir}",
+                parent=root,
+            )
 
         return batch_dir
 
@@ -573,9 +611,9 @@ if TKINTER_AVAILABLE:
     class DownloaderGUI:
         def __init__(self, root):
             self.root = root
-            self.root.title("vailá YOUTUBE DOWNLOADER")
-            self.root.geometry("800x720")  # Reduzir o tamanho inicial da janela
-            self.root.minsize(700, 600)  # Ajustar o tamanho mínimo da janela
+            self.root.title("vailá YouTube Downloader")
+            self.root.geometry("850x750")
+            self.root.minsize(720, 600)
 
             # Create downloader instance
             self.downloader = YTDownloader()
@@ -597,108 +635,199 @@ if TKINTER_AVAILABLE:
             scrollbar.pack(side="right", fill="y")
 
             # Main frame content
-            main_frame = ttk.Frame(scrollable_frame, padding=15)
+            main_frame = ttk.Frame(scrollable_frame, padding=20)
             main_frame.pack(fill=tk.BOTH, expand=True)
 
-            # Criar um frame para o título
-            title_frame = ttk.Frame(main_frame)
-            title_frame.pack(pady=(0, 5), fill=tk.X)
+            # ----- Header: title + Help button -----
+            header_frame = ttk.Frame(main_frame)
+            header_frame.pack(fill=tk.X, pady=(0, 15))
 
-            # Usar dois labels separados em vez do widget Text
-            # O primeiro label para "vailá" em itálico
-            vaila_label = ttk.Label(title_frame, text="vailá", font=("Arial", 16, "bold", "italic"))
+            title_frame = ttk.Frame(header_frame)
+            title_frame.pack(side=tk.LEFT)
+
+            vaila_label = ttk.Label(
+                title_frame, text="vailá", font=("Arial", 20, "bold", "italic")
+            )
             vaila_label.pack(side=tk.LEFT)
 
-            # O segundo label para "YOUTUBE DOWNLOADER" em fonte normal
             downloader_label = ttk.Label(
-                title_frame, text=" YOUTUBE DOWNLOADER", font=("Arial", 16, "bold")
+                title_frame,
+                text=" YouTube DOWNLOADER",
+                font=("Arial", 20, "bold"),
             )
             downloader_label.pack(side=tk.LEFT)
 
+            # Help button (opens HTML in browser)
+            help_btn = ttk.Button(
+                header_frame,
+                text="? Help",
+                command=self._open_help,
+            )
+            help_btn.pack(side=tk.RIGHT, padx=5)
+
             desc_label = ttk.Label(
                 main_frame,
-                text="Download YouTube videos with highest framerate (FPS)",
-                font=("Arial", 12),
+                text="Download YouTube videos in highest quality (prioritizing FPS) or extract audio as MP3.",
+                font=("Arial", 11),
             )
-            desc_label.pack(pady=(0, 15))
+            desc_label.pack(pady=(0, 20), anchor="w")
 
-            # Output directory section
-            dir_frame = ttk.LabelFrame(main_frame, text="Save Location", padding=10)
-            dir_frame.pack(fill=tk.X, pady=10)
+            # ----- Configuration Section (Directory & Type) -----
+            config_frame = ttk.LabelFrame(main_frame, text="Configuration", padding=15)
+            config_frame.pack(fill=tk.X, pady=(0, 20))
 
-            # Directory display
+            # Directory selection
+            dir_frame = ttk.Frame(config_frame)
+            dir_frame.pack(fill=tk.X, pady=(0, 10))
+            
+            ttk.Label(dir_frame, text="Save Location:").pack(anchor=tk.W)
+            
+            dir_input_frame = ttk.Frame(dir_frame)
+            dir_input_frame.pack(fill=tk.X, pady=(5, 0))
+            
             self.output_dir_var = tk.StringVar(value=os.path.expanduser("~/Downloads"))
-            ttk.Label(dir_frame, text="Videos will be saved to:").pack(anchor=tk.W, pady=(0, 5))
+            dir_path = ttk.Entry(dir_input_frame, textvariable=self.output_dir_var)
+            dir_path.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10))
 
-            dir_path = ttk.Entry(dir_frame, textvariable=self.output_dir_var, width=60)
-            dir_path.pack(fill=tk.X, pady=5)
+            browse_btn = ttk.Button(dir_input_frame, text="Browse...", command=self.browse_dir)
+            browse_btn.pack(side=tk.RIGHT)
 
-            browse_btn = ttk.Button(dir_frame, text="Browse...", command=self.browse_dir)
-            browse_btn.pack(anchor=tk.W, pady=5)
-
-            # Status area
-            status_frame = ttk.LabelFrame(main_frame, text="Status", padding=10)
-            status_frame.pack(fill=tk.X, pady=10)
-
-            self.status_var = tk.StringVar(
-                value="Ready - Please select output directory and load a URL file"
+            # Download Type Selection
+            type_frame = ttk.Frame(config_frame)
+            type_frame.pack(fill=tk.X, pady=(10, 0))
+            
+            ttk.Label(type_frame, text="Download Mode (Select One):").pack(anchor=tk.W, pady=(0, 5))
+            
+            self.download_type_var = tk.StringVar(value="video")
+            
+            # Custom button frame
+            btn_toggle_frame = ttk.Frame(type_frame)
+            btn_toggle_frame.pack(fill=tk.X)
+            
+            # We will use styles to indicate state
+            self.btn_video = ttk.Button(
+                btn_toggle_frame, 
+                text="🎬 VIDEO (MP4)\nBest Quality", 
+                command=lambda: self.set_download_mode("video"),
+                style="Accent.TButton", 
+                width=20
             )
+            self.btn_video.pack(side=tk.LEFT, padx=(0, 10), fill=tk.X, expand=True)
+            
+            self.btn_audio = ttk.Button(
+                btn_toggle_frame, 
+                text="🎵 AUDIO (MP3)\nAudio Only", 
+                command=lambda: self.set_download_mode("audio"),
+                style="TButton",
+                width=20
+            )
+            self.btn_audio.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+            # ----- Direct Input Section -----
+            input_frame = ttk.LabelFrame(main_frame, text="Direct URL Input", padding=15)
+            input_frame.pack(fill=tk.X, pady=(0, 20))
+
+            ttk.Label(
+                input_frame,
+                text="Paste YouTube URLs here (one per line):",
+                font=("Arial", 10),
+            ).pack(anchor=tk.W, pady=(0, 5))
+
+            self.url_input_text = tk.Text(input_frame, height=5, width=60)
+            self.url_input_text.pack(fill=tk.X, pady=(0, 10))
+
+            btn_frame = ttk.Frame(input_frame)
+            btn_frame.pack(fill=tk.X)
+
+            process_btn = ttk.Button(
+                btn_frame,
+                text="DOWNLOAD FROM TEXT BOX",
+                command=self.process_direct_urls,
+                style="Accent.TButton",
+            )
+            process_btn.pack(side=tk.RIGHT)
+
+            ttk.Button(
+                btn_frame,
+                text="Clear Text Box",
+                command=lambda: self.url_input_text.delete("1.0", tk.END),
+            ).pack(side=tk.RIGHT, padx=10)
+
+            # ----- File Input Section -----
+            file_frame = ttk.LabelFrame(main_frame, text="Batch File Input", padding=15)
+            file_frame.pack(fill=tk.X, pady=(0, 20))
+
+            file_desc = ttk.Label(
+                file_frame,
+                text="Or load a text file containing YouTube URLs list.",
+            )
+            file_desc.pack(side=tk.LEFT)
+
+            load_file_button = ttk.Button(
+                file_frame,
+                text="LOAD FROM FILE...",
+                command=self.load_url_file,
+            )
+            load_file_button.pack(side=tk.RIGHT)
+
+            # ----- Status & Log Section -----
+            status_frame = ttk.LabelFrame(main_frame, text="Status & Log", padding=15)
+            status_frame.pack(fill=tk.BOTH, expand=True)
+
+            self.status_var = tk.StringVar(value="Ready")
             ttk.Label(status_frame, textvariable=self.status_var, font=("Arial", 10, "bold")).pack(
-                anchor=tk.W
+                anchor=tk.W, pady=(0, 5)
             )
 
             self.progress_bar = ttk.Progressbar(
                 status_frame, orient=tk.HORIZONTAL, length=100, mode="determinate"
             )
-            self.progress_bar.pack(fill=tk.X, expand=True, pady=10)
+            self.progress_bar.pack(fill=tk.X, pady=(0, 10))
 
-            # Log display
-            log_frame = ttk.LabelFrame(main_frame, text="Log", padding=10)
-            log_frame.pack(fill=tk.BOTH, expand=True, pady=10)
-
-            self.log_text = tk.Text(
-                log_frame, height=5, width=80, wrap=tk.WORD
-            )  # Reduzir a altura do log
+            self.log_text = tk.Text(status_frame, height=8, width=80, wrap=tk.WORD)
             self.log_text.pack(fill=tk.BOTH, expand=True)
-
-            # Load URL file section
-            file_frame = ttk.LabelFrame(main_frame, text="Load URLs from File", padding=10)
-            file_frame.pack(fill=tk.X, pady=10)
-
-            ttk.Label(
-                file_frame,
-                text="Load a text file with YouTube URLs (one per line)",
-                font=("Arial", 11),
-            ).pack(anchor=tk.W, pady=5)
-
-            file_button_frame = ttk.Frame(file_frame)
-            file_button_frame.pack(fill=tk.X, pady=5)
-
-            load_file_button = ttk.Button(
-                file_button_frame,
-                text="SELECT URL FILE",
-                command=self.load_url_file,
-                style="Accent.TButton",
-            )
-            load_file_button.pack(side=tk.LEFT, padx=5, pady=5)
-
-            # Add instructions for URL file format
-            instructions_frame = ttk.Frame(main_frame)
-            instructions_frame.pack(fill=tk.X, pady=5)
-
-            ttk.Label(
-                instructions_frame,
-                text="File Format: One YouTube URL per line, lines starting with # are ignored",
-                font=("Arial", 9),
-                foreground="gray",
-            ).pack(pady=5)
+            
+            # Scrollbar for log
+            log_scroll = ttk.Scrollbar(status_frame, orient="vertical", command=self.log_text.yview)
+            log_scroll.pack(side="right", fill="y")
+            self.log_text.configure(yscrollcommand=log_scroll.set)
+            # Repack log text to sit next to scrollbar
+            self.log_text.pack_forget()
+            log_scroll.pack_forget()
+            
+            log_inner_frame = ttk.Frame(status_frame)
+            log_inner_frame.pack(fill=tk.BOTH, expand=True)
+            log_scroll.pack(side=tk.RIGHT, fill=tk.Y, in_=log_inner_frame)
+            self.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, in_=log_inner_frame)
 
             # Thread management
             self.download_thread = None
 
             # Log startup
-            self.log("Downloader started - loading highest FPS version for all videos")
-            self.log("Please select output directory and then load a URL file")
+            self.log("Downloader ready.")
+            self.log("Select download type (Video/Audio) and add URLs.")
+
+        def _open_help(self):
+            """Open the script's HTML help in the default browser."""
+            help_path = get_help_html_path()
+            if help_path.exists():
+                try:
+                    webbrowser.open(help_path.as_uri())
+                    self.log("Help opened in browser.")
+                except Exception as e:
+                    self.log(f"Could not open help: {e}")
+                    messagebox.showwarning(
+                        "Help",
+                        f"Could not open help in browser.\n\nFile: {help_path}",
+                        parent=self.root,
+                    )
+            else:
+                self.log(f"Help file not found: {help_path}")
+                messagebox.showwarning(
+                    "Help",
+                    f"Help file not found:\n{help_path}",
+                    parent=self.root,
+                )
 
         def log(self, message):
             """Add a message to the log display safely."""
@@ -721,232 +850,200 @@ if TKINTER_AVAILABLE:
         def browse_dir(self):
             """Open directory browser dialog."""
             try:
-                # Trazer a janela para frente e forçar o foco
                 self.root.lift()
                 self.root.focus_force()
-                # Breve pausa para garantir que a janela principal esteja visível
                 self.root.update()
 
                 directory = filedialog.askdirectory(
                     initialdir=os.path.expanduser("~"),
                     title="Select folder to save videos",
-                    parent=self.root,  # Explicitamente definir a janela pai
+                    parent=self.root,
                 )
 
                 if directory:
-                    # Atualiza a variável e força a atualização da interface
                     self.output_dir_var.set(directory)
-                    self.root.update_idletasks()  # Força a atualização dos widgets
-
-                    # Garante que o Entry seja atualizado explicitamente
-                    for widget in self.root.winfo_children():
-                        widget.update()
-
+                    self.root.update_idletasks()
                     self.update_status(f"Output directory set to: {directory}")
-
-                    # Log para debug
-                    self.log(f"Directory selected: {directory}")
-                    self.log(f"Variable value: {self.output_dir_var.get()}")
             except Exception as e:
                 self.log(f"Error selecting directory: {str(e)}")
 
+        def set_download_mode(self, mode):
+            """Set download mode and update button styles."""
+            self.download_type_var.set(mode)
+            
+            if mode == "video":
+                self.btn_video.configure(style="Accent.TButton")
+                self.btn_audio.configure(style="TButton")
+                self.log("Mode selected: VIDEO (Best Quality)")
+            else:
+                self.btn_video.configure(style="TButton")
+                self.btn_audio.configure(style="Accent.TButton")
+                self.log("Mode selected: AUDIO (MP3)")
+            
+            self.root.update_idletasks()
+
+        def get_download_mode(self):
+            """Get current download mode: 'audio' (True) or 'video' (False)."""
+            return self.download_type_var.get() == "audio"
+
+        def get_mode_name(self):
+            """Get human readable mode name."""
+            return "MP3 Audio" if self.get_download_mode() else "High Quality Video"
+
         def load_url_file(self):
-            """Load URLs from a text file and download with highest FPS priority or as MP3 audio."""
+            """Load URLs from a text file and process them."""
             try:
-                # Trazer a janela para frente e forçar o foco
                 self.root.lift()
                 self.root.focus_force()
-                # Breve pausa para garantir que a janela principal esteja visível
                 self.root.update()
 
                 file_path = filedialog.askopenfilename(
                     initialdir=os.path.expanduser("~"),
                     title="Select file with YouTube URLs",
                     filetypes=(("Text files", "*.txt"), ("All files", "*.*")),
-                    parent=self.root,  # Explicitamente definir a janela pai
+                    parent=self.root,
                 )
 
                 if not file_path:
                     return
 
-                # Read URLs from file
                 self.log(f"Reading URLs from file: {file_path}")
                 urls = read_urls_from_file(file_path)
 
                 if not urls:
-                    # Trazer a janela para frente antes de mostrar a mensagem
-                    self.root.lift()
-                    self.root.focus_force()
-                    self.root.update()
                     messagebox.showwarning("Warning", "No URLs found in the file", parent=self.root)
                     return
 
-                # Trazer a janela para frente antes dos próximos diálogos
-                self.root.lift()
-                self.root.focus_force()
-                self.root.update()
-
-                # Ask user for download type
-                download_type = messagebox.askquestion(
-                    "Download Type",
-                    "Do you want to download as MP3 audio files?\n\n"
-                    "Select 'Yes' for MP3 audio only.\n"
-                    "Select 'No' for video with highest FPS.",
-                    icon="question",
-                    parent=self.root,
-                )
-
-                audio_only = download_type == "yes"
-                content_type = "MP3 audio tracks" if audio_only else "videos with highest FPS"
-
-                # Trazer a janela para frente antes do próximo diálogo
-                self.root.lift()
-                self.root.focus_force()
-                self.root.update()
-
-                # Show confirmation with URL preview
-                confirm = messagebox.askyesno(
-                    "Confirm Batch Download",
-                    f"Do you want to download {len(urls)} {content_type}?\n\n"
-                    f"First 3 URLs:\n" + "\n".join(urls[:3]) + ("\n..." if len(urls) > 3 else ""),
-                    parent=self.root,
-                )
-
-                if not confirm:
-                    return
-
-                # Process each URL
-                self.log(f"Processing {len(urls)} URLs from file")
-
-                # Get output directory
-                output_dir = self.output_dir_var.get()
-
-                # Create a batch folder
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                folder_type = "audio" if audio_only else "batch"
-                batch_dir = os.path.join(output_dir, f"yt{folder_type}_{timestamp}")
-                os.makedirs(batch_dir, exist_ok=True)
-
-                # Create log file
-                log_file = os.path.join(batch_dir, "batch_log.txt")
-                with open(log_file, "w", encoding="utf-8") as f:
-                    f.write(
-                        f"Batch download started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-                    )
-                    f.write(f"Total URLs: {len(urls)}\n\n")
-
-                # Process each URL
-                for i, url in enumerate(urls, 1):
-                    try:
-                        # Update status
-                        self.update_status(f"Processing URL {i}/{len(urls)}")
-
-                        # Create a subfolder for this video
-                        item_dir = os.path.join(batch_dir, f"{i:03d}")
-                        os.makedirs(item_dir, exist_ok=True)
-
-                        if audio_only:
-                            # Download as MP3 audio
-                            self.downloader.download_audio(
-                                url, output_dir=item_dir, filename_prefix=f"{i:03d}"
-                            )
-                            self.log(f"Downloaded MP3 ({i}/{len(urls)}): {url}")
-                        else:
-                            # Download as video with the existing code
-                            # ... código existente para download de vídeo ...
-
-                            # Format specification for best quality
-                            format_spec = "bestvideo+bestaudio/best"
-
-                            # Download options
-                            ydl_opts = {
-                                "format": format_spec,
-                                "outtmpl": os.path.join(item_dir, "%(title)s.%(ext)s"),
-                                "merge_output_format": "mp4",
-                                "no_check_certificate": True,
-                            }
-
-                            # Download the video
-                            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                                info = ydl.extract_info(url, download=True)
-                                title = info.get("title", "Unknown")
-
-                                # Create info file with FPS details
-                                info_file = os.path.join(item_dir, "video_info.txt")
-                                with open(info_file, "w", encoding="utf-8") as f:
-                                    f.write(f"Title: {title}\n")
-                                    f.write(f"URL: {url}\n")
-                                    f.write(
-                                        f"Download date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-                                    )
-                                    f.write(
-                                        f"Resolution: {info.get('width', 'unknown')}x{info.get('height', 'unknown')}\n"
-                                    )
-                                    f.write(f"FPS: {info.get('fps', 'unknown')}\n")
-                                    f.write("Priority: Best overall quality\n")
-
-                                # Log success
-                                with open(log_file, "a", encoding="utf-8") as f:
-                                    f.write(
-                                        f"{i}. SUCCESS: {url} -> {title} ({info.get('fps', 'unknown')} FPS)\n"
-                                    )
-
-                                self.log(
-                                    f"Downloaded ({i}/{len(urls)}): {title} @ {info.get('fps', 'unknown')} FPS"
-                                )
-
-                    except Exception as e:
-                        # Log error
-                        with open(log_file, "a", encoding="utf-8") as f:
-                            f.write(f"{i}. ERROR: {url} -> {str(e)}\n")
-
-                        self.log(f"Error processing URL {i}/{len(urls)}: {str(e)}")
-
-                # Show completion message
-                self.update_status("Batch download complete")
-                # No final do método load_url_file, antes de limpar recursos
-                # Trazer a janela para frente antes da mensagem final
-                self.root.lift()
-                self.root.focus_force()
-                self.root.update()
-
-                messagebox.showinfo(
-                    "Batch Download Complete",
-                    f"All videos have been downloaded to:\n{batch_dir}",
-                    parent=self.root,
-                )
-
-                # Adicionar esta linha para limpar recursos após conclusão
-                self.cleanup_resources()
+                self.start_batch_download(urls, "File Batch")
 
             except Exception as e:
-                self.log(f"Error in batch download: {str(e)}")
-                messagebox.showerror("Batch Download Error", str(e))
+                self.log(f"Error loading file: {str(e)}")
+                messagebox.showerror("Error", str(e))
+
+        def process_direct_urls(self):
+            """Process URLs from the text box."""
+            content = self.url_input_text.get("1.0", tk.END).strip()
+            if not content:
+                messagebox.showwarning("Empty Input", "Please paste at least one YouTube URL.", parent=self.root)
+                return
+
+            # Split by lines and clean up
+            urls = []
+            for line in content.split("\n"):
+                url = line.strip()
+                if url and not url.startswith("#"):
+                    urls.append(url)
+
+            if not urls:
+                messagebox.showwarning("No Valid URLs", "No valid URLs found in the text box.", parent=self.root)
+                return
+
+            self.start_batch_download(urls, "Direct Input Batch")
+
+        def start_batch_download(self, urls, source_name):
+            """Common method to start download for a list of URLs."""
+            audio_only = self.get_download_mode()
+            mode_name = self.get_mode_name()
+            
+            # Confirm download
+            confirm = messagebox.askyesno(
+                f"Confirm {source_name} Download",
+                f"Ready to download {len(urls)} items.\n\n"
+                f"Mode: {mode_name}\n"
+                f"Save to: {self.output_dir_var.get()}\n\n"
+                f"Proceed?",
+                parent=self.root,
+            )
+
+            if not confirm:
+                return
+
+            # Process logic similar to original but using class state
+            self.log(f"Starting {source_name} download of {len(urls)} items as {mode_name}")
+            
+            # Get output directory
+            output_dir = self.output_dir_var.get()
+
+            # Create a batch folder
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            folder_type = "audio" if audio_only else "batch"
+            batch_dir = os.path.join(output_dir, f"vaila_{folder_type}_{timestamp}")
+            os.makedirs(batch_dir, exist_ok=True)
+
+            # Create log file
+            log_file = os.path.join(batch_dir, "batch_log.txt")
+            with open(log_file, "w", encoding="utf-8") as f:
+                f.write(f"Batch download started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write(f"Mode: {mode_name}\n")
+                f.write(f"Total URLs: {len(urls)}\n\n")
+
+            # Process each URL
+            success_count = 0
+            fail_count = 0
+
+            for i, url in enumerate(urls, 1):
+                try:
+                    self.update_status(f"Processing ({i}/{len(urls)}): {url}")
+                    self.progress_bar["value"] = (i / len(urls)) * 100
+                    self.root.update()
+
+                    # Create a subfolder for this item
+                    item_dir = os.path.join(batch_dir, f"{i:03d}")
+                    os.makedirs(item_dir, exist_ok=True)
+
+                    if audio_only:
+                        self.downloader.download_audio(
+                            url, output_dir=item_dir, filename_prefix=f"{i:03d}"
+                        )
+                        msg = f"SUCCESS: Audio downloaded for {url}"
+                    else:
+                        # Video download logic
+                        # Re-using the logic from previous implementation manually 
+                        # to ensure consistency with the requested changes.
+                        # Ideally, we call self.downloader.download_video, 
+                        # but we need to ensure it uses the robust logic.
+                        self.downloader.download_video(
+                            url, output_dir=item_dir, filename_prefix=f"{i:03d}"
+                        )
+                        msg = f"SUCCESS: Video downloaded for {url}"
+
+                    self.log(msg)
+                    with open(log_file, "a", encoding="utf-8") as f:
+                        f.write(f"{i}. {msg}\n")
+                    success_count += 1
+
+                except Exception as e:
+                    err_msg = f"ERROR: {str(e)}"
+                    self.log(err_msg)
+                    with open(log_file, "a", encoding="utf-8") as f:
+                        f.write(f"{i}. {err_msg} - URL: {url}\n")
+                    fail_count += 1
+
+            # Completion
+            self.progress_bar["value"] = 100
+            self.update_status("Download sequence completed.")
+            
+            summary = f"Completed!\nSuccess: {success_count}\nFailures: {fail_count}\n\nSaved to:\n{batch_dir}"
+            self.log("Batch finished. " + summary.replace("\n", " "))
+            
+            messagebox.showinfo("Download Complete", summary, parent=self.root)
+            self.cleanup_resources()
 
         def cleanup_resources(self):
             """Clean up resources to prevent hanging after download completion."""
             try:
-                # Limpar referências a processos e threads
+                # Limpar referências
                 if hasattr(self, "download_thread") and self.download_thread:
                     self.download_thread = None
 
-                # Força o coletor de lixo para liberar recursos
                 import gc
-
                 gc.collect()
 
-                # Atualizar a interface se ainda existir
                 if self.root and self.root.winfo_exists():
                     self.root.update_idletasks()
-
-                # Log a mensagem com segurança usando o método de log modificado
-                self.log("Resources cleaned up successfully")
+                
             except Exception as e:
-                # Tentar registrar o erro, mas não lance outra exceção se falhar
-                try:
-                    print(f"[Error cleaning up resources] {str(e)}")
-                except:
-                    pass  # Último recurso - silenciar completamente
+                print(f"[cleanup error] {e}")
 
 
 def run_ytdown():
@@ -1052,8 +1149,8 @@ def run_ytdown():
             # para permitir que o usuário alterne entre janelas se quiser
             root.after(1000, lambda: root.attributes("-topmost", False))
 
-            # If URL was provided, pre-fill it
-            if args.url:
+            # If URL was provided, pre-fill it (if GUI has url_var)
+            if args.url and hasattr(app, "url_var"):
                 app.url_var.set(args.url)
 
             # If output dir was provided, set it
