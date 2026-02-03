@@ -48,8 +48,16 @@ wget -qO- https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/i
 **🪟 Windows:**
 
 ```powershell
-irm https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/install_vaila_win.ps1 | iex
+[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor 3072; irm https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/install_vaila_win.ps1 | iex
 ```
+
+If you use a one-liner that points to `https://vaila.io/install.ps1`, use the same TLS fix first:
+
+```powershell
+[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor 3072; iwr -useb https://vaila.io/install.ps1 | iex
+```
+
+**Windows SSL/TLS error?** If you see "could not establish trust relationship for the SSL/TLS secure channel", the line above enables TLS 1.2 before the download. This is unrelated to Conda being activated.
 
 ## Introduction
 
@@ -400,6 +408,8 @@ The installation script automatically:
 - If you run without admin privileges, some features may be skipped, but _vailá_ will still be installed
 - The script dynamically configures paths, so no manual adjustments are necessary
 - **No Conda required:** The new installation method does not require Anaconda or Miniconda
+
+**Erro de SSL/TLS ao baixar o script?** Se aparecer "could not establish trust relationship for the SSL/TLS secure channel", use o one-liner da seção [Install Now](#-install-now-one-line) (com a linha que ativa TLS 1.2). Isso não tem relação com o Conda estar ativado.
 
 ### 4. **Launching _vailá_**
 
