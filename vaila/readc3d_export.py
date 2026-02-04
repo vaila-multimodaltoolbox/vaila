@@ -6,8 +6,8 @@ Author: Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 25 September 2024
-Update Date: 14 January 2026
-Version: 0.2.0
+Update Date: 03 February 2026
+Version: 0.2.1
 
 Description:
 This script processes .c3d files, extracting marker data, analog data, events, and points residuals,
@@ -99,6 +99,16 @@ from ezc3d import c3d
 from rich import print
 from tqdm import tqdm
 import ezc3d
+import json
+
+# #region agent log
+def _debug_log(location, message, data, hypothesis_id="H1"):
+    try:
+        with open(r"c:\Users\paulo\Preto\vaila\.cursor\debug.log", "a", encoding="utf-8") as f:
+            f.write(json.dumps({"location": location, "message": message, "data": data, "hypothesisId": hypothesis_id, "timestamp": datetime.now().isoformat()}, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+# #endregion
 
 # === ADVANCED C3D REPORT GENERATOR ===
 class C3DReportGenerator:
@@ -111,20 +121,37 @@ class C3DReportGenerator:
         self.filename = self.path.name
         self.creation_date = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
 
-        # Carregar C3D
+        # Carregar C3D (fallback sem extract_forceplat_data para arquivos que falham com force platform)
         try:
             self.c3d = ezc3d.c3d(str(self.path), extract_forceplat_data=True)
-        except Exception as e:
-            raise ValueError(f"Erro ao ler o C3D com ezc3d: {e}")
+        except Exception:
+            try:
+                self.c3d = ezc3d.c3d(str(self.path))
+            except Exception as e:
+                raise ValueError(f"Erro ao ler o C3D com ezc3d: {e}")
 
         self.header = self.c3d['header']
         self.parameters = self.c3d['parameters']
         self.data = self.c3d['data']
+        # #region agent log
+        _debug_log("C3DReportGenerator.__init__", "header keys after load", list(self.header.keys()) if isinstance(self.header, dict) else str(type(self.header)), "H1")
+        _debug_log("C3DReportGenerator.__init__", "has version?", "version" in self.header if isinstance(self.header, dict) else "N/A", "H1")
+        # #endregion
+
+    def _get(self, obj, key, default=None):
+        """Get value from dict or object (ezc3d Header returns objects, not dicts)."""
+        if obj is None:
+            return default
+        if isinstance(obj, dict):
+            return obj.get(key, default)
+        return getattr(obj, key, default)
 
     def generate_txt_report(self, output_path=None):
         if not output_path:
             output_path = self.path.with_suffix('.txt')
-
+        # #region agent log
+        _debug_log("generate_txt_report", "entry", {"output_path": str(output_path), "header_keys": list(self.header.keys()) if isinstance(self.header, dict) else "not_dict"}, "H2")
+        # #endregion
         lines = []
         lines.append("="*80)
         lines.append(f"RELATÓRIO DE INSPEÇÃO C3D - vailá Multimodal Toolbox")
@@ -136,14 +163,18 @@ class C3DReportGenerator:
         # 1. Cabeçalho
         lines.append("1. CABEÇALHO (HEADER)")
         lines.append("-" * 40)
-        pts = self.header['points']
-        ana = self.header['analogs']
-        duration = (pts['last_frame'] - pts['first_frame'] + 1) / pts['frame_rate']
+        pts = self._get(self.header, 'points')
+        ana = self._get(self.header, 'analogs')
+        fr = self._get(pts, 'frame_rate') or 1
+        first = self._get(pts, 'first_frame') or 0
+        last = self._get(pts, 'last_frame') or 0
+        duration = (last - first + 1) / fr if fr else 0
+        version = self._get(self.header, 'version') or self._get(self.header, 'Version') or 'N/A'
 
-        lines.append(f"Versão C3D: {self.header['version']}")
-        lines.append(f"Taxa de Pontos (Video): {pts['frame_rate']} Hz")
-        lines.append(f"Taxa de Analógicos:    {ana['frame_rate']} Hz")
-        lines.append(f"Total Frames (Vídeo):  {pts['last_frame'] - pts['first_frame'] + 1}")
+        lines.append(f"Versão C3D: {version}")
+        lines.append(f"Taxa de Pontos (Video): {fr} Hz")
+        lines.append(f"Taxa de Analógicos:    {self._get(ana, 'frame_rate') or 0} Hz")
+        lines.append(f"Total Frames (Vídeo):  {last - first + 1}")
         lines.append(f"Duração Estimada:      {duration:.2f} s")
         lines.append("")
 
@@ -183,7 +214,7 @@ class C3DReportGenerator:
                 lines.append(f"    Desc: {param.get('description', '')}")
                 lines.append(f"    Type: {param.get('type', '')}")
 
-        with open(output_path, 'w', encoding='utf-8') as f:
+        with open(output_path, 'w', encoding='utf-8', errors='replace') as f:
             f.write("\n".join(lines))
 
         return output_path
@@ -191,11 +222,23 @@ class C3DReportGenerator:
     def generate_html_report(self, output_path=None):
         if not output_path:
             output_path = self.path.with_suffix('.html')
-
+        # #region agent log
+        _debug_log("generate_html_report", "entry", {"output_path": str(output_path), "header_keys": list(self.header.keys()) if isinstance(self.header, dict) else "not_dict"}, "H2")
+        # #endregion
         # Coletar dados pré-processados
         marker_stats = self._calculate_marker_health()
         events = self._get_events_list()
         analog_info = self._get_analog_info()
+
+        # Header values (ezc3d returns Header object, not dict)
+        pts = self._get(self.header, 'points')
+        ana = self._get(self.header, 'analogs')
+        _version = self._get(self.header, 'version') or self._get(self.header, 'Version') or 'N/A'
+        _pt_fr = self._get(pts, 'frame_rate') or 0
+        _ana_fr = self._get(ana, 'frame_rate') or 0
+        _first = self._get(pts, 'first_frame') or 0
+        _last = self._get(pts, 'last_frame') or 0
+        _duration = ((_last - _first + 1) / _pt_fr) if _pt_fr else 0
 
         # Construção do HTML
         html_content = f"""
@@ -240,12 +283,12 @@ class C3DReportGenerator:
                 <h2>1. Visão Geral da Aquisição</h2>
                 <table>
                     <tr><th>Parâmetro</th><th>Valor</th></tr>
-                    <tr><td>Versão do Arquivo</td><td>{self.header['version']}</td></tr>
-                    <tr><td>Frequência de Pontos (Vídeo)</td><td>{self.header['points']['frame_rate']} Hz</td></tr>
-                    <tr><td>Frequência de Analógicos</td><td>{self.header['analogs']['frame_rate']} Hz</td></tr>
-                    <tr><td>Primeiro Frame</td><td>{self.header['points']['first_frame']}</td></tr>
-                    <tr><td>Último Frame</td><td>{self.header['points']['last_frame']}</td></tr>
-                    <tr><td>Duração Total</td><td>{((self.header['points']['last_frame'] - self.header['points']['first_frame'] + 1) / self.header['points']['frame_rate']):.2f} segundos</td></tr>
+                    <tr><td>Versão do Arquivo</td><td>{_version}</td></tr>
+                    <tr><td>Frequência de Pontos (Vídeo)</td><td>{_pt_fr} Hz</td></tr>
+                    <tr><td>Frequência de Analógicos</td><td>{_ana_fr} Hz</td></tr>
+                    <tr><td>Primeiro Frame</td><td>{_first}</td></tr>
+                    <tr><td>Último Frame</td><td>{_last}</td></tr>
+                    <tr><td>Duração Total</td><td>{_duration:.2f} segundos</td></tr>
                 </table>
 
                 <h2>2. Saúde dos Marcadores (Data Quality)</h2>
@@ -358,10 +401,16 @@ class C3DReportGenerator:
         </html>
         """
 
-        with open(output_path, 'w', encoding='utf-8') as f:
+        with open(output_path, 'w', encoding='utf-8', errors='replace') as f:
             f.write(html_content)
 
         return output_path
+
+    def _label_to_str(self, label):
+        """Normalize label to string (ezc3d may return list of lists, e.g. [['LASI'], ...])."""
+        if isinstance(label, (list, np.ndarray)) and len(label) > 0:
+            return str(label[0]).strip()
+        return str(label).strip()
 
     def _calculate_marker_health(self):
         """Analisa a qualidade do sinal dos marcadores (Pontos)."""
@@ -385,7 +434,7 @@ class C3DReportGenerator:
             pct = (nan_count / total_frames) * 100 if total_frames > 0 else 0
 
             stats.append({
-                'name': label,
+                'name': self._label_to_str(label),
                 'nans': int(nan_count),
                 'valid': int(total_frames - nan_count),
                 'pct': pct,
@@ -407,9 +456,11 @@ class C3DReportGenerator:
 
         for i, label in enumerate(labels):
             channel_data = data[0, i, :]
+            u = units[i] if i < len(units) else ""
+            unit_str = u if isinstance(u, str) else (str(u[0]) if isinstance(u, (list, np.ndarray)) and len(u) else str(u))
             info.append({
-                'name': label,
-                'unit': units[i],
+                'name': self._label_to_str(label),
+                'unit': unit_str,
                 'min': np.nanmin(channel_data) if channel_data.size > 0 else 0,
                 'max': np.nanmax(channel_data) if channel_data.size > 0 else 0
             })
@@ -536,6 +587,9 @@ class DidacticC3DInspector:
             messagebox.showinfo("Success", f"Advanced report saved to:\n{report_path}")
             print(f"Advanced TXT Report saved: {report_path}")
         except Exception as e:
+            # #region agent log
+            _debug_log("save_txt_report", "exception", {"type": type(e).__name__, "args": getattr(e, "args", ())}, "H4")
+            # #endregion
             messagebox.showerror("Error", f"Failed: {e}")
 
     def save_html_report(self):
@@ -554,6 +608,9 @@ class DidacticC3DInspector:
             messagebox.showinfo("Success", f"Advanced HTML report saved to:\n{report_path}")
             print(f"Advanced HTML Report saved: {report_path}")
         except Exception as e:
+            # #region agent log
+            _debug_log("save_html_report", "exception", {"type": type(e).__name__, "args": getattr(e, "args", ())}, "H4")
+            # #endregion
             messagebox.showerror("Error", f"Failed: {e}")
 
     def _build_overview_tab(self):
