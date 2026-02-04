@@ -6,7 +6,7 @@
 - **File:** `vaila\cop_calculate.py`
 - **Lines:** 308
 - **Size:** 9920 characters
-- **Version:** 0.0.1
+- **Version:** 0.0.2
 - **Author:** Prof. Dr. Paulo R. P. Santiago
 - **GUI Interface:** ✅ Yes
 
@@ -15,9 +15,9 @@
 
 cop_calculate.py
 Author: Prof. Dr. Paulo R. P. Santiago
-Date: 2025-02-18
-Update: 2025-02-18
-Version: 0.0.1
+Date: 2026-02-03
+Update: 2026-02-03
+Version: 0.0.2
 Python Version: 3.12.9
 Description:
 ------------
