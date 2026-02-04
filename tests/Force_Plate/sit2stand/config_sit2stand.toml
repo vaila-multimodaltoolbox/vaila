@@ -1,12 +1,16 @@
-# === DEFAULT CONFIGURATION (Applied to all files first) ===
 [analysis]
 force_column = "Force.Fz3"
 fps = 2000.0        # Default Frame Rate
 body_weight = 15.0  # Default Weight (fallback)
 
+[force_plate]
+width_mm = 464.0
+height_mm = 508.0
+moment_unit = "N.mm"
+
 [filtering]
-enabled = false
-cutoff_frequency = 100.0
+enabled = true
+cutoff_frequency = 50.0
 sampling_frequency = 2000.0
 order = 4
 
@@ -15,15 +19,15 @@ force_threshold = 1.0
 min_duration = 0.05
 onset_threshold = 1.0
 
-[detection.peak_detection]
-height = 139.0
-distance = 200
-prominence = 10.0
-rel_height = 0.5
-
 [stability]
 enabled = true
 baseline_window = 0.5
 stability_threshold = 10.0
 noise_analysis = true
 rolling_window = 0.1
+
+[detection.peak_detection]
+height = 139.0
+distance = 200
+prominence = 10.0
+rel_height = 0.5
