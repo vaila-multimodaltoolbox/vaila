@@ -6,8 +6,8 @@ Author: Prof. Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 09 September 2024
-Update Date: 11 January 2026
-Version: 0.2.1
+Update Date: 03 February 2026
+Version: 0.2.2
 
 Description:
 ------------
@@ -136,6 +136,8 @@ _parent_dir = _script_dir.parent
 if str(_parent_dir) not in sys.path:
     sys.path.insert(0, str(_parent_dir))
 
+import re
+from collections import defaultdict
 from itertools import cycle
 from tkinter import (
     BooleanVar,
@@ -144,6 +146,7 @@ from tkinter import (
     Checkbutton,
     Frame,
     Label,
+    LabelFrame,
     Scrollbar,
     Tk,
     Toplevel,
@@ -160,6 +163,7 @@ from scipy import stats
 from scipy.interpolate import griddata
 from scipy.signal import butter, find_peaks, savgol_filter, sosfiltfilt, welch
 from sklearn.decomposition import PCA
+import ezc3d
 
 # ============================================================================
 # FILTER UTILITIES (from filter_utils.py - integrated)
@@ -500,6 +504,7 @@ def convert_to_cm(data, unit):
     return data * conversion_factors[unit]
 
 
+
 def read_csv_full(filename):
     """Reads the full CSV file."""
     try:
@@ -507,6 +512,34 @@ def read_csv_full(filename):
         return data
     except Exception as e:
         raise Exception(f"Error reading the CSV file: {str(e)}") from e
+
+
+def read_c3d_analogs(filename):
+    """
+    Reads analog data from a C3D file using ezc3d.
+    Returns a pandas DataFrame with analog channels as columns.
+    """
+    try:
+        c = ezc3d.c3d(filename)
+        # Extract analog labels
+        labels = c['parameters']['ANALOG']['LABELS']['value']
+        # Extract analog data (Shape: 1 x N_channels x N_frames) -> (N_channels x N_frames)
+        data = c['data']['analogs'][0, :, :]
+        
+        # Create DataFrame
+        # Transpose to have frames as rows, channels as columns
+        df = pd.DataFrame(data.T, columns=labels)
+        
+        # Add Time column if rate is available
+        rate = c['parameters']['ANALOG']['RATE']['value'][0]
+        n_frames = df.shape[0]
+        time = np.linspace(0, n_frames / rate, n_frames, endpoint=False)
+        df.insert(0, 'Time', time)
+        
+        return df
+    except Exception as e:
+        raise Exception(f"Error reading the C3D file: {str(e)}") from e
+
 
 
 # ============================================================================
@@ -1045,6 +1078,23 @@ def plot_heatmap_with_contours(
 # ============================================================================
 
 
+def _bind_mousewheel_scroll(canvas, scrollable_frame):
+    """Bind mouse wheel (and Linux Button-4/5) to scroll the canvas vertically."""
+    def _on_mousewheel(event):
+        if hasattr(event, "delta"):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        elif event.num == 4:
+            canvas.yview_scroll(-1, "units")
+        elif event.num == 5:
+            canvas.yview_scroll(1, "units")
+    canvas.bind("<MouseWheel>", _on_mousewheel)
+    canvas.bind("<Button-4>", _on_mousewheel)
+    canvas.bind("<Button-5>", _on_mousewheel)
+    scrollable_frame.bind("<MouseWheel>", _on_mousewheel)
+    scrollable_frame.bind("<Button-4>", _on_mousewheel)
+    scrollable_frame.bind("<Button-5>", _on_mousewheel)
+
+
 def select2headers(file_path):
     """Displays a GUI to select two (2) headers for force plate data analysis."""
 
@@ -1091,6 +1141,7 @@ def select2headers(file_path):
 
     canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
     canvas.configure(yscrollcommand=scrollbar.set)
+    _bind_mousewheel_scroll(canvas, scrollable_frame)
 
     header_vars = [BooleanVar() for _ in headers]
     num_columns = 8
@@ -1156,6 +1207,7 @@ def checklist_select_files(file_paths, title="Select files to process"):
     )
     canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
     canvas.configure(yscrollcommand=scrollbar.set)
+    _bind_mousewheel_scroll(canvas, scrollable_frame)
 
     vars_ = []
     for i, fp in enumerate(file_paths):
@@ -1923,11 +1975,17 @@ def main_cop_balance():
 def select_headers_calculate(file_path):
     """Displays a GUI to select six (6) headers for force plate data analysis."""
 
-    def get_csv_headers(file_path):
-        df = pd.read_csv(file_path)
+def select_headers_calculate(file_path):
+    """Displays a GUI to select six (6) headers for force plate data analysis."""
+
+    def get_file_headers(path):
+        if path.lower().endswith('.c3d'):
+            df = read_c3d_analogs(path)
+        else:
+            df = pd.read_csv(path)
         return list(df.columns), df
 
-    headers, df = get_csv_headers(file_path)
+    headers, df = get_file_headers(file_path)
     selected_headers = []
 
     def on_select():
@@ -1939,7 +1997,7 @@ def select_headers_calculate(file_path):
             messagebox.showinfo("Info", "Please select exactly six (6) headers for analysis.")
             return
         selection_window.quit()
-        selection_window.destroy()
+        _cleanup_bindings()
 
     def select_all():
         for var in header_vars:
@@ -1955,6 +2013,7 @@ def select_headers_calculate(file_path):
         f"{selection_window.winfo_screenwidth()}x{int(selection_window.winfo_screenheight() * 0.9)}"
     )
 
+
     canvas = Canvas(selection_window)
     scrollbar = Scrollbar(selection_window, orient="vertical", command=canvas.yview)
     scrollable_frame = Frame(canvas)
@@ -1964,13 +2023,99 @@ def select_headers_calculate(file_path):
     )
     canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
     canvas.configure(yscrollcommand=scrollbar.set)
+    _bind_mousewheel_scroll(canvas, scrollable_frame)
 
     header_vars = [BooleanVar() for _ in headers]
-    num_columns = 7
 
-    for i, label in enumerate(headers):
-        chk = Checkbutton(scrollable_frame, text=label, variable=header_vars[i])
-        chk.grid(row=i // num_columns, column=i % num_columns, sticky="w")
+    # --- Grouping Logic ---
+    groups = defaultdict(list)
+    # Regex structure: Prefix + separator + Axis(F/M + x/y/z) + Index(digits)
+    # Matches: Force.Fx1, Moment.Mz, Analog.Fx1, etc.
+    fp_pattern = re.compile(r"^(Force|Moment|Analog)[._]([FfMm][xyzXYZ])(\d+)?$")
+
+    for i, h in enumerate(headers):
+        match = fp_pattern.match(h)
+        if match:
+             # It matches Force Plate pattern
+             idx = match.group(3) if match.group(3) else "1"
+             group_key = f"Force Plate {idx}"
+             groups[group_key].append(i)
+        else:
+             # Group by generic prefix (e.g. "Sensor 1")
+             if "." in h:
+                 prefix = h.split(".")[0]
+                 groups[prefix].append(i)
+             elif "_" in h:
+                  prefix = h.split("_")[0]
+                  groups[prefix].append(i)
+             else:
+                 groups["Other"].append(i)
+
+    # Sort Keys: Force Plates first, then Others alphabetically
+    def group_sort_key(k):
+        if k.startswith("Force Plate"):
+            nums = re.findall(r"\d+", k)
+            n = int(nums[0]) if nums else 0
+            return (0, n, k)
+        elif k == "Other":
+            return (2, 0, k)
+        else:
+            return (1, 0, k)
+
+    sorted_keys = sorted(groups.keys(), key=group_sort_key)
+    
+    # helper for group selection
+    def make_select_group(indices, val):
+        def callback():
+            for idx in indices:
+                header_vars[idx].set(val)
+        return callback
+
+    # Layout Groups in localized grid (e.g. 3 groups per row)
+    MAX_GROUPS_PER_ROW = 3
+    
+    for g_idx, g_key in enumerate(sorted_keys):
+        indices = groups[g_key]
+        
+        # Container for the group
+        lf = LabelFrame(scrollable_frame, text=g_key, padx=5, pady=5, font=("Arial", 10, "bold"))
+        row = g_idx // MAX_GROUPS_PER_ROW
+        col = g_idx % MAX_GROUPS_PER_ROW
+        lf.grid(row=row, column=col, padx=10, pady=10, sticky="nsew")
+        
+        # Group Buttons (All/None)
+        btn_f = Frame(lf)
+        btn_f.pack(side="top", anchor="e", fill="x")
+        Button(btn_f, text="All", font=("Arial", 7), width=4, 
+               command=make_select_group(indices, True)).pack(side="right", padx=2)
+        Button(btn_f, text="None", font=("Arial", 7), width=4, 
+               command=make_select_group(indices, False)).pack(side="right", padx=2)
+               
+        # Sort headers inside group (Specific for Force Plates)
+        if g_key.startswith("Force Plate"):
+             def header_sort_key(idx):
+                h = headers[idx].lower()
+                # Order Fx, Fy, Fz, Mx, My, Mz
+                if "fx" in h: return 1
+                if "fy" in h: return 2
+                if "fz" in h: return 3
+                if "mx" in h: return 4
+                if "my" in h: return 5
+                if "mz" in h: return 6
+                return 10
+             indices.sort(key=header_sort_key)
+
+        # Content Frame
+        content_f = Frame(lf)
+        content_f.pack(fill="both", expand=True)
+        
+        # Grid Checkbuttons inside group (3 columns for FP, 2 otherwise)
+        inner_cols = 3 if g_key.startswith("Force Plate") or len(indices) > 4 else 1
+        
+        for j, h_idx in enumerate(indices):
+            # clean label for display? (Optional, maybe keep full for clarity)
+            chk = Checkbutton(content_f, text=headers[h_idx], variable=header_vars[h_idx])
+            chk.grid(row=j // inner_cols, column=j % inner_cols, sticky="w", padx=2)
 
     canvas.pack(side="left", fill="both", expand=True)
     scrollbar.pack(side="right", fill="y")
@@ -1990,39 +2135,109 @@ def select_headers_calculate(file_path):
     return selected_headers
 
 
-def calc_cop(data, board_height_m: float = 0.0):
+
+def calculate_cop_shimba(fx, fy, fz, mx, my, mz, threshold=0.0):
+    """
+    Calculate Point of Wrench Application (PWA) using Shimba (1984) method.
+    
+    Formula based on:
+    Shimba T. (1984), "An estimation of center of gravity from force platform data",
+    Journal of Biomechanics 17(1), 53–60.
+    
+    Adapted from BTK's GroundReactionWrenchFilter.
+    
+    Parameters:
+        fx, fy, fz: Force components (arrays or scalars)
+        mx, my, mz: Moment components (arrays or scalars) at the origin
+        threshold: Fz threshold below which CoP is set to 0 to avoid division by zero
+        
+    Returns:
+        px, py, pz: Coordinates of the PWA (CoP)
+    """
+    # Square norm of force
+    snf = fx**2 + fy**2 + fz**2
+    
+    # Avoid division by zero
+    # Create mask for valid data (Fz > threshold and sNF > 0)
+    # Using numpy for array handling
+    
+    # Initialize output arrays
+    px = np.zeros_like(fz)
+    py = np.zeros_like(fz)
+    pz = np.zeros_like(fz) # Shimba PWA Pz is typically 0 if calculated at surface
+    
+    # Mask for valid calculation
+    # BTK logic: if (sNF == 0.0) || (abs(Fz) <= threshold) -> Px=Py=0
+    mask = (snf > 0) & (np.abs(fz) > threshold)
+    
+    if np.any(mask):
+        f_sq = snf[mask]
+        f_z_val = fz[mask]
+        f_x_val = fx[mask]
+        f_y_val = fy[mask]
+        m_x_val = mx[mask]
+        m_y_val = my[mask]
+        m_z_val = mz[mask]
+        
+        # Px = (Fy * Mz - Fz * My) / sNF - (Fx^2 * My - Fx * Fy * Mx) / (sNF * Fz)
+        term1_x = (f_y_val * m_z_val - f_z_val * m_y_val) / f_sq
+        term2_x = (f_x_val**2 * m_y_val - f_x_val * (f_y_val * m_x_val)) / (f_sq * f_z_val)
+        px[mask] = term1_x - term2_x
+        
+        # Py = (Fz * Mx - Fx * Mz) / sNF - (Fx * Fy * My - Fy^2 * Mx) / (sNF * Fz)
+        term1_y = (f_z_val * m_x_val - f_x_val * m_z_val) / f_sq
+        term2_y = (f_x_val * (f_y_val * m_y_val) - f_y_val**2 * m_x_val) / (f_sq * f_z_val)
+        py[mask] = term1_y - term2_y
+        
+    return px, py, pz
+
+
+def calc_cop(data, board_height_m: float = 0.0, moment_unit: str = "N.m"):
     """
     Converts force (N) and moment (N.m) data into center of pressure (m) coordinates.
+    Uses Shimba (1984) method for PWA calculation.
 
     Parameters:
         data: numpy array with columns [Fx, Fy, Fz, Mx, My, Mz]
         board_height_m: float, height of the board over the force plate (in meters).
-                        If 0, assumes no board is present.
+                        If not 0, moments are adjusted before PWA calculation.
+        moment_unit: str, unit of moment data ('N.m' or 'N.mm').
+                     If 'N.mm', moments are converted to N.m before calculation.
 
     Returns:
-        cop_xyz: numpy array with columns [CP_ap, CP_ml, h] in meters.
+        cop_xyz: numpy array with columns [CP_ap, CP_ml, CP_z] in meters.
     """
     data = np.asarray(data)
     fx = data[:, 0]
     fy = data[:, 1]
-    fz = data[:, 2]
+    fz = data[:, 2].copy()
     mx = data[:, 3]
     my = data[:, 4]
+    mz = data[:, 5]
 
+    # Ensure Fz is non-negative (reaction force convention): flip sign if needed
     if np.any(fz < 0):
         fz = -fz
 
-    if board_height_m == 0.0:
-        cp_ap = -my / fz
-        cp_ml = mx / fz
-        cp_z = np.zeros_like(fz)
-    else:
-        h = board_height_m
-        cp_ap = (-h * fx - my) / fz
-        cp_ml = (h * fy + mx) / fz
-        cp_z = np.full_like(fz, h)
+    # Convert Moments to N.m if provided in N.mm
+    if "mm" in moment_unit.lower():
+        mx = mx / 1000.0
+        my = my / 1000.0
+        mz = mz / 1000.0
 
-    cop_xyz = np.column_stack((cp_ap, cp_ml, cp_z))
+    # Adjust moments if there is a board height (Translation of origin)
+    if board_height_m != 0.0:
+        mx = mx + board_height_m * fy
+        my = my - board_height_m * fx
+        
+    # Calculate PWA using Shimba
+    # Threshold for Fz (e.g. 5N) to avoid noise
+    px, py, pz = calculate_cop_shimba(fx, fy, fz, mx, my, mz, threshold=5.0)
+    
+    if board_height_m != 0.0:
+        pz = np.full_like(fz, board_height_m)
+        
+    cop_xyz = np.column_stack((px, py, pz))
     return cop_xyz
 
 
@@ -2086,12 +2301,12 @@ def main_calculate_cop():
         print("No board height provided. Assuming board_height_m = 0.")
         board_height_m = 0.0
 
-    csv_files = sorted([f for f in os.listdir(input_dir) if f.endswith(".csv")])
-    if not csv_files:
-        print("No CSV files found in the selected directory.")
+    files = sorted([f for f in os.listdir(input_dir) if f.lower().endswith((".csv", ".c3d"))])
+    if not files:
+        print("No CSV or C3D files found in the selected directory.")
         return
 
-    first_file_path = os.path.join(input_dir, csv_files[0])
+    first_file_path = os.path.join(input_dir, files[0])
     selected_headers = select_headers_calculate(first_file_path)
     if not selected_headers:
         print("No valid headers selected.")
@@ -2104,13 +2319,16 @@ def main_calculate_cop():
     os.makedirs(main_output_dir, exist_ok=True)
     print(f"Main output directory created: {main_output_dir}")
 
-    for file_name in csv_files:
+    for file_name in files:
         print(f"Processing file: {file_name}")
         file_path = os.path.join(input_dir, file_name)
         try:
-            df_full = read_csv_full(file_path)
+            if file_name.lower().endswith(".c3d"):
+                df_full = read_c3d_analogs(file_path)
+            else:
+                df_full = read_csv_full(file_path)
         except Exception as e:
-            print(f"Error reading CSV file {file_name}: {e}")
+            print(f"Error reading file {file_name}: {e}")
             continue
 
         if not all(header in df_full.columns for header in selected_headers):
@@ -2121,7 +2339,7 @@ def main_calculate_cop():
         data = df_full[selected_headers].to_numpy()
 
         try:
-            cop_xyz_m = calc_cop(data, board_height_m=board_height_m)
+            cop_xyz_m = calc_cop(data, board_height_m=board_height_m, moment_unit=moment_unit)
         except Exception as e:
             print(f"Error processing data for file {file_name}: {e}")
             messagebox.showerror(

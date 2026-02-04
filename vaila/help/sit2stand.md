@@ -6,7 +6,7 @@
 - **File:** `vaila\sit2stand.py`
 - **Lines:** 1727
 - **Size:** 61021 characters
-- **Version:** 0.0.3
+- **Version:** 0.0.7
 - **Author:** Prof. Paulo Santiago
 - **GUI Interface:** ✅ Yes
 
@@ -18,8 +18,8 @@ sit2stand.py - Sit to Stand Analysis Module
 ================================================================================
 Author: Prof. Paulo Santiago
 Create: 10 October 2025
-Update: 14 October 2025
-Version: 0.0.3
+Update: 03 February 2026
+Version: 0.0.7
 
 Description:
 ------------
@@ -33,32 +33,24 @@ Key Features:
 3. TOML Configuration: All parameters can be defined in TOML configuration files
 4. Butterworth Filtering: Configurable low-pass filtering with user-defined parameters
 5. Column Selection: Interactive column selection with detailed file information
-6. C3D File Analysis: Full support for C3D files w...
+6. C3D File Analysis: Full support for C3D files extraction (Fx, Fy, Fz, Mx, My, Mz)
+7. Center of Pressure (CoP): Shimba (1984) calculation for balance and path analysis
+8. Interactive Reporting: Plotly-based reports with interactive CoP and Force plots
+9. Stability Analysis: Index of stability measuring deviation from horizontal baseline
+10. Energy Expenditure Analysis: Calculates mechanical work and metabolic energy based on body weight
+11. Advanced Peak Detection: Uses scipy.signal.find_peaks with configurable parameters
 
-## 🔧 Main Functions
-
-**Total functions found:** 20
-
-- `main`
-- `run_cli_mode`
-- `get_default_config`
-- `run_gui_mode`
-- `load_toml_config`
-- `find_analysis_files`
-- `select_or_confirm_column`
-- `auto_detect_force_column`
-- `verify_column_exists`
-- `butterworth_filter`
-- `run_batch_analysis`
-- `generate_batch_report`
-- `read_c3d_file`
-- `print_c3d_info`
-- `suggest_force_column`
-- `read_csv_file`
-- `analyze_sit_to_stand`
-- `detect_sit_to_stand_phases`
-- `detect_ascending_threshold`
-- `find_peaks_in_segment`
+Analysis Capabilities:
+----------------------
+- Sit-to-stand phase detection with configurable thresholds
+- Force impulse calculation with filtered data
+- Peak force identification and timing analysis
+- Movement timing analysis with onset detection
+- Balance assessment via CoP Path and Time-Series
+- Butterworth low-pass filtering for noise reduction
+- Stability index calculation
+- Noise and oscillation analysis during standing phase
+- Interactive HTML reports with zoom/pan capabilities
 
 
 

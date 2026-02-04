@@ -92,9 +92,9 @@
             <h3>📋 Module Information</h3>
             <p><strong>Category:</strong> Processing</p>
             <p><strong>File:</strong> vaila\readc3d_export.py</p>
-            <p><strong>Lines:</strong> 1255</p>
-            <p><strong>Size:</strong> 47131 characters</p>
-            <p><strong>Version:</strong> JANUARY 2026</p>
+            <p><strong>Lines:</strong> 1986</p>
+            <p><strong>Size:</strong> 82210 characters</p>
+            <p><strong>Version:</strong> 0.2.1</p>
             <p><strong>Author:</strong> Prof. Paulo R. P. Santiago</p>
             <p><strong>GUI Interface:</strong> ✅ Yes</p>
         </div>
@@ -108,10 +108,10 @@
 readc3d_export.py
 ===============================================================================
 Author: Prof. Paulo R. P. Santiago
-Version: 25 September 2024
-Update: JANUARY 2026
-Version updated: 0.0.4 (Didactic Inspector)
-Python Version: 3.12.11
+Creation Date: 25 September 2024
+Update Date: 03 February 2026
+Version: 0.2.1
+Python Version: 3.12.12
 
 Description:
 This script processes .c3d files, extracting marker data, analog data, events, and points residuals,
@@ -125,9 +125,18 @@ Features:
 - Extracts and saves events with their labels and times.
 - Extracts and saves points residuals with time columns.
 - Supports saving the data in CSV format.
-- Optionally saves the data in Excel format.
-- **Didactic C3D Inspector:** A tabbed GUI to explore C3D structure, check data health, and view parameters/events.
-- **Export Reports:** Save inspection summaries as TXT or didactic HTML files.</pre>
+- Optionally saves the data in Excel format (can be slow for large files).
+- Generates an info file containing metadata about markers, analogs, and their units.
+- Generates a simplified short info file with key parameters and headers.
+- Handles encoding errors to avoid crashes due to unexpected characters.
+- Extracts and saves force platform data including Center of Pressure (COP) from the C3D file into CSV files.
+- **Didactic C3D Inspector:** A tabbed GUI to explore C3D structure, check data health, and view parameters/events. Opened via the "Inspect C3D" button in the C3D &lt;-&gt; CSV dialog.
+- **Export Reports:** In the Inspector, use "Save TXT Report" and "Save HTML Report" to save inspection summaries. Reports work with any C3D (including files with force platforms). Special or invalid characters in the data are handled when writing (UTF-8 with replacement of characters that cannot be encoded).</pre>
+        </div>
+
+        <div class="docstring">
+            <h3>Inspect C3D and reports</h3>
+            <p>From the vailá GUI, go to <strong>C_A_r1_c2 (C3D &lt;-&gt; CSV)</strong> and click <strong>Inspect C3D</strong>. Choose a .c3d file to open the Didactic C3D Inspector. The Inspector has three tabs: <strong>Overview</strong> (file info, acquisition settings, data health), <strong>Parameters Map</strong> (expandable parameter groups), and <strong>Data &amp; Events</strong> (timeline events and marker list). Use the buttons <strong>Save TXT Report</strong> and <strong>Save HTML Report</strong> to export a text or HTML inspection report to a location of your choice.</p>
         </div>
 
         <div class="functions">
@@ -144,7 +153,7 @@ Features:
                 <li><code>save_meta_points_data</code></li>
                 <li><code>save_header_summary</code></li>
                 <li><code>save_parameter_groups</code></li>
-                <li><code>save_data statistics</code></li>
+                <li><code>save_data_statistics</code></li>
                 <li><code>save_to_files</code></li>
                 <li><code>convert_c3d_to_csv</code></li>
                 <li><code>batch_convert_c3d_to_csv</code></li>
@@ -154,7 +163,7 @@ Features:
         </div>
 
         <div class="footer">
-            <p>📅 Generated automatically on: 15/10/2025 08:04:44</p>
+            <p>📅 Generated automatically on: February 2026</p>
             <p>🔗 Part of vailá - Multimodal Toolbox</p>
             <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
         </div>

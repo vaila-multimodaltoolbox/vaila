@@ -40,7 +40,7 @@
             <p><strong>File:</strong> vaila\sit2stand.py</p>
             <p><strong>Lines:</strong> 1727</p>
             <p><strong>Size:</strong> 61021 characters</p>
-            <p><strong>Version:</strong> 0.0.3</p>
+            <p><strong>Version:</strong> 0.0.7</p>
             <p><strong>Author:</strong> Prof. Paulo Santiago</p>
             <p><strong>GUI Interface:</strong> ✅ Yes</p>
         </div>
@@ -55,8 +55,8 @@ sit2stand.py - Sit to Stand Analysis Module
 ================================================================================
 Author: Prof. Paulo Santiago
 Create: 10 October 2025
-Update: 14 October 2025
-Version: 0.0.3
+Update: 03 February 2026
+Version: 0.0.7
 
 Description:
 ------------
@@ -70,13 +70,30 @@ Key Features:
 3. TOML Configuration: All parameters can be defined in TOML configuration files
 4. Butterworth Filtering: Configurable low-pass filtering with user-defined parameters
 5. Column Selection: Interactive column selection with detailed file information
-6. C3D File Analysis: Full support for C3D files w...</pre>
+6. C3D File Analysis: Full support for C3D files extraction (Fx, Fy, Fz, Mx, My, Mz)
+7. Center of Pressure (CoP): Shimba (1984) calculation for balance and path analysis
+8. Interactive Reporting: Plotly-based reports with interactive CoP and Force plots
+9. Stability Analysis: Index of stability measuring deviation from horizontal baseline
+10. Energy Expenditure Analysis: Calculates mechanical work and metabolic energy based on body weight
+11. Advanced Peak Detection: Uses scipy.signal.find_peaks with configurable parameters
+
+Analysis Capabilities:
+----------------------
+- Sit-to-stand phase detection with configurable thresholds
+- Force impulse calculation with filtered data
+- Peak force identification and timing analysis
+- Movement timing analysis with onset detection
+- Balance assessment via CoP Path and Time-Series
+- Butterworth low-pass filtering for noise reduction
+- Stability index calculation
+- Noise and oscillation analysis during standing phase
+- Interactive HTML reports with zoom/pan capabilities</pre>
         </div>
 
         <div class="functions">
             <h3>🔧 Main Functions</h3>
-            <p><strong>Total functions found:</strong> 20</p>
-            <ul><li><code>main</code></li><li><code>run_cli_mode</code></li><li><code>get_default_config</code></li><li><code>run_gui_mode</code></li><li><code>load_toml_config</code></li><li><code>find_analysis_files</code></li><li><code>select_or_confirm_column</code></li><li><code>auto_detect_force_column</code></li><li><code>verify_column_exists</code></li><li><code>butterworth_filter</code></li><li><code>run_batch_analysis</code></li><li><code>generate_batch_report</code></li><li><code>read_c3d_file</code></li><li><code>print_c3d_info</code></li><li><code>suggest_force_column</code></li><li><code>read_csv_file</code></li><li><code>analyze_sit_to_stand</code></li><li><code>detect_sit_to_stand_phases</code></li><li><code>detect_ascending_threshold</code></li><li><code>find_peaks_in_segment</code></li></ul>
+            <p><strong>Total functions found:</strong> 22</p>
+            <ul><li><code>main</code></li><li><code>run_cli_mode</code></li><li><code>get_default_config</code></li><li><code>run_gui_mode</code></li><li><code>load_toml_config</code></li><li><code>find_analysis_files</code></li><li><code>select_or_confirm_column</code></li><li><code>auto_detect_force_column</code></li><li><code>verify_column_exists</code></li><li><code>butterworth_filter</code></li><li><code>run_batch_analysis</code></li><li><code>generate_batch_report</code></li><li><code>read_c3d_file</code></li><li><code>print_c3d_info</code></li><li><code>suggest_force_column</code></li><li><code>read_csv_file</code></li><li><code>analyze_sit_to_stand</code></li><li><code>detect_sit_to_stand_phases</code></li><li><code>detect_ascending_threshold</code></li><li><code>find_peaks_in_segment</code></li><li><code>generate_interactive_html_report</code></li><li><code>save_force_plot_png</code></li></ul>
         </div>
 
         <div class="footer">
