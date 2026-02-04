@@ -113,7 +113,15 @@ def plot_ellipse_pca(data, confidence=0.95):
     y_bounds = [min(ellipse_y), max(ellipse_y)]
 
     # Return the ellipse data as a tuple of all necessary elements
-    ellipse_data = (ellipse_x, ellipse_y, eigvecs, scaled_eigvals, pca.mean_)
+    # Index 5: explained_variance_ratio_ for PCA (PC1, PC2) for use in reports
+    ellipse_data = (
+        ellipse_x,
+        ellipse_y,
+        eigvecs,
+        scaled_eigvals,
+        pca.mean_,
+        getattr(pca, "explained_variance_ratio_", np.array([0.0, 0.0])),
+    )
 
     return area, angle, x_bounds + y_bounds, ellipse_data
 

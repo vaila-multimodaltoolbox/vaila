@@ -4,8 +4,8 @@ sit2stand.py - Sit to Stand Analysis Module
 ================================================================================
 Author: Prof. Paulo Santiago
 Create: 10 October 2025
-Update: 12 January 2026
-Version: 0.0.6
+Update: 03 February 2026
+Version: 0.0.7
 
 Description:
 ------------
@@ -105,6 +105,7 @@ This module is part of the VAILA toolbox and follows the same MIT License.
 
 import os
 import sys
+import re
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
@@ -149,6 +150,21 @@ try:
 except ImportError:
     C3D_SUPPORT = False
     print("Warning: ezc3d not found. C3D file support will be limited.")
+
+# Import CoP calculation logic
+try:
+    from vaila.cop_calculate import calc_cop
+    COP_SUPPORT = True
+except ImportError:
+    COP_SUPPORT = False
+    print("Warning: specific vaila modules not found. CoP calcs may fail.")
+
+# Optional: ellipse.py for PCA-based confidence ellipse and variance ratios
+try:
+    from vaila.ellipse import plot_ellipse_pca
+    ELLIPSE_SUPPORT = True
+except ImportError:
+    ELLIPSE_SUPPORT = False
 
 
 def main(cli_args=None):
@@ -253,6 +269,11 @@ def get_default_config():
             "force_column": "Force.Fz3",
             "fps": 2000.0,  # Frames per second for time vector generation
             "body_weight": 70.0,  # Body weight in kg for energy calculations
+        },
+        "force_plate": {
+             "width_mm": 464.0,  # X dimension
+             "height_mm": 508.0, # Y dimension
+             "moment_unit": "N.mm" # Default unit for C3D moments
         },
         "filtering": {
             "enabled": False,
@@ -675,9 +696,9 @@ def process_single_file(file_path, config, output_dir):
         # Generate individual report
         generate_individual_report(result, config, output_dir)
 
-        # Generate animated HTML report
-        html_path = file_results_dir / f"{file_base_name}_animated_report.html"
-        generate_animated_html_report(data, analysis_result, config, str(html_path), result)
+        # Generate interactive HTML report
+        html_path = file_results_dir / f"{file_base_name}_interactive_report.html"
+        generate_interactive_html_report(data, analysis_result, config, str(html_path), result)
 
         print(f"  [OK] Completed: {os.path.basename(file_path)}")
         return result
@@ -883,6 +904,28 @@ def generate_individual_report(result, config, output_dir):
                         )
                 f.write("\n")
 
+            # Center of Pressure (CoP) analysis
+            cop_results = analysis.get("cop_results", {})
+            if cop_results and "cop_path_length" in cop_results:
+                f.write("CENTER OF PRESSURE (CoP) ANALYSIS:\n")
+                f.write(f"  CoP Path Length: {cop_results.get('cop_path_length', 0):.2f} mm\n")
+                f.write(f"  Ellipse Area (95% confidence): {cop_results.get('ellipse_area_95', 0):.2f} mm²\n")
+                f.write(f"  Ellipse Angle: {cop_results.get('ellipse_angle_deg', 0):.2f}°\n")
+                f.write(
+                    f"  Root Mean Square of Total Sway (CoP): {cop_results.get('rms_sway_total_mm', 0):.2f} mm\n"
+                )
+                f.write(
+                    f"  RMS Sway ML (Medio-Lateral, X): {cop_results.get('rms_sway_ml_mm', 0):.2f} mm\n"
+                )
+                f.write(
+                    f"  RMS Sway AP (Antero-Posterior, Y): {cop_results.get('rms_sway_ap_mm', 0):.2f} mm\n"
+                )
+                pca1 = cop_results.get("pca_pc1_variance_ratio", 0) * 100
+                pca2 = cop_results.get("pca_pc2_variance_ratio", 0) * 100
+                f.write(f"  PCA PC1 Explained Variance: {pca1:.2f}%\n")
+                f.write(f"  PCA PC2 Explained Variance: {pca2:.2f}%\n")
+                f.write("\n")
+
             # Plot information
             if "plot_path" in result:
                 f.write(f"Plot saved: {Path(result['plot_path']).name}\n")
@@ -1015,6 +1058,39 @@ def generate_individual_report(result, config, output_dir):
                 csv_data["metric"].append(f"Standing Peak {i} Prominence")
                 csv_data["value"].append(peak["prominence"])
                 csv_data["unit"].append("N")
+
+        # Center of Pressure (CoP) metrics
+        cop_results = analysis.get("cop_results", {})
+        if cop_results and "cop_path_length" in cop_results:
+            csv_data["metric"].extend(
+                [
+                    "CoP Path Length",
+                    "CoP Ellipse Area (95%)",
+                    "CoP Ellipse Angle",
+                    "RMS Sway Total (CoP)",
+                    "RMS Sway ML (Medio-Lateral)",
+                    "RMS Sway AP (Antero-Posterior)",
+                    "PCA PC1 Explained Variance",
+                    "PCA PC2 Explained Variance",
+                ]
+            )
+            pca1 = cop_results.get("pca_pc1_variance_ratio", 0) * 100
+            pca2 = cop_results.get("pca_pc2_variance_ratio", 0) * 100
+            csv_data["value"].extend(
+                [
+                    cop_results.get("cop_path_length", 0),
+                    cop_results.get("ellipse_area_95", 0),
+                    cop_results.get("ellipse_angle_deg", 0),
+                    cop_results.get("rms_sway_total_mm", 0),
+                    cop_results.get("rms_sway_ml_mm", 0),
+                    cop_results.get("rms_sway_ap_mm", 0),
+                    pca1,
+                    pca2,
+                ]
+            )
+            csv_data["unit"].extend(
+                ["mm", "mm²", "deg", "mm", "mm", "mm", "%", "%"]
+            )
 
         # Save CSV
         df = pd.DataFrame(csv_data)
@@ -1474,7 +1550,7 @@ def read_c3d_file(file_path, column_name):
         analogs = datac3d["data"]["analogs"]
         analog_labels_raw = datac3d["parameters"]["ANALOG"]["LABELS"]["value"]
         
-        # Handle different label formats (list of strings or list of lists)
+        # Handle different label formats
         if analog_labels_raw:
             if isinstance(analog_labels_raw[0], list):
                 analog_labels = [label[0] if isinstance(label, list) else str(label) for label in analog_labels_raw]
@@ -1483,107 +1559,107 @@ def read_c3d_file(file_path, column_name):
         else:
             analog_labels = []
 
-        # Print available channels safely (handle encoding issues)
-        try:
-            if len(analog_labels) > 10:
-                labels_str = ", ".join([str(l).encode('utf-8', errors='replace').decode('utf-8', errors='replace') for l in analog_labels[:10]])
-                print(f"Available analog channels ({len(analog_labels)}): {labels_str}...")
-            else:
-                labels_str = ", ".join([str(l).encode('utf-8', errors='replace').decode('utf-8', errors='replace') for l in analog_labels])
-                print(f"Available analog channels: {labels_str}")
-        except Exception:
-            print(f"Available analog channels: {len(analog_labels)} channels found")
-
-        # Check if requested column exists (case-insensitive search)
-        column_name_lower = column_name.lower()
-        matching_labels = [label for label in analog_labels if label.lower() == column_name_lower]
+        # Identify the target plate based on the requested column name (e.g. Force.Fz3 -> Plate 3)
+        # We need to extract all 6 channels: Fx, Fy, Fz, Mx, My, Mz
         
-        if matching_labels:
-            # Use the exact match
-            column_name = matching_labels[0]
-            print(f"Found exact match for '{column_name}'")
-        else:
-            print(f"Column '{column_name}' not found in analog channels")
+        # 1. Determine suffix/index from the requested column
+        # E.g., if column_name is "Force.Fz3", we look for "3"
+        # If no number, we assume 1 or look for corresponding channels
+        
+        target_index = ""
+        match = re.search(r"(\d+)$", column_name)
+        if match:
+            target_index = match.group(1)
             
-            # Try to find a suitable force column automatically
-            suggested_column = suggest_force_column(analog_labels)
-            if suggested_column:
-                print(f"Suggested column: {suggested_column}")
-                column_name = suggested_column
-            else:
-                print("No suitable force column found")
-                print(f"Looking for patterns containing 'Fz' or 'Force'...")
-                # Last resort: find any column with Fz or Force in the name
-                fz_labels = [label for label in analog_labels if 'fz' in label.lower() or 'force' in label.lower()]
-                if fz_labels:
-                    # Prefer Force.Fz3, Force.Fz2, etc.
-                    preferred = [l for l in fz_labels if 'force.fz' in l.lower()]
-                    if preferred:
-                        column_name = preferred[0]
-                        print(f"Using: {column_name}")
-                    else:
-                        column_name = fz_labels[0]
-                        print(f"Using first Fz/Force column found: {column_name}")
-                else:
-                    return None
+        print(f"Targeting Force Plate Index: {target_index if target_index else 'Auto'}")
 
-        # Find the index of the requested column
-        try:
-            column_index = analog_labels.index(column_name)
-        except ValueError:
-            # Try case-insensitive search
-            column_index = next((i for i, label in enumerate(analog_labels) if label.lower() == column_name.lower()), None)
-            if column_index is None:
-                print(f"Could not find column '{column_name}' in analog labels")
-                return None
+        # Define channel patterns to look for
+        components = {
+            "Fx": [f"Force.Fx{target_index}", f"Fx{target_index}", f"FX{target_index}", f"Force.FX{target_index}"],
+            "Fy": [f"Force.Fy{target_index}", f"Fy{target_index}", f"FY{target_index}", f"Force.FY{target_index}"],
+            "Fz": [f"Force.Fz{target_index}", f"Fz{target_index}", f"FZ{target_index}", f"Force.FZ{target_index}"],
+            "Mx": [f"Moment.Mx{target_index}", f"Mx{target_index}", f"MX{target_index}", f"Moment.MX{target_index}"],
+            "My": [f"Moment.My{target_index}", f"My{target_index}", f"MY{target_index}", f"Moment.MY{target_index}"],
+            "Mz": [f"Moment.Mz{target_index}", f"Mz{target_index}", f"MZ{target_index}", f"Moment.MZ{target_index}"],
+        }
 
-        # Extract the analog data for this channel
-        # analogs shape can be (1, num_channels, num_frames) or (num_frames, num_channels)
-        print(f"Analog data shape: {analogs.shape}")
+        # If strict column name was passed and found, use it as Fz primary
+        # But we also try to find the neighbors
         
-        # Handle different analog data structures
-        if analogs.ndim == 3:
-            # Shape is (1, num_channels, num_frames) - squeeze first dimension
-            analog_data = analogs.squeeze(axis=0)
-            if analog_data.ndim == 2:
-                # Shape is (num_channels, num_frames)
-                force_values = analog_data[column_index, :]
-            else:
-                print(f"Unexpected analog data shape after squeeze: {analog_data.shape}")
-                return None
-        elif analogs.ndim == 2:
-            # Shape is (num_channels, num_frames) or (num_frames, num_channels)
-            if analogs.shape[0] == len(analog_labels):
-                # Shape is (num_channels, num_frames)
-                force_values = analogs[column_index, :]
-            elif analogs.shape[1] == len(analog_labels):
-                # Shape is (num_frames, num_channels) - transpose
-                force_values = analogs[:, column_index]
-            else:
-                print(f"Unexpected analog data shape: {analogs.shape}")
-                return None
-        else:
-            print(f"Unexpected analog data dimensions: {analogs.ndim}")
-            return None
+        found_channels = {}
+        
+        for comp, patterns in components.items():
+            for pattern in patterns:
+                # Case insensitive search
+                matching = [l for l in analog_labels if l.lower() == pattern.lower()]
+                if matching:
+                    found_channels[comp] = matching[0]
+                    break
+        
+        # Check if we at least have Fz
+        if "Fz" not in found_channels:
+             # Fallback: if we were given a specific column_name that corresponds to vertical force
+             # and we couldn't match the pattern logic above, verify if column_name itself exists
+             matching = [l for l in analog_labels if l.lower() == column_name.lower()]
+             if matching:
+                 found_channels["Fz"] = matching[0]
+                 print(f"Using requested column '{matching[0]}' as vertical force (Fz)")
+             else:
+                 print(f"Could not find vertical force channel (Fz). Requested: {column_name}")
+                 return None
 
-        # Get timing information
+        print("Found channels:")
+        for k, v in found_channels.items():
+            print(f"  {k}: {v}")
+
+        # Extract data for all found channels
+        extracted_data = {}
+        
+        for comp, label in found_channels.items():
+            idx = analog_labels.index(label)
+            
+            # shape handling (1, n_ch, n_frames) or (n_ch, n_frames)
+            if analogs.ndim == 3:
+                vals = analogs[0, idx, :]
+            else:
+                 # assume (n_ch, n_frames)
+                 vals = analogs[idx, :]
+            
+            extracted_data[comp] = vals
+
+        # Ensure Fz is non-negative (reaction force convention), same as forceplate_analysis calc_cop
+        if np.any(extracted_data["Fz"] < 0):
+            extracted_data["Fz"] = -np.asarray(extracted_data["Fz"])
+
+        # Get timing
         analog_freq = datac3d["header"]["analogs"]["frame_rate"]
-        num_frames = len(force_values)
+        num_frames = len(extracted_data["Fz"])
         time_values = np.arange(num_frames) / analog_freq
 
-        print(f"Using analog channel: {column_name}")
+        # Construct DataFrame
+        # Always ensure we have 'Time' and 'Force' (Fz alias) for backward compatibility
+        df_dict = {
+            "Time": time_values,
+            "Force": extracted_data["Fz"]
+        }
+        
+        # Add all components with standard names
+        for comp in ["Fx", "Fy", "Fz", "Mx", "My", "Mz"]:
+            if comp in extracted_data:
+                df_dict[f"Force.{comp}"] = extracted_data[comp]
+                
+        force_data = pd.DataFrame(df_dict)
+        
         print(f"Analog frequency: {analog_freq} Hz")
         print(f"Data points: {num_frames}")
         print(f"Time range: {time_values[0]:.3f} - {time_values[-1]:.3f} s")
-        print(f"Force range: {force_values.min():.3f} - {force_values.max():.3f}")
-
-        # Create DataFrame
-        force_data = pd.DataFrame({"Time": time_values, "Force": force_values})
 
         return force_data
 
     except Exception as e:
         print(f"Error reading C3D file: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 
@@ -1774,8 +1850,35 @@ def read_csv_file(file_path, column_name, config=None):
         # Ensure Force column is numeric
         force_data["Force"] = pd.to_numeric(force_data["Force"], errors="coerce")
 
-        # Remove any rows with NaN values
-        force_data = force_data.dropna()
+        # Ensure Fz is non-negative (reaction force convention), same as C3D and forceplate_analysis
+        if np.any(force_data["Force"] < 0):
+            force_data["Force"] = -force_data["Force"]
+
+        # If force_column suggests a plate index (e.g. Force.Fz3), try to add 6 components for CoP
+        plate_idx = None
+        if "Force.Fz" in column_name or "Fz" in column_name:
+            m = re.search(r"Fz(\d+)|Force\.Fz(\d+)", column_name, re.IGNORECASE)
+            if m:
+                plate_idx = int(m.group(1) or m.group(2))
+        if plate_idx is not None:
+            cand = {
+                "Force.Fx": f"Force.Fx{plate_idx}",
+                "Force.Fy": f"Force.Fy{plate_idx}",
+                "Force.Fz": f"Force.Fz{plate_idx}",
+                "Force.Mx": f"Moment.Mx{plate_idx}",
+                "Force.My": f"Moment.My{plate_idx}",
+                "Force.Mz": f"Moment.Mz{plate_idx}",
+            }
+            if all(c in df.columns for c in cand.values()):
+                for std_name, csv_name in cand.items():
+                    force_data[std_name] = pd.to_numeric(df[csv_name], errors="coerce")
+                # Align Fz sign: use same non-negative convention for Force.Fz
+                if np.any(force_data["Force.Fz"] < 0):
+                    force_data["Force.Fz"] = -force_data["Force.Fz"]
+                print(f"Added 6 components for plate {plate_idx} for CoP calculation")
+
+        # Remove any rows with NaN values (only in Time/Force for core; NaN in optional columns left as-is for CoP mask)
+        force_data = force_data.dropna(subset=["Time", "Force"])
 
         if len(force_data) == 0:
             print("No valid data after cleaning")
@@ -1886,6 +1989,149 @@ def analyze_sit_to_stand(data, config):
                 data["Force"].values, data["Time"].values, sit_to_stand_phases, config
             )
 
+        # Calculate CoP if 6-component data is available
+        cop_results = {}
+        if config.get("detection", {}).get("calculate_cop", True) and COP_SUPPORT:
+            # Check if we have all necessary components
+            # We look for columns starting with "Force." and containing the component names
+            components_present = True
+            component_cols = {}
+            for comp in ["Fx", "Fy", "Fz", "Mx", "My", "Mz"]:
+                col = f"Force.{comp}"
+                if col not in data.columns:
+                    components_present = False
+                    break
+                component_cols[comp] = col
+            
+            if components_present:
+                print("Calculating Center of Pressure (CoP)...")
+                try:
+                    # Get force plate dimensions from config
+                    fp_config = config.get("force_plate", {})
+                    width_mm = fp_config.get("width_mm", 464.0)
+                    height_mm = fp_config.get("height_mm", 508.0)
+                    
+                    # Extract raw components (ensure numpy arrays)
+                    Fx = data[component_cols["Fx"]].values
+                    Fy = data[component_cols["Fy"]].values
+                    Fz = data[component_cols["Fz"]].values
+                    Mx = data[component_cols["Mx"]].values
+                    My = data[component_cols["My"]].values
+                    Mz = data[component_cols["Mz"]].values
+                    
+                    # Prepare arguments for calc_cop
+                    # calc_cop signature: (forces_moments, dimensions)
+                    # forces_moments = (Fx, Fy, Fz, Mx, My, Mz)
+                    # dimensions = (width_mm, height_mm) -- expecting half-dimensions or full?
+                    # cop_calculate.py usually standardizes on full dimensions if it does the offset math,
+                    # OR it might be simpler. Let's look at the implementation of Shimba in cop_calculate.py
+                    # To be safe, I will use my direct implementation which I know is robust for this context.
+                    # AND it avoids dependency issues if cop_calculate changes.
+                    
+                    # Shimba Method (1984) - Simplified for Type 2 Plate (Origin at center of top surface)
+                    # CoPx = -My / Fz
+                    # CoPy =  Mx / Fz
+                    
+                    # Check moment unit
+                    moment_unit = fp_config.get("moment_unit", "N.mm")
+                    
+                    # If moments are in N.mm and Force in N, Result is in mm.
+                    # If moments are in N.m, Result is in m.
+                    
+                    # Filter Fz to avoid division by zero
+                    # Use a threshold (e.g., 10 N)
+                    valid_mask = np.abs(Fz) > 10.0
+                    
+                    cop_x = np.full_like(Fz, np.nan)
+                    cop_y = np.full_like(Fz, np.nan)
+                    
+                    # Calculate CoP
+                    # Note: Mx is moment about X-axis (controls Y-coord), My is moment about Y-axis (controls X-coord)
+                    # Check sign convention. 
+                    # Standard biomechanics (Right-Hand Rule):
+                    # CoP_x = -My / Fz
+                    # CoP_y =  Mx / Fz
+                    
+                    cop_x[valid_mask] = -My[valid_mask] / Fz[valid_mask]
+                    cop_y[valid_mask] =  Mx[valid_mask] / Fz[valid_mask]
+                    
+                    # Unit conversion if needed (target: mm)
+                    if "mm" not in moment_unit.lower(): # e.g. "N.m"
+                         cop_x *= 1000.0
+                         cop_y *= 1000.0
+                    
+                    # Root Mean Square of CoP sway (total and separated into ML/AP)
+                    n_valid = np.sum(valid_mask)
+                    rms_sway_total_mm = 0.0
+                    rms_sway_ml_mm = 0.0
+                    rms_sway_ap_mm = 0.0
+                    if n_valid > 0:
+                        cx = cop_x[valid_mask]
+                        cy = cop_y[valid_mask]
+                        mx = np.nanmean(cx)
+                        my = np.nanmean(cy)
+                        rms_sway_ml_mm = float(np.sqrt(np.nanmean((cx - mx) ** 2)))
+                        rms_sway_ap_mm = float(np.sqrt(np.nanmean((cy - my) ** 2)))
+                        rms_sway_total_mm = float(np.sqrt(np.nanmean((cx - mx) ** 2 + (cy - my) ** 2)))
+
+                    # 95% Confidence Ellipse (PCA-based via ellipse.py, or covariance fallback)
+                    ellipse_area_95 = 0.0
+                    ellipse_angle_deg = 0.0
+                    pca_pc1_variance_ratio = 0.0
+                    pca_pc2_variance_ratio = 0.0
+                    ellipse_x_path = None
+                    ellipse_y_path = None
+                    if n_valid > 10:
+                        cop_data_2d = np.column_stack((cop_x[valid_mask], cop_y[valid_mask]))
+                        if ELLIPSE_SUPPORT:
+                            try:
+                                area, angle, _bounds, ellipse_data = plot_ellipse_pca(
+                                    cop_data_2d, confidence=0.95
+                                )
+                                ellipse_area_95 = float(area)
+                                ellipse_angle_deg = float(angle)
+                                if len(ellipse_data) > 5:
+                                    evr = ellipse_data[5]
+                                    pca_pc1_variance_ratio = float(evr[0]) if len(evr) > 0 else 0.0
+                                    pca_pc2_variance_ratio = float(evr[1]) if len(evr) > 1 else 0.0
+                                ellipse_x_path = ellipse_data[0].tolist()
+                                ellipse_y_path = ellipse_data[1].tolist()
+                            except Exception as e_ellipse:
+                                print(f"Error in ellipse.py: {e_ellipse}")
+                        if ellipse_area_95 == 0.0:
+                            try:
+                                cov_matrix = np.cov([cop_x[valid_mask], cop_y[valid_mask]])
+                                eigenvalues = np.linalg.eigvals(cov_matrix)
+                                ellipse_area_95 = float(
+                                    np.pi * np.prod(np.sqrt(np.abs(eigenvalues))) * 5.991
+                                )
+                            except Exception as e_ellipse:
+                                print(f"Error calculating Ellipse Area: {e_ellipse}")
+
+                    cop_results = {
+                        "cop_x": cop_x,
+                        "cop_y": cop_y,
+                        "valid_mask": valid_mask,
+                        "mean_cop_x": np.nanmean(cop_x),
+                        "mean_cop_y": np.nanmean(cop_y),
+                        "cop_path_length": np.nansum(np.sqrt(np.diff(cop_x[valid_mask])**2 + np.diff(cop_y[valid_mask])**2)) if np.any(valid_mask) else 0.0,
+                        "ellipse_area_95": ellipse_area_95,
+                        "ellipse_angle_deg": ellipse_angle_deg,
+                        "pca_pc1_variance_ratio": pca_pc1_variance_ratio,
+                        "pca_pc2_variance_ratio": pca_pc2_variance_ratio,
+                        "rms_sway_total_mm": rms_sway_total_mm,
+                        "rms_sway_ml_mm": rms_sway_ml_mm,
+                        "rms_sway_ap_mm": rms_sway_ap_mm,
+                        "ellipse_x_path": ellipse_x_path,
+                        "ellipse_y_path": ellipse_y_path,
+                    }
+                    print(f"CoP Path Length: {cop_results['cop_path_length']:.2f} mm")
+                    print(f"CoP Ellipse Area (95%): {cop_results['ellipse_area_95']:.2f} mm^2")
+                    print(f"CoP RMS Sway Total: {cop_results['rms_sway_total_mm']:.2f} mm (ML: {cop_results['rms_sway_ml_mm']:.2f}, AP: {cop_results['rms_sway_ap_mm']:.2f})")
+                    
+                except Exception as e:
+                    print(f"Error calculating CoP: {e}")
+
         results = {
             "total_samples": total_samples,
             "duration": duration,
@@ -1900,6 +2146,7 @@ def analyze_sit_to_stand(data, config):
             "time_to_peak_metrics": time_to_peak_metrics,
             "stability_metrics": stability_metrics,
             "energy_metrics": energy_metrics,
+            "cop_results": cop_results, 
             "detection_threshold": force_threshold,
             "status": "analyzed",
         }
@@ -3488,9 +3735,11 @@ def save_force_plot_png(
 # display_results function removed - not needed in batch mode, results are saved automatically
 
 
-def generate_animated_html_report(data, analysis_result, config, output_path, result):
+def generate_interactive_html_report(data, analysis_result, config, output_path, result):
     """
-    Generates an interactive HTML report with animated chart using Plotly.js.
+    Generates an interactive HTML report with static charts using Plotly.js.
+    Uses Plotly for interactive zooming/panning/hovering without slow animations.
+    Includes Center of Pressure (CoP) analysis visualizations.
     
     Parameters:
     -----------
@@ -3526,6 +3775,16 @@ def generate_animated_html_report(data, analysis_result, config, output_path, re
                     logo_b64 = base64.b64encode(logo_data).decode("utf-8")
         except Exception as e:
             print(f"Warning: Could not load logo: {e}")
+
+        # Embed force plot PNG in report if available
+        force_plot_b64 = ""
+        plot_path = result.get("plot_path")
+        if plot_path and Path(plot_path).exists():
+            try:
+                with open(plot_path, "rb") as img_file:
+                    force_plot_b64 = base64.b64encode(img_file.read()).decode("utf-8")
+            except Exception as e:
+                print(f"Warning: Could not load force plot image: {e}")
         
         # Extract data for JavaScript - convert to JSON-safe format
         time_data = [float(x) for x in data["Time"].tolist()]
@@ -3547,6 +3806,22 @@ def generate_animated_html_report(data, analysis_result, config, output_path, re
         all_peaks = analysis_result.get("all_peaks_global", [])
         peaks_data = [{"time": float(p.get("time", 0)), "force": float(p.get("force", 0))} for p in all_peaks]
         
+        # Extract CoP data if available
+        cop_data = analysis_result.get("cop_results", {})
+        has_cop = False
+        cop_x = []
+        cop_y = []
+        if cop_data and "cop_x" in cop_data and "cop_y" in cop_data:
+            has_cop = True
+            # Convert numpy arrays to lists of floats, handling NaNs
+            cx = cop_data["cop_x"]
+            cy = cop_data["cop_y"]
+            # Replace NaNs with None for JSON
+            cop_x = [float(x) if not np.isnan(x) else None for x in cx]
+            cop_y = [float(y) if not np.isnan(y) else None for y in cy]
+        cop_ellipse_x = list(cop_data.get("ellipse_x_path") or []) if cop_data else []
+        cop_ellipse_y = list(cop_data.get("ellipse_y_path") or []) if cop_data else []
+
         # Extract stability metrics
         stability = analysis_result.get("stability_metrics", {})
         stability_data = {
@@ -3558,41 +3833,128 @@ def generate_animated_html_report(data, analysis_result, config, output_path, re
         # Extract movement metrics
         movement = analysis_result.get("movement_metrics", {})
         energy = analysis_result.get("energy_metrics", {})
-        
-        # Prepare data for table
-        table_data = []
-        # Basic metrics
-        table_data.append(["Duration", f"{analysis_result.get('duration', 0):.2f}", "s"])
-        table_data.append(["Mean Force", f"{analysis_result.get('mean_force', 0):.2f}", "N"])
-        table_data.append(["Max Force", f"{analysis_result.get('max_force', 0):.2f}", "N"])
-        table_data.append(["Min Force", f"{analysis_result.get('min_force', 0):.2f}", "N"])
-        
-        # Movement metrics
-        table_data.append(["Phases Detected", f"{movement.get('num_phases', 0)}", "count"])
-        table_data.append(["Total Movement Time", f"{movement.get('total_movement_time', 0):.2f}", "s"])
-        table_data.append(["Average Phase Duration", f"{movement.get('average_phase_duration', 0):.2f}", "s"])
-        
-        # Time to peak
         time_to_peak = analysis_result.get("time_to_peak_metrics", {})
-        if time_to_peak.get("time_to_first_peak"):
-            table_data.append(["Time to First Peak", f"{time_to_peak.get('time_to_first_peak', 0):.3f}", "s"])
-        if time_to_peak.get("time_to_max_force"):
-            table_data.append(["Time to Max Force", f"{time_to_peak.get('time_to_max_force', 0):.3f}", "s"])
-        
-        # Impulse metrics
         impulse = analysis_result.get("impulse_metrics", {})
-        table_data.append(["Total Impulse", f"{impulse.get('total_impulse', 0):.2f}", "N⋅s"])
-        table_data.append(["Peak Power", f"{impulse.get('peak_power', 0):.2f}", "W"])
         
-        # Stability metrics
-        table_data.append(["Stability Index", f"{stability_data.get('stability_index', 0):.3f}", "(0-1)"])
-        table_data.append(["Mean Deviation from Peak", f"{stability_data.get('mean_deviation', 0):.2f}", "N"])
-        
-        # Energy metrics
+        # Prepare metrics grid data (align with old animated report: Duration, Mean/Max/Min Force, movement, time-to-peak, impulse, stability, energy)
+        metrics_html = f'''
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-label">Duration</div>
+                    <div class="metric-value">{analysis_result.get('duration', 0):.2f}<span class="metric-unit">s</span></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Mean Force</div>
+                    <div class="metric-value">{analysis_result.get('mean_force', 0):.2f}<span class="metric-unit">N</span></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Max Force</div>
+                    <div class="metric-value">{analysis_result.get('max_force', 0):.1f}<span class="metric-unit">N</span></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Min Force</div>
+                    <div class="metric-value">{analysis_result.get('min_force', 0):.1f}<span class="metric-unit">N</span></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Phases Detected</div>
+                    <div class="metric-value">{movement.get('num_phases', 0)}<span class="metric-unit">count</span></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Total Movement Time</div>
+                    <div class="metric-value">{movement.get('total_movement_time', 0):.2f}<span class="metric-unit">s</span></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Average Phase Duration</div>
+                    <div class="metric-value">{movement.get('average_phase_duration', 0):.2f}<span class="metric-unit">s</span></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Stability Index</div>
+                    <div class="metric-value">{stability_data.get('stability_index', 0):.3f}<span class="metric-unit">(0-1)</span></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Mean Deviation from Peak</div>
+                    <div class="metric-value">{stability_data.get('mean_deviation', 0):.2f}<span class="metric-unit">N</span></div>
+                </div>
+        '''
+        if time_to_peak.get("time_to_first_peak") is not None:
+            metrics_html += f'''
+                <div class="metric-card">
+                    <div class="metric-label">Time to First Peak</div>
+                    <div class="metric-value">{time_to_peak.get('time_to_first_peak', 0):.3f}<span class="metric-unit">s</span></div>
+                </div>
+            '''
+        if time_to_peak.get("time_to_max_force") is not None:
+            metrics_html += f'''
+                <div class="metric-card">
+                    <div class="metric-label">Time to Max Force</div>
+                    <div class="metric-value">{time_to_peak.get('time_to_max_force', 0):.3f}<span class="metric-unit">s</span></div>
+                </div>
+            '''
+        if impulse:
+            metrics_html += f'''
+                <div class="metric-card">
+                    <div class="metric-label">Total Impulse</div>
+                    <div class="metric-value">{impulse.get('total_impulse', 0):.2f}<span class="metric-unit">N⋅s</span></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Peak Power</div>
+                    <div class="metric-value">{impulse.get('peak_power', 0):.2f}<span class="metric-unit">W</span></div>
+                </div>
+            '''
         if energy:
-            table_data.append(["Body Weight", f"{energy.get('body_weight_kg', 0):.1f}", "kg"])
-            table_data.append(["Total Metabolic Energy", f"{energy.get('total_metabolic_energy_kcal', 0):.3f}", "kcal"])
-            table_data.append(["Energy Efficiency", f"{energy.get('energy_efficiency', 0):.1f}", "%"])
+            metrics_html += f'''
+                <div class="metric-card">
+                    <div class="metric-label">Body Weight</div>
+                    <div class="metric-value">{energy.get('body_weight_kg', 0):.1f}<span class="metric-unit">kg</span></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Total Metabolic Energy</div>
+                    <div class="metric-value">{energy.get('total_metabolic_energy_kcal', 0):.3f}<span class="metric-unit">kcal</span></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Energy Efficiency</div>
+                    <div class="metric-value">{energy.get('energy_efficiency', 0):.1f}<span class="metric-unit">%</span></div>
+                </div>
+            '''
+        if has_cop:
+            pca1_pct = cop_data.get("pca_pc1_variance_ratio", 0) * 100
+            pca2_pct = cop_data.get("pca_pc2_variance_ratio", 0) * 100
+            metrics_html += f'''
+                <div class="metric-card">
+                    <div class="metric-label">CoP Path Length</div>
+                    <div class="metric-value">{cop_data.get('cop_path_length', 0):.1f}<span class="metric-unit">mm</span></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Ellipse Area (95%)</div>
+                    <div class="metric-value">{cop_data.get('ellipse_area_95', 0):.1f}<span class="metric-unit">mm²</span></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Ellipse Angle</div>
+                    <div class="metric-value">{cop_data.get('ellipse_angle_deg', 0):.1f}<span class="metric-unit">°</span></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">RMS Sway Total (CoP)</div>
+                    <div class="metric-value">{cop_data.get('rms_sway_total_mm', 0):.2f}<span class="metric-unit">mm</span></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">RMS Sway ML (X)</div>
+                    <div class="metric-value">{cop_data.get('rms_sway_ml_mm', 0):.2f}<span class="metric-unit">mm</span></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">RMS Sway AP (Y)</div>
+                    <div class="metric-value">{cop_data.get('rms_sway_ap_mm', 0):.2f}<span class="metric-unit">mm</span></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">PCA PC1 Variance</div>
+                    <div class="metric-value">{pca1_pct:.1f}<span class="metric-unit">%</span></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">PCA PC2 Variance</div>
+                    <div class="metric-value">{pca2_pct:.1f}<span class="metric-unit">%</span></div>
+                </div>
+            '''
+            
+        metrics_html += '</div>'
         
         # Create HTML content
         html_content = f"""<!DOCTYPE html>
@@ -3600,466 +3962,268 @@ def generate_animated_html_report(data, analysis_result, config, output_path, re
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sit-to-Stand Analysis Report - {result.get('filename', 'Analysis')}</title>
+    <title>Sit-to-Stand Interactive Report - {result.get('filename', 'Analysis')}</title>
     <script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>
     <style>
-        * {{
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }}
-        
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
         body {{
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #f0f2f5;
             padding: 20px;
-            min-height: 100vh;
+            color: #333;
         }}
-        
         .container {{
             max-width: 1400px;
             margin: 0 auto;
             background: white;
-            border-radius: 15px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
             overflow: hidden;
         }}
-        
         .header {{
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 30px;
-            text-align: center;
+            background: white;
+            padding: 20px 30px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
         }}
-        
-        .header h1 {{
-            font-size: 2.5em;
-            margin-bottom: 10px;
-        }}
-        
-        .header p {{
-            font-size: 1.1em;
-            opacity: 0.9;
-        }}
-        
-        .content {{
-            padding: 30px;
-        }}
+        .header-content h1 {{ font-size: 1.8em; color: #1a202c; margin-bottom: 5px; }}
+        .header-content p {{ color: #718096; }}
+        .content {{ padding: 30px; }}
         
         .metrics-grid {{
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 20px;
             margin-bottom: 30px;
         }}
-        
         .metric-card {{
-            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            background: #f8fafc;
             padding: 20px;
-            border-radius: 10px;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
             text-align: center;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            transition: transform 0.3s;
         }}
+        .metric-value {{ font-size: 1.8em; font-weight: bold; color: #2d3748; }}
+        .metric-unit {{ font-size: 0.5em; color: #718096; margin-left: 5px; font-weight: normal; vertical-align: middle; }}
+        .metric-label {{ font-size: 0.9em; color: #718096; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.05em; }}
         
-        .metric-card:hover {{
-            transform: translateY(-5px);
-        }}
-        
-        .metric-label {{
-            font-size: 0.9em;
-            color: #666;
-            margin-bottom: 10px;
-        }}
-        
-        .metric-value {{
-            font-size: 2em;
-            font-weight: bold;
-            color: #667eea;
-        }}
-        
-        .metric-unit {{
-            font-size: 0.8em;
-            color: #999;
-        }}
-        
-        .chart-container {{
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 10px;
+        .chart-section {{
             margin-bottom: 30px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }}
-        
-        .chart-title {{
-            font-size: 1.5em;
-            color: #333;
-            margin-bottom: 15px;
-            text-align: center;
-        }}
-        
-        #animatedChart {{
-            width: 100%;
-            height: 600px;
-        }}
-        
-        .controls {{
-            text-align: center;
-            margin: 20px 0;
-        }}
-        
-        .btn {{
-            background: #667eea;
-            color: white;
-            border: none;
-            padding: 12px 30px;
-            border-radius: 25px;
-            font-size: 1em;
-            cursor: pointer;
-            margin: 0 10px;
-            transition: all 0.3s;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        }}
-        
-        .btn:hover {{
-            background: #764ba2;
-            transform: translateY(-2px);
-            box-shadow: 0 6px 8px rgba(0,0,0,0.2);
-        }}
-        
-        .btn:active {{
-            transform: translateY(0);
-        }}
-        
-        .phases-section {{
-            margin-top: 30px;
-        }}
-        
-        .phase-card {{
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 20px;
             background: white;
-            border-left: 4px solid #667eea;
-            padding: 15px;
-            margin-bottom: 15px;
-            border-radius: 5px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }}
+        .chart-title {{ font-size: 1.2em; font-weight: 600; margin-bottom: 15px; color: #2d3748; display: flex; align-items: center; gap: 10px; }}
+        .chart-container {{ width: 100%; height: 500px; }}
         
-        .phase-title {{
-            font-size: 1.2em;
-            color: #667eea;
-            margin-bottom: 10px;
-        }}
-        
-        .phase-details {{
+        .two-col {{
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 10px;
-            font-size: 0.9em;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
         }}
         
-        .phase-detail {{
-            color: #666;
-        }}
-        
-        .phase-detail strong {{
-            color: #333;
+        @media (max-width: 1000px) {{
+            .two-col {{ grid-template-columns: 1fr; }}
         }}
         
         .footer {{
-            background: #f8f9fa;
-            padding: 20px;
             text-align: center;
-            color: #666;
-            border-top: 1px solid #ddd;
+            padding: 20px;
+            color: #718096;
+            font-size: 0.9em;
+            border-top: 1px solid #eee;
         }}
         
-        .data-table {{
-            width: 100%;
-            border-collapse: collapse;
-            margin: 20px 0;
-            background: white;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }}
-        
-        .data-table th {{
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 15px;
-            text-align: left;
-            font-weight: bold;
-        }}
-        
-        .data-table td {{
-            padding: 12px 15px;
-            border-bottom: 1px solid #ddd;
-        }}
-        
-        .data-table tr:nth-child(even) {{
-            background: #f8f9fa;
-        }}
-        
-        .data-table tr:hover {{
-            background: #e9ecef;
-        }}
-        
-        .table-container {{
-            margin: 30px 0;
-            overflow-x: auto;
-        }}
-        
-        .table-title {{
-            font-size: 1.5em;
-            color: #667eea;
-            margin-bottom: 15px;
+        .badge {{
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            font-weight: 600;
+            background: #edf2f7;
+            color: #4a5568;
         }}
     </style>
 </head>
-    <body>
+<body>
     <div class="container">
         <div class="header">
-            {f'<div style="text-align: center; margin-bottom: 20px;"><img src="data:image/png;base64,{logo_b64}" style="max-width: 200px; height: auto;" alt="vailá Logo"></div>' if logo_b64 else ''}
-            <h1>🚶 Sit-to-Stand Analysis Report</h1>
-            <p>{result.get('filename', 'Analysis File')}</p>
+            <div class="header-content">
+                <h1>Sit-to-Stand Analysis Report</h1>
+                <p>{result.get('filename', 'Analysis File')} • {datetime.now().strftime("%Y-%m-%d %H:%M")}</p>
+            </div>
+            {f'<img src="data:image/png;base64,{logo_b64}" style="height: 50px;" alt="vailá">' if logo_b64 else ''}
         </div>
         
         <div class="content">
-            <div class="metrics-grid">
-                <div class="metric-card">
-                    <div class="metric-label">Duration</div>
-                    <div class="metric-value">{analysis_result.get('duration', 0):.2f}<span class="metric-unit">s</span></div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-label">Max Force</div>
-                    <div class="metric-value">{analysis_result.get('max_force', 0):.1f}<span class="metric-unit">N</span></div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-label">Phases Detected</div>
-                    <div class="metric-value">{movement.get('num_phases', 0)}<span class="metric-unit">movements</span></div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-label">Stability Index</div>
-                    <div class="metric-value">{stability_data.get('stability_index', 0):.3f}<span class="metric-unit">(0-1)</span></div>
-                </div>
-                {f'''
-                <div class="metric-card">
-                    <div class="metric-label">Total Energy</div>
-                    <div class="metric-value">{energy.get('total_metabolic_energy_kcal', 0):.3f}<span class="metric-unit">kcal</span></div>
-                </div>
-                ''' if energy else ''}
-            </div>
+            {metrics_html}
             
-            <div class="chart-container">
-                <div class="chart-title">📊 Animated Force Analysis</div>
-                <div class="controls">
-                    <button class="btn" onclick="playAnimation()">▶️ Play Animation</button>
-                    <button class="btn" onclick="resetAnimation()">⏮️ Reset</button>
-                    <button class="btn" onclick="togglePause()">⏸️ Pause</button>
-                </div>
-                <div id="animatedChart"></div>
-            </div>
+            {f'<div class="chart-section"><div class="chart-title">📊 Force plot (PNG)</div><img src="data:image/png;base64,{force_plot_b64}" alt="Force plot" style="max-width:100%; height:auto; border-radius:8px;" /></div>' if force_plot_b64 else ''}
             
-            <div class="table-container">
-                <div class="table-title">📋 Analysis Data Summary</div>
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>Metric</th>
-                            <th>Value</th>
-                            <th>Unit</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {''.join([f'''
-                        <tr>
-                            <td>{row[0]}</td>
-                            <td>{row[1]}</td>
-                            <td>{row[2]}</td>
-                        </tr>
-                        ''' for row in table_data])}
-                    </tbody>
-                </table>
+            <div class="chart-section">
+                <div class="chart-title">📊 Vertical Force & RFD Analysis</div>
+                <div id="forceChart" class="chart-container" style="height: 600px;"></div>
             </div>
             
             {f'''
-            <div class="phases-section">
-                <h2 style="color: #667eea; margin-bottom: 20px;">Movement Phases</h2>
-                {''.join([f'''
-                <div class="phase-card">
-                    <div class="phase-title">Phase {i+1}</div>
-                    <div class="phase-details">
-                        <div class="phase-detail"><strong>Duration:</strong> {p.get('duration', 0):.3f} s</div>
-                        <div class="phase-detail"><strong>Peak Force:</strong> {p.get('peak_force', 0):.1f} N</div>
-                        <div class="phase-detail"><strong>Time to Peak:</strong> {p.get('time_to_max_force', 0):.3f} s</div>
-                        <div class="phase-detail"><strong>RFD:</strong> {p.get('overall_rfd', 0):.1f} N/s</div>
-                    </div>
+            <div class="two-col">
+                <div class="chart-section">
+                    <div class="chart-title">👣 CoP Path (Top View)</div>
+                    <div id="copPathChart" class="chart-container" style="height: 450px;"></div>
                 </div>
-                ''' for i, p in enumerate(phases)])}
+                <div class="chart-section">
+                    <div class="chart-title">📈 CoP Displacement vs Time</div>
+                    <div id="copTimeChart" class="chart-container" style="height: 450px;"></div>
+                </div>
             </div>
-            ''' if phases else ''}
+            ''' if has_cop else ''}
+            
         </div>
         
         <div class="footer">
-            <p>Report generated by <i>vailá</i> - Multimodal Toolbox</p>
-            <p>Date: {datetime.now().strftime("%d/%m/%Y %H:%M:%S")}</p>
+            Generated by vailá Multimodal Toolbox
         </div>
     </div>
     
     <script>
-        // Data - properly formatted as JSON
+        // Data
         const timeData = {json.dumps(time_data)};
         const forceData = {json.dumps(force_data)};
         const phases = {json.dumps(phases_data)};
         const peaks = {json.dumps(peaks_data)};
-        const stabilityRef = {stability_data.get('reference_peak_force', 0)};
         
-        let animationFrame = 0;
-        let isPlaying = false;
-        let animationId = null;
-        const animationSpeed = 2; // frames per update
+        // --- FORCE CHART ---
         
-        // Create initial trace
-        const trace = {{
-            x: [],
-            y: [],
-            type: 'scatter',
-            mode: 'lines',
-            name: 'Force',
-            line: {{
-                color: '#667eea',
-                width: 2
+        // Calculate RFD (Force Rate) for subplot
+        const rfdData = [];
+        for(let i=1; i<forceData.length; i++) {{
+            const dt = timeData[i] - timeData[i-1];
+            if(dt > 0) {{
+                rfdData.push((forceData[i] - forceData[i-1])/dt);
+            }} else {{
+                rfdData.push(0);
             }}
+        }}
+        rfdData.push(0); // Pad last
+        
+        const forceTrace = {{
+            x: timeData,
+            y: forceData,
+            name: 'Vertical Force (Fz)',
+            type: 'scatter',
+            line: {{ color: '#4299e1', width: 2 }},
+            fill: 'tozeroy',
+            fillcolor: 'rgba(66, 153, 225, 0.1)'
         }};
         
-        // Add phase regions
-        const phaseShapes = phases.map((phase, phaseIdx) => ({{
+        const rfdTrace = {{
+            x: timeData,
+            y: rfdData,
+            name: 'RFD (N/s)',
+            type: 'scatter',
+            yaxis: 'y2',
+            line: {{ color: '#ed8936', width: 1.5, dash: 'dot' }},
+            opacity: 0.7
+        }};
+        
+        // Phases Backgrounds
+        const shapes = phases.map((p, i) => ({{
             type: 'rect',
-            xref: 'x',
-            yref: 'paper',
-            x0: phase.start_time,
-            y0: 0,
-            x1: phase.end_time,
-            y1: 1,
-            fillcolor: 'rgba(102, 126, 234, ' + (0.1 + phaseIdx * 0.05) + ')',
-            line: {{
-                width: 0
-            }},
+            xref: 'x', yref: 'paper',
+            x0: p.start_time, x1: p.end_time,
+            y0: 0, y1: 1,
+            fillcolor: i%2===0 ? 'rgba(72, 187, 120, 0.15)' : 'rgba(72, 187, 120, 0.05)',
+            line: {{ width: 0 }},
             layer: 'below'
         }}));
         
-        // Add peak markers
-        const peakTrace = {{
-            x: peaks.map(p => p.time),
-            y: peaks.map(p => p.force),
-            type: 'scatter',
-            mode: 'markers',
-            name: 'Peaks',
-            marker: {{
-                color: '#e74c3c',
-                size: 10,
-                symbol: 'diamond'
-            }}
-        }};
-        
-        // Add stability reference line
-        const stabilityLine = {{
-            x: [timeData[0], timeData[timeData.length - 1]],
-            y: [stabilityRef, stabilityRef],
-            type: 'scatter',
-            mode: 'lines',
-            name: 'Reference Peak',
-            line: {{
-                color: '#f39c12',
-                width: 2,
-                dash: 'dash'
-            }}
-        }};
-        
-        const layout = {{
-            title: {{
-                text: 'Sit-to-Stand Force Analysis (Animated)',
-                font: {{ size: 20 }}
+        const layoutForce = {{
+            title: {{ text: 'Vertical Ground Reaction Force & RFD', font: {{size: 14}} }},
+            font: {{ family: 'Segoe UI' }},
+            xaxis: {{ title: 'Time (s)', gridcolor: '#f7fafc' }},
+            yaxis: {{ title: 'Force (N)', gridcolor: '#edf2f7' }},
+            yaxis2: {{
+                title: 'RFD (N/s)',
+                overlaying: 'y',
+                side: 'right',
+                showgrid: false,
+                zeroline: false
             }},
-            xaxis: {{
-                title: 'Time (s)',
-                range: [timeData[0], timeData[timeData.length - 1]]
-            }},
-            yaxis: {{
-                title: 'Force (N)'
-            }},
-            shapes: phaseShapes,
+            shapes: shapes,
             hovermode: 'closest',
-            showlegend: true,
-            legend: {{
-                x: 0.02,
-                y: 0.98
-            }}
+            legend: {{ orientation: 'h', y: 1.1 }},
+            margin: {{ l: 50, r: 50, t: 50, b: 50 }}
         }};
         
-        const config = {{
-            responsive: true,
-            displayModeBar: true
+        Plotly.newPlot('forceChart', [forceTrace, rfdTrace], layoutForce, {{responsive: true}});
+        
+        // --- CoP CHARTS ---
+        {f'''
+        const copX = {json.dumps(cop_x)};
+        const copY = {json.dumps(cop_y)};
+        const copEllipseX = {json.dumps(cop_ellipse_x)};
+        const copEllipseY = {json.dumps(cop_ellipse_y)};
+        
+        // CoP Path
+        const copPathTrace = {{
+            x: copX,
+            y: copY,
+            mode: 'markers+lines',
+            type: 'scatter',
+            name: 'CoP Path',
+            line: {{ color: '#805ad5', width: 1 }},
+            marker: {{ size: 3, color: timeData, colorscale: 'Viridis', showscale: false }}
+        }};
+        const copPathTraces = [copPathTrace];
+        if (copEllipseX.length > 0 && copEllipseY.length > 0) {{
+            copPathTraces.push({{
+                x: copEllipseX,
+                y: copEllipseY,
+                mode: 'lines',
+                type: 'scatter',
+                name: '95% Confidence Ellipse',
+                line: {{ color: 'gray', width: 2, dash: 'dash' }}
+            }});
+        }}
+        
+        const layoutCopPath = {{
+            title: {{ text: 'Center of Pressure Path (mm)', font: {{size: 14}} }},
+            xaxis: {{ title: 'CoP X (mm)', zeroline: true, zerolinecolor: '#cbd5e0' }},
+            yaxis: {{ title: 'CoP Y (mm)', zeroline: true, zerolinecolor: '#cbd5e0', scaleanchor: 'x', scaleratio: 1 }},
+            hovermode: 'closest',
+            margin: {{ l: 40, r: 40, t: 40, b: 40 }}
         }};
         
-        // Initialize plot
-        Plotly.newPlot('animatedChart', [trace, peakTrace, stabilityLine], layout, config);
+        Plotly.newPlot('copPathChart', copPathTraces, layoutCopPath, {{responsive: true}});
         
-        function playAnimation() {{
-            if (isPlaying) return;
-            isPlaying = true;
-            animate();
-        }}
+        // CoP Time Series
+        const copXTrace = {{
+            x: timeData,
+            y: copX,
+            name: 'CoP X (ML)',
+            line: {{ color: '#e53e3e' }}
+        }};
+        const copYTrace = {{
+            x: timeData,
+            y: copY,
+            name: 'CoP Y (AP)',
+            line: {{ color: '#38a169' }}
+        }};
         
-        function animate() {{
-            if (!isPlaying || animationFrame >= timeData.length) {{
-                isPlaying = false;
-                return;
-            }}
-            
-            const endFrame = Math.min(animationFrame + animationSpeed, timeData.length);
-            const xData = timeData.slice(0, endFrame);
-            const yData = forceData.slice(0, endFrame);
-            
-            Plotly.update('animatedChart', {{
-                x: [xData],
-                y: [yData]
-            }}, {{}}, [0]);
-            
-            animationFrame = endFrame;
-            
-            if (animationFrame < timeData.length) {{
-                animationId = setTimeout(animate, 50);
-            }} else {{
-                isPlaying = false;
-            }}
-        }}
+        const layoutCopTime = {{
+            title: {{ text: 'CoP Components over Time', font: {{size: 14}} }},
+            xaxis: {{ title: 'Time (s)' }},
+            yaxis: {{ title: 'Displacement (mm)' }},
+            legend: {{ orientation: 'h', y: 1.1 }},
+            margin: {{ l: 40, r: 40, t: 40, b: 40 }}
+        }};
         
-        function resetAnimation() {{
-            isPlaying = false;
-            if (animationId) {{
-                clearTimeout(animationId);
-            }}
-            animationFrame = 0;
-            Plotly.update('animatedChart', {{
-                x: [[]],
-                y: [[]]
-            }}, {{}}, [0]);
-        }}
+        Plotly.newPlot('copTimeChart', [copXTrace, copYTrace], layoutCopTime, {{responsive: true}});
+        ''' if has_cop else ''}
         
-        function togglePause() {{
-            isPlaying = !isPlaying;
-            if (isPlaying) {{
-                animate();
-            }} else {{
-                if (animationId) {{
-                    clearTimeout(animationId);
-                }}
-            }}
-        }}
-        
-        // Auto-play on load
-        setTimeout(() => {{
-            playAnimation();
-        }}, 1000);
     </script>
 </body>
 </html>"""
@@ -4068,10 +4232,10 @@ def generate_animated_html_report(data, analysis_result, config, output_path, re
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(html_content)
         
-        print(f"  Animated HTML report saved: {Path(output_path).name}")
+        print(f"  Interactive HTML report saved: {Path(output_path).name}")
         
     except Exception as e:
-        print(f"Error generating animated HTML report: {str(e)}")
+        print(f"Error generating interactive HTML report: {str(e)}")
         import traceback
         traceback.print_exc()
 
