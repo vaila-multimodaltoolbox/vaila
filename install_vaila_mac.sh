@@ -36,20 +36,23 @@ echo "This script will install or update vaila in: ~/vaila"
 echo "If vaila is already installed, it will be updated with the latest code."
 echo ""
 
-# Prompt user to choose installation method
-echo "---------------------------------------------"
-echo "Installation Method Selection"
-echo "  [1] uv (recommended - modern, fast)"
-echo "  [2] Conda (legacy - for compatibility)"
-echo "---------------------------------------------"
-printf "Choose an option [1-2] (default: 1): "
-read INSTALL_METHOD
-INSTALL_METHOD=${INSTALL_METHOD:-1}
+# Prompt user to choose installation method only if not already set (e.g. by bootstrap re-invocation)
+if [[ -z "$INSTALL_METHOD" || ( "$INSTALL_METHOD" != "1" && "$INSTALL_METHOD" != "2" ) ]]; then
+    echo "---------------------------------------------"
+    echo "Installation Method Selection"
+    echo "  [1] uv (recommended - modern, fast)"
+    echo "  [2] Conda (legacy - for compatibility)"
+    echo "---------------------------------------------"
+    printf "Choose an option [1-2] (default: 1): "
+    read INSTALL_METHOD
+    INSTALL_METHOD=${INSTALL_METHOD:-1}
 
-if [[ "$INSTALL_METHOD" != "1" && "$INSTALL_METHOD" != "2" ]]; then
-    echo "Invalid option. Defaulting to uv (option 1)."
-    INSTALL_METHOD=1
+    if [[ "$INSTALL_METHOD" != "1" && "$INSTALL_METHOD" != "2" ]]; then
+        echo "Invalid option. Defaulting to uv (option 1)."
+        INSTALL_METHOD=1
+    fi
 fi
+INSTALL_METHOD=${INSTALL_METHOD:-1}
 
 # Define paths (common to both methods)
 USER_HOME="$HOME"
@@ -72,7 +75,7 @@ if [ ! -f "$PROJECT_DIR/pyproject.toml" ]; then
     
     echo "Running installer from downloaded source..."
     chmod +x "$TEMP_DIR/vaila/install_vaila_mac.sh"
-    "$TEMP_DIR/vaila/install_vaila_mac.sh" "$@"
+    INSTALL_METHOD="$INSTALL_METHOD" "$TEMP_DIR/vaila/install_vaila_mac.sh" "$@"
     EXIT_CODE=$?
     
     echo "Cleaning up temporary files..."
@@ -138,8 +141,8 @@ EOF
     
     cat <<EOF > "$APP_DIR/Contents/MacOS/vaila"
 #!/bin/bash
-# Open a terminal window to run the script
-open -a Terminal "$RUN_SCRIPT"
+# Open Terminal by bundle ID (works in any system language: English, Portuguese, etc.)
+open -b com.apple.Terminal "$RUN_SCRIPT"
 EOF
 
     chmod +x "$APP_DIR/Contents/MacOS/vaila"
