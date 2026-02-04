@@ -13,14 +13,15 @@
 #      ./create_dmg_installer.sh                                                        #
 #                                                                                       #
 # Notes:                                                                                #
-#   - Requires hdiutil (built-in macOS tool)                                           #
+#   - Requires hdiutil (built-in macOS tool)                                            #
 #   - Creates a .dmg file in the current directory                                      #
-#   - The .dmg will contain the vaila installer scripts and necessary files             #
+#   - The .dmg contains "Install vaila.app": user drags it to Applications, then       #
+#     double-clicks it to run the installer (Terminal opens and runs install_vaila_mac.sh) #
 #                                                                                       #
 # Author: Prof. Dr. Paulo R. P. Santiago                                                #
 # Creation: 20 November 2025                                                           #
 # Update: 27 January 2026                                                              #
-# Version: 0.3.17                                                                     #
+# Version: 0.3.18                                                                     #
 # OS: macOS                                                                             #
 #########################################################################################
 
@@ -126,48 +127,100 @@ rsync -av \
 # Make install script executable
 chmod +x "$INSTALLER_DIR/install_vaila_mac.sh"
 
-# Create Applications symlink (for drag-and-drop install)
-echo "Creating Applications symlink..."
-ln -s /Applications "$DMG_TEMP_DIR/Applications"
+# ---------------------------------------------------------------------------
+# Create "Install vaila.app" so that double-click runs the installer in Terminal
+# (drag to Applications then double-click = copy + run install for non-technical users)
+# ---------------------------------------------------------------------------
+APP_NAME="Install vaila.app"
+APP_PATH="$DMG_TEMP_DIR/$APP_NAME"
+echo "Creating $APP_NAME bundle..."
+mkdir -p "$APP_PATH/Contents/MacOS"
+mkdir -p "$APP_PATH/Contents/Resources"
 
-# Create a README file with installation instructions
+# Move installer files into the app's Resources (so app is self-contained)
+mv "$INSTALLER_DIR" "$APP_PATH/Contents/Resources/vaila_installer"
+INSTALLER_DIR="$APP_PATH/Contents/Resources/vaila_installer"
+
+# Launcher: open Terminal and run the installer (run_install.command lives in Resources)
+cat > "$APP_PATH/Contents/Resources/run_install.command" << 'LAUNCHER'
+#!/bin/bash
+DIR="$(cd "$(dirname "$0")" && pwd)"
+INSTALLER_DIR="$DIR/vaila_installer"
+cd "$INSTALLER_DIR" || exit 1
+./install_vaila_mac.sh
+echo ""
+echo "Press Enter to close this window."
+read
+LAUNCHER
+chmod +x "$APP_PATH/Contents/Resources/run_install.command"
+
+# App executable: open Terminal by bundle ID (works in any system language)
+cat > "$APP_PATH/Contents/MacOS/install_vaila" << 'APPEXEC'
+#!/bin/bash
+BINDIR="$(dirname "$0")"
+APP_CONTENTS="$(cd "$BINDIR/.." && pwd)"
+open -b com.apple.Terminal "$APP_CONTENTS/Resources/run_install.command"
+APPEXEC
+chmod +x "$APP_PATH/Contents/MacOS/install_vaila"
+
+# Minimal Info.plist for the installer app
+cat > "$APP_PATH/Contents/Info.plist" << 'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleExecutable</key>
+    <string>install_vaila</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.vaila.installer</string>
+    <key>CFBundleName</key>
+    <string>Install vaila</string>
+    <key>CFBundleDisplayName</key>
+    <string>Install vaila</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+</dict>
+</plist>
+PLIST
+
+# Create Applications symlink with localized name (works in any macOS language)
+# Get the folder name as shown in Finder for the current locale (e.g. Applications, Aplicativos)
+APPLICATIONS_DMG_NAME=$(osascript -e 'tell application "Finder" to get name of folder "Applications" of startup disk' 2>/dev/null || echo "Applications")
+echo "Creating Applications symlink (locale: $APPLICATIONS_DMG_NAME)..."
+ln -s /Applications "$DMG_TEMP_DIR/$APPLICATIONS_DMG_NAME"
+
+# Create README with installation instructions (simplified for end users)
 cat > "$DMG_TEMP_DIR/README.txt" << 'EOF'
-=====================================
+============================================================
 vaila - Installation Instructions
-=====================================
+============================================================
 
-To install vaila:
+To install vaila (easy way):
 
-1. Double-click "vaila_installer" folder
-2. Open Terminal and run:
-   cd vaila_installer
-   ./install_vaila_mac.sh
+1. Drag "Install vaila.app" to the Applications folder (as indicated by the arrow).
 
-   OR simply drag "vaila_installer" folder to your Desktop,
-   open Terminal, and run:
-   cd ~/Desktop/vaila_installer
-   ./install_vaila_mac.sh
-   
-   Note: The installer will ask you to choose between:
+2. Open Applications (e.g. from the Dock or Finder) and double-click "Install vaila.app".
+
+3. A Terminal window will open and run the installer.
+   When asked, choose:
    - Option 1: uv (recommended, modern, fast)
    - Option 2: Conda (legacy, for compatibility)
 
-3. The installer will:
-   - Install uv (if needed)
-   - Install Python 3.12.12
-   - Create virtual environment
-   - Install all dependencies
-   - Create vaila.app in Applications
-
-4. After installation, you can find vaila in:
+4. When the installation finishes, you can find vaila in:
    - Launchpad
-   - /Applications/vaila.app
+   - Applications (vaila.app)
    - Spotlight (search for "vaila")
 
-=====================================
+The installer will:
+- Install uv (if needed)
+- Install Python 3.12.12
+- Create the environment and install dependencies
+- Create vaila.app in your Applications folder
+
+============================================================
 For more information, visit:
 https://github.com/vaila-multimodaltoolbox/vaila
-=====================================
+============================================================
 EOF
 
 # Set up DMG background and window properties using AppleScript
@@ -262,9 +315,12 @@ sleep 3
 fi
 
 # Configure DMG window appearance using AppleScript (only if mount succeeded)
+# Use placeholder for Applications folder name (localized: Applications, Aplicativos, etc.)
 if [ -n "$DEVICE" ] && [ -d "$MOUNT_DIR" ]; then
 echo "Configuring DMG window appearance..."
-osascript << 'APPLESCRIPT'
+# Escape for sed replacement ( & and \ )
+APPLICATIONS_ESC=$(printf '%s' "$APPLICATIONS_DMG_NAME" | sed 's/\\/\\\\/g; s/&/\\&/g')
+sed "s|__APPLICATIONS_NAME__|$APPLICATIONS_ESC|g" << 'APPLESCRIPT' | osascript -
 tell application "Finder"
     activate
     try
@@ -290,10 +346,10 @@ tell application "Finder"
         delay 1
         
         try
-            set position of item "vaila_installer" of theWindow to {140, 200}
+            set position of item "Install vaila.app" of theWindow to {140, 200}
         end try
         try
-            set position of item "Applications" of theWindow to {460, 200}
+            set position of item "__APPLICATIONS_NAME__" of theWindow to {460, 200}
         end try
         try
             set position of item "README.txt" of theWindow to {300, 360}
@@ -418,10 +474,8 @@ echo ""
 echo "The DMG installer is ready for distribution!"
 echo "Users should:"
 echo "  1. Double-click the .dmg file to mount it"
-echo "  2. Copy the 'vaila_installer' folder to their Desktop or desired location"
-echo "  3. Open Terminal and run:"
-echo "     cd ~/Desktop/vaila_installer"
-echo "     ./install_vaila_mac.sh"
-echo "     (The installer will ask you to choose between uv or Conda installation method)"
+echo "  2. Drag 'Install vaila.app' to the Applications folder"
+echo "  3. Double-click 'Install vaila.app' to run the installer (Terminal will open)"
+echo "  4. Choose uv (recommended) or Conda when prompted"
 echo ""
 
