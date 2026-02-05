@@ -54,6 +54,8 @@ MANIFEST
 *.exe
 *.dmg
 *.deb
+*.rpm
+build_packages/
 
 # PyInstaller
 # Usually these files are written by a python script from a template
