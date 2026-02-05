@@ -7,7 +7,7 @@ Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/paulopreto/vaila-multimodaltoolbox
 Date: 22 July 2025
 Update: 3 February 2026
-Version: 0.3.18
+Version: 0.3.19
 Python Version: 3.12.12
 
 Description:

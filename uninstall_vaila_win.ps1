@@ -8,7 +8,7 @@
     Creation Date: 10 Jan 2025
     Last Update: 03 February 2026
     Author: Paulo R. P. Santiago
-    Version: 0.3.18
+    Version: 0.3.19
 #>
 
 $ErrorActionPreference = "Continue"
