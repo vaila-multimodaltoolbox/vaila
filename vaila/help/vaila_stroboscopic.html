@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>vailá - Stroboscopic Generator Help</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; background-color: #f5f5f5; font-size: 18px; }
+        .container { max-width: 1000px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 30px; border-left: 5px solid #3498db; padding-left: 10px; background-color: #e8f4f8; padding: 10px; }
+        code { background: #f0f0f0; padding: 2px 5px; border-radius: 3px; font-family: monospace; }
+        pre { background: #2c3e50; color: #ecf0f1; padding: 15px; border-radius: 5px; overflow-x: auto; }
+        .back-link { display: inline-block; margin-bottom: 20px; text-decoration: none; color: #3498db; font-weight: bold; }
+        .back-link:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="index.html" class="back-link">← Back to Index</a>
+        
+        <h1>Stroboscopic Effect Generator</h1>
+        <p><strong>Script:</strong> <code>vaila/vaila_stroboscopic.py</code></p>
+
+        <h2>Overview</h2>
+        <p>This tool generates a <strong>stroboscopic (chronophotography) image</strong> from a video file and associated pose data (CSV). It visualizes human motion by overlaying multiple skeleton instances on a single background image, creating a "motion trail" effect.</p>
+
+        <h2>Key Features</h2>
+        <ul>
+            <li><strong>Temporal Gradient:</strong> Skeletons are colored from <strong>Blue (Start)</strong> to <strong>Red (End)</strong>, clearly showing the direction of movement.</li>
+            <li><strong>Enhanced Visualization:</strong> Uses the vaila-standard "Enhanced Skeleton" style, which includes:
+                <ul>
+                    <li>Explicit segments (Arm, Forearm, Thigh, Leg, etc.)</li>
+                    <li>Computed midpoints (Neck, Mid-Hip, Mid-Shoulder)</li>
+                    <li>Color-coded sides (Left=Sky Blue, Right=Coral)</li>
+                </ul>
+            </li>
+            <li><strong>Automatic Data Detection:</strong> Can automatically find the corresponding CSV file if naming conventions are followed.</li>
+            <li><strong>Flexible Input:</strong> Works via GUI (file picker) or Command Line Interface (CLI).</li>
+        </ul>
+
+        <h2>Usage</h2>
+
+        <h3>1. GUI Method (Recommended)</h3>
+        <ol>
+            <li>Launch <code>vaila.py</code>.</li>
+            <li>Navigate to the <strong>Visualization</strong> frame (Frame C).</li>
+            <li>Click the <strong>"Stroboscopic"</strong> button.</li>
+            <li>Select your video file in the dialog window.
+                <ul>
+                    <li>The script will look for a CSV with the same name (e.g., <code>video.mp4</code> → <code>video.csv</code> or <code>video_vaila_analyzed.csv</code>).</li>
+                </ul>
+            </li>
+            <li>The output image (<code>_stroboscopic.png</code>) will be saved in the same directory.</li>
+        </ol>
+
+        <h3>2. Command Line Interface (CLI)</h3>
+        <p>You can run the script directly from the terminal for batch processing or advanced control.</p>
+
+        <pre>uv run vaila/vaila_stroboscopic.py -v /path/to/video.mp4 -i 10</pre>
+
+        <p><strong>Arguments:</strong></p>
+        <ul>
+            <li><code>-v</code>, <code>--video</code>: Path to the input video file (Required if not using GUI).</li>
+            <li><code>-c</code>, <code>--csv</code>: Path to the pixel coordinates CSV file (Optional, auto-detected if omitted).</li>
+            <li><code>-o</code>, <code>--output</code>: Path for the output PNG image (Optional).</li>
+            <li><code>-i</code>, <code>--interval</code>: Frame interval for the strobe effect (Default: 10). A higher number means fewer skeletons drawn.</li>
+        </ul>
+
+        <h2>Output</h2>
+        <p>The tool produces a high-resolution PNG image overlaying the skeletons onto the first frame of the video (background darkened for contrast).</p>
+        
+        <div style="text-align: center; margin-top: 20px; color: #888;">
+            <p><em>(Example output would be displayed here)</em></p>
+        </div>
+
+    </div>
+</body>
+</html>

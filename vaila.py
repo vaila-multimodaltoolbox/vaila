@@ -1241,11 +1241,11 @@ class Vaila(tk.Tk):
             width=button_width,
         )
 
-        # C_C_r3_c2 - Visualization: vailá
-        vaila_btn17 = tk.Button(
+        # C_C_r3_c2 - Visualization: Stroboscopic
+        stroboscopic_btn = tk.Button(
             tools_col3,
-            text="vailá",
-            command=self.show_vaila_message,
+            text="Stroboscopic",
+            command=self.run_stroboscopic,
             width=button_width,
         )
 
@@ -1287,7 +1287,7 @@ class Vaila(tk.Tk):
         plot_2d_btn.grid(row=1, column=0, padx=2, pady=2)
         plot_3d_btn.grid(row=1, column=1, padx=2, pady=2)
         draw_soccerfield_btn.grid(row=2, column=0, padx=2, pady=2)
-        vaila_btn17.grid(row=2, column=1, padx=2, pady=2)
+        stroboscopic_btn.grid(row=2, column=1, padx=2, pady=2)
         vaila_btn18.grid(row=3, column=0, padx=2, pady=2)
         vaila_btn19.grid(row=3, column=1, padx=2, pady=2)
         vaila_btn20.grid(row=4, column=0, padx=2, pady=2)
@@ -2614,6 +2614,11 @@ class Vaila(tk.Tk):
         from vaila import soccerfield
 
         soccerfield.run_soccerfield()
+
+    # C_C_r3_c2
+    def run_stroboscopic(self):
+        """Runs the Stroboscopic Image Generator module."""
+        run_vaila_module("vaila.vaila_stroboscopic", "vaila/vaila_stroboscopic.py")
 
     # C_C_r3_c2
     # def vaila(self):

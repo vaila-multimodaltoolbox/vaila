@@ -263,6 +263,27 @@ landmark_names = [
     "right_foot_index",
 ]
 
+# Standard Motion Capture Side Colors (BGR)
+# Lines
+COLOR_LEFT_LINE = (0, 0, 255)   # Red
+COLOR_RIGHT_LINE = (0, 255, 0)  # Green
+COLOR_NEUTRAL_LINE = (255, 255, 255) # White
+
+# Points
+COLOR_LEFT_POINT = (0, 255, 255)   # Yellow
+COLOR_RIGHT_POINT = (255, 0, 0)    # Blue
+COLOR_NEUTRAL_POINT = (255, 255, 255) # White
+
+# MediaPipe Pose Landmark Indices
+# Left side indices (odd numbers usually)
+LEFT_INDICES = {
+    1, 2, 3, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31
+}
+# Right side indices (even numbers usually)
+RIGHT_INDICES = {
+    4, 5, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32
+}
+
 VERBOSE_FRAMES = False  # Set to True to print per-frame pose detection status
 PAD_START_FRAMES = 120  # Number of initial frames to pad for MediaPipe stabilization
 
@@ -4067,6 +4088,40 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
         frame_count = 0
         landmarks_history = deque(maxlen=30)
         
+        # --- PADDING (WARM-UP) LOGIC ---
+        current_timestamp_ms = 0
+        frame_duration_ms = int(1000 / fps) if fps > 0 else 33
+        
+        enable_padding = pose_config.get("enable_padding", ENABLE_PADDING_DEFAULT)
+        pad_frames_count = pose_config.get("pad_start_frames", PAD_START_FRAMES_DEFAULT)
+        
+        if enable_padding and pad_frames_count > 0:
+            print(f"Applying initial padding: {pad_frames_count} frames to stabilize model...")
+            success, first_frame = cap.read()
+            if success:
+                # Create MediaPipe Image from the first frame
+                mp_first_frame = mp.Image(image_format=mp.ImageFormat.SRGB, data=cv2.cvtColor(first_frame, cv2.COLOR_BGR2RGB))
+                
+                # Check for ROI to apply consistent cropping logic if needed
+                # However, for pure stabilization, feeding the full frame or consistent ROI is key.
+                # Simplest approach: Feed full frame or valid crop if static. 
+                # Ideally we mimic the first frame processing. 
+                # For now, we will simply feed the image to warm up the internal state.
+                
+                # Note: If crop is dynamic, we might need more complex logic, but usually first frame ROI is static or None.
+                
+                for _ in range(pad_frames_count):
+                    # We just run detection to update internal state (recurrence)
+                    landmarker.detect_for_video(mp_first_frame, current_timestamp_ms)
+                    current_timestamp_ms += frame_duration_ms
+                
+                # Reset video to start
+                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                print("Padding complete. Starting main analysis...")
+            else:
+                print("Warning: Could not read first frame for padding. Skipping.")
+        # -------------------------------
+        
         while cap.isOpened():
             ret, frame = cap.read()
             if not ret:
@@ -4076,7 +4131,8 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
             if should_throttle_cpu(frame_count):
                 apply_cpu_throttling()
 
-            timestamp_ms = int((frame_count * 1000) / fps)
+            # Ensure continuous timestamp from padding
+            timestamp_ms = current_timestamp_ms
             
             # Determine ROI for this frame
             bbox_config = get_bbox_config_for_frame(frame_count, pose_config, width, height)
@@ -4119,25 +4175,98 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
                 ]
                 pixel_landmarks_list.append(pixel_landmarks)
                 
-                # Draw landmarks (Simple circle drawing for speed/robustness)
-                for i, lm in enumerate(landmarks):
-                     # Map normalized back to current frame dimensions for drawing
-                     px = int(lm[0] * width)
-                     py = int(lm[1] * height)
-                     cv2.circle(annotated_frame, (px, py), 4, (0, 255, 0), -1)
+                # --- NEW DRAWING LOGIC (mpangles style) ---
                 
-                # Draw skeleton connections
-                for connection in POSE_CONNECTIONS:
-                    start_idx, end_idx = connection
-                    if start_idx < len(landmarks) and end_idx < len(landmarks):
-                        start_lm = landmarks[start_idx]
-                        end_lm = landmarks[end_idx]
-                        # Skip if any coordinate is NaN
-                        if not (np.isnan(start_lm[0]) or np.isnan(start_lm[1]) or 
-                                np.isnan(end_lm[0]) or np.isnan(end_lm[1])):
-                            start_pt = (int(start_lm[0] * width), int(start_lm[1] * height))
-                            end_pt = (int(end_lm[0] * width), int(end_lm[1] * height))
-                            cv2.line(annotated_frame, start_pt, end_pt, (255, 0, 0), 2)
+                # 1. Map landmarks to dictionary of naming -> (px, py)
+                l_names = [
+                    "nose", "left_eye_inner", "left_eye", "left_eye_outer",
+                    "right_eye_inner", "right_eye", "right_eye_outer",
+                    "left_ear", "right_ear", "mouth_left", "mouth_right",
+                    "left_shoulder", "right_shoulder", "left_elbow", "right_elbow",
+                    "left_wrist", "right_wrist", "left_pinky", "right_pinky",
+                    "left_index", "right_index", "left_thumb", "right_thumb",
+                    "left_hip", "right_hip", "left_knee", "right_knee",
+                    "left_ankle", "right_ankle", "left_heel", "right_heel",
+                    "left_foot_index", "right_foot_index"
+                ]
+                
+                pts = {}
+                for i, name in enumerate(l_names):
+                    if i < len(landmarks):
+                        lm = landmarks[i]
+                        # Normalized to pixel
+                        px = int(lm[0] * width)
+                        py = int(lm[1] * height)
+                        pts[name] = np.array([px, py])
+                    else:
+                        pts[name] = np.array([np.nan, np.nan])
+
+                # Helper for midpoint
+                def compute_mid(p1, p2):
+                     if np.isnan(p1).any() or np.isnan(p2).any(): return np.array([np.nan, np.nan])
+                     return (p1 + p2) / 2
+
+                # 2. Compute Midpoints
+                pts['mid_shoulder'] = compute_mid(pts['left_shoulder'], pts['right_shoulder'])
+                pts['mid_hip'] = compute_mid(pts['left_hip'], pts['right_hip'])
+                pts['mid_ear'] = compute_mid(pts['left_ear'], pts['right_ear'])
+                pts['left_mid_hand'] = compute_mid(pts['left_pinky'], pts['left_index'])
+                pts['right_mid_hand'] = compute_mid(pts['right_pinky'], pts['right_index'])
+
+                # 3. Define Colors (BGR)
+                C_RIGHT = (80, 80, 255)   # Coral/Red-ish
+                C_LEFT = (255, 191, 0)    # Sky Blue
+                C_CENTER = (240, 240, 240) # White/Gray
+                C_JOINT = (0, 255, 0)     # Green
+
+                # 4. Drawing Helpers
+                def dline(p1, p2, color, thick=3):
+                    if np.isnan(p1).any() or np.isnan(p2).any(): return
+                    pt1 = (int(p1[0]), int(p1[1]))
+                    pt2 = (int(p2[0]), int(p2[1]))
+                    cv2.line(annotated_frame, pt1, pt2, color, thick, cv2.LINE_AA)
+
+                def dcircle(p, color, radius=5):
+                    if np.isnan(p).any(): return
+                    pt = (int(p[0]), int(p[1]))
+                    cv2.circle(annotated_frame, pt, radius, (255,255,255), -1, cv2.LINE_AA) # white border
+                    cv2.circle(annotated_frame, pt, radius-2, color, -1, cv2.LINE_AA)
+
+                # 5. Draw Segments
+                # Right Side
+                dline(pts['right_shoulder'], pts['right_elbow'], C_RIGHT)
+                dline(pts['right_elbow'], pts['right_wrist'], C_RIGHT)
+                dline(pts['right_wrist'], pts['right_mid_hand'], C_RIGHT)
+                dline(pts['right_hip'], pts['right_knee'], C_RIGHT)
+                dline(pts['right_knee'], pts['right_ankle'], C_RIGHT)
+                dline(pts['right_ankle'], pts['right_heel'], C_RIGHT)
+                dline(pts['right_heel'], pts['right_foot_index'], C_RIGHT)
+                dline(pts['right_ankle'], pts['right_foot_index'], C_RIGHT)
+
+                # Left Side
+                dline(pts['left_shoulder'], pts['left_elbow'], C_LEFT)
+                dline(pts['left_elbow'], pts['left_wrist'], C_LEFT)
+                dline(pts['left_wrist'], pts['left_mid_hand'], C_LEFT)
+                dline(pts['left_hip'], pts['left_knee'], C_LEFT)
+                dline(pts['left_knee'], pts['left_ankle'], C_LEFT)
+                dline(pts['left_ankle'], pts['left_heel'], C_LEFT)
+                dline(pts['left_heel'], pts['left_foot_index'], C_LEFT)
+                dline(pts['left_ankle'], pts['left_foot_index'], C_LEFT)
+
+                # Center
+                dline(pts['mid_shoulder'], pts['mid_hip'], C_CENTER)
+                dline(pts['mid_ear'], pts['mid_shoulder'], C_CENTER)
+                dline(pts['right_shoulder'], pts['left_shoulder'], C_CENTER, 2)
+                dline(pts['right_hip'], pts['left_hip'], C_CENTER, 2)
+
+                # 6. Draw Joints
+                for name, pt in pts.items():
+                    if 'mid' in name: continue
+                    if name == 'nose': continue
+                    if 'eye' in name: continue
+                    dcircle(pt, C_JOINT, 5)
+                
+                # ----------------------------------------
                      
                 # Draw ROI box if crop enabled
                 if bbox_config.get("enable_crop", False):
@@ -4156,6 +4285,7 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
             
             out_video.write(annotated_frame)
             frame_count += 1
+            current_timestamp_ms += frame_duration_ms
             
             if frame_count % 100 == 0:
                 print(f"Processed {frame_count}/{total_frames} frames...")

@@ -26,140 +26,147 @@
 
   <div class="info-box">
     <strong>Module Information:</strong><br>
-    Category: Utils | File: vaila/mpangles.py | Version: 0.0.2<br>
-    Author: Paulo R. P. Santiago | License: AGPL v3.0
+    Category: Utils | File: vaila/mpangles.py | Version: 0.0.3<br>
+    Author: Paulo R. P. Santiago | Update: February 2026 | License: AGPL v3.0
   </div>
 
   <h2>Description</h2>
   <p>
-    The <strong>MP Angles</strong> module calculates absolute and relative joint angles from landmark coordinates obtained from MediaPipe pose estimation. This tool processes CSV files containing MediaPipe landmark data (33 landmarks) and generates comprehensive angle calculations for biomechanical analysis.
+    The <strong>MP Angles</strong> module calculates absolute and relative joint angles from MediaPipe landmark coordinates. It processes <strong>CSV files</strong> (or a <strong>Directory</strong> in batch), optionally with a matching video to generate skeleton overlay and angles. Outputs include angle CSVs, an annotated video (when video is used), and an HTML report with an angles table and a stick-figure sequence PNG.
   </p>
 
   <h3>Key Features</h3>
   <ul>
-    <li><strong>Absolute Angles:</strong> Calculates angles between body segments and the horizontal axis</li>
-    <li><strong>Relative Angles:</strong> Computes joint angles between connected body segments</li>
-    <li><strong>Video Visualization:</strong> Creates annotated videos with skeleton overlay and real-time angle display</li>
+    <li><strong>Input:</strong> CSV or Directory only. For CSV, you select the corresponding video for overlay when running. For Directory, the module finds videos and matching CSVs by name (prefers <code>*_pixel_vaila.csv</code>).</li>
+    <li><strong>Absolute Angles:</strong> Left side -180° to +180°, right side 0° to 360° in the video overlay. All segments: trunk, neck, thigh, shank, foot, upper arm, forearm, hand.</li>
+    <li><strong>Relative Angles:</strong> Joint angles (shoulder, elbow, wrist, hip, knee, ankle, neck, trunk). Neck (relative) is shown at the top center of the video.</li>
+    <li><strong>Smoothing (optional):</strong> Section “Smoothing (optional)” with a clear checkbox: “Apply Butterworth low-pass filter (smooth joint trajectories)”. Hint: “Use when data is noisy; leave unchecked for raw angles.” Cutoff (Hz), Order, and FPS are always editable.</li>
+    <li><strong>HTML Report:</strong> Contains an <strong>Angles</strong> table (preview of relative angles CSV) and a <strong>Pose sequence (stick figures)</strong> PNG — no embedded video. For directory runs, <strong>batch_analysis_report.html</strong> lists all processed videos with links to reports and output videos.</li>
+    <li><strong>Video overlay:</strong> Skeleton and angle values in corners; angle values at joints on the figure.</li>
   </ul>
 
   <h2>Supported Angles</h2>
-  
-  <h3>Relative Angles (Joint Angles)</h3>
+
+  <h3>Relative (joint angles)</h3>
   <ul>
-    <li>Neck Angle</li>
-    <li>Trunk Angle</li>
-    <li>Shoulder Angle (left and right)</li>
-    <li>Elbow Angle (left and right)</li>
-    <li>Wrist Angle (left and right)</li>
-    <li>Hip Angle (left and right)</li>
-    <li>Knee Angle (left and right)</li>
-    <li>Ankle Angle (left and right)</li>
+    <li>Neck, Trunk</li>
+    <li>Shoulder, Elbow, Wrist (left and right)</li>
+    <li>Hip, Knee, Ankle (left and right)</li>
   </ul>
 
-  <h3>Absolute Angles (Segment Angles)</h3>
+  <h3>Absolute (segment angles)</h3>
   <ul>
-    <li>Upper arm, Forearm, Hand (left and right)</li>
+    <li>Trunk, Neck</li>
     <li>Thigh, Shank, Foot (left and right)</li>
-    <li>Trunk and Neck</li>
+    <li>Upper arm, Forearm, Hand (left and right)</li>
   </ul>
+  <p>Generated in both -180°..+180° and 0°..360° formats.</p>
 
   <h2>Usage</h2>
 
-  <h3>Method 1: GUI Mode (Recommended)</h3>
+  <h3>GUI (recommended)</h3>
   <ol>
-    <li>Click the <strong>"MP Angles"</strong> button (B4_r4_c4) in the vailá GUI</li>
-    <li>Select angle format: 0-360° or -180° to +180°</li>
-    <li>Choose processing type:
-      <ul>
-        <li><strong>Yes:</strong> Process video with visualization (requires CSV + video)</li>
-        <li><strong>No:</strong> Process CSV files only (faster, batch processing)</li>
-      </ul>
-    </li>
-    <li>Select input files/directory as prompted</li>
-    <li>Wait for processing to complete</li>
+    <li>Launch the module.</li>
+    <li><strong>Input:</strong> Choose <strong>CSV</strong> or <strong>Dir</strong> and browse to the file or folder.</li>
+    <li><strong>Smoothing:</strong> Optionally check “Apply Butterworth low-pass filter...” and set Cutoff, Order, FPS (always editable).</li>
+    <li>Click <strong>RUN ANALYSIS</strong>. If you selected a CSV, you will be asked to select the video for that CSV; then the overlay and report are generated. If you selected a directory, videos are processed in batch and the batch report is created there.</li>
   </ol>
 
-  <h3>Method 2: Command Line</h3>
-  <pre><code>conda activate vaila
-python -m vaila.mpangles</code></pre>
+  <h3>Command line</h3>
+  <pre><code># Directory (batch): videos + matching CSVs → overlay and report for each
+python -m vaila.mpangles -i /path/to/dir
+
+# CSV only: angle CSVs only (no video, no report)
+python -m vaila.mpangles -i /path/to/landmarks.csv
+
+# CSV + video: overlay and report
+python -m vaila.mpangles -i /path/to/landmarks.csv -v /path/to/video.mp4
+
+# Everything together: CSV + video + Butterworth filter
+python -m vaila.mpangles -i /path/to/landmarks.csv -v /path/to/video.mp4 --filter --cutoff 6.0 --order 4 --fps 30
+
+# Directory with filter
+python -m vaila.mpangles -i /path/to/dir --filter --cutoff 6.0 --order 4 --fps 30</code></pre>
+  <p><strong>Arguments:</strong> <code>-i/--input</code> (CSV or directory), <code>-v/--video</code> (video path; use with CSV for overlay and report), <code>-o/--output</code> (optional; default: folder <code>angles_video_&lt;timestamp&gt;</code> next to the video), <code>--filter</code>, <code>--cutoff</code>, <code>--order</code>, <code>--fps</code>.</p>
+  <p>With <strong>CSV + video</strong> (with or without <code>--filter</code>), output is written to that folder: the three angle CSVs, <code>angles_&lt;videoname&gt;.mp4</code>, the stick-figure PNG, and <code>analysis_report.html</code>.</p>
 
   <h2>Input Requirements</h2>
 
-  <h3>CSV File Format</h3>
-  <p>Input CSV files must contain MediaPipe landmark coordinates:</p>
+  <h3>CSV format</h3>
   <ul>
-    <li><strong>First column:</strong> Frame index (0, 1, 2, ...)</li>
-    <li><strong>Subsequent columns:</strong> 33 landmarks × 2 coordinates = 66 columns</li>
-    <li><strong>Format:</strong> p0_x, p0_y, p1_x, p1_y, ..., p32_x, p32_y</li>
-    <li><strong>Total:</strong> 67 columns (1 frame + 66 coordinates)</li>
+    <li><strong>First column:</strong> Frame index</li>
+    <li><strong>Next columns:</strong> 33 landmarks × 2 coordinates = 66 columns (e.g. p1_x, p1_y, ..., p33_x, p33_y)</li>
+    <li><strong>Total:</strong> At least 67 columns. Angle output files (e.g. *_rel.csv) are not valid inputs and are skipped in directory mode.</li>
   </ul>
 
   <div class="info-box">
-    <strong>Note:</strong> CSV files from Markerless 2D Analysis are directly compatible with MP Angles.
+    <strong>Preferred format:</strong> <code>*_pixel_vaila.csv</code> (vaila format). The module prefers this when multiple CSVs match the same video name.
   </div>
 
   <h2>Output Files</h2>
 
-  <h3>CSV Processing Mode</h3>
-  <p>Generates two CSV files per input file:</p>
+  <p>For each processed input:</p>
   <ol>
-    <li><strong>processed_{filename}_rel.csv</strong> - Relative angles (joint angles)</li>
-    <li><strong>processed_{filename}_abs.csv</strong> - Absolute angles (segment angles)</li>
+    <li><strong>*_rel.csv</strong> — Relative angles</li>
+    <li><strong>*_abs_180.csv</strong> — Absolute angles (-180° to +180°)</li>
+    <li><strong>*_abs_360.csv</strong> — Absolute angles (0° to 360°)</li>
   </ol>
 
-  <h3>Video Processing Mode</h3>
-  <p>Generates:</p>
-  <ol>
-    <li><strong>angles_{videoname}.mp4</strong> - Annotated video with skeleton and angles</li>
-    <li><strong>{videoname}_rel.csv</strong> - Relative angles CSV</li>
-    <li><strong>{videoname}_abs.csv</strong> - Absolute angles CSV</li>
-  </ol>
+  <p>When a video is used (CSV + video or directory batch):</p>
+  <ul>
+    <li><strong>angles_{videoname}.mp4</strong> — Annotated video with skeleton and angles</li>
+    <li><strong>{basename}_stick_sequence.png</strong> — Colored stick-figure sequence (blue/red/gray segments, green joints, angle labels)</li>
+    <li><strong>analysis_report.html</strong> — Report with angles table and stick figure PNG (no embedded video)</li>
+  </ul>
+
+  <p>For directory runs:</p>
+  <ul>
+    <li><strong>batch_analysis_report.html</strong> — In the selected directory, with links to each output folder, report, and video</li>
+  </ul>
 
   <h2>Configuration</h2>
 
-  <h3>Angle Format</h3>
+  <h3>Smoothing (optional)</h3>
   <ul>
-    <li><strong>0-360° Format:</strong> Absolute angles from 0° to 360° (no negative values)</li>
-    <li><strong>-180° to +180° Format:</strong> Absolute angles from -180° to +180° (biomechanical standard)</li>
+    <li><strong>Checkbox:</strong> “Apply Butterworth low-pass filter (smooth joint trajectories)” — filter is applied only when checked.</li>
+    <li><strong>Cutoff (Hz):</strong> Typically 6–10 Hz for human motion</li>
+    <li><strong>Order:</strong> Typically 2 or 4</li>
+    <li><strong>FPS:</strong> Must match the data/video frame rate</li>
   </ul>
 
   <h2>Troubleshooting</h2>
 
-  <h3>Common Issues</h3>
   <table>
+    <tr><th>Issue</th><th>Solution</th></tr>
     <tr>
-      <th>Issue</th>
-      <th>Solution</th>
+      <td>No CSV or videos in directory</td>
+      <td>Ensure folder has videos and matching landmark CSVs (e.g. *_pixel_vaila.csv). Angle outputs are skipped.</td>
     </tr>
     <tr>
-      <td>No CSV files found</td>
-      <td>Ensure CSV files are in the selected directory with .csv extension</td>
+      <td>CSV has wrong number of columns</td>
+      <td>Input must have at least 67 columns (frame + 66 coordinates). Angle CSVs are not valid inputs.</td>
     </tr>
     <tr>
-      <td>Error reading CSV</td>
-      <td>Verify CSV format matches MediaPipe 33-landmark structure</td>
-    </tr>
-    <tr>
-      <td>Video/CSV mismatch</td>
-      <td>Ensure video and CSV have the same number of frames</td>
+      <td>Video not visible in file dialog</td>
+      <td>Use “All files” or select the specific video format in the dialog when choosing the video for a CSV.</td>
     </tr>
     <tr>
       <td>Permission denied</td>
-      <td>Check write permissions and disk space</td>
+      <td>Check write permissions and disk space for the output directory.</td>
     </tr>
   </table>
 
   <h2>Requirements</h2>
   <ul>
     <li>Python 3.12.12+</li>
-    <li>pandas, numpy, opencv-python, tkinter, rich</li>
-    <li>FFmpeg (for video processing)</li>
+    <li>pandas, numpy, opencv-python, scipy, rich; tkinter (GUI)</li>
+    <li>Optional: matplotlib (for stick figure sequence in report)</li>
   </ul>
 
   <h2>Integration</h2>
   <p>
-    <strong>Input from:</strong> Markerless 2D Analysis, Markerless 3D Analysis, any MediaPipe-based analysis<br>
-    <strong>Output to:</strong> Data analysis tools, visualization software, statistical analysis
+    <strong>Input from:</strong> Markerless 2D Analysis (e.g. <code>*_pixel_vaila.csv</code>), any MediaPipe landmark CSV<br>
+    <strong>Output to:</strong> Analysis tools, visualization, statistics (CSV and report)
   </p>
 
   <h2>Related Documentation</h2>
@@ -170,6 +177,6 @@ python -m vaila.mpangles</code></pre>
   </ul>
 
   <hr>
-  <p><small>Last Updated: November 2025 | Part of vailá - Multimodal Toolbox</small></p>
+  <p><small>Last Updated: February 2026 | Part of vailá - Multimodal Toolbox</small></p>
 </body>
 </html>

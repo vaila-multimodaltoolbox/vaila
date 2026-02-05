@@ -7,11 +7,15 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 23 January 2026
-Version: 0.3.15
+Update Date: 5 February 2026
+Version: 0.3.16
 
 Description:
-This script is designed to manage files and directories through a graphical user interface (GUI) using Tkinter. It supports various operations such as copying, moving, removing, and converting files, along with advanced features like pattern matching and batch processing. The tool is particularly useful for organizing large datasets and automating repetitive file operations.
+This script is designed to manage files and directories through a graphical user
+interface (GUI) using Tkinter. It supports various operations such as copying,
+moving, removing, and converting files, along with advanced features like
+pattern matching and batch processing. The tool is particularly useful for
+organizing large datasets and automating repetitive file operations.
 
     File Copy/Move:
         Allows copying or moving files based on file extensions and pattern matching.
@@ -19,20 +23,18 @@ This script is designed to manage files and directories through a graphical user
 
     File Removal:
         Removes files matching specific extensions or directories.
-        Safeguards critical system files from accidental deletion by recognizing forbidden patterns and offering multiple user confirmations.
+        Safeguards critical system files from accidental deletion by recognizing
+        forbidden patterns and offering multiple user confirmations.
 
     File Transfer:
         Provides a GUI for transferring files via SSH (rsync/scp).
         Supports both Upload (Send) and Download (Receive) modes.
-        Includes cross-platform support (Linux, macOS, Windows) with password (paramiko) or key-based authentication.
+        Includes cross-platform support (Linux, macOS, Windows) with password
+        (paramiko) or key-based authentication.
 
-Changelog for Version 0.3.15:
-
-    Added "Transfer Files (SSH)" GUI directly into the File Manager.
-    Implemented cross-platform Transfer tool (Upload/Download modes).
-    Removed dependency on external shell scripts for transfer on Linux/Unix.
-    Enhanced GUI with "Upload" and "Download" radio buttons for bidirectional transfer.
-    Integrated paramiko for SSH password support in the GUI.
+Changelog for Version 0.3.16:
+    - Updated Stroboscopic script help and integration.
+    - Updated documentation headers.
 
 License:
 This script is distributed under the AGPL3 License
@@ -41,6 +43,7 @@ This script is distributed under the AGPL3 License
 
 import fnmatch
 import os
+from pathlib import Path
 import platform  # Add this import at the top with other imports
 import re
 import shutil
