@@ -244,6 +244,27 @@ landmark_names = [
     "right_foot_index",
 ]
 
+# Standard Motion Capture Side Colors (BGR)
+# Lines
+COLOR_LEFT_LINE = (0, 0, 255)   # Red
+COLOR_RIGHT_LINE = (0, 255, 0)  # Green
+COLOR_NEUTRAL_LINE = (255, 255, 255) # White
+
+# Points
+COLOR_LEFT_POINT = (0, 255, 255)   # Yellow
+COLOR_RIGHT_POINT = (255, 0, 0)    # Blue
+COLOR_NEUTRAL_POINT = (255, 255, 255) # White
+
+# MediaPipe Pose Landmark Indices
+# Left side indices (odd numbers usually)
+LEFT_INDICES = {
+    1, 2, 3, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31
+}
+# Right side indices (even numbers usually)
+RIGHT_INDICES = {
+    4, 5, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32
+}
+
 
 def select_free_polygon_roi(video_path):
     """
@@ -2294,18 +2315,104 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
                     frame = draw_yolo_landmarks(frame, landmarks_px, width, height)
                 else:
                     # Use manual OpenCV drawing for MediaPipe landmarks
-                    # Draw landmarks (circles)
-                    points = {}
-                    for i, lm in enumerate(landmarks_px):
-                        if i < 33 and not np.isnan(lm[0]) and not np.isnan(lm[1]):
-                            x, y = int(round(lm[0])), int(round(lm[1]))
-                            if 0 <= x < width and 0 <= y < height:
-                                points[i] = (x, y)
-                                cv2.circle(frame, (x, y), 3, (0, 255, 0), -1)
-                    # Draw connections (using POSE_CONNECTIONS defined at module level)
-                    for start_idx, end_idx in POSE_CONNECTIONS:
-                        if start_idx in points and end_idx in points:
-                            cv2.line(frame, points[start_idx], points[end_idx], (255, 0, 0), 2)
+                    # Draw landmarks with side-specific colors
+                    # --- NEW DRAWING LOGIC (mpangles style) ---
+                
+                    # 1. Map landmarks to dictionary of naming -> (px, py)
+                    l_names = [
+                        "nose", "left_eye_inner", "left_eye", "left_eye_outer",
+                        "right_eye_inner", "right_eye", "right_eye_outer",
+                        "left_ear", "right_ear", "mouth_left", "mouth_right",
+                        "left_shoulder", "right_shoulder", "left_elbow", "right_elbow",
+                        "left_wrist", "right_wrist", "left_pinky", "right_pinky",
+                        "left_index", "right_index", "left_thumb", "right_thumb",
+                        "left_hip", "right_hip", "left_knee", "right_knee",
+                        "left_ankle", "right_ankle", "left_heel", "right_heel",
+                        "left_foot_index", "right_foot_index"
+                    ]
+                    
+                    pts = {}
+                    for i, name in enumerate(l_names):
+                        if i < len(landmarks_px):
+                            lm = landmarks_px[i]
+                            # Pixel coordinates already
+                            if not np.isnan(lm[0]) and not np.isnan(lm[1]):
+                                px = int(lm[0])
+                                py = int(lm[1])
+                                pts[name] = np.array([px, py])
+                            else:
+                                pts[name] = np.array([np.nan, np.nan])
+                        else:
+                            pts[name] = np.array([np.nan, np.nan])
+
+                    # Helper for midpoint
+                    def compute_mid(p1, p2):
+                         if np.isnan(p1).any() or np.isnan(p2).any(): return np.array([np.nan, np.nan])
+                         return (p1 + p2) / 2
+
+                    # 2. Compute Midpoints
+                    pts['mid_shoulder'] = compute_mid(pts.get('left_shoulder', np.array([np.nan, np.nan])), pts.get('right_shoulder', np.array([np.nan, np.nan])))
+                    pts['mid_hip'] = compute_mid(pts.get('left_hip', np.array([np.nan, np.nan])), pts.get('right_hip', np.array([np.nan, np.nan])))
+                    pts['mid_ear'] = compute_mid(pts.get('left_ear', np.array([np.nan, np.nan])), pts.get('right_ear', np.array([np.nan, np.nan])))
+                    pts['left_mid_hand'] = compute_mid(pts.get('left_pinky', np.array([np.nan, np.nan])), pts.get('left_index', np.array([np.nan, np.nan])))
+                    pts['right_mid_hand'] = compute_mid(pts.get('right_pinky', np.array([np.nan, np.nan])), pts.get('right_index', np.array([np.nan, np.nan])))
+
+                    # 3. Define Colors (BGR)
+                    C_RIGHT = (80, 80, 255)   # Coral/Red-ish
+                    C_LEFT = (255, 191, 0)    # Sky Blue
+                    C_CENTER = (240, 240, 240) # White/Gray
+                    C_JOINT = (0, 255, 0)     # Green
+
+                    # 4. Drawing Helpers
+                    def dline(p1, p2, color, thick=3):
+                        if isinstance(p1, np.ndarray) and isinstance(p2, np.ndarray):
+                            if np.isnan(p1).any() or np.isnan(p2).any(): return
+                            pt1 = (int(p1[0]), int(p1[1]))
+                            pt2 = (int(p2[0]), int(p2[1]))
+                            cv2.line(frame, pt1, pt2, color, thick, cv2.LINE_AA)
+
+                    def dcircle(p, color, radius=5):
+                        if isinstance(p, np.ndarray):
+                            if np.isnan(p).any(): return
+                            pt = (int(p[0]), int(p[1]))
+                            cv2.circle(frame, pt, radius, (255,255,255), -1, cv2.LINE_AA) # white border
+                            cv2.circle(frame, pt, radius-2, color, -1, cv2.LINE_AA)
+
+                    # 5. Draw Segments
+                    # Right Side
+                    dline(pts.get('right_shoulder'), pts.get('right_elbow'), C_RIGHT)
+                    dline(pts.get('right_elbow'), pts.get('right_wrist'), C_RIGHT)
+                    dline(pts.get('right_wrist'), pts.get('right_mid_hand'), C_RIGHT)
+                    dline(pts.get('right_hip'), pts.get('right_knee'), C_RIGHT)
+                    dline(pts.get('right_knee'), pts.get('right_ankle'), C_RIGHT)
+                    dline(pts.get('right_ankle'), pts.get('right_heel'), C_RIGHT)
+                    dline(pts.get('right_heel'), pts.get('right_foot_index'), C_RIGHT)
+                    dline(pts.get('right_ankle'), pts.get('right_foot_index'), C_RIGHT)
+
+                    # Left Side
+                    dline(pts.get('left_shoulder'), pts.get('left_elbow'), C_LEFT)
+                    dline(pts.get('left_elbow'), pts.get('left_wrist'), C_LEFT)
+                    dline(pts.get('left_wrist'), pts.get('left_mid_hand'), C_LEFT)
+                    dline(pts.get('left_hip'), pts.get('left_knee'), C_LEFT)
+                    dline(pts.get('left_knee'), pts.get('left_ankle'), C_LEFT)
+                    dline(pts.get('left_ankle'), pts.get('left_heel'), C_LEFT)
+                    dline(pts.get('left_heel'), pts.get('left_foot_index'), C_LEFT)
+                    dline(pts.get('left_ankle'), pts.get('left_foot_index'), C_LEFT)
+
+                    # Center
+                    dline(pts.get('mid_shoulder'), pts.get('mid_hip'), C_CENTER)
+                    dline(pts.get('mid_ear'), pts.get('mid_shoulder'), C_CENTER)
+                    dline(pts.get('right_shoulder'), pts.get('left_shoulder'), C_CENTER, 2)
+                    dline(pts.get('right_hip'), pts.get('left_hip'), C_CENTER, 2)
+
+                    # 6. Draw Joints
+                    for name, pt in pts.items():
+                        if 'mid' in name: continue
+                        if name == 'nose': continue
+                        if 'eye' in name: continue
+                        dcircle(pt, C_JOINT, 5)
+
+                    # ----------------------------------------
 
         out.write(frame)
         frame_idx += 1

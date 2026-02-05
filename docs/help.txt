@@ -57,6 +57,10 @@ Available Tools:
         Description: Compress video files using the H.264 codec. This helps in reducing the file size while maintaining video quality.
         Instructions: Place your video files in the data/video_compress_h264 directory. The tool will compress these videos using the H.264 codec.
 
+    Stroboscopic Generator (vaila/vaila_stroboscopic.py)
+        Description: Generates a stroboscopic (chronophotography) image from video and pose data.
+        Instructions: Open GUI in Visualization frame and click 'Stroboscopic', or run 'uv run vaila/vaila_stroboscopic.py -v video.mp4'.
+
     Transfer Files (SSH)
         Description: Transfer files between local and remote systems using SSH (rsync/scp).
         Instructions: Open the File Manager (Frame A) and click "Transfer". Select Upload/Download mode and configure paths.
