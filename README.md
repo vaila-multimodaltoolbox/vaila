@@ -287,8 +287,6 @@ vaila
 
 ## Installation and Setup
 
-
-
 ### ⚡ New Engine: Powered by _uv_
 
 _vailá_ has migrated to **[uv](https://github.com/astral-sh/uv)**, an extremely fast Python package installer and resolver, written in Rust. **uv is now the recommended installation method for all platforms** (Windows, Linux, macOS).
@@ -941,4 +939,3 @@ maintains the freedom of the software and requires source code availability.
 
 For more details, see the [LICENSE](LICENSE) file or visit:
 <https://www.gnu.org/licenses/agpl-3.0.html>
-
