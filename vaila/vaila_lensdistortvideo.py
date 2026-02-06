@@ -2,11 +2,47 @@
 ===============================================================================
 vaila_lensdistortvideo.py
 ===============================================================================
-Author: Prof. Paulo R. P. Santiago
-Date: 20 December 2024
-Version: 0.0.1
-Python Version: 3.12.8
+Author: Paulo R. P. Santiago
+Email: paulosantiago@usp.br
+GitHub: https://github.com/vaila-multimodaltoolbox/vaila
+Creation Date: 10 October 2024
+Update Date: 06 February 2026
+Version: 0.1.4
+Python Version: 3.12.12
+
+Description:
+------------
+This script corrects lens distortion in videos using a camera calibration file
+generated usually from 'camera_calibration.py'. It undistorts every frame of the
+input video(s) and reconstructs the video with high quality, maintaining the
+original metadata (FPS, duration, resolution) as precisely as possible.
+
+Key Features:
+-------------
+1. Precise metadata extraction using `ffprobe`.
+2. Hardware-accelerated encoding (optional/auto-detect).
+3. Batch processing of multiple videos.
+4. CLI support for pipeline integration.
+
+Usage:
+------
+GUI Mode (Default):
+    python vaila_lensdistortvideo.py
+
+CLI Mode:
+    python vaila_lensdistortvideo.py --input_dir /path/to/videos --params_file /path/to/params.csv [--output_dir /path/to/output]
+
+    Arguments:
+      --input_dir   Directory containing the videos to be processed.
+      --params_file Path to the camera calibration parameters CSV file.
+      --output_dir  (Optional) Directory to save the corrected videos.
+
+License:
+--------
+This program is licensed under the GNU Lesser General Public License v3.0.
+For more details, visit: https://www.gnu.org/licenses/lgpl-3.0.html
 ===============================================================================
+
 
 Camera Calibration Parameters and Their Meanings
 =================================================
@@ -23,9 +59,9 @@ Intrinsic Camera Parameters:
    - Calculated using the formula:
      fx = (width / 2) / tan(horizontal FOV / 2)
      fy = (height / 2) / tan(vertical FOV / 2)
-   - Example for a 2.8 mm lens with 105° horizontal FOV, 58° vertical FOV, and 1920×1080 resolution:
-     fx ≈ (1920 / 2) / tan(105° / 2) ≈ 949.41 pixels
-     fy ≈ (1080 / 2) / tan(58° / 2) ≈ 950.63 pixels
+   - Example for a 2.8 mm lens with 105 deg horizontal FOV, 58 deg vertical FOV, and 1920x1080 resolution:
+     fx = (1920 / 2) / tan(105 deg / 2) = 949.41 pixels
+     fy = (1080 / 2) / tan(58 deg / 2) = 950.63 pixels
 
 2. cx, cy (Optical Center):
    - Represent the x and y coordinates of the camera's optical center in pixels.
@@ -98,8 +134,11 @@ References:
 ===============================================================================
 """
 
+import argparse
+import json
 import os
 import subprocess
+from pathlib import Path
 import tkinter as tk
 from datetime import datetime
 from tkinter import filedialog
@@ -126,6 +165,113 @@ def load_distortion_parameters(csv_path):
     return df.iloc[0].to_dict()
 
 
+def get_precise_video_metadata(video_path):
+    """
+    Get precise video metadata using ffprobe to avoid rounding errors.
+    Returns dict with fps (float), width, height, codec, etc.
+    """
+    try:
+        cmd = [
+            "ffprobe",
+            "-v",
+            "error",
+            "-print_format",
+            "json",
+            "-show_format",
+            "-show_streams",
+            str(video_path),
+        ]
+        result = subprocess.run(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True
+        )
+        data = json.loads(result.stdout)
+
+        # Find video stream
+        video_stream = None
+        for stream in data.get("streams", []):
+            if stream.get("codec_type") == "video":
+                video_stream = stream
+                break
+
+        if not video_stream:
+            # Fallback to OpenCV if ffprobe fails
+            cap = cv2.VideoCapture(str(video_path))
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            cap.release()
+            return {
+                "fps": fps,
+                "width": width,
+                "height": height,
+                "codec": "unknown",
+                "r_frame_rate": None,
+                "avg_frame_rate": None,
+            }
+
+        # Get precise FPS from r_frame_rate or avg_frame_rate
+        r_frame_rate_str = video_stream.get("r_frame_rate", "0/0")
+        avg_frame_rate_str = video_stream.get("avg_frame_rate", "0/0")
+
+        # Convert fraction strings to float
+        def fraction_to_float(frac_str):
+            try:
+                if "/" in frac_str:
+                    num, den = map(int, frac_str.split("/"))
+                    return float(num) / den if den != 0 else 0.0
+                return float(frac_str)
+            except (ValueError, ZeroDivisionError):
+                return None
+
+        r_fps = fraction_to_float(r_frame_rate_str)
+        avg_fps = fraction_to_float(avg_frame_rate_str)
+
+        # Use avg_frame_rate if available, otherwise r_frame_rate
+        fps = avg_fps if avg_fps and avg_fps > 0 else (r_fps if r_fps and r_fps > 0 else 30.0)
+
+        # Get frame count if available
+        nb_frames = None
+        try:
+            if "nb_frames" in video_stream and video_stream["nb_frames"] not in (None, "N/A", ""):
+                nb_frames = int(video_stream["nb_frames"])
+        except (ValueError, TypeError):
+            nb_frames = None
+
+        # Calculate frame count from duration and FPS if nb_frames not available
+        duration = float(data.get("format", {}).get("duration", 0))
+        if nb_frames is None and duration > 0 and fps > 0:
+            nb_frames = int(round(duration * fps))
+
+        return {
+            "fps": fps,
+            "width": int(video_stream.get("width")),
+            "height": int(video_stream.get("height")),
+            "codec": video_stream.get("codec_name", "unknown"),
+            "r_frame_rate": r_frame_rate_str,
+            "avg_frame_rate": avg_frame_rate_str,
+            "duration": duration if duration > 0 else None,
+            "nb_frames": nb_frames,
+        }
+    except (subprocess.CalledProcessError, json.JSONDecodeError, FileNotFoundError) as e:
+        # Fallback to OpenCV if ffprobe is not available
+        rprint(f"[yellow]Warning: ffprobe not available or failed, using OpenCV fallback: {e}[/yellow]")
+        cap = cv2.VideoCapture(str(video_path))
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        cap.release()
+        return {
+            "fps": fps,
+            "width": width,
+            "height": height,
+            "total_frames": total_frames,
+            "codec": "unknown",
+            "r_frame_rate": None,
+            "avg_frame_rate": None,
+        }
+
+
 def process_video(input_path, output_path, parameters):
     """Process video applying lens distortion correction."""
     console = Console()
@@ -135,11 +281,21 @@ def process_video(input_path, output_path, parameters):
     if not cap.isOpened():
         raise ValueError("Error opening video file")
 
-    # Get video properties
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    # Get video properties using precise metadata
+    metadata = get_precise_video_metadata(input_path)
+    fps = metadata["fps"]
+    width = metadata["width"]
+    height = metadata["height"]
+    
+    # Get total frames (prefer metadata, fallback to cap)
+    if "nb_frames" in metadata and metadata["nb_frames"]:
+        total_frames = metadata["nb_frames"]
+    elif "total_frames" in metadata:
+         total_frames = metadata["total_frames"]
+    else:
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        
+    rprint(f"[dim]Metadata: {width}x{height} @ {fps:.4f} fps, {total_frames} frames[/dim]")
 
     # Create camera matrix and distortion coefficients
     camera_matrix = np.array(
@@ -272,22 +428,49 @@ def run_distortvideo():
     """Main function to run batch lens distortion correction."""
     rprint("[yellow]Running batch lens distortion correction...[/yellow]")
 
-    # Select input directory
-    rprint("\nSelect the directory containing videos:")
-    input_dir = select_directory(title="Select Directory with Videos")
-    if not input_dir:
-        rprint("[red]No directory selected. Exiting.[/red]")
-        return
+    # Print the directory and name of the script being executed
+    print(f"Running script: {Path(__file__).name}")
+    print(f"Script directory: {Path(__file__).parent}")
 
-    # Select parameters file
-    rprint("\nSelect the camera calibration parameters file:")
-    parameters_path = select_file(
-        title="Select Parameters File",
-        filetypes=(("CSV Files", "*.csv"), ("All Files", "*.*")),
-    )
-    if not parameters_path:
-        rprint("[red]No parameters file selected. Exiting.[/red]")
-        return
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="Batch lens distortion correction for videos.")
+    parser.add_argument("--input_dir", type=str, help="Directory containing videos to process")
+    parser.add_argument("--params_file", type=str, help="Path to the camera calibration parameters CSV file")
+    parser.add_argument("--output_dir", type=str, help="Optional output directory for processed videos")
+    args = parser.parse_args()
+
+    # Determine input directory
+    if args.input_dir:
+        input_dir = args.input_dir
+        if not os.path.isdir(input_dir):
+            rprint(f"[red]Error: Input directory not found: {input_dir}[/red]")
+            return
+        rprint(f"\n[cyan]Using input directory: {input_dir}[/cyan]")
+    else:
+        # Select input directory via GUI
+        rprint("\nSelect the directory containing videos:")
+        input_dir = select_directory(title="Select Directory with Videos")
+        if not input_dir:
+            rprint("[red]No directory selected. Exiting.[/red]")
+            return
+
+    # Determine parameters file
+    if args.params_file:
+        parameters_path = args.params_file
+        if not os.path.isfile(parameters_path):
+            rprint(f"[red]Error: Parameters file not found: {parameters_path}[/red]")
+            return
+        rprint(f"\n[cyan]Using parameters file: {parameters_path}[/cyan]")
+    else:
+        # Select parameters file via GUI
+        rprint("\nSelect the camera calibration parameters file:")
+        parameters_path = select_file(
+            title="Select Parameters File",
+            filetypes=(("CSV Files", "*.csv"), ("All Files", "*.*")),
+        )
+        if not parameters_path:
+            rprint("[red]No parameters file selected. Exiting.[/red]")
+            return
 
     # Load parameters
     try:
@@ -310,10 +493,16 @@ def run_distortvideo():
 
     rprint(f"\n[cyan]Found {len(video_files)} video files to process.[/cyan]")
 
-    # Create output directory with a timestamp in the name: vaila_lensdistort_timestamp
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_dir = os.path.join(input_dir, f"vaila_lensdistort_{timestamp}")
+    # Create output directory
+    if args.output_dir:
+        output_dir = args.output_dir
+    else:
+        # Create output directory with a timestamp in the name: vaila_lensdistort_timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_dir = os.path.join(input_dir, f"vaila_lensdistort_{timestamp}")
+    
     os.makedirs(output_dir, exist_ok=True)
+    rprint(f"[cyan]Output directory: {output_dir}[/cyan]")
 
     # Process each video
     for video_file in video_files:
