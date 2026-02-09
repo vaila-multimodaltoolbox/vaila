@@ -6,34 +6,41 @@ vailá - Multimodal Toolbox
 Author: Prof. Dr. Paulo R. P. Santiago
 https://github.com/paulopreto/vaila-multimodaltoolbox
 Date: 03 April 2025
-Update: 24 July 2025
-Version: 0.0.2
-Python Version: 3.12.11
+Update: 06 February 2026
+Version: 0.0.4
+Python Version: 3.12.12
 
 Description:
 ------------
-This tool applies lens distortion correction to 2D coordinates from a DAT file
+This tool applies lens distortion correction to 2D coordinates from a DAT/CSV file
 using the same camera calibration parameters as vaila_lensdistortvideo.py.
 
 New Features in This Version:
 ------------------------------
-1. Fixed issue with column order in output file.
-2. Improved error handling.
-3. Added more detailed error logging.
+1. CLI support for pipeline integration.
+2. Fixed issue with column order in output file.
+3. Improved error handling and logging.
 
 How to use:
 ------------
-1. Select the distortion parameters CSV file.
-2. Select the directory containing CSV/DAT files to process.
-3. The script will process all CSV and DAT files in the directory and save the
-   results in the output directory.
+GUI Mode (Default):
+    python vaila_datdistort.py
+    (Follow the on-screen dialogs to select files and folders)
 
-python vaila_datdistort.py
+CLI Mode:
+    python vaila_datdistort.py --input_dir /path/to/data --params_file /path/to/params.csv [--output_dir /path/to/output]
+
+    Arguments:
+      --input_dir   Directory containing CSV/DAT files to process.
+      --params_file Path to the camera calibration parameters CSV file.
+      --output_dir  (Optional) Directory to save the corrected files.
 
 ================================================================================
 """
 
+import argparse
 import os
+from pathlib import Path
 import tkinter as tk
 from datetime import datetime
 from tkinter import filedialog
@@ -210,23 +217,46 @@ def select_directory(title="Select a directory"):
 
 def run_datdistort():
     """Main function to process DAT/CSV files using distortion parameters."""
-    print(f"Running script: {os.path.basename(__file__)}")
-    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    print(f"Running script: {Path(__file__).name}")
+    print(f"Script directory: {Path(__file__).parent}")
 
-    print("Select the distortion parameters CSV file:")
-    parameters_path = select_file(
-        title="Select Calibration Parameters File",
-        filetypes=(("CSV Files", "*.csv"), ("All Files", "*.*")),
-    )
-    if not parameters_path:
-        print("No parameters file selected. Exiting.")
-        return
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="Batch lens distortion correction for CSV/DAT files.")
+    parser.add_argument("--input_dir", type=str, help="Directory containing CSV/DAT files to process")
+    parser.add_argument("--params_file", type=str, help="Path to the camera calibration parameters CSV file")
+    parser.add_argument("--output_dir", type=str, help="Optional output directory for processed files")
+    args = parser.parse_args()
 
-    print("Select the directory containing CSV/DAT files to process:")
-    input_dir = select_directory(title="Select Directory with CSV/DAT Files")
-    if not input_dir:
-        print("No directory selected. Exiting.")
-        return
+    # Determine parameters file
+    if args.params_file:
+        parameters_path = args.params_file
+        if not os.path.isfile(parameters_path):
+            print(f"Error: Parameters file not found: {parameters_path}")
+            return
+        print(f"Using parameters file: {parameters_path}")
+    else:
+        print("Select the distortion parameters CSV file:")
+        parameters_path = select_file(
+            title="Select Calibration Parameters File",
+            filetypes=(("CSV Files", "*.csv"), ("All Files", "*.*")),
+        )
+        if not parameters_path:
+            print("No parameters file selected. Exiting.")
+            return
+
+    # Determine input directory
+    if args.input_dir:
+        input_dir = args.input_dir
+        if not os.path.isdir(input_dir):
+            print(f"Error: Input directory not found: {input_dir}")
+            return
+        print(f"Using input directory: {input_dir}")
+    else:
+        print("Select the directory containing CSV/DAT files to process:")
+        input_dir = select_directory(title="Select Directory with CSV/DAT Files")
+        if not input_dir:
+            print("No directory selected. Exiting.")
+            return
 
     # Load parameters once
     parameters = load_distortion_parameters(parameters_path)
@@ -236,7 +266,12 @@ def run_datdistort():
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     # Create output directory
-    output_dir = os.path.join(input_dir, f"distorted_{timestamp}")
+    # Create output directory
+    if args.output_dir:
+        output_dir = args.output_dir
+    else:
+        output_dir = os.path.join(input_dir, f"distorted_{timestamp}")
+    
     os.makedirs(output_dir, exist_ok=True)
 
     for filename in os.listdir(input_dir):
