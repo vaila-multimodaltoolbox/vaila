@@ -6,12 +6,12 @@
 - **File:** `vaila\vaila_datdistort.py`
 - **Lines:** 269
 - **Size:** 9032 characters
-- **Version:** 0.0.2
+- **Version:** 0.0.4
 - **Author:** Prof. Dr. Paulo R. P. Santiago
 - **GUI Interface:** ✅ Yes
+- **CLI Support:** ✅ Yes
 
 ## 📖 Description
-
 
 ================================================================================
 vaila_datdistort.py
@@ -20,23 +20,23 @@ vailá - Multimodal Toolbox
 Author: Prof. Dr. Paulo R. P. Santiago
 https://github.com/paulopreto/vaila-multimodaltoolbox
 Date: 03 April 2025
-Update: 24 July 2025
-Version: 0.0.2
-Python Version: 3.12.11
+Update: 06 February 2026
+Version: 0.0.4
+Python Version: 3.12.12
 
-Description:
-------------
+## Description:
+
 This tool applies lens distortion correction to 2D coordinates from a DAT file
 using the same camera calibration parameters as vaila_lensdistortvideo.py.
 
-New Features in This Version:
-------------------------------
-1. Fixed issue with column order in output file.
-2. Improved errorr handling.
-3. Added more detailed errorr logging.
+## New Features in This Version:
 
-How to use:
-------------
+1. CLI support for pipeline integration.
+2. Fixed issue with column order in output file.
+3. Improved error handling.
+
+## How to use:
+
 1. Select the distortion parameters CSV file.
 2. Select the directory containing CSV/DAT files to process.
 3. The script will process all CSV and DAT files in the directory and save the
@@ -55,8 +55,29 @@ python vai...
 - `select_directory`
 - `run_datdistort`
 
+## 🚀 Usage
 
+### GUI Mode (Default)
 
+Run the script without arguments to use the graphical interface:
+
+```bash
+python vaila_datdistort.py
+```
+
+### CLI Mode (Automation)
+
+Run with command-line arguments for pipeline integration:
+
+```bash
+python vaila_datdistort.py --input_dir "/path/to/data" --params_file "/path/to/params.csv"
+```
+
+Optional: Specify output directory
+
+```bash
+python vaila_datdistort.py --input_dir "..." --params_file "..." --output_dir "/path/to/output"
+```
 
 ---
 
