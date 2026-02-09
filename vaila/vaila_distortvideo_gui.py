@@ -3,9 +3,9 @@
 vaila_lensdistortvideo.py
 ===============================================================================
 Author: Prof. Paulo R. P. Santiago
-Date: 21 Feb 2025
-Version: 0.1.1
-Python Version: 3.12.9
+Date: 06 Feb 2026
+Version: 0.0.3
+Python Version: 3.12.12
 ===============================================================================
 
 This script processes videos applying lens distortion correction based on
@@ -19,6 +19,7 @@ preview in real time.
 
 import math
 import os
+from pathlib import Path
 import subprocess
 import tkinter as tk
 from datetime import datetime
@@ -692,8 +693,8 @@ def run_distortvideo_gui():
     rprint("[yellow]Running lens distortion correction with OpenCV GUI...[/yellow]")
 
     # Print the directory and name of the script being executed
-    print(f"Running script: {os.path.basename(__file__)}")
-    print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    print(f"Running script: {Path(__file__).name}")
+    print(f"Script directory: {Path(__file__).parent}")
 
     # Extract parameters via the OpenCV-based interface
     parameters = distort_video_gui_cv2()
