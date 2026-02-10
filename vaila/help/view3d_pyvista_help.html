@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>vailá – PyVista 3D Viewer – Keyboard Shortcuts</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; margin: 0; padding: 20px; background-color: #f5f5f5; }
+        .container { max-width: 960px; margin: 0 auto; background-color: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 28px; border-left: 4px solid #3498db; padding-left: 12px; }
+        .info { background-color: #d1ecf1; border: 1px solid #bee5eb; color: #0c5460; padding: 15px; border-radius: 5px; margin: 15px 0; }
+        .warn { background-color: #fff3cd; border: 1px solid #ffc107; color: #856404; padding: 12px; border-radius: 5px; margin: 12px 0; }
+        .section { background-color: #f8f9fa; padding: 16px; margin: 14px 0; border-radius: 8px; border-left: 4px solid #3498db; }
+        .key { display: inline-block; background: #eee; border: 1px solid #ccc; border-radius: 4px; padding: 2px 8px; font-family: 'Courier New', monospace; font-weight: bold; min-width: 28px; text-align: center; }
+        table { border-collapse: collapse; width: 100%; margin: 10px 0; }
+        th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid #dee2e6; }
+        th { background-color: #e9ecef; font-weight: 600; }
+        tr:hover { background-color: #f1f3f5; }
+        ul { padding-left: 20px; }
+        li { margin: 6px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>vailá – PyVista 3D Viewer</h1>
+        <div class="info">
+            <strong>Script:</strong> viewc3d_pyvista.py · <strong>Backend:</strong> PyVista (VTK)<br>
+            C3D and CSV marker visualization: timeline, picking, skeleton, trails, export (screenshot, PNG sequence, MP4).
+            Part of <strong>vailá - Multimodal Toolbox</strong>.
+        </div>
+        <div class="warn">
+            <strong>Warning:</strong> Do NOT press <span class="key">E</span> – VTK uses it to close the window.
+            Use <span class="key">End</span> to jump to the last frame instead.
+        </div>
+
+        <h2>Navigation</h2>
+        <div class="section">
+        <table>
+            <tr><th>Key</th><th>Action</th></tr>
+            <tr><td><span class="key">←</span> / <span class="key">→</span></td><td>Previous / next frame (±1, wraps around)</td></tr>
+            <tr><td><span class="key">↑</span> / <span class="key">↓</span></td><td>Skip ±10 frames</td></tr>
+            <tr><td><span class="key">PgUp</span> / <span class="key">PgDn</span></td><td>Skip ±100 frames</td></tr>
+            <tr><td><span class="key">S</span></td><td>Jump to start (frame 0)</td></tr>
+            <tr><td><span class="key">End</span></td><td>Jump to last frame</td></tr>
+            <tr><td><span class="key">Space</span></td><td>Play / Pause (same as the Play checkbox)</td></tr>
+        </table>
+        </div>
+
+        <h2>View Presets</h2>
+        <div class="section">
+        <table>
+            <tr><th>Key</th><th>Action</th></tr>
+            <tr><td><span class="key">1</span></td><td>Front view (XZ plane)</td></tr>
+            <tr><td><span class="key">2</span></td><td>Right view (YZ plane)</td></tr>
+            <tr><td><span class="key">3</span></td><td>Top view (XY plane)</td></tr>
+            <tr><td><span class="key">4</span></td><td>Isometric view</td></tr>
+            <tr><td><span class="key">R</span></td><td>Reset / fit camera to data</td></tr>
+        </table>
+        </div>
+
+        <h2>Display</h2>
+        <div class="section">
+        <table>
+            <tr><th>Key</th><th>Action</th></tr>
+            <tr><td><span class="key">X</span></td><td>Toggle marker name labels on/off</td></tr>
+            <tr><td><span class="key">B</span></td><td>Cycle background: Dark → Gray → White</td></tr>
+            <tr><td><span class="key">G</span></td><td>Toggle ground grid on/off</td></tr>
+            <tr><td><span class="key">C</span></td><td>Cycle marker color: Orange → Blue → Green → Red → White → Yellow → Purple → Cyan → Pink → Gray → Black</td></tr>
+            <tr><td><span class="key">M</span></td><td>Choose which markers to show/hide (dialog with checkboxes)</td></tr>
+            <tr><td><span class="key">T</span></td><td>Toggle trajectory trail on/off</td></tr>
+            <tr><td><span class="key">{</span> / <span class="key">}</span></td><td>Decrease / increase trail length (0, 25, 50, 100, 200 frames)</td></tr>
+            <tr><td><span class="key">+</span> / <span class="key">−</span></td><td>Increase / decrease marker size (2–50 px)</td></tr>
+        </table>
+        </div>
+
+        <h2>Playback</h2>
+        <div class="section">
+        <table>
+            <tr><th>Key</th><th>Action</th></tr>
+            <tr><td><span class="key">[</span></td><td>Slower (0.1× → 0.25× → 0.5× → 1× → 2× → 4× → 8×)</td></tr>
+            <tr><td><span class="key">]</span></td><td>Faster</td></tr>
+        </table>
+        </div>
+
+        <h2>Skeleton</h2>
+        <div class="section">
+        <table>
+            <tr><th>Key</th><th>Action</th></tr>
+            <tr><td><span class="key">J</span></td><td>Load skeleton connections from JSON file</td></tr>
+        </table>
+        <p>JSON format: <code>[["MarkerA","MarkerB"], ["MarkerC","MarkerD"], ...]</code><br>
+        Or: <code>{"connections": [["MarkerA","MarkerB"], ...]}</code></p>
+        <p>Connections are drawn as orange lines between markers, updated every frame.</p>
+        </div>
+
+        <h2>Picking &amp; Measurement</h2>
+        <div class="section">
+        <table>
+            <tr><th>Key</th><th>Action</th></tr>
+            <tr><td><strong>Left click</strong></td><td>Select marker (name shown top-left)</td></tr>
+            <tr><td><span class="key">D</span></td><td>Distance mode: click two markers to measure distance</td></tr>
+            <tr><td><span class="key">Escape</span></td><td>Clear selection, cancel distance mode</td></tr>
+        </table>
+        <p>Click a marker to see its name. Distance is shown on-screen and printed to console.</p>
+        </div>
+
+        <h2>Info &amp; Stats</h2>
+        <div class="section">
+        <table>
+            <tr><th>Key</th><th>Action</th></tr>
+            <tr><td><span class="key">I</span></td><td>Print frame info to console (file, frame, time, markers, rate, events)</td></tr>
+            <tr><td><span class="key">A</span></td><td>Print quality stats to console (gaps, range, worst marker, events list)</td></tr>
+        </table>
+        </div>
+
+        <h2>Export</h2>
+        <div class="section">
+        <table>
+            <tr><th>Key</th><th>Action</th></tr>
+            <tr><td><span class="key">K</span></td><td>Save screenshot as PNG (next to the C3D file)</td></tr>
+            <tr><td><span class="key">Z</span></td><td>Export all frames as numbered PNG files to a folder</td></tr>
+            <tr><td><span class="key">V</span></td><td>Export animation as MP4 video</td></tr>
+        </table>
+        </div>
+
+        <h2>Help</h2>
+        <div class="section">
+        <table>
+            <tr><th>Key</th><th>Action</th></tr>
+            <tr><td><span class="key">H</span></td><td>Open this help page in the default browser</td></tr>
+        </table>
+        </div>
+
+        <h2>Mouse &amp; UI</h2>
+        <div class="section">
+        <ul>
+            <li><strong>Left drag</strong> – Rotate 3D view</li>
+            <li><strong>Middle drag / right drag</strong> – Pan</li>
+            <li><strong>Mouse wheel</strong> – Zoom</li>
+            <li><strong>Timeline slider</strong> (top) – Scrub frames (integer)</li>
+            <li><strong>Play checkbox</strong> (top-left green square) – Start/stop animation</li>
+            <li><strong>XYZ axes</strong> (bottom-left) – Orientation indicator</li>
+        </ul>
+        </div>
+
+        <h2>Complete Key Map</h2>
+        <div class="section">
+        <table>
+            <tr><th>Key</th><th>Action</th><th>Key</th><th>Action</th></tr>
+            <tr><td class="key">Space</td><td>Play/Pause</td><td class="key">H</td><td>Help</td></tr>
+            <tr><td class="key">←/→</td><td>±1 frame</td><td class="key">↑/↓</td><td>±10 frames</td></tr>
+            <tr><td class="key">PgUp/Dn</td><td>±100 frames</td><td class="key">S</td><td>Start</td></tr>
+            <tr><td class="key">End</td><td>Last frame</td><td class="key">R</td><td>Reset cam</td></tr>
+            <tr><td class="key">1–4</td><td>View presets</td><td class="key">B</td><td>Background</td></tr>
+            <tr><td class="key">G</td><td>Grid</td><td class="key">X</td><td>Labels</td></tr>
+            <tr><td class="key">C</td><td>Colors</td><td class="key">T</td><td>Trail</td></tr>
+            <tr><td class="key">{ }</td><td>Trail length</td><td class="key">[ ]</td><td>Speed</td></tr>
+            <tr><td class="key">+ −</td><td>Marker size</td><td class="key">J</td><td>Skeleton</td></tr>
+            <tr><td class="key">K</td><td>Screenshot</td><td class="key">Z</td><td>PNG seq</td></tr>
+            <tr><td class="key">V</td><td>MP4 export</td><td class="key">D</td><td>Distance</td></tr>
+            <tr><td class="key">I</td><td>Info</td><td class="key">A</td><td>Stats</td></tr>
+            <tr><td class="key">Escape</td><td>Clear</td><td class="key">M</td><td>Markers</td></tr>
+        </table>
+        </div>
+
+        <div class="footer" style="margin-top: 2em; padding-top: 1em; border-top: 1px solid #dee2e6; color: #6c757d; font-size: 0.9em;">
+            <p>🔗 Part of vailá - Multimodal Toolbox | 🌐 <a href="https://github.com/paulopreto/vaila-multimodaltoolbox">GitHub</a></p>
+        </div>
+    </div>
+</body>
+</html>

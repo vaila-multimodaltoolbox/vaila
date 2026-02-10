@@ -204,7 +204,8 @@ _debug_log(
 
 # Additional imports for filtering and interpolation
 from pykalman import KalmanFilter  # noqa: E402
-#from rich import print  # noqa: E402
+
+# from rich import print  # noqa: E402
 from scipy.interpolate import UnivariateSpline  # noqa: E402
 from scipy.signal import butter, savgol_filter, sosfiltfilt  # noqa: E402
 from statsmodels.nonparametric.smoothers_lowess import lowess  # noqa: E402
@@ -265,24 +266,20 @@ landmark_names = [
 
 # Standard Motion Capture Side Colors (BGR)
 # Lines
-COLOR_LEFT_LINE = (0, 0, 255)   # Red
+COLOR_LEFT_LINE = (0, 0, 255)  # Red
 COLOR_RIGHT_LINE = (0, 255, 0)  # Green
-COLOR_NEUTRAL_LINE = (255, 255, 255) # White
+COLOR_NEUTRAL_LINE = (255, 255, 255)  # White
 
 # Points
-COLOR_LEFT_POINT = (0, 255, 255)   # Yellow
-COLOR_RIGHT_POINT = (255, 0, 0)    # Blue
-COLOR_NEUTRAL_POINT = (255, 255, 255) # White
+COLOR_LEFT_POINT = (0, 255, 255)  # Yellow
+COLOR_RIGHT_POINT = (255, 0, 0)  # Blue
+COLOR_NEUTRAL_POINT = (255, 255, 255)  # White
 
 # MediaPipe Pose Landmark Indices
 # Left side indices (odd numbers usually)
-LEFT_INDICES = {
-    1, 2, 3, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31
-}
+LEFT_INDICES = {1, 2, 3, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31}
 # Right side indices (even numbers usually)
-RIGHT_INDICES = {
-    4, 5, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32
-}
+RIGHT_INDICES = {4, 5, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32}
 
 VERBOSE_FRAMES = False  # Set to True to print per-frame pose detection status
 PAD_START_FRAMES = 120  # Number of initial frames to pad for MediaPipe stabilization
@@ -593,7 +590,9 @@ def kalman_smooth(data, n_iter=5, mode=1):
         return data
 
 
-def filter_pose_data(data, enable_median=True, enable_butterworth=True, order=4, fc=6, fs=30, median_kernel=5):
+def filter_pose_data(
+    data, enable_median=True, enable_butterworth=True, order=4, fc=6, fs=30, median_kernel=5
+):
     """
     Applies:
     1. Median Filter (removes abrupt jumps/outliers).
@@ -607,7 +606,7 @@ def filter_pose_data(data, enable_median=True, enable_butterworth=True, order=4,
         return data
 
     filtered_data = data.copy()
-    
+
     # Iterate over columns (handling numpy array)
     n_cols = data.shape[1]
     for j in range(n_cols):
@@ -619,24 +618,27 @@ def filter_pose_data(data, enable_median=True, enable_butterworth=True, order=4,
         # If median_kernel > 1, apply filter. Value must be odd.
         if enable_median and median_kernel and median_kernel > 1:
             k = int(median_kernel)
-            if k % 2 == 0: k += 1 # Ensure odd
+            if k % 2 == 0:
+                k += 1  # Ensure odd
             try:
                 filtered_data[:, j] = signal.medfilt(filtered_data[:, j], kernel_size=k)
-            except Exception as e:
-                pass # Ignore error if array is too small
+            except Exception:
+                pass  # Ignore error if array is too small
 
         # 2. SMOOTHING (BUTTERWORTH)
         if enable_butterworth:
             nyquist = 0.5 * fs
             normal_cutoff = fc / nyquist
-            if normal_cutoff >= 1: normal_cutoff = 0.99
-            b, a = signal.butter(order, normal_cutoff, btype='low', analog=False)
+            if normal_cutoff >= 1:
+                normal_cutoff = 0.99
+            b, a = signal.butter(order, normal_cutoff, btype="low", analog=False)
             try:
                 filtered_data[:, j] = signal.filtfilt(b, a, filtered_data[:, j])
-            except Exception as e:
-                pass # Keep data with only median if butter fails
-            
+            except Exception:
+                pass  # Keep data with only median if butter fails
+
     return filtered_data
+
 
 def arima_smooth(data, order=(1, 0, 0)):
     """Apply ARIMA smoothing to the input data."""
@@ -694,6 +696,7 @@ def arima_smooth(data, order=(1, 0, 0)):
                 print(f"Error in ARIMA smoothing for column {j}: {str(e)}")
                 smoothed[:, j] = data[:, j]  # Keep original data for failed columns
         return smoothed
+
 
 # Configuration management functions
 def get_default_config():
@@ -800,7 +803,9 @@ def save_config_to_toml(config, filepath):
                 f.write("# ================================================================\n")
                 f.write("# VIDEO INFO\n")
                 f.write("# ================================================================\n")
-                f.write(f"video_total_frames = {config['video_total_frames']}  # Total frames in the processed video\n\n")
+                f.write(
+                    f"video_total_frames = {config['video_total_frames']}  # Total frames in the processed video\n\n"
+                )
 
             f.write("[mediapipe]\n")
             f.write("# ================================================================\n")
@@ -876,7 +881,9 @@ def save_config_to_toml(config, filepath):
             f.write(
                 f"median_kernel_size = {mp['median_kernel_size']}               # Kernel size (odd integer: 3, 5, 7)\n"
             )
-            f.write("#                           # Helps reduce jitter without heavy distortion.\n\n")
+            f.write(
+                "#                           # Helps reduce jitter without heavy distortion.\n\n"
+            )
 
             f.write("\n[video_resize]\n")
             f.write("# ================================================================\n")
@@ -900,7 +907,6 @@ def save_config_to_toml(config, filepath):
             f.write("#                        # 5-8 = for very distant or tiny people\n")
             f.write("#                        # Higher = better detection but much slower\n")
             f.write("#                        # Coordinates are automatically converted back\n")
-
 
             f.write("\n[padding]\n")
             f.write("# ================================================================\n")
@@ -977,8 +983,12 @@ def save_config_to_toml(config, filepath):
                 f.write(f"roi_polygon_points = {polygon_str}  # Polygon ROI points\n")
             else:
                 f.write("# roi_polygon_points = [[x1, y1], [x2, y2], ...]  # Polygon ROI points\n")
-            f.write("# Note: If roi_polygon_points is set, it takes precedence over bbox coordinates.\n")
-            f.write("# Use 'Select Polygon ROI' button in GUI to visually select polygon from video.\n\n")
+            f.write(
+                "# Note: If roi_polygon_points is set, it takes precedence over bbox coordinates.\n"
+            )
+            f.write(
+                "# Use 'Select Polygon ROI' button in GUI to visually select polygon from video.\n\n"
+            )
 
             # NEW: Save multiple ROI ranges for different frame intervals
             bbox_ranges = config.get("bounding_box_ranges", [])
@@ -987,35 +997,63 @@ def save_config_to_toml(config, filepath):
                 f.write("# ================================================================\n")
                 f.write("# MULTIPLE ROI RANGES FOR DIFFERENT FRAME INTERVALS (ADVANCED)\n")
                 f.write("# ================================================================\n")
-                f.write("# Define different ROI and resize crop settings for different frame ranges.\n")
-                f.write("# This is useful when the subject size changes significantly during the video.\n")
-                f.write("# Example: Small subject at start (frames 0-100) needs larger ROI and 4x resize,\n")
-                f.write("#          but larger subject later (frames 101+) needs smaller ROI and 2x resize.\n\n")
+                f.write(
+                    "# Define different ROI and resize crop settings for different frame ranges.\n"
+                )
+                f.write(
+                    "# This is useful when the subject size changes significantly during the video.\n"
+                )
+                f.write(
+                    "# Example: Small subject at start (frames 0-100) needs larger ROI and 4x resize,\n"
+                )
+                f.write(
+                    "#          but larger subject later (frames 101+) needs smaller ROI and 2x resize.\n\n"
+                )
 
                 for idx, range_config in enumerate(bbox_ranges):
                     f.write(f"[[bounding_box_ranges.range]]  # Range {idx + 1}\n")
-                    f.write(f"frame_start = {range_config.get('frame_start', 0)}  # Start frame (0-based)\n")
+                    f.write(
+                        f"frame_start = {range_config.get('frame_start', 0)}  # Start frame (0-based)\n"
+                    )
                     # Handle infinity value for TOML (use quoted string)
-                    frame_end_val = range_config.get('frame_end', float('inf'))
-                    if frame_end_val == float('inf'):
+                    frame_end_val = range_config.get("frame_end", float("inf"))
+                    if frame_end_val == float("inf"):
                         f.write('frame_end = "inf"  # End frame (use "inf" for last frame)\n')
                     else:
                         f.write(f"frame_end = {int(frame_end_val)}  # End frame\n")
-                    roi_type = range_config.get('roi_type', 'inclusion')
-                    f.write(f'roi_type = "{roi_type}"  # "inclusion" = detect inside ROI, "exclusion" = ignore this area\n')
-                    f.write(f"enable_crop = {str(range_config.get('enable_crop', False)).lower()}  # Enable ROI for this range\n")
-                    f.write(f"bbox_x_min = {range_config.get('bbox_x_min', 0)}  # Left edge of ROI\n")
-                    f.write(f"bbox_y_min = {range_config.get('bbox_y_min', 0)}  # Top edge of ROI\n")
-                    f.write(f"bbox_x_max = {range_config.get('bbox_x_max', 1920)}  # Right edge of ROI\n")
-                    f.write(f"bbox_y_max = {range_config.get('bbox_y_max', 1080)}  # Bottom edge of ROI\n")
-                    f.write(f"enable_resize_crop = {str(range_config.get('enable_resize_crop', False)).lower()}  # Resize cropped region\n")
-                    f.write(f"resize_crop_scale = {range_config.get('resize_crop_scale', 2)}  # Scale factor (2-8)\n")
+                    roi_type = range_config.get("roi_type", "inclusion")
+                    f.write(
+                        f'roi_type = "{roi_type}"  # "inclusion" = detect inside ROI, "exclusion" = ignore this area\n'
+                    )
+                    f.write(
+                        f"enable_crop = {str(range_config.get('enable_crop', False)).lower()}  # Enable ROI for this range\n"
+                    )
+                    f.write(
+                        f"bbox_x_min = {range_config.get('bbox_x_min', 0)}  # Left edge of ROI\n"
+                    )
+                    f.write(
+                        f"bbox_y_min = {range_config.get('bbox_y_min', 0)}  # Top edge of ROI\n"
+                    )
+                    f.write(
+                        f"bbox_x_max = {range_config.get('bbox_x_max', 1920)}  # Right edge of ROI\n"
+                    )
+                    f.write(
+                        f"bbox_y_max = {range_config.get('bbox_y_max', 1080)}  # Bottom edge of ROI\n"
+                    )
+                    f.write(
+                        f"enable_resize_crop = {str(range_config.get('enable_resize_crop', False)).lower()}  # Resize cropped region\n"
+                    )
+                    f.write(
+                        f"resize_crop_scale = {range_config.get('resize_crop_scale', 2)}  # Scale factor (2-8)\n"
+                    )
                     if range_config.get("roi_polygon_points"):
                         polygon_str = "[\n"
                         for pt in range_config["roi_polygon_points"]:
                             polygon_str += f"    [{pt[0]}, {pt[1]}],\n"
                         polygon_str = polygon_str.rstrip(",\n") + "\n]"
-                        f.write(f"roi_polygon_points = {polygon_str}  # Polygon ROI points (optional)\n")
+                        f.write(
+                            f"roi_polygon_points = {polygon_str}  # Polygon ROI points (optional)\n"
+                        )
                     f.write("\n")
             else:
                 f.write("# [bounding_box_ranges]  # Uncomment to use multiple ROI ranges\n")
@@ -1048,14 +1086,26 @@ def save_config_to_toml(config, filepath):
             f.write("# SCIENTIFIC ROBUSTNESS PARAMETERS (Kalman + Optical Flow) - v0.9.0\n")
             f.write("# ================================================================\n")
             f.write("# Kalman Filter: Predicts motion when tracking is lost.\n")
-            f.write(f"track_process_noise = {sr.get('track_process_noise', 1.0)}       # Process noise (model uncertainty)\n")
-            f.write(f"track_measurement_noise = {sr.get('track_measurement_noise', 0.1)}   # Base measurement noise (sensor uncertainty)\n")
-            f.write(f"max_pred_gap = {sr.get('max_pred_gap', 10)}              # Max frames to predict before declaring a gap\n")
+            f.write(
+                f"track_process_noise = {sr.get('track_process_noise', 1.0)}       # Process noise (model uncertainty)\n"
+            )
+            f.write(
+                f"track_measurement_noise = {sr.get('track_measurement_noise', 0.1)}   # Base measurement noise (sensor uncertainty)\n"
+            )
+            f.write(
+                f"max_pred_gap = {sr.get('max_pred_gap', 10)}              # Max frames to predict before declaring a gap\n"
+            )
             f.write("# Optical Flow: Tracks points when MediaPipe confidence is low.\n")
-            f.write(f"optical_flow_threshold = {sr.get('optical_flow_threshold', 0.15)}    # Max error for optical flow tracking\n")
+            f.write(
+                f"optical_flow_threshold = {sr.get('optical_flow_threshold', 0.15)}    # Max error for optical flow tracking\n"
+            )
             f.write("# Gap Reconstruction: Fills true gaps (offline).\n")
-            f.write(f"enable_gap_reconstruction = {str(sr.get('enable_gap_reconstruction', True)).lower()} # Enable offline gap reconstruction\n")
-            f.write(f"max_reconstruction_gap = {sr.get('max_reconstruction_gap', 10)}      # Max gap size to fill (frames)\n")
+            f.write(
+                f"enable_gap_reconstruction = {str(sr.get('enable_gap_reconstruction', True)).lower()} # Enable offline gap reconstruction\n"
+            )
+            f.write(
+                f"max_reconstruction_gap = {sr.get('max_reconstruction_gap', 10)}      # Max gap size to fill (frames)\n"
+            )
             f.write("\n")
 
         print(f"Configuration saved to: {filepath}")
@@ -1159,7 +1209,9 @@ def load_config_from_toml(filepath):
                     "bbox_y_max": bbox_y_max,
                     "enable_resize_crop": bool(bb.get("enable_resize_crop", False)),
                     "resize_crop_scale": int(bb.get("resize_crop_scale", 2)),
-                    "roi_polygon_points": bb.get("roi_polygon_points"),  # Load polygon ROI if available
+                    "roi_polygon_points": bb.get(
+                        "roi_polygon_points"
+                    ),  # Load polygon ROI if available
                 }
             )
         else:
@@ -1197,15 +1249,19 @@ def load_config_from_toml(filepath):
 
                 config["bounding_box_ranges"] = []
                 for range_config in ranges_list:
-                    frame_end = range_config.get("frame_end", float('inf'))
+                    frame_end = range_config.get("frame_end", float("inf"))
                     # Handle 'inf' string in TOML
                     if isinstance(frame_end, str) and frame_end.lower() == "inf":
-                        frame_end = float('inf')
+                        frame_end = float("inf")
 
                     range_dict = {
                         "frame_start": int(range_config.get("frame_start", 0)),
-                        "frame_end": float(frame_end) if isinstance(frame_end, (int, float)) else float('inf'),
-                        "roi_type": str(range_config.get("roi_type", "inclusion")),  # "inclusion" or "exclusion"
+                        "frame_end": float(frame_end)
+                        if isinstance(frame_end, (int, float))
+                        else float("inf"),
+                        "roi_type": str(
+                            range_config.get("roi_type", "inclusion")
+                        ),  # "inclusion" or "exclusion"
                         "enable_crop": bool(range_config.get("enable_crop", False)),
                         "bbox_x_min": int(range_config.get("bbox_x_min", 0)),
                         "bbox_y_min": int(range_config.get("bbox_y_min", 0)),
@@ -1216,7 +1272,9 @@ def load_config_from_toml(filepath):
                         "roi_polygon_points": range_config.get("roi_polygon_points"),
                     }
                     config["bounding_box_ranges"].append(range_dict)
-                    print(f"Loaded ROI range: frames {range_dict['frame_start']}-{range_dict['frame_end']}")
+                    print(
+                        f"Loaded ROI range: frames {range_dict['frame_start']}-{range_dict['frame_end']}"
+                    )
             else:
                 config["bounding_box_ranges"] = []
         else:
@@ -1265,23 +1323,23 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
 
         # Estilo para deixar mais moderno
         style = ttk.Style()
-        style.theme_use('clam') # Tenta usar um tema mais limpo se disponível
+        style.theme_use("clam")  # Tenta usar um tema mais limpo se disponível
 
         # --- Criação do Sistema de Abas (Notebook) ---
         self.notebook = ttk.Notebook(master)
-        self.notebook.pack(fill='both', expand=True, padx=5, pady=5)
+        self.notebook.pack(fill="both", expand=True, padx=5, pady=5)
 
         # Criar os frames para cada aba
         self.tab_mediapipe = ttk.Frame(self.notebook)
         self.tab_processing = ttk.Frame(self.notebook)
         self.tab_roi = ttk.Frame(self.notebook)
-        self.tab_scientific = ttk.Frame(self.notebook) # NEW
+        self.tab_scientific = ttk.Frame(self.notebook)  # NEW
         self.tab_filters = ttk.Frame(self.notebook)
 
-        self.notebook.add(self.tab_mediapipe, text=' MediaPipe & Model ')
-        self.notebook.add(self.tab_processing, text=' Simple Processing ')
-        self.notebook.add(self.tab_roi, text=' Advanced ROI ')
-        self.notebook.add(self.tab_filters, text=' Save & Load Config ')
+        self.notebook.add(self.tab_mediapipe, text=" MediaPipe & Model ")
+        self.notebook.add(self.tab_processing, text=" Simple Processing ")
+        self.notebook.add(self.tab_roi, text=" Advanced ROI ")
+        self.notebook.add(self.tab_filters, text=" Save & Load Config ")
 
         # --- ABA 1: MEDIAPIPE ---
         self._build_mediapipe_tab()
@@ -1302,14 +1360,14 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
         """Helper para criar linhas de label + entry padronizadas"""
         lbl = ttk.Label(parent, text=label_text)
         lbl.grid(row=row, column=0, sticky="w", padx=10, pady=5)
-        
+
         entry = ttk.Entry(parent)
         entry.insert(0, str(default_val))
         entry.grid(row=row, column=1, sticky="ew", padx=10, pady=5)
-        
+
         # Garante que a coluna do entry expanda
         parent.grid_columnconfigure(1, weight=1)
-        
+
         setattr(self, attr_name, entry)
         return entry
 
@@ -1331,42 +1389,60 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
 
         for i, (txt, attr, val) in enumerate(mp_params):
             self._create_entry_row(frame, txt, attr, val, i)
-            
+
         # Frame 2: Post-Processing (Simple)
         pp_frame = ttk.LabelFrame(self.tab_mediapipe, text="Simple Post-Processing", padding=15)
         pp_frame.pack(fill="x", padx=10, pady=5)
-        
+
         # Enable Median Filter
         self.enable_median_filter_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(pp_frame, text="Enable Median Filter (Reduce Jitter)", variable=self.enable_median_filter_var).grid(row=0, column=0, columnspan=2, sticky="w")
-        
+        ttk.Checkbutton(
+            pp_frame,
+            text="Enable Median Filter (Reduce Jitter)",
+            variable=self.enable_median_filter_var,
+        ).grid(row=0, column=0, columnspan=2, sticky="w")
+
         # Kernel Size
-        self._create_entry_row(pp_frame, "Median Kernel Size (3, 5, 7):", "median_kernel_size_entry", "5", 1)
+        self._create_entry_row(
+            pp_frame, "Median Kernel Size (3, 5, 7):", "median_kernel_size_entry", "5", 1
+        )
 
     def _build_processing_tab(self):
         # Frame de Resize
         resize_frame = ttk.LabelFrame(self.tab_processing, text="Video Resizing", padding=15)
         resize_frame.pack(fill="x", padx=10, pady=10)
 
-        self._create_entry_row(resize_frame, "Enable Resize (True/False):", "enable_resize_entry", "False", 0)
-        self._create_entry_row(resize_frame, "Resize Scale (e.g., 2):", "resize_scale_entry", "2", 1)
+        self._create_entry_row(
+            resize_frame, "Enable Resize (True/False):", "enable_resize_entry", "False", 0
+        )
+        self._create_entry_row(
+            resize_frame, "Resize Scale (e.g., 2):", "resize_scale_entry", "2", 1
+        )
 
         # Frame de Padding
-        pad_frame = ttk.LabelFrame(self.tab_processing, text="Padding (Initial Stabilization)", padding=15)
+        pad_frame = ttk.LabelFrame(
+            self.tab_processing, text="Padding (Initial Stabilization)", padding=15
+        )
         pad_frame.pack(fill="x", padx=10, pady=10)
 
         pad_params = [
-            ("Enable Initial Padding (True/False):", "enable_padding_entry", str(ENABLE_PADDING_DEFAULT)),
+            (
+                "Enable Initial Padding (True/False):",
+                "enable_padding_entry",
+                str(ENABLE_PADDING_DEFAULT),
+            ),
             ("Initial Padding Frames:", "pad_start_frames_entry", str(PAD_START_FRAMES_DEFAULT)),
             ("Enable Reverse Padding (True/False):", "enable_reverse_padding_entry", "True"),
             ("Reverse Padding Frames:", "pad_end_frames_entry", "30"),
         ]
-        
+
         for i, (txt, attr, val) in enumerate(pad_params):
             self._create_entry_row(pad_frame, txt, attr, val, i)
 
     def _build_roi_tab(self):
-        roi_frame = ttk.LabelFrame(self.tab_roi, text="Region of Interest (ROI) Selection", padding=15)
+        roi_frame = ttk.LabelFrame(
+            self.tab_roi, text="Region of Interest (ROI) Selection", padding=15
+        )
         roi_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
         # Checkbox
@@ -1382,42 +1458,54 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
             ("Maximum Y (px):", "bbox_y_max_entry", "1080"),
         ]
         for i, (txt, attr, val) in enumerate(bbox_params):
-            entry = self._create_entry_row(roi_frame, txt, attr, val, i+1)
+            entry = self._create_entry_row(roi_frame, txt, attr, val, i + 1)
             # Bind para atualizar coords normalizadas
             entry.bind("<KeyRelease>", self.update_normalized_coords)
 
         # Label coords normalizadas
-        ttk.Label(roi_frame, text="Normalized Coords:").grid(row=5, column=0, sticky="e", padx=10, pady=5)
-        self.norm_coords_label = ttk.Label(roi_frame, text="(0.0, 0.0) - (1.0, 1.0)", foreground="gray")
+        ttk.Label(roi_frame, text="Normalized Coords:").grid(
+            row=5, column=0, sticky="e", padx=10, pady=5
+        )
+        self.norm_coords_label = ttk.Label(
+            roi_frame, text="(0.0, 0.0) - (1.0, 1.0)", foreground="gray"
+        )
         self.norm_coords_label.grid(row=5, column=1, sticky="w", padx=10, pady=5)
 
         # Botões de Seleção Visual
         btn_frame = ttk.Frame(roi_frame)
         btn_frame.grid(row=6, column=0, columnspan=2, pady=15)
-        
-        ttk.Button(btn_frame, text="Select BBox from Video", command=self.select_roi_from_video).pack(side="left", padx=5)
-        ttk.Button(btn_frame, text="Select Polygon (Free)", command=self.select_polygon_roi_from_video).pack(side="left", padx=5)
+
+        ttk.Button(
+            btn_frame, text="Select BBox from Video", command=self.select_roi_from_video
+        ).pack(side="left", padx=5)
+        ttk.Button(
+            btn_frame, text="Select Polygon (Free)", command=self.select_polygon_roi_from_video
+        ).pack(side="left", padx=5)
 
         # Opções de Resize do Crop
         sep = ttk.Separator(roi_frame, orient="horizontal")
         sep.grid(row=7, column=0, columnspan=2, sticky="ew", pady=10)
 
         self.enable_resize_crop_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(roi_frame, text="Resize Cropped Region", variable=self.enable_resize_crop_var).grid(row=8, column=0, sticky="w")
-        
+        ttk.Checkbutton(
+            roi_frame, text="Resize Cropped Region", variable=self.enable_resize_crop_var
+        ).grid(row=8, column=0, sticky="w")
+
         self._create_entry_row(roi_frame, "Crop Scale (2-8):", "resize_crop_scale_entry", "2", 9)
 
         # Multi ROI
         multi_frame = ttk.LabelFrame(self.tab_roi, text="Multiple ROIs (Advanced)", padding=10)
         multi_frame.pack(fill="x", padx=10, pady=10)
-        
+
         ttk.Label(multi_frame, text="Num Ranges:").pack(side="left", padx=5)
         self.num_roi_ranges_entry = ttk.Entry(multi_frame, width=5)
         self.num_roi_ranges_entry.insert(0, "1")
         self.num_roi_ranges_entry.pack(side="left", padx=5)
-        
-        ttk.Button(multi_frame, text="Setup Ranges", command=self.setup_multiple_rois).pack(side="left", padx=5)
-        
+
+        ttk.Button(multi_frame, text="Setup Ranges", command=self.setup_multiple_rois).pack(
+            side="left", padx=5
+        )
+
         self.roi_ranges_label = ttk.Label(multi_frame, text="Configured: 0", foreground="gray")
         self.roi_ranges_label.pack(side="left", padx=10)
 
@@ -1427,18 +1515,23 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
         # --- Configuração TOML ---
         toml_frame = ttk.LabelFrame(self.tab_filters, text="File Management (TOML)", padding=15)
         toml_frame.pack(fill="x", padx=10, pady=10)
-        
+
         btn_grid = ttk.Frame(toml_frame)
         btn_grid.pack(fill="x")
-        
-        ttk.Button(btn_grid, text="Load TOML", command=self.load_config_file).pack(side="left", padx=2)
-        ttk.Button(btn_grid, text="Save Current", command=self.save_current_config_to_toml).pack(side="left", padx=2)
-        ttk.Button(btn_grid, text="Create Template", command=self.create_default_toml_template).pack(side="left", padx=2)
+
+        ttk.Button(btn_grid, text="Load TOML", command=self.load_config_file).pack(
+            side="left", padx=2
+        )
+        ttk.Button(btn_grid, text="Save Current", command=self.save_current_config_to_toml).pack(
+            side="left", padx=2
+        )
+        ttk.Button(
+            btn_grid, text="Create Template", command=self.create_default_toml_template
+        ).pack(side="left", padx=2)
         ttk.Button(btn_grid, text="Help", command=self.show_help).pack(side="right", padx=2)
-        
+
         self.toml_label = ttk.Label(toml_frame, text="No file loaded", foreground="gray")
         self.toml_label.pack(pady=5)
-
 
     def create_default_toml_template(self):
         from tkinter import filedialog, messagebox
@@ -1468,7 +1561,9 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
                 "static_image_mode": default_config["mediapipe"]["static_image_mode"],
                 "apply_filtering": default_config["mediapipe"]["apply_filtering"],
                 "estimate_occluded": default_config["mediapipe"]["estimate_occluded"],
-                "enable_median_filter": default_config["mediapipe"].get("enable_median_filter", False),
+                "enable_median_filter": default_config["mediapipe"].get(
+                    "enable_median_filter", False
+                ),
                 "median_kernel_size": default_config["mediapipe"].get("median_kernel_size", 5),
                 "enable_resize": default_config["video_resize"]["enable_resize"],
                 "resize_scale": default_config["video_resize"]["resize_scale"],
@@ -1546,17 +1641,17 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
                     # We'll just default to Total Frames or 0, but user likely made a mistake or wants to override?
                     # Let's set it to total_frames - 1 as a placeholder or just 0 if robust.
                     default_start = total_frames
-                    min_start = 0 # Allow overlap if user insists? Or just fail?
+                    min_start = 0  # Allow overlap if user insists? Or just fail?
                 else:
                     default_start = int(last_end) + 1
-                    min_start = 0 # We don't strictly enforce > previous end here to allow flexibility/overlaps if needed, 
-                                  # though typically sequential. minvalue=min_start in prompt enforces it if we want.
+                    min_start = 0  # We don't strictly enforce > previous end here to allow flexibility/overlaps if needed,
+                    # though typically sequential. minvalue=min_start in prompt enforces it if we want.
 
             frame_start = simpledialog.askinteger(
                 f"ROI Range {i + 1}/{num_ranges}",
                 f"Enter START frame for ROI range {i + 1}:\n(Video has {total_frames} frames, 0-indexed)",
-                minvalue=0, 
-                maxvalue=None, # Removed strict enforcement dependent on previous range to avoid complex validation logic here
+                minvalue=0,
+                maxvalue=None,  # Removed strict enforcement dependent on previous range to avoid complex validation logic here
                 initialvalue=default_start,
             )
             if frame_start is None:
@@ -1568,7 +1663,9 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
             frame_end_str = simpledialog.askstring(
                 f"ROI Range {i + 1}/{num_ranges}",
                 f"Enter END frame for ROI range {i + 1}:\n(Enter 'inf' for last frame, or a number up to {total_frames - 1})",
-                initialvalue="inf" if i == num_ranges - 1 else str(min(default_end, total_frames - 1)),
+                initialvalue="inf"
+                if i == num_ranges - 1
+                else str(min(default_end, total_frames - 1)),
             )
             if frame_end_str is None:
                 messagebox.showinfo("Cancelled", f"Setup cancelled at range {i + 1}.")
@@ -1591,11 +1688,11 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
             roi_type_choice = simpledialog.askstring(
                 f"ROI Range {i + 1}/{num_ranges} - Type",
                 f"Enter ROI type for range {i + 1}:\n'inclusion' (or '1') = detect only inside this ROI\n'exclusion' (or '0') = ignore this area\n\n(Default: inclusion)",
-                initialvalue="inclusion"
+                initialvalue="inclusion",
             )
             if roi_type_choice is None:
                 roi_type_choice = "inclusion"
-            
+
             # Map 1/0 shortcuts to full names
             choice_str = roi_type_choice.lower().strip()
             if choice_str == "1":
@@ -1604,7 +1701,7 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
                 roi_type = "exclusion"
             else:
                 roi_type = choice_str
-                
+
             if roi_type not in ["inclusion", "exclusion"]:
                 roi_type = "inclusion"  # Default to inclusion
 
@@ -1625,7 +1722,7 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
             roi_type_text = "INCLUSION" if roi_type == "inclusion" else "EXCLUSION"
             messagebox.showinfo(
                 f"Select {roi_type_text} ROI for Range {i + 1}",
-                f"Select the ROI for frames {frame_start} to {frame_end_str}.\n\nType: {roi_type_text}\nDrag to select region, press SPACE or ENTER to confirm."
+                f"Select the ROI for frames {frame_start} to {frame_end_str}.\n\nType: {roi_type_text}\nDrag to select region, press SPACE or ENTER to confirm.",
             )
 
             # Open video at the specified start frame
@@ -1641,7 +1738,9 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
             # Let user select ROI
             cv2.namedWindow("Select ROI for Range " + str(i + 1), cv2.WINDOW_NORMAL)
             cv2.resizeWindow("Select ROI for Range " + str(i + 1), 1280, 720)
-            bbox = cv2.selectROI("Select ROI for Range " + str(i + 1), frame, fromCenter=False, showCrosshair=True)
+            bbox = cv2.selectROI(
+                "Select ROI for Range " + str(i + 1), frame, fromCenter=False, showCrosshair=True
+            )
             cv2.destroyAllWindows()
 
             if bbox[2] == 0 or bbox[3] == 0:
@@ -1667,28 +1766,30 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
             }
             self.bounding_box_ranges.append(range_config)
 
-            print(f"ROI Range {i + 1} configured: frames {frame_start}-{frame_end_str}, bbox ({x_min}, {y_min}) to ({x_max}, {y_max})")
+            print(
+                f"ROI Range {i + 1} configured: frames {frame_start}-{frame_end_str}, bbox ({x_min}, {y_min}) to ({x_max}, {y_max})"
+            )
 
         # Update status label
         self.roi_ranges_label.config(
             text=f"ROI ranges configured: {len(self.bounding_box_ranges)}",
-            foreground="green" if self.bounding_box_ranges else "gray"
+            foreground="green" if self.bounding_box_ranges else "gray",
         )
 
         if self.bounding_box_ranges:
             messagebox.showinfo(
                 "Setup Complete",
-                f"Configured {len(self.bounding_box_ranges)} ROI range(s).\n\nUse 'Save Current Config' to save to TOML file."
+                f"Configured {len(self.bounding_box_ranges)} ROI range(s).\n\nUse 'Save Current Config' to save to TOML file.",
             )
 
     def save_current_config_to_toml(self):
         """Salva o estado atual da GUI em um arquivo TOML."""
-        
+
         # Pega o caminho do arquivo
         file_path = filedialog.asksaveasfilename(
             defaultextension=".toml",
             filetypes=[("TOML files", "*.toml"), ("All files", "*.*")],
-            title="Salvar Configuração TOML"
+            title="Salvar Configuração TOML",
         )
         if not file_path:
             return
@@ -1700,24 +1801,25 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
                 "min_detection_confidence": float(self.min_detection_entry.get()),
                 "min_tracking_confidence": float(self.min_tracking_entry.get()),
                 "model_complexity": int(self.model_complexity_entry.get()),
-                "enable_segmentation": self.enable_segmentation_entry.get().lower() == 'true',
-                "smooth_segmentation": self.smooth_segmentation_entry.get().lower() == 'true',
-                "static_image_mode": self.static_image_mode_entry.get().lower() == 'true',
-                "apply_filtering": self.apply_filtering_entry.get().lower() == 'true',
-                "estimate_occluded": self.estimate_occluded_entry.get().lower() == 'true',
-                
+                "enable_segmentation": self.enable_segmentation_entry.get().lower() == "true",
+                "smooth_segmentation": self.smooth_segmentation_entry.get().lower() == "true",
+                "static_image_mode": self.static_image_mode_entry.get().lower() == "true",
+                "apply_filtering": self.apply_filtering_entry.get().lower() == "true",
+                "estimate_occluded": self.estimate_occluded_entry.get().lower() == "true",
                 # Simple Median Filter
-                "enable_median_filter": self.enable_median_filter_var.get() if hasattr(self, 'enable_median_filter_var') else False,
-                "median_kernel_size": int(self.median_kernel_size_entry.get()) if hasattr(self, 'median_kernel_size_entry') else 5,
-
+                "enable_median_filter": self.enable_median_filter_var.get()
+                if hasattr(self, "enable_median_filter_var")
+                else False,
+                "median_kernel_size": int(self.median_kernel_size_entry.get())
+                if hasattr(self, "median_kernel_size_entry")
+                else 5,
                 # Resize & Padding
-                "enable_resize": self.enable_resize_entry.get().lower() == 'true',
+                "enable_resize": self.enable_resize_entry.get().lower() == "true",
                 "resize_scale": float(self.resize_scale_entry.get()),
-                "enable_padding": self.enable_padding_entry.get().lower() == 'true',
+                "enable_padding": self.enable_padding_entry.get().lower() == "true",
                 "pad_start_frames": int(self.pad_start_frames_entry.get()),
-                "enable_reverse_padding": self.enable_reverse_padding_entry.get().lower() == 'true',
+                "enable_reverse_padding": self.enable_reverse_padding_entry.get().lower() == "true",
                 "pad_end_frames": int(self.pad_end_frames_entry.get()),
-
                 # ROI
                 "enable_crop": self.enable_crop_var.get(),
                 "bbox_x_min": int(self.bbox_x_min_entry.get()),
@@ -1726,7 +1828,6 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
                 "bbox_y_max": int(self.bbox_y_max_entry.get()),
                 "enable_resize_crop": self.enable_resize_crop_var.get(),
                 "resize_crop_scale": float(self.resize_crop_scale_entry.get()),
-                
                 # Advanced ROI
                 "roi_polygon_points": self.roi_polygon_points,
                 "bounding_box_ranges": self.bounding_box_ranges,
@@ -1751,12 +1852,12 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
 
             # Use the global save function to ensure correct formatting and headers
             save_config_to_toml(config, file_path)
-            
+
             messagebox.showinfo("Sucesso", f"Configuração salva em:\n{file_path}")
             self.loaded_config = config
-            
+
             # Atualiza label na aba de Filtros
-            if hasattr(self, 'toml_label'):
+            if hasattr(self, "toml_label"):
                 self.toml_label.config(text=os.path.basename(file_path), foreground="green")
 
         except Exception as e:
@@ -1843,18 +1944,21 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
             # Calculate path to help file relative to this script
             script_dir = os.path.dirname(os.path.abspath(__file__))
             help_path = os.path.join(script_dir, "help", "markerless_2d_analysis.html")
-            
+
             if os.path.exists(help_path):
                 webbrowser.open(f"file://{help_path}")
             else:
                 from tkinter import messagebox
+
                 messagebox.showwarning(
-                    "Help Not Found", 
-                    f"Could not find help file at:\n{help_path}\n\nPlease check your installation."
+                    "Help Not Found",
+                    f"Could not find help file at:\n{help_path}\n\nPlease check your installation.",
                 )
         except Exception as e:
             from tkinter import messagebox
+
             messagebox.showerror("Error", f"Failed to open help: {str(e)}")
+
     def update_normalized_coords(self, event=None):
         """Update normalized coordinates display based on pixel coordinates"""
         try:
@@ -2066,109 +2170,110 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
 
             print(f"Polygon ROI selected with {len(roi_poly)} points")
             messagebox.showinfo(
-                "ROI Selected", f"Polygon ROI selected with {len(roi_poly)} points.\nBounding box: ({x_min}, {y_min}) to ({x_max}, {y_max})"
+                "ROI Selected",
+                f"Polygon ROI selected with {len(roi_poly)} points.\nBounding box: ({x_min}, {y_min}) to ({x_max}, {y_max})",
             )
         else:
             print("Polygon ROI selection cancelled or invalid")
 
     def populate_fields_from_config(self, config):
         """Preenche a GUI com valores de um dicionário carregado."""
-        
+
         # --- MediaPipe & Model ---
-        if 'min_detection_confidence' in config:
+        if "min_detection_confidence" in config:
             self.min_detection_entry.delete(0, tk.END)
-            self.min_detection_entry.insert(0, str(config['min_detection_confidence']))
-        if 'min_tracking_confidence' in config:
+            self.min_detection_entry.insert(0, str(config["min_detection_confidence"]))
+        if "min_tracking_confidence" in config:
             self.min_tracking_entry.delete(0, tk.END)
-            self.min_tracking_entry.insert(0, str(config['min_tracking_confidence']))
-        if 'model_complexity' in config:
+            self.min_tracking_entry.insert(0, str(config["min_tracking_confidence"]))
+        if "model_complexity" in config:
             self.model_complexity_entry.delete(0, tk.END)
-            self.model_complexity_entry.insert(0, str(config['model_complexity']))
-        if 'enable_segmentation' in config:
+            self.model_complexity_entry.insert(0, str(config["model_complexity"]))
+        if "enable_segmentation" in config:
             self.enable_segmentation_entry.delete(0, tk.END)
-            self.enable_segmentation_entry.insert(0, str(config['enable_segmentation']))
-        if 'smooth_segmentation' in config:
+            self.enable_segmentation_entry.insert(0, str(config["enable_segmentation"]))
+        if "smooth_segmentation" in config:
             self.smooth_segmentation_entry.delete(0, tk.END)
-            self.smooth_segmentation_entry.insert(0, str(config['smooth_segmentation']))
-        if 'static_image_mode' in config:
+            self.smooth_segmentation_entry.insert(0, str(config["smooth_segmentation"]))
+        if "static_image_mode" in config:
             self.static_image_mode_entry.delete(0, tk.END)
-            self.static_image_mode_entry.insert(0, str(config['static_image_mode']))
-        if 'apply_filtering' in config:
+            self.static_image_mode_entry.insert(0, str(config["static_image_mode"]))
+        if "apply_filtering" in config:
             self.apply_filtering_entry.delete(0, tk.END)
-            self.apply_filtering_entry.insert(0, str(config['apply_filtering']))
-        if 'estimate_occluded' in config:
+            self.apply_filtering_entry.insert(0, str(config["apply_filtering"]))
+        if "estimate_occluded" in config:
             self.estimate_occluded_entry.delete(0, tk.END)
-            self.estimate_occluded_entry.insert(0, str(config['estimate_occluded']))
+            self.estimate_occluded_entry.insert(0, str(config["estimate_occluded"]))
 
         # --- Simple Median Filter ---
-        if hasattr(self, 'enable_median_filter_var') and 'enable_median_filter' in config:
-            self.enable_median_filter_var.set(config['enable_median_filter'])
-        if hasattr(self, 'median_kernel_size_entry') and 'median_kernel_size' in config:
+        if hasattr(self, "enable_median_filter_var") and "enable_median_filter" in config:
+            self.enable_median_filter_var.set(config["enable_median_filter"])
+        if hasattr(self, "median_kernel_size_entry") and "median_kernel_size" in config:
             self.median_kernel_size_entry.delete(0, tk.END)
-            self.median_kernel_size_entry.insert(0, str(config['median_kernel_size']))
+            self.median_kernel_size_entry.insert(0, str(config["median_kernel_size"]))
 
         # --- Processamento (Resize & Padding) ---
-        if 'enable_resize' in config:
+        if "enable_resize" in config:
             self.enable_resize_entry.delete(0, tk.END)
-            self.enable_resize_entry.insert(0, str(config['enable_resize']))
-        if 'resize_scale' in config:
+            self.enable_resize_entry.insert(0, str(config["enable_resize"]))
+        if "resize_scale" in config:
             self.resize_scale_entry.delete(0, tk.END)
-            self.resize_scale_entry.insert(0, str(config['resize_scale']))
-        if 'enable_padding' in config:
+            self.resize_scale_entry.insert(0, str(config["resize_scale"]))
+        if "enable_padding" in config:
             self.enable_padding_entry.delete(0, tk.END)
-            self.enable_padding_entry.insert(0, str(config['enable_padding']))
-        if 'pad_start_frames' in config:
+            self.enable_padding_entry.insert(0, str(config["enable_padding"]))
+        if "pad_start_frames" in config:
             self.pad_start_frames_entry.delete(0, tk.END)
-            self.pad_start_frames_entry.insert(0, str(config['pad_start_frames']))
-        if 'enable_reverse_padding' in config:
+            self.pad_start_frames_entry.insert(0, str(config["pad_start_frames"]))
+        if "enable_reverse_padding" in config:
             self.enable_reverse_padding_entry.delete(0, tk.END)
-            self.enable_reverse_padding_entry.insert(0, str(config['enable_reverse_padding']))
-        if 'pad_end_frames' in config:
+            self.enable_reverse_padding_entry.insert(0, str(config["enable_reverse_padding"]))
+        if "pad_end_frames" in config:
             self.pad_end_frames_entry.delete(0, tk.END)
-            self.pad_end_frames_entry.insert(0, str(config['pad_end_frames']))
+            self.pad_end_frames_entry.insert(0, str(config["pad_end_frames"]))
 
         # --- ROI ---
-        if 'enable_crop' in config:
+        if "enable_crop" in config:
             # Checkbox var precisa ser setada
-            val = str(config['enable_crop']).lower() == 'true'
+            val = str(config["enable_crop"]).lower() == "true"
             self.enable_crop_var.set(val)
-        
-        if 'bbox_x_min' in config:
-            self.bbox_x_min_entry.delete(0, tk.END)
-            self.bbox_x_min_entry.insert(0, str(config['bbox_x_min']))
-        if 'bbox_y_min' in config:
-            self.bbox_y_min_entry.delete(0, tk.END)
-            self.bbox_y_min_entry.insert(0, str(config['bbox_y_min']))
-        if 'bbox_x_max' in config:
-            self.bbox_x_max_entry.delete(0, tk.END)
-            self.bbox_x_max_entry.insert(0, str(config['bbox_x_max']))
-        if 'bbox_y_max' in config:
-            self.bbox_y_max_entry.delete(0, tk.END)
-            self.bbox_y_max_entry.insert(0, str(config['bbox_y_max']))
 
-        if 'enable_resize_crop' in config:
-            val = str(config['enable_resize_crop']).lower() == 'true'
+        if "bbox_x_min" in config:
+            self.bbox_x_min_entry.delete(0, tk.END)
+            self.bbox_x_min_entry.insert(0, str(config["bbox_x_min"]))
+        if "bbox_y_min" in config:
+            self.bbox_y_min_entry.delete(0, tk.END)
+            self.bbox_y_min_entry.insert(0, str(config["bbox_y_min"]))
+        if "bbox_x_max" in config:
+            self.bbox_x_max_entry.delete(0, tk.END)
+            self.bbox_x_max_entry.insert(0, str(config["bbox_x_max"]))
+        if "bbox_y_max" in config:
+            self.bbox_y_max_entry.delete(0, tk.END)
+            self.bbox_y_max_entry.insert(0, str(config["bbox_y_max"]))
+
+        if "enable_resize_crop" in config:
+            val = str(config["enable_resize_crop"]).lower() == "true"
             self.enable_resize_crop_var.set(val)
 
-        if 'resize_crop_scale' in config:
+        if "resize_crop_scale" in config:
             self.resize_crop_scale_entry.delete(0, tk.END)
-            self.resize_crop_scale_entry.insert(0, str(config['resize_crop_scale']))
+            self.resize_crop_scale_entry.insert(0, str(config["resize_crop_scale"]))
 
         # --- ROI Polígono e Ranges ---
-        if 'roi_polygon_points' in config:
-            val = config['roi_polygon_points']
+        if "roi_polygon_points" in config:
+            val = config["roi_polygon_points"]
             # Tratamento para string "None" vindo do TOML
             if isinstance(val, str) and val.lower() == "none":
                 self.roi_polygon_points = None
             else:
                 self.roi_polygon_points = val
 
-        if 'bounding_box_ranges' in config:
-            self.bounding_box_ranges = config['bounding_box_ranges']
+        if "bounding_box_ranges" in config:
+            self.bounding_box_ranges = config["bounding_box_ranges"]
             self.roi_ranges_label.config(text=f"Configurados: {len(self.bounding_box_ranges)}")
             self.num_roi_ranges_entry.delete(0, tk.END)
             self.num_roi_ranges_entry.insert(0, str(len(self.bounding_box_ranges)))
-            
+
         # Atualiza visualmente as coords normalizadas
         self.update_normalized_coords()
 
@@ -2196,7 +2301,6 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
                 # New Post-Processing
                 "enable_median_filter": self.enable_median_filter_var.get(),
                 "median_kernel_size": int(self.median_kernel_size_entry.get()),
-                
                 # Resizing & Padding
                 "enable_resize": self.enable_resize_entry.get().lower() == "true",
                 "resize_scale": int(self.resize_scale_entry.get()),
@@ -2204,7 +2308,6 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
                 "pad_start_frames": int(self.pad_start_frames_entry.get()),
                 "enable_reverse_padding": self.enable_reverse_padding_entry.get().lower() == "true",
                 "pad_end_frames": int(self.pad_end_frames_entry.get()),
-                
                 # Bounding box settings
                 "enable_crop": self.enable_crop_var.get(),
                 "bbox_x_min": int(self.bbox_x_min_entry.get() or 0),
@@ -2213,8 +2316,12 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
                 "bbox_y_max": int(self.bbox_y_max_entry.get() or 1080),
                 "enable_resize_crop": self.enable_resize_crop_var.get(),
                 "resize_crop_scale": int(self.resize_crop_scale_entry.get() or 2),
-                "roi_polygon_points": getattr(self, "roi_polygon_points", None),  # Store polygon points if selected
-                "bounding_box_ranges": getattr(self, "bounding_box_ranges", []),  # Store multiple ROI ranges
+                "roi_polygon_points": getattr(
+                    self, "roi_polygon_points", None
+                ),  # Store polygon points if selected
+                "bounding_box_ranges": getattr(
+                    self, "bounding_box_ranges", []
+                ),  # Store multiple ROI ranges
             }
 
 
@@ -2263,7 +2370,9 @@ class DeviceSelectionDialog(tk.simpledialog.Dialog):
         for backend_name in ["nvidia", "rocm", "mps"]:
             if backend_name in self.available_backends:
                 available, info, error = self.available_backends[backend_name]
-                test_result = self.available_backends.get(f"{backend_name}_test", (False, "Not tested"))
+                test_result = self.available_backends.get(
+                    f"{backend_name}_test", (False, "Not tested")
+                )
 
                 backend_text = backend_labels.get(backend_name, f"GPU ({backend_name.upper()})")
                 if not available:
@@ -2291,7 +2400,9 @@ class DeviceSelectionDialog(tk.simpledialog.Dialog):
         for backend_name in ["nvidia", "rocm", "mps"]:
             if backend_name in self.available_backends:
                 available, info, error = self.available_backends[backend_name]
-                test_result = self.available_backends.get(f"{backend_name}_test", (False, "Not tested"))
+                test_result = self.available_backends.get(
+                    f"{backend_name}_test", (False, "Not tested")
+                )
 
                 if available and info:
                     info_text = f"Backend: {backend_name.upper()}\n"
@@ -2848,28 +2959,30 @@ def apply_interpolation_and_smoothing(df, config, progress_callback=None):
                         print(f"Kalman smoothing failed for column {j}: {e}")
         elif smooth_method == "butterworth":
             # Use new user-controlled parameters if available, otherwise fall back to TOML/defaults
-            # config comes from self.result in apply(). 
+            # config comes from self.result in apply().
             # If loaded from TOML, these keys might be missing at top level, check smooth_params
-            
+
             # Priority: Top-level config (GUI) > smooth_params (TOML) > Defaults
             cutoff = config.get("filter_cutoff")
             if cutoff is None:
                 cutoff = smooth_params.get("cutoff", 6.0)
-                
+
             median_kernel = config.get("median_kernel")
             if median_kernel is None:
-                median_kernel = 5 # Default
-                
+                median_kernel = 5  # Default
+
             order = config.get("filter_order")
             if order is None:
                 order = 4
-                
+
             fs = smooth_params.get("fs", 30.0)
-            
+
             # Apply the combined Median + Butterworth filter
             try:
                 # filter_pose_data expects numpy array and handles iteration internally
-                data = filter_pose_data(data, order=order, fc=cutoff, fs=fs, median_kernel=median_kernel)
+                data = filter_pose_data(
+                    data, order=order, fc=cutoff, fs=fs, median_kernel=median_kernel
+                )
                 print(f"Applied Median (k={median_kernel}) + Butterworth (fc={cutoff}Hz) filter.")
             except Exception as e:
                 print(f"Filtering failed: {e}")
@@ -3299,12 +3412,24 @@ def test_mediapipe_gpu_delegate(backend="nvidia"):
 
         except Exception as e:
             error_msg = str(e)
-            
-            # Specific check for Linux MediaPipe GPU limitation
-            if platform.system() == "Linux" and ("GPU processing is disabled in build flags" in error_msg or "ValidatedGraphConfig Initialization failed" in error_msg):
-                 return False, f"GPU delegate test failed for {backend}.\n  NOTE: Official MediaPipe PyPI packages for Linux usually do NOT support GPU.\n  Technical error: {error_msg}"
 
-            if "GPU" in error_msg or "delegate" in error_msg.lower() or "CUDA" in error_msg or "ROCm" in error_msg or "MPS" in error_msg:
+            # Specific check for Linux MediaPipe GPU limitation
+            if platform.system() == "Linux" and (
+                "GPU processing is disabled in build flags" in error_msg
+                or "ValidatedGraphConfig Initialization failed" in error_msg
+            ):
+                return (
+                    False,
+                    f"GPU delegate test failed for {backend}.\n  NOTE: Official MediaPipe PyPI packages for Linux usually do NOT support GPU.\n  Technical error: {error_msg}",
+                )
+
+            if (
+                "GPU" in error_msg
+                or "delegate" in error_msg.lower()
+                or "CUDA" in error_msg
+                or "ROCm" in error_msg
+                or "MPS" in error_msg
+            ):
                 return False, f"GPU delegate test failed for {backend}: {error_msg}"
             else:
                 # Might be a different error, but GPU delegate was created
@@ -3448,14 +3573,14 @@ def get_bbox_config_for_frame(
     process_width=None,
     process_height=None,
     enable_resize=False,
-    resize_scale=1.0
+    resize_scale=1.0,
 ):
     """
     Get the bounding box configuration for a specific frame.
-    
-    Iterates through bounding_box_ranges (sorted by specificity) and returns the 
+
+    Iterates through bounding_box_ranges (sorted by specificity) and returns the
     config for the first matching range. Last match wins due to sorting.
-    
+
     Args:
         frame_idx: Current frame index
         pose_config: Full pose configuration dictionary
@@ -3465,7 +3590,7 @@ def get_bbox_config_for_frame(
         process_height: Processing height (if video was resized)
         enable_resize: Whether video was resized
         resize_scale: Scale factor used for resizing
-    
+
     Returns:
         dict: Bounding box configuration for this frame
     """
@@ -3473,7 +3598,7 @@ def get_bbox_config_for_frame(
         process_width = original_width
     if process_height is None:
         process_height = original_height
-    
+
     # Default config (full frame, no crop)
     default_config = {
         "enable_crop": pose_config.get("enable_crop", False),
@@ -3488,34 +3613,36 @@ def get_bbox_config_for_frame(
         "video_resized": enable_resize,
         "resize_scale": resize_scale,
     }
-    
+
     # Check if we have multiple ROI ranges
     bounding_box_ranges = pose_config.get("bounding_box_ranges", [])
     if not bounding_box_ranges:
         return default_config
-    
+
     # Find matching ranges for this frame
     # Note: Ranges should be sorted General -> Specific (last match wins)
     matched_config = default_config.copy()
     exclusion_rois = []
-    
+
     for roi_range in bounding_box_ranges:
         frame_start = roi_range.get("frame_start", 0)
         frame_end = roi_range.get("frame_end", float("inf"))
-        
+
         # Check if frame is within range
         if frame_start <= frame_idx <= frame_end:
             roi_type = roi_range.get("roi_type", "inclusion")
-            
+
             if roi_type == "exclusion":
                 # Add to exclusion list
-                exclusion_rois.append({
-                    "bbox_x_min": roi_range.get("bbox_x_min", 0),
-                    "bbox_y_min": roi_range.get("bbox_y_min", 0),
-                    "bbox_x_max": roi_range.get("bbox_x_max", process_width),
-                    "bbox_y_max": roi_range.get("bbox_y_max", process_height),
-                    "roi_polygon_points": roi_range.get("roi_polygon_points"),
-                })
+                exclusion_rois.append(
+                    {
+                        "bbox_x_min": roi_range.get("bbox_x_min", 0),
+                        "bbox_y_min": roi_range.get("bbox_y_min", 0),
+                        "bbox_x_max": roi_range.get("bbox_x_max", process_width),
+                        "bbox_y_max": roi_range.get("bbox_y_max", process_height),
+                        "roi_polygon_points": roi_range.get("roi_polygon_points"),
+                    }
+                )
             else:
                 # Inclusion ROI - update the main config (last match wins)
                 matched_config = {
@@ -3531,10 +3658,10 @@ def get_bbox_config_for_frame(
                     "video_resized": enable_resize,
                     "resize_scale": resize_scale,
                 }
-    
+
     # Attach all matching exclusion ROIs
     matched_config["exclusion_rois"] = exclusion_rois
-    
+
     return matched_config
 
 
@@ -3587,18 +3714,18 @@ def process_video_batch(
             global_frame_idx,
             pose_config,
             full_width,  # original_width
-            full_height, # original_height
-            width,       # processing_width
-            height,      # processing_height
+            full_height,  # original_height
+            width,  # processing_width
+            height,  # processing_height
             derived_enable_resize,
-            derived_scale
+            derived_scale,
         )
 
         enable_crop = (
-            bbox_config.get("bbox_x_min", 0) != 0 or
-            bbox_config.get("bbox_y_min", 0) != 0 or
-            bbox_config.get("bbox_x_max", width) != width or
-            bbox_config.get("bbox_y_max", height) != height
+            bbox_config.get("bbox_x_min", 0) != 0
+            or bbox_config.get("bbox_y_min", 0) != 0
+            or bbox_config.get("bbox_x_max", width) != width
+            or bbox_config.get("bbox_y_max", height) != height
         ) or pose_config.get("enable_crop", False)
 
         # Process frame with Tasks API
@@ -3704,7 +3831,6 @@ def get_model_path(complexity):
     return str(model_path.resolve())
 
 
-
 def process_frame_with_tasks_api(
     frame,
     landmarker,
@@ -3737,8 +3863,7 @@ def process_frame_with_tasks_api(
                 if bbox_config.get("video_resized", False):
                     resize_scale = bbox_config.get("resize_scale", 1.0)
                     scaled_polygon = [
-                        [int(pt[0] * resize_scale), int(pt[1] * resize_scale)]
-                        for pt in roi_polygon
+                        [int(pt[0] * resize_scale), int(pt[1] * resize_scale)] for pt in roi_polygon
                     ]
                 else:
                     scaled_polygon = [[int(pt[0]), int(pt[1])] for pt in roi_polygon]
@@ -3750,8 +3875,12 @@ def process_frame_with_tasks_api(
                 # Bounding box exclusion ROI
                 x_min = max(0, min(exclusion_roi.get("bbox_x_min", 0), process_width - 1))
                 y_min = max(0, min(exclusion_roi.get("bbox_y_min", 0), process_height - 1))
-                x_max = max(x_min + 1, min(exclusion_roi.get("bbox_x_max", process_width), process_width))
-                y_max = max(y_min + 1, min(exclusion_roi.get("bbox_y_max", process_height), process_height))
+                x_max = max(
+                    x_min + 1, min(exclusion_roi.get("bbox_x_max", process_width), process_width)
+                )
+                y_max = max(
+                    y_min + 1, min(exclusion_roi.get("bbox_y_max", process_height), process_height)
+                )
                 # Fill exclusion area with black (0) in mask
                 exclusion_mask[y_min:y_max, x_min:x_max] = 0
 
@@ -3844,9 +3973,11 @@ def process_frame_with_tasks_api(
 
         # Map coordinates to full frame if cropping was used
         if enable_crop:
-
             # For polygon ROI, adjust coordinates for the offset
-            if bbox_config.get("roi_polygon_points") and len(bbox_config.get("roi_polygon_points", [])) >= 3:
+            if (
+                bbox_config.get("roi_polygon_points")
+                and len(bbox_config.get("roi_polygon_points", [])) >= 3
+            ):
                 # Polygon ROI: landmarks are in cropped bounding box coordinates (normalized 0-1)
                 # Need to map back to full frame coordinates
                 offset_x = bbox_config.get("polygon_offset_x", 0)
@@ -3911,6 +4042,7 @@ def process_frame_with_tasks_api(
         # No pose detected
         return None
 
+
 def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backend=None):
     """
     Process a video file using MediaPipe Pose estimation with optional video resize.
@@ -3951,15 +4083,18 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
     # Since "Last Match Wins" in get_bbox_config_for_frame, we sort so that:
     # - Long ranges (e.g. 0-inf) come FIRST
     # - Short ranges (e.g. 0-300) come LAST
-    if "bounding_box_ranges" in pose_config and isinstance(pose_config["bounding_box_ranges"], list):
+    if "bounding_box_ranges" in pose_config and isinstance(
+        pose_config["bounding_box_ranges"], list
+    ):
         print("Optimizing ROI Range priority...")
+
         def get_range_duration(r):
             start = r.get("frame_start", 0)
-            end = r.get("frame_end", float('inf'))
+            end = r.get("frame_end", float("inf"))
             if isinstance(end, str) and end.lower() == "inf":
-                end = float('inf')
+                end = float("inf")
             return end - start
-        
+
         # Sort descending by duration: Longest (Inf) -> Shortest (Specific)
         # This ensures Specific overrides General in the loop.
         pose_config["bounding_box_ranges"].sort(key=get_range_duration, reverse=True)
@@ -4043,7 +4178,7 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
     VisionRunningMode = mp.tasks.vision.RunningMode  # noqa: N806 - MediaPipe class name
 
     # Create options with CPU or GPU Delegate
-    delegate = BaseOptions.Delegate.CPU # Default to CPU
+    delegate = BaseOptions.Delegate.CPU  # Default to CPU
     if use_gpu and gpu_backend:
         try:
             # Try GPU delegate
@@ -4056,13 +4191,10 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
             delegate = BaseOptions.Delegate.CPU
             use_gpu = False
             gpu_backend = None
-            
+
     # Create landmarker options
     options = PoseLandmarkerOptions(
-        base_options=BaseOptions(
-            model_asset_path=model_path,
-            delegate=delegate
-        ),
+        base_options=BaseOptions(model_asset_path=model_path, delegate=delegate),
         running_mode=VisionRunningMode.VIDEO,
         min_pose_detection_confidence=pose_config.get("min_detection_confidence", 0.5),
         min_pose_presence_confidence=pose_config.get("min_detection_confidence", 0.5),
@@ -4072,80 +4204,88 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
 
     # Setup Video Writer for annotated output
     fps = cap.get(cv2.CAP_PROP_FPS)
-    if fps <= 0: fps = 30.0
+    if fps <= 0:
+        fps = 30.0
     annotated_output_path = output_dir / f"{video_path.stem}_annotated.mp4"
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     out_video = cv2.VideoWriter(str(annotated_output_path), fourcc, fps, (width, height))
 
     # Initialize results containers
     normalized_landmarks_list = []
     pixel_landmarks_list = []
-    last_frames_for_padding = deque(maxlen=30) 
+    last_frames_for_padding = deque(maxlen=30)
 
     print(f"Starting analysis loop... (Total frames: {total_frames})")
 
     with PoseLandmarker.create_from_options(options) as landmarker:
         frame_count = 0
         landmarks_history = deque(maxlen=30)
-        
+
         # --- PADDING (WARM-UP) LOGIC ---
         current_timestamp_ms = 0
         frame_duration_ms = int(1000 / fps) if fps > 0 else 33
-        
+
         enable_padding = pose_config.get("enable_padding", ENABLE_PADDING_DEFAULT)
         pad_frames_count = pose_config.get("pad_start_frames", PAD_START_FRAMES_DEFAULT)
-        
+
         if enable_padding and pad_frames_count > 0:
             print(f"Applying initial padding: {pad_frames_count} frames to stabilize model...")
             success, first_frame = cap.read()
             if success:
                 # Create MediaPipe Image from the first frame
-                mp_first_frame = mp.Image(image_format=mp.ImageFormat.SRGB, data=cv2.cvtColor(first_frame, cv2.COLOR_BGR2RGB))
-                
+                mp_first_frame = mp.Image(
+                    image_format=mp.ImageFormat.SRGB,
+                    data=cv2.cvtColor(first_frame, cv2.COLOR_BGR2RGB),
+                )
+
                 # Check for ROI to apply consistent cropping logic if needed
                 # However, for pure stabilization, feeding the full frame or consistent ROI is key.
-                # Simplest approach: Feed full frame or valid crop if static. 
-                # Ideally we mimic the first frame processing. 
+                # Simplest approach: Feed full frame or valid crop if static.
+                # Ideally we mimic the first frame processing.
                 # For now, we will simply feed the image to warm up the internal state.
-                
+
                 # Note: If crop is dynamic, we might need more complex logic, but usually first frame ROI is static or None.
-                
+
                 for _ in range(pad_frames_count):
                     # We just run detection to update internal state (recurrence)
                     landmarker.detect_for_video(mp_first_frame, current_timestamp_ms)
                     current_timestamp_ms += frame_duration_ms
-                
+
                 # Reset video to start
                 cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                 print("Padding complete. Starting main analysis...")
             else:
                 print("Warning: Could not read first frame for padding. Skipping.")
         # -------------------------------
-        
+
         while cap.isOpened():
             ret, frame = cap.read()
             if not ret:
                 break
-            
+
             # Throttle CPU if needed
             if should_throttle_cpu(frame_count):
                 apply_cpu_throttling()
 
             # Ensure continuous timestamp from padding
             timestamp_ms = current_timestamp_ms
-            
+
             # Determine ROI for this frame
             bbox_config = get_bbox_config_for_frame(frame_count, pose_config, width, height)
-            
+
             # Show ROI details periodically (every 500 frames or at key frames)
             if frame_count == 0 or frame_count % 500 == 0:
                 if bbox_config.get("enable_crop", False):
                     roi_info = f"ROI: ({bbox_config.get('bbox_x_min', 0)},{bbox_config.get('bbox_y_min', 0)}) -> ({bbox_config.get('bbox_x_max', width)},{bbox_config.get('bbox_y_max', height)})"
-                    scale_info = f"Scale: {bbox_config.get('resize_crop_scale', 1)}x" if bbox_config.get('enable_resize_crop', False) else "No Scale"
+                    scale_info = (
+                        f"Scale: {bbox_config.get('resize_crop_scale', 1)}x"
+                        if bbox_config.get("enable_resize_crop", False)
+                        else "No Scale"
+                    )
                     print(f"  [Frame {frame_count}] {roi_info}, {scale_info}")
                 else:
                     print(f"  [Frame {frame_count}] Using full frame (no ROI)")
-            
+
             # --- PROCESS FRAME ---
             # Returns landmarks in normalized coordinates (w.r.t Original Video Size)
             landmarks = process_frame_with_tasks_api(
@@ -4154,42 +4294,65 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
                 timestamp_ms,
                 bbox_config.get("enable_crop", False),
                 bbox_config,
-                width, # Process width
-                height, # Process height
+                width,  # Process width
+                height,  # Process height
                 original_width,
                 original_height,
                 pose_config,
-                landmarks_history
+                landmarks_history,
             )
-            
+
             # Draw on frame (Visualization)
             annotated_frame = frame.copy()
-            
+
             if landmarks:
                 normalized_landmarks_list.append(landmarks)
-                
+
                 # Convert to pixel for internal usage/drawing
                 pixel_landmarks = [
-                     [lm[0] * original_width, lm[1] * original_height, lm[2]] 
-                     for lm in landmarks
+                    [lm[0] * original_width, lm[1] * original_height, lm[2]] for lm in landmarks
                 ]
                 pixel_landmarks_list.append(pixel_landmarks)
-                
+
                 # --- NEW DRAWING LOGIC (mpangles style) ---
-                
+
                 # 1. Map landmarks to dictionary of naming -> (px, py)
                 l_names = [
-                    "nose", "left_eye_inner", "left_eye", "left_eye_outer",
-                    "right_eye_inner", "right_eye", "right_eye_outer",
-                    "left_ear", "right_ear", "mouth_left", "mouth_right",
-                    "left_shoulder", "right_shoulder", "left_elbow", "right_elbow",
-                    "left_wrist", "right_wrist", "left_pinky", "right_pinky",
-                    "left_index", "right_index", "left_thumb", "right_thumb",
-                    "left_hip", "right_hip", "left_knee", "right_knee",
-                    "left_ankle", "right_ankle", "left_heel", "right_heel",
-                    "left_foot_index", "right_foot_index"
+                    "nose",
+                    "left_eye_inner",
+                    "left_eye",
+                    "left_eye_outer",
+                    "right_eye_inner",
+                    "right_eye",
+                    "right_eye_outer",
+                    "left_ear",
+                    "right_ear",
+                    "mouth_left",
+                    "mouth_right",
+                    "left_shoulder",
+                    "right_shoulder",
+                    "left_elbow",
+                    "right_elbow",
+                    "left_wrist",
+                    "right_wrist",
+                    "left_pinky",
+                    "right_pinky",
+                    "left_index",
+                    "right_index",
+                    "left_thumb",
+                    "right_thumb",
+                    "left_hip",
+                    "right_hip",
+                    "left_knee",
+                    "right_knee",
+                    "left_ankle",
+                    "right_ankle",
+                    "left_heel",
+                    "right_heel",
+                    "left_foot_index",
+                    "right_foot_index",
                 ]
-                
+
                 pts = {}
                 for i, name in enumerate(l_names):
                     if i < len(landmarks):
@@ -4203,108 +4366,144 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
 
                 # Helper for midpoint
                 def compute_mid(p1, p2):
-                     if np.isnan(p1).any() or np.isnan(p2).any(): return np.array([np.nan, np.nan])
-                     return (p1 + p2) / 2
+                    if np.isnan(p1).any() or np.isnan(p2).any():
+                        return np.array([np.nan, np.nan])
+                    return (p1 + p2) / 2
 
                 # 2. Compute Midpoints
-                pts['mid_shoulder'] = compute_mid(pts['left_shoulder'], pts['right_shoulder'])
-                pts['mid_hip'] = compute_mid(pts['left_hip'], pts['right_hip'])
-                pts['mid_ear'] = compute_mid(pts['left_ear'], pts['right_ear'])
-                pts['left_mid_hand'] = compute_mid(pts['left_pinky'], pts['left_index'])
-                pts['right_mid_hand'] = compute_mid(pts['right_pinky'], pts['right_index'])
+                pts["mid_shoulder"] = compute_mid(pts["left_shoulder"], pts["right_shoulder"])
+                pts["mid_hip"] = compute_mid(pts["left_hip"], pts["right_hip"])
+                pts["mid_ear"] = compute_mid(pts["left_ear"], pts["right_ear"])
+                pts["left_mid_hand"] = compute_mid(pts["left_pinky"], pts["left_index"])
+                pts["right_mid_hand"] = compute_mid(pts["right_pinky"], pts["right_index"])
 
                 # 3. Define Colors (BGR)
-                C_RIGHT = (80, 80, 255)   # Coral/Red-ish
-                C_LEFT = (255, 191, 0)    # Sky Blue
-                C_CENTER = (240, 240, 240) # White/Gray
-                C_JOINT = (0, 255, 0)     # Green
+                C_RIGHT = (80, 80, 255)  # Coral/Red-ish
+                C_LEFT = (255, 191, 0)  # Sky Blue
+                C_CENTER = (240, 240, 240)  # White/Gray
+                C_JOINT = (0, 255, 0)  # Green
 
                 # 4. Drawing Helpers
                 def dline(p1, p2, color, thick=3):
-                    if np.isnan(p1).any() or np.isnan(p2).any(): return
+                    if np.isnan(p1).any() or np.isnan(p2).any():
+                        return
                     pt1 = (int(p1[0]), int(p1[1]))
                     pt2 = (int(p2[0]), int(p2[1]))
                     cv2.line(annotated_frame, pt1, pt2, color, thick, cv2.LINE_AA)
 
                 def dcircle(p, color, radius=5):
-                    if np.isnan(p).any(): return
+                    if np.isnan(p).any():
+                        return
                     pt = (int(p[0]), int(p[1]))
-                    cv2.circle(annotated_frame, pt, radius, (255,255,255), -1, cv2.LINE_AA) # white border
-                    cv2.circle(annotated_frame, pt, radius-2, color, -1, cv2.LINE_AA)
+                    cv2.circle(
+                        annotated_frame, pt, radius, (255, 255, 255), -1, cv2.LINE_AA
+                    )  # white border
+                    cv2.circle(annotated_frame, pt, radius - 2, color, -1, cv2.LINE_AA)
 
                 # 5. Draw Segments
                 # Right Side
-                dline(pts['right_shoulder'], pts['right_elbow'], C_RIGHT)
-                dline(pts['right_elbow'], pts['right_wrist'], C_RIGHT)
-                dline(pts['right_wrist'], pts['right_mid_hand'], C_RIGHT)
-                dline(pts['right_hip'], pts['right_knee'], C_RIGHT)
-                dline(pts['right_knee'], pts['right_ankle'], C_RIGHT)
-                dline(pts['right_ankle'], pts['right_heel'], C_RIGHT)
-                dline(pts['right_heel'], pts['right_foot_index'], C_RIGHT)
-                dline(pts['right_ankle'], pts['right_foot_index'], C_RIGHT)
+                dline(pts["right_shoulder"], pts["right_elbow"], C_RIGHT)
+                dline(pts["right_elbow"], pts["right_wrist"], C_RIGHT)
+                dline(pts["right_wrist"], pts["right_mid_hand"], C_RIGHT)
+                dline(pts["right_hip"], pts["right_knee"], C_RIGHT)
+                dline(pts["right_knee"], pts["right_ankle"], C_RIGHT)
+                dline(pts["right_ankle"], pts["right_heel"], C_RIGHT)
+                dline(pts["right_heel"], pts["right_foot_index"], C_RIGHT)
+                dline(pts["right_ankle"], pts["right_foot_index"], C_RIGHT)
 
                 # Left Side
-                dline(pts['left_shoulder'], pts['left_elbow'], C_LEFT)
-                dline(pts['left_elbow'], pts['left_wrist'], C_LEFT)
-                dline(pts['left_wrist'], pts['left_mid_hand'], C_LEFT)
-                dline(pts['left_hip'], pts['left_knee'], C_LEFT)
-                dline(pts['left_knee'], pts['left_ankle'], C_LEFT)
-                dline(pts['left_ankle'], pts['left_heel'], C_LEFT)
-                dline(pts['left_heel'], pts['left_foot_index'], C_LEFT)
-                dline(pts['left_ankle'], pts['left_foot_index'], C_LEFT)
+                dline(pts["left_shoulder"], pts["left_elbow"], C_LEFT)
+                dline(pts["left_elbow"], pts["left_wrist"], C_LEFT)
+                dline(pts["left_wrist"], pts["left_mid_hand"], C_LEFT)
+                dline(pts["left_hip"], pts["left_knee"], C_LEFT)
+                dline(pts["left_knee"], pts["left_ankle"], C_LEFT)
+                dline(pts["left_ankle"], pts["left_heel"], C_LEFT)
+                dline(pts["left_heel"], pts["left_foot_index"], C_LEFT)
+                dline(pts["left_ankle"], pts["left_foot_index"], C_LEFT)
 
                 # Center
-                dline(pts['mid_shoulder'], pts['mid_hip'], C_CENTER)
-                dline(pts['mid_ear'], pts['mid_shoulder'], C_CENTER)
-                dline(pts['right_shoulder'], pts['left_shoulder'], C_CENTER, 2)
-                dline(pts['right_hip'], pts['left_hip'], C_CENTER, 2)
+                dline(pts["mid_shoulder"], pts["mid_hip"], C_CENTER)
+                dline(pts["mid_ear"], pts["mid_shoulder"], C_CENTER)
+                dline(pts["right_shoulder"], pts["left_shoulder"], C_CENTER, 2)
+                dline(pts["right_hip"], pts["left_hip"], C_CENTER, 2)
 
                 # 6. Draw Joints
                 for name, pt in pts.items():
-                    if 'mid' in name: continue
-                    if name == 'nose': continue
-                    if 'eye' in name: continue
+                    if "mid" in name:
+                        continue
+                    if name == "nose":
+                        continue
+                    if "eye" in name:
+                        continue
                     dcircle(pt, C_JOINT, 5)
-                
+
                 # ----------------------------------------
-                     
+
                 # Draw ROI box if crop enabled
                 if bbox_config.get("enable_crop", False):
-                     x_min = bbox_config.get("bbox_x_min", 0)
-                     y_min = bbox_config.get("bbox_y_min", 0)
-                     x_max = bbox_config.get("bbox_x_max", width)
-                     y_max = bbox_config.get("bbox_y_max", height)
-                     cv2.rectangle(annotated_frame, (x_min, y_min), (x_max, y_max), (0, 0, 255), 2)
-                     
+                    x_min = bbox_config.get("bbox_x_min", 0)
+                    y_min = bbox_config.get("bbox_y_min", 0)
+                    x_max = bbox_config.get("bbox_x_max", width)
+                    y_max = bbox_config.get("bbox_y_max", height)
+                    cv2.rectangle(annotated_frame, (x_min, y_min), (x_max, y_max), (0, 0, 255), 2)
+
             else:
-                 # NaNs for missing frame
-                 num_landmarks = 33
-                 nan_landmarks = [[np.nan, np.nan, np.nan] for _ in range(num_landmarks)]
-                 normalized_landmarks_list.append(nan_landmarks)
-                 pixel_landmarks_list.append(nan_landmarks)
-            
+                # NaNs for missing frame
+                num_landmarks = 33
+                nan_landmarks = [[np.nan, np.nan, np.nan] for _ in range(num_landmarks)]
+                normalized_landmarks_list.append(nan_landmarks)
+                pixel_landmarks_list.append(nan_landmarks)
+
             out_video.write(annotated_frame)
             frame_count += 1
             current_timestamp_ms += frame_duration_ms
-            
+
             if frame_count % 100 == 0:
                 print(f"Processed {frame_count}/{total_frames} frames...")
 
     cap.release()
     out_video.release()
     cv2.destroyAllWindows()
-    
+
     print("\nAnalysis loop completed.")
 
     # --- POST PROCESSING ---
-    
+
     # Define columns
     landmark_names = [
-        "nose", "left_eye_inner", "left_eye", "left_eye_outer", "right_eye_inner", "right_eye", "right_eye_outer",
-        "left_ear", "right_ear", "mouth_left", "mouth_right", "left_shoulder", "right_shoulder", "left_elbow",
-        "right_elbow", "left_wrist", "right_wrist", "left_pinky", "right_pinky", "left_index", "right_index",
-        "left_thumb", "right_thumb", "left_hip", "right_hip", "left_knee", "right_knee", "left_ankle", "right_ankle",
-        "left_heel", "right_heel", "left_foot_index", "right_foot_index"
+        "nose",
+        "left_eye_inner",
+        "left_eye",
+        "left_eye_outer",
+        "right_eye_inner",
+        "right_eye",
+        "right_eye_outer",
+        "left_ear",
+        "right_ear",
+        "mouth_left",
+        "mouth_right",
+        "left_shoulder",
+        "right_shoulder",
+        "left_elbow",
+        "right_elbow",
+        "left_wrist",
+        "right_wrist",
+        "left_pinky",
+        "right_pinky",
+        "left_index",
+        "right_index",
+        "left_thumb",
+        "right_thumb",
+        "left_hip",
+        "right_hip",
+        "left_knee",
+        "right_knee",
+        "left_ankle",
+        "right_ankle",
+        "left_heel",
+        "right_heel",
+        "left_foot_index",
+        "right_foot_index",
     ]
     columns = ["frame_index"]
     for name in landmark_names:
@@ -4323,36 +4522,40 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
     print("Converting results to DataFrame...")
     df_norm = create_df(normalized_landmarks_list)
     df_pixel = create_df(pixel_landmarks_list)
-    
+
     # 2. Apply Median Filter (if enabled)
     # We only filter the coordinate columns (skip frame_index)
-    coord_cols = df_norm.columns[1:] 
-    
+    coord_cols = df_norm.columns[1:]
+
     if pose_config.get("enable_median_filter", False):
         kernel = pose_config.get("median_kernel_size", 5)
         print(f"Applying Median Filter (Kernel: {kernel})...")
-        
+
         # Filter Normalized
         norm_values = df_norm[coord_cols].values
-        filtered_norm = filter_pose_data(norm_values, enable_median=True, enable_butterworth=False, median_kernel=kernel)
+        filtered_norm = filter_pose_data(
+            norm_values, enable_median=True, enable_butterworth=False, median_kernel=kernel
+        )
         df_norm[coord_cols] = filtered_norm
-        
+
         # Filter Pixel
         pixel_values = df_pixel[coord_cols].values
-        filtered_pixel = filter_pose_data(pixel_values, enable_median=True, enable_butterworth=False, median_kernel=kernel)
+        filtered_pixel = filter_pose_data(
+            pixel_values, enable_median=True, enable_butterworth=False, median_kernel=kernel
+        )
         df_pixel[coord_cols] = filtered_pixel
         print("Median filtering complete.")
 
     # 3. Save CSVs
     print(f"Saving processed CSVs to {output_dir}")
     df_norm.to_csv(output_file_path, index=False, float_format="%.6f")
-    
+
     # Save legacy/pixel format
     convert_mediapipe_to_vaila_format(df_pixel, output_dir / f"{video_path.stem}_pixel_vaila.csv")
-    
+
     # Also save the raw MP pixel format if needed
     df_pixel.to_csv(output_pixel_file_path, index=False, float_format="%.1f")
-    
+
     # 4. Save configuration used
     config_used_path = output_dir / "configuration_used.toml"
     try:
@@ -4362,45 +4565,51 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
         print(f"Configuration saved to: {config_used_path}")
     except Exception as e:
         print(f"Warning: Could not save configuration: {e}")
-    
+
     # 5. Generate log_info.txt
     end_time = time.time()
     processing_time = end_time - start_time
     log_path = output_dir / "log_info.txt"
     try:
         with open(log_path, "w") as f:
-            f.write(f"vailá Markerless 2D Analysis Log\n")
-            f.write(f"================================\n\n")
+            f.write("vailá Markerless 2D Analysis Log\n")
+            f.write("================================\n\n")
             f.write(f"Video: {video_path.name}\n")
             f.write(f"Processing Date: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
             f.write(f"Processing Time: {processing_time:.2f} seconds\n\n")
-            f.write(f"Video Info:\n")
+            f.write("Video Info:\n")
             f.write(f"  - Original Resolution: {original_width}x{original_height}\n")
             f.write(f"  - Processing Resolution: {width}x{height}\n")
             f.write(f"  - Total Frames: {total_frames}\n")
             f.write(f"  - FPS: {fps:.2f}\n\n")
-            f.write(f"Configuration:\n")
+            f.write("Configuration:\n")
             f.write(f"  - Model Complexity: {pose_config.get('model_complexity', 2)}\n")
-            f.write(f"  - Detection Confidence: {pose_config.get('min_detection_confidence', 0.5)}\n")
+            f.write(
+                f"  - Detection Confidence: {pose_config.get('min_detection_confidence', 0.5)}\n"
+            )
             f.write(f"  - Tracking Confidence: {pose_config.get('min_tracking_confidence', 0.5)}\n")
             f.write(f"  - Enable Resize: {pose_config.get('enable_resize', False)}\n")
             f.write(f"  - Enable Median Filter: {pose_config.get('enable_median_filter', False)}\n")
-            if pose_config.get('enable_median_filter', False):
+            if pose_config.get("enable_median_filter", False):
                 f.write(f"  - Median Kernel Size: {pose_config.get('median_kernel_size', 5)}\n")
             f.write(f"  - Enable Crop/ROI: {pose_config.get('enable_crop', False)}\n")
-            if pose_config.get('bounding_box_ranges'):
-                f.write(f"  - Multiple ROI Ranges: {len(pose_config.get('bounding_box_ranges', []))}\n")
-            f.write(f"\nOutput Files:\n")
+            if pose_config.get("bounding_box_ranges"):
+                f.write(
+                    f"  - Multiple ROI Ranges: {len(pose_config.get('bounding_box_ranges', []))}\n"
+                )
+            f.write("\nOutput Files:\n")
             f.write(f"  - Annotated Video: {video_path.stem}_annotated.mp4\n")
             f.write(f"  - Normalized CSV: {video_path.stem}_mp_norm.csv\n")
             f.write(f"  - Pixel CSV: {video_path.stem}_mp_pixel.csv\n")
             f.write(f"  - vailá Format CSV: {video_path.stem}_pixel_vaila.csv\n")
-            f.write(f"  - Configuration: configuration_used.toml\n")
+            f.write("  - Configuration: configuration_used.toml\n")
         print(f"Log saved to: {log_path}")
     except Exception as e:
         print(f"Warning: Could not save log: {e}")
-    
+
     print(f"\nProcessing complete! Duration: {processing_time:.2f}s")
+
+
 def process_videos_in_directory(existing_root=None):
     """
     Process all video files in the selected directory for markerless 2D analysis.
@@ -4556,7 +4765,9 @@ def process_videos_in_directory(existing_root=None):
         output_dir.mkdir(parents=True, exist_ok=True)
 
         try:
-            process_video(video_file, output_dir, pose_config, use_gpu=use_gpu, gpu_backend=gpu_backend)
+            process_video(
+                video_file, output_dir, pose_config, use_gpu=use_gpu, gpu_backend=gpu_backend
+            )
         except Exception as e:
             print(f"Error processing {video_file.name}: {e}")
         finally:

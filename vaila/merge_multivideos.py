@@ -723,11 +723,10 @@ class VideoMergeApp:
                 current_fps = fps
                 self.root.after(
                     0,
-                    lambda i=current_i,
-                    w=current_width,
-                    h=current_height,
-                    fps=current_fps: self.progress_label.config(
-                        text=f"Analyzed video {i + 1}/{len(self.video_files)}: {w}x{h} at {fps:.2f} FPS"
+                    lambda i=current_i, w=current_width, h=current_height, fps=current_fps: (
+                        self.progress_label.config(
+                            text=f"Analyzed video {i + 1}/{len(self.video_files)}: {w}x{h} at {fps:.2f} FPS"
+                        )
                     ),
                 )
 
@@ -1450,11 +1449,10 @@ class VideoMergeApp:
                     current_frames = frames
                     self.root.after(
                         0,
-                        lambda i=current_i,
-                        w=current_width,
-                        h=current_height,
-                        f=current_frames: self.progress_label.config(
-                            text=f"Analyzed video {i + 1}/{len(self.video_files)}: {w}x{h}, {f} frames"
+                        lambda i=current_i, w=current_width, h=current_height, f=current_frames: (
+                            self.progress_label.config(
+                                text=f"Analyzed video {i + 1}/{len(self.video_files)}: {w}x{h}, {f} frames"
+                            )
                         ),
                     )
                 except Exception as analysis_error:

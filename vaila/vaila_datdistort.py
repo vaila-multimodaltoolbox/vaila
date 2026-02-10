@@ -6,8 +6,8 @@ vailá - Multimodal Toolbox
 Author: Prof. Dr. Paulo R. P. Santiago
 https://github.com/paulopreto/vaila-multimodaltoolbox
 Date: 03 April 2025
-Update: 06 February 2026
-Version: 0.0.4
+Update: 10 February 2026
+Version: 0.0.5
 Python Version: 3.12.12
 
 Description:
@@ -24,26 +24,47 @@ New Features in This Version:
 How to use:
 ------------
 GUI Mode (Default):
-    python vaila_datdistort.py
-    (Follow the on-screen dialogs to select files and folders)
+    uv run vaila/vaila_datdistort.py
+    python vaila/vaila_datdistort.py
+    (Follow the on-screen dialogs to select parameters file and input directory)
 
-CLI Mode:
-    python vaila_datdistort.py --input_dir /path/to/data --params_file /path/to/params.csv [--output_dir /path/to/output]
+CLI Mode (from project root):
+    uv run vaila/vaila_datdistort.py --params_file /path/to/params.toml --input /path/to/file_or_dir [--output_dir /path/to/output]
+    python vaila/vaila_datdistort.py --params_file /path/to/params.toml --input /path/to/file_or_dir [--output_dir /path/to/output]
 
-    Arguments:
-      --input_dir   Directory containing CSV/DAT files to process.
-      --params_file Path to the camera calibration parameters CSV file.
-      --output_dir  (Optional) Directory to save the corrected files.
+  Or run as module:
+    uv run python -m vaila.vaila_datdistort --params_file /path/to/params.toml --input /path/to/file_or_dir [--output_dir /path/to/output]
+    python -m vaila.vaila_datdistort --params_file /path/to/params.toml --input /path/to/file_or_dir [--output_dir /path/to/output]
 
+  Arguments:
+    --params_file  Path to the camera calibration parameters TOML file (required in CLI).
+    --input        Single CSV/DAT file or directory containing CSV/DAT files to process.
+    --output_dir   (Optional) Output directory. If omitted, a new subdirectory distorted_TIMESTAMP
+                   is created under the input path; if given, files are written directly there.
+  The parameters file is never processed (excluded from the batch).
+  Output CSV "frame" column is written as integer.
+  CLI help:  uv run vaila/vaila_datdistort.py --help
+
+License:
+--------
+This program is licensed under the GNU Lesser General Public License v3.0.
+For more details, visit: https://www.gnu.org/licenses/lgpl-3.0.html
 ================================================================================
 """
 
 import argparse
+import json
 import os
-from pathlib import Path
+import time
 import tkinter as tk
 from datetime import datetime
+from pathlib import Path
 from tkinter import filedialog
+
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib  # pyright: ignore[reportMissingImports]
 
 import cv2
 import numpy as np
@@ -51,10 +72,62 @@ import pandas as pd
 from rich import print
 
 
-def load_distortion_parameters(csv_path):
-    """Load distortion parameters from a CSV file."""
-    df = pd.read_csv(csv_path)
-    return df.iloc[0].to_dict()
+def _decimal_places(s):
+    """Return number of decimal places in a string number, or -1 if not a float string."""
+    s = str(s).strip()
+    if not s or s.lower() in ("nan", "inf", "-inf"):
+        return -1
+    if "." not in s:
+        return 0  # integer
+    try:
+        parts = s.split(".")
+        if len(parts) != 2:
+            return -1
+        return len(parts[1])  # e.g. "1.0" -> 1, "1.00" -> 2
+    except Exception:
+        return -1
+
+
+def _infer_float_precision(file_path, columns_of_interest, sep=",", max_rows=100):
+    """
+    Infer decimal places from the raw file for given columns.
+    Returns a dict: column -> max decimal places (0 = int, 1 = .1f, etc.).
+    """
+    prec = {c: 0 for c in columns_of_interest}
+    try:
+        with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+            first = f.readline()
+        if sep not in first and ";" in first:
+            sep = ";"
+        with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+            df_raw = pd.read_csv(f, sep=sep, dtype=str, nrows=max_rows)
+    except Exception:
+        return prec
+    for col in columns_of_interest:
+        if col not in df_raw.columns:
+            continue
+        max_dp = 0
+        for v in df_raw[col].dropna():
+            dp = _decimal_places(v)
+            if dp >= 0 and dp > max_dp:
+                max_dp = dp
+        prec[col] = max_dp
+    return prec
+
+
+def load_distortion_parameters(toml_path):
+    """Load distortion parameters from a TOML file (fx, fy, cx, cy, k1, k2, k3, p1, p2)."""
+    with open(toml_path, "rb") as f:
+        data = tomllib.load(f)
+    params = {k: float(v) for k, v in data.items() if k in ("fx", "fy", "cx", "cy", "k1", "k2", "k3", "p1", "p2")}
+    # #region agent log
+    try:
+        with open("/home/preto/Preto/vaila/.cursor/debug-a5f5a000-975d-4bfc-9676-f9748629bda8.log", "a") as _f:
+            _f.write(json.dumps({"sessionId": "a5f5a000-975d-4bfc-9676-f9748629bda8", "id": "datdistort_load_toml", "timestamp": int(time.time() * 1000), "location": "vaila_datdistort.load_distortion_parameters", "message": "TOML params loaded", "data": {"script": "vaila_datdistort", "path": toml_path, "ext": os.path.splitext(toml_path)[1], "keys_count": len(params)}, "runId": "distort", "hypothesisId": "A"}) + "\n")
+    except Exception:
+        pass
+    # #endregion
+    return params
 
 
 def undistort_points(points, camera_matrix, dist_coeffs, image_size):
@@ -138,14 +211,14 @@ def process_dat_file(input_path, output_path, parameters, image_size=(1920, 1080
     x_columns = [col for col in columns if col.endswith("_x")]
     y_columns = [col for col in columns if col.endswith("_y")]
 
-    # No need to sort - use the original order from the file
-    # This preserves the correct p1_x, p1_y, p2_x, p2_y... order
+    # Frame column: used only for row identification/logging, not for distortion math
+    has_frame_col = "frame" in columns
 
     result_frames = []
 
     # Process each frame
-    for _, row in df.iterrows():
-        frame_num = row["frame"]
+    for idx, row in df.iterrows():
+        frame_num = int(row["frame"]) if has_frame_col else idx
 
         # Collect valid points for this frame
         points = []
@@ -196,6 +269,28 @@ def process_dat_file(input_path, output_path, parameters, image_size=(1920, 1080
 
     # Create output DataFrame with the same column order as input
     result_df = pd.DataFrame(result_frames, columns=df.columns)
+    # Ensure "frame" column is integer in output (not float)
+    if "frame" in result_df.columns:
+        result_df["frame"] = result_df["frame"].astype(int)
+
+    # Infer decimal precision from input file so output matches input
+    coord_columns = x_columns + y_columns
+    try:
+        sep = "," if "," in open(input_path, encoding="utf-8", errors="replace").readline() else ";"
+    except Exception:
+        sep = ","
+    prec = _infer_float_precision(input_path, coord_columns, sep=sep)
+    # Use same precision for all float columns (match input, e.g. .1f -> .1f)
+    max_decimals = max(prec.values()) if prec else 4
+    # Format float columns to same number of decimals as input before writing
+    for col in result_df.columns:
+        if col == "frame":
+            continue  # keep as int, already set above
+        if result_df[col].dtype in (np.floating, float):
+            n = prec.get(col, max_decimals)
+            result_df[col] = result_df[col].apply(
+                lambda x, nd=n: f"{x:.{nd}f}" if pd.notna(x) else ""
+            )
     result_df.to_csv(output_path, index=False)
 
 
@@ -221,73 +316,115 @@ def run_datdistort():
     print(f"Script directory: {Path(__file__).parent}")
 
     # Parse command line arguments
-    parser = argparse.ArgumentParser(description="Batch lens distortion correction for CSV/DAT files.")
-    parser.add_argument("--input_dir", type=str, help="Directory containing CSV/DAT files to process")
-    parser.add_argument("--params_file", type=str, help="Path to the camera calibration parameters CSV file")
-    parser.add_argument("--output_dir", type=str, help="Optional output directory for processed files")
+    parser = argparse.ArgumentParser(
+        description="Batch lens distortion correction for CSV/DAT files. GUI mode if --input and --params_file are omitted."
+    )
+    parser.add_argument(
+        "--input",
+        type=str,
+        help="Path to a single CSV/DAT file or to a directory containing CSV/DAT files to process",
+    )
+    parser.add_argument(
+        "--params_file",
+        type=str,
+        help="Path to the camera calibration parameters TOML file (required in CLI mode)",
+    )
+    parser.add_argument(
+        "--output_dir",
+        type=str,
+        help="Output directory for processed files. If omitted, a new subdirectory (distorted_TIMESTAMP) is created under the input path.",
+    )
     args = parser.parse_args()
 
     # Determine parameters file
+    # #region agent log
+    _log_path = "/home/preto/Preto/vaila/.cursor/debug-a5f5a000-975d-4bfc-9676-f9748629bda8.log"
+    # #endregion
     if args.params_file:
-        parameters_path = args.params_file
+        parameters_path = os.path.abspath(args.params_file)
         if not os.path.isfile(parameters_path):
             print(f"Error: Parameters file not found: {parameters_path}")
             return
         print(f"Using parameters file: {parameters_path}")
+        # #region agent log
+        try:
+            with open(_log_path, "a") as _f:
+                _f.write(json.dumps({"sessionId": "a5f5a000-975d-4bfc-9676-f9748629bda8", "id": "datdistort_mode", "timestamp": int(time.time() * 1000), "location": "vaila_datdistort.run_datdistort", "message": "Params source", "data": {"script": "vaila_datdistort", "mode": "cli", "params_path": parameters_path}, "runId": "distort", "hypothesisId": "B"}) + "\n")
+        except Exception:
+            pass
+        # #endregion
     else:
-        print("Select the distortion parameters CSV file:")
+        print("Select the distortion parameters TOML file:")
         parameters_path = select_file(
             title="Select Calibration Parameters File",
-            filetypes=(("CSV Files", "*.csv"), ("All Files", "*.*")),
+            filetypes=(("TOML Files", "*.toml"), ("All Files", "*.*")),
         )
         if not parameters_path:
             print("No parameters file selected. Exiting.")
             return
+        parameters_path = os.path.abspath(parameters_path)
+        # #region agent log
+        try:
+            with open(_log_path, "a") as _f:
+                _f.write(json.dumps({"sessionId": "a5f5a000-975d-4bfc-9676-f9748629bda8", "id": "datdistort_mode", "timestamp": int(time.time() * 1000), "location": "vaila_datdistort.run_datdistort", "message": "Params source", "data": {"script": "vaila_datdistort", "mode": "gui", "params_path": parameters_path}, "runId": "distort", "hypothesisId": "B"}) + "\n")
+        except Exception:
+            pass
+        # #endregion
 
-    # Determine input directory
-    if args.input_dir:
-        input_dir = args.input_dir
-        if not os.path.isdir(input_dir):
-            print(f"Error: Input directory not found: {input_dir}")
+    # Determine input: single file or directory
+    if args.input:
+        input_path = os.path.abspath(args.input)
+        if os.path.isfile(input_path):
+            input_dir = os.path.dirname(input_path)
+            file_list = [os.path.basename(input_path)] if input_path.lower().endswith((".csv", ".dat")) else []
+        elif os.path.isdir(input_path):
+            input_dir = input_path
+            file_list = [f for f in os.listdir(input_dir) if f.lower().endswith((".csv", ".dat"))]
+        else:
+            print(f"Error: Input not found: {input_path}")
             return
-        print(f"Using input directory: {input_dir}")
+        print(f"Using input: {args.input}")
     else:
         print("Select the directory containing CSV/DAT files to process:")
         input_dir = select_directory(title="Select Directory with CSV/DAT Files")
         if not input_dir:
             print("No directory selected. Exiting.")
             return
+        input_dir = os.path.abspath(input_dir)
+        file_list = [f for f in os.listdir(input_dir) if f.lower().endswith((".csv", ".dat"))]
+        single_file_mode = False
 
     # Load parameters once
     parameters = load_distortion_parameters(parameters_path)
 
-    # Process all CSV and DAT files in the directory
     processed_count = 0
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    # Create output directory
-    # Create output directory
+    # Output directory: if given, use as-is; else create new subdir under input
     if args.output_dir:
-        output_dir = args.output_dir
+        output_dir = os.path.abspath(args.output_dir)
     else:
         output_dir = os.path.join(input_dir, f"distorted_{timestamp}")
-    
+
     os.makedirs(output_dir, exist_ok=True)
 
-    for filename in os.listdir(input_dir):
-        if filename.lower().endswith((".csv", ".dat")):
-            input_path = os.path.join(input_dir, filename)
-            base_name = os.path.splitext(filename)[0]
-            output_path = os.path.join(output_dir, f"{base_name}_distorted.csv")
+    for filename in file_list:
+        input_path = os.path.join(input_dir, filename)
+        # Do not process the parameters file (avoid applying distortion to the params TOML)
+        if os.path.abspath(input_path) == parameters_path:
+            print(f"\nSkipping parameters file: {filename}")
+            continue
+        base_name = os.path.splitext(filename)[0]
+        output_path = os.path.join(output_dir, f"{base_name}_distorted.csv")
 
-            try:
-                print(f"\nProcessing: {filename}")
-                process_dat_file(input_path, output_path, parameters)
-                print(f"Saved as: {os.path.basename(output_path)}")
-                processed_count += 1
-            except Exception as e:
-                print(f"Error processing {filename}: {e}")
-                continue
+        try:
+            print(f"\nProcessing: {filename}")
+            process_dat_file(input_path, output_path, parameters)
+            print(f"Saved as: {os.path.basename(output_path)}")
+            processed_count += 1
+        except Exception as e:
+            print(f"Error processing {filename}: {e}")
+            continue
 
     print("\nProcessing complete!")
     print(f"Files processed: {processed_count}")

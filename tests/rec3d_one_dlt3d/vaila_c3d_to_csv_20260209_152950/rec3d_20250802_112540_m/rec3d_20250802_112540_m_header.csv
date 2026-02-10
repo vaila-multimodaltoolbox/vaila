@@ -1,0 +1,16 @@
+Section,Property,Value
+points,size,34
+points,frame_rate,240.0
+points,first_frame,0
+points,last_frame,3995
+analogs,size,0
+analogs,frame_rate,240.0
+analogs,first_frame,0
+analogs,last_frame,3995
+rotations,size,0
+rotations,frame_rate,0.0
+rotations,first_frame,0
+rotations,last_frame,-1
+events,size,18
+events,events_time,"(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)"
+events,events_label,"('', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '')"

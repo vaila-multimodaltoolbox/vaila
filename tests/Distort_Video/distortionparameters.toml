@@ -1,0 +1,11 @@
+# Camera distortion parameters (used by vaila_lensdistortvideo / vaila_datdistort / vaila_distortvideo_gui)
+# fx, fy = focal lengths; cx, cy = principal point; k1, k2, k3, p1, p2 = distortion coefficients
+fx = 949.41
+fy = 950.63
+cx = 960.0
+cy = 540.0
+k1 = -0.28871370110181493
+k2 = 0.1374614711665278
+k3 = -0.025511562284832402
+p1 = 0.00044281215436799446
+p2 = -0.00042111749309847274

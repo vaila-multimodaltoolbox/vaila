@@ -64,7 +64,7 @@ python vaila_lensdistortvideo.py
 Run with command-line arguments for pipeline integration:
 
 ```bash
-python vaila_lensdistortvideo.py --input_dir "/path/to/videos" --params_file "/path/to/params.csv"
+python vaila_lensdistortvideo.py --input_dir "/path/to/videos" --params_file "/path/to/params.toml"
 ```
 
 Optional: Specify output directory
