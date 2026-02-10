@@ -457,7 +457,9 @@ def process_single_file(
     for i in range(len(y_data) - 1, -1, -1):
         # Only consider positive values above baseline
         # Track the maximum positive value found so far (going backwards)
-        if y_data[i] > baseline_initial and (positive_peak_idx is None or y_data[i] > positive_peak_value):
+        if y_data[i] > baseline_initial and (
+            positive_peak_idx is None or y_data[i] > positive_peak_value
+        ):
             positive_peak_idx = i
             positive_peak_value = y_data[i]
             positive_peak_time = x[i]

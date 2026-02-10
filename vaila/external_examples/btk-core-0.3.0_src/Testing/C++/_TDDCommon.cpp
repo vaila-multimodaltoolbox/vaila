@@ -1,0 +1,13 @@
+#include "_TDDConfigure.h"
+
+#include "AcquisitionTest.h"
+#include "AnalogTest.h"
+#include "ForcePlatformTypesTest.h"
+#include "IMUTypesTest.h"
+#include "NullPtrTest.h"
+#include "PointTest.h"
+#include "PointCollectionTest.h"
+#include "MetaDataInfoTest.h"
+#include "MetaDataTest.h"
+#include "PipelineTest.h"
+#include "TriangleMeshTest.h"

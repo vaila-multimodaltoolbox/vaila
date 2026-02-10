@@ -1,0 +1,12 @@
+Parameter,Value,Description
+USED,[0],
+LABELS,[],
+DESCRIPTIONS,[],
+GEN_SCALE,[1.],
+SCALE,[],
+OFFSET,[],
+UNITS,[],
+RATE,[240.],
+FORMAT,['SIGNED'],
+BITS,[12],
+GAIN,[],

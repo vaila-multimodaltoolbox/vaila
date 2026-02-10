@@ -645,9 +645,7 @@ if TKINTER_AVAILABLE:
             title_frame = ttk.Frame(header_frame)
             title_frame.pack(side=tk.LEFT)
 
-            vaila_label = ttk.Label(
-                title_frame, text="vailá", font=("Arial", 20, "bold", "italic")
-            )
+            vaila_label = ttk.Label(title_frame, text="vailá", font=("Arial", 20, "bold", "italic"))
             vaila_label.pack(side=tk.LEFT)
 
             downloader_label = ttk.Label(
@@ -679,12 +677,12 @@ if TKINTER_AVAILABLE:
             # Directory selection
             dir_frame = ttk.Frame(config_frame)
             dir_frame.pack(fill=tk.X, pady=(0, 10))
-            
+
             ttk.Label(dir_frame, text="Save Location:").pack(anchor=tk.W)
-            
+
             dir_input_frame = ttk.Frame(dir_frame)
             dir_input_frame.pack(fill=tk.X, pady=(5, 0))
-            
+
             self.output_dir_var = tk.StringVar(value=os.path.expanduser("~/Downloads"))
             dir_path = ttk.Entry(dir_input_frame, textvariable=self.output_dir_var)
             dir_path.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10))
@@ -695,31 +693,31 @@ if TKINTER_AVAILABLE:
             # Download Type Selection
             type_frame = ttk.Frame(config_frame)
             type_frame.pack(fill=tk.X, pady=(10, 0))
-            
+
             ttk.Label(type_frame, text="Download Mode (Select One):").pack(anchor=tk.W, pady=(0, 5))
-            
+
             self.download_type_var = tk.StringVar(value="video")
-            
+
             # Custom button frame
             btn_toggle_frame = ttk.Frame(type_frame)
             btn_toggle_frame.pack(fill=tk.X)
-            
+
             # We will use styles to indicate state
             self.btn_video = ttk.Button(
-                btn_toggle_frame, 
-                text="🎬 VIDEO (MP4)\nBest Quality", 
+                btn_toggle_frame,
+                text="🎬 VIDEO (MP4)\nBest Quality",
                 command=lambda: self.set_download_mode("video"),
-                style="Accent.TButton", 
-                width=20
+                style="Accent.TButton",
+                width=20,
             )
             self.btn_video.pack(side=tk.LEFT, padx=(0, 10), fill=tk.X, expand=True)
-            
+
             self.btn_audio = ttk.Button(
-                btn_toggle_frame, 
-                text="🎵 AUDIO (MP3)\nAudio Only", 
+                btn_toggle_frame,
+                text="🎵 AUDIO (MP3)\nAudio Only",
                 command=lambda: self.set_download_mode("audio"),
                 style="TButton",
-                width=20
+                width=20,
             )
             self.btn_audio.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
@@ -786,7 +784,7 @@ if TKINTER_AVAILABLE:
 
             self.log_text = tk.Text(status_frame, height=8, width=80, wrap=tk.WORD)
             self.log_text.pack(fill=tk.BOTH, expand=True)
-            
+
             # Scrollbar for log
             log_scroll = ttk.Scrollbar(status_frame, orient="vertical", command=self.log_text.yview)
             log_scroll.pack(side="right", fill="y")
@@ -794,7 +792,7 @@ if TKINTER_AVAILABLE:
             # Repack log text to sit next to scrollbar
             self.log_text.pack_forget()
             log_scroll.pack_forget()
-            
+
             log_inner_frame = ttk.Frame(status_frame)
             log_inner_frame.pack(fill=tk.BOTH, expand=True)
             log_scroll.pack(side=tk.RIGHT, fill=tk.Y, in_=log_inner_frame)
@@ -870,7 +868,7 @@ if TKINTER_AVAILABLE:
         def set_download_mode(self, mode):
             """Set download mode and update button styles."""
             self.download_type_var.set(mode)
-            
+
             if mode == "video":
                 self.btn_video.configure(style="Accent.TButton")
                 self.btn_audio.configure(style="TButton")
@@ -879,7 +877,7 @@ if TKINTER_AVAILABLE:
                 self.btn_video.configure(style="TButton")
                 self.btn_audio.configure(style="Accent.TButton")
                 self.log("Mode selected: AUDIO (MP3)")
-            
+
             self.root.update_idletasks()
 
         def get_download_mode(self):
@@ -924,7 +922,9 @@ if TKINTER_AVAILABLE:
             """Process URLs from the text box."""
             content = self.url_input_text.get("1.0", tk.END).strip()
             if not content:
-                messagebox.showwarning("Empty Input", "Please paste at least one YouTube URL.", parent=self.root)
+                messagebox.showwarning(
+                    "Empty Input", "Please paste at least one YouTube URL.", parent=self.root
+                )
                 return
 
             # Split by lines and clean up
@@ -935,7 +935,9 @@ if TKINTER_AVAILABLE:
                     urls.append(url)
 
             if not urls:
-                messagebox.showwarning("No Valid URLs", "No valid URLs found in the text box.", parent=self.root)
+                messagebox.showwarning(
+                    "No Valid URLs", "No valid URLs found in the text box.", parent=self.root
+                )
                 return
 
             self.start_batch_download(urls, "Direct Input Batch")
@@ -944,7 +946,7 @@ if TKINTER_AVAILABLE:
             """Common method to start download for a list of URLs."""
             audio_only = self.get_download_mode()
             mode_name = self.get_mode_name()
-            
+
             # Confirm download
             confirm = messagebox.askyesno(
                 f"Confirm {source_name} Download",
@@ -960,7 +962,7 @@ if TKINTER_AVAILABLE:
 
             # Process logic similar to original but using class state
             self.log(f"Starting {source_name} download of {len(urls)} items as {mode_name}")
-            
+
             # Get output directory
             output_dir = self.output_dir_var.get()
 
@@ -998,9 +1000,9 @@ if TKINTER_AVAILABLE:
                         msg = f"SUCCESS: Audio downloaded for {url}"
                     else:
                         # Video download logic
-                        # Re-using the logic from previous implementation manually 
+                        # Re-using the logic from previous implementation manually
                         # to ensure consistency with the requested changes.
-                        # Ideally, we call self.downloader.download_video, 
+                        # Ideally, we call self.downloader.download_video,
                         # but we need to ensure it uses the robust logic.
                         self.downloader.download_video(
                             url, output_dir=item_dir, filename_prefix=f"{i:03d}"
@@ -1022,10 +1024,10 @@ if TKINTER_AVAILABLE:
             # Completion
             self.progress_bar["value"] = 100
             self.update_status("Download sequence completed.")
-            
+
             summary = f"Completed!\nSuccess: {success_count}\nFailures: {fail_count}\n\nSaved to:\n{batch_dir}"
             self.log("Batch finished. " + summary.replace("\n", " "))
-            
+
             messagebox.showinfo("Download Complete", summary, parent=self.root)
             self.cleanup_resources()
 
@@ -1037,11 +1039,12 @@ if TKINTER_AVAILABLE:
                     self.download_thread = None
 
                 import gc
+
                 gc.collect()
 
                 if self.root and self.root.winfo_exists():
                     self.root.update_idletasks()
-                
+
             except Exception as e:
                 print(f"[cleanup error] {e}")
 

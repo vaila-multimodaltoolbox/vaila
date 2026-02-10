@@ -9,9 +9,9 @@
 
 import logging
 import os
+import platform
 import shutil
 import subprocess
-import platform
 from pathlib import Path
 
 import psutil
@@ -28,6 +28,7 @@ class HardwareManager:
     Hardware Manager for vailá Multimodal Toolbox.
     Detects GPU, CPU, and RAM to dynamically optimize models and execution parameters.
     """
+
     def __init__(self, models_dir="models"):
         self.logger = logging.getLogger("vaila.hardware")
         # Ensure models_dir is absolute or relative to this file if not absolute
@@ -35,7 +36,7 @@ class HardwareManager:
             self.models_dir = Path(os.path.dirname(__file__)) / models_dir
         else:
             self.models_dir = Path(models_dir)
-            
+
         self.gpu_info = self._detect_gpu()
         self.sys_info = self._detect_system()
         self.profile = self._get_hardware_profile()
@@ -54,12 +55,12 @@ class HardwareManager:
             if isinstance(name, bytes):
                 name = name.decode("utf-8")
             name = name.replace(" ", "_")
-            
+
             info = pynvml.nvmlDeviceGetMemoryInfo(handle)
             return {
                 "name": name,
                 "total_vram_gb": round(info.total / 1024**3, 2),
-                "cuda_capable": True
+                "cuda_capable": True,
             }
         except Exception as e:
             self.logger.warning(f"NVIDIA GPU not detected or driver error: {e}")
@@ -71,7 +72,7 @@ class HardwareManager:
             "cpu": platform.processor(),
             "cores": psutil.cpu_count(logical=False),
             "ram_total_gb": round(psutil.virtual_memory().total / 1024**3, 2),
-            "os": f"{platform.system()} {platform.release()}"
+            "os": f"{platform.system()} {platform.release()}",
         }
 
     def _get_hardware_profile(self):
@@ -80,34 +81,46 @@ class HardwareManager:
         if vram > 20:
             return "ULTRA"  # RTX 4090 / 5050 (High VRAM)
         elif 7 <= vram <= 20:
-            return "HIGH"   # Alienware / Mid-range desktops (8GB-16GB)
+            return "HIGH"  # Alienware / Mid-range desktops (8GB-16GB)
         else:
-            return "LITE"   # Laptops or CPU execution
+            return "LITE"  # Laptops or CPU execution
 
     def get_trt_config(self):
         """Returns TensorRT configuration based on hardware profile."""
         configs = {
-            "ULTRA": {"workspace": 8192, "precision": "fp16", "desc": "High Performance (8GB Workspace, FP16)"},
-            "HIGH": {"workspace": 2048, "precision": "fp16", "desc": "Balanced (2GB Workspace, FP16)"},
-            "LITE": {"workspace": 512, "precision": "fp32", "desc": "Compatibility (512MB Workspace, FP32)"} # FP16 might be supported but safer default
+            "ULTRA": {
+                "workspace": 8192,
+                "precision": "fp16",
+                "desc": "High Performance (8GB Workspace, FP16)",
+            },
+            "HIGH": {
+                "workspace": 2048,
+                "precision": "fp16",
+                "desc": "Balanced (2GB Workspace, FP16)",
+            },
+            "LITE": {
+                "workspace": 512,
+                "precision": "fp32",
+                "desc": "Compatibility (512MB Workspace, FP32)",
+            },  # FP16 might be supported but safer default
         }
         return configs.get(self.profile)
 
     def auto_export(self, model_input):
         """
         Checks for and automatically exports models to .engine format optimized for the current GPU.
-        
+
         Args:
             model_input (str): Name of the model (e.g., 'yolo11n-pose.pt' or just 'yolo11n-pose')
-            
+
         Returns:
             str: Path to the optimal model to load (.engine if available/created, else .pt).
         """
         model_name = Path(model_input).stem  # Remove extension if present
-        
+
         # Base paths
         pt_path = self.models_dir / f"{model_name}.pt"
-        
+
         # If no CUDA capability, just return the PT file (CPU execution)
         if not self.gpu_info["cuda_capable"]:
             return str(pt_path)
@@ -125,7 +138,7 @@ class HardwareManager:
         # We need the source .pt file first. If it doesn't exist, we can't convert.
         # Ensure directory exists
         self.models_dir.mkdir(parents=True, exist_ok=True)
-        
+
         if not pt_path.exists():
             # If the PT file is not found, we might need to download it first via YOLO()
             # The calling script usually handles download, but we can double check.
@@ -138,9 +151,11 @@ class HardwareManager:
             print("Warning: trtexec not found. Skipping auto-optimization.")
             return str(pt_path)
 
-        print(f"\n⚡ Auto-Exporting {model_name} for {self.gpu_info['name']} ({self.profile} Profile)...")
+        print(
+            f"\n⚡ Auto-Exporting {model_name} for {self.gpu_info['name']} ({self.profile} Profile)..."
+        )
         print(f"   Config: {self.config['desc']}")
-        
+
         # 1. Export to ONNX
         onnx_path = self.models_dir / f"{model_name}.onnx"
         if not onnx_path.exists():
@@ -154,14 +169,14 @@ class HardwareManager:
                 return str(pt_path)
 
         if not onnx_path.exists():
-             # Sometimes export names slightly differently or fails silently
-             print("❌ ONNX file not found after export attempt.")
-             return str(pt_path)
+            # Sometimes export names slightly differently or fails silently
+            print("❌ ONNX file not found after export attempt.")
+            return str(pt_path)
 
         # 2. Convert to Engine
         print("⚙️  Step 2/2: Building TensorRT Engine (this takes a few minutes)...")
         precision_flag = f"--{self.config['precision']}"
-        
+
         cmd = [
             trtexec_cmd,
             f"--onnx={onnx_path}",
@@ -169,25 +184,25 @@ class HardwareManager:
             f"--workspace={self.config['workspace']}",
             precision_flag,
             "--avgRuns=10",
-            "--verbose" if self.profile == "ULTRA" else "--noDataTransfer" # Less verbose usually
+            "--verbose" if self.profile == "ULTRA" else "--noDataTransfer",  # Less verbose usually
         ]
-        
+
         try:
             # Run conversion
-            subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE) 
-            # Note: capturing output allows checking errors but hides progress. 
-            # Given user wants to see it, maybe let it print? 
-            # User said "Auto-Export", implied background or explicit. 
+            subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+            # Note: capturing output allows checking errors but hides progress.
+            # Given user wants to see it, maybe let it print?
+            # User said "Auto-Export", implied background or explicit.
             # Let's print a success message.
-            
+
             print(f"✨ SUCCESS! Optimized engine created: {engine_name}")
             return str(engine_path)
-            
+
         except subprocess.CalledProcessError as e:
-            print(f"❌ TensorRT optimization failed.")
+            print("❌ TensorRT optimization failed.")
             print(f"   Error: {e.stderr.decode('utf-8')[-200:] if e.stderr else 'Unknown'}")
             return str(pt_path)
-    
+
     def print_report(self):
         print("-" * 40)
         print("vailá Hardware Report")

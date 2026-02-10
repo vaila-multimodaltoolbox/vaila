@@ -1,6 +1,6 @@
 """
 ===============================================================================
-vaila_lensdistortvideo.py
+vaila_distortvideo_gui.py
 ===============================================================================
 Author: Prof. Paulo R. P. Santiago
 Date: 06 Feb 2026
@@ -9,25 +9,30 @@ Python Version: 3.12.12
 ===============================================================================
 
 This script processes videos applying lens distortion correction based on
-intrinsic camera parameters and distortion coefficients. Now, instead of loading
-parameters from a CSV file, it is possible to adjust them interactively
-through a graphical interface with sliders and buttons. For this, the first
-frame of the video and the result (undistorted image) is displayed in an updated
-preview in real time.
+intrinsic camera parameters and distortion coefficients. Parameters are loaded
+and saved as TOML (not CSV). It is possible to adjust them interactively
+through a graphical interface with sliders and buttons. The first frame of the
+video and the result (undistorted image) are displayed in an updated preview in real time.
 ===============================================================================
 """
 
+import json
 import math
 import os
-from pathlib import Path
 import subprocess
+import time
 import tkinter as tk
 from datetime import datetime
+from pathlib import Path
 from tkinter import filedialog, messagebox
+
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib  # pyright: ignore[reportMissingImports]
 
 import cv2
 import numpy as np
-import pandas as pd
 from PIL import Image, ImageTk  # To convert images for display with Tkinter
 from rich import print
 from rich import print as rprint
@@ -41,12 +46,13 @@ from rich.progress import (
 )
 
 
-def load_distortion_parameters(csv_path):
+def load_distortion_parameters(toml_path):
     """
-    Load distortion parameters from a CSV file.
+    Load distortion parameters from a TOML file (fx, fy, cx, cy, k1, k2, k3, p1, p2).
     """
-    df = pd.read_csv(csv_path)
-    return df.iloc[0].to_dict()
+    with open(toml_path, "rb") as f:
+        data = tomllib.load(f)
+    return {k: float(v) for k, v in data.items() if k in ("fx", "fy", "cx", "cy", "k1", "k2", "k3", "p1", "p2")}
 
 
 def process_video(input_path, output_path, parameters):
@@ -180,7 +186,7 @@ def select_directory(title="Select a directory"):
     return directory
 
 
-def select_file(title="Select a file", filetypes=(("CSV Files", "*.csv"),)):
+def select_file(title="Select a file", filetypes=(("TOML Files", "*.toml"),)):
     """
     Open a dialog to select a file.
     """
@@ -196,7 +202,7 @@ def distort_video_gui():
     using the first frame of a video as an example.
 
     After adjustment, the parameters (fx,fy,cx,cy,k1,k2,k3,p1,p2) are saved
-    in a CSV file for later use.
+    in a TOML file for later use.
     """
     # Print the directory and name of the script being executed
     print(f"Running script: {os.path.basename(__file__)}")
@@ -460,26 +466,28 @@ def distort_video_gui():
     root.mainloop()
 
     if state.confirmed:
-        # Select where to save the parameters file
+        # Select where to save the parameters file (TOML)
         params_file = filedialog.asksaveasfilename(
             title="Save parameters",
-            defaultextension=".csv",
-            filetypes=(("CSV Files", "*.csv"), ("All Files", "*.*")),
+            defaultextension=".toml",
+            filetypes=(("TOML Files", "*.toml"), ("All Files", "*.*")),
         )
         if params_file:
-            with open(params_file, "w") as f:
-                f.write("fx,fy,cx,cy,k1,k2,k3,p1,p2\n")
-                f.write(
-                    f"{state.results['fx']:.2f},"
-                    f"{state.results['fy']:.2f},"
-                    f"{state.results['cx']:.2f},"
-                    f"{state.results['cy']:.3f},"
-                    f"{state.results['k1']:.17f},"
-                    f"{state.results['k2']:.17f},"
-                    f"{state.results['k3']:.17f},"
-                    f"{state.results['p1']:.17f},"
-                    f"{state.results['p2']:.17f}\n"
-                )
+            r = state.results
+            toml_content = (
+                "# Camera distortion parameters\n"
+                f"fx = {r['fx']:.6f}\n"
+                f"fy = {r['fy']:.6f}\n"
+                f"cx = {r['cx']:.6f}\n"
+                f"cy = {r['cy']:.6f}\n"
+                f"k1 = {r['k1']:.17f}\n"
+                f"k2 = {r['k2']:.17f}\n"
+                f"k3 = {r['k3']:.17f}\n"
+                f"p1 = {r['p1']:.17f}\n"
+                f"p2 = {r['p2']:.17f}\n"
+            )
+            with open(params_file, "w", encoding="utf-8") as f:
+                f.write(toml_content)
         return state.results
     else:
         return None
@@ -721,24 +729,33 @@ def run_distortvideo_gui():
     # Destroy the Tkinter root after the video selection
     root.destroy()
 
-    # Save the parameters to a CSV file in the same directory as the selected video
+    # Save the parameters to a TOML file in the same directory as the selected video
     base_name = os.path.splitext(os.path.basename(video_path))[0]
-    params_csv = os.path.join(os.path.dirname(video_path), f"{base_name}_parameters.csv")
+    params_toml = os.path.join(os.path.dirname(video_path), f"{base_name}_parameters.toml")
     try:
-        with open(params_csv, "w") as f:
-            f.write("fx,fy,cx,cy,k1,k2,k3,p1,p2\n")
-            f.write(
-                f"{parameters['fx']:.2f},"
-                f"{parameters['fy']:.2f},"
-                f"{parameters['cx']:.2f},"
-                f"{parameters['cy']:.2f},"
-                f"{parameters['k1']:.17f},"
-                f"{parameters['k2']:.17f},"
-                f"{parameters['k3']:.17f},"
-                f"{parameters['p1']:.17f},"
-                f"{parameters['p2']:.17f}\n"
-            )
-        rprint(f"\n[blue]Parameters saved to: {params_csv}[/blue]")
+        p = parameters
+        toml_content = (
+            "# Camera distortion parameters\n"
+            f"fx = {p['fx']:.6f}\n"
+            f"fy = {p['fy']:.6f}\n"
+            f"cx = {p['cx']:.6f}\n"
+            f"cy = {p['cy']:.6f}\n"
+            f"k1 = {p['k1']:.17f}\n"
+            f"k2 = {p['k2']:.17f}\n"
+            f"k3 = {p['k3']:.17f}\n"
+            f"p1 = {p['p1']:.17f}\n"
+            f"p2 = {p['p2']:.17f}\n"
+        )
+        with open(params_toml, "w", encoding="utf-8") as f:
+            f.write(toml_content)
+        rprint(f"\n[blue]Parameters saved to: {params_toml}[/blue]")
+        # #region agent log
+        try:
+            with open("/home/preto/Preto/vaila/.cursor/debug-a5f5a000-975d-4bfc-9676-f9748629bda8.log", "a") as _f:
+                _f.write(json.dumps({"sessionId": "a5f5a000-975d-4bfc-9676-f9748629bda8", "id": "distortvideo_gui_save_toml", "timestamp": int(time.time() * 1000), "location": "vaila_distortvideo_gui.run_distortvideo_gui", "message": "Params saved as TOML", "data": {"script": "vaila_distortvideo_gui", "mode": "gui", "params_path": params_toml, "ext": ".toml"}, "runId": "distort", "hypothesisId": "C"}) + "\n")
+        except Exception:
+            pass
+        # #endregion
     except Exception as e:
         rprint(f"[red]Error saving parameters: {e}[/red]")
 

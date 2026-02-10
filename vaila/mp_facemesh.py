@@ -42,7 +42,6 @@ import time
 import time as _time_module
 import tkinter as tk
 import urllib.request
-from collections import deque
 from pathlib import Path
 from tkinter import filedialog, messagebox
 
@@ -89,7 +88,8 @@ def _debug_log(hypothesis_id, location, message, data=None):
 
 # Additional imports for filtering and interpolation
 from pykalman import KalmanFilter  # noqa: E402
-#from rich import print  # noqa: E402
+
+# from rich import print  # noqa: E402
 from scipy.interpolate import UnivariateSpline  # noqa: E402
 from scipy.signal import butter, savgol_filter, sosfiltfilt  # noqa: E402
 from statsmodels.nonparametric.smoothers_lowess import lowess  # noqa: E402
@@ -115,29 +115,119 @@ import threading  # noqa: F401, E402 - For future Linux thread management
 # Face regions for MediaPipe FaceMesh (manually defined since Tasks API doesn't expose these)
 # These are the standard FaceMesh connections (468 landmarks)
 # We'll define key connections for visualization
-FACE_CONNECTIONS = frozenset([
-    # Face oval (contour)
-    (10, 338), (338, 297), (297, 332), (332, 284), (284, 251), (251, 389), (389, 356), (356, 454),
-    (454, 323), (323, 361), (361, 288), (288, 397), (397, 365), (365, 379), (379, 378), (378, 400),
-    (400, 377), (377, 152), (152, 148), (148, 176), (176, 149), (149, 150), (150, 136), (136, 172),
-    (172, 58), (58, 132), (132, 93), (93, 234), (234, 127), (127, 162), (162, 21), (21, 54),
-    (54, 103), (103, 67), (67, 109), (109, 10),
-    # Left eye
-    (33, 7), (7, 163), (163, 144), (144, 145), (145, 153), (153, 154), (154, 155), (155, 133),
-    (133, 173), (173, 157), (157, 158), (158, 159), (159, 160), (160, 161), (161, 246), (246, 33),
-    # Right eye
-    (362, 382), (382, 381), (381, 380), (380, 374), (374, 373), (373, 390), (390, 249), (249, 263),
-    (263, 466), (466, 388), (388, 387), (387, 386), (386, 385), (385, 384), (384, 398), (398, 362),
-    # Lips
-    (61, 146), (146, 91), (91, 181), (181, 84), (84, 17), (17, 314), (314, 405), (405, 320),
-    (320, 307), (307, 375), (375, 321), (321, 308), (308, 324), (324, 318), (318, 61),
-    # Left eyebrow
-    (276, 283), (283, 282), (282, 295), (295, 285), (285, 336), (336, 296), (296, 334), (334, 293),
-    (293, 300), (300, 276),
-    # Right eyebrow
-    (46, 53), (53, 52), (52, 65), (65, 55), (55, 70), (70, 63), (63, 105), (105, 66),
-    (66, 107), (107, 46),
-])
+FACE_CONNECTIONS = frozenset(
+    [
+        # Face oval (contour)
+        (10, 338),
+        (338, 297),
+        (297, 332),
+        (332, 284),
+        (284, 251),
+        (251, 389),
+        (389, 356),
+        (356, 454),
+        (454, 323),
+        (323, 361),
+        (361, 288),
+        (288, 397),
+        (397, 365),
+        (365, 379),
+        (379, 378),
+        (378, 400),
+        (400, 377),
+        (377, 152),
+        (152, 148),
+        (148, 176),
+        (176, 149),
+        (149, 150),
+        (150, 136),
+        (136, 172),
+        (172, 58),
+        (58, 132),
+        (132, 93),
+        (93, 234),
+        (234, 127),
+        (127, 162),
+        (162, 21),
+        (21, 54),
+        (54, 103),
+        (103, 67),
+        (67, 109),
+        (109, 10),
+        # Left eye
+        (33, 7),
+        (7, 163),
+        (163, 144),
+        (144, 145),
+        (145, 153),
+        (153, 154),
+        (154, 155),
+        (155, 133),
+        (133, 173),
+        (173, 157),
+        (157, 158),
+        (158, 159),
+        (159, 160),
+        (160, 161),
+        (161, 246),
+        (246, 33),
+        # Right eye
+        (362, 382),
+        (382, 381),
+        (381, 380),
+        (380, 374),
+        (374, 373),
+        (373, 390),
+        (390, 249),
+        (249, 263),
+        (263, 466),
+        (466, 388),
+        (388, 387),
+        (387, 386),
+        (386, 385),
+        (385, 384),
+        (384, 398),
+        (398, 362),
+        # Lips
+        (61, 146),
+        (146, 91),
+        (91, 181),
+        (181, 84),
+        (84, 17),
+        (17, 314),
+        (314, 405),
+        (405, 320),
+        (320, 307),
+        (307, 375),
+        (375, 321),
+        (321, 308),
+        (308, 324),
+        (324, 318),
+        (318, 61),
+        # Left eyebrow
+        (276, 283),
+        (283, 282),
+        (282, 295),
+        (295, 285),
+        (285, 336),
+        (336, 296),
+        (296, 334),
+        (334, 293),
+        (293, 300),
+        (300, 276),
+        # Right eyebrow
+        (46, 53),
+        (53, 52),
+        (52, 65),
+        (65, 55),
+        (55, 70),
+        (70, 63),
+        (63, 105),
+        (105, 66),
+        (66, 107),
+        (107, 46),
+    ]
+)
 
 # Drawing connections (for visualization)
 DRAW_CONNECTIONS = list(FACE_CONNECTIONS)
@@ -145,9 +235,36 @@ DRAW_CONNECTIONS = list(FACE_CONNECTIONS)
 # Define regions for compatibility (simplified)
 MEDIAPIPE_REGIONS = {
     "face_oval": [(i, (i + 1) % 17) for i in range(17)],  # Simplified
-    "left_eye": [(33, 7), (7, 163), (163, 144), (144, 145), (145, 153), (153, 154), (154, 155), (155, 133)],
-    "right_eye": [(362, 382), (382, 381), (381, 380), (380, 374), (374, 373), (373, 390), (390, 249), (249, 263)],
-    "lips": [(61, 146), (146, 91), (91, 181), (181, 84), (84, 17), (17, 314), (314, 405), (405, 320)],
+    "left_eye": [
+        (33, 7),
+        (7, 163),
+        (163, 144),
+        (144, 145),
+        (145, 153),
+        (153, 154),
+        (154, 155),
+        (155, 133),
+    ],
+    "right_eye": [
+        (362, 382),
+        (382, 381),
+        (381, 380),
+        (380, 374),
+        (374, 373),
+        (373, 390),
+        (390, 249),
+        (249, 263),
+    ],
+    "lips": [
+        (61, 146),
+        (146, 91),
+        (91, 181),
+        (181, 84),
+        (84, 17),
+        (17, 314),
+        (314, 405),
+        (405, 320),
+    ],
     "left_eyebrow": [(276, 283), (283, 282), (282, 295), (295, 285), (285, 336)],
     "right_eyebrow": [(46, 53), (53, 52), (52, 65), (65, 55), (55, 70)],
     "tessellation": [],  # Not used for drawing
@@ -211,6 +328,7 @@ CPU_USAGE_THRESHOLD = 150
 FRAME_SLEEP_TIME = 0.01
 MAX_CPU_CHECK_INTERVAL = 100
 
+
 # Generate landmark mapping for CSV headers
 def generate_landmark_mapping():
     """Generate mapping from landmark index to descriptive name"""
@@ -225,9 +343,7 @@ def generate_landmark_mapping():
     landmark_to_name = {}
     for idx in range(max_idx + 1):
         anat_regions = [
-            r
-            for r, inds in regions_indices.items()
-            if r != "tessellation" and idx in inds
+            r for r, inds in regions_indices.items() if r != "tessellation" and idx in inds
         ]
         if anat_regions:
             regions_sorted = sorted(anat_regions)
@@ -1960,7 +2076,9 @@ class FaceMeshConfigDialog(tk.simpledialog.Dialog):
                         text=f"TOML loaded: {os.path.basename(file_path)}", fg="green"
                     )
                     self.populate_fields_from_config(config)
-                    messagebox.showinfo("TOML Parameters Loaded", "Configuration loaded successfully!")
+                    messagebox.showinfo(
+                        "TOML Parameters Loaded", "Configuration loaded successfully!"
+                    )
                 else:
                     self.toml_label.config(text="Error loading TOML", fg="red")
             except Exception as e:
@@ -1986,9 +2104,13 @@ class FaceMeshConfigDialog(tk.simpledialog.Dialog):
         self.resize_scale_entry.delete(0, tk.END)
         self.resize_scale_entry.insert(0, str(config.get("resize_scale", 2)))
         self.enable_padding_entry.delete(0, tk.END)
-        self.enable_padding_entry.insert(0, str(config.get("enable_padding", ENABLE_PADDING_DEFAULT)))
+        self.enable_padding_entry.insert(
+            0, str(config.get("enable_padding", ENABLE_PADDING_DEFAULT))
+        )
         self.pad_start_frames_entry.delete(0, tk.END)
-        self.pad_start_frames_entry.insert(0, str(config.get("pad_start_frames", PAD_START_FRAMES_DEFAULT)))
+        self.pad_start_frames_entry.insert(
+            0, str(config.get("pad_start_frames", PAD_START_FRAMES_DEFAULT))
+        )
 
         enable_crop = config.get("enable_crop", False)
         self.enable_crop_var.set(enable_crop)
@@ -2249,9 +2371,10 @@ def process_frame_with_facemesh(
 
             # Map coordinates to full frame if cropping was used
             if enable_crop:
-                if bbox_config.get("roi_polygon_points") and len(
-                    bbox_config.get("roi_polygon_points", [])
-                ) >= 3:
+                if (
+                    bbox_config.get("roi_polygon_points")
+                    and len(bbox_config.get("roi_polygon_points", [])) >= 3
+                ):
                     # Polygon ROI mapping
                     offset_x = bbox_config.get("polygon_offset_x", 0)
                     offset_y = bbox_config.get("polygon_offset_y", 0)
@@ -2433,7 +2556,9 @@ def process_video(video_path, output_dir, face_config):
         "bbox_x_max_orig": face_config.get("bbox_x_max", original_width),
         "bbox_y_max_orig": face_config.get("bbox_y_max", original_height),
         "video_resized": enable_resize and resize_metadata is not None,
-        "resize_scale": resize_metadata["scale_factor"] if (enable_resize and resize_metadata) else 1.0,
+        "resize_scale": resize_metadata["scale_factor"]
+        if (enable_resize and resize_metadata)
+        else 1.0,
         "roi_polygon_points": face_config.get("roi_polygon_points"),
     }
 
@@ -2509,7 +2634,9 @@ def process_video(video_path, output_dir, face_config):
             time.sleep(FRAME_SLEEP_TIME)
 
             if frame_count % 100 == 0:
-                print(f"  Processed {frame_count}/{total_frames + (pad_start_frames if enable_padding else 0)} frames")
+                print(
+                    f"  Processed {frame_count}/{total_frames + (pad_start_frames if enable_padding else 0)} frames"
+                )
 
     cap.release()
     cv2.destroyAllWindows()
@@ -2518,7 +2645,9 @@ def process_video(video_path, output_dir, face_config):
     if enable_padding and pad_start_frames > 0:
         print(f"Removing {pad_start_frames} padding frames from results")
         all_frames_data = all_frames_data[pad_start_frames:]
-        frames_with_missing_data = [f - pad_start_frames for f in frames_with_missing_data if f >= pad_start_frames]
+        frames_with_missing_data = [
+            f - pad_start_frames for f in frames_with_missing_data if f >= pad_start_frames
+        ]
         # Adjust frame indices
         for i, frame_data in enumerate(all_frames_data):
             frame_data["frame_idx"] = i
@@ -2542,15 +2671,17 @@ def process_video(video_path, output_dir, face_config):
             first_face_landmarks = faces[0][1]  # faces[0] is (face_idx, landmarks)
             if len(first_face_landmarks) != NUM_FACE_LANDMARKS:
                 actual_num_landmarks = len(first_face_landmarks)
-                print(f"Warning: FaceLandmarker returned {actual_num_landmarks} landmarks, expected {NUM_FACE_LANDMARKS}")
-                print(f"Adjusting CSV header to match actual landmark count")
+                print(
+                    f"Warning: FaceLandmarker returned {actual_num_landmarks} landmarks, expected {NUM_FACE_LANDMARKS}"
+                )
+                print("Adjusting CSV header to match actual landmark count")
                 # Regenerate header with correct number of landmarks
                 header = ["frame_index", "face_idx"]  # Include face_idx to match row structure
                 for idx in range(actual_num_landmarks):
                     name = LANDMARK_NAMES.get(idx, f"landmark_{idx}")
                     header.extend([f"{name}_x", f"{name}_y", f"{name}_z"])
                 break
-    
+
     # If header was adjusted, we need to ensure all rows match
     expected_cols = len(header)
 
@@ -2568,7 +2699,9 @@ def process_video(video_path, output_dir, face_config):
                     # Pad or truncate to match expected count
                     if len(landmarks) < actual_num_landmarks:
                         # Pad with NaN
-                        landmarks = landmarks + [[np.nan, np.nan, np.nan]] * (actual_num_landmarks - len(landmarks))
+                        landmarks = landmarks + [[np.nan, np.nan, np.nan]] * (
+                            actual_num_landmarks - len(landmarks)
+                        )
                     else:
                         # Truncate
                         landmarks = landmarks[:actual_num_landmarks]
@@ -2576,20 +2709,44 @@ def process_video(video_path, output_dir, face_config):
                 # Add landmarks to rows (each landmark has 3 values: x, y, z)
                 for landmark in landmarks:
                     if isinstance(landmark, (list, tuple)) and len(landmark) >= 3:
-                        norm_row.extend([landmark[0], landmark[1], landmark[2]])  # Already normalized
-                        pixel_row.extend([
-                            int(landmark[0] * original_width) if not (np.isnan(landmark[0]) if hasattr(np, 'isnan') else landmark[0] != landmark[0]) else np.nan,
-                            int(landmark[1] * original_height) if not (np.isnan(landmark[1]) if hasattr(np, 'isnan') else landmark[1] != landmark[1]) else np.nan,
-                            landmark[2] if not (np.isnan(landmark[2]) if hasattr(np, 'isnan') else landmark[2] != landmark[2]) else np.nan
-                        ])
+                        norm_row.extend(
+                            [landmark[0], landmark[1], landmark[2]]
+                        )  # Already normalized
+                        pixel_row.extend(
+                            [
+                                int(landmark[0] * original_width)
+                                if not (
+                                    np.isnan(landmark[0])
+                                    if hasattr(np, "isnan")
+                                    else landmark[0] != landmark[0]
+                                )
+                                else np.nan,
+                                int(landmark[1] * original_height)
+                                if not (
+                                    np.isnan(landmark[1])
+                                    if hasattr(np, "isnan")
+                                    else landmark[1] != landmark[1]
+                                )
+                                else np.nan,
+                                landmark[2]
+                                if not (
+                                    np.isnan(landmark[2])
+                                    if hasattr(np, "isnan")
+                                    else landmark[2] != landmark[2]
+                                )
+                                else np.nan,
+                            ]
+                        )
                     else:
                         # Invalid landmark format, add NaN
                         norm_row.extend([np.nan, np.nan, np.nan])
                         pixel_row.extend([np.nan, np.nan, np.nan])
-                
+
                 # Verify row length matches header
                 if len(norm_row) != expected_cols:
-                    print(f"Warning: Row length mismatch for frame {frame_idx}, face {face_idx}: expected {expected_cols}, got {len(norm_row)}")
+                    print(
+                        f"Warning: Row length mismatch for frame {frame_idx}, face {face_idx}: expected {expected_cols}, got {len(norm_row)}"
+                    )
                     # Adjust row to match header
                     if len(norm_row) < expected_cols:
                         norm_row.extend([np.nan] * (expected_cols - len(norm_row)))
@@ -2646,6 +2803,7 @@ def process_video(video_path, output_dir, face_config):
     original_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
     from fractions import Fraction
+
     orig_fps = cap.get(cv2.CAP_PROP_FPS)
     if not orig_fps or np.isnan(orig_fps) or orig_fps < 1 or orig_fps > 240:
         safe_fps = 30.0
@@ -2706,22 +2864,34 @@ def process_video(video_path, output_dir, face_config):
 
                 # Define colors (BGR) for Left (Blue) and Right (Red)
                 # Note: OpenCV uses BGR
-                color_right = (0, 0, 255)   # Red (Subject's Right)
-                color_left = (255, 0, 0)    # Blue (Subject's Left)
-                color_other = (0, 255, 0)   # Green (Other points)
-                color_neutral_conn = (200, 200, 200) # Grey/White for neutral connections
-                
+                color_right = (0, 0, 255)  # Red (Subject's Right)
+                color_left = (255, 0, 0)  # Blue (Subject's Left)
+                color_other = (0, 255, 0)  # Green (Other points)
+                color_neutral_conn = (200, 200, 200)  # Grey/White for neutral connections
+
                 # Draw connections with specific colors
                 for connection in DRAW_CONNECTIONS:
                     if connection[0] in points and connection[1] in points:
                         start_pt = points[connection[0]]
                         end_pt = points[connection[1]]
-                        
+
                         # Determine color based on connection
-                        is_right_eye = any((connection == c or connection == c[::-1]) for c in MEDIAPIPE_REGIONS["right_eye"])
-                        is_right_brow = any((connection == c or connection == c[::-1]) for c in MEDIAPIPE_REGIONS["right_eyebrow"])
-                        is_left_eye = any((connection == c or connection == c[::-1]) for c in MEDIAPIPE_REGIONS["left_eye"])
-                        is_left_brow = any((connection == c or connection == c[::-1]) for c in MEDIAPIPE_REGIONS["left_eyebrow"])
+                        is_right_eye = any(
+                            (connection == c or connection == c[::-1])
+                            for c in MEDIAPIPE_REGIONS["right_eye"]
+                        )
+                        is_right_brow = any(
+                            (connection == c or connection == c[::-1])
+                            for c in MEDIAPIPE_REGIONS["right_eyebrow"]
+                        )
+                        is_left_eye = any(
+                            (connection == c or connection == c[::-1])
+                            for c in MEDIAPIPE_REGIONS["left_eye"]
+                        )
+                        is_left_brow = any(
+                            (connection == c or connection == c[::-1])
+                            for c in MEDIAPIPE_REGIONS["left_eyebrow"]
+                        )
 
                         if is_right_eye or is_right_brow:
                             color = color_right
@@ -2734,23 +2904,23 @@ def process_video(video_path, output_dir, face_config):
 
                 # Draw iris landmarks individually
                 # Right Iris (468-472) -> Red
-                for i in range(468, 473): 
-                     if i in points:
-                         cv2.circle(frame, points[i], 2, color_right, -1)
-                
+                for i in range(468, 473):
+                    if i in points:
+                        cv2.circle(frame, points[i], 2, color_right, -1)
+
                 # Left Iris (473-477) -> Blue
                 for i in range(473, 478):
-                     if i in points:
-                         cv2.circle(frame, points[i], 2, color_left, -1)
+                    if i in points:
+                        cv2.circle(frame, points[i], 2, color_left, -1)
 
                 # Draw other points (Green, smaller size)
                 for i, pt in points.items():
-                    if i < 468: # Non-iris landmarks
+                    if i < 468:  # Non-iris landmarks
                         # Check if it's already part of the colored features to avoid overwriting or leave it?
                         # User said "demais points em green", implies all others.
                         # Logic: Draw all small green, then overwrite eyes? Or just draw points not in eyes?
                         # Simplest: Draw ALL face mesh points as small green dots first, then maybe eyes on top?
-                        # But loop order here is after connectivity. 
+                        # But loop order here is after connectivity.
                         # Let's draw them all as small green dots for the "diminuir size" request.
                         cv2.circle(frame, pt, 1, color_other, -1)
 
@@ -2876,7 +3046,7 @@ def process_videos_in_directory(existing_root=None):
         return
 
     prepare_root_for_dialog()
-    
+
     # GPU Detection and Selection
     print("Checking for available GPUs...")
     nvidia_avail, nvidia_info, nvidia_error = detect_nvidia_gpu()
@@ -2891,9 +3061,7 @@ def process_videos_in_directory(existing_root=None):
         print(f"AMD GPU detected: {amd_info.get('name')}")
 
     # Show Device Selection Dialog
-    device_dialog = DeviceSelectionDialog(
-        root, nvidia_avail, nvidia_info, amd_avail, amd_info
-    )
+    device_dialog = DeviceSelectionDialog(root, nvidia_avail, nvidia_info, amd_avail, amd_info)
     selected_device = device_dialog.selected_device
     print(f"Selected processing device: {selected_device}")
 
@@ -2903,18 +3071,19 @@ def process_videos_in_directory(existing_root=None):
         print("Configured for NVIDIA GPU (CUDA)")
     elif selected_device == "amd":
         # AMD logic usually handles itself via ROCm, but we can set visible devices if needed
-        # os.environ["HIP_VISIBLE_DEVICES"] = "0" 
+        # os.environ["HIP_VISIBLE_DEVICES"] = "0"
         print("Configured for AMD GPU (ROCm)")
     else:
-        os.environ["CUDA_VISIBLE_DEVICES"] = "-1" # Disable CUDA
+        os.environ["CUDA_VISIBLE_DEVICES"] = "-1"  # Disable CUDA
         print("Configured for CPU")
-    
+
     # Check dependencies for GPU
     if selected_device != "cpu":
         try:
             import tensorflow as tf
+
             print(f"TensorFlow version: {tf.__version__}")
-            gpus = tf.config.list_physical_devices('GPU')
+            gpus = tf.config.list_physical_devices("GPU")
             print(f"TensorFlow GPUs: {gpus}")
         except ImportError:
             pass

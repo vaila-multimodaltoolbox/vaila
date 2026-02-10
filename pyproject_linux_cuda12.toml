@@ -117,6 +117,8 @@ dependencies = [
     "pyzmq",
     "protobuf",
     "ruff",
+    "vpython",
+    "pyvista",
 ]
 
 [project.optional-dependencies]

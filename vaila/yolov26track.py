@@ -58,7 +58,6 @@ import colorsys
 import contextlib
 import csv
 import datetime
-from .HardwareManager import HardwareManager
 import glob
 import os
 import platform
@@ -77,6 +76,8 @@ import ultralytics
 import yaml
 from rich import print
 from ultralytics import YOLO
+
+from .HardwareManager import HardwareManager
 
 # Import PIL for image display
 try:
@@ -887,7 +888,13 @@ def select_bbox_roi(video_path):
                 info_text = f"BBox: {width}x{height} pixels"
                 text_y = display_img.shape[0] - 20
                 cv2.putText(
-                    display_img, info_text, (10, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 0), 3
+                    display_img,
+                    info_text,
+                    (10, text_y),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.8,
+                    (0, 0, 0),
+                    3,
                 )
                 cv2.putText(
                     display_img,
@@ -2313,7 +2320,7 @@ def select_id_and_run_pose():
     csv_files = glob.glob(os.path.join(tracking_dir, "*_id_*.csv"))
     # Filter out combined/merged files (all_id_merge.csv, all_id_detection.csv, etc.)
     csv_files = [f for f in csv_files if not os.path.basename(f).startswith("all_id_")]
-    
+
     if not csv_files:
         messagebox.showerror("Error", f"No tracking CSV files found in:\n{tracking_dir}")
         return
@@ -2771,7 +2778,7 @@ def process_pose_for_merged_csv(
     video_basename = os.path.splitext(os.path.basename(video_path))[0]
     # Remove 'processed_' prefix if present
     if video_basename.startswith("processed_"):
-        video_basename = video_basename[len("processed_"):]
+        video_basename = video_basename[len("processed_") :]
     # Create pose output directory with timestamp
     pose_timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     pose_output_dir = os.path.join(tracking_dir, f"{video_basename}_pose_{pose_timestamp}")
@@ -2835,7 +2842,7 @@ def process_pose_for_single_id(
     video_basename = os.path.splitext(os.path.basename(video_path))[0]
     # Remove 'processed_' prefix if present
     if video_basename.startswith("processed_"):
-        video_basename = video_basename[len("processed_"):]
+        video_basename = video_basename[len("processed_") :]
     # Create pose output directory with timestamp
     pose_timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     pose_output_dir = os.path.join(tracking_dir, f"{video_basename}_pose_{pose_timestamp}")
@@ -3124,7 +3131,7 @@ def process_pose_in_bboxes(tracking_dir, device=None, pose_model_name="yolo26n-p
     print("\n" + "=" * 80)
     print("POSE ESTIMATION WITHIN TRACKED BBOXES")
     print("=" * 80)
-    
+
     # Auto-detect device if not specified
     if device is None:
         device = detect_optimal_device()
@@ -3476,10 +3483,10 @@ def run_yolov26track():
     # Use HardwareManager to get optimal model for this GPU
     hw = HardwareManager()
     hw.print_report()
-    
+
     try:
         # Auto-export if needed (creates .engine optimized for this GPU)
-        model_path = hw.auto_export(model_name) 
+        model_path = hw.auto_export(model_name)
         model = YOLO(model_path)
         print(f"Model loaded successfully: {model_path}")
     except Exception as e:

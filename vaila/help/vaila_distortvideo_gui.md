@@ -14,20 +14,19 @@
 
 
 ===============================================================================
-vaila_lensdistortvideo.py
+vaila_distortvideo_gui.py
 ===============================================================================
 Author: Prof. Paulo R. P. Santiago
-Date: 21 Feb 2025
-Version: 0.1.1
-Python Version: 3.12.9
+Date: 06 Feb 2026
+Version: 0.0.3
+Python Version: 3.12.12
 ===============================================================================
 
 This script processes videos applying lens distortion correction based on
-intrinsic camera parameters and distortion coefficients. Now, instead of loading
-parameters from a CSV file, it is possible to adjust them interactively
-through a graphical interface with sliders and buttons. For this, the first
-frame of the video and the result (undistorted image) is displayed in an updated
-preview in real time.
+intrinsic camera parameters and distortion coefficients. Parameters are loaded
+and saved as TOML. It is possible to adjust them interactively through a
+graphical interface with sliders and buttons. The first frame of the video and
+the result (undistorted image) are displayed in an updated preview in real time.
 ===============================================================================
 
 

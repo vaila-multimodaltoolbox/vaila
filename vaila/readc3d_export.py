@@ -86,29 +86,45 @@ Citation:
 }
 """
 
+import json
 import math
+import pathlib
+import tkinter as tk
 from datetime import datetime
 from pathlib import Path
-import pathlib
 from tkinter import Tk, filedialog, messagebox, scrolledtext, ttk
-import tkinter as tk
 
+import ezc3d
 import numpy as np
 import pandas as pd
 from ezc3d import c3d
 from rich import print
 from tqdm import tqdm
-import ezc3d
-import json
+
 
 # #region agent log
 def _debug_log(location, message, data, hypothesis_id="H1"):
     try:
         with open(r"c:\Users\paulo\Preto\vaila\.cursor\debug.log", "a", encoding="utf-8") as f:
-            f.write(json.dumps({"location": location, "message": message, "data": data, "hypothesisId": hypothesis_id, "timestamp": datetime.now().isoformat()}, ensure_ascii=False) + "\n")
+            f.write(
+                json.dumps(
+                    {
+                        "location": location,
+                        "message": message,
+                        "data": data,
+                        "hypothesisId": hypothesis_id,
+                        "timestamp": datetime.now().isoformat(),
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
     except Exception:
         pass
+
+
 # #endregion
+
 
 # === ADVANCED C3D REPORT GENERATOR ===
 class C3DReportGenerator:
@@ -116,6 +132,7 @@ class C3DReportGenerator:
     Classe para gerar relatórios detalhados (Inspeção Profunda) de arquivos C3D.
     Autor: Paulo R. P. Santiago (vailá Toolbox)
     """
+
     def __init__(self, c3d_path):
         self.path = Path(c3d_path)
         self.filename = self.path.name
@@ -130,12 +147,22 @@ class C3DReportGenerator:
             except Exception as e:
                 raise ValueError(f"Erro ao ler o C3D com ezc3d: {e}")
 
-        self.header = self.c3d['header']
-        self.parameters = self.c3d['parameters']
-        self.data = self.c3d['data']
+        self.header = self.c3d["header"]
+        self.parameters = self.c3d["parameters"]
+        self.data = self.c3d["data"]
         # #region agent log
-        _debug_log("C3DReportGenerator.__init__", "header keys after load", list(self.header.keys()) if isinstance(self.header, dict) else str(type(self.header)), "H1")
-        _debug_log("C3DReportGenerator.__init__", "has version?", "version" in self.header if isinstance(self.header, dict) else "N/A", "H1")
+        _debug_log(
+            "C3DReportGenerator.__init__",
+            "header keys after load",
+            list(self.header.keys()) if isinstance(self.header, dict) else str(type(self.header)),
+            "H1",
+        )
+        _debug_log(
+            "C3DReportGenerator.__init__",
+            "has version?",
+            "version" in self.header if isinstance(self.header, dict) else "N/A",
+            "H1",
+        )
         # #endregion
 
     def _get(self, obj, key, default=None):
@@ -148,28 +175,38 @@ class C3DReportGenerator:
 
     def generate_txt_report(self, output_path=None):
         if not output_path:
-            output_path = self.path.with_suffix('.txt')
+            output_path = self.path.with_suffix(".txt")
         # #region agent log
-        _debug_log("generate_txt_report", "entry", {"output_path": str(output_path), "header_keys": list(self.header.keys()) if isinstance(self.header, dict) else "not_dict"}, "H2")
+        _debug_log(
+            "generate_txt_report",
+            "entry",
+            {
+                "output_path": str(output_path),
+                "header_keys": list(self.header.keys())
+                if isinstance(self.header, dict)
+                else "not_dict",
+            },
+            "H2",
+        )
         # #endregion
         lines = []
-        lines.append("="*80)
-        lines.append(f"RELATÓRIO DE INSPEÇÃO C3D - vailá Multimodal Toolbox")
+        lines.append("=" * 80)
+        lines.append("RELATÓRIO DE INSPEÇÃO C3D - vailá Multimodal Toolbox")
         lines.append(f"Arquivo: {self.filename}")
         lines.append(f"Data da Inspeção: {self.creation_date}")
-        lines.append("="*80)
+        lines.append("=" * 80)
         lines.append("")
 
         # 1. Cabeçalho
         lines.append("1. CABEÇALHO (HEADER)")
         lines.append("-" * 40)
-        pts = self._get(self.header, 'points')
-        ana = self._get(self.header, 'analogs')
-        fr = self._get(pts, 'frame_rate') or 1
-        first = self._get(pts, 'first_frame') or 0
-        last = self._get(pts, 'last_frame') or 0
+        pts = self._get(self.header, "points")
+        ana = self._get(self.header, "analogs")
+        fr = self._get(pts, "frame_rate") or 1
+        first = self._get(pts, "first_frame") or 0
+        last = self._get(pts, "last_frame") or 0
         duration = (last - first + 1) / fr if fr else 0
-        version = self._get(self.header, 'version') or self._get(self.header, 'Version') or 'N/A'
+        version = self._get(self.header, "version") or self._get(self.header, "Version") or "N/A"
 
         lines.append(f"Versão C3D: {version}")
         lines.append(f"Taxa de Pontos (Video): {fr} Hz")
@@ -194,7 +231,9 @@ class C3DReportGenerator:
         lines.append("-" * 40)
         marker_stats = self._calculate_marker_health()
         for m in marker_stats:
-            lines.append(f"{m['name']:<20} | NaNs: {m['nans']:>5} ({m['pct']:.1f}%) | Max Gap: {m['max_gap_frames']} f")
+            lines.append(
+                f"{m['name']:<20} | NaNs: {m['nans']:>5} ({m['pct']:.1f}%) | Max Gap: {m['max_gap_frames']} f"
+            )
         lines.append("")
 
         # 4. Parâmetros Completos
@@ -205,25 +244,37 @@ class C3DReportGenerator:
             lines.append(f"  Descrição: {group.get('description', 'N/A')}")
 
             for param_name, param in group.items():
-                if param_name == '__METADATA__': continue
-                val_str = str(param['value'])
+                if param_name == "__METADATA__":
+                    continue
+                val_str = str(param["value"])
                 # Truncar valores muito longos no TXT
-                if len(val_str) > 100: val_str = val_str[:97] + "..."
+                if len(val_str) > 100:
+                    val_str = val_str[:97] + "..."
 
                 lines.append(f"  > {param_name}: {val_str}")
                 lines.append(f"    Desc: {param.get('description', '')}")
                 lines.append(f"    Type: {param.get('type', '')}")
 
-        with open(output_path, 'w', encoding='utf-8', errors='replace') as f:
+        with open(output_path, "w", encoding="utf-8", errors="replace") as f:
             f.write("\n".join(lines))
 
         return output_path
 
     def generate_html_report(self, output_path=None):
         if not output_path:
-            output_path = self.path.with_suffix('.html')
+            output_path = self.path.with_suffix(".html")
         # #region agent log
-        _debug_log("generate_html_report", "entry", {"output_path": str(output_path), "header_keys": list(self.header.keys()) if isinstance(self.header, dict) else "not_dict"}, "H2")
+        _debug_log(
+            "generate_html_report",
+            "entry",
+            {
+                "output_path": str(output_path),
+                "header_keys": list(self.header.keys())
+                if isinstance(self.header, dict)
+                else "not_dict",
+            },
+            "H2",
+        )
         # #endregion
         # Coletar dados pré-processados
         marker_stats = self._calculate_marker_health()
@@ -231,13 +282,13 @@ class C3DReportGenerator:
         analog_info = self._get_analog_info()
 
         # Header values (ezc3d returns Header object, not dict)
-        pts = self._get(self.header, 'points')
-        ana = self._get(self.header, 'analogs')
-        _version = self._get(self.header, 'version') or self._get(self.header, 'Version') or 'N/A'
-        _pt_fr = self._get(pts, 'frame_rate') or 0
-        _ana_fr = self._get(ana, 'frame_rate') or 0
-        _first = self._get(pts, 'first_frame') or 0
-        _last = self._get(pts, 'last_frame') or 0
+        pts = self._get(self.header, "points")
+        ana = self._get(self.header, "analogs")
+        _version = self._get(self.header, "version") or self._get(self.header, "Version") or "N/A"
+        _pt_fr = self._get(pts, "frame_rate") or 0
+        _ana_fr = self._get(ana, "frame_rate") or 0
+        _first = self._get(pts, "first_frame") or 0
+        _last = self._get(pts, "last_frame") or 0
         _duration = ((_last - _first + 1) / _pt_fr) if _pt_fr else 0
 
         # Construção do HTML
@@ -305,14 +356,14 @@ class C3DReportGenerator:
 
         # Loop Marcadores
         for m in marker_stats:
-            status_class = "warning" if m['pct'] > 5.0 else "good"
-            status_text = "ALERTA" if m['pct'] > 5.0 else "OK"
+            status_class = "warning" if m["pct"] > 5.0 else "good"
+            status_text = "ALERTA" if m["pct"] > 5.0 else "OK"
             html_content += f"""
                     <tr>
-                        <td>{m['name']}</td>
-                        <td>{m['valid']}</td>
-                        <td>{m['nans']}</td>
-                        <td>{m['pct']:.2f}%</td>
+                        <td>{m["name"]}</td>
+                        <td>{m["valid"]}</td>
+                        <td>{m["nans"]}</td>
+                        <td>{m["pct"]:.2f}%</td>
                         <td class="{status_class}">{status_text}</td>
                     </tr>
             """
@@ -348,7 +399,7 @@ class C3DReportGenerator:
         """
 
         for group_name, group in self.parameters.items():
-            desc = group.get('description', '')
+            desc = group.get("description", "")
             html_content += f"""
                 <details>
                     <summary>{group_name} <span style="font-weight:normal; font-size:0.8em">({desc})</span></summary>
@@ -358,21 +409,23 @@ class C3DReportGenerator:
             """
 
             for param_name, param in group.items():
-                if param_name == '__METADATA__': continue
+                if param_name == "__METADATA__":
+                    continue
 
-                val = param['value']
+                val = param["value"]
                 # Formatação segura para visualização
                 if isinstance(val, np.ndarray):
                     val_display = f"Array {val.shape}"
-                    if val.size < 10: val_display = str(val)
+                    if val.size < 10:
+                        val_display = str(val)
                 elif isinstance(val, list) and len(val) > 10:
                     val_display = f"List [{len(val)} items] (ver raw data)"
                 else:
                     val_display = str(val)
 
                 val_display = str(val)
-                p_desc = param.get('description', '')
-                p_type = param.get('type', '?')
+                p_desc = param.get("description", "")
+                p_type = param.get("type", "?")
 
                 html_content += f"""
                             <tr>
@@ -401,7 +454,7 @@ class C3DReportGenerator:
         </html>
         """
 
-        with open(output_path, 'w', encoding='utf-8', errors='replace') as f:
+        with open(output_path, "w", encoding="utf-8", errors="replace") as f:
             f.write(html_content)
 
         return output_path
@@ -415,11 +468,12 @@ class C3DReportGenerator:
     def _calculate_marker_health(self):
         """Analisa a qualidade do sinal dos marcadores (Pontos)."""
         stats = []
-        if 'POINT' not in self.parameters: return stats
+        if "POINT" not in self.parameters:
+            return stats
 
-        labels = self.parameters['POINT']['LABELS']['value']
+        labels = self.parameters["POINT"]["LABELS"]["value"]
         # Data shape: (3, n_markers, n_frames)
-        points_data = self.data['points']
+        points_data = self.data["points"]
 
         total_frames = points_data.shape[2]
 
@@ -433,23 +487,26 @@ class C3DReportGenerator:
             nan_count = np.sum(is_nan_frame)
             pct = (nan_count / total_frames) * 100 if total_frames > 0 else 0
 
-            stats.append({
-                'name': self._label_to_str(label),
-                'nans': int(nan_count),
-                'valid': int(total_frames - nan_count),
-                'pct': pct,
-                'max_gap_frames': self._max_consecutive_true(is_nan_frame)
-            })
+            stats.append(
+                {
+                    "name": self._label_to_str(label),
+                    "nans": int(nan_count),
+                    "valid": int(total_frames - nan_count),
+                    "pct": pct,
+                    "max_gap_frames": self._max_consecutive_true(is_nan_frame),
+                }
+            )
         return stats
 
     def _get_analog_info(self):
         """Retorna resumo dos analógicos."""
         info = []
-        if 'ANALOG' not in self.parameters: return info
+        if "ANALOG" not in self.parameters:
+            return info
 
-        labels = self.parameters['ANALOG']['LABELS']['value']
-        units = self.parameters['ANALOG'].get('UNITS', {}).get('value', [])
-        data = self.data['analogs']
+        labels = self.parameters["ANALOG"]["LABELS"]["value"]
+        units = self.parameters["ANALOG"].get("UNITS", {}).get("value", [])
+        data = self.data["analogs"]
 
         if len(units) < len(labels):
             units = list(units) + [""] * (len(labels) - len(units))
@@ -457,43 +514,53 @@ class C3DReportGenerator:
         for i, label in enumerate(labels):
             channel_data = data[0, i, :]
             u = units[i] if i < len(units) else ""
-            unit_str = u if isinstance(u, str) else (str(u[0]) if isinstance(u, (list, np.ndarray)) and len(u) else str(u))
-            info.append({
-                'name': self._label_to_str(label),
-                'unit': unit_str,
-                'min': np.nanmin(channel_data) if channel_data.size > 0 else 0,
-                'max': np.nanmax(channel_data) if channel_data.size > 0 else 0
-            })
+            unit_str = (
+                u
+                if isinstance(u, str)
+                else (str(u[0]) if isinstance(u, (list, np.ndarray)) and len(u) else str(u))
+            )
+            info.append(
+                {
+                    "name": self._label_to_str(label),
+                    "unit": unit_str,
+                    "min": np.nanmin(channel_data) if channel_data.size > 0 else 0,
+                    "max": np.nanmax(channel_data) if channel_data.size > 0 else 0,
+                }
+            )
         return info
 
     def _get_events_list(self):
         """Normaliza a extração de eventos."""
         events_list = []
-        if 'EVENT' not in self.parameters: return events_list
+        if "EVENT" not in self.parameters:
+            return events_list
 
-        ev = self.parameters['EVENT']
-        times = ev.get('TIMES', {}).get('value', [])
-        labels = ev.get('LABELS', {}).get('value', [])
-        contexts = ev.get('CONTEXTS', {}).get('value', [])
+        ev = self.parameters["EVENT"]
+        times = ev.get("TIMES", {}).get("value", [])
+        labels = ev.get("LABELS", {}).get("value", [])
+        contexts = ev.get("CONTEXTS", {}).get("value", [])
 
         # ezc3d às vezes retorna shape (2, N) para tempos, a linha 1 são os tempos reais
         if isinstance(times, np.ndarray) and len(times.shape) > 1:
             times = times[1, :]
 
         # Normalizar para lista se for escalar ou array
-        if not hasattr(times, '__iter__'): times = [times]
-        if not hasattr(labels, '__iter__'): labels = [labels]
-        if not hasattr(contexts, '__iter__'): contexts = [contexts]
+        if not hasattr(times, "__iter__"):
+            times = [times]
+        if not hasattr(labels, "__iter__"):
+            labels = [labels]
+        if not hasattr(contexts, "__iter__"):
+            contexts = [contexts]
 
         count = len(times)
         for i in range(count):
             t = times[i] if i < len(times) else 0.0
             l = labels[i] if i < len(labels) else ""
             c = contexts[i] if i < len(contexts) else ""
-            events_list.append({'time': t, 'label': l, 'context': c})
+            events_list.append({"time": t, "label": l, "context": c})
 
         # Ordenar por tempo
-        events_list.sort(key=lambda x: x['time'])
+        events_list.sort(key=lambda x: x["time"])
         return events_list
 
     def _max_consecutive_true(self, condition):
@@ -503,8 +570,10 @@ class C3DReportGenerator:
         diff = np.diff(padded.astype(int))
         starts = np.flatnonzero(diff == 1)
         ends = np.flatnonzero(diff == -1)
-        if len(starts) == 0: return 0
+        if len(starts) == 0:
+            return 0
         return np.max(ends - starts)
+
 
 # === C3D INSPECTION TOOL (DIDACTIC VERSION) ===
 class DidacticC3DInspector:
@@ -512,20 +581,20 @@ class DidacticC3DInspector:
         self.root = root
         self.file_path = file_path
         self.filename = Path(file_path).name
-        
+
         self.root.title(f"vailá C3D Inspector - {self.filename}")
         self.root.geometry("1000x700")
-        
+
         # Console Log
         print(f"Opening C3D Inspector for: {self.filename}")
         print(f"Path: {file_path}")
-        
+
         # Load C3D data
         try:
             self.c3d_data = ezc3d.c3d(file_path)
-            self.header = self.c3d_data['header']
-            self.params = self.c3d_data['parameters']
-            self.data = self.c3d_data['data']
+            self.header = self.c3d_data["header"]
+            self.params = self.c3d_data["parameters"]
+            self.data = self.c3d_data["data"]
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load C3D file:\n{str(e)}")
             self.root.destroy()
@@ -538,11 +607,11 @@ class DidacticC3DInspector:
         style = ttk.Style()
         style.configure("Bold.TLabel", font=("Arial", 10, "bold"))
         style.configure("Title.TLabel", font=("Arial", 12, "bold"), foreground="#2c3e50")
-        
+
         # Notebook for Tabs
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        
+
         # --- TAB 1: OVERVIEW ---
         self.tab_overview = ttk.Frame(self.notebook)
         self.notebook.add(self.tab_overview, text="Overview")
@@ -561,13 +630,21 @@ class DidacticC3DInspector:
         # Bottom Bar
         btn_frame = ttk.Frame(self.root)
         btn_frame.pack(fill=tk.X, padx=10, pady=10)
-        
+
         ttk.Button(btn_frame, text="Close", command=self.root.destroy).pack(side=tk.RIGHT, padx=5)
-        ttk.Button(btn_frame, text="Save HTML Report", command=self.save_html_report).pack(side=tk.RIGHT, padx=5)
-        ttk.Button(btn_frame, text="Save TXT Report", command=self.save_txt_report).pack(side=tk.RIGHT, padx=5)
-        
+        ttk.Button(btn_frame, text="Save HTML Report", command=self.save_html_report).pack(
+            side=tk.RIGHT, padx=5
+        )
+        ttk.Button(btn_frame, text="Save TXT Report", command=self.save_txt_report).pack(
+            side=tk.RIGHT, padx=5
+        )
+
         # Status
-        lbl_status = ttk.Label(btn_frame, text="Didactic Inspector: Explore the tabs to understand the file structure.", font=("Arial", 9, "italic"))
+        lbl_status = ttk.Label(
+            btn_frame,
+            text="Didactic Inspector: Explore the tabs to understand the file structure.",
+            font=("Arial", 9, "italic"),
+        )
         lbl_status.pack(side=tk.LEFT)
 
     def save_txt_report(self):
@@ -576,19 +653,25 @@ class DidacticC3DInspector:
             defaultextension=".txt",
             filetypes=[("Text Files", "*.txt")],
             initialfile=f"inspection_{self.filename}.txt",
-            title="Save Advanced Inspection Report"
+            title="Save Advanced Inspection Report",
         )
-        if not report_path: return
+        if not report_path:
+            return
 
         try:
             # Chama o gerador novo
             generator = C3DReportGenerator(self.file_path)
-            generator.generate_txt_report(report_path) # Passa o caminho escolhido
+            generator.generate_txt_report(report_path)  # Passa o caminho escolhido
             messagebox.showinfo("Success", f"Advanced report saved to:\n{report_path}")
             print(f"Advanced TXT Report saved: {report_path}")
         except Exception as e:
             # #region agent log
-            _debug_log("save_txt_report", "exception", {"type": type(e).__name__, "args": getattr(e, "args", ())}, "H4")
+            _debug_log(
+                "save_txt_report",
+                "exception",
+                {"type": type(e).__name__, "args": getattr(e, "args", ())},
+                "H4",
+            )
             # #endregion
             messagebox.showerror("Error", f"Failed: {e}")
 
@@ -598,9 +681,10 @@ class DidacticC3DInspector:
             defaultextension=".html",
             filetypes=[("HTML Files", "*.html")],
             initialfile=f"inspection_{self.filename}.html",
-            title="Save Advanced HTML Report"
+            title="Save Advanced HTML Report",
         )
-        if not report_path: return
+        if not report_path:
+            return
 
         try:
             generator = C3DReportGenerator(self.file_path)
@@ -609,29 +693,38 @@ class DidacticC3DInspector:
             print(f"Advanced HTML Report saved: {report_path}")
         except Exception as e:
             # #region agent log
-            _debug_log("save_html_report", "exception", {"type": type(e).__name__, "args": getattr(e, "args", ())}, "H4")
+            _debug_log(
+                "save_html_report",
+                "exception",
+                {"type": type(e).__name__, "args": getattr(e, "args", ())},
+                "H4",
+            )
             # #endregion
             messagebox.showerror("Error", f"Failed: {e}")
 
     def _build_overview_tab(self):
         frame = ttk.Frame(self.tab_overview)
         frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
-        
+
         # File Info
-        ttk.Label(frame, text="File Information", style="Title.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 10))
-        
+        ttk.Label(frame, text="File Information", style="Title.TLabel").grid(
+            row=0, column=0, sticky="w", pady=(0, 10)
+        )
+
         info_grid = ttk.Frame(frame)
         info_grid.grid(row=1, column=0, sticky="ew")
-        
+
         self._add_info_row(info_grid, 0, "Filename:", self.filename)
         self._add_info_row(info_grid, 1, "Path:", self.file_path)
-        
+
         # Structure Info
-        ttk.Label(frame, text="Acquisition Settings", style="Title.TLabel").grid(row=2, column=0, sticky="w", pady=(20, 10))
-        
-        points = self.header['points']
-        analogs = self.header['analogs']
-        
+        ttk.Label(frame, text="Acquisition Settings", style="Title.TLabel").grid(
+            row=2, column=0, sticky="w", pady=(20, 10)
+        )
+
+        points = self.header["points"]
+        analogs = self.header["analogs"]
+
         settings_grid = ttk.Frame(frame)
         settings_grid.grid(row=3, column=0, sticky="ew")
 
@@ -639,29 +732,37 @@ class DidacticC3DInspector:
         self._add_info_row(settings_grid, 1, "Analog Frame Rate:", f"{analogs['frame_rate']} Hz")
         self._add_info_row(settings_grid, 2, "First Frame:", f"{points['first_frame']}")
         self._add_info_row(settings_grid, 3, "Last Frame:", f"{points['last_frame']}")
-        duration = (points['last_frame'] - points['first_frame'] + 1) / points['frame_rate']
+        duration = (points["last_frame"] - points["first_frame"] + 1) / points["frame_rate"]
         self._add_info_row(settings_grid, 4, "Duration:", f"{duration:.2f} seconds")
-        
+
         # Health Check
-        ttk.Label(frame, text="Data Health Check", style="Title.TLabel").grid(row=4, column=0, sticky="w", pady=(20, 10))
-        
+        ttk.Label(frame, text="Data Health Check", style="Title.TLabel").grid(
+            row=4, column=0, sticky="w", pady=(20, 10)
+        )
+
         health_grid = ttk.Frame(frame)
         health_grid.grid(row=5, column=0, sticky="ew")
-        
+
         # Check NaNs
-        pts = self.data['points']
+        pts = self.data["points"]
         nan_pts = np.isnan(pts).sum()
         total_pts = pts.size
         pct_pts = nan_pts / total_pts * 100 if total_pts > 0 else 0
-        
-        self._add_health_row(health_grid, 0, "Markers (Points)", f"{nan_pts} NaNs ({pct_pts:.2f}%)", pct_pts > 5)
+
+        self._add_health_row(
+            health_grid, 0, "Markers (Points)", f"{nan_pts} NaNs ({pct_pts:.2f}%)", pct_pts > 5
+        )
 
     def _add_info_row(self, parent, row, label, value):
-        ttk.Label(parent, text=label, style="Bold.TLabel").grid(row=row, column=0, sticky="w", padx=5, pady=2)
+        ttk.Label(parent, text=label, style="Bold.TLabel").grid(
+            row=row, column=0, sticky="w", padx=5, pady=2
+        )
         ttk.Label(parent, text=str(value)).grid(row=row, column=1, sticky="w", padx=5, pady=2)
 
     def _add_health_row(self, parent, row, label, status_text, is_warning):
-        ttk.Label(parent, text=label, style="Bold.TLabel").grid(row=row, column=0, sticky="w", padx=5, pady=2)
+        ttk.Label(parent, text=label, style="Bold.TLabel").grid(
+            row=row, column=0, sticky="w", padx=5, pady=2
+        )
         color = "red" if is_warning else "green"
         lbl = tk.Label(parent, text=status_text, fg=color)
         lbl.grid(row=row, column=1, sticky="w", padx=5, pady=2)
@@ -669,9 +770,12 @@ class DidacticC3DInspector:
     def _build_parameters_tab(self):
         container = ttk.Frame(self.tab_params)
         container.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        
+
         # Description
-        ttk.Label(container, text="Double-click groups (e.g., POINT) to expand. Select parameters to view details.").pack(side=tk.TOP, fill=tk.X, pady=(0, 5))
+        ttk.Label(
+            container,
+            text="Double-click groups (e.g., POINT) to expand. Select parameters to view details.",
+        ).pack(side=tk.TOP, fill=tk.X, pady=(0, 5))
 
         # Treeview
         columns = ("desc", "value")
@@ -682,14 +786,14 @@ class DidacticC3DInspector:
         self.tree.column("#0", width=200)
         self.tree.column("desc", width=300)
         self.tree.column("value", width=400)
-        
+
         # Scrollbar
         sb = ttk.Scrollbar(container, orient=tk.VERTICAL, command=self.tree.yview)
         self.tree.configure(yscrollcommand=sb.set)
-        
+
         self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         sb.pack(side=tk.RIGHT, fill=tk.Y)
-        
+
         # Populate Tree
         self._populate_tree()
 
@@ -700,49 +804,59 @@ class DidacticC3DInspector:
             "ANALOG": "Contains data from analog devices (Force Plates, EMGs).",
             "EVENT": "Time events marked in the trial (e.g., Heel Strike).",
             "TRIAL": "General trial information.",
-            "SUBJECT": "Information about the subject (Name, Height, etc.)."
+            "SUBJECT": "Information about the subject (Name, Height, etc.).",
         }
-        
+
         for group_name in self.params:
             group = self.params[group_name]
-            node_id = self.tree.insert("", tk.END, text=group_name, values=(descriptions.get(group_name, "User defined group"), ""))
-            
+            node_id = self.tree.insert(
+                "",
+                tk.END,
+                text=group_name,
+                values=(descriptions.get(group_name, "User defined group"), ""),
+            )
+
             # Insert parameters inside group
             for param_name in group:
-                if param_name == "__METADATA__": continue
+                if param_name == "__METADATA__":
+                    continue
                 param = group[param_name]
                 desc = param.get("description", "")
                 val = param.get("value", [])
-                
+
                 # Format value for display
                 display_val = str(val)
                 if isinstance(val, list) and len(val) > 5:
                     display_val = f"{val[:5]}... ({len(val)} items)"
                 elif isinstance(val, np.ndarray):
                     display_val = f"Array shape {val.shape}"
-                
+
                 self.tree.insert(node_id, tk.END, text=param_name, values=(desc, display_val))
 
     def _build_data_tab(self):
         frame = ttk.Frame(self.tab_data)
         frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
-        
+
         # Events Section
-        ttk.Label(frame, text="Timeline Events", style="Title.TLabel").pack(anchor="w", pady=(0, 10))
-        
-        event_tree = ttk.Treeview(frame, columns=("time", "label", "context"), show="headings", height=8)
+        ttk.Label(frame, text="Timeline Events", style="Title.TLabel").pack(
+            anchor="w", pady=(0, 10)
+        )
+
+        event_tree = ttk.Treeview(
+            frame, columns=("time", "label", "context"), show="headings", height=8
+        )
         event_tree.heading("time", text="Time (s)")
         event_tree.heading("label", text="Label")
         event_tree.heading("context", text="Context")
         event_tree.pack(fill=tk.X)
-        
+
         # Populate events
-        if 'EVENT' in self.params:
-            ev_group = self.params['EVENT']
-            times = ev_group.get('TIMES', {}).get('value', [])
-            labels = ev_group.get('LABELS', {}).get('value', [])
-            contexts = ev_group.get('CONTEXTS', {}).get('value', [])
-            
+        if "EVENT" in self.params:
+            ev_group = self.params["EVENT"]
+            times = ev_group.get("TIMES", {}).get("value", [])
+            labels = ev_group.get("LABELS", {}).get("value", [])
+            contexts = ev_group.get("CONTEXTS", {}).get("value", [])
+
             if len(times) > 0 and len(times.shape) > 1:
                 real_times = times[1, :]
                 for i in range(len(real_times)):
@@ -750,33 +864,36 @@ class DidacticC3DInspector:
                     l = labels[i] if i < len(labels) else ""
                     c = contexts[i] if i < len(contexts) else ""
                     event_tree.insert("", tk.END, values=(f"{t:.3f}", l, c))
-            elif len(times) > 0: # single dim
-                 for i in range(len(times)):
+            elif len(times) > 0:  # single dim
+                for i in range(len(times)):
                     t = times[i]
                     l = labels[i] if i < len(labels) else ""
                     c = contexts[i] if i < len(contexts) else ""
                     event_tree.insert("", tk.END, values=(f"{t:.3f}", l, c))
-        
+
         # Labels Lists
         ttk.Label(frame, text="Markers List", style="Title.TLabel").pack(anchor="w", pady=(20, 10))
-        
+
         txt_markers = scrolledtext.ScrolledText(frame, height=5)
         txt_markers.pack(fill=tk.X)
-        
-        if 'POINT' in self.params:
-            lbls = self.params['POINT'].get('LABELS', {}).get('value', [])
+
+        if "POINT" in self.params:
+            lbls = self.params["POINT"].get("LABELS", {}).get("value", [])
             if lbls:
-                if isinstance(lbls[0], list): lbls = lbls[0]
+                if isinstance(lbls[0], list):
+                    lbls = lbls[0]
                 txt_markers.insert(tk.END, ", ".join(lbls))
-        
-        txt_markers.configure(state='disabled')
+
+        txt_markers.configure(state="disabled")
+
 
 inspect_window_ref = None
+
 
 def inspect_c3d_gui(parent_root=None):
     """Launcher for the Didactic Inspector."""
     global inspect_window_ref
-    
+
     if parent_root is None:
         root = tk.Tk()
         root.withdraw()
@@ -784,8 +901,7 @@ def inspect_c3d_gui(parent_root=None):
         root = parent_root
 
     file_path = filedialog.askopenfilename(
-        title="Select C3D File to Inspect",
-        filetypes=[("C3D Files", "*.c3d")]
+        title="Select C3D File to Inspect", filetypes=[("C3D Files", "*.c3d")]
     )
 
     if not file_path:
@@ -795,15 +911,14 @@ def inspect_c3d_gui(parent_root=None):
     win = tk.Toplevel(root)
     # Store ref to prevent garbage collection issues if any
     inspect_window_ref = DidacticC3DInspector(win, file_path)
-    
+
     if parent_root is None:
         root.mainloop()
+
 
 # Removed legacy text-based generator
 
 # =================================
-
-
 
 
 def get_time_precision(freq):
@@ -1938,32 +2053,33 @@ if __name__ == "__main__":
     print("Starting C3D Export & Inspection Tool...")
     print(f"Running: {pathlib.Path(__file__).name}")
     print(f"Directory: {pathlib.Path(__file__).parent.resolve()}")
+
     # Create Main Menu GUI
     def open_menu():
         root = Tk()
         root.title("C3D Export & Inspection Tool")
         root.geometry("500x400")
-        
+
         # Center window
         screen_width = root.winfo_screenwidth()
         screen_height = root.winfo_screenheight()
-        x_c = int((screen_width/2) - (500/2))
-        y_c = int((screen_height/2) - (400/2))
+        x_c = int((screen_width / 2) - (500 / 2))
+        y_c = int((screen_height / 2) - (400 / 2))
         root.geometry(f"500x400+{x_c}+{y_c}")
-        
+
         # Title
         label = tk.Label(root, text="Select Mode", font=("Arial", 16, "bold"))
         label.pack(pady=20)
-        
+
         # Buttons
         def run_batch():
             root.destroy()
             batch_convert_c3d_to_csv()
-            
+
         def run_single():
             root.destroy()
             convert_c3d_to_csv()
-            
+
         def run_inspect():
             print("Starting C3D Inspection Tool...")
             print(f"Running: {pathlib.Path(__file__).name}")
@@ -1973,13 +2089,26 @@ if __name__ == "__main__":
             inspect_c3d_gui()
 
         btn_font = ("Arial", 12)
-        
-        tk.Button(root, text="Batch Convert (Directory)", command=run_batch, font=btn_font, width=25).pack(pady=10)
-        tk.Button(root, text="Single Convert (File)", command=run_single, font=btn_font, width=25).pack(pady=10)
-        tk.Button(root, text="Inspect C3D File", command=run_inspect, font=btn_font, width=25, bg="#e1f5fe").pack(pady=10)
-        
-        tk.Button(root, text="Exit", command=root.destroy, font=btn_font, width=10, fg="red").pack(pady=20)
-        
+
+        tk.Button(
+            root, text="Batch Convert (Directory)", command=run_batch, font=btn_font, width=25
+        ).pack(pady=10)
+        tk.Button(
+            root, text="Single Convert (File)", command=run_single, font=btn_font, width=25
+        ).pack(pady=10)
+        tk.Button(
+            root,
+            text="Inspect C3D File",
+            command=run_inspect,
+            font=btn_font,
+            width=25,
+            bg="#e1f5fe",
+        ).pack(pady=10)
+
+        tk.Button(root, text="Exit", command=root.destroy, font=btn_font, width=10, fg="red").pack(
+            pady=20
+        )
+
         root.mainloop()
 
     open_menu()
