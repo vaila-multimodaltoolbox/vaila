@@ -489,7 +489,12 @@ def create_improvement_scatter(run_stats, output_dir):
     stats_text += f"Declined: {n_declined} ({n_declined / len(complete_df) * 100:.1f}%)\n"
     stats_text += f"Avg Change: {avg_improvement:+.2f} km/h"
 
-    props = {"boxstyle": "round,pad=0.5", "facecolor": "white", "alpha": 0.9, "edgecolor": "#bdc3c7"}
+    props = {
+        "boxstyle": "round,pad=0.5",
+        "facecolor": "white",
+        "alpha": 0.9,
+        "edgecolor": "#bdc3c7",
+    }
     ax.text(
         0.02,
         0.98,

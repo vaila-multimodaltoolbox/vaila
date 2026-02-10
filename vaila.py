@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 5 February 2026
-Version: 0.3.19
+Update Date: 10 February 2026
+Version: 0.3.20
 
 Example of usage:
 uv run vaila.py (recommended)
@@ -130,10 +130,12 @@ def run_vaila_module(module_name, script_path=None):
             except Exception as e2:
                 print(f"Fallback also failed: {e2}")
                 import traceback
+
                 traceback.print_exc()
                 messagebox.showerror("Error", f"Could not launch {module_name}:\n{e}\n\n{e2}")
         else:
             import traceback
+
             traceback.print_exc()
             messagebox.showerror("Error", f"Could not launch {module_name}: {e}")
 
@@ -153,7 +155,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 5.February.2026 v0.3.19 (Python 3.12.12)
+vailá - 10.February.2026 v0.3.20 (Python 3.12.12)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -259,7 +261,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__()
-        self.title("vailá - 5.February.2026 v0.3.19 (Python 3.12.12)")
+        self.title("vailá - 10.February.2026 v0.3.20 (Python 3.12.12)")
 
         # Set WM_CLASS for Linux (needed for proper icon in taskbar/dock)
         if platform.system() == "Linux":
@@ -267,7 +269,7 @@ class Vaila(tk.Tk):
             # Use tk.call instead of wm_class method which may not exist in all Tkinter versions
             # Silently ignore if WM_CLASS setting fails (not critical for functionality)
             with contextlib.suppress(AttributeError, Exception):
-                self.tk.call('wm', 'class', self._w, 'vaila', 'vaila')
+                self.tk.call("wm", "class", self._w, "vaila", "vaila")
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()
@@ -2063,14 +2065,10 @@ class Vaila(tk.Tk):
         def launch_inspect():
             window.destroy()
             from vaila.readc3d_export import inspect_c3d_gui
+
             inspect_c3d_gui(self)
 
-        button_inspect = Button(
-            window,
-            text="Inspect C3D",
-            command=launch_inspect,
-            bg="#e1f5fe"
-        )
+        button_inspect = Button(window, text="Inspect C3D", command=launch_inspect, bg="#e1f5fe")
         button_inspect.pack(side="bottom", padx=20, pady=20)
 
     # C_A_r1_c3
@@ -2553,16 +2551,31 @@ class Vaila(tk.Tk):
 
     # C_C_r1_c1
     def show_c3d_data(self):
-        """Runs the C3D file viewer module.
+        """Runs a C3D file viewer. Offers a choice between Open3D and PyVista viewers.
 
-        This function runs the C3D file viewer module, which can be used to
-        view C3D files. The module will prompt the user to select the C3D file
-        to view.
-
+        Opens a dialog to select which viewer to use; both will prompt the user
+        to select the C3D file to view.
         """
-        from vaila.viewc3d import run_viewc3d
+        dialog = Toplevel(self)
+        dialog.title("Choose C3D viewer")
+        dialog.geometry("320x140")
 
-        run_viewc3d()
+        tk.Label(dialog, text="Select which viewer to use:", pady=10).pack()
+
+        def open_open3d():
+            dialog.destroy()
+            from vaila.viewc3d import run_viewc3d
+
+            run_viewc3d()
+
+        def open_pyvista():
+            dialog.destroy()
+            from vaila.viewc3d_pyvista import MokkaLikeViewer
+
+            MokkaLikeViewer()
+
+        tk.Button(dialog, text="Open3D viewer", command=open_open3d).pack(pady=5)
+        tk.Button(dialog, text="PyVista viewer", command=open_pyvista).pack(pady=5)
 
     # C_C_r1_c2
     def show_csv_file(self):

@@ -1,0 +1,61 @@
+#ifndef _TDDConfigure_h
+#define _TDDConfigure_h
+
+#include <btkConfigure.h>
+
+#define TDD_FilePathIN "${BTK_TESTING_DATA_PATH}/Input/"
+#define TDD_FilePathOUT "${BTK_BINARY_DIR}/Testing/Data/Output/"
+
+#ifndef CXXTEST_RUNNING
+    #define CXXTEST_RUNNING
+#endif
+
+#define _CXXTEST_HAVE_STD
+#define _CXXTEST_HAVE_EH
+
+#include <cxxtest/TestGenerator.h>
+
+#include <cxxtest/TestListener.h>
+#include <cxxtest/TestTracker.h>
+#include <cxxtest/TestRunner.h>
+#include <cxxtest/RealDescriptions.h>
+#include <cxxtest/ErrorPrinter.h>
+
+#define AMTIForcePlatformFilePathIN std::string(TDD_FilePathIN) + "AMTIForcePlatformSamples/"
+#define AMTIForcePlatformFilePathOUT std::string(TDD_FilePathOUT) + "AMTIForcePlatformSamples/"
+#define ANBFilePathIN std::string(TDD_FilePathIN) + "ANBSamples/"
+#define ANBFilePathOUT std::string(TDD_FilePathOUT) + "ANBSamples/"
+#define ANCFilePathIN std::string(TDD_FilePathIN) + "ANCSamples/"
+#define ANCFilePathOUT std::string(TDD_FilePathOUT) + "ANCSamples/"
+#define C3DFilePathIN std::string(TDD_FilePathIN) + "C3DSamples/"
+#define C3DFilePathOUT std::string(TDD_FilePathOUT) + "C3DSamples/"
+#define CALForcePlateFilePathIN std::string(TDD_FilePathIN) + "CALForcePlateSamples/"
+#define CALForcePlateFilePathOUT std::string(TDD_FilePathOUT) + "CALForcePlateSamples/"
+#define TRBFilePathIN std::string(TDD_FilePathIN) + "TRBSamples/"
+#define TRBFilePathOUT std::string(TDD_FilePathOUT) + "TRBSamples/"
+#define TRCFilePathIN std::string(TDD_FilePathIN) + "TRCSamples/"
+#define TRCFilePathOUT std::string(TDD_FilePathOUT) + "TRCSamples/"
+#define XLSOrthoTrakFilePathIN std::string(TDD_FilePathIN) + "XLSOrthoTrakSamples/"
+#define XLSOrthoTrakFilePathOUT std::string(TDD_FilePathOUT) + "XLSOrthoTrakSamples/"
+#define EliteFilePathIN std::string(TDD_FilePathIN) + "EliteSamples/"
+#define EliteFilePathOUT std::string(TDD_FilePathOUT) + "EliteSamples/"
+#define EMFFilePathIN std::string(TDD_FilePathIN) + "EMFSamples/"
+#define EMFFilePathOUT std::string(TDD_FilePathOUT) + "EMFSamples/"
+#define TDFFilePathIN std::string(TDD_FilePathIN) + "TDFSamples/"
+#define TDFFilePathOUT std::string(TDD_FilePathOUT) + "TDFSamples/"
+#define STLFilePathIN std::string(TDD_FilePathIN) + "STLSamples/"
+#define STLFilePathOUT std::string(TDD_FilePathOUT) + "STLSamples/"
+#define DelsysEMGFilePathIN std::string(TDD_FilePathIN) + "DelsysEMGSamples/"
+#define DelsysEMGFilePathOUT std::string(TDD_FilePathOUT) + "DelsysEMGSamples/"
+#define CLBFilePathIN std::string(TDD_FilePathIN) + "CLBSamples/"
+#define CLBFilePathOUT std::string(TDD_FilePathOUT) + "CLBSamples/"
+#define MDFFilePathIN std::string(TDD_FilePathIN) + "MDFSamples/"
+#define MDFFilePathOUT std::string(TDD_FilePathOUT) + "MDFSamples/"
+#define XMOVEFilePathIN std::string(TDD_FilePathIN) + "XMOVESamples/"
+#define XMOVEFilePathOUT std::string(TDD_FilePathOUT) + "XMOVESamples/"
+#define BSFFilePathIN std::string(TDD_FilePathIN) + "BSFSamples/"
+#define BSFFilePathOUT std::string(TDD_FilePathOUT) + "BSFSamples/"
+#define KistlerDATFilePathIN std::string(TDD_FilePathIN) + "KistlerDATSamples/"
+#define KistlerDATFilePathOUT std::string(TDD_FilePathOUT) + "KistlerDATSamples/"
+
+#endif // _TDDConfigure_h

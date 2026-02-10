@@ -98,7 +98,7 @@ class MplCanvas(FigureCanvas):
         self.fig = Figure(figsize=(width, height), dpi=dpi)
         self.ax_x = self.fig.add_subplot(211)  # X coordinates plot
         self.ax_y = self.fig.add_subplot(212)  # Y coordinates plot
-        super(MplCanvas, self).__init__(self.fig)
+        super().__init__(self.fig)
         self.fig.tight_layout()
 
 

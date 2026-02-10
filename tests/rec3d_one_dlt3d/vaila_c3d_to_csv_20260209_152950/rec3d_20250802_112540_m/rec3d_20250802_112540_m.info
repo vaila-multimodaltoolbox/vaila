@@ -1,0 +1,285 @@
+File: rec3d_20250802_112540_m
+--- Parameters in C3D File ---
+
+Group: POINT
+  Parameter: __METADATA__
+    Description: No description
+    Value: No value
+    Type: No type
+    Dimension: No dimension
+
+  Parameter: USED
+    Description: 
+    Value: [34]
+    Type: 2
+    Dimension: No dimension
+
+  Parameter: LABELS
+    Description: 
+    Value: ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10', 'p11', 'p12', 'p13', 'p14', 'p15', 'p16', 'p17', 'p18', 'p19', 'p20', 'p21', 'p22', 'p23', 'p24', 'p25', 'p26', 'p27', 'p28', 'p29', 'p30', 'p31', 'p32', 'p33', 'COM']
+    Type: -1
+    Dimension: No dimension
+
+  Parameter: DESCRIPTIONS
+    Description: 
+    Value: ['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', 'Average between the markers p25, p24, p12 and p13']
+    Type: -1
+    Dimension: No dimension
+
+  Parameter: SCALE
+    Description: 
+    Value: [-5.53409918e-05]
+    Type: 4
+    Dimension: No dimension
+
+  Parameter: UNITS
+    Description: 
+    Value: ['m']
+    Type: -1
+    Dimension: No dimension
+
+  Parameter: RATE
+    Description: 
+    Value: [240.]
+    Type: 4
+    Dimension: No dimension
+
+  Parameter: FRAMES
+    Description: 
+    Value: [3996]
+    Type: 2
+    Dimension: No dimension
+
+  Parameter: X_SCREEN
+    Description: 
+    Value: ['+X']
+    Type: -1
+    Dimension: No dimension
+
+  Parameter: Y_SCREEN
+    Description: 
+    Value: ['+Z']
+    Type: -1
+    Dimension: No dimension
+
+  Parameter: MOVIE_DELAY
+    Description: 
+    Value: []
+    Type: 4
+    Dimension: No dimension
+
+  Parameter: MOVIE_ID
+    Description: 
+    Value: []
+    Type: -1
+    Dimension: No dimension
+
+  Parameter: DATA_START
+    Description: 
+    Value: [7]
+    Type: 2
+    Dimension: No dimension
+
+Group: ANALOG
+  Parameter: __METADATA__
+    Description: No description
+    Value: No value
+    Type: No type
+    Dimension: No dimension
+
+  Parameter: USED
+    Description: 
+    Value: [0]
+    Type: 2
+    Dimension: No dimension
+
+  Parameter: LABELS
+    Description: 
+    Value: []
+    Type: -1
+    Dimension: No dimension
+
+  Parameter: DESCRIPTIONS
+    Description: 
+    Value: []
+    Type: -1
+    Dimension: No dimension
+
+  Parameter: GEN_SCALE
+    Description: 
+    Value: [1.]
+    Type: 4
+    Dimension: No dimension
+
+  Parameter: SCALE
+    Description: 
+    Value: []
+    Type: 4
+    Dimension: No dimension
+
+  Parameter: OFFSET
+    Description: 
+    Value: []
+    Type: 2
+    Dimension: No dimension
+
+  Parameter: UNITS
+    Description: 
+    Value: []
+    Type: -1
+    Dimension: No dimension
+
+  Parameter: RATE
+    Description: 
+    Value: [240.]
+    Type: 4
+    Dimension: No dimension
+
+  Parameter: FORMAT
+    Description: 
+    Value: ['SIGNED']
+    Type: -1
+    Dimension: No dimension
+
+  Parameter: BITS
+    Description: 
+    Value: [12]
+    Type: 2
+    Dimension: No dimension
+
+  Parameter: GAIN
+    Description: 
+    Value: []
+    Type: 2
+    Dimension: No dimension
+
+Group: FORCE_PLATFORM
+  Parameter: __METADATA__
+    Description: No description
+    Value: No value
+    Type: No type
+    Dimension: No dimension
+
+  Parameter: USED
+    Description: 
+    Value: [0]
+    Type: 2
+    Dimension: No dimension
+
+  Parameter: TYPE
+    Description: 
+    Value: []
+    Type: 2
+    Dimension: No dimension
+
+  Parameter: ZERO
+    Description: 
+    Value: [1 0]
+    Type: 2
+    Dimension: No dimension
+
+  Parameter: CORNERS
+    Description: 
+    Value: []
+    Type: 4
+    Dimension: No dimension
+
+  Parameter: ORIGIN
+    Description: 
+    Value: []
+    Type: 4
+    Dimension: No dimension
+
+  Parameter: CHANNEL
+    Description: 
+    Value: []
+    Type: 2
+    Dimension: No dimension
+
+  Parameter: CAL_MATRIX
+    Description: 
+    Value: []
+    Type: 4
+    Dimension: No dimension
+
+Group: ROTATION
+  Parameter: __METADATA__
+    Description: No description
+    Value: No value
+    Type: No type
+    Dimension: No dimension
+
+  Parameter: USED
+    Description: 
+    Value: [0]
+    Type: 2
+    Dimension: No dimension
+
+  Parameter: DATA_START
+    Description: 
+    Value: [4125]
+    Type: 2
+    Dimension: No dimension
+
+  Parameter: RATE
+    Description: 
+    Value: [240.]
+    Type: 4
+    Dimension: No dimension
+
+  Parameter: LABELS
+    Description: 
+    Value: []
+    Type: -1
+    Dimension: No dimension
+
+  Parameter: DESCRIPTIONS
+    Description: 
+    Value: []
+    Type: -1
+    Dimension: No dimension
+
+  Parameter: RATIO
+    Description: 
+    Value: [0]
+    Type: 2
+    Dimension: No dimension
+
+Group: EZC3D
+  Parameter: __METADATA__
+    Description: No description
+    Value: No value
+    Type: No type
+    Dimension: No dimension
+
+  Parameter: VERSION
+    Description: 
+    Value: ['1.5.19']
+    Type: -1
+    Dimension: No dimension
+
+  Parameter: CONTACT
+    Description: 
+    Value: ['pariterre@hotmail.com']
+    Type: -1
+    Dimension: No dimension
+
+Group: TRIAL
+  Parameter: __METADATA__
+    Description: No description
+    Value: No value
+    Type: No type
+    Dimension: No dimension
+
+  Parameter: ACTUAL_START_FIELD
+    Description: 
+    Value: [1 0]
+    Type: 2
+    Dimension: No dimension
+
+  Parameter: ACTUAL_END_FIELD
+    Description: 
+    Value: [3996    0]
+    Type: 2
+    Dimension: No dimension
+

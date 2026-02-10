@@ -43,19 +43,15 @@ This script is distributed under the AGPL3 License
 
 import fnmatch
 import os
-from pathlib import Path
 import platform  # Add this import at the top with other imports
 import re
 import shutil
 import subprocess
-import sys
 import threading
 import time
 import tkinter as tk
 import unicodedata
 from tkinter import filedialog, messagebox, simpledialog
-
-
 
 
 def ask_directory(title="Select Directory", initialdir=None, parent=None):
@@ -71,23 +67,23 @@ def ask_directory(title="Select Directory", initialdir=None, parent=None):
             cmd = ["zenity", "--file-selection", "--directory", f"--title={title}"]
             if initialdir and os.path.exists(initialdir):
                 cmd.append(f"--filename={initialdir}")
-            
+
             # zenity returns the path with a newline at the end
-            result = subprocess.check_output(cmd, stderr=subprocess.DEVNULL).decode('utf-8').strip()
+            result = subprocess.check_output(cmd, stderr=subprocess.DEVNULL).decode("utf-8").strip()
             return result
         except subprocess.CalledProcessError:
             # User cancelled
             return ""
         except Exception as e:
             print(f"Zenity error: {e}, falling back to tkinter")
-    
+
     # Fallback to tkinter
     kwargs = {"title": title}
     if initialdir:
         kwargs["initialdir"] = initialdir
     if parent:
         kwargs["parent"] = parent
-        
+
     path = filedialog.askdirectory(**kwargs)
     if path:
         return os.path.normpath(path)
@@ -893,49 +889,46 @@ def transfer_file():
 def _transfer_file_gui():
     """Cross-platform file transfer implementation using Python with GUI."""
     import shutil
-    import threading
-    import shlex
-    
+
     # Check for rsync or scp
     rsync_path = shutil.which("rsync")
     scp_path = shutil.which("scp")
-    
+
     # Create GUI window first (needed for messagebox parent)
     # Get or create root window
     root = None
     try:
         # Try to get existing root window
-        if hasattr(tk, '_default_root') and tk._default_root is not None:
+        if hasattr(tk, "_default_root") and tk._default_root is not None:
             root = tk._default_root
         else:
             # Create a temporary root window if none exists
             root = tk.Tk()
             root.withdraw()  # Hide it
-    except Exception as root_error:
+    except Exception:
         # Fallback: create new root
         root = tk.Tk()
         root.withdraw()
-    
+
     if not rsync_path and not scp_path:
         error_msg = (
             "Neither rsync nor scp is found in PATH.\n\n"
             "To use file transfer, please install rsync or ensure OpenSSH is installed."
         )
         if platform.system() == "Windows":
-             error_msg += (
-            "\n\nOption 1: SCP (Recommended for Windows)\n"
-            "  - Enable OpenSSH Client: Settings > Apps > Optional Features > Add OpenSSH Client\n"
-            "  - Or run as Administrator: dism /online /Add-Capability /CapabilityName:OpenSSH.Client~~~~0.0.1.0\n\n"
-            "Option 2: rsync\n"
-            "  - Install via Git for Windows (includes rsync)\n"
-            "  - Or install via Chocolatey: choco install rsync\n"
-            "  - Or install via WSL/Cygwin"
-             )
+            error_msg += (
+                "\n\nOption 1: SCP (Recommended for Windows)\n"
+                "  - Enable OpenSSH Client: Settings > Apps > Optional Features > Add OpenSSH Client\n"
+                "  - Or run as Administrator: dism /online /Add-Capability /CapabilityName:OpenSSH.Client~~~~0.0.1.0\n\n"
+                "Option 2: rsync\n"
+                "  - Install via Git for Windows (includes rsync)\n"
+                "  - Or install via Chocolatey: choco install rsync\n"
+                "  - Or install via WSL/Cygwin"
+            )
         else:
-             error_msg += (
-                 "\n\nLinux: sudo apt install rsync openssh-client\n"
-                 "macOS: brew install rsync"
-             )
+            error_msg += (
+                "\n\nLinux: sudo apt install rsync openssh-client\nmacOS: brew install rsync"
+            )
 
         # Use print if root is not available to avoid the error
         if root is None:
@@ -943,7 +936,7 @@ def _transfer_file_gui():
             return
         try:
             messagebox.showerror("Transfer Tool Not Found", error_msg, parent=root)
-        except Exception as msg_err:
+        except Exception:
             print(f"ERROR: {error_msg}")
         return
 
@@ -951,18 +944,18 @@ def _transfer_file_gui():
     use_rsync = rsync_path is not None
     transfer_method = "RSYNC" if use_rsync else "SCP"
     tool_path = rsync_path if use_rsync else scp_path
-    
+
     # Ensure root is properly initialized before creating Toplevel
     if root is None:
         print("ERROR: Cannot create transfer window - no root window available")
         return
-    
+
     # Update root window to ensure it's ready
     try:
         root.update_idletasks()
     except:
         pass
-    
+
     # Create GUI window for transfer configuration
     try:
         transfer_window = tk.Toplevel(root)
@@ -973,10 +966,10 @@ def _transfer_file_gui():
         print(f"ERROR: Failed to create transfer window: {toplevel_error}")
         # Try to show error via print instead of messagebox to avoid recursion
         return
-    
+
     # Default local directory
     default_local_dir = os.path.join(os.path.expanduser("~"), "Downloads")
-    
+
     # Variables
     local_dir_var = tk.StringVar(value=default_local_dir)
     remote_user_var = tk.StringVar()
@@ -984,36 +977,33 @@ def _transfer_file_gui():
     remote_port_var = tk.StringVar(value="22")
     remote_dir_var = tk.StringVar()
     ssh_password_var = tk.StringVar()  # Password field
-    mode_var = tk.StringVar(value="upload") # Transfer mode: upload or download
+    mode_var = tk.StringVar(value="upload")  # Transfer mode: upload or download
     local_label_var = tk.StringVar(value="Local Directory (Source):")
     remote_label_var = tk.StringVar(value="Remote Directory (Destination):")
-    
+
     # Main frame
     main_frame = tk.Frame(transfer_window, padx=10, pady=10)
     main_frame.pack(fill=tk.BOTH, expand=True)
-    
+
     # Title
     title_label = tk.Label(
-        main_frame,
-        text=f"File Transfer Tool ({transfer_method})",
-        font=("Arial", 12, "bold")
+        main_frame, text=f"File Transfer Tool ({transfer_method})", font=("Arial", 12, "bold")
     )
     title_label.pack(pady=(0, 10))
-    
-    
+
     if not use_rsync:
         info_label = tk.Label(
             main_frame,
             text="Note: Using SCP (rsync not available). SCP transfers entire directories recursively.",
             fg="orange",
-            font=("Arial", 9)
+            font=("Arial", 9),
         )
         info_label.pack(pady=(0, 10))
 
     # Mode selection
     mode_frame = tk.LabelFrame(main_frame, text="Transfer Mode", padx=5, pady=5)
     mode_frame.pack(fill=tk.X, pady=(0, 10))
-    
+
     def update_labels():
         if mode_var.get() == "upload":
             local_label_var.set("Local Directory (Source):")
@@ -1022,64 +1012,82 @@ def _transfer_file_gui():
             local_label_var.set("Local Directory (Destination):")
             remote_label_var.set("Remote Directory (Source):")
 
-    tk.Radiobutton(mode_frame, text="Upload (Send to Remote)", variable=mode_var, value="upload", command=update_labels).pack(side=tk.LEFT, padx=10)
-    tk.Radiobutton(mode_frame, text="Download (Receive from Remote)", variable=mode_var, value="download", command=update_labels).pack(side=tk.LEFT, padx=10)
-    
+    tk.Radiobutton(
+        mode_frame,
+        text="Upload (Send to Remote)",
+        variable=mode_var,
+        value="upload",
+        command=update_labels,
+    ).pack(side=tk.LEFT, padx=10)
+    tk.Radiobutton(
+        mode_frame,
+        text="Download (Receive from Remote)",
+        variable=mode_var,
+        value="download",
+        command=update_labels,
+    ).pack(side=tk.LEFT, padx=10)
+
     # Local directory
     tk.Label(main_frame, textvariable=local_label_var, anchor="w").pack(fill=tk.X, pady=(5, 2))
     local_frame = tk.Frame(main_frame)
     local_frame.pack(fill=tk.X, pady=(0, 10))
     local_entry = tk.Entry(local_frame, textvariable=local_dir_var, width=50)
     local_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
-    
+
     def browse_local():
         dir_path = ask_directory(
             title="Select Local Directory to Transfer",
             initialdir=local_dir_var.get() or default_local_dir,
-            parent=transfer_window
+            parent=transfer_window,
         )
         if dir_path:
             local_dir_var.set(dir_path)
-    
+
     tk.Button(local_frame, text="Browse...", command=browse_local).pack(side=tk.LEFT)
-    
+
     # Remote username
     tk.Label(main_frame, text="Remote Username:", anchor="w").pack(fill=tk.X, pady=(5, 2))
     tk.Entry(main_frame, textvariable=remote_user_var, width=50).pack(fill=tk.X, pady=(0, 10))
-    
+
     # Remote host
-    tk.Label(main_frame, text="Remote Host (IP or hostname):", anchor="w").pack(fill=tk.X, pady=(5, 2))
+    tk.Label(main_frame, text="Remote Host (IP or hostname):", anchor="w").pack(
+        fill=tk.X, pady=(5, 2)
+    )
     tk.Entry(main_frame, textvariable=remote_host_var, width=50).pack(fill=tk.X, pady=(0, 10))
-    
+
     # SSH port
     tk.Label(main_frame, text="SSH Port:", anchor="w").pack(fill=tk.X, pady=(5, 2))
     tk.Entry(main_frame, textvariable=remote_port_var, width=50).pack(fill=tk.X, pady=(0, 10))
-    
+
     # Remote directory
     tk.Label(main_frame, textvariable=remote_label_var, anchor="w").pack(fill=tk.X, pady=(5, 2))
     tk.Entry(main_frame, textvariable=remote_dir_var, width=50).pack(fill=tk.X, pady=(0, 10))
-    
+
     # SSH Password (REMOVED/DISABLED)
     # tk.Label(main_frame, text="SSH Password:", anchor="w").pack(fill=tk.X, pady=(5, 2))
     # password_entry = tk.Entry(main_frame, textvariable=ssh_password_var, width=50, show="*")
     # password_entry.pack(fill=tk.X, pady=(0, 10))
-    tk.Label(main_frame, text="Note: You will be prompted for the password in the terminal window.", 
-             fg="blue", font=("Arial", 9, "italic")).pack(fill=tk.X, pady=(5, 10))
-    
+    tk.Label(
+        main_frame,
+        text="Note: You will be prompted for the password in the terminal window.",
+        fg="blue",
+        font=("Arial", 9, "italic"),
+    ).pack(fill=tk.X, pady=(5, 10))
+
     # Progress text area (initially hidden)
     progress_frame = tk.Frame(main_frame)
     progress_label = tk.Label(progress_frame, text="Transfer Progress:", font=("Arial", 10, "bold"))
     progress_text = tk.Text(progress_frame, height=10, width=70, wrap=tk.WORD, state=tk.DISABLED)
     progress_scroll = tk.Scrollbar(progress_frame, orient=tk.VERTICAL, command=progress_text.yview)
     progress_text.config(yscrollcommand=progress_scroll.set)
-    
+
     # Buttons frame
     buttons_frame = tk.Frame(main_frame)
     buttons_frame.pack(fill=tk.X, pady=(10, 0))
-    
+
     # Transfer process variable (needs to be accessible from both functions)
     transfer_process_ref = {"process": None}
-    
+
     def start_transfer():
         # Validate inputs
         local_dir = local_dir_var.get().strip()
@@ -1088,32 +1096,34 @@ def _transfer_file_gui():
         remote_port = remote_port_var.get().strip() or "22"
         remote_dir = remote_dir_var.get().strip()
         ssh_password = ssh_password_var.get()  # Get password from GUI
-        
+
         if not local_dir:
             messagebox.showerror("Error", "Please specify local directory.", parent=transfer_window)
             return
-        
+
         if not os.path.exists(local_dir):
-            messagebox.showerror("Error", f"Local directory not found: {local_dir}", parent=transfer_window)
+            messagebox.showerror(
+                "Error", f"Local directory not found: {local_dir}", parent=transfer_window
+            )
             return
-        
+
         if not remote_user:
             messagebox.showerror("Error", "Please enter remote username.", parent=transfer_window)
             return
-        
+
         if not remote_host:
             messagebox.showerror("Error", "Please enter remote host.", parent=transfer_window)
             return
-        
+
         if not remote_dir:
             messagebox.showerror("Error", "Please enter remote directory.", parent=transfer_window)
             return
-        
+
         # Always force terminal prompt - no password checking needed here
         # if not ssh_password: ... logic removed
-        
+
         mode = mode_var.get()
-        
+
         # Show progress area
         progress_frame.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
         progress_label.pack(anchor="w")
@@ -1122,14 +1132,14 @@ def _transfer_file_gui():
         progress_text.config(state=tk.NORMAL)
         progress_text.delete(1.0, tk.END)
         progress_text.insert(tk.END, f"Starting {mode}...\n")
-        
+
         if mode == "upload":
             source_desc = local_dir
             dest_desc = f"{remote_user}@{remote_host}:{remote_dir}"
         else:
             source_desc = f"{remote_user}@{remote_host}:{remote_dir}"
             dest_desc = local_dir
-            
+
         progress_text.insert(tk.END, f"From: {source_desc}\n")
         progress_text.insert(tk.END, f"To: {dest_desc}\n")
         progress_text.insert(tk.END, f"SSH Port: {remote_port}\n")
@@ -1137,48 +1147,52 @@ def _transfer_file_gui():
         progress_text.insert(tk.END, "-" * 60 + "\n\n")
         progress_text.config(state=tk.DISABLED)
         progress_text.see(tk.END)
-        
+
         # Disable start button
         start_btn.config(state=tk.DISABLED)
         cancel_btn.config(state=tk.NORMAL)
-        
+
         # Build command
         # Normalize paths (Universal format for Windows compatibility)
-        local_dir_normalized = local_dir.replace("\\", "/").rstrip('/')
-        
+        local_dir_normalized = local_dir.replace("\\", "/").rstrip("/")
+
         # Context: Remote path likely doesn't need normalization if it's Linux, but good to be safe w.r.t slashes
-        if not remote_dir.startswith("/") and ":" not in remote_dir: # Simple check assuming Linux/Unix remote
-             remote_dir_normalized = f"/{remote_dir}".replace("//", "/")
+        if (
+            not remote_dir.startswith("/") and ":" not in remote_dir
+        ):  # Simple check assuming Linux/Unix remote
+            remote_dir_normalized = f"/{remote_dir}".replace("//", "/")
         else:
-             remote_dir_normalized = remote_dir
-        
-        remote_path_trimmed = remote_dir_normalized.rstrip('/')
+            remote_dir_normalized = remote_dir
+
+        remote_path_trimmed = remote_dir_normalized.rstrip("/")
 
         # Build command
         if use_rsync:
             # For rsync, the -e option needs the ssh command as a single string
             ssh_cmd = f"ssh -p {remote_port}"
-            
+
             if mode == "upload":
                 # Local -> Remote
                 cmd = [
                     rsync_path,
                     "-avzhP",
-                    "-e", ssh_cmd,
+                    "-e",
+                    ssh_cmd,
                     f"{local_dir_normalized}",  # Source: send directory itself
-                    f"{remote_user}@{remote_host}:{remote_path_trimmed}/" # Dest: into this dir
+                    f"{remote_user}@{remote_host}:{remote_path_trimmed}/",  # Dest: into this dir
                 ]
             else:
                 # Remote -> Local
                 cmd = [
                     rsync_path,
                     "-avzhP",
-                    "-e", ssh_cmd,
-                    f"{remote_user}@{remote_host}:{remote_path_trimmed}", # Source: send directory itself
-                    f"{local_dir_normalized}/" # Dest: into this dir
+                    "-e",
+                    ssh_cmd,
+                    f"{remote_user}@{remote_host}:{remote_path_trimmed}",  # Source: send directory itself
+                    f"{local_dir_normalized}/",  # Dest: into this dir
                 ]
-                
-        else: # SCP
+
+        else:  # SCP
             # SCP treats recursive copy of 'dir' to 'dest' as 'dest/dir'.
             # Similar to rsync with trailing slash on dest, or no trailing slash on src.
             # Using normalized paths with forward slashes is safer on Windows OpenSSH/Git Bash.
@@ -1186,68 +1200,101 @@ def _transfer_file_gui():
                 cmd = [
                     scp_path,
                     "-r",
-                    "-P", remote_port,
+                    "-P",
+                    remote_port,
                     "-v",
                     "-C",
                     local_dir_normalized,
-                    f"{remote_user}@{remote_host}:{remote_dir}"
+                    f"{remote_user}@{remote_host}:{remote_dir}",
                 ]
             else:
                 cmd = [
                     scp_path,
                     "-r",
-                    "-P", remote_port,
+                    "-P",
+                    remote_port,
                     "-v",
                     "-C",
                     f"{remote_user}@{remote_host}:{remote_dir}",
-                    local_dir_normalized
+                    local_dir_normalized,
                 ]
-        
+
         def run_transfer():
             try:
                 progress_text.config(state=tk.NORMAL)
                 # Try to run in terminal if we can't be sure
-                
+
                 # Try to execute directly first and capture output (similar to Windows "wait" approach but without new window)
                 # BUT updating the GUI in real-time
-                
-                # Note: If rsync prompts for password, it reads from /dev/tty. 
+
+                # Note: If rsync prompts for password, it reads from /dev/tty.
                 # Without a proper TTY, it might fail or we can't feed it password.
-                
+
                 # On Linux/Mac, to allow password input, we should spawn a terminal
                 terminal_cmd = None
-                script_cmd = ' '.join([f"'{arg}'" if " " in arg else arg for arg in cmd])
+                script_cmd = " ".join([f"'{arg}'" if " " in arg else arg for arg in cmd])
 
                 # Detect terminal emulator
                 if shutil.which("gnome-terminal"):
-                     # gnome-terminal requires -- bash -c "cmd; exec bash" to keep open or just run
-                     terminal_cmd = ["gnome-terminal", "--", "bash", "-c", f"{script_cmd}; echo 'Press Enter to exit...'; read"]
+                    # gnome-terminal requires -- bash -c "cmd; exec bash" to keep open or just run
+                    terminal_cmd = [
+                        "gnome-terminal",
+                        "--",
+                        "bash",
+                        "-c",
+                        f"{script_cmd}; echo 'Press Enter to exit...'; read",
+                    ]
                 elif shutil.which("xterm"):
-                     terminal_cmd = ["xterm", "-e", f"{script_cmd}; echo 'Press Enter to exit...'; read"]
+                    terminal_cmd = [
+                        "xterm",
+                        "-e",
+                        f"{script_cmd}; echo 'Press Enter to exit...'; read",
+                    ]
                 elif shutil.which("konsole"):
-                     terminal_cmd = ["konsole", "-e", "bash", "-c", f"{script_cmd}; echo 'Press Enter to exit...'; read"]
+                    terminal_cmd = [
+                        "konsole",
+                        "-e",
+                        "bash",
+                        "-c",
+                        f"{script_cmd}; echo 'Press Enter to exit...'; read",
+                    ]
                 elif shutil.which("xfce4-terminal"):
-                     terminal_cmd = ["xfce4-terminal", "-e", f"bash -c \"{script_cmd}; echo 'Press Enter to exit...'; read\""]
-                elif platform.system() == "Darwin": # macOS
-                     # Use AppleScript to tell Terminal to do script
-                     escaped_script = script_cmd.replace('"', '\\"')
-                     subprocess.run(["osascript", "-e", f'tell application "Terminal" to do script "{escaped_script}"'])
-                     terminal_cmd = [] # Handled
-                
+                    terminal_cmd = [
+                        "xfce4-terminal",
+                        "-e",
+                        f"bash -c \"{script_cmd}; echo 'Press Enter to exit...'; read\"",
+                    ]
+                elif platform.system() == "Darwin":  # macOS
+                    # Use AppleScript to tell Terminal to do script
+                    escaped_script = script_cmd.replace('"', '\\"')
+                    subprocess.run(
+                        [
+                            "osascript",
+                            "-e",
+                            f'tell application "Terminal" to do script "{escaped_script}"',
+                        ]
+                    )
+                    terminal_cmd = []  # Handled
+
                 if terminal_cmd:
                     subprocess.Popen(terminal_cmd)
                     progress_text.config(state=tk.NORMAL)
-                    progress_text.insert(tk.END, f"\n Launched external terminal for password input.\n")
+                    progress_text.insert(
+                        tk.END, "\n Launched external terminal for password input.\n"
+                    )
                     progress_text.config(state=tk.DISABLED)
                 elif platform.system() == "Darwin" and not terminal_cmd:
-                     # Handled by osascript above
-                     progress_text.config(state=tk.NORMAL)
-                     progress_text.insert(tk.END, f"\n Launched macOS Terminal for password input.\n")
-                     progress_text.config(state=tk.DISABLED)
+                    # Handled by osascript above
+                    progress_text.config(state=tk.NORMAL)
+                    progress_text.insert(tk.END, "\n Launched macOS Terminal for password input.\n")
+                    progress_text.config(state=tk.DISABLED)
                 else:
                     # Fallback for when no known terminal found - try running in current pty if possible or error
-                    msg = "Could not detect a supported terminal emulator (gnome-terminal, xterm, konsole, xfce4-terminal).\n" \
-                          "Please run the following command manually in your terminal:\n\n" + script_cmd
+                    msg = (
+                        "Could not detect a supported terminal emulator (gnome-terminal, xterm, konsole, xfce4-terminal).\n"
+                        "Please run the following command manually in your terminal:\n\n"
+                        + script_cmd
+                    )
                     messagebox.showinfo("Manual Run Required", msg)
                     progress_text.config(state=tk.NORMAL)
                     progress_text.insert(tk.END, f"\n{msg}\n")
@@ -1257,7 +1304,7 @@ def _transfer_file_gui():
                     # Since it runs externally, we re-enable buttons immediately (or we could wait if we tracked PID)
                     start_btn.config(state=tk.NORMAL)
                     cancel_btn.config(state=tk.DISABLED)
-                
+
             except Exception as e:
                 progress_text.config(state=tk.NORMAL)
                 progress_text.insert(tk.END, f"\n✗ Error: {e}\n", "error")
@@ -1265,15 +1312,15 @@ def _transfer_file_gui():
                 progress_text.see(tk.END)
                 start_btn.config(state=tk.NORMAL)
                 cancel_btn.config(state=tk.DISABLED)
-        
+
         # Configure text tags for colors
         progress_text.tag_config("success", foreground="green")
         progress_text.tag_config("error", foreground="red")
-        
+
         # Run transfer in separate thread
         transfer_thread = threading.Thread(target=run_transfer, daemon=True)
         transfer_thread.start()
-    
+
     def cancel_transfer():
         if transfer_process_ref["process"] and transfer_process_ref["process"].poll() is None:
             transfer_process_ref["process"].terminate()
@@ -1282,16 +1329,23 @@ def _transfer_file_gui():
             progress_text.config(state=tk.DISABLED)
             start_btn.config(state=tk.NORMAL)
             cancel_btn.config(state=tk.DISABLED)
-    
-    start_btn = tk.Button(buttons_frame, text="Start Transfer", command=start_transfer, bg="#4CAF50", fg="white", font=("Arial", 10, "bold"))
+
+    start_btn = tk.Button(
+        buttons_frame,
+        text="Start Transfer",
+        command=start_transfer,
+        bg="#4CAF50",
+        fg="white",
+        font=("Arial", 10, "bold"),
+    )
     start_btn.pack(side=tk.LEFT, padx=(0, 5))
-    
+
     cancel_btn = tk.Button(buttons_frame, text="Cancel", command=cancel_transfer, state=tk.DISABLED)
     cancel_btn.pack(side=tk.LEFT, padx=(0, 5))
-    
+
     close_btn = tk.Button(buttons_frame, text="Close", command=transfer_window.destroy)
     close_btn.pack(side=tk.RIGHT)
-    
+
     # Center window
     transfer_window.update_idletasks()
     width = transfer_window.winfo_width()
