@@ -30,11 +30,11 @@ GUI Mode (Default):
     python vaila_lensdistortvideo.py
 
 CLI Mode:
-    python vaila_lensdistortvideo.py --input_dir /path/to/videos --params_file /path/to/params.csv [--output_dir /path/to/output]
+    python vaila_lensdistortvideo.py --input_dir /path/to/videos --params_file /path/to/params.toml [--output_dir /path/to/output]
 
     Arguments:
       --input_dir   Directory containing the videos to be processed.
-      --params_file Path to the camera calibration parameters CSV file.
+      --params_file Path to the camera calibration parameters TOML file.
       --output_dir  (Optional) Directory to save the corrected videos.
 
 License:
@@ -91,12 +91,19 @@ Camera Matrix (Intrinsic Parameters):
 Distortion Coefficients:
     [k1, k2, p1, p2, k3]
 
-Example CSV Format:
--------------------
-Below is an example of a CSV file containing calibration parameters for use with this script:
+Example TOML Format:
+--------------------
+Below is an example of a TOML file containing calibration parameters for use with this script:
 
-    fx,fy,cx,cy,k1,k2,k3,p1,p2
-    949.41,950.63,960.00,540.00,-0.28871370110181493,0.1374614711665278,-0.025511562284832402,0.00044281215436799446,-0.00042111749309847274
+    fx = 949.41
+    fy = 950.63
+    cx = 960.0
+    cy = 540.0
+    k1 = -0.28871370110181493
+    k2 = 0.1374614711665278
+    k3 = -0.025511562284832402
+    p1 = 0.00044281215436799446
+    p2 = -0.00042111749309847274
 
 Applications:
 -------------
@@ -138,10 +145,16 @@ import argparse
 import json
 import os
 import subprocess
-from pathlib import Path
+import time
 import tkinter as tk
 from datetime import datetime
+from pathlib import Path
 from tkinter import filedialog
+
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib  # pyright: ignore[reportMissingImports]
 
 import cv2
 import numpy as np
@@ -157,12 +170,21 @@ from rich.progress import (
 )
 
 
-def load_distortion_parameters(csv_path):
+def load_distortion_parameters(toml_path):
     """
-    Load distortion parameters from a CSV file.
+    Load distortion parameters from a TOML file (fx, fy, cx, cy, k1, k2, k3, p1, p2).
     """
-    df = pd.read_csv(csv_path)
-    return df.iloc[0].to_dict()
+    with open(toml_path, "rb") as f:
+        data = tomllib.load(f)
+    params = {k: float(v) for k, v in data.items() if k in ("fx", "fy", "cx", "cy", "k1", "k2", "k3", "p1", "p2")}
+    # #region agent log
+    try:
+        with open("/home/preto/Preto/vaila/.cursor/debug-a5f5a000-975d-4bfc-9676-f9748629bda8.log", "a") as _f:
+            _f.write(json.dumps({"sessionId": "a5f5a000-975d-4bfc-9676-f9748629bda8", "id": "lensdistort_load_toml", "timestamp": int(time.time() * 1000), "location": "vaila_lensdistortvideo.load_distortion_parameters", "message": "TOML params loaded", "data": {"script": "vaila_lensdistortvideo", "path": toml_path, "ext": os.path.splitext(toml_path)[1], "keys_count": len(params)}, "runId": "distort", "hypothesisId": "A"}) + "\n")
+    except Exception:
+        pass
+    # #endregion
+    return params
 
 
 def get_precise_video_metadata(video_path):
@@ -254,7 +276,9 @@ def get_precise_video_metadata(video_path):
         }
     except (subprocess.CalledProcessError, json.JSONDecodeError, FileNotFoundError) as e:
         # Fallback to OpenCV if ffprobe is not available
-        rprint(f"[yellow]Warning: ffprobe not available or failed, using OpenCV fallback: {e}[/yellow]")
+        rprint(
+            f"[yellow]Warning: ffprobe not available or failed, using OpenCV fallback: {e}[/yellow]"
+        )
         cap = cv2.VideoCapture(str(video_path))
         fps = cap.get(cv2.CAP_PROP_FPS)
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -286,15 +310,15 @@ def process_video(input_path, output_path, parameters):
     fps = metadata["fps"]
     width = metadata["width"]
     height = metadata["height"]
-    
+
     # Get total frames (prefer metadata, fallback to cap)
     if "nb_frames" in metadata and metadata["nb_frames"]:
         total_frames = metadata["nb_frames"]
     elif "total_frames" in metadata:
-         total_frames = metadata["total_frames"]
+        total_frames = metadata["total_frames"]
     else:
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        
+
     rprint(f"[dim]Metadata: {width}x{height} @ {fps:.4f} fps, {total_frames} frames[/dim]")
 
     # Create camera matrix and distortion coefficients
@@ -414,7 +438,7 @@ def select_directory(title="Select a directory"):
     return directory
 
 
-def select_file(title="Select a file", filetypes=(("CSV Files", "*.csv"),)):
+def select_file(title="Select a file", filetypes=(("TOML Files", "*.toml"),)):
     """
     Open a dialog to select a file.
     """
@@ -435,8 +459,12 @@ def run_distortvideo():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="Batch lens distortion correction for videos.")
     parser.add_argument("--input_dir", type=str, help="Directory containing videos to process")
-    parser.add_argument("--params_file", type=str, help="Path to the camera calibration parameters CSV file")
-    parser.add_argument("--output_dir", type=str, help="Optional output directory for processed videos")
+    parser.add_argument(
+        "--params_file", type=str, help="Path to the camera calibration parameters TOML file"
+    )
+    parser.add_argument(
+        "--output_dir", type=str, help="Optional output directory for processed videos"
+    )
     args = parser.parse_args()
 
     # Determine input directory
@@ -455,22 +483,39 @@ def run_distortvideo():
             return
 
     # Determine parameters file
+    # #region agent log
+    _log_path_lens = "/home/preto/Preto/vaila/.cursor/debug-a5f5a000-975d-4bfc-9676-f9748629bda8.log"
+    # #endregion
     if args.params_file:
         parameters_path = args.params_file
         if not os.path.isfile(parameters_path):
             rprint(f"[red]Error: Parameters file not found: {parameters_path}[/red]")
             return
         rprint(f"\n[cyan]Using parameters file: {parameters_path}[/cyan]")
+        # #region agent log
+        try:
+            with open(_log_path_lens, "a") as _f:
+                _f.write(json.dumps({"sessionId": "a5f5a000-975d-4bfc-9676-f9748629bda8", "id": "lensdistort_mode", "timestamp": int(time.time() * 1000), "location": "vaila_lensdistortvideo.run_distortvideo", "message": "Params source", "data": {"script": "vaila_lensdistortvideo", "mode": "cli", "params_path": parameters_path}, "runId": "distort", "hypothesisId": "B"}) + "\n")
+        except Exception:
+            pass
+        # #endregion
     else:
         # Select parameters file via GUI
         rprint("\nSelect the camera calibration parameters file:")
         parameters_path = select_file(
             title="Select Parameters File",
-            filetypes=(("CSV Files", "*.csv"), ("All Files", "*.*")),
+            filetypes=(("TOML Files", "*.toml"), ("All Files", "*.*")),
         )
         if not parameters_path:
             rprint("[red]No parameters file selected. Exiting.[/red]")
             return
+        # #region agent log
+        try:
+            with open(_log_path_lens, "a") as _f:
+                _f.write(json.dumps({"sessionId": "a5f5a000-975d-4bfc-9676-f9748629bda8", "id": "lensdistort_mode", "timestamp": int(time.time() * 1000), "location": "vaila_lensdistortvideo.run_distortvideo", "message": "Params source", "data": {"script": "vaila_lensdistortvideo", "mode": "gui", "params_path": parameters_path}, "runId": "distort", "hypothesisId": "B"}) + "\n")
+        except Exception:
+            pass
+        # #endregion
 
     # Load parameters
     try:
@@ -500,7 +545,7 @@ def run_distortvideo():
         # Create output directory with a timestamp in the name: vaila_lensdistort_timestamp
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         output_dir = os.path.join(input_dir, f"vaila_lensdistort_{timestamp}")
-    
+
     os.makedirs(output_dir, exist_ok=True)
     rprint(f"[cyan]Output directory: {output_dir}[/cyan]")
 

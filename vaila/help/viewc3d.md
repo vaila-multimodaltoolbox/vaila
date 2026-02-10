@@ -4,74 +4,58 @@
 
 - **Category:** Visualization
 - **File:** `vaila\viewc3d.py`
-- **Lines:** 3186
-- **Size:** 120773 characters
-- **Version:** 0.1.0
+- **Version:** 0.2.0
 - **Author:** Paulo Santiago
 - **GUI Interface:** ✅ Yes
 
 ## 📖 Description
 
-
-================================================================================
-Script: viewc3d.py
-================================================================================
-
-vailá - Multimodal Toolbox
-© Paulo Santiago, Guilherme Cesar, Ligia Mochida, Bruno Bedo
-https://github.com/paulopreto/vaila-multimodaltoolbox
-Please see AUTHORS for contributors.
-
-================================================================================
-Author: Paulo Santiago
-Version: 0.1.0
-Created: 06 February 2025
-Last Updated: 30 December 2025
-
-To run:
-uv run viewc3d.py
-
-Description:
-------------
 Advanced 3D viewer for C3D files with adaptive visualization for different scales.
 Automatically detects and converts units (millimeters/meters) with enhanced confidence scoring.
 Features adaptive ground plane, grid, and camera positioning based on data scale.
-Features soccer field lines and penalty areas.
+Soccer field lines and penalty areas supported.
 
-    Key Features:
-    - Adaptive visualization for small (lab) to large (soccer field) scales
-    - Automatic unit detection...
+**To run:** `uv run viewc3d.py`. For a VTK/PyVista-based viewer (C3D and CSV), use `viewc3d_pyvista.py` (see `help/viewc3d_pyvista.md`).
 
-## 🔧 Main Functions
+### Architecture
 
-**Total functions found:** 20
+- **VailaModel** (data layer): C3D acquisition with `GetPointFrame`, `GetFrameNumber`, `GetPointFrequency`, `get_bounds()`, `is_z_up()`. Clean separation from visualization; enables future multi-C3D loading.
+- **VailaView** (Open3D layer): Scene, trails, dynamic grid, Z-up camera, marker picking.
 
-- `detect_c3d_units`
-- `ask_user_units_c3d`
-- `load_c3d_file`
-- `toggle_theme`
-- `select_markers`
-- `create_coordinate_lines`
-- `create_ground_plane`
-- `create_x_marker`
-- `get_marker_customization`
-- `create_ground_grid`
-- `check_display_environment`
-- `check_opengl_support`
-- `run_viewc3d_fallback`
-- `run_viewc3d`
-- `load_field_lines_from_csv`
-- `create_football_field_lines`
-- `on_ok`
-- `on_cancel`
-- `update_listbox`
-- `select_all`
+### Key Features
 
+- Adaptive visualization for small (lab) to large (soccer field) scales
+- Automatic unit detection (mm/m) with confidence scoring
+- Interactive marker selection with search and filter options
+- Real-time marker labels with color coding
+- Ground grid toggle and field line customization
+- **Trails (ghosting):** older segments drawn darker; velocity-based coloring
+- **Z-up camera:** automatic when Z range > Y range (biomechanics convention)
+- **Marker picking:** `` ` `` / `` ~ `` keys to cycle and highlight one marker (yellow)
+- Matplotlib fallback for systems without OpenGL support
 
+### Main Keyboard Shortcuts
 
+- **Navigation:** ← → frame; ↑ ↓ 60 frames; S/E start/end; Space play/pause
+- **Markers:** +/- size; C color; X labels; `` ` `` / `` ~ `` pick (highlight)
+- **View:** T background; Y ground; G field lines; M grid; R reset camera
+- **Trails:** W toggle trails with ghosting
+- **Help:** H open help (browser)
+
+## 🔧 Main Functions / Classes
+
+- **VailaModel** – Data layer (C3D acquisition API)
+- **VailaView** – Open3D visualization layer
+- `run_viewc3d` – Main entry point
+- `load_c3d_file` – Load C3D with unit detection
+- `select_markers` – Marker selection dialog
+- `detect_c3d_units` – mm/m detection
+- `create_ground_plane`, `create_ground_grid` – Dynamic grid from bounds
+- `run_viewc3d_fallback` – Matplotlib fallback when OpenGL unavailable
+- `load_field_lines_from_csv`, `create_football_field_lines` – Field overlay
+- Plus: `create_coordinate_lines`, `create_x_marker`, `check_opengl_support`, etc.
 
 ---
 
-📅 **Generated automatically on:** 30/12/2025 10:10:45
-🔗 **Part of vailá - Multimodal Toolbox**
+🔗 **Part of vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

@@ -115,7 +115,15 @@
         <h1>C3D Viewer - Keyboard Shortcuts</h1>
         
         <div class="info">
-            <strong>Overview:</strong> Advanced 3D viewer for C3D files with Blender-like features, marker trails, skeleton visualization, and video export capabilities.
+            <strong>Overview:</strong> Advanced 3D viewer for C3D files with Blender-like features, marker trails (with ghosting), skeleton visualization, Z-up camera for biomechanics, dynamic grid, marker picking, and video export capabilities.
+        </div>
+
+        <h2>Architecture</h2>
+        <div class="feature-highlight">
+            <ul>
+                <li><strong>VailaModel</strong> (data layer): C3D acquisition with <code>GetPointFrame</code>, <code>GetFrameNumber</code>, <code>GetPointFrequency</code>, bounds and Z-up detection. Clean separation from visualization.</li>
+                <li><strong>VailaView</strong> (Open3D layer): Scene, trails, dynamic grid, Z-up camera, and marker picking. Enables future multi-C3D and extended viewer features.</li>
+            </ul>
         </div>
 
         <h2>Navigation Controls</h2>
@@ -150,11 +158,13 @@
                 <div class="keyboard-shortcut"><strong>-</strong> - Decrease marker size</div>
                 <div class="keyboard-shortcut"><strong>C</strong> - Cycle marker colors</div>
                 <div class="keyboard-shortcut"><strong>X</strong> - Toggle marker labels</div>
+                <div class="keyboard-shortcut"><strong>`</strong> (backtick) - Cycle picked marker forward (highlight in yellow)</div>
+                <div class="keyboard-shortcut"><strong>~</strong> (tilde) - Cycle picked marker backward</div>
             </div>
 
             <div class="module-section">
                 <h3>Advanced Features</h3>
-                <div class="keyboard-shortcut"><strong>W</strong> - Toggle trails with velocity coloring</div>
+                <div class="keyboard-shortcut"><strong>W</strong> - Toggle trails with velocity coloring and ghosting (older segments darker)</div>
                 <div class="keyboard-shortcut"><strong>J</strong> - Load skeleton connections from JSON</div>
                 <div class="keyboard-shortcut"><strong>D</strong> - Measure distance between two markers</div>
             </div>
@@ -222,7 +232,7 @@
             <div class="keyboard-shortcut"><strong>]</strong> - Faster playback</div>
             <div class="keyboard-shortcut"><strong>Q</strong> - Toggle per-frame console info</div>
             <div class="info">
-                <strong>Available speeds:</strong> 0.1×, 0.2×, 0.25×, 0.5×, 1×, 2×, 4×, 8×
+                <strong>Available speeds:</strong> 0.1×, 0.2×, 0.25×, 0.5×, 1×, 2×, 4×, 8×, 16×, 32×, 64×, 128×
             </div>
         </div>
 
@@ -250,10 +260,29 @@
         <div class="feature-highlight">
             <h3>🎯 Marker Trails (W key)</h3>
             <ul>
-                <li>Visualize historical marker positions</li>
+                <li>Visualize historical marker positions (ghosting)</li>
+                <li>Older segments drawn darker for clear trail effect</li>
                 <li>Color-coded by velocity magnitude</li>
                 <li>Configurable trail length</li>
                 <li>Real-time updates during playback</li>
+            </ul>
+        </div>
+
+        <div class="feature-highlight">
+            <h3>🔍 Marker Picking (` and ~ keys)</h3>
+            <ul>
+                <li>Cycle through markers to highlight one in yellow (picked marker)</li>
+                <li><strong>`</strong> (backtick): next marker</li>
+                <li><strong>~</strong> (tilde): previous marker</li>
+                <li>Picked marker name and index shown in console</li>
+            </ul>
+        </div>
+
+        <div class="feature-highlight">
+            <h3>📐 Dynamic Grid & Z-up Camera</h3>
+            <ul>
+                <li>Grid and ground plane adapt to data bounding box (no fixed field)</li>
+                <li>If Z range &gt; Y range, camera up vector set to Z (biomechanics convention)</li>
             </ul>
         </div>
 
@@ -368,6 +397,18 @@ ffmpeg (for video export)
         <h2>Recent Updates</h2>
         
         <div class="step">
+            <h3>🏗️ Architecture Refactor</h3>
+            <ul>
+                <li><strong>VailaModel:</strong> Data layer with GetPointFrame, GetFrameNumber, GetPointFrequency, get_bounds(), is_z_up()</li>
+                <li><strong>VailaView:</strong> Open3D visualization layer; separation allows future multi-C3D and cleaner code</li>
+                <li><strong>Dynamic grid:</strong> Grid and ground from data bounding box</li>
+                <li><strong>Z-up camera:</strong> Automatic when Z range &gt; Y range (biomechanics)</li>
+                <li><strong>Trails ghosting:</strong> Older trail segments drawn darker</li>
+                <li><strong>Marker picking:</strong> ` and ~ keys to cycle and highlight one marker (yellow)</li>
+            </ul>
+        </div>
+
+        <div class="step">
             <h3>✅ Fixed Issues</h3>
             <ul>
                 <li><strong>Play/Pause:</strong> Space and Enter keys now work correctly</li>
@@ -381,8 +422,9 @@ ffmpeg (for video export)
         <div class="step">
             <h3>🆕 New Features</h3>
             <ul>
+                <li><strong>Marker Picking:</strong> ` and ~ to cycle and highlight a marker (yellow)</li>
                 <li><strong>Marker Quality Statistics:</strong> Analyze marker data quality, gaps, and residuals (A key)</li>
-                <li><strong>Marker Trails:</strong> Visualize movement history with velocity coloring</li>
+                <li><strong>Marker Trails:</strong> Movement history with velocity coloring and ghosting (older segments darker)</li>
                 <li><strong>Skeleton Loading:</strong> Load and visualize skeleton connections from JSON</li>
                 <li><strong>Distance Measurement:</strong> Interactive distance measurement between markers</li>
                 <li><strong>Marker Label Swaps:</strong> Apply corrections from CSV/TOML files (N key)</li>
