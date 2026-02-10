@@ -104,11 +104,11 @@ This module is part of the VAILA toolbox and follows the same MIT License.
 """
 
 import os
-import sys
 import re
+import sys
 import tkinter as tk
 from pathlib import Path
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox
 
 # Set UTF-8 encoding for stdout/stderr to avoid encoding errors
 if sys.stdout.encoding != "utf-8":
@@ -154,6 +154,7 @@ except ImportError:
 # Import CoP calculation logic
 try:
     from vaila.cop_calculate import calc_cop
+
     COP_SUPPORT = True
 except ImportError:
     COP_SUPPORT = False
@@ -162,6 +163,7 @@ except ImportError:
 # Optional: ellipse.py for PCA-based confidence ellipse and variance ratios
 try:
     from vaila.ellipse import plot_ellipse_pca
+
     ELLIPSE_SUPPORT = True
 except ImportError:
     ELLIPSE_SUPPORT = False
@@ -206,9 +208,7 @@ def run_cli_mode(cli_args):
         Command line arguments [config_file, input_directory, output_directory, file_format]
     """
     if len(cli_args) < 2:
-        print(
-            "Usage: python sit2stand.py <config.toml> <input_directory> [output_directory]"
-        )
+        print("Usage: python sit2stand.py <config.toml> <input_directory> [output_directory]")
         print("Example: python sit2stand.py config.toml /path/to/files /path/to/output")
         print("Note: Automatically processes all .c3d and .csv files in the input directory")
         return
@@ -271,9 +271,9 @@ def get_default_config():
             "body_weight": 70.0,  # Body weight in kg for energy calculations
         },
         "force_plate": {
-             "width_mm": 464.0,  # X dimension
-             "height_mm": 508.0, # Y dimension
-             "moment_unit": "N.mm" # Default unit for C3D moments
+            "width_mm": 464.0,  # X dimension
+            "height_mm": 508.0,  # Y dimension
+            "moment_unit": "N.mm",  # Default unit for C3D moments
         },
         "filtering": {
             "enabled": False,
@@ -620,7 +620,7 @@ def process_single_file(file_path, config, output_dir):
 
         # Auto-detect or use configured column
         column_name = config.get("analysis", {}).get("force_column", "Force.Fz3")
-        
+
         # For C3D files, column detection is handled in read_c3d_file
         # For CSV files, verify and auto-detect if needed
         if file_path.lower().endswith(".csv"):
@@ -706,6 +706,7 @@ def process_single_file(file_path, config, output_dir):
     except Exception as e:
         print(f"Error processing {file_path}: {str(e)}")
         import traceback
+
         traceback.print_exc()
         return {
             "file": file_path,
@@ -745,23 +746,26 @@ def run_batch_analysis(files, config, output_dir):
     for i, file_path in enumerate(files):
         try:
             print(f"Processing file {i + 1}/{len(files)}: {os.path.basename(file_path)}")
-            
+
             # Use process_single_file to maintain consistency
             # All files use the same config
             result = process_single_file(file_path, config, output_dir)
-            
+
             if result:
                 results.append(result)
             else:
-                results.append({
-                    "file": file_path,
-                    "filename": os.path.basename(file_path),
-                    "error": "Processing returned no result",
-                })
+                results.append(
+                    {
+                        "file": file_path,
+                        "filename": os.path.basename(file_path),
+                        "error": "Processing returned no result",
+                    }
+                )
 
         except Exception as e:
             print(f"Error processing {file_path}: {str(e)}")
             import traceback
+
             traceback.print_exc()
             results.append(
                 {
@@ -798,7 +802,7 @@ def generate_individual_report(result, config, output_dir):
         else:
             # Fallback: create individual file directory path
             file_results_dir = Path(output_dir) / base_name
-        
+
         # Ensure directory exists
         file_results_dir.mkdir(parents=True, exist_ok=True)
 
@@ -909,7 +913,9 @@ def generate_individual_report(result, config, output_dir):
             if cop_results and "cop_path_length" in cop_results:
                 f.write("CENTER OF PRESSURE (CoP) ANALYSIS:\n")
                 f.write(f"  CoP Path Length: {cop_results.get('cop_path_length', 0):.2f} mm\n")
-                f.write(f"  Ellipse Area (95% confidence): {cop_results.get('ellipse_area_95', 0):.2f} mm²\n")
+                f.write(
+                    f"  Ellipse Area (95% confidence): {cop_results.get('ellipse_area_95', 0):.2f} mm²\n"
+                )
                 f.write(f"  Ellipse Angle: {cop_results.get('ellipse_angle_deg', 0):.2f}°\n")
                 f.write(
                     f"  Root Mean Square of Total Sway (CoP): {cop_results.get('rms_sway_total_mm', 0):.2f} mm\n"
@@ -1088,9 +1094,7 @@ def generate_individual_report(result, config, output_dir):
                     pca2,
                 ]
             )
-            csv_data["unit"].extend(
-                ["mm", "mm²", "deg", "mm", "mm", "mm", "%", "%"]
-            )
+            csv_data["unit"].extend(["mm", "mm²", "deg", "mm", "mm", "mm", "%", "%"])
 
         # Save CSV
         df = pd.DataFrame(csv_data)
@@ -1136,7 +1140,7 @@ def generate_batch_report(results, config, output_dir):
             main_results_dir = first_result_dir.parent
         else:
             main_results_dir = Path(output_dir) / "sit2stand_results"
-        
+
         main_results_dir.mkdir(parents=True, exist_ok=True)
         report_path = main_results_dir / "batch_analysis_summary.txt"
 
@@ -1549,11 +1553,14 @@ def read_c3d_file(file_path, column_name):
         # Get analog data and labels
         analogs = datac3d["data"]["analogs"]
         analog_labels_raw = datac3d["parameters"]["ANALOG"]["LABELS"]["value"]
-        
+
         # Handle different label formats
         if analog_labels_raw:
             if isinstance(analog_labels_raw[0], list):
-                analog_labels = [label[0] if isinstance(label, list) else str(label) for label in analog_labels_raw]
+                analog_labels = [
+                    label[0] if isinstance(label, list) else str(label)
+                    for label in analog_labels_raw
+                ]
             else:
                 analog_labels = [str(label) for label in analog_labels_raw]
         else:
@@ -1561,33 +1568,63 @@ def read_c3d_file(file_path, column_name):
 
         # Identify the target plate based on the requested column name (e.g. Force.Fz3 -> Plate 3)
         # We need to extract all 6 channels: Fx, Fy, Fz, Mx, My, Mz
-        
+
         # 1. Determine suffix/index from the requested column
         # E.g., if column_name is "Force.Fz3", we look for "3"
         # If no number, we assume 1 or look for corresponding channels
-        
+
         target_index = ""
         match = re.search(r"(\d+)$", column_name)
         if match:
             target_index = match.group(1)
-            
+
         print(f"Targeting Force Plate Index: {target_index if target_index else 'Auto'}")
 
         # Define channel patterns to look for
         components = {
-            "Fx": [f"Force.Fx{target_index}", f"Fx{target_index}", f"FX{target_index}", f"Force.FX{target_index}"],
-            "Fy": [f"Force.Fy{target_index}", f"Fy{target_index}", f"FY{target_index}", f"Force.FY{target_index}"],
-            "Fz": [f"Force.Fz{target_index}", f"Fz{target_index}", f"FZ{target_index}", f"Force.FZ{target_index}"],
-            "Mx": [f"Moment.Mx{target_index}", f"Mx{target_index}", f"MX{target_index}", f"Moment.MX{target_index}"],
-            "My": [f"Moment.My{target_index}", f"My{target_index}", f"MY{target_index}", f"Moment.MY{target_index}"],
-            "Mz": [f"Moment.Mz{target_index}", f"Mz{target_index}", f"MZ{target_index}", f"Moment.MZ{target_index}"],
+            "Fx": [
+                f"Force.Fx{target_index}",
+                f"Fx{target_index}",
+                f"FX{target_index}",
+                f"Force.FX{target_index}",
+            ],
+            "Fy": [
+                f"Force.Fy{target_index}",
+                f"Fy{target_index}",
+                f"FY{target_index}",
+                f"Force.FY{target_index}",
+            ],
+            "Fz": [
+                f"Force.Fz{target_index}",
+                f"Fz{target_index}",
+                f"FZ{target_index}",
+                f"Force.FZ{target_index}",
+            ],
+            "Mx": [
+                f"Moment.Mx{target_index}",
+                f"Mx{target_index}",
+                f"MX{target_index}",
+                f"Moment.MX{target_index}",
+            ],
+            "My": [
+                f"Moment.My{target_index}",
+                f"My{target_index}",
+                f"MY{target_index}",
+                f"Moment.MY{target_index}",
+            ],
+            "Mz": [
+                f"Moment.Mz{target_index}",
+                f"Mz{target_index}",
+                f"MZ{target_index}",
+                f"Moment.MZ{target_index}",
+            ],
         }
 
         # If strict column name was passed and found, use it as Fz primary
         # But we also try to find the neighbors
-        
+
         found_channels = {}
-        
+
         for comp, patterns in components.items():
             for pattern in patterns:
                 # Case insensitive search
@@ -1595,18 +1632,18 @@ def read_c3d_file(file_path, column_name):
                 if matching:
                     found_channels[comp] = matching[0]
                     break
-        
+
         # Check if we at least have Fz
         if "Fz" not in found_channels:
-             # Fallback: if we were given a specific column_name that corresponds to vertical force
-             # and we couldn't match the pattern logic above, verify if column_name itself exists
-             matching = [l for l in analog_labels if l.lower() == column_name.lower()]
-             if matching:
-                 found_channels["Fz"] = matching[0]
-                 print(f"Using requested column '{matching[0]}' as vertical force (Fz)")
-             else:
-                 print(f"Could not find vertical force channel (Fz). Requested: {column_name}")
-                 return None
+            # Fallback: if we were given a specific column_name that corresponds to vertical force
+            # and we couldn't match the pattern logic above, verify if column_name itself exists
+            matching = [l for l in analog_labels if l.lower() == column_name.lower()]
+            if matching:
+                found_channels["Fz"] = matching[0]
+                print(f"Using requested column '{matching[0]}' as vertical force (Fz)")
+            else:
+                print(f"Could not find vertical force channel (Fz). Requested: {column_name}")
+                return None
 
         print("Found channels:")
         for k, v in found_channels.items():
@@ -1614,17 +1651,17 @@ def read_c3d_file(file_path, column_name):
 
         # Extract data for all found channels
         extracted_data = {}
-        
+
         for comp, label in found_channels.items():
             idx = analog_labels.index(label)
-            
+
             # shape handling (1, n_ch, n_frames) or (n_ch, n_frames)
             if analogs.ndim == 3:
                 vals = analogs[0, idx, :]
             else:
-                 # assume (n_ch, n_frames)
-                 vals = analogs[idx, :]
-            
+                # assume (n_ch, n_frames)
+                vals = analogs[idx, :]
+
             extracted_data[comp] = vals
 
         # Ensure Fz is non-negative (reaction force convention), same as forceplate_analysis calc_cop
@@ -1638,18 +1675,15 @@ def read_c3d_file(file_path, column_name):
 
         # Construct DataFrame
         # Always ensure we have 'Time' and 'Force' (Fz alias) for backward compatibility
-        df_dict = {
-            "Time": time_values,
-            "Force": extracted_data["Fz"]
-        }
-        
+        df_dict = {"Time": time_values, "Force": extracted_data["Fz"]}
+
         # Add all components with standard names
         for comp in ["Fx", "Fy", "Fz", "Mx", "My", "Mz"]:
             if comp in extracted_data:
                 df_dict[f"Force.{comp}"] = extracted_data[comp]
-                
+
         force_data = pd.DataFrame(df_dict)
-        
+
         print(f"Analog frequency: {analog_freq} Hz")
         print(f"Data points: {num_frames}")
         print(f"Time range: {time_values[0]:.3f} - {time_values[-1]:.3f} s")
@@ -1659,6 +1693,7 @@ def read_c3d_file(file_path, column_name):
     except Exception as e:
         print(f"Error reading C3D file: {e}")
         import traceback
+
         traceback.print_exc()
         return None
 
@@ -1695,8 +1730,12 @@ def print_c3d_info(datac3d):
         for label, unit in zip(analog_labels, analog_units, strict=True):
             try:
                 # Handle encoding issues with special characters
-                label_str = str(label).encode('utf-8', errors='replace').decode('utf-8', errors='replace')
-                unit_str = str(unit).encode('utf-8', errors='replace').decode('utf-8', errors='replace')
+                label_str = (
+                    str(label).encode("utf-8", errors="replace").decode("utf-8", errors="replace")
+                )
+                unit_str = (
+                    str(unit).encode("utf-8", errors="replace").decode("utf-8", errors="replace")
+                )
                 print(f"  {label_str}: {unit_str}")
             except Exception:
                 print(f"  [Label {analog_labels.index(label)}]: {unit}")
@@ -2002,7 +2041,7 @@ def analyze_sit_to_stand(data, config):
                     components_present = False
                     break
                 component_cols[comp] = col
-            
+
             if components_present:
                 print("Calculating Center of Pressure (CoP)...")
                 try:
@@ -2010,7 +2049,7 @@ def analyze_sit_to_stand(data, config):
                     fp_config = config.get("force_plate", {})
                     width_mm = fp_config.get("width_mm", 464.0)
                     height_mm = fp_config.get("height_mm", 508.0)
-                    
+
                     # Extract raw components (ensure numpy arrays)
                     Fx = data[component_cols["Fx"]].values
                     Fy = data[component_cols["Fy"]].values
@@ -2018,7 +2057,7 @@ def analyze_sit_to_stand(data, config):
                     Mx = data[component_cols["Mx"]].values
                     My = data[component_cols["My"]].values
                     Mz = data[component_cols["Mz"]].values
-                    
+
                     # Prepare arguments for calc_cop
                     # calc_cop signature: (forces_moments, dimensions)
                     # forces_moments = (Fx, Fy, Fz, Mx, My, Mz)
@@ -2027,39 +2066,39 @@ def analyze_sit_to_stand(data, config):
                     # OR it might be simpler. Let's look at the implementation of Shimba in cop_calculate.py
                     # To be safe, I will use my direct implementation which I know is robust for this context.
                     # AND it avoids dependency issues if cop_calculate changes.
-                    
+
                     # Shimba Method (1984) - Simplified for Type 2 Plate (Origin at center of top surface)
                     # CoPx = -My / Fz
                     # CoPy =  Mx / Fz
-                    
+
                     # Check moment unit
                     moment_unit = fp_config.get("moment_unit", "N.mm")
-                    
+
                     # If moments are in N.mm and Force in N, Result is in mm.
                     # If moments are in N.m, Result is in m.
-                    
+
                     # Filter Fz to avoid division by zero
                     # Use a threshold (e.g., 10 N)
                     valid_mask = np.abs(Fz) > 10.0
-                    
+
                     cop_x = np.full_like(Fz, np.nan)
                     cop_y = np.full_like(Fz, np.nan)
-                    
+
                     # Calculate CoP
                     # Note: Mx is moment about X-axis (controls Y-coord), My is moment about Y-axis (controls X-coord)
-                    # Check sign convention. 
+                    # Check sign convention.
                     # Standard biomechanics (Right-Hand Rule):
                     # CoP_x = -My / Fz
                     # CoP_y =  Mx / Fz
-                    
+
                     cop_x[valid_mask] = -My[valid_mask] / Fz[valid_mask]
-                    cop_y[valid_mask] =  Mx[valid_mask] / Fz[valid_mask]
-                    
+                    cop_y[valid_mask] = Mx[valid_mask] / Fz[valid_mask]
+
                     # Unit conversion if needed (target: mm)
-                    if "mm" not in moment_unit.lower(): # e.g. "N.m"
-                         cop_x *= 1000.0
-                         cop_y *= 1000.0
-                    
+                    if "mm" not in moment_unit.lower():  # e.g. "N.m"
+                        cop_x *= 1000.0
+                        cop_y *= 1000.0
+
                     # Root Mean Square of CoP sway (total and separated into ML/AP)
                     n_valid = np.sum(valid_mask)
                     rms_sway_total_mm = 0.0
@@ -2072,7 +2111,9 @@ def analyze_sit_to_stand(data, config):
                         my = np.nanmean(cy)
                         rms_sway_ml_mm = float(np.sqrt(np.nanmean((cx - mx) ** 2)))
                         rms_sway_ap_mm = float(np.sqrt(np.nanmean((cy - my) ** 2)))
-                        rms_sway_total_mm = float(np.sqrt(np.nanmean((cx - mx) ** 2 + (cy - my) ** 2)))
+                        rms_sway_total_mm = float(
+                            np.sqrt(np.nanmean((cx - mx) ** 2 + (cy - my) ** 2))
+                        )
 
                     # 95% Confidence Ellipse (PCA-based via ellipse.py, or covariance fallback)
                     ellipse_area_95 = 0.0
@@ -2114,7 +2155,13 @@ def analyze_sit_to_stand(data, config):
                         "valid_mask": valid_mask,
                         "mean_cop_x": np.nanmean(cop_x),
                         "mean_cop_y": np.nanmean(cop_y),
-                        "cop_path_length": np.nansum(np.sqrt(np.diff(cop_x[valid_mask])**2 + np.diff(cop_y[valid_mask])**2)) if np.any(valid_mask) else 0.0,
+                        "cop_path_length": np.nansum(
+                            np.sqrt(
+                                np.diff(cop_x[valid_mask]) ** 2 + np.diff(cop_y[valid_mask]) ** 2
+                            )
+                        )
+                        if np.any(valid_mask)
+                        else 0.0,
                         "ellipse_area_95": ellipse_area_95,
                         "ellipse_angle_deg": ellipse_angle_deg,
                         "pca_pc1_variance_ratio": pca_pc1_variance_ratio,
@@ -2127,8 +2174,10 @@ def analyze_sit_to_stand(data, config):
                     }
                     print(f"CoP Path Length: {cop_results['cop_path_length']:.2f} mm")
                     print(f"CoP Ellipse Area (95%): {cop_results['ellipse_area_95']:.2f} mm^2")
-                    print(f"CoP RMS Sway Total: {cop_results['rms_sway_total_mm']:.2f} mm (ML: {cop_results['rms_sway_ml_mm']:.2f}, AP: {cop_results['rms_sway_ap_mm']:.2f})")
-                    
+                    print(
+                        f"CoP RMS Sway Total: {cop_results['rms_sway_total_mm']:.2f} mm (ML: {cop_results['rms_sway_ml_mm']:.2f}, AP: {cop_results['rms_sway_ap_mm']:.2f})"
+                    )
+
                 except Exception as e:
                     print(f"Error calculating CoP: {e}")
 
@@ -2146,7 +2195,7 @@ def analyze_sit_to_stand(data, config):
             "time_to_peak_metrics": time_to_peak_metrics,
             "stability_metrics": stability_metrics,
             "energy_metrics": energy_metrics,
-            "cop_results": cop_results, 
+            "cop_results": cop_results,
             "detection_threshold": force_threshold,
             "status": "analyzed",
         }
@@ -3740,7 +3789,7 @@ def generate_interactive_html_report(data, analysis_result, config, output_path,
     Generates an interactive HTML report with static charts using Plotly.js.
     Uses Plotly for interactive zooming/panning/hovering without slow animations.
     Includes Center of Pressure (CoP) analysis visualizations.
-    
+
     Parameters:
     -----------
     data : pandas.DataFrame
@@ -3758,17 +3807,17 @@ def generate_interactive_html_report(data, analysis_result, config, output_path,
         import base64
         import json
         from datetime import datetime
-        
+
         # Try to load VAILA logo
         logo_b64 = ""
         try:
             current_file = Path(__file__).resolve()
             project_root = current_file.parent.parent
             logo_path = project_root / "docs" / "images" / "vaila_logo.png"
-            
+
             if not logo_path.exists():
                 logo_path = project_root / "docs" / "images" / "vaila.png"
-            
+
             if logo_path.exists():
                 with open(logo_path, "rb") as img_file:
                     logo_data = img_file.read()
@@ -3785,27 +3834,31 @@ def generate_interactive_html_report(data, analysis_result, config, output_path,
                     force_plot_b64 = base64.b64encode(img_file.read()).decode("utf-8")
             except Exception as e:
                 print(f"Warning: Could not load force plot image: {e}")
-        
+
         # Extract data for JavaScript - convert to JSON-safe format
         time_data = [float(x) for x in data["Time"].tolist()]
         force_data = [float(x) for x in data["Force"].tolist()]
-        
+
         # Extract phases information
         phases = analysis_result.get("sit_to_stand_phases", [])
         phases_data = []
         for phase in phases:
-            phases_data.append({
-                "start_time": float(phase.get("start_time", 0)),
-                "end_time": float(phase.get("end_time", 0)),
-                "peak_time": float(phase.get("peak_time", 0)),
-                "peak_force": float(phase.get("peak_force", 0)),
-                "duration": float(phase.get("duration", 0)),
-            })
-        
+            phases_data.append(
+                {
+                    "start_time": float(phase.get("start_time", 0)),
+                    "end_time": float(phase.get("end_time", 0)),
+                    "peak_time": float(phase.get("peak_time", 0)),
+                    "peak_force": float(phase.get("peak_force", 0)),
+                    "duration": float(phase.get("duration", 0)),
+                }
+            )
+
         # Extract peaks
         all_peaks = analysis_result.get("all_peaks_global", [])
-        peaks_data = [{"time": float(p.get("time", 0)), "force": float(p.get("force", 0))} for p in all_peaks]
-        
+        peaks_data = [
+            {"time": float(p.get("time", 0)), "force": float(p.get("force", 0))} for p in all_peaks
+        ]
+
         # Extract CoP data if available
         cop_data = analysis_result.get("cop_results", {})
         has_cop = False
@@ -3829,120 +3882,120 @@ def generate_interactive_html_report(data, analysis_result, config, output_path,
             "stability_index": float(stability.get("stability_index", 0)),
             "mean_deviation": float(stability.get("mean_deviation", 0)),
         }
-        
+
         # Extract movement metrics
         movement = analysis_result.get("movement_metrics", {})
         energy = analysis_result.get("energy_metrics", {})
         time_to_peak = analysis_result.get("time_to_peak_metrics", {})
         impulse = analysis_result.get("impulse_metrics", {})
-        
+
         # Prepare metrics grid data (align with old animated report: Duration, Mean/Max/Min Force, movement, time-to-peak, impulse, stability, energy)
-        metrics_html = f'''
+        metrics_html = f"""
             <div class="metrics-grid">
                 <div class="metric-card">
                     <div class="metric-label">Duration</div>
-                    <div class="metric-value">{analysis_result.get('duration', 0):.2f}<span class="metric-unit">s</span></div>
+                    <div class="metric-value">{analysis_result.get("duration", 0):.2f}<span class="metric-unit">s</span></div>
                 </div>
                 <div class="metric-card">
                     <div class="metric-label">Mean Force</div>
-                    <div class="metric-value">{analysis_result.get('mean_force', 0):.2f}<span class="metric-unit">N</span></div>
+                    <div class="metric-value">{analysis_result.get("mean_force", 0):.2f}<span class="metric-unit">N</span></div>
                 </div>
                 <div class="metric-card">
                     <div class="metric-label">Max Force</div>
-                    <div class="metric-value">{analysis_result.get('max_force', 0):.1f}<span class="metric-unit">N</span></div>
+                    <div class="metric-value">{analysis_result.get("max_force", 0):.1f}<span class="metric-unit">N</span></div>
                 </div>
                 <div class="metric-card">
                     <div class="metric-label">Min Force</div>
-                    <div class="metric-value">{analysis_result.get('min_force', 0):.1f}<span class="metric-unit">N</span></div>
+                    <div class="metric-value">{analysis_result.get("min_force", 0):.1f}<span class="metric-unit">N</span></div>
                 </div>
                 <div class="metric-card">
                     <div class="metric-label">Phases Detected</div>
-                    <div class="metric-value">{movement.get('num_phases', 0)}<span class="metric-unit">count</span></div>
+                    <div class="metric-value">{movement.get("num_phases", 0)}<span class="metric-unit">count</span></div>
                 </div>
                 <div class="metric-card">
                     <div class="metric-label">Total Movement Time</div>
-                    <div class="metric-value">{movement.get('total_movement_time', 0):.2f}<span class="metric-unit">s</span></div>
+                    <div class="metric-value">{movement.get("total_movement_time", 0):.2f}<span class="metric-unit">s</span></div>
                 </div>
                 <div class="metric-card">
                     <div class="metric-label">Average Phase Duration</div>
-                    <div class="metric-value">{movement.get('average_phase_duration', 0):.2f}<span class="metric-unit">s</span></div>
+                    <div class="metric-value">{movement.get("average_phase_duration", 0):.2f}<span class="metric-unit">s</span></div>
                 </div>
                 <div class="metric-card">
                     <div class="metric-label">Stability Index</div>
-                    <div class="metric-value">{stability_data.get('stability_index', 0):.3f}<span class="metric-unit">(0-1)</span></div>
+                    <div class="metric-value">{stability_data.get("stability_index", 0):.3f}<span class="metric-unit">(0-1)</span></div>
                 </div>
                 <div class="metric-card">
                     <div class="metric-label">Mean Deviation from Peak</div>
-                    <div class="metric-value">{stability_data.get('mean_deviation', 0):.2f}<span class="metric-unit">N</span></div>
+                    <div class="metric-value">{stability_data.get("mean_deviation", 0):.2f}<span class="metric-unit">N</span></div>
                 </div>
-        '''
+        """
         if time_to_peak.get("time_to_first_peak") is not None:
-            metrics_html += f'''
+            metrics_html += f"""
                 <div class="metric-card">
                     <div class="metric-label">Time to First Peak</div>
-                    <div class="metric-value">{time_to_peak.get('time_to_first_peak', 0):.3f}<span class="metric-unit">s</span></div>
+                    <div class="metric-value">{time_to_peak.get("time_to_first_peak", 0):.3f}<span class="metric-unit">s</span></div>
                 </div>
-            '''
+            """
         if time_to_peak.get("time_to_max_force") is not None:
-            metrics_html += f'''
+            metrics_html += f"""
                 <div class="metric-card">
                     <div class="metric-label">Time to Max Force</div>
-                    <div class="metric-value">{time_to_peak.get('time_to_max_force', 0):.3f}<span class="metric-unit">s</span></div>
+                    <div class="metric-value">{time_to_peak.get("time_to_max_force", 0):.3f}<span class="metric-unit">s</span></div>
                 </div>
-            '''
+            """
         if impulse:
-            metrics_html += f'''
+            metrics_html += f"""
                 <div class="metric-card">
                     <div class="metric-label">Total Impulse</div>
-                    <div class="metric-value">{impulse.get('total_impulse', 0):.2f}<span class="metric-unit">N⋅s</span></div>
+                    <div class="metric-value">{impulse.get("total_impulse", 0):.2f}<span class="metric-unit">N⋅s</span></div>
                 </div>
                 <div class="metric-card">
                     <div class="metric-label">Peak Power</div>
-                    <div class="metric-value">{impulse.get('peak_power', 0):.2f}<span class="metric-unit">W</span></div>
+                    <div class="metric-value">{impulse.get("peak_power", 0):.2f}<span class="metric-unit">W</span></div>
                 </div>
-            '''
+            """
         if energy:
-            metrics_html += f'''
+            metrics_html += f"""
                 <div class="metric-card">
                     <div class="metric-label">Body Weight</div>
-                    <div class="metric-value">{energy.get('body_weight_kg', 0):.1f}<span class="metric-unit">kg</span></div>
+                    <div class="metric-value">{energy.get("body_weight_kg", 0):.1f}<span class="metric-unit">kg</span></div>
                 </div>
                 <div class="metric-card">
                     <div class="metric-label">Total Metabolic Energy</div>
-                    <div class="metric-value">{energy.get('total_metabolic_energy_kcal', 0):.3f}<span class="metric-unit">kcal</span></div>
+                    <div class="metric-value">{energy.get("total_metabolic_energy_kcal", 0):.3f}<span class="metric-unit">kcal</span></div>
                 </div>
                 <div class="metric-card">
                     <div class="metric-label">Energy Efficiency</div>
-                    <div class="metric-value">{energy.get('energy_efficiency', 0):.1f}<span class="metric-unit">%</span></div>
+                    <div class="metric-value">{energy.get("energy_efficiency", 0):.1f}<span class="metric-unit">%</span></div>
                 </div>
-            '''
+            """
         if has_cop:
             pca1_pct = cop_data.get("pca_pc1_variance_ratio", 0) * 100
             pca2_pct = cop_data.get("pca_pc2_variance_ratio", 0) * 100
-            metrics_html += f'''
+            metrics_html += f"""
                 <div class="metric-card">
                     <div class="metric-label">CoP Path Length</div>
-                    <div class="metric-value">{cop_data.get('cop_path_length', 0):.1f}<span class="metric-unit">mm</span></div>
+                    <div class="metric-value">{cop_data.get("cop_path_length", 0):.1f}<span class="metric-unit">mm</span></div>
                 </div>
                 <div class="metric-card">
                     <div class="metric-label">Ellipse Area (95%)</div>
-                    <div class="metric-value">{cop_data.get('ellipse_area_95', 0):.1f}<span class="metric-unit">mm²</span></div>
+                    <div class="metric-value">{cop_data.get("ellipse_area_95", 0):.1f}<span class="metric-unit">mm²</span></div>
                 </div>
                 <div class="metric-card">
                     <div class="metric-label">Ellipse Angle</div>
-                    <div class="metric-value">{cop_data.get('ellipse_angle_deg', 0):.1f}<span class="metric-unit">°</span></div>
+                    <div class="metric-value">{cop_data.get("ellipse_angle_deg", 0):.1f}<span class="metric-unit">°</span></div>
                 </div>
                 <div class="metric-card">
                     <div class="metric-label">RMS Sway Total (CoP)</div>
-                    <div class="metric-value">{cop_data.get('rms_sway_total_mm', 0):.2f}<span class="metric-unit">mm</span></div>
+                    <div class="metric-value">{cop_data.get("rms_sway_total_mm", 0):.2f}<span class="metric-unit">mm</span></div>
                 </div>
                 <div class="metric-card">
                     <div class="metric-label">RMS Sway ML (X)</div>
-                    <div class="metric-value">{cop_data.get('rms_sway_ml_mm', 0):.2f}<span class="metric-unit">mm</span></div>
+                    <div class="metric-value">{cop_data.get("rms_sway_ml_mm", 0):.2f}<span class="metric-unit">mm</span></div>
                 </div>
                 <div class="metric-card">
                     <div class="metric-label">RMS Sway AP (Y)</div>
-                    <div class="metric-value">{cop_data.get('rms_sway_ap_mm', 0):.2f}<span class="metric-unit">mm</span></div>
+                    <div class="metric-value">{cop_data.get("rms_sway_ap_mm", 0):.2f}<span class="metric-unit">mm</span></div>
                 </div>
                 <div class="metric-card">
                     <div class="metric-label">PCA PC1 Variance</div>
@@ -3952,17 +4005,17 @@ def generate_interactive_html_report(data, analysis_result, config, output_path,
                     <div class="metric-label">PCA PC2 Variance</div>
                     <div class="metric-value">{pca2_pct:.1f}<span class="metric-unit">%</span></div>
                 </div>
-            '''
-            
-        metrics_html += '</div>'
-        
+            """
+
+        metrics_html += "</div>"
+
         # Create HTML content
         html_content = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sit-to-Stand Interactive Report - {result.get('filename', 'Analysis')}</title>
+    <title>Sit-to-Stand Interactive Report - {result.get("filename", "Analysis")}</title>
     <script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
@@ -4053,22 +4106,33 @@ def generate_interactive_html_report(data, analysis_result, config, output_path,
         <div class="header">
             <div class="header-content">
                 <h1>Sit-to-Stand Analysis Report</h1>
-                <p>{result.get('filename', 'Analysis File')} • {datetime.now().strftime("%Y-%m-%d %H:%M")}</p>
+                <p>{result.get("filename", "Analysis File")} • {
+            datetime.now().strftime("%Y-%m-%d %H:%M")
+        }</p>
             </div>
-            {f'<img src="data:image/png;base64,{logo_b64}" style="height: 50px;" alt="vailá">' if logo_b64 else ''}
+            {
+            f'<img src="data:image/png;base64,{logo_b64}" style="height: 50px;" alt="vailá">'
+            if logo_b64
+            else ""
+        }
         </div>
         
         <div class="content">
             {metrics_html}
             
-            {f'<div class="chart-section"><div class="chart-title">📊 Force plot (PNG)</div><img src="data:image/png;base64,{force_plot_b64}" alt="Force plot" style="max-width:100%; height:auto; border-radius:8px;" /></div>' if force_plot_b64 else ''}
+            {
+            f'<div class="chart-section"><div class="chart-title">📊 Force plot (PNG)</div><img src="data:image/png;base64,{force_plot_b64}" alt="Force plot" style="max-width:100%; height:auto; border-radius:8px;" /></div>'
+            if force_plot_b64
+            else ""
+        }
             
             <div class="chart-section">
                 <div class="chart-title">📊 Vertical Force & RFD Analysis</div>
                 <div id="forceChart" class="chart-container" style="height: 600px;"></div>
             </div>
             
-            {f'''
+            {
+            '''
             <div class="two-col">
                 <div class="chart-section">
                     <div class="chart-title">👣 CoP Path (Top View)</div>
@@ -4079,7 +4143,10 @@ def generate_interactive_html_report(data, analysis_result, config, output_path,
                     <div id="copTimeChart" class="chart-container" style="height: 450px;"></div>
                 </div>
             </div>
-            ''' if has_cop else ''}
+            '''
+            if has_cop
+            else ""
+        }
             
         </div>
         
@@ -4161,7 +4228,8 @@ def generate_interactive_html_report(data, analysis_result, config, output_path,
         Plotly.newPlot('forceChart', [forceTrace, rfdTrace], layoutForce, {{responsive: true}});
         
         // --- CoP CHARTS ---
-        {f'''
+        {
+            f'''
         const copX = {json.dumps(cop_x)};
         const copY = {json.dumps(cop_y)};
         const copEllipseX = {json.dumps(cop_ellipse_x)};
@@ -4222,21 +4290,25 @@ def generate_interactive_html_report(data, analysis_result, config, output_path,
         }};
         
         Plotly.newPlot('copTimeChart', [copXTrace, copYTrace], layoutCopTime, {{responsive: true}});
-        ''' if has_cop else ''}
+        '''
+            if has_cop
+            else ""
+        }
         
     </script>
 </body>
 </html>"""
-        
+
         # Write HTML file
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(html_content)
-        
+
         print(f"  Interactive HTML report saved: {Path(output_path).name}")
-        
+
     except Exception as e:
         print(f"Error generating interactive HTML report: {str(e)}")
         import traceback
+
         traceback.print_exc()
 
 
@@ -4297,13 +4369,13 @@ class SitToStandGUI:
 
         input_btn = tk.Button(input_frame, text="Browse", command=self.browse_input_dir, width=8)
         input_btn.pack(side=tk.LEFT)
-        
+
         # Info label about automatic file detection
         info_label = tk.Label(
-            main_frame, 
+            main_frame,
             text="Note: Automatically processes all .c3d and .csv files in the directory",
             font=("Arial", 8),
-            fg="gray"
+            fg="gray",
         )
         info_label.pack(pady=(0, 10))
 
@@ -4490,7 +4562,9 @@ class SitToStandGUI:
 
             if result is None:  # Success
                 self.status_label.config(text="Analysis completed successfully!", fg="green")
-                messagebox.showinfo("Success", "Sit-to-Stand batch analysis completed successfully!")
+                messagebox.showinfo(
+                    "Success", "Sit-to-Stand batch analysis completed successfully!"
+                )
             else:
                 self.status_label.config(text="Analysis failed", fg="red")
                 messagebox.showerror("Error", "Analysis failed. Check console for details.")

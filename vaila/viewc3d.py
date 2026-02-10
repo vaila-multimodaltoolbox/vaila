@@ -12,10 +12,13 @@ Please see AUTHORS for contributors.
 Author: Paulo Santiago
 Version: 0.2.0
 Created: 06 February 2025
-Last Updated: 14 January 2026
+Last Updated: 10 February 2026
 
 To run:
-uv run viewc3d.py
+  uv run viewc3d.py [path/to/file.c3d]
+  python -m vaila.viewc3d [path/to/file.c3d]
+  CLI help:  python -m vaila.viewc3d --help
+  GUI help:  press H in the viewer (opens HTML)
 
 Description:
 ------------
@@ -24,12 +27,18 @@ Automatically detects and converts units (millimeters/meters) with enhanced conf
 Features adaptive ground plane, grid, and camera positioning based on data scale.
 Features soccer field lines and penalty areas.
 
+    Architecture:
+    - VailaModel: data layer (C3D acquisition, GetPointFrame, GetFrameNumber, GetPointFrequency)
+    - VailaView: visualization layer (Open3D; trails, dynamic grid, Z-up, picking)
+
     Key Features:
     - Adaptive visualization for small (lab) to large (soccer field) scales
     - Automatic unit detection (mm/m) with confidence scoring
     - Interactive marker selection with search and filter options
     - Real-time marker labels with color coding
     - Ground grid toggle and field line customization
+    - Trails (ghosting) with older segments drawn darker; Z-up camera when appropriate
+    - Marker picking: ` / ~ to cycle highlighted marker (yellow)
     - Matplotlib fallback for systems without OpenGL support
 
     Keyboard Shortcuts:
@@ -43,6 +52,7 @@ Features soccer field lines and penalty areas.
       +/-/= - Increase/Decrease marker size
       C - Change marker color
       X - Toggle marker labels (names)
+      ` / ~ - Cycle picked marker (highlight)
 
     View:
       T - Change background color
@@ -77,6 +87,7 @@ License:
     Affero General Public License v3.0 - AGPL-3.0
 """
 
+import argparse
 import contextlib
 import hashlib
 import json
@@ -497,6 +508,274 @@ def load_c3d_file():
         messagebox.showerror("Error Loading File", f"Failed to load C3D file:\n{str(e)}")
         print(f"[bold red]Error details:[/bold red] {str(e)}")
         exit(1)
+
+
+# -----------------------------------------------------------------------------
+# VailaModel: data layer
+# Separates acquisition data from visualization; enables future multi-C3D loading.
+# -----------------------------------------------------------------------------
+class VailaModel:
+    """
+    Encapsulates C3D acquisition data.
+    Use GetPointFrame(index), GetFrameNumber(), GetPointFrequency() for a clean
+    separation between data and visualization.
+    """
+
+    def __init__(self, filepath=None):
+        """
+        Load C3D and run marker selection. If filepath is None, opens file dialog.
+        """
+        (
+            pts,
+            self._filepath,
+            self._fps,
+            self._marker_labels,
+            self._residuals,
+            self._events,
+            self._analog_info,
+            self._c3d_object,
+        ) = load_c3d_file() if filepath is None else self._load_from_path(filepath)
+        self._selected_indices = select_markers(self._marker_labels, self._filepath)
+        if not self._selected_indices:
+            print("No markers selected, exiting.")
+            exit(0)
+        self._points_all = pts  # (num_frames, total_markers, 3)
+        self._points = pts[:, self._selected_indices, :]  # filtered
+        self._selected_names = [self._marker_labels[i] for i in self._selected_indices]
+        self._num_frames, self._num_markers, _ = self._points.shape
+
+    def _load_from_path(self, filepath):
+        """Load C3D from a given path (same logic as load_c3d_file, no dialog)."""
+        env_path = os.environ.get("VIEWC3D_FILE", "").strip()
+        path = env_path if (env_path and os.path.exists(env_path)) else filepath
+        if not path or not os.path.exists(path):
+            raise FileNotFoundError(f"C3D file not found: {filepath}")
+        c3d = ezc3d.c3d(path)
+        fps = c3d["header"]["points"]["frame_rate"]
+        pts = c3d["data"]["points"]
+        pts = pts[:3, :, :]
+        pts = np.transpose(pts, (2, 1, 0))  # (num_frames, num_markers, 3)
+        marker_labels = c3d["parameters"]["POINT"]["LABELS"]["value"]
+        if len(marker_labels) > 0 and isinstance(marker_labels[0], list):
+            marker_labels = marker_labels[0]
+        residuals = None
+        try:
+            residuals = c3d["data"]["meta_points"]["residuals"]
+            if residuals.shape != pts.shape[:2] and residuals.shape == (pts.shape[1], pts.shape[0]):
+                residuals = residuals.T
+        except (KeyError, AttributeError):
+            pass
+        events = None
+        try:
+            event_params = c3d["parameters"]["EVENT"]
+            if all(k in event_params for k in ["CONTEXTS", "LABELS", "TIMES"]):
+                event_times = event_params["TIMES"]["value"][1, :]
+                events = {
+                    "times": event_times,
+                    "labels": event_params["LABELS"]["value"],
+                    "contexts": event_params["CONTEXTS"]["value"],
+                }
+        except (KeyError, AttributeError):
+            pass
+        analog_info = None
+        try:
+            analog_labels = c3d["parameters"]["ANALOG"]["LABELS"]["value"]
+            if len(analog_labels) > 0 and isinstance(analog_labels[0], list):
+                analog_labels = analog_labels[0]
+            analog_freq = c3d["header"]["analogs"]["frame_rate"]
+            analog_info = {
+                "labels": analog_labels,
+                "freq": analog_freq,
+                "exists": len(analog_labels) > 0,
+            }
+        except (KeyError, AttributeError):
+            analog_info = {"labels": [], "freq": 0.0, "exists": False}
+        is_mm, _ = detect_c3d_units(pts)
+        if is_mm:
+            pts = pts * 0.001
+        return pts, path, fps, marker_labels, residuals, events, analog_info, c3d
+
+    def get_point_frame(self, frame_index):
+        """Return marker positions for one frame, shape (num_markers, 3)."""
+        return self._points[frame_index]
+
+    def get_frame_number(self):
+        """Total number of point frames."""
+        return self._num_frames
+
+    def get_point_frequency(self):
+        """Point frame rate in Hz."""
+        return self._fps
+
+    def get_point_number(self):
+        """Number of markers (after selection)."""
+        return self._num_markers
+
+    def get_points(self):
+        """All frames, selected markers only: (num_frames, num_markers, 3)."""
+        return self._points
+
+    def get_point_labels(self):
+        """All marker labels from C3D."""
+        return self._marker_labels
+
+    def get_selected_indices(self):
+        """Indices of selected markers in the full list."""
+        return self._selected_indices
+
+    def get_selected_names(self):
+        """Names of selected markers."""
+        return self._selected_names
+
+    def get_filepath(self):
+        return self._filepath
+
+    def get_residuals(self):
+        return self._residuals
+
+    def get_events(self):
+        return self._events
+
+    def get_analog_info(self):
+        return self._analog_info
+
+    def get_c3d_object(self):
+        return self._c3d_object
+
+    def get_points_all(self):
+        """Full point array before marker selection (for residuals, etc.)."""
+        return self._points_all
+
+    def get_bounds(self):
+        """Return (x_min, x_max, y_min, y_max, z_min, z_max) from valid data."""
+        all_pts = self._points.reshape(-1, 3)
+        valid = all_pts[~np.isnan(all_pts).any(axis=1)]
+        if len(valid) == 0:
+            return (-10, 10, -10, 10, 0, 1)
+        return (
+            float(np.min(valid[:, 0])),
+            float(np.max(valid[:, 0])),
+            float(np.min(valid[:, 1])),
+            float(np.max(valid[:, 1])),
+            float(np.min(valid[:, 2])),
+            float(np.max(valid[:, 2])),
+        )
+
+    def is_z_up(self):
+        """
+        Heuristic: if Z range is larger than Y range, assume Z-up (common in biomechanics).
+        Used to set Open3D camera up vector to (0, 0, 1).
+        """
+        x_min, x_max, y_min, y_max, z_min, z_max = self.get_bounds()
+        z_range = z_max - z_min
+        y_range = y_max - y_min
+        return z_range > y_range
+
+
+# -----------------------------------------------------------------------------
+# VailaView: Open3D visualization layer
+# Holds model reference and optional state (e.g. trail buffer). Scene and
+# main loop remain in run_viewc3d(); this class can be extended to own
+# the visualizer and run() in a future refactor.
+# -----------------------------------------------------------------------------
+class VailaView:
+    """
+    Open3D-based 3D viewer for C3D acquisition data.
+    Uses VailaModel for all data access (GetPointFrame, GetFrameNumber, etc.).
+    Supports trails (ghosting), dynamic grid from bounding box, Z-up camera.
+    """
+
+    def __init__(self, model):
+        assert isinstance(model, VailaModel)
+        self.model = model
+        self._trail_buffer = deque(maxlen=120)  # Last N frames for trail/ghosting
+
+
+# -----------------------------------------------------------------------------
+# Open3DMokkaViewer: main application class (structure mirrors viewc3d_pyvista.MokkaLikeViewer)
+# Encapsulates state, init_vis (window + geometries + callbacks), and run (animation loop).
+# -----------------------------------------------------------------------------
+class Open3DMokkaViewer:
+    """
+    Main Open3D C3D viewer application. Holds model (VailaModel), view config (VailaView),
+    visualizer, and all playback/label state. Use init_vis() for setup, run() for the event loop.
+    """
+
+    def __init__(self, model):
+        assert isinstance(model, VailaModel)
+        self.model = model
+        self.view_state = VailaView(model)
+        # Data from model
+        self.points = model.get_points()
+        self.filepath = model.get_filepath()
+        self.fps = model.get_point_frequency()
+        self.marker_labels = model.get_point_labels()
+        self.selected_indices = model.get_selected_indices()
+        self.residuals = model.get_residuals()
+        self.events = model.get_events()
+        self.analog_info = model.get_analog_info()
+        self.c3d_object = model.get_c3d_object()
+        self.num_frames = model.get_frame_number()
+        self.num_markers = model.get_point_number()
+        self.total_markers = len(self.marker_labels)
+        self.selected_marker_names = model.get_selected_names()
+        import copy
+
+        self.original_c3d_object = self.c3d_object
+        self.edited_c3d_object = copy.deepcopy(self.c3d_object)
+        self.original_points = self.points.copy()
+        self.original_residuals = self.residuals.copy() if self.residuals is not None else None
+        # Playback and UI state
+        self.current_frame = 0
+        self.is_playing = False
+        self.vis = None
+        self.playback_rates = [0.1, 0.2, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0, 128.0]
+        self.playback_rate_index = [4]
+        self.last_time_ref = [time.time()]
+
+    def init_vis(self):
+        """Setup Open3D window, geometries (points, grid, floor, trails), and key callbacks."""
+        _run_open3d_body(self)
+
+    def run(self):
+        """Run the Open3D event loop: init_vis then animation loop."""
+        self.init_vis()
+        _run_open3d_loop(self)
+
+
+def _run_open3d_body(viewer):
+    """Run the Open3D setup (window, geometries, callbacks). Uses run_viewc3d with viewer attached."""
+    global _setup_only_viewer
+    _setup_only_viewer = viewer
+    try:
+        run_viewc3d()
+    finally:
+        _setup_only_viewer = None
+
+
+def _run_open3d_loop(viewer):
+    """Open3D event loop: playback timing and render. Requires viewer._next_frame set by init_vis."""
+    while True:
+        if not viewer.vis.poll_events():
+            break
+        if viewer.is_playing:
+            current_time = time.time()
+            effective_fps = viewer.fps * viewer.playback_rates[viewer.playback_rate_index[0]]
+            interval = 1.0 / effective_fps if effective_fps > 0 else 0
+            if effective_fps > 0 and interval > 0:
+                elapsed = current_time - viewer.last_time_ref[0]
+                if elapsed >= interval:
+                    n = min(max(1, int(elapsed / interval)), 60)
+                    for _ in range(n):
+                        viewer._next_frame(viewer.vis)
+                    viewer.last_time_ref[0] += n * interval
+                    if viewer.last_time_ref[0] < current_time - 2 * interval:
+                        viewer.last_time_ref[0] = current_time
+        else:
+            time.sleep(0.01)
+        with contextlib.suppress(Exception):
+            viewer.vis.update_renderer()
+    viewer.vis.destroy_window()
 
 
 def toggle_theme(theme, window=None):
@@ -1336,91 +1615,138 @@ def detect_gaps(points):
     return gap_info
 
 
-def run_viewc3d():
-    # Print the directory and name of the script being executed
-    print(f"Running script: {Path(__file__).name}")
-    print(f"Script directory: {Path(__file__).parent}")
-    print("Starting viewc3d.py...")
-    print("-" * 80)
+# When set by _run_open3d_body(viewer), run_viewc3d() uses this viewer and only runs setup (no loop).
+_setup_only_viewer = None
 
-    # Load data from the C3D file, including FPS and marker labels
-    points, filepath, fps, marker_labels, residuals, events, analog_info, c3d_object = (
-        load_c3d_file()
-    )
-    num_frames, total_markers, _ = points.shape
 
-    # Let user select which markers to display - passar o filepath
-    selected_indices = select_markers(marker_labels, filepath)
-    if not selected_indices:
-        print("No markers selected, exiting.")
-        exit(0)
+def run_viewc3d(c3d_path=None):
+    global _setup_only_viewer
+    if _setup_only_viewer is not None:
+        viewer = _setup_only_viewer
+        file_name = os.path.basename(viewer.filepath)
+        num_frames = viewer.num_frames
+        num_markers = viewer.num_markers
+        total_markers = viewer.total_markers
+        fps = viewer.fps
+        points = viewer.points
+        filepath = viewer.filepath
+        marker_labels = viewer.marker_labels
+        selected_indices = viewer.selected_indices
+        residuals = viewer.residuals
+        events = viewer.events
+        analog_info = viewer.analog_info
+        c3d_object = viewer.c3d_object
+        selected_marker_names = viewer.selected_marker_names
+        original_c3d_object = viewer.original_c3d_object
+        edited_c3d_object = viewer.edited_c3d_object
+        original_points = viewer.original_points
+        original_residuals = viewer.original_residuals
+        # Build window title and fall through to setup block
+        window_title = (
+            f"C3D Viewer | File: {file_name} | Markers: {num_markers}/{total_markers} | Frames: {num_frames} | FPS: {fps} | "
+            "Keys: [←→: Frame, ↑↓: 60 Frames, +/-: Size, C: Color, Space: Play, H: Help] | "
+            "Mouse: [Left: Rotate, Middle/Right: Pan, Wheel: Zoom]"
+        )
+    else:
+        # Print the directory and name of the script being executed
+        print(f"Running script: {Path(__file__).name}")
+        print(f"Script directory: {Path(__file__).parent}")
+        print("Starting viewc3d.py...")
+        print("-" * 80)
 
-    # Check OpenGL support before proceeding
-    opengl_supported, error_msg = check_opengl_support()
+        # Data layer: load C3D and run marker selection
+        model = VailaModel(c3d_path)
 
-    if not opengl_supported:
-        import platform
+        points = model.get_points()
+        filepath = model.get_filepath()
+        fps = model.get_point_frequency()
+        marker_labels = model.get_point_labels()
+        selected_indices = model.get_selected_indices()
+        residuals = model.get_residuals()
+        events = model.get_events()
+        analog_info = model.get_analog_info()
+        c3d_object = model.get_c3d_object()
+        num_frames = model.get_frame_number()
+        num_markers = model.get_point_number()
+        total_markers = len(marker_labels)
+        selected_marker_names = model.get_selected_names()
 
-        print("[yellow] OpenGL/Open3D not supported on this system:[/yellow]")
-        print(f"[yellow]  {error_msg}[/yellow]")
+        # Check OpenGL support before proceeding
+        opengl_supported, error_msg = check_opengl_support()
 
-        # Platform-specific messages
-        if platform.system() == "Darwin":
-            print(
-                "[yellow]  This is common on macOS with Apple Silicon (M1/M2/M3/M4) due to GLFW compatibility issues[/yellow]"
-            )
-            print(
-                "[yellow]  The matplotlib fallback provides full functionality for C3D visualization[/yellow]"
-            )
-        else:
-            print("[yellow]  This is common on older Linux systems or remote connections[/yellow]")
+        if not opengl_supported:
+            import platform
 
-        print("[cyan] Switching to matplotlib fallback visualization...[/cyan]")
+            print("[yellow] OpenGL/Open3D not supported on this system:[/yellow]")
+            print(f"[yellow]  {error_msg}[/yellow]")
 
-        success = run_viewc3d_fallback(points, filepath, fps, marker_labels, selected_indices)
-        if success:
-            return
-        else:
-            print("[red]❌ Both Open3D and matplotlib visualization failed[/red]")
-            print("[red]Please check your system's graphics drivers and Python environment[/red]")
-            return
+            # Platform-specific messages
+            if platform.system() == "Darwin":
+                print(
+                    "[yellow]  This is common on macOS with Apple Silicon (M1/M2/M3/M4) due to GLFW compatibility issues[/yellow]"
+                )
+                print(
+                    "[yellow]  The matplotlib fallback provides full functionality for C3D visualization[/yellow]"
+                )
+            else:
+                print(
+                    "[yellow]  This is common on older Linux systems or remote connections[/yellow]"
+                )
 
-    # Store original c3d_object (read-only)
-    original_c3d_object = c3d_object
+            print("[cyan] Switching to matplotlib fallback visualization...[/cyan]")
 
-    # Create editable copy for modifications
-    import copy
+            success = run_viewc3d_fallback(points, filepath, fps, marker_labels, selected_indices)
+            if success:
+                return
+            else:
+                print("[red]❌ Both Open3D and matplotlib visualization failed[/red]")
+                print(
+                    "[red]Please check your system's graphics drivers and Python environment[/red]"
+                )
+                return
 
-    edited_c3d_object = copy.deepcopy(c3d_object)
+        # Store original c3d_object (read-only)
+        original_c3d_object = c3d_object
 
-    # Store original data before filtering (for analysis functions)
-    original_points = points.copy()
-    original_residuals = residuals.copy() if residuals is not None else None
-    # Filter the points array to only the selected markers
-    points = points[:, selected_indices, :]
-    num_markers = len(selected_indices)
-    # Get selected marker names for labeling and analysis
-    selected_marker_names = [marker_labels[i] for i in selected_indices]
+        # Create editable copy for modifications
+        import copy
 
-    # Extract file name from full path (cross-platform)
-    file_name = os.path.basename(filepath)
+        edited_c3d_object = copy.deepcopy(c3d_object)
 
-    # Build a detailed window title with file info, FPS, and control instructions
-    window_title = (
-        f"C3D Viewer | File: {file_name} | Markers: {num_markers}/{total_markers} | Frames: {num_frames} | FPS: {fps} | "
-        "Keys: [←→: Frame, ↑↓: 60 Frames, +/-: Size, C: Color, Space: Play, H: Help] | "
-        "Mouse: [Left: Rotate, Middle/Right: Pan, Wheel: Zoom]"
-    )
+        # Store original data before filtering (for analysis functions)
+        original_points = points.copy()
+        original_residuals = residuals.copy() if residuals is not None else None
 
+        # Main application class (structure mirrors viewc3d_pyvista.MokkaLikeViewer)
+        viewer = Open3DMokkaViewer(model)
+
+        # Extract file name from full path (cross-platform)
+        file_name = os.path.basename(filepath)
+
+        # Build a detailed window title with file info, FPS, and control instructions
+        window_title = (
+            f"C3D Viewer | File: {file_name} | Markers: {num_markers}/{total_markers} | Frames: {num_frames} | FPS: {fps} | "
+            "Keys: [←→: Frame, ↑↓: 60 Frames, +/-: Size, C: Color, Space: Play, H: Help] | "
+            "Mouse: [Left: Rotate, Middle/Right: Pan, Wheel: Zoom]"
+        )
+
+    run_loop = _setup_only_viewer is None
     try:
-        vis = o3d.visualization.VisualizerWithKeyCallback()
+        viewer.vis = o3d.visualization.VisualizerWithKeyCallback()
+        vis = viewer.vis
         # Create window with Blender-like aspect (16:9)
         window_created = vis.create_window(window_name=window_title, width=1280, height=720)
 
         if not window_created:
             print("[red] Failed to create Open3D window[/red]")
             print("[cyan] Trying matplotlib fallback...[/cyan]")
-            success = run_viewc3d_fallback(points, filepath, fps, marker_labels, selected_indices)
+            success = run_viewc3d_fallback(
+                viewer.points,
+                viewer.filepath,
+                viewer.fps,
+                viewer.marker_labels,
+                viewer.selected_indices,
+            )
             return
 
     except Exception as e:
@@ -1478,6 +1804,10 @@ def run_viewc3d():
 
     for sphere in spheres:
         vis.add_geometry(sphere)
+
+    # Marker visibility: None = all visible, else set of indices to show
+    visible_marker_indices = None
+    markers_in_scene = set(range(num_markers))
 
     # Add Cartesian axes, ground, and grid
     axes = create_coordinate_lines(axis_length=0.25)
@@ -1668,6 +1998,10 @@ def run_viewc3d():
             height=720,
             margin=1.8,  # Increased margin for more space
         )
+        # Biomechanics Z-up: if Z range exceeds Y range, set camera up vector to Z
+        if model.is_z_up():
+            ctr.set_up((0.0, 0.0, 1.0))
+            print("[green]Camera: Z-up orientation applied (biomechanics convention)[/green]")
         print("[green]Camera configured with Blender-like FOV (~40° horiz) and 16:9 aspect[/green]")
 
     except Exception as e:
@@ -1718,6 +2052,10 @@ def run_viewc3d():
 
     screenshot_serial = [0]
 
+    # Picking: highlight one marker. Keyboard-based
+    # since Open3D Python does not expose mouse pick; use ` to cycle, Shift+` to cycle back.
+    picked_marker_index = [None]  # None = no highlight, int = index to highlight (yellow)
+
     def _safe_add_geometry(geometry):
         try:
             vis.add_geometry(geometry, reset_bounding_box=False)
@@ -1759,7 +2097,7 @@ def run_viewc3d():
         return colors
 
     def _update_single_trail(marker_index, new_pos):
-        """Append position and update/create its LineSet with per-segment speed color."""
+        """Append position and update LineSet. Older segments drawn darker (ghosting)."""
         if np.isnan(new_pos).any():
             return
         trails_positions[marker_index].append(new_pos.copy())
@@ -1771,6 +2109,11 @@ def run_viewc3d():
         # Speeds magnitude between segments
         diffs = np.linalg.norm(np.diff(positions, axis=0), axis=1)
         colors = _color_map_speed(diffs)
+        # Ghosting: older segments (N-5, N-10, ...) darker for trail effect
+        n_seg = len(colors)
+        for i in range(n_seg):
+            age = (i + 1) / max(n_seg, 1)  # 0 at start of trail, 1 at current
+            colors[i] = 0.25 + 0.75 * age * np.array(colors[i])
 
         if trails_linesets[marker_index] is None:
             ls = o3d.geometry.LineSet()
@@ -2364,16 +2707,16 @@ def run_viewc3d():
                     # Call the existing function to load swaps
                     apply_swaps_from_file(vis)
                     # We return a special indicator or just False/None since execution passed to another function
-                    # But create_swap_dialog is expected to return a dict. 
+                    # But create_swap_dialog is expected to return a dict.
                     # We can set cancelled=True to avoid further processing in manual_swap_markers
-                    dialog_result["cancelled"] = True 
-                    dialog_result["loaded_csv"] = True # Flag to indicate we switched flows
+                    dialog_result["cancelled"] = True
+                    dialog_result["loaded_csv"] = True  # Flag to indicate we switched flows
 
                 load_btn = tk.Button(
                     button_frame,
                     text="Load CSV",
                     command=on_load_csv,
-                    bg="#2196F3", # Blue
+                    bg="#2196F3",  # Blue
                     fg="white",
                     font=("Arial", 11, "bold"),
                     width=15,
@@ -2739,15 +3082,15 @@ def run_viewc3d():
             # Create template based on actual C3D markers
             # Get only the first 20 or so if there are too many, or maybe all
             # It's better to list them in column 'marker_a' as candidates
-            
+
             # Prepare data for DataFrame
             markers_to_list = all_marker_labels
-            
+
             template_data = {
                 "marker_a": markers_to_list,
-                "marker_b": [""] * len(markers_to_list), # Empty for user to fill
-                "start_frame": ["1"] * len(markers_to_list), # Suggested start
-                "end_frame": [""] * len(markers_to_list), # Empty for user to fill
+                "marker_b": [""] * len(markers_to_list),  # Empty for user to fill
+                "start_frame": ["1"] * len(markers_to_list),  # Suggested start
+                "end_frame": [""] * len(markers_to_list),  # Empty for user to fill
             }
 
             template_df = pd.DataFrame(template_data)
@@ -2758,11 +3101,11 @@ def run_viewc3d():
             # Print available markers to terminal instead
             print(f"\n[green]Template CSV saved: {out_path}[/green]")
             print(f"  Example entries: {len(template_data['marker_a'])} rows")
-            print(f"  Format matches 'O' key export: marker_a,marker_b,start_frame,end_frame")
+            print("  Format matches 'O' key export: marker_a,marker_b,start_frame,end_frame")
             print("  Available markers in file:")
             for i, label in enumerate(all_marker_labels):
-                 if i < 20:
-                     print(f"    {i}: {label}")
+                if i < 20:
+                    print(f"    {i}: {label}")
             if len(all_marker_labels) > 20:
                 print(f"    ... and {len(all_marker_labels) - 20} more markers")
 
@@ -2855,7 +3198,7 @@ def run_viewc3d():
         is_playing = False
         start_frame = current_frame
         tmp_dir = tempfile.mkdtemp(prefix="viewc3d_frames_")
-        output_filename = Path(out_path) # Use Path for easier handling with ffmpeg
+        output_filename = Path(out_path)  # Use Path for easier handling with ffmpeg
         temp_dir = Path(tmp_dir)
         print(f"\nExporting MP4 via ffmpeg → {output_filename}")
         try:
@@ -2864,7 +3207,7 @@ def run_viewc3d():
                 update_spheres(points[current_frame])
                 png_path = temp_dir / f"frame_{fidx:05d}.png"
                 vis.capture_screen_image(str(png_path), do_render=True)
-            
+
             # Use 'pad' filter to ensure dimensions are divisible by 2
             # pad=ceil(iw/2)*2:ceil(ih/2)*2
             subprocess.run(
@@ -2887,7 +3230,7 @@ def run_viewc3d():
                 ],
                 check=True,
             )
-            print(f"\n[green]Video export successful via ffmpeg![/green]")
+            print("\n[green]Video export successful via ffmpeg![/green]")
             print(f"Saved to: {output_filename}")
         except FileNotFoundError:
             print("\n[red]ffmpeg not found. Install ffmpeg and ensure it is in PATH.[/red]")
@@ -2960,8 +3303,9 @@ def run_viewc3d():
     current_frame = 0
     is_playing = False
     verbose_frame = [False]  # Print per-frame info in console when True
-    playback_rates = [0.1, 0.2, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0]
+    playback_rates = [0.1, 0.2, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0, 128.0]
     playback_rate_index = [4]  # start at 1.0x
+    last_time_ref = [time.time()]  # for playback timing; [ and ] reset this so speed change applies
 
     def toggle_grid(_vis_obj):
         """Toggle ground grid visibility"""
@@ -3016,11 +3360,11 @@ def run_viewc3d():
         print("=" * 60)
 
     def toggle_marker_labels(_vis_obj):
-        """Toggle marker labels visibility"""
+        """Toggle marker labels: terminal output only (Open3D has no 3D text; cubes were useless)."""
         nonlocal marker_labels_visible, marker_label_texts
 
         if marker_labels_visible[0]:
-            # Hide labels
+            # Hide labels (remove any leftover geometry, then terminal-only mode off)
             for label_geom in marker_label_texts:
                 vis.remove_geometry(label_geom, reset_bounding_box=False)
             marker_label_texts.clear()
@@ -3028,53 +3372,19 @@ def run_viewc3d():
             print("\nMarker labels hidden")
             marker_labels_visible[0] = False
         else:
-            # Show labels - create text geometries for current frame
-            frame_data = points[current_frame]
-            for marker_name, marker_pos in zip(selected_marker_names, frame_data, strict=True):
-                if not np.isnan(marker_pos).any():
-                    # Use hash-based color for consistent, distinct colors
-                    label_color = get_marker_label_color(marker_name)
-
-                    label_geom = create_text_geometry(
-                        marker_name,
-                        marker_pos,
-                        size=current_radius * 4,  # Increased from 3 to 4 for better visibility
-                        color=label_color,
-                    )
-                    vis.add_geometry(label_geom, reset_bounding_box=False)
-                    marker_label_texts.append(label_geom)
-
-            vis.update_renderer()
-            print(f"\nMarker labels visible ({len(marker_label_texts)} labels)")
-            # Print labels to terminal
+            # Show labels: only print to terminal (no 3D cubes – they don't show text)
             print_labels_to_terminal()
+            print(f"\nMarker labels visible in terminal ({num_markers} markers)")
             marker_labels_visible[0] = True
 
         return False
 
     def update_marker_labels():
-        """Update marker label positions when frame changes"""
-        if marker_labels_visible[0] and marker_label_texts:
-            # Remove old labels
-            for label_geom in marker_label_texts:
-                vis.remove_geometry(label_geom, reset_bounding_box=False)
-            marker_label_texts.clear()
-
-            # Add new labels for current frame
-            frame_data = points[current_frame]
-            for marker_name, marker_pos in zip(selected_marker_names, frame_data, strict=True):
-                if not np.isnan(marker_pos).any():
-                    # Use hash-based color for consistent, distinct colors
-                    label_color = get_marker_label_color(marker_name)
-
-                    label_geom = create_text_geometry(
-                        marker_name,
-                        marker_pos,
-                        size=current_radius * 4,  # Increased from 3 to 4 for better visibility
-                        color=label_color,
-                    )
-                    vis.add_geometry(label_geom, reset_bounding_box=False)
-                    marker_label_texts.append(label_geom)
+        """When labels are visible we use terminal-only (no 3D geometry to update)."""
+        if not marker_labels_visible[0]:
+            return
+        # Terminal-only mode: no 3D label geometry; optional: print every N frames to avoid spam
+        # (currently we only print when X is first pressed)
 
     def toggle_field_lines(_vis_obj):
         """Toggle field lines or load new field lines from CSV"""
@@ -3229,10 +3539,13 @@ def run_viewc3d():
         nonlocal current_color_index
         current_color_index = (current_color_index + 1) % len(available_colors)
         new_color, color_name = available_colors[current_color_index]
+        picked = picked_marker_index[0]
 
-        # Update the color of all markers
-        for sphere in spheres:
-            sphere.paint_uniform_color(new_color)
+        # Update the color of all markers; keep picked marker highlighted (yellow)
+        for i, sphere in enumerate(spheres):
+            sphere.paint_uniform_color(
+                [1.0, 1.0, 0.0] if picked is not None and i == picked else new_color
+            )
             vis.update_geometry(sphere)
 
         print(f"\nMarker color: {color_name}")
@@ -3257,13 +3570,34 @@ def run_viewc3d():
 
     # Modified update_spheres function
     def update_spheres(frame_data):
-        for i, sphere in enumerate(spheres):
+        nonlocal markers_in_scene
+        picked = picked_marker_index[0]
+        base_color = available_colors[current_color_index][0]
+        # Apply marker visibility: sync which spheres are in the scene
+        if visible_marker_indices is not None:
+            to_remove = markers_in_scene - visible_marker_indices
+            to_add = visible_marker_indices - markers_in_scene
+            for i in to_remove:
+                vis.remove_geometry(spheres[i], reset_bounding_box=False)
+                markers_in_scene.discard(i)
+            for i in to_add:
+                vis.add_geometry(spheres[i], reset_bounding_box=False)
+                markers_in_scene.add(i)
+            indices_to_update = markers_in_scene
+        else:
+            indices_to_update = range(num_markers)
+        # Update positions and colors for spheres currently in scene
+        for i in indices_to_update:
+            sphere = spheres[i]
             new_pos = frame_data[i]
-            # Skip update if the new position is invalid to avoid corrupting geometry
             if np.isnan(new_pos).any():
                 continue
             new_vertices = spheres_bases[i] + new_pos
             sphere.vertices = o3d.utility.Vector3dVector(new_vertices)
+            if picked is not None and i == picked:
+                sphere.paint_uniform_color([1.0, 1.0, 0.0])
+            else:
+                sphere.paint_uniform_color(base_color)
             vis.update_geometry(sphere)
 
         # Update marker labels if they are visible
@@ -3339,20 +3673,21 @@ def run_viewc3d():
     def toggle_play(_vis_obj=None):
         nonlocal is_playing
         is_playing = not is_playing
+        viewer.is_playing = is_playing  # so _run_open3d_loop sees it
         print(f"\nPlay: {'ON' if is_playing else 'PAUSE'}")
         return False
 
     def faster_playback(_vis_obj):
-        # Increase playback rate
         if playback_rate_index[0] < len(playback_rates) - 1:
             playback_rate_index[0] += 1
+            last_time_ref[0] = time.time()  # apply new speed from next frame
         print(f"\nPlayback rate: {playback_rates[playback_rate_index[0]]}x")
         return False
 
     def slower_playback(_vis_obj):
-        # Decrease playback rate
         if playback_rate_index[0] > 0:
             playback_rate_index[0] -= 1
+            last_time_ref[0] = time.time()  # apply new speed from next frame
         print(f"\nPlayback rate: {playback_rates[playback_rate_index[0]]}x")
         return False
 
@@ -3535,6 +3870,7 @@ S/E - Jump to start/end
 - - Decrease marker size
 C - Change marker color
 X - Toggle marker labels (names)
+        ` / ~ - Cycle picked marker (highlight/yellow)
         W - Toggle trails with velocity coloring
         J - Load skeleton connections from JSON
         D - Measure distance between two markers
@@ -3570,7 +3906,7 @@ O - Manual swap markers (visual editing)
         9 - Save swap template CSV, 0 - Save skeleton template JSON
 
         PLAYBACK SPEED
-        [ - Slower, ] - Faster (rates: 0.1×, 0.2×, 0.25×, 0.5×, 1×, 2×, 4×, 8×)
+        [ - Slower, ] - Faster (rates: 0.1× up to 128×)
         Q - Toggle per-frame console info
         </body></html>
         """
@@ -3802,6 +4138,62 @@ O - Manual swap markers (visual editing)
 
         return False
 
+    def open_marker_visibility_dialog(_vis_obj):
+        """Open dialog to choose which markers to display. Key: O."""
+        nonlocal visible_marker_indices, markers_in_scene
+        root = _create_centered_tk_root()
+        root.title("Show / hide markers")
+        root.geometry("380x420")
+        vars_by_idx = {}
+        inner = tk.Frame(root, padx=10, pady=10)
+        inner.pack(fill=tk.BOTH, expand=True)
+        tk.Label(inner, text="Check markers to display (uncheck to hide):", font=("", 10)).pack(anchor=tk.W)
+        scroll_frame = tk.Frame(inner)
+        scroll_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+        scrollbar = tk.Scrollbar(scroll_frame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        canvas = tk.Canvas(scroll_frame, yscrollcommand=scrollbar.set)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.config(command=canvas.yview)
+        cb_frame = tk.Frame(canvas)
+        canvas.create_window((0, 0), window=cb_frame, anchor=tk.NW)
+        for idx, name in enumerate(selected_marker_names):
+            var = tk.BooleanVar(value=visible_marker_indices is None or idx in visible_marker_indices)
+            vars_by_idx[idx] = var
+            tk.Checkbutton(cb_frame, text=name, variable=var).pack(anchor=tk.W)
+
+        def on_configure(_event):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+
+        cb_frame.bind("<Configure>", on_configure)
+
+        def all_none(all_checked):
+            for v in vars_by_idx.values():
+                v.set(all_checked)
+
+        def apply_and_close_wrapper():
+            nonlocal visible_marker_indices, markers_in_scene
+            selected = {idx for idx, v in vars_by_idx.items() if v.get()}
+            if len(selected) == num_markers:
+                visible_marker_indices = None
+                markers_in_scene = set(range(num_markers))
+            else:
+                visible_marker_indices = selected
+                markers_in_scene = set(selected)
+            root.destroy()
+            update_spheres(points[current_frame])
+            n = len(visible_marker_indices) if visible_marker_indices else num_markers
+            print(f"\nMarkers visible: {n}/{num_markers}")
+
+        btn_frame = tk.Frame(inner)
+        btn_frame.pack(pady=10)
+        tk.Button(btn_frame, text="All", command=lambda: all_none(True)).pack(side=tk.LEFT, padx=4)
+        tk.Button(btn_frame, text="None", command=lambda: all_none(False)).pack(side=tk.LEFT, padx=4)
+        tk.Button(btn_frame, text="OK", command=apply_and_close_wrapper).pack(side=tk.LEFT, padx=4)
+        tk.Button(btn_frame, text="Cancel", command=root.destroy).pack(side=tk.LEFT, padx=4)
+        root.mainloop()
+        return False
+
     # Register all shortcuts
     # Left/right arrows for previous/next frame
     vis.register_key_callback(262, next_frame)  # Right arrow (→)
@@ -3835,6 +4227,7 @@ O - Manual swap markers (visual editing)
     vis.register_key_callback(ord("Y"), change_ground_color)  # Ground color
     vis.register_key_callback(ord("G"), toggle_field_lines)  # Field lines
     vis.register_key_callback(ord("M"), toggle_grid)  # Grid visibility
+    vis.register_key_callback(ord("O"), open_marker_visibility_dialog)  # Marker visibility (show/hide)
     vis.register_key_callback(ord("L"), set_view_limits)  # View limits
     vis.register_key_callback(ord("R"), reset_camera_view)  # Reset camera
 
@@ -3842,6 +4235,36 @@ O - Manual swap markers (visual editing)
     vis.register_key_callback(ord("I"), show_frame_info)  # Frame info
     vis.register_key_callback(ord("A"), show_quality_stats)  # Quality stats
     vis.register_key_callback(ord("H"), show_help)  # Help
+
+    # Picking: cycle highlighted marker (` forward, ~ backward)
+    def cycle_pick_forward(_vis_obj):
+        nonlocal picked_marker_index
+        if num_markers == 0:
+            return False
+        picked_marker_index[0] = (
+            0 if picked_marker_index[0] is None else (picked_marker_index[0] + 1) % num_markers
+        )
+        name = selected_marker_names[picked_marker_index[0]]
+        print(f"\nPicked marker: {picked_marker_index[0]} - {name}")
+        update_spheres(points[current_frame])
+        return False
+
+    def cycle_pick_backward(_vis_obj):
+        nonlocal picked_marker_index
+        if num_markers == 0:
+            return False
+        picked_marker_index[0] = (
+            num_markers - 1
+            if picked_marker_index[0] is None
+            else (picked_marker_index[0] - 1) % num_markers
+        )
+        name = selected_marker_names[picked_marker_index[0]]
+        print(f"\nPicked marker: {picked_marker_index[0]} - {name}")
+        update_spheres(points[current_frame])
+        return False
+
+    vis.register_key_callback(96, cycle_pick_forward)  # ` (backtick)
+    vis.register_key_callback(126, cycle_pick_backward)  # ~
 
     # Advanced features
     vis.register_key_callback(ord("W"), toggle_trails)  # Trails
@@ -3869,22 +4292,22 @@ O - Manual swap markers (visual editing)
     def ctrl_s_key_action(vis, action, mods):
         # action: 0=RELEASE, 1=PRESS, 2=REPEAT
         # mods: bitmask - 1=SHIFT, 2=CTRL, 4=ALT, 8=SUPER
-        
+
         # PRESS (1)
         if action == 1:
             if mods & 2:  # CTRL modifier
                 return save_c3d_file(vis)
-            elif not mods: # No modifiers (Plain 's' or 'S' depending on key handling)
+            elif not mods:  # No modifiers (Plain 's' or 'S' depending on key handling)
                 # If this callback intercepts 'S' key, we must handle the basic action here
                 return jump_to_start(vis)
-                
+
         return False
 
     vis.register_key_action_callback(ord("S"), ctrl_s_key_action)  # Ctrl+S for save
 
     # Also register lowercase 's' for jump to start for robustness
-    vis.register_key_callback(ord("s"), jump_to_start) 
-    
+    vis.register_key_callback(ord("s"), jump_to_start)
+
     # Register lowercase variants for other navigation keys to be safe
     vis.register_key_callback(ord("e"), jump_to_end)
     vis.register_key_callback(ord("w"), toggle_trails)
@@ -3910,8 +4333,6 @@ O - Manual swap markers (visual editing)
     vis.register_key_callback(ord("Q"), toggle_verbose)
     # Quit (ESC)
     vis.register_key_callback(256, lambda _v: (vis.destroy_window(), False)[1])
-
-
 
     # --- Field Drawing Logic from soccerfield.py ---
 
@@ -4136,23 +4557,17 @@ O - Manual swap markers (visual editing)
         "Mouse: [Left: Rotate, Middle/Right: Pan, Wheel: Zoom]"
     )
 
-    # Main loop for automatic playback (using FPS from file)
-    last_time = time.time()
-    while True:
-        if not vis.poll_events():
-            break
-        if is_playing:
-            current_time = time.time()
-            # Apply playback rate multiplier
-            effective_fps = fps * playback_rates[playback_rate_index[0]]
-            if current_time - last_time >= 1.0 / effective_fps:
-                next_frame(vis)
-                last_time = current_time
-        else:
-            time.sleep(0.01)  # Small sleep to reduce CPU usage when not playing
-        with contextlib.suppress(Exception):
-            vis.update_renderer()
-    vis.destroy_window()
+    # Bind next_frame and playback state for the shared animation loop
+    viewer._next_frame = next_frame
+    viewer.is_playing = is_playing
+    viewer.playback_rates = playback_rates
+    viewer.playback_rate_index = playback_rate_index
+    viewer.last_time_ref = last_time_ref
+    viewer.fps = fps
+
+    # Main loop (shared with Open3DMokkaViewer.run()); skip when called from init_vis via _run_open3d_body
+    if run_loop:
+        _run_open3d_loop(viewer)
 
 
 def load_field_lines_from_csv():
@@ -4308,4 +4723,15 @@ def create_football_field_lines(ground_level=0):
 
 
 if __name__ == "__main__":
-    run_viewc3d()
+    parser = argparse.ArgumentParser(
+        description="vailá Open3D 3D viewer for C3D files. Press H in the viewer for full HTML help.",
+        prog="viewc3d",
+    )
+    parser.add_argument(
+        "c3d_path",
+        nargs="?",
+        default=None,
+        help="Path to a C3D file (optional; file dialog opens if omitted)",
+    )
+    args = parser.parse_args()
+    run_viewc3d(c3d_path=args.c3d_path)
