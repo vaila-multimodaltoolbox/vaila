@@ -3,84 +3,74 @@
 ## 📋 Module Information
 
 - **Category:** Tools
-- **File:** `vaila\vaila_datdistort.py`
-- **Lines:** 269
-- **Size:** 9032 characters
-- **Version:** 0.0.4
+- **File:** `vaila/vaila_datdistort.py`
+- **Version:** 0.0.5
 - **Author:** Prof. Dr. Paulo R. P. Santiago
 - **GUI Interface:** ✅ Yes
 - **CLI Support:** ✅ Yes
 
 ## 📖 Description
 
-================================================================================
-vaila_datdistort.py
-================================================================================
-vailá - Multimodal Toolbox
-Author: Prof. Dr. Paulo R. P. Santiago
-https://github.com/paulopreto/vaila-multimodaltoolbox
-Date: 03 April 2025
-Update: 06 February 2026
-Version: 0.0.4
-Python Version: 3.12.12
+This tool applies lens distortion correction to 2D coordinates from DAT/CSV files using the same camera calibration parameters as vaila_lensdistortvideo.py. The parameters file (TOML with fx, fy, cx, cy, k1, k2, k3, p1, p2) is never processed; the output CSV "frame" column is written as integer.
 
-## Description:
+## How to run
 
-This tool applies lens distortion correction to 2D coordinates from a DAT file
-using the same camera calibration parameters as vaila_lensdistortvideo.py.
+### GUI mode (default)
 
-## New Features in This Version:
+Run without arguments; dialogs will ask for the parameters file and input directory.
 
-1. CLI support for pipeline integration.
-2. Fixed issue with column order in output file.
-3. Improved error handling.
+```bash
+# From project root (recommended)
+uv run vaila/vaila_datdistort.py
+python vaila/vaila_datdistort.py
+```
 
-## How to use:
+### CLI mode
 
-1. Select the distortion parameters CSV file.
-2. Select the directory containing CSV/DAT files to process.
-3. The script will process all CSV and DAT files in the directory and save the
-   results in the output directory.
+**From project root:**
 
-python vai...
+```bash
+# Using uv (recommended)
+uv run vaila/vaila_datdistort.py --params_file /path/to/distortionparameters.toml --input /path/to/file_or_dir
+
+# Optional: specify output directory (otherwise creates input_dir/distorted_TIMESTAMP)
+uv run vaila/vaila_datdistort.py --params_file /path/to/params.toml --input /path/to/data --output_dir /path/to/output
+```
+
+**As Python module:**
+
+```bash
+uv run python -m vaila.vaila_datdistort --params_file /path/to/params.toml --input /path/to/file_or_dir [--output_dir /path/to/output]
+python -m vaila.vaila_datdistort --params_file /path/to/params.toml --input /path/to/file_or_dir [--output_dir /path/to/output]
+```
+
+**CLI help:**
+
+```bash
+uv run vaila/vaila_datdistort.py --help
+python -m vaila.vaila_datdistort --help
+```
+
+### Arguments
+
+| Argument       | Description |
+|----------------|-------------|
+| `--params_file` | Path to the camera calibration parameters TOML file (required in CLI). |
+| `--input`       | Single CSV/DAT file or directory containing CSV/DAT files to process. |
+| `--output_dir`  | (Optional) Output directory. If omitted, a new subdirectory `distorted_TIMESTAMP` is created under the input path; if given, files are written directly there. |
+
+- The parameters file is **excluded from the batch** (never distortion-corrected).
+- Output CSV **"frame"** column is written as **integer**.
 
 ## 🔧 Main Functions
 
-**Total functions found:** 6
-
-- `load_distortion_parameters`
-- `undistort_points`
-- `process_dat_file`
-- `select_file`
-- `select_directory`
-- `run_datdistort`
-
-## 🚀 Usage
-
-### GUI Mode (Default)
-
-Run the script without arguments to use the graphical interface:
-
-```bash
-python vaila_datdistort.py
-```
-
-### CLI Mode (Automation)
-
-Run with command-line arguments for pipeline integration:
-
-```bash
-python vaila_datdistort.py --input_dir "/path/to/data" --params_file "/path/to/params.csv"
-```
-
-Optional: Specify output directory
-
-```bash
-python vaila_datdistort.py --input_dir "..." --params_file "..." --output_dir "/path/to/output"
-```
+- `load_distortion_parameters` – Load calibration from TOML
+- `undistort_points` – Apply OpenCV undistort to 2D points
+- `process_dat_file` – Process one DAT/CSV file
+- `select_file` / `select_directory` – GUI file/dir selection
+- `run_datdistort` – Main entry (GUI or CLI)
 
 ---
 
-📅 **Generated automatically on:** 15/10/2025 08:04:44
-🔗 **Part of vailá - Multimodal Toolbox**
-🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
+🔗 **Part of vailá - Multimodal Toolbox**  
+🌐 [GitHub](https://github.com/paulopreto/vaila-multimodaltoolbox)

@@ -49,7 +49,6 @@ import subprocess
 import tkinter as tk
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
-from fractions import Fraction
 from tkinter import filedialog, messagebox, ttk
 
 from rich import print
@@ -131,7 +130,7 @@ def get_precise_video_metadata(video_path):
             "avg_frame_rate": avg_frame_rate_str,
             "duration": duration if duration > 0 else None,
             "nb_frames": nb_frames,
-            "_raw_json": data
+            "_raw_json": data,
         }
     except Exception as e:
         print(f"Warning: ffprobe failed for {video_path}: {e}")
@@ -151,9 +150,10 @@ def get_video_info(video_path):
 
         # Fallback to OpenCV if ffprobe fails or returns incomplete data
         if not meta or meta.get("nb_frames") is None:
-             import cv2
-             cap = cv2.VideoCapture(str(video_path))
-             if cap.isOpened():
+            import cv2
+
+            cap = cv2.VideoCapture(str(video_path))
+            if cap.isOpened():
                 if not meta:
                     meta = {
                         "fps": cap.get(cv2.CAP_PROP_FPS),
@@ -164,9 +164,9 @@ def get_video_info(video_path):
                         "container": "unknown",
                         "container_long": "unknown",
                         "duration": 0.0,
-                        "_raw_json": {}
+                        "_raw_json": {},
                     }
-                
+
                 meta["nb_frames"] = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
                 cap.release()
 
@@ -185,8 +185,8 @@ def get_video_info(video_path):
 
         # Capture FPS logic removed for simplicity as robust parsing is prioritized,
         # but could be re-added by inspecting meta["_raw_json"] if strictly needed.
-        capture_fps = None 
-        
+        capture_fps = None
+
         display_fps = fps
         avg_fps = fps
 
@@ -195,7 +195,7 @@ def get_video_info(video_path):
         # Format FPS values for printing (handle None)
         disp_str = f"{display_fps:.9f}" if display_fps else "N/A"
         dur_str = f"{duration:.9f}" if duration else "N/A"
-        
+
         print(
             f"Video info: {width}x{height}, codec={codec_name}, container={container_format}, "
             f"display≈{disp_str} fps, dur={dur_str}s, frames={nb_frames}"

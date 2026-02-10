@@ -1,6 +1,7 @@
 """
 Update: 11 January 2026
 """
+
 import sys
 from pathlib import Path
 
@@ -12,6 +13,7 @@ vaila_dir = current_dir.parent.parent / "vaila"
 sys.path.append(str(vaila_dir))
 
 from vaila_and_jump import calculate_kinematics
+
 
 def run_validation():
     # Load sample CSV
@@ -36,7 +38,7 @@ def run_validation():
     # Header: cg_y_normalized? No.
     # Header from Step 7: "left_foot_index_y", "right_foot_index_y", "nose_y", "left_hip_y"...
     # It does NOT have "cg_y". The `vaila_and_jump.py` calculates CG.
-    
+
     # We need to replicate CG calculation to run identify_jump_phases, OR manually specify frames.
     # Since I just want to validate kinematics Math, I can manually specify frames IF I know them,
     # OR I can mock the results dictionary.
@@ -83,7 +85,6 @@ def run_validation():
             print("  [WARN] Ratio seems abnormal")
 
     if "knee_angle_left_squat_deg" in kinematics:
-
         deg = kinematics["knee_angle_left_squat_deg"]
         print(f"Knee Angle Left Squat: {deg:.2f} deg")
         if 80 < deg < 185:
@@ -98,6 +99,7 @@ def run_validation():
             print("  [PASS] KASR is within reasonable physical range")
         else:
             print("  [WARN] KASR seems abnormal")
+
 
 if __name__ == "__main__":
     run_validation()

@@ -119,6 +119,8 @@ dependencies = [
     "protobuf",
     "pyobjc-framework-Cocoa; sys_platform == 'darwin'",
     "ruff",
+    "vpython",
+    "pyvista",
 ]
 
 [project.optional-dependencies]

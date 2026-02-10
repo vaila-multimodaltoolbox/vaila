@@ -38,58 +38,39 @@
             <h3>📋 Module Information</h3>
             <p><strong>Category:</strong> Visualization</p>
             <p><strong>File:</strong> vaila\viewc3d.py</p>
-            <p><strong>Lines:</strong> 3186</p>
-            <p><strong>Size:</strong> 120773 characters</p>
-            <p><strong>Version:</strong> 0.1.0</p>
+            <p><strong>Version:</strong> 0.2.0</p>
             <p><strong>Author:</strong> Paulo Santiago</p>
             <p><strong>GUI Interface:</strong> ✅ Yes</p>
         </div>
 
-        
-
         <div class="docstring">
             <h3>📖 Description</h3>
-            <pre>
-================================================================================
-Script: viewc3d.py
-================================================================================
-
-vailá - Multimodal Toolbox
-© Paulo Santiago, Guilherme Cesar, Ligia Mochida, Bruno Bedo
-https://github.com/paulopreto/vaila-multimodaltoolbox
-Please see AUTHORS for contributors.
-
-================================================================================
-Author: Paulo Santiago
-Version: 0.1.0
-Created: 06 February 2025
-Last Updated: 30 December 2025
-
-To run:
-uv run viewc3d.py
-
-Description:
-------------
-Advanced 3D viewer for C3D files with adaptive visualization for different scales.
-Automatically detects and converts units (millimeters/meters) with enhanced confidence scoring.
-Features adaptive ground plane, grid, and camera positioning based on data scale.
-Features soccer field lines and penalty areas.
-
-    Key Features:
-    - Adaptive visualization for small (lab) to large (soccer field) scales
-    - Automatic unit detection...</pre>
+            <p>Advanced 3D viewer for C3D files with adaptive visualization (Open3D backend). <strong>To run:</strong> <code>uv run viewc3d.py</code>. The toolbox also provides a PyVista-based viewer: <code>viewc3d_pyvista.py</code> (see help in that module).</p>
+            <h4>Architecture</h4>
+            <ul>
+                <li><strong>VailaModel</strong> (data layer): GetPointFrame, GetFrameNumber, GetPointFrequency, get_bounds(), is_z_up()</li>
+                <li><strong>VailaView</strong> (Open3D layer): Scene, trails, dynamic grid, Z-up camera, marker picking</li>
+            </ul>
+            <h4>Key Features</h4>
+            <ul>
+                <li>Adaptive scale (lab to soccer field), automatic unit detection (mm/m)</li>
+                <li>Trails with ghosting (older segments darker), Z-up camera when Z range &gt; Y range</li>
+                <li>Marker picking: <code>`</code> / <code>~</code> to cycle and highlight one marker (yellow)</li>
+                <li>Grid and ground from data bounds; Matplotlib fallback if no OpenGL</li>
+            </ul>
         </div>
 
         <div class="functions">
-            <h3>🔧 Main Functions</h3>
-            <p><strong>Total functions found:</strong> 20</p>
-            <ul><li><code>detect_c3d_units</code></li><li><code>ask_user_units_c3d</code></li><li><code>load_c3d_file</code></li><li><code>toggle_theme</code></li><li><code>select_markers</code></li><li><code>create_coordinate_lines</code></li><li><code>create_ground_plane</code></li><li><code>create_x_marker</code></li><li><code>get_marker_customization</code></li><li><code>create_ground_grid</code></li><li><code>check_display_environment</code></li><li><code>check_opengl_support</code></li><li><code>run_viewc3d_fallback</code></li><li><code>run_viewc3d</code></li><li><code>load_field_lines_from_csv</code></li><li><code>create_football_field_lines</code></li><li><code>on_ok</code></li><li><code>on_cancel</code></li><li><code>update_listbox</code></li><li><code>select_all</code></li></ul>
+            <h3>🔧 Main Functions / Classes</h3>
+            <p><strong>Classes:</strong> <code>VailaModel</code>, <code>VailaView</code></p>
+            <p><strong>Entry:</strong> <code>run_viewc3d</code></p>
+            <p><strong>Data/UI:</strong> <code>load_c3d_file</code>, <code>select_markers</code>, <code>detect_c3d_units</code></p>
+            <p><strong>Scene:</strong> <code>create_ground_plane</code>, <code>create_ground_grid</code>, <code>create_football_field_lines</code>, <code>load_field_lines_from_csv</code></p>
+            <p><strong>Fallback:</strong> <code>run_viewc3d_fallback</code> (Matplotlib when OpenGL unavailable)</p>
         </div>
 
         <div class="footer">
-            <p>📅 Generated automatically on: 30/12/2025 10:10:45</p>
-            <p>🔗 Part of vailá - Multimodal Toolbox</p>
-            <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
+            <p>🔗 Part of vailá - Multimodal Toolbox | 🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub</a></p>
         </div>
     </div>
 </body>
