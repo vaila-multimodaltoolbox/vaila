@@ -14,30 +14,66 @@ Version: 0.0.5
 Created: 02 August 2025
 Last Updated: 11 February 2026
 
-Description:
-    Optimized batch 3D reconstruction using the Direct Linear Transformation (DLT) method with multiple cameras.
-    Each camera has a corresponding DLT3D parameter file (one set of 11 parameters per file) and a pixel coordinate CSV file.
-    The pixel files are expected to use vailá's standard header:
-      frame,p1_x,p1_y,p2_x,p2_y,...,pN_x,pN_y
-    For each common frame found among the pixel files, the script reconstructs 3D points for all detected markers.
-    The output includes CSV, 3D format, and C3D files with reconstructed coordinates (x,y,z) for each marker.
+================================================================================
+Description
+================================================================================
 
-    Optimizations:
-    - Reduced debug output for cleaner processing feedback
-    - Vectorized NumPy operations for faster computation
-    - Progress tracking for large datasets
-    - Pre-allocated NumPy arrays to eliminate dynamic memory allocation
-    - Direct array indexing instead of list.append() operations
-    - Improved memory efficiency and cache locality
+Batch 3D reconstruction using the Direct Linear Transformation (DLT) method with
+multiple cameras. For each camera you provide:
+  - One DLT3D parameter file (11 coefficients per camera, e.g. from dlt3d.py).
+  - One pixel-coordinate CSV with columns: frame, p1_x, p1_y, p2_x, p2_y, ..., pN_x, pN_y.
 
-Usage:
-    GUI (default): run with no arguments or --gui. You are asked for number of cameras,
-    then one file dialog per camera for DLT3D files and one per camera for pixel CSVs,
-    so files can be in different directories. Then choose output directory and data rate (Hz).
+Frames common to all pixel files are reconstructed; output is written to a
+timestamped subfolder in the chosen output directory.
 
-    CLI: pass --dlt3d, --pixels, --output, and optionally --fps.
-    Example:
-      python -m vaila.rec3d_one_dlt3d --dlt3d cam1.dlt3d cam2.dlt3d --pixels cam1.csv cam2.csv --fps 60 --output ./out
+Output files (same base name, in the output subfolder):
+  - rec3d_YYYYMMDD_HHMMSS.csv   — 3D points (frame, p1_x, p1_y, p1_z, ...)
+  - rec3d_YYYYMMDD_HHMMSS.3d    — same data, duplicate copy
+  - rec3d_YYYYMMDD_HHMMSS_m.c3d — C3D in meters (POINT:UNITS=m, POINT:FRAMES set)
+  - rec3d_YYYYMMDD_HHMMSS_mm.c3d — C3D in millimeters (POINT:UNITS=mm)
+
+C3D files are compatible with viewc3d, viewc3d_pyvista, readc3d_export (inspect/
+convert), and standard C3D tools. They are produced via readcsv_export.auto_create_c3d_from_csv.
+
+================================================================================
+Input file formats
+================================================================================
+
+DLT3D file:
+  - CSV with one row of 11 DLT coefficients (e.g. from vaila dlt3d module).
+  - One file per camera; order must match the pixel file order.
+
+Pixel CSV:
+  - Header: frame,p1_x,p1_y,p2_x,p2_y,...,pN_x,pN_y (vailá standard).
+  - One file per camera; same number of markers and matching frame sets recommended.
+  - Files may be in different directories (GUI: one dialog per camera).
+
+================================================================================
+Usage
+================================================================================
+
+GUI (default):
+  Run with no arguments or --gui. You are prompted for:
+  1) Number of cameras
+  2) One DLT3D file per camera (file dialogs; may be in different folders)
+  3) One pixel CSV per camera (file dialogs; may be in different folders)
+  4) Output directory
+  5) Data rate in Hz (e.g. 60, 100)
+
+CLI:
+  Require --dlt3d, --pixels, --output. Optional --fps. Order of files must match.
+  Example:
+    python -m vaila.rec3d_one_dlt3d --dlt3d c1.dlt3d c2.dlt3d --pixels c1.csv c2.csv --fps 60 -o ./out
+  Help:
+    python -m vaila.rec3d_one_dlt3d --help
+
+Documentation: vaila/help/rec3d_one_dlt3d.md and rec3d_one_dlt3d.html
+
+Related modules:
+  - dlt3d.py          — compute DLT3D coefficients from calibration data
+  - readcsv_export.py — CSV to C3D (used internally); batch convert
+  - readc3d_export.py — C3D to CSV; inspect C3D
+  - viewc3d / viewc3d_pyvista — visualize C3D files
 """
 
 import argparse
@@ -440,43 +476,61 @@ def run_rec3d_one_dlt3d():
 def _cli_run():
     """CLI entry: argparse for --dlt3d, --pixels, --fps, --output."""
     parser = argparse.ArgumentParser(
-        description="3D reconstruction from DLT3D parameter files and pixel CSV files (one per camera).",
+        description=(
+            "Batch 3D reconstruction from DLT3D parameter files and pixel CSV files "
+            "(one file per camera). Output: CSV, .3d, and C3D files (meters and mm) in a "
+            "timestamped subfolder under the given output directory. "
+            "Without --dlt3d/--pixels/--output, or with --gui, launches the GUI."
+        ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
+Input:
+  DLT3D files: one per camera (CSV with 11 DLT coefficients; e.g. from dlt3d module).
+  Pixel files:  one per camera (CSV with header frame,p1_x,p1_y,p2_x,p2_y,...).
+  Order must match: first DLT3D with first pixel file, etc.
+
+Output:
+  A new subfolder is created under DIR with name rec3d_YYYYMMDD_HHMMSS containing:
+  rec3d_*.csv, rec3d_*.3d, rec3d_*_m.c3d, rec3d_*_mm.c3d.
+
 Examples:
-  %(prog)s --dlt3d cam1.dlt3d cam2.dlt3d --pixels cam1.csv cam2.csv --fps 60 --output ./out
+  %(prog)s --dlt3d cam1.dlt3d cam2.dlt3d --pixels cam1.csv cam2.csv --fps 60 -o ./out
+  %(prog)s -o ./results --dlt3d a.dlt3d b.dlt3d --pixels a.csv b.csv
   %(prog)s --gui
+
+See also: vaila/help/rec3d_one_dlt3d.md
         """,
     )
     parser.add_argument(
         "--dlt3d",
         nargs="+",
         metavar="FILE",
-        help="DLT3D parameter files (one per camera, order must match --pixels)",
+        help="DLT3D parameter files, one per camera (order must match --pixels)",
     )
     parser.add_argument(
         "--pixels",
         nargs="+",
         metavar="FILE",
-        help="Pixel coordinate CSV files (one per camera, order must match --dlt3d)",
+        help="Pixel coordinate CSV files, one per camera (order must match --dlt3d)",
     )
     parser.add_argument(
         "--fps",
         type=int,
         default=100,
         metavar="HZ",
-        help="Point data rate in Hz (default: 100)",
+        help="Point data rate in Hz for C3D/CSV (default: 100)",
     )
     parser.add_argument(
         "-o",
         "--output",
         metavar="DIR",
-        help="Output directory for reconstruction results",
+        dest="output",
+        help="Output directory; a timestamped subfolder will be created here",
     )
     parser.add_argument(
         "--gui",
         action="store_true",
-        help="Launch GUI instead of CLI",
+        help="Launch GUI (file dialogs) instead of CLI",
     )
     args = parser.parse_args()
 
