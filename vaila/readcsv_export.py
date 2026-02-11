@@ -721,6 +721,7 @@ def auto_create_c3d_from_csv(
     analog_rate=1000,
     conversion_factor=1,
     sort_markers=False,
+    point_units=None,
 ):
     """
     Create a C3D file from the given points DataFrame and automatically
@@ -734,6 +735,8 @@ def auto_create_c3d_from_csv(
         analog_rate (int): Analog data sampling rate.
         conversion_factor (float): Conversion factor for the point coordinates.
         sort_markers (bool): Whether to sort marker labels alphabetically.
+        point_units (str, optional): POINT:UNITS string (e.g. "m", "mm"). If None,
+            uses "mm" when conversion_factor==1000 else "m".
 
     Raises:
         Exception: If there is an error writing the C3D file.
@@ -765,8 +768,10 @@ def auto_create_c3d_from_csv(
     except Exception as e:
         raise Exception(f"Failed to extract marker labels: {e}")
 
+    # Use point_units when given (e.g. "mm" for millimeter output); default "m"
+    units_str = point_units if point_units else ("mm" if conversion_factor == 1000 else "m")
     try:
-        c3d["parameters"]["POINT"]["UNITS"]["value"] = ["m"]
+        c3d["parameters"]["POINT"]["UNITS"]["value"] = [units_str]
         c3d["parameters"]["POINT"]["LABELS"]["value"] = marker_labels
         c3d["parameters"]["POINT"]["RATE"]["value"] = [point_rate]
     except Exception as e:
@@ -829,6 +834,12 @@ def auto_create_c3d_from_csv(
         print("Points data assigned to C3D successfully.")
     except Exception as e:
         raise Exception(f"Failed to assign points data to C3D: {e}")
+
+    # POINT:FRAMES (total frame count) for reader/tool compatibility
+    try:
+        c3d["parameters"]["POINT"]["FRAMES"]["value"] = [num_frames]
+    except Exception as e:
+        print(f"Warning: Could not set POINT:FRAMES: {e}")
 
     # Handle analog data if provided
     if analog_df is not None:
