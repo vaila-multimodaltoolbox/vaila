@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 ================================================================================
 Author: Paulo Santiago
-Version: 0.0.4
-Created: August 02, 2025
-Last Updated: August 02, 2025
+Version: 0.0.5
+Created: 02 August 2025
+Last Updated: 11 February 2026
 
 Description:
     Optimized batch 3D reconstruction using the Direct Linear Transformation (DLT) method with multiple cameras.
@@ -29,9 +29,20 @@ Description:
     - Pre-allocated NumPy arrays to eliminate dynamic memory allocation
     - Direct array indexing instead of list.append() operations
     - Improved memory efficiency and cache locality
+
+Usage:
+    GUI (default): run with no arguments or --gui. You are asked for number of cameras,
+    then one file dialog per camera for DLT3D files and one per camera for pixel CSVs,
+    so files can be in different directories. Then choose output directory and data rate (Hz).
+
+    CLI: pass --dlt3d, --pixels, --output, and optionally --fps.
+    Example:
+      python -m vaila.rec3d_one_dlt3d --dlt3d cam1.dlt3d cam2.dlt3d --pixels cam1.csv cam2.csv --fps 60 --output ./out
 """
 
+import argparse
 import os
+import sys
 from datetime import datetime
 from pathlib import Path
 from tkinter import Tk, filedialog, messagebox, simpledialog
@@ -106,16 +117,12 @@ def save_rec3d_as_c3d(rec3d_df, output_dir, default_filename, point_rate=100, co
     points_data[3, :, :] = 1  # Coordenada homogênea
 
     c3d = ezc3d.c3d()
-    # Adiciona o grupo __METADATA__ para evitar o erro na escrita do arquivo C3D
-    c3d["parameters"]["__METADATA__"] = {}
-
-    # Define parâmetros básicos do C3D
-    c3d["parameters"]["POINT"] = {}
-    c3d["parameters"]["POINT"]["LABELS"] = {"value": marker_labels}
-    c3d["parameters"]["POINT"]["RATE"] = {"value": [point_rate]}
-    c3d["parameters"]["POINT"]["UNITS"] = {"value": ["m"]}
-
-    # Atribui os pontos diretamente (sem reatribuir "c3d['data']")
+    # Usar a estrutura POINT já existente no ezc3d (preserva __METADATA__ para write())
+    units_str = "mm" if conversion_factor == 1000 else "m"
+    c3d["parameters"]["POINT"]["LABELS"]["value"] = marker_labels
+    c3d["parameters"]["POINT"]["RATE"]["value"] = [point_rate]
+    c3d["parameters"]["POINT"]["UNITS"]["value"] = [units_str]
+    c3d["parameters"]["POINT"]["FRAMES"]["value"] = [num_frames]
     c3d["data"]["points"] = points_data
 
     output_c3d = filedialog.asksaveasfilename(
@@ -129,12 +136,213 @@ def save_rec3d_as_c3d(rec3d_df, output_dir, default_filename, point_rate=100, co
         try:
             c3d.write(output_c3d)
             messagebox.showinfo("Success", f"Arquivo C3D salvo em:\n{output_c3d}")
-            print("[DEBUG] Arquivo C3D salvo em", output_c3d)
         except Exception as e:
             messagebox.showerror("Error", f"Erro ao salvar arquivo C3D: {e}")
-            print("[DEBUG] Erro ao escrever arquivo C3D:", e)
     else:
         messagebox.showwarning("Warning", "Operação de salvamento do C3D cancelada.")
+
+
+def run_reconstruction(dlt_files, pixel_files, output_directory, point_rate, gui=True):
+    """
+    Run 3D reconstruction from DLT3D and pixel CSV paths. Used by both GUI and CLI.
+
+    Args:
+        dlt_files: list of paths to DLT3D parameter files (one per camera)
+        pixel_files: list of paths to pixel coordinate CSV files (one per camera)
+        output_directory: directory where output subdir and files will be written
+        point_rate: point data rate in Hz (e.g. 60, 100)
+        gui: if True use messagebox for errors/success; if False use print only
+
+    Returns:
+        (new_dir, file_base) on success, None on failure.
+    """
+    def _err(msg):
+        if gui:
+            messagebox.showerror("Error", msg)
+        else:
+            print(f"Error: {msg}")
+        return None
+
+    # Load DLT3D parameters for each camera
+    print("Loading DLT3D calibration parameters...")
+    dlt_params_list = []
+    for file in dlt_files:
+        df = pd.read_csv(file)
+        if df.empty:
+            return _err(f"DLT3D file {os.path.basename(file)} is empty!")
+        params = df.iloc[0, 1:].to_numpy().astype(float)
+        dlt_params_list.append(params)
+
+    # Load pixel coordinate data for each camera
+    print("Loading pixel coordinate data...")
+    pixel_dfs = []
+    for file in pixel_files:
+        df = pd.read_csv(file)
+        required_cols = {"frame", "p1_x", "p1_y"}
+        if not required_cols.issubset(df.columns):
+            return _err(
+                f"Pixel coordinate file {os.path.basename(file)} does not contain required columns 'frame', 'p1_x', and 'p1_y'."
+            )
+        if df.shape[0] == 1:
+            df["frame"] = 0
+        pixel_dfs.append(df)
+
+    first_df = pixel_dfs[0]
+    x_columns = [col for col in first_df.columns if col.endswith("_x") and col.startswith("p")]
+    num_markers = len(x_columns)
+    print(f"Detected {num_markers} markers for 3D reconstruction")
+
+    frame_sets = [set(df["frame"]) for df in pixel_dfs]
+    common_frames = set.intersection(*frame_sets)
+    if not common_frames:
+        return _err("No common frames found among pixel files!")
+    common_frames = sorted(common_frames)
+    print(f"Processing {len(common_frames)} common frames...")
+
+    total_frames = len(common_frames)
+    total_cols = 1 + (num_markers * 3)
+    print(f"Pre-allocating array for {total_frames} frames x {num_markers} markers...")
+    reconstruction_array = np.full((total_frames, total_cols), np.nan, dtype=np.float64)
+    reconstruction_array[:, 0] = common_frames
+
+    progress_step = max(1, total_frames // 20)
+    for frame_idx, frame in enumerate(common_frames):
+        if frame_idx % progress_step == 0:
+            progress = (frame_idx / total_frames) * 100
+            print(f"Progress: {progress:.1f}% ({frame_idx}/{total_frames} frames)")
+
+        frame_data = []
+        valid_frame = True
+        for df in pixel_dfs:
+            frame_row = df[df["frame"] == frame]
+            if frame_row.empty:
+                valid_frame = False
+                break
+            frame_data.append(frame_row.iloc[0])
+
+        if not valid_frame:
+            continue
+
+        for marker in range(1, num_markers + 1):
+            pixel_obs_list = []
+            valid_marker = True
+            for frame_row in frame_data:
+                try:
+                    x_obs = float(frame_row[f"p{marker}_x"])
+                    y_obs = float(frame_row[f"p{marker}_y"])
+                    if np.isnan(x_obs) or np.isnan(y_obs):
+                        valid_marker = False
+                        break
+                    pixel_obs_list.append((x_obs, y_obs))
+                except Exception:
+                    valid_marker = False
+                    break
+
+            col_start = 1 + (marker - 1) * 3
+            if not valid_marker or len(pixel_obs_list) != len(dlt_params_list):
+                pass
+            else:
+                point3d = rec3d_multicam(dlt_params_list, pixel_obs_list)
+                reconstruction_array[frame_idx, col_start : col_start + 3] = point3d
+
+    print("3D reconstruction completed!")
+
+    header = ["frame"]
+    for marker in range(1, num_markers + 1):
+        header.extend([f"p{marker}_x", f"p{marker}_y", f"p{marker}_z"])
+
+    rec3d_df = pd.DataFrame(reconstruction_array, columns=header)
+    valid_frames_mask = ~rec3d_df.iloc[:, 1:].isna().all(axis=1)
+    rec3d_df = rec3d_df[valid_frames_mask].reset_index(drop=True)
+
+    if rec3d_df.empty:
+        return _err("No valid 3D reconstruction could be performed!")
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    new_dir = os.path.join(output_directory, f"vaila_rec3d_{timestamp}")
+    os.makedirs(new_dir, exist_ok=True)
+
+    file_base = f"rec3d_{timestamp}"
+    file_3d_path = os.path.join(new_dir, f"{file_base}.3d")
+    file_csv_path = os.path.join(new_dir, f"{file_base}.csv")
+
+    print("Saving 3D reconstruction results...")
+    rec3d_df.to_csv(file_3d_path, index=False, float_format="%.6f")
+    rec3d_df.to_csv(file_csv_path, index=False, float_format="%.6f")
+
+    rec3d_df_for_c3d = rec3d_df.copy()
+    new_columns = []
+    for col in rec3d_df_for_c3d.columns:
+        if col.lower() != "frame":
+            parts = col.split("_")
+            if len(parts) == 2:
+                new_columns.append(parts[0] + "_" + parts[1].upper())
+            else:
+                new_columns.append(col)
+        else:
+            new_columns.append(col)
+    rec3d_df_for_c3d.columns = new_columns
+
+    m_conversion = 1
+    mm_conversion = 1000
+
+    import vaila.readcsv_export as readcsv_export
+
+    c3d_output_path_m = os.path.join(new_dir, f"{file_base}_m.c3d")
+    try:
+        readcsv_export.auto_create_c3d_from_csv(
+            rec3d_df_for_c3d,
+            c3d_output_path_m,
+            point_rate=point_rate,
+            conversion_factor=m_conversion,
+        )
+        if gui:
+            messagebox.showinfo("Success", f"C3D file (meters) saved at:\n{c3d_output_path_m}")
+        print("C3D file (meters) created successfully")
+    except Exception as e:
+        if gui:
+            messagebox.showerror("Error", f"Failed to save C3D file (meters): {e}")
+        print("Error saving C3D file (meters):", e)
+        return None
+
+    c3d_output_path_mm = os.path.join(new_dir, f"{file_base}_mm.c3d")
+    try:
+        readcsv_export.auto_create_c3d_from_csv(
+            rec3d_df_for_c3d,
+            c3d_output_path_mm,
+            point_rate=point_rate,
+            conversion_factor=mm_conversion,
+        )
+        if gui:
+            messagebox.showinfo("Success", f"C3D file (millimeters) saved at:\n{c3d_output_path_mm}")
+        print("C3D file (millimeters) created successfully")
+    except Exception as e:
+        if gui:
+            messagebox.showerror("Error", f"Failed to save C3D file (millimeters): {e}")
+        print("Error saving C3D file (millimeters):", e)
+        return None
+
+    print("\n=== Processing Complete ===")
+    print(f"Processed {len(common_frames)} frames with {num_markers} markers")
+    print(f"Output directory: {new_dir}")
+    print("Files created:")
+    print(f"  - {file_base}.csv (CSV format)")
+    print(f"  - {file_base}.3d (3D format)")
+    print(f"  - {file_base}_m.c3d (C3D in meters)")
+    print(f"  - {file_base}_mm.c3d (C3D in millimeters)")
+
+    if gui:
+        messagebox.showinfo(
+            "Processing Complete",
+            f"3D reconstruction completed successfully!\n\n"
+            f"Processed: {len(common_frames)} frames with {num_markers} markers\n"
+            f"Output directory: {os.path.basename(new_dir)}\n\n"
+            f"Files created:\n"
+            f"• CSV and 3D format files\n"
+            f"• C3D files (meters and millimeters)",
+        )
+
+    return (new_dir, file_base)
 
 
 def run_rec3d_one_dlt3d():
@@ -148,32 +356,54 @@ def run_rec3d_one_dlt3d():
     root = Tk()
     root.withdraw()
 
-    # Step 1: Select DLT3D parameter files
+    # Step 0: Ask number of cameras (allows selecting files from different directories)
+    print("Step 0: Number of cameras...")
+    n_cameras = simpledialog.askinteger(
+        "Number of cameras",
+        "Enter number of cameras (e.g. 2):",
+        minvalue=1,
+        maxvalue=20,
+        initialvalue=2,
+    )
+    if n_cameras is None:
+        messagebox.showwarning("Cancelled", "Operation cancelled.")
+        root.destroy()
+        return
+
+    # Step 1: Select DLT3D parameter files (one dialog per camera so each can be from a different directory)
     print("Step 1: Selecting DLT3D parameter files...")
-    dlt_files = filedialog.askopenfilenames(
-        title="Select DLT3D parameter files (one per camera)",
-        filetypes=[("DLT3D files", "*.dlt3d"), ("CSV files", "*.csv")],
-    )
-    if not dlt_files:
-        messagebox.showerror("Error", "No DLT3D files selected!")
-        return
+    dlt_files = []
+    for i in range(1, n_cameras + 1):
+        path = filedialog.askopenfilename(
+            title=f"Select DLT3D file for camera {i}",
+            filetypes=[("DLT3D files", "*.dlt3d"), ("CSV files", "*.csv")],
+        )
+        if not path:
+            messagebox.showerror("Error", f"No DLT3D file selected for camera {i}!")
+            root.destroy()
+            return
+        dlt_files.append(path)
 
-    # Step 2: Select pixel coordinate CSV files
+    # Step 2: Select pixel coordinate CSV files (one dialog per camera)
     print("Step 2: Selecting pixel coordinate CSV files...")
-    pixel_files = filedialog.askopenfilenames(
-        title="Select pixel coordinate CSV files (one per camera)",
-        filetypes=[("CSV files", "*.csv")],
-    )
-
-    if not pixel_files:
-        messagebox.showerror("Error", "No pixel coordinate files selected!")
-        return
+    pixel_files = []
+    for i in range(1, n_cameras + 1):
+        path = filedialog.askopenfilename(
+            title=f"Select pixel coordinate CSV for camera {i}",
+            filetypes=[("CSV files", "*.csv")],
+        )
+        if not path:
+            messagebox.showerror("Error", f"No pixel coordinate file selected for camera {i}!")
+            root.destroy()
+            return
+        pixel_files.append(path)
 
     if len(dlt_files) != len(pixel_files):
         messagebox.showerror(
             "Error",
             "The number of DLT3D files must match the number of pixel coordinate files!",
         )
+        root.destroy()
         return
 
     # Step 3: Select output directory
@@ -203,210 +433,81 @@ def run_rec3d_one_dlt3d():
     print(f"  - Data rate: {point_rate} Hz")
     print("-" * 80)
 
-    # Load DLT3D parameters for each camera (use first row from each file, skipping the frame column)
-    print("Loading DLT3D calibration parameters...")
-    dlt_params_list = []
-    for file in dlt_files:
-        df = pd.read_csv(file)
-        if df.empty:
-            messagebox.showerror("Error", f"DLT3D file {os.path.basename(file)} is empty!")
-            return
-        params = df.iloc[0, 1:].to_numpy().astype(float)
-        dlt_params_list.append(params)
-
-    # Load pixel coordinate data for each camera using Vailá's standard header
-    print("Loading pixel coordinate data...")
-    pixel_dfs = []
-    for file in pixel_files:
-        df = pd.read_csv(file)
-        required_cols = {"frame", "p1_x", "p1_y"}
-        if not required_cols.issubset(df.columns):
-            messagebox.showerror(
-                "Error",
-                f"Pixel coordinate file {os.path.basename(file)} does not contain required columns 'frame', 'p1_x', and 'p1_y'.",
-            )
-            return
-        # If the file has only one row, force the frame to 0 for consistency across cameras.
-        if df.shape[0] == 1:
-            df["frame"] = 0
-        pixel_dfs.append(df)
-
-    # Calculate number of markers by counting the columns that match the pattern "p{number}_x"
-    first_df = pixel_dfs[0]
-    x_columns = [col for col in first_df.columns if col.endswith("_x") and col.startswith("p")]
-    num_markers = len(x_columns)
-    print(f"Detected {num_markers} markers for 3D reconstruction")
-
-    # Determine the common frames across all pixel files
-    frame_sets = [set(df["frame"]) for df in pixel_dfs]
-    common_frames = set.intersection(*frame_sets)
-    if not common_frames:
-        messagebox.showerror("Error", "No common frames found among pixel files!")
-        return
-    common_frames = sorted(common_frames)
-    print(f"Processing {len(common_frames)} common frames...")
-
-    # Pre-allocate NumPy array for better performance
-    total_frames = len(common_frames)
-    total_cols = 1 + (num_markers * 3)  # frame + (x,y,z) for each marker
-
-    print(f"Pre-allocating array for {total_frames} frames x {num_markers} markers...")
-    reconstruction_array = np.full((total_frames, total_cols), np.nan, dtype=np.float64)
-
-    # Set frame numbers in first column
-    reconstruction_array[:, 0] = common_frames
-
-    # Progress tracking
-    progress_step = max(1, total_frames // 20)  # Show progress every 5%
-
-    for frame_idx, frame in enumerate(common_frames):
-        if frame_idx % progress_step == 0:
-            progress = (frame_idx / total_frames) * 100
-            print(f"Progress: {progress:.1f}% ({frame_idx}/{total_frames} frames)")
-
-        # Get frame data from all cameras at once
-        frame_data = []
-        valid_frame = True
-        for df in pixel_dfs:
-            frame_row = df[df["frame"] == frame]
-            if frame_row.empty:
-                valid_frame = False
-                break
-            frame_data.append(frame_row.iloc[0])
-
-        if not valid_frame:
-            continue
-
-        # Loop through all detected markers
-        for marker in range(1, num_markers + 1):
-            pixel_obs_list = []
-            valid_marker = True
-
-            for frame_row in frame_data:
-                try:
-                    x_obs = float(frame_row[f"p{marker}_x"])
-                    y_obs = float(frame_row[f"p{marker}_y"])
-                    if np.isnan(x_obs) or np.isnan(y_obs):
-                        valid_marker = False
-                        break
-                    pixel_obs_list.append((x_obs, y_obs))
-                except:
-                    valid_marker = False
-                    break
-
-            # Calculate column indices for this marker
-            col_start = 1 + (marker - 1) * 3  # x, y, z columns for this marker
-
-            if not valid_marker or len(pixel_obs_list) != len(dlt_params_list):
-                # NaN values already pre-allocated, so skip
-                pass
-            else:
-                point3d = rec3d_multicam(dlt_params_list, pixel_obs_list)
-                reconstruction_array[frame_idx, col_start : col_start + 3] = point3d
-
-    print("3D reconstruction completed!")
-
-    # Prepare header for all markers
-    header = ["frame"]
-    for marker in range(1, num_markers + 1):
-        header.extend([f"p{marker}_x", f"p{marker}_y", f"p{marker}_z"])
-
-    # Convert pre-allocated array to DataFrame
-    rec3d_df = pd.DataFrame(reconstruction_array, columns=header)
-
-    # Remove frames that were skipped (all NaN except frame number)
-    valid_frames_mask = ~rec3d_df.iloc[:, 1:].isna().all(axis=1)
-    rec3d_df = rec3d_df[valid_frames_mask].reset_index(drop=True)
-
-    if rec3d_df.empty:
-        messagebox.showerror("Error", "No valid 3D reconstruction could be performed!")
-        return
-
-    # Create output directory with timestamp
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    new_dir = os.path.join(output_directory, f"vaila_rec3d_{timestamp}")
-    os.makedirs(new_dir, exist_ok=True)
-
-    file_base = f"rec3d_{timestamp}"
-    file_3d_path = os.path.join(new_dir, f"{file_base}.3d")
-    file_csv_path = os.path.join(new_dir, f"{file_base}.csv")
-
-    print("Saving 3D reconstruction results...")
-    rec3d_df.to_csv(file_3d_path, index=False, float_format="%.6f")
-    rec3d_df.to_csv(file_csv_path, index=False, float_format="%.6f")
-
-    # Adjust column names to the expected format (e.g., convert "p1_x" to "p1_X")
-    rec3d_df_for_c3d = rec3d_df.copy()
-    new_columns = []
-    for col in rec3d_df_for_c3d.columns:
-        if col.lower() != "frame":
-            parts = col.split("_")
-            if len(parts) == 2:
-                new_columns.append(parts[0] + "_" + parts[1].upper())
-            else:
-                new_columns.append(col)
-        else:
-            new_columns.append(col)
-    rec3d_df_for_c3d.columns = new_columns
-
-    # Set conversion factors
-    m_conversion = 1  # Conversion factor for meters
-    mm_conversion = 1000  # Conversion factor for millimeters
-
-    import vaila.readcsv_export as readcsv_export
-
-    # Save C3D file in meters
-    c3d_output_path_m = os.path.join(new_dir, f"{file_base}_m.c3d")
-    try:
-        readcsv_export.auto_create_c3d_from_csv(
-            rec3d_df_for_c3d,
-            c3d_output_path_m,
-            point_rate=point_rate,
-            conversion_factor=m_conversion,
-        )
-        messagebox.showinfo("Success", f"C3D file (meters) saved at:\n{c3d_output_path_m}")
-        print("C3D file (meters) created successfully")
-    except Exception as e:
-        messagebox.showerror("Error", f"Failed to save C3D file (meters): {e}")
-        print("Error saving C3D file (meters):", e)
-
-    # Save C3D file in millimeters
-    c3d_output_path_mm = os.path.join(new_dir, f"{file_base}_mm.c3d")
-    try:
-        readcsv_export.auto_create_c3d_from_csv(
-            rec3d_df_for_c3d,
-            c3d_output_path_mm,
-            point_rate=point_rate,
-            conversion_factor=mm_conversion,
-        )
-        messagebox.showinfo("Success", f"C3D file (millimeters) saved at:\n{c3d_output_path_mm}")
-        print("C3D file (millimeters) created successfully")
-    except Exception as e:
-        messagebox.showerror("Error", f"Failed to save C3D file (millimeters): {e}")
-        print("Error saving C3D file (millimeters):", e)
-
-    # Final summary message
-    print("\n=== Processing Complete ===")
-    print(f"Processed {len(common_frames)} frames with {num_markers} markers")
-    print(f"Output directory: {new_dir}")
-    print("Files created:")
-    print(f"  - {file_base}.csv (CSV format)")
-    print(f"  - {file_base}.3d (3D format)")
-    print(f"  - {file_base}_m.c3d (C3D in meters)")
-    print(f"  - {file_base}_mm.c3d (C3D in millimeters)")
-
-    messagebox.showinfo(
-        "Processing Complete",
-        f"3D reconstruction completed successfully!\n\n"
-        f"Processed: {len(common_frames)} frames with {num_markers} markers\n"
-        f"Output directory: {os.path.basename(new_dir)}\n\n"
-        f"Files created:\n"
-        f"• CSV and 3D format files\n"
-        f"• C3D files (meters and millimeters)",
-    )
-
+    run_reconstruction(dlt_files, pixel_files, output_directory, point_rate, gui=True)
     root.destroy()
 
 
+def _cli_run():
+    """CLI entry: argparse for --dlt3d, --pixels, --fps, --output."""
+    parser = argparse.ArgumentParser(
+        description="3D reconstruction from DLT3D parameter files and pixel CSV files (one per camera).",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  %(prog)s --dlt3d cam1.dlt3d cam2.dlt3d --pixels cam1.csv cam2.csv --fps 60 --output ./out
+  %(prog)s --gui
+        """,
+    )
+    parser.add_argument(
+        "--dlt3d",
+        nargs="+",
+        metavar="FILE",
+        help="DLT3D parameter files (one per camera, order must match --pixels)",
+    )
+    parser.add_argument(
+        "--pixels",
+        nargs="+",
+        metavar="FILE",
+        help="Pixel coordinate CSV files (one per camera, order must match --dlt3d)",
+    )
+    parser.add_argument(
+        "--fps",
+        type=int,
+        default=100,
+        metavar="HZ",
+        help="Point data rate in Hz (default: 100)",
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        metavar="DIR",
+        help="Output directory for reconstruction results",
+    )
+    parser.add_argument(
+        "--gui",
+        action="store_true",
+        help="Launch GUI instead of CLI",
+    )
+    args = parser.parse_args()
+
+    if args.gui or (not args.dlt3d and not args.pixels and not args.output):
+        run_rec3d_one_dlt3d()
+        return
+
+    if not args.dlt3d or not args.pixels:
+        print("Error: CLI mode requires --dlt3d and --pixels.", file=sys.stderr)
+        sys.exit(1)
+    if not args.output:
+        print("Error: CLI mode requires --output.", file=sys.stderr)
+        sys.exit(1)
+    if len(args.dlt3d) != len(args.pixels):
+        print(
+            "Error: Number of --dlt3d files must match number of --pixels files.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    result = run_reconstruction(
+        args.dlt3d,
+        args.pixels,
+        os.path.abspath(args.output),
+        args.fps,
+        gui=False,
+    )
+    if result is None:
+        sys.exit(1)
+    print(f"Output directory: {result[0]}")
+
+
 if __name__ == "__main__":
-    run_rec3d_one_dlt3d()
+    _cli_run()
