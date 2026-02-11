@@ -5,29 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>vailá - interp_smooth_split</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 40px;
-            line-height: 1.6;
-            background-color: #f5f5f5;
-        }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            background: white;
-            padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
-        h2 { color: #34495e; margin-top: 30px; }
-        .module-info { background: #ecf0f1; padding: 15px; border-radius: 5px; margin: 20px 0; }
+        body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; background-color: #f5f5f5; color: #111; }
+        .container { max-width: 800px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { color: #111; border-bottom: 3px solid #333; padding-bottom: 10px; }
+        h2, h4 { color: #111; margin-top: 24px; }
+        .module-info { background: #f0f0f0; padding: 15px; border-radius: 5px; margin: 20px 0; }
         .functions { background: #f8f9fa; padding: 15px; border-left: 4px solid #28a745; margin: 15px 0; }
-        .docstring { background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 15px 0; }
-        .errorr { background: #f8d7da; padding: 15px; border-left: 4px solid #dc3545; margin: 15px 0; }
+        .docstring { background: #fff9e6; padding: 15px; border-left: 4px solid #ffc107; margin: 15px 0; }
         code { background: #e9ecef; padding: 2px 6px; border-radius: 3px; }
-        pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; }
-        .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #6c757d; font-size: 0.9em; }
+        pre { background: #f0f0f0; padding: 10px; border-radius: 5px; overflow-x: auto; }
+        table { border-collapse: collapse; width: 100%; margin: 10px 0; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background: #f0f0f0; }
+        ul { margin: 0.5em 0; }
+        .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #555; font-size: 0.9em; }
     </style>
 </head>
 <body>
@@ -35,60 +26,63 @@
         <h1>vailá - interp_smooth_split</h1>
 
         <div class="module-info">
-            <h3>📋 Module Information</h3>
-            <p><strong>Category:</strong> Processing</p>
-            <p><strong>File:</strong> vaila\interp_smooth_split.py</p>
-            <p><strong>Lines:</strong> 3283</p>
-            <p><strong>Size:</strong> 131102 characters</p>
-            <p><strong>Version:</strong> 0.0.7</p>
-            <p><strong>Author:</strong> Paulo R. P. Santiago</p>
-            <p><strong>GUI Interface:</strong> ✅ Yes</p>
+            <h3>📋 Informação do módulo</h3>
+            <p><strong>Categoria:</strong> Processing</p>
+            <p><strong>Ficheiro:</strong> vaila/interp_smooth_split.py</p>
+            <p><strong>Versão:</strong> 0.1.0</p>
+            <p><strong>Autor:</strong> Paulo R. P. Santiago</p>
+            <p><strong>GUI:</strong> ✅ &nbsp; <strong>CLI:</strong> ✅</p>
         </div>
 
-        
-
         <div class="docstring">
-            <h3>📖 Description</h3>
-            <pre>
-===============================================================================
-interp_smooth_split.py
-===============================================================================
-Author: Paulo R. P. Santiago
-Email: paulosantiago@usp.br
-GitHub: https://github.com/vaila-multimodaltoolbox/vaila
-Creation Date: 14 October 2024
-Update Date: 16 September 2025
-Version: 0.0.7
-Python Version: 3.12.9
+            <h3>📖 Descrição</h3>
+            <p>Ferramenta para preencher dados em falta em ficheiros CSV (interpolação), suavização e divisão de dados. Destinada a análise biomecânica e séries temporais.</p>
 
-Description:
-------------
-This script provides functionality to fill missing data in CSV files using
-linear interpolation, Kalman filter, Savitzky-Golay filter, nearest value fill,
-or to split data into a separate CSV file. It is intended for use in biomechanical
-data analysis, where gaps in time-series data can be filled and datasets can be
-split for further analysis.
+            <h4>Funcionalidades principais</h4>
+            <ul>
+                <li><strong>Interpolação:</strong> Linear, cúbica, nearest, Kalman, Hampel; ou nenhuma / skip.</li>
+                <li><strong>Suavização:</strong> Nenhuma, Savitzky-Golay, LOWESS, Kalman, Butterworth, Splines, ARIMA, mediana móvel.</li>
+                <li><strong>smooth_config.toml:</strong> Configuração gravada ao aplicar; análise e processamento (GUI ou CLI) usam este ficheiro quando existir. O diretório de output também recebe uma cópia do TOML usado.</li>
+                <li><strong>Analyze Quality:</strong> CSV de teste, análise por coluna, Winter residual (fc 1–15 Hz, fs em Hz). Selecção de coluna com Combobox.</li>
+                <li><strong>Padding</strong> e <strong>divisão de dados</strong> configuráveis.</li>
+            </ul>
 
-Key Features:
--------------
-1. **Data Splitting**:
-   - Splits CSV files into two halves for easier data management and analysis.
-2. **Padding**:
-   - Pads the data with the last valid value to avoid edge effects.
+            <h4>Como executar — GUI (por defeito)</h4>
+            <p><code>python -m vaila.interp_smooth_split</code> ou <code>python vaila/interp_smooth_split.py</code></p>
+            <p>Ou com <code>--gui</code> para forçar a interface gráfica. Abre o diálogo; após Apply escolhe-se o diretório de origem. O output é escrito num subdir com timestamp.</p>
 
-    padding_l...</pre>
+            <h4>Como executar — CLI</h4>
+            <p>Config é lida de: <code>--config</code> (se indicado), ou <code>smooth_config.toml</code> no diretório de entrada, ou <code>smooth_config.toml</code> no diretório atual. Se não existir, o script termina com erro.</p>
+            <table>
+                <tr><th>Argumento</th><th>Descrição</th></tr>
+                <tr><td><code>-i</code>, <code>--input</code></td><td>Diretório com CSVs (obrigatório em CLI)</td></tr>
+                <tr><td><code>-o</code>, <code>--output</code></td><td>Diretório de saída (opcional)</td></tr>
+                <tr><td><code>-c</code>, <code>--config</code></td><td>Caminho para smooth_config.toml (opcional)</td></tr>
+                <tr><td><code>--gui</code></td><td>Abre a interface gráfica</td></tr>
+            </table>
+            <p>Exemplos:</p>
+            <pre>python -m vaila.interp_smooth_split --input ./data
+python -m vaila.interp_smooth_split -i ./data -o ./results -c ./smooth_config.toml</pre>
+
+            <h4>Ficheiro de configuração (TOML)</h4>
+            <p><code>smooth_config.toml</code>: secções <code>[interpolation]</code>, <code>[smoothing]</code>, <code>[padding]</code>, <code>[split]</code>, <code>[time_column]</code> (sample_rate).</p>
         </div>
 
         <div class="functions">
-            <h3>🔧 Main Functions</h3>
-            <p><strong>Total functions found:</strong> 20</p>
-            <ul><li><code>save_config_to_toml</code></li><li><code>load_config_from_toml</code></li><li><code>generate_report</code></li><li><code>detect_float_format</code></li><li><code>savgol_smooth</code></li><li><code>lowess_smooth</code></li><li><code>spline_smooth</code></li><li><code>kalman_smooth</code></li><li><code>arima_smooth</code></li><li><code>process_file</code></li><li><code>run_fill_split_dialog</code></li><li><code>setup_variables</code></li><li><code>center_window</code></li><li><code>on_window_resize</code></li><li><code>create_dialog_content</code></li><li><code>create_interpolation_section</code></li><li><code>create_smoothing_section</code></li><li><code>create_split_section</code></li><li><code>create_parameters_section</code></li><li><code>create_padding_section</code></li></ul>
+            <h3>🔧 Funções principais</h3>
+            <ul>
+                <li><code>run_fill_split_dialog</code></li>
+                <li><code>run_batch(source_dir, config, dest_dir=None, use_messagebox=True)</code></li>
+                <li><code>process_file</code></li>
+                <li><code>load_smooth_config_for_analysis</code> / <code>save_smooth_config_toml</code></li>
+                <li><code>winter_residual_analysis</code></li>
+            </ul>
         </div>
 
         <div class="footer">
-            <p>📅 Generated automatically on: 15/10/2025 08:04:44</p>
-            <p>🔗 Part of vailá - Multimodal Toolbox</p>
-            <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
+            <p>📅 Atualizado: 2026</p>
+            <p>🔗 Parte do vailá - Multimodal Toolbox</p>
+            <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">Repositório GitHub</a></p>
         </div>
     </div>
 </body>
