@@ -45,24 +45,25 @@ Key Features:
 
 Usage:
 ------
-- Run this script to launch a graphical user interface (GUI) that provides options
-  to perform interpolation on CSV files or to split them into two parts.
-- The filled or split files are saved in new directories to avoid overwriting the
-  original files.
+GUI mode (default): no arguments, or --gui
+  python -m vaila.interp_smooth_split
+  python vaila/interp_smooth_split.py
+  Opens the configuration dialog; after Apply you choose the source directory.
+  Output is written to a timestamped subdir (e.g. processed_linear_lowess_YYYYMMDD_HHMMSS).
+  Configuration can be saved/loaded as smooth_config.toml.
 
-How to run:
------------
-GUI mode:
-- Run this script to launch a graphical user interface (GUI) that provides options
-  to perform interpolation on CSV files or to split them into two parts.
-- The filled or split files are saved in new directories to avoid overwriting the
-  original files.
+CLI mode: pass --input (and optionally --output, --config)
+  Config is read from:
+  - --config PATH  if given, or
+  - smooth_config.toml in the input directory (or same dir as input file), or
+  - smooth_config.toml in the current directory.
+  If no config is found, an error is printed (create one via GUI Apply or copy a template).
 
-CLI mode:
-- Run this script with command line arguments to perform interpolation on CSV files
-  or to split them into two parts.
-- The filled or split files are saved in new directories to avoid overwriting the
-  original files.
+  Examples:
+  python -m vaila.interp_smooth_split --input /path/to/csv_dir [--output /path/to/out] [--config /path/to/smooth_config.toml]
+  python -m vaila.interp_smooth_split -i ./data -o ./results
+  python -m vaila.interp_smooth_split -i ./data -c ./smooth_config.toml
+  If --output is omitted, a timestamped subdir is created inside the input directory.
 
 License:
 --------
@@ -76,7 +77,7 @@ import os
 import sys
 import tkinter as tk
 from pathlib import Path
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, ttk
 
 import numpy as np
 import pandas as pd
@@ -465,6 +466,88 @@ def load_config_from_toml(filepath):
         config = toml.load(f)
     print(f"Configuration loaded from: {filepath}")
     return config
+
+
+SMOOTH_CONFIG_FILENAME = "smooth_config.toml"
+
+
+def _smooth_config_path_for_dialog(dialog):
+    """Return path for smooth_config.toml: directory of test data if set, else cwd."""
+    base = (
+        os.path.dirname(dialog.test_data_path)
+        if getattr(dialog, "test_data_path", None)
+        else os.getcwd()
+    )
+    return os.path.join(base, SMOOTH_CONFIG_FILENAME)
+
+
+def _write_smooth_config_toml_from_result(dialog):
+    """Write current applied config to smooth_config.toml so it is the single source of truth."""
+    path = _smooth_config_path_for_dialog(dialog)
+    save_smooth_config_toml(dialog.result, path)
+
+
+def save_smooth_config_toml(config_result, filepath):
+    """
+    Save the applied configuration to smooth_config.toml so it is the single source of truth.
+    config_result: dict with keys padding, interp_method, interp_params, smooth_method,
+                   smooth_params, max_gap, do_split, sample_rate (optional).
+    """
+    interp = {
+        "method": config_result.get("interp_method", "linear"),
+        "max_gap": config_result.get("max_gap", 60),
+    }
+    smooth = {
+        "method": config_result.get("smooth_method", "none"),
+        **config_result.get("smooth_params", {}),
+    }
+    padding = {"percent": config_result.get("padding", 10.0)}
+    split = {"enabled": config_result.get("do_split", False)}
+    sr = config_result.get("sample_rate")
+    time_col = {"sample_rate": float(sr) if sr is not None and sr > 0 else 0.0}
+    data = {
+        "interpolation": interp,
+        "smoothing": smooth,
+        "padding": padding,
+        "split": split,
+        "time_column": time_col,
+    }
+    with open(filepath, "w", encoding="utf-8") as f:
+        toml.dump(data, f)
+    print(f"Configuration saved to {filepath} (will be used for analysis and processing).")
+
+
+def load_smooth_config_for_analysis(filepath):
+    """
+    Load smooth_config.toml and return config in the format expected by
+    perform_analysis / process_file (interp_method, smooth_method, smooth_params, padding, max_gap,
+    do_split, sample_rate).
+    """
+    with open(filepath, encoding="utf-8") as f:
+        data = toml.load(f)
+    interp = data.get("interpolation", {})
+    smoothing = data.get("smoothing", {})
+    padding_pct = data.get("padding", {}).get("percent", 10.0)
+    split = data.get("split", {})
+    time_col = data.get("time_column", {})
+    smooth_params = {k: v for k, v in smoothing.items() if k != "method"}
+    sample_rate = time_col.get("sample_rate") or 0.0
+    try:
+        sample_rate = float(sample_rate)
+        if sample_rate <= 0:
+            sample_rate = None
+    except (TypeError, ValueError):
+        sample_rate = None
+    return {
+        "interp_method": interp.get("method", "linear"),
+        "interp_params": {k: v for k, v in interp.items() if k not in ["method", "max_gap"]},
+        "smooth_method": smoothing.get("method", "none"),
+        "smooth_params": smooth_params,
+        "padding": float(padding_pct),
+        "max_gap": int(interp.get("max_gap", 60)),
+        "do_split": bool(split.get("enabled", False)),
+        "sample_rate": sample_rate,
+    }
 
 
 class InterpolationConfigDialog:
@@ -1525,6 +1608,7 @@ Parameters have been confirmed and will be used for processing.
                 "do_split": bool(split.get("enabled", False)),
                 "sample_rate": sample_rate,
             }
+            _write_smooth_config_toml_from_result(self)
 
         else:
             try:
@@ -1538,16 +1622,6 @@ Parameters have been confirmed and will be used for processing.
 
                 # Force update of widget values before collecting them
                 self.update_idletasks()
-
-                # Debug: Print the values of the StringVar before processing
-                print("\nDEBUG - StringVar Values:")
-                print(f"Savgol Window: {self.savgol_window.get()}")
-                print(f"Savgol Poly: {self.savgol_poly.get()}")
-                print(f"LOWESS Frac: {self.lowess_frac.get()}")
-                print(f"LOWESS It: {self.lowess_it.get()}")
-                print(f"Butter Cutoff: {self.butter_cutoff.get()}")
-                print(f"Butter Fs: {self.butter_fs.get()}")
-                print(f"Kalman Iterations: {self.kalman_iterations.get()}")
 
                 interp_map = {
                     1: "linear",
@@ -1570,13 +1644,6 @@ Parameters have been confirmed and will be used for processing.
                     9: "hampel",
                 }
 
-                # Debug: Print the values of the Entry widgets
-                print("\nDEBUG - Entry Values:")
-                print(f"Interpolation Method: {self.interp_entry.get()}")
-                print(f"Smoothing Method: {self.smooth_entry.get()}")
-                print(f"Max Gap: {self.max_gap_entry.get()}")
-                print(f"Padding: {self.padding_entry.get()}")
-
                 smooth_method = int(self.smooth_entry.get())
                 interp_method = int(self.interp_entry.get())
                 max_gap = int(self.max_gap_entry.get())
@@ -1596,15 +1663,11 @@ Parameters have been confirmed and will be used for processing.
                         "window_length": window_length,
                         "polyorder": polyorder,
                     }
-                    print(
-                        f"APPLY: Savitzky-Golay settings - window={window_length}, polyorder={polyorder}"
-                    )
 
                 elif smooth_method == 3:  # LOWESS
                     frac = float(self.lowess_frac.get())
                     it = int(self.lowess_it.get())
                     smooth_params = {"frac": frac, "it": it}
-                    print(f"APPLY: LOWESS settings - frac={frac}, it={it}")
 
                 elif smooth_method == 4:  # Kalman
                     n_iter = int(self.kalman_iterations.get())
@@ -1613,30 +1676,25 @@ Parameters have been confirmed and will be used for processing.
                         messagebox.showerror("Error", "Kalman mode must be 1 (1D) or 2 (2D)")
                         return False
                     smooth_params = {"n_iter": n_iter, "mode": mode}
-                    print(f"APPLY: Kalman settings - n_iter={n_iter}, mode={mode}")
 
                 elif smooth_method == 5:  # Butterworth
                     cutoff = float(self.butter_cutoff.get())
                     fs = float(self.butter_fs.get())
                     smooth_params = {"cutoff": cutoff, "fs": fs}
-                    print(f"APPLY: Butterworth settings - cutoff={cutoff} Hz, fs={fs} Hz")
 
                 elif smooth_method == 6:  # Splines
                     smoothing_factor = float(self.spline_smoothing.get())
                     smooth_params = {"smoothing_factor": smoothing_factor}
-                    print(f"APPLY: Spline Smoothing settings - smoothing_factor={smoothing_factor}")
 
                 elif smooth_method == 7:  # ARIMA
                     p = int(self.arima_p.get())
                     d = int(self.arima_d.get())
                     q = int(self.arima_q.get())
                     smooth_params = {"p": p, "d": d, "q": q}
-                    print(f"APPLY: ARIMA settings - order=({p},{d},{q})")
 
                 elif smooth_method == 8:  # Moving Median
                     kernel_size = int(self.median_kernel.get())
                     smooth_params = {"kernel_size": kernel_size}
-                    print(f"APPLY: Moving Median settings - kernel_size={kernel_size}")
 
                 elif smooth_method == 9:  # Hampel Filter
                     window_size = int(self.hampel_window.get())
@@ -1645,7 +1703,6 @@ Parameters have been confirmed and will be used for processing.
                         "window_size": window_size,
                         "n_sigmas": n_sigmas,
                     }
-                    print(f"APPLY: Hampel settings - window={window_size}, sigmas={n_sigmas}")
 
                 # Display a summary of the chosen parameters
                 summary = f"""
@@ -1716,9 +1773,8 @@ Parameters have been confirmed and will be used for processing.
                         "sample_rate": sample_rate,
                     }
 
-                    print("\nDEBUG - Final Configuration:")
-                    print(f"FINAL CONFIG: {config_result}")
                     self.result = config_result
+                    _write_smooth_config_toml_from_result(self)
                 else:
                     self.result = None
 
@@ -2117,17 +2173,45 @@ Parameters have been confirmed and will be used for processing.
 
         tk.Label(selection_frame, text="Select column to analyze:").pack(side=tk.LEFT, padx=5)
 
-        # Column selection dropdown
+        # Column selection: Combobox stays open until selection (no need to keep mouse pressed)
         selected_column = tk.StringVar(value=numeric_cols[0])
-        column_menu = tk.OptionMenu(selection_frame, selected_column, *numeric_cols)
-        column_menu.pack(side=tk.LEFT, padx=5)
+        column_combo = ttk.Combobox(
+            selection_frame,
+            textvariable=selected_column,
+            values=numeric_cols,
+            state="readonly",
+            width=max(20, min(35, max(len(c) for c in numeric_cols))),
+        )
+        column_combo.pack(side=tk.LEFT, padx=5)
+        # Keep StringVar in sync when user selects (readonly Combobox may not update it on all platforms)
+        def _on_column_selected(_event=None):
+            val = column_combo.get()
+            if val and val in numeric_cols:
+                selected_column.set(val)
+        column_combo.bind("<<ComboboxSelected>>", _on_column_selected)
 
-        # Analyze button
+        tk.Label(selection_frame, text="fs (Hz):").pack(side=tk.LEFT, padx=(15, 2))
+        fs_var = tk.StringVar(value="30.0")
+        fs_entry = tk.Entry(selection_frame, textvariable=fs_var, width=6)
+        fs_entry.pack(side=tk.LEFT, padx=2)
+
+        # Analyze button (read column from Combobox so selection always applies)
         tk.Button(
             selection_frame,
             text="Analyze Column",
-            command=lambda: self.perform_analysis(analysis_window, selected_column.get()),
+            command=lambda: self.perform_analysis(analysis_window, column_combo.get() or numeric_cols[0]),
             bg="#4CAF50",
+            fg="white",
+        ).pack(side=tk.LEFT, padx=5)
+
+        # Winter residual analysis (read column from Combobox so selection always applies)
+        tk.Button(
+            selection_frame,
+            text="Winter Residual (fc 1–15 Hz)",
+            command=lambda: self.perform_winter_residual_analysis(
+                analysis_window, column_combo.get() or numeric_cols[0], fs_var.get()
+            ),
+            bg="#2196F3",
             fg="white",
         ).pack(side=tk.LEFT, padx=5)
 
@@ -2146,6 +2230,47 @@ Parameters have been confirmed and will be used for processing.
 
         # Perform initial analysis on first column
         self.perform_analysis(analysis_window, numeric_cols[0])
+
+    def perform_winter_residual_analysis(self, window, column_name, fs_str="30.0"):
+        """Winter residual analysis: Butterworth fc sweep 1–15 Hz, RMS residual, suggest elbow."""
+        try:
+            fs = float(fs_str)
+            if fs <= 0:
+                messagebox.showerror("Error", "Sampling frequency (fs) must be positive.")
+                return
+        except ValueError:
+            messagebox.showerror("Error", "Invalid fs. Use a number (e.g. 30.0).")
+            return
+        data = self.test_data[column_name].values
+        fc_list, rms_list, suggested_fc = winter_residual_analysis(
+            data, fs, fc_min=1.0, fc_max=15.0, n_fc=29, order=4
+        )
+        if len(fc_list) == 0:
+            messagebox.showwarning("Warning", "No valid data for residual analysis.")
+            return
+        for widget in self.plot_frame.winfo_children():
+            widget.destroy()
+        fig = Figure(figsize=(10, 5))
+        ax = fig.add_subplot(111)
+        ax.plot(fc_list, rms_list, "b.-", linewidth=2, markersize=6)
+        if suggested_fc is not None:
+            idx = np.argmin(np.abs(fc_list - suggested_fc))
+            ax.axvline(suggested_fc, color="red", linestyle="--", label=f"Suggested fc = {suggested_fc:.1f} Hz")
+            ax.plot(fc_list[idx], rms_list[idx], "ro", markersize=10)
+        ax.set_xlabel("Cutoff frequency (Hz)", fontweight="bold")
+        ax.set_ylabel("RMS residual (raw - filtered)", fontweight="bold")
+        ax.set_title(f"Winter residual analysis — {column_name} (fs={fs} Hz, Butterworth 4th order)", fontweight="bold")
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        fig.tight_layout()
+        canvas = FigureCanvasTkAgg(fig, master=self.plot_frame)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        from matplotlib.backends.backend_tkagg import NavigationToolbar2Tk
+        toolbar = NavigationToolbar2Tk(canvas, self.plot_frame)
+        toolbar.update()
+        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        print(f"[Winter] {column_name}: suggested cutoff = {suggested_fc} Hz (elbow)")
 
     def apply_filter_to_residuals(self, residuals, config):
         """Apply the same filter used in processing to the residuals"""
@@ -2211,10 +2336,6 @@ Parameters have been confirmed and will be used for processing.
 
     def perform_analysis(self, window, column_name):
         """Perform quality analysis on selected column"""
-        # Force update of all widgets before analysis
-        print("\n[DEBUG] Performing analysis...")
-        print(f"[DEBUG] Column: {column_name}")
-
         # Force focus to trigger any pending updates
         self.window.focus_force()
         self.window.update()
@@ -2226,13 +2347,6 @@ Parameters have been confirmed and will be used for processing.
 
         # Get current configuration with forced parameter update
         config = self.get_current_analysis_config()
-
-        print("[DEBUG] Using config for analysis:")
-        print(f"  Interp method: {config['interp_method']}")
-        print(f"  Smooth method: {config['smooth_method']}")
-        print(f"  Smooth params: {config['smooth_params']}")
-        print(f"  Padding: {config['padding']}")
-        print(f"  Max gap: {config['max_gap']}")
 
         # Process the selected column
         original_data = self.test_data[column_name].values
@@ -2439,28 +2553,52 @@ Parameters have been confirmed and will be used for processing.
         canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
     def get_current_analysis_config(self):
-        """Get current configuration for analysis - with forced parameter update"""
+        """Get current configuration for analysis - prefer smooth_config.toml when present."""
         try:
+            # Prefer smooth_config.toml as single source of truth (same dir as test data or cwd)
+            path = _smooth_config_path_for_dialog(self)
+            if os.path.isfile(path):
+                cfg = load_smooth_config_for_analysis(path)
+                return cfg
             # Force update of all parameter values from Entry widgets
             self.window.update_idletasks()
 
-            # Force explicit update from param_entries if they exist
+            # Force explicit update from param_entries so Entry values are used (avoid stale StringVar)
             if hasattr(self, "param_entries"):
                 if "cutoff" in self.param_entries:
                     try:
-                        cutoff_value = self.param_entries["cutoff"].get()
-                        self.butter_cutoff.set(cutoff_value)
-                        print(f"[DEBUG] Updated cutoff to: {cutoff_value}")
-                    except Exception as e:
-                        print(f"[DEBUG] Error updating cutoff: {e}")
+                        self.butter_cutoff.set(self.param_entries["cutoff"].get())
+                    except Exception:
+                        pass
 
                 if "fs" in self.param_entries:
                     try:
-                        fs_value = self.param_entries["fs"].get()
-                        self.butter_fs.set(fs_value)
-                        print(f"[DEBUG] Updated fs to: {fs_value}")
-                    except Exception as e:
-                        print(f"[DEBUG] Error updating fs: {e}")
+                        self.butter_fs.set(self.param_entries["fs"].get())
+                    except Exception:
+                        pass
+
+                if "frac" in self.param_entries:
+                    try:
+                        self.lowess_frac.set(self.param_entries["frac"].get())
+                    except Exception:
+                        pass
+
+                if "it" in self.param_entries:
+                    try:
+                        self.lowess_it.set(self.param_entries["it"].get())
+                    except Exception:
+                        pass
+
+                if "window_length" in self.param_entries:
+                    try:
+                        self.savgol_window.set(self.param_entries["window_length"].get())
+                    except Exception:
+                        pass
+                if "polyorder" in self.param_entries:
+                    try:
+                        self.savgol_poly.set(self.param_entries["polyorder"].get())
+                    except Exception:
+                        pass
 
             interp_map = {
                 1: "linear",
@@ -2489,50 +2627,31 @@ Parameters have been confirmed and will be used for processing.
                     "window_length": int(self.savgol_window.get()),
                     "polyorder": int(self.savgol_poly.get()),
                 }
-                print(
-                    f"[DEBUG] Savgol params: window={smooth_params['window_length']}, poly={smooth_params['polyorder']}"
-                )
             elif smooth_method == 3:  # LOWESS
                 smooth_params = {
                     "frac": float(self.lowess_frac.get()),
                     "it": int(self.lowess_it.get()),
                 }
-                print(
-                    f"[DEBUG] LOWESS params: frac={smooth_params['frac']}, it={smooth_params['it']}"
-                )
             elif smooth_method == 4:  # Kalman
                 smooth_params = {
                     "n_iter": int(self.kalman_iterations.get()),
                     "mode": int(self.kalman_mode.get()),
                 }
-                print(
-                    f"[DEBUG] Kalman params: n_iter={smooth_params['n_iter']}, mode={smooth_params['mode']}"
-                )
             elif smooth_method == 5:  # Butterworth
                 smooth_params = {
                     "cutoff": float(self.butter_cutoff.get()),
                     "fs": float(self.butter_fs.get()),
                 }
-                print(
-                    f"[DEBUG] Butterworth params: cutoff={smooth_params['cutoff']}, fs={smooth_params['fs']}"
-                )
             elif smooth_method == 6:  # Splines
                 smooth_params = {"smoothing_factor": float(self.spline_smoothing.get())}
-                print(
-                    f"[DEBUG] Spline params: smoothing_factor={smooth_params['smoothing_factor']}"
-                )
             elif smooth_method == 7:  # ARIMA
                 smooth_params = {
                     "p": int(self.arima_p.get()),
                     "d": int(self.arima_d.get()),
                     "q": int(self.arima_q.get()),
                 }
-                print(
-                    f"[DEBUG] ARIMA params: p={smooth_params['p']}, d={smooth_params['d']}, q={smooth_params['q']}"
-                )
             elif smooth_method == 8:  # Moving Median
                 smooth_params = {"kernel_size": int(self.median_kernel.get())}
-                print(f"[DEBUG] Moving Median params: kernel_size={smooth_params['kernel_size']}")
 
             # Get interpolation parameters (Hampel)
             interp_params = {}
@@ -2542,9 +2661,6 @@ Parameters have been confirmed and will be used for processing.
                     "window_size": int(self.hampel_window.get()),
                     "n_sigmas": float(self.hampel_sigma.get()),
                 }
-                print(
-                    f"[DEBUG] Hampel params: window={interp_params['window_size']}, sigmas={interp_params['n_sigmas']}"
-                )
 
             config = {
                 "interp_method": interp_map[int(self.interp_entry.get())],
@@ -2555,7 +2671,6 @@ Parameters have been confirmed and will be used for processing.
                 "max_gap": int(self.max_gap_entry.get()),
             }
 
-            print(f"[DEBUG] Final analysis config: {config}")
             return config
 
         except Exception as e:
@@ -3054,6 +3169,55 @@ def lowess_smooth(data, frac, it):
         return data  # Return original data if smoothing fails
 
 
+def winter_residual_analysis(data, fs, fc_min=1.0, fc_max=15.0, n_fc=29, order=4):
+    """
+    Winter-style residual analysis: Butterworth low-pass at multiple cutoff frequencies,
+    compute RMS(residual) = RMS(raw - filtered). Used to find optimal cutoff (elbow).
+
+    Parameters:
+    - data: 1D array (NaN filled with linear interpolation for the sweep)
+    - fs: sampling frequency (Hz)
+    - fc_min, fc_max: range of cutoff frequencies (Hz)
+    - n_fc: number of fc points
+    - order: Butterworth order (4 = dual 2nd for zero phase in filter_utils)
+
+    Returns:
+    - fc_list: array of cutoff frequencies
+    - rms_list: array of RMS residual for each fc
+    - suggested_fc: cutoff at elbow (where relative decrease in RMS drops below ~5%)
+    """
+    data = np.asarray(data, dtype=float)
+    valid = ~np.isnan(data)
+    if not np.any(valid):
+        return np.array([]), np.array([]), None
+    # Fill NaN for filtering
+    series = pd.Series(data)
+    filled = series.interpolate(method="linear", limit_direction="both").values
+    fc_list = np.linspace(fc_min, fc_max, num=n_fc)
+    rms_list = []
+    for fc in fc_list:
+        try:
+            filtered = butter_filter(
+                filled, fs=fs, filter_type="low", cutoff=fc, order=order, padding=True
+            )
+            residual = filled - filtered
+            rms_list.append(np.sqrt(np.nanmean(residual[valid] ** 2)))
+        except Exception:
+            rms_list.append(np.nan)
+    rms_list = np.array(rms_list)
+    # Elbow: first fc where relative decrease in RMS is below threshold
+    suggested_fc = None
+    for i in range(1, len(rms_list)):
+        if rms_list[i - 1] > 0 and not np.isnan(rms_list[i]):
+            rel_decrease = (rms_list[i - 1] - rms_list[i]) / rms_list[i - 1]
+            if rel_decrease < 0.05:  # less than 5% decrease
+                suggested_fc = float(fc_list[i])
+                break
+    if suggested_fc is None and len(fc_list) > 0:
+        suggested_fc = float(fc_list[-1])
+    return fc_list, rms_list, suggested_fc
+
+
 def spline_smooth(data, s=1.0):
     """
     Applies spline smoothing to the data.
@@ -3333,14 +3497,6 @@ def process_file(file_path, dest_dir, config):
             "output_path": output_path,
             "warnings": [],
         }
-
-        # Debug: print configuration parameters
-        print("\n" + "=" * 80)
-        print("DEBUG - PROCESSING PARAMETERS:")
-        print(f"Interpolation Method: {config['interp_method']}")
-        print(f"Maximum Gap Size: {config['max_gap']} frames")
-        print(f"Smoothing Method: {config['smooth_method']}")
-        print("=" * 80 + "\n")
 
         df = pd.read_csv(file_path)
         filename = os.path.basename(file_path)
@@ -3941,12 +4097,19 @@ def run_fill_split_dialog(parent=None):
     # Wait for dialog to complete
     config_dialog.window.wait_window()
 
-    if not hasattr(config_dialog, "result") or config_dialog.result is None:
-        print("Operation canceled by user.")
+    config = None
+    if hasattr(config_dialog, "result") and config_dialog.result is not None:
+        config = config_dialog.result
+    else:
+        # No result from dialog: try smooth_config.toml in cwd so batch can use last saved config
+        path_cwd = os.path.join(os.getcwd(), SMOOTH_CONFIG_FILENAME)
+        if os.path.isfile(path_cwd):
+            config = load_smooth_config_for_analysis(path_cwd)
+            print(f"Using config from {path_cwd}")
+    if config is None:
+        print("Operation canceled by user (no config and no smooth_config.toml).")
         print("================================================")
         return
-
-    config = config_dialog.result
 
     # Select source directory
     source_dir = filedialog.askdirectory(title="Select Source Directory")
@@ -3955,60 +4118,56 @@ def run_fill_split_dialog(parent=None):
         print("================================================")
         return
 
-    # Create destination directory with method names
+    # Prefer smooth_config.toml in source directory if present (per-project config)
+    path_in_source = os.path.join(source_dir, SMOOTH_CONFIG_FILENAME)
+    if os.path.isfile(path_in_source):
+        config = load_smooth_config_for_analysis(path_in_source)
+        print(f"Using config from {path_in_source}")
+
+    run_batch(source_dir, config, dest_dir=None, use_messagebox=True)
+
+
+def run_batch(source_dir, config, dest_dir=None, use_messagebox=True):
+    """
+    Process all CSV files in source_dir with the given config.
+    If dest_dir is None, create a timestamped subdir inside source_dir.
+    If use_messagebox is False (CLI), print results instead of showing dialogs.
+    Returns (dest_dir, processed_files, report_path or None).
+    """
     timestamp = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
-
-    # Create descriptive names for methods
     interp_name = config["interp_method"]
-
-    # Add information about smoothing parameters if used
     smooth_info = "no_smooth"
     if config["smooth_method"] != "none":
         smooth_info = config["smooth_method"]
         try:
             if config["smooth_method"] == "butterworth":
-                cutoff = config["smooth_params"].get("cutoff", 10)
-                smooth_info += f"_cut{cutoff}"
+                smooth_info += f"_cut{config['smooth_params'].get('cutoff', 10)}"
             elif config["smooth_method"] == "savgol":
-                window = config["smooth_params"].get("window_length", 7)
-                poly = config["smooth_params"].get("polyorder", 2)
-                smooth_info += f"_w{window}p{poly}"
+                smooth_info += f"_w{config['smooth_params'].get('window_length', 7)}p{config['smooth_params'].get('polyorder', 2)}"
             elif config["smooth_method"] == "lowess":
                 frac = config["smooth_params"].get("frac", 0.3)
                 it = config["smooth_params"].get("it", 3)
                 smooth_info += f"_frac{int(frac * 100)}_it{it}"
-                print("\nDEBUG - LOWESS Configuration:")
-                print(f"Fraction: {frac}")
-                print(f"Iterations: {it}")
             elif config["smooth_method"] == "kalman":
-                n_iter = config["smooth_params"].get("n_iter", 5)
-                mode = config["smooth_params"].get("mode", 1)
-                smooth_info += f"_iter{n_iter}_mode{mode}"
+                smooth_info += f"_iter{config['smooth_params'].get('n_iter', 5)}_mode{config['smooth_params'].get('mode', 1)}"
             elif config["smooth_method"] == "splines":
-                s = config["smooth_params"].get("smoothing_factor", 1.0)
-                smooth_info += f"_s{s}"
+                smooth_info += f"_s{config['smooth_params'].get('smoothing_factor', 1.0)}"
             elif config["smooth_method"] == "arima":
                 p = config["smooth_params"].get("p", 1)
                 d = config["smooth_params"].get("d", 0)
                 q = config["smooth_params"].get("q", 0)
                 smooth_info += f"_p{p}d{d}q{q}"
-        except Exception as e:
-            print(f"Warning: Error formatting smooth_info: {str(e)}")
-            smooth_info = config["smooth_method"]  # Fallback to basic name
-
-    # Sanitize all components of directory name
+        except Exception:
+            smooth_info = config["smooth_method"]
     sanitized_interp = sanitize_filename(interp_name)
     sanitized_smooth = sanitize_filename(smooth_info)
-
-    # Directory with informative name (all sanitized)
-    dest_dir_name = f"processed_{sanitized_interp}_{sanitized_smooth}_{timestamp}"
-    dest_dir = os.path.join(source_dir, dest_dir_name)
+    if dest_dir is None:
+        dest_dir_name = f"processed_{sanitized_interp}_{sanitized_smooth}_{timestamp}"
+        dest_dir = os.path.join(source_dir, dest_dir_name)
     os.makedirs(dest_dir, exist_ok=True)
+    save_smooth_config_toml(config, os.path.join(dest_dir, SMOOTH_CONFIG_FILENAME))
 
-    # List to store information about processed files
     processed_files = []
-
-    # Process each file
     for filename in os.listdir(source_dir):
         if filename.endswith(".csv"):
             try:
@@ -4019,34 +4178,93 @@ def run_fill_split_dialog(parent=None):
                     print(f"Warning: No information returned for file {filename}")
             except Exception as e:
                 print(f"Error processing file {filename}: {str(e)}")
-                processed_files.append(
-                    {
-                        "original_path": os.path.join(source_dir, filename),
-                        "original_filename": filename,
-                        "warnings": [f"Error processing file: {str(e)}"],
-                        "error": True,
-                        "original_size": 0,
-                        "original_columns": 0,
-                        "total_missing": 0,
-                        "columns_with_missing": {},
-                        "output_path": None,
-                    }
-                )
-
-    # Filtra arquivos processados para remover None
+                processed_files.append({
+                    "original_path": os.path.join(source_dir, filename),
+                    "original_filename": filename,
+                    "warnings": [f"Error: {str(e)}"],
+                    "error": True,
+                    "original_size": 0,
+                    "original_columns": 0,
+                    "total_missing": 0,
+                    "columns_with_missing": {},
+                    "output_path": None,
+                })
     processed_files = [pf for pf in processed_files if pf is not None]
 
-    # Generate detailed processing report
+    report_path = None
     if processed_files:
         report_path = generate_report(dest_dir, config, processed_files)
-        messagebox.showinfo(
-            "Complete",
-            f"Processing complete. Results saved in {dest_dir}\n"
-            f"A detailed processing report has been saved to:\n{report_path}",
-        )
+        if use_messagebox:
+            messagebox.showinfo(
+                "Complete",
+                f"Processing complete. Results saved in {dest_dir}\n"
+                f"Report: {report_path}",
+            )
+        else:
+            print(f"Processing complete. Results saved in {dest_dir}")
+            print(f"Report: {report_path}")
     else:
-        messagebox.showwarning("Warning", "No files were successfully processed.")
+        if use_messagebox:
+            messagebox.showwarning("Warning", "No files were successfully processed.")
+        else:
+            print("Warning: No CSV files were successfully processed.")
+    return dest_dir, processed_files, report_path
+
+
+def _cli_run():
+    """CLI entry: argparse for --input, --output, --config (TOML)."""
+    import argparse
+    parser = argparse.ArgumentParser(
+        description="Interpolate/smooth CSV data (or split). Config from TOML or smooth_config.toml in input/cwd.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  %(prog)s --input ./data
+  %(prog)s -i ./data -o ./out
+  %(prog)s -i ./data -c ./smooth_config.toml
+  %(prog)s --gui
+        """,
+    )
+    parser.add_argument("-i", "--input", metavar="DIR", help="Input directory containing CSV files")
+    parser.add_argument("-o", "--output", metavar="DIR", help="Output directory (default: timestamped subdir inside input)")
+    parser.add_argument("-c", "--config", metavar="TOML", help="Path to smooth_config.toml (default: smooth_config.toml in input dir or cwd)")
+    parser.add_argument("--gui", action="store_true", help="Launch GUI instead of CLI")
+    args = parser.parse_args()
+
+    if args.gui or (not args.input and not args.output and not args.config):
+        run_fill_split_dialog()
+        return
+
+    if not args.input:
+        print("Error: --input is required for CLI mode. Use --gui to open the graphical interface.")
+        sys.exit(1)
+
+    source_dir = os.path.abspath(args.input)
+    if not os.path.isdir(source_dir):
+        print(f"Error: Input is not a directory: {source_dir}")
+        sys.exit(1)
+
+    config = None
+    if args.config and os.path.isfile(args.config):
+        config = load_smooth_config_for_analysis(os.path.abspath(args.config))
+        print(f"Using config from {args.config}")
+    else:
+        path_in_source = os.path.join(source_dir, SMOOTH_CONFIG_FILENAME)
+        if os.path.isfile(path_in_source):
+            config = load_smooth_config_for_analysis(path_in_source)
+            print(f"Using config from {path_in_source}")
+        else:
+            path_cwd = os.path.join(os.getcwd(), SMOOTH_CONFIG_FILENAME)
+            if os.path.isfile(path_cwd):
+                config = load_smooth_config_for_analysis(path_cwd)
+                print(f"Using config from {path_cwd}")
+    if config is None:
+        print("Error: No configuration found. Create smooth_config.toml (e.g. via GUI Apply) or pass --config PATH.")
+        sys.exit(1)
+
+    dest_dir = os.path.abspath(args.output) if args.output else None
+    run_batch(source_dir, config, dest_dir=dest_dir, use_messagebox=False)
 
 
 if __name__ == "__main__":
-    run_fill_split_dialog()
+    _cli_run()
